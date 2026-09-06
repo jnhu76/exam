@@ -115,10 +115,7 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <DataTableShell
-        title={t("admin.dashboard.recent.title")}
-        minTableWidth="compact"
-      >
+      <DataTableShell title={t("admin.dashboard.recent.title")}>
         <div className="min-w-0">
           {!data?.recentExams || data.recentExams.length === 0 ? (
             <div className="p-6">

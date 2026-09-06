@@ -64,17 +64,19 @@ describe("DataWorkbench", () => {
     expect(region).toHaveAttribute("data-overflowing", "false");
   });
 
-  it("passes min-table-width through to the table region", () => {
+  it("passes the archetype and negotiated tier through to the table region", () => {
     render(
       <DataWorkbench
-        minTableWidth="compact"
+        archetype="management-list"
         desktopTable={<table aria-label="题目表" />}
       />,
     );
     const region = screen
       .getByRole("table", { name: "题目表" })
       .closest('[data-slot="admin-table-shell"]') as HTMLElement;
-    expect(region).toHaveAttribute("data-table-min-width", "compact");
+    // Unmeasured jsdom container → deterministic minTier fallback.
+    expect(region).toHaveAttribute("data-table-archetype", "management-list");
+    expect(region).toHaveAttribute("data-table-tier", "compact");
   });
 
   it("keeps the mobile list OUTSIDE the admin-table-shell region", () => {

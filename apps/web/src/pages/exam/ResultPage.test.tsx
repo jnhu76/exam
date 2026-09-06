@@ -243,8 +243,8 @@ describe("ResultPage", () => {
 
     const truncatedAnswers = await screen.findAllByTitle(longAnswer);
     expect(truncatedAnswers).toHaveLength(2);
-    expect(truncatedAnswers[0]).toHaveClass("truncate");
-    expect(truncatedAnswers[1]).toHaveClass("truncate");
+    expect(truncatedAnswers[0]).toHaveClass("data-table-overflow-truncate");
+    expect(truncatedAnswers[1]).toHaveClass("data-table-overflow-truncate");
   });
 
   it("navigates back to the exam list", async () => {

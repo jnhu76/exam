@@ -69,17 +69,18 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
-  it("enforces fixed layout + collapsed borders inside the admin shell only", () => {
+  it("enforces fixed layout + collapsed borders in tier-governed shells only", () => {
     // Fixed layout makes <col> widths authoritative (root cause fix for
     // candidate-fields horizontal scroll + users header/body misalign).
-    // Scoped to the admin shell so calendar, Dialog, and Card tables keep
-    // auto layout.
+    // Scoped to TIER-GOVERNED shells (those carrying data-table-tier):
+    // embedded-picker shells keep auto layout (the named exception, issue 445
+    // P3 §9), as do calendar, Dialog, and Card tables outside the shell.
     // border-collapse (not separate): collapse lets a width:100% fixed-layout
     // table shrink to its container when declared col widths would overflow
     // (the candidate-fields horizontal-scroll fix). The low-contrast grid is
     // drawn directly on <th>/<td>, which renders reliably under collapse.
     expect(tableCss).toMatch(
-      /\[data-slot="admin-table-shell"\]\s+\[data-slot="table"\][\s\S]*?table-layout:\s*fixed/,
+      /\[data-slot="admin-table-shell"\]\[data-table-tier\]\s+\[data-slot="table"\][\s\S]*?table-layout:\s*fixed/,
     );
     expect(tableCss).toMatch(
       /\[data-slot="admin-table-shell"\]\s+\[data-slot="table"\][\s\S]*?border-collapse:\s*collapse/,
@@ -87,7 +88,7 @@ describe("table and color visual-finish authority", () => {
   });
 
   it("binds the actions column to the icon-only contract width", () => {
-    // #445 P3 §4.3: the inline row-action vocabulary is icon-only and
+    // issue 445 P3 §4.3: the inline row-action vocabulary is icon-only and
     // count-bounded, so the actions column is a LOCKED column at the derived
     // contract width (6rem fine / 7.5rem coarse) — not a per-page density
     // tier. The density selectors are gone entirely.
@@ -143,7 +144,7 @@ describe("table and color visual-finish authority", () => {
   });
 
   it("keeps useOverflowObservation as the single overflow-measurement owner", () => {
-    // #445 P3 §8: exactly one module may read scrollWidth/clientWidth via a
+    // issue 445 P3 §8: exactly one module may read scrollWidth/clientWidth via a
     // ResizeObserver loop. Before the convergence DataTableShell and
     // DataWorkbench each carried a byte-identical copy of the algorithm; any
     // second production owner (or a component re-deriving overflow facts)

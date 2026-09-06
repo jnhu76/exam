@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
@@ -16,18 +16,14 @@ import {
   DataTableCell,
   DataTableColumns,
   DataTableHead,
+  DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataToolbar } from "@/components/shared/DataToolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
@@ -235,13 +231,13 @@ export function CoursePage() {
             }
           />
         ) : (
-          <DataTableShell minTableWidth="compact">
+          <DataTableShell>
             <Table>
               <DataTableColumns
                 columns={[
                   { role: "primary-text" },
                   { role: "short-id" },
-                  { role: "description" },
+                  { role: "description", overflow: "line-clamp-2" },
                   { role: "actions" },
                 ]}
               />
@@ -270,7 +266,10 @@ export function CoursePage() {
                     <DataTableCell role="short-id">{course.code}</DataTableCell>
                     <DataTableCell role="description">
                       {course.description ? (
-                        <TruncatedCell text={course.description} />
+                        <DataTableOverflowText
+                          mode="line-clamp-2"
+                          value={course.description}
+                        />
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
@@ -385,38 +384,5 @@ export function CoursePage() {
         </Dialog>
       </div>
     </TooltipProvider>
-  );
-}
-
-/** Displays text with line clamping and a tooltip when content is truncated. */
-/** Renders text truncated to two lines with a tooltip when content overflows. */
-function TruncatedCell({ text }: { text: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [truncated, setTruncated] = useState(false);
-
-  useEffect(() => {
-    if (ref.current) {
-      setTruncated(ref.current.scrollHeight > ref.current.clientHeight);
-    }
-  }, [text]);
-
-  const span = (
-    <span
-      ref={ref}
-      className="block cursor-default line-clamp-2 whitespace-pre-wrap break-words"
-    >
-      {text}
-    </span>
-  );
-
-  if (!truncated) return span;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{span}</TooltipTrigger>
-      <TooltipContent className="max-w-md whitespace-pre-wrap break-words">
-        {text}
-      </TooltipContent>
-    </Tooltip>
   );
 }

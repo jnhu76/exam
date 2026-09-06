@@ -1,32 +1,31 @@
 /*
- * Semantic data-table recipes. DataTableContract owns column allocation and
- * wrap policy; DataTableShell owns the local scroll and interaction surface.
+ * Semantic data-table recipes. DataTableContract owns column allocation,
+ * overflow vocabulary and priority; DataTableShell owns the archetype/tier
+ * negotiation, local scroll and interaction surface.
  */
 
 /*
- * Fixed layout + collapsed borders, scoped to admin shells ONLY.
+ * Fixed layout + collapsed borders, scoped to TIER-GOVERNED admin shells ONLY.
  *
  * Why scoped: a global `table { table-layout: fixed }` would also hit the
  * react-day-picker month grid (calendar.tsx), Dialog question-picker tables
- * (max-w-2xl, too narrow for the long-text 18rem), and Card-bound answer
- * detail tables (candidate-facing ResultPage/AttemptDetailPage). Those rely
- * on auto layout to fit their containers. Restricting fixed layout to the
- * admin shell keeps the colgroup widths authoritative here while leaving
- * every other <table> untouched.
+ * (max-w-2xl, too narrow for the long-text 16rem), and Card-bound answer
+ * detail tables. Those rely on auto layout to fit their containers.
+ * `embedded-picker` shells carry no data-table-tier and keep auto layout (the
+ * named exception, issue 445 P3 §9); every other shell table is fixed.
  *
  * Fixed layout makes the <col> widths in DataTableColumns authoritative
  * (auto layout ignores them when content is wider — the root cause of the
  * candidate-fields horizontal scroll and the users header/body misalign).
  * border-collapse makes header and body share column edges so th/td stay
- * aligned row-to-row.
+ * aligned row-to-row, and lets a width:100% fixed-layout table shrink to its
+ * container when columns would otherwise overflow.
  */
-[data-slot="admin-table-shell"] [data-slot="table"] {
+[data-slot="admin-table-shell"][data-table-tier] [data-slot="table"] {
   table-layout: fixed;
-  /* border-collapse (not separate): the grid is drawn directly on <th>/<td>
-   * below, which renders reliably even under collapse. collapse also makes a
-   * width:100% fixed-layout table shrink to its container when columns would
-   * otherwise overflow (the candidate-fields horizontal-scroll fix) — separate
-   * makes declared col widths strict and re-introduces that overflow. */
+}
+
+[data-slot="admin-table-shell"] [data-slot="table"] {
   border-collapse: collapse;
 }
 
@@ -100,18 +99,22 @@
   box-shadow: inset 2px 0 0 var(--primary-soft-strong);
 }
 
-[data-slot="admin-table-shell"][data-table-min-width="compact"]
-  [data-slot="table"] {
+/*
+ * Tier floors — the physical `min-width` of the shell-scoped table
+ * (P3-Corrective §5: renderedTableMin = max(tierMin, contentMin) is a CSS
+ * physical fact; there is NO runtime Σmin channel). `data-table-tier` is
+ * emitted by the shell's container-driven negotiation.
+ */
+[data-slot="admin-table-shell"][data-table-tier="compact"] [data-slot="table"] {
   min-width: 45rem;
 }
 
-[data-slot="admin-table-shell"][data-table-min-width="standard"]
+[data-slot="admin-table-shell"][data-table-tier="standard"]
   [data-slot="table"] {
   min-width: 61.25rem;
 }
 
-[data-slot="admin-table-shell"][data-table-min-width="wide"]
-  [data-slot="table"] {
+[data-slot="admin-table-shell"][data-table-tier="wide"] [data-slot="table"] {
   min-width: 75rem;
 }
 
@@ -138,7 +141,8 @@
  *     min-width (both set to the same value), so they do not grow with the
  *     container and never compress — they stay compact and never wrap.
  *     This mirrors TanStack Table's size/minSize model: locked = size+minSize
- *     match, flexible = the columns that absorb slack.
+ *     match, flexible = the columns that absorb slack (TanStack itself stays
+ *     a row/header model — sizing authority lives here, P3-Corrective §5.5).
  */
 [data-column-role="primary-text"] {
   width: auto;
@@ -160,9 +164,18 @@
   min-width: 13rem;
 }
 
+/*
+ * Status column — vocabulary-bound width 8.5rem (issue 445 P3-Corrective K1).
+ * Derived from the statusMeta × SUPPORTED_LOCALES fixture: the widest legal
+ * badge (the offline status, iconPolicy=show) measures 100.02px at the product
+ * font; token 8.5rem = 136px gives a content box of 104px ≥ 100.02 + slack.
+ * The fixture is a structural-test oracle: a new status or locale grows the
+ * fixture and turns the test red until this authority value is revisited.
+ * 5.5rem → 8.5rem is an INTENTIONAL system-level visual change.
+ */
 [data-column-role="status"] {
-  width: 5.5rem;
-  min-width: 5.5rem;
+  width: 8.5rem;
+  min-width: 8.5rem;
 }
 
 [data-column-role="date"] {
@@ -206,7 +219,7 @@
 }
 
 /*
- * Actions column — contract-bound width (#445 P3 §4.3). The inline row-action
+ * Actions column — contract-bound width (issue 445 P3 §4.3). The inline row-action
  * vocabulary is icon-only and count-bounded (N ≤ 2 → [a1][a2]; N > 2 →
  * [primary][kebab]), so the widest legal inline set is two icon buttons at
  * any label length. The width is the derived bound of that vocabulary, not a
@@ -216,6 +229,8 @@
  *           + border/slack ≈ 6rem    (content box 71px ≥ max inline 68px)
  *   coarse: 2 × iconBtn(2.75rem) + gap + padding + slack
  *           ≈ 7.5rem                 (content box 95px ≥ max inline 92px)
+ *
+ * Owned by UI-ACTION-CAPACITY-1 (issue 453); this issue must not alter it.
  */
 [data-column-role="actions"] {
   width: 6rem;
@@ -229,11 +244,49 @@
   }
 }
 
-[data-slot="table-head"][data-column-wrap="atomic"],
-[data-slot="table-cell"][data-column-wrap="atomic"] {
+/*
+ * Overflow vocabulary (closed, issue 445 P3-Corrective §16). The attribute comes
+ * from the column declaration (role default or explicit override) — cells and
+ * headers never repeat the metadata.
+ *
+ * Pure-CSS policies:
+ *   nowrap      — short atomic values
+ *   wrap        — normal human text; overflow-wrap:anywhere survives long
+ *                 unbroken tokens
+ *   break-token — URLs / mixed machine-like strings; arbitrary break points
+ *                 legal (word-break: break-all)
+ *
+ * Presenter policies (truncate / truncate-middle / line-clamp-2) are realized
+ * through DataTableOverflowText — never through silent cell-level clipping —
+ * so the full value stays accessible (title + keyboard focus + DOM text).
+ */
+[data-slot="table-head"][data-column-overflow="nowrap"],
+[data-slot="table-cell"][data-column-overflow="nowrap"] {
   white-space: nowrap;
   word-break: normal;
   overflow-wrap: normal;
+}
+
+[data-slot="table-head"][data-column-overflow="wrap"],
+[data-slot="table-cell"][data-column-overflow="wrap"] {
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="table-head"][data-column-overflow="break-token"],
+[data-slot="table-cell"][data-column-overflow="break-token"] {
+  white-space: normal;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+/* Machine identifiers stay on one line even before the presenter truncates
+ * them (a wrap here would split IDs mid-token). Clipping is the presenter's
+ * job — never the cell's. */
+[data-slot="table-head"][data-column-overflow="truncate-middle"],
+[data-slot="table-cell"][data-column-overflow="truncate-middle"] {
+  white-space: nowrap;
 }
 
 [data-slot="table-head"][data-column-role="number"],
@@ -290,12 +343,92 @@
   outline-offset: 1px;
 }
 
+/*
+ * Content presenter geometry (DataTableOverflowText). The truncate /
+ * truncate-middle / line-clamp-2 policies own their own clipping; the cell
+ * only carries the semantic attribute.
+ */
+[data-slot="table-cell"] .data-table-overflow-text,
+[data-slot="table-head"] .data-table-overflow-text {
+  min-width: 0;
+}
+
+.data-table-overflow-truncate {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.data-table-overflow-middle {
+  display: block;
+  white-space: nowrap;
+}
+
+.data-table-overflow-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/*
+ * Sticky first column — detail-comparison ONLY (issue 445 P3 §9).
+ *
+ * The first column (question number) stays pinned during local horizontal
+ * scroll so the row's context never scrolls away. Cell-owned opaque
+ * backgrounds keep the pinned layer free of transparent overlap on hover /
+ * focus / selected rows (same pattern as the workbench sticky action rail);
+ * an inset left-edge shadow expresses the freeze edge. border-collapse stays
+ * untouched — no second table, no JS column repositioning.
+ */
+[data-slot="admin-table-shell"][data-table-archetype="detail-comparison"]
+  [data-slot="table-head"]:first-child,
+[data-slot="admin-table-shell"][data-table-archetype="detail-comparison"]
+  [data-slot="table-cell"]:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+[data-slot="admin-table-shell"][data-table-archetype="detail-comparison"]
+  [data-slot="table-head"]:first-child {
+  background: var(--table-header);
+}
+
+[data-slot="admin-table-shell"][data-table-archetype="detail-comparison"]
+  [data-slot="table-cell"]:first-child {
+  background: var(--surface);
+  box-shadow: inset -1px 0 0 var(--border-header);
+}
+
+[data-slot="admin-table-shell"][data-table-archetype="detail-comparison"]
+  [data-slot="table-body"]
+  [data-slot="table-row"]:hover
+  [data-slot="table-cell"]:first-child {
+  background: var(--table-row-hover);
+}
+
+[data-slot="admin-table-shell"][data-table-archetype="detail-comparison"]
+  [data-slot="table-body"]
+  [data-slot="table-row"]:focus-within
+  [data-slot="table-cell"]:first-child {
+  background: var(--table-row-focus);
+}
+
+[data-slot="admin-table-shell"][data-table-archetype="detail-comparison"]
+  [data-slot="table-body"]
+  [data-slot="table-row"][data-state="selected"]
+  [data-slot="table-cell"]:first-child {
+  background: var(--table-row-selected);
+}
+
 [data-slot="table-scroll-fade-left"],
 [data-slot="table-scroll-fade-right"] {
   position: absolute;
   top: 0;
   bottom: 0;
-  z-index: 2;
+  z-index: 3;
   width: 0.5rem;
   pointer-events: none;
 }

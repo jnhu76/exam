@@ -153,8 +153,8 @@ describe("ExamPage", () => {
       "duration",
     );
     expect(duration[0]?.closest("td")).toHaveAttribute(
-      "data-column-wrap",
-      "atomic",
+      "data-column-overflow",
+      "nowrap",
     );
     expect(score[0]?.closest("td")).toHaveAttribute(
       "data-column-role",
