@@ -84,6 +84,7 @@ export function DataTableShell({
   description,
   toolbar,
   children,
+  mobile,
   footer,
   className,
   contentClassName,
@@ -93,6 +94,13 @@ export function DataTableShell({
   description?: string;
   toolbar?: ReactNode;
   children: ReactNode;
+  /**
+   * Mobile card list for the management-list archetype (issue 457): a
+   * viewport-only (<lg) representation derived from the same column
+   * declarations as the desktop table. The switch is pure CSS (`lg:`) — no JS
+   * breakpoint. Other archetypes keep horizontal scroll below lg.
+   */
+  mobile?: ReactNode;
   footer?: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -104,6 +112,16 @@ export function DataTableShell({
   const descriptionId = description ? `${shellId}-description` : undefined;
   const scrollRef = useRef<HTMLDivElement>(null);
   const overflow = useOverflowObservation(scrollRef);
+
+  if (
+    import.meta.env.DEV &&
+    mobile !== undefined &&
+    archetype !== "management-list"
+  ) {
+    throw new Error(
+      `DataTableShell contract violation: the mobile card slot is a management-list mechanism; archetype "${archetype}" keeps horizontal scroll below lg`,
+    );
+  }
 
   const tier =
     archetype === "embedded-picker"
@@ -148,7 +166,23 @@ export function DataTableShell({
           {toolbar && <div className="shrink-0">{toolbar}</div>}
         </div>
       )}
-      <div data-slot="table-scroll-frame" className="relative min-w-0">
+      {mobile !== undefined && (
+        // Viewport switch is CSS-only (issue 457): below lg the table region
+        // is display:none and the card list renders instead. The tier
+        // negotiation stays mounted but measures a hidden region (width 0 →
+        // min tier), so no JS breakpoint ever drives the representation.
+        <div data-slot="table-mobile-region" className="lg:hidden">
+          {mobile}
+        </div>
+      )}
+      <div
+        data-slot="table-scroll-frame"
+        className={
+          mobile !== undefined
+            ? "relative hidden min-w-0 lg:block"
+            : "relative min-w-0"
+        }
+      >
         <div
           ref={scrollRef}
           data-slot="table-scroll-region"
