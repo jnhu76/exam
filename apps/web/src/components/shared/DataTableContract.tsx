@@ -222,11 +222,12 @@ export function middleTruncate(value: string): string {
  * The table-contract-owned content presenter for the overflow policies that
  * need presentation logic (`truncate`, `truncate-middle`, `line-clamp-2`).
  *
- * A11y contract (issue 445 P3 §20): the complete value is never lost. `truncate` /
- * `line-clamp-2` keep the full text in the DOM (screen readers read it) and
- * the focusable title makes it reachable for keyboard users; `truncate-middle`
- * renders the shortened form but exposes the full value via aria-label, title
- * and keyboard focus.
+ * A11y contract (issue 445 P3 §20): the complete value is never lost. Every
+ * mode exposes the full value via aria-label + title and is keyboard-focusable;
+ * `truncate` / `line-clamp-2` also keep the full text in the DOM, while
+ * `truncate-middle` renders the shortened head…tail form as visible text.
+ * The aria-label is load-bearing: consumers target the cell by its full value
+ * (getByLabel in authoring product-loop e2e), so truncate cannot drop it.
  */
 export function DataTableOverflowText({
   value,
@@ -264,6 +265,7 @@ export function DataTableOverflowText({
         className,
       )}
       title={value}
+      aria-label={value}
       tabIndex={0}
     >
       {value}

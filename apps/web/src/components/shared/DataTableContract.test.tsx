@@ -118,4 +118,19 @@ describe("DataTableContract", () => {
     expect(el).toHaveAttribute("tabindex", "0");
     expect(el).toHaveAttribute("data-overflow-policy", "truncate-middle");
   });
+
+  it("keeps aria-label on truncate mode (getByLabel consumers target the full value)", () => {
+    const content = "P2论述题-请阐述考试安全边界";
+    render(<DataTableOverflowText mode="truncate" value={content} />);
+
+    // The full value stays in the DOM AND as the accessible name — the
+    // pre-existing authoring product-loop e2e resolves the cell via
+    // getByLabel(content, { exact: true }).
+    expect(screen.getByLabelText(content)).toBeInTheDocument();
+    expect(screen.getByLabelText(content)).toHaveAttribute("title", content);
+    expect(screen.getByLabelText(content)).toHaveAttribute(
+      "data-overflow-policy",
+      "truncate",
+    );
+  });
 });
