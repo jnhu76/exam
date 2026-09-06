@@ -9,6 +9,7 @@ import { DataToolbar } from "./DataToolbar";
 import { EmptyState } from "./EmptyState";
 import { ErrorState } from "./ErrorState";
 import { FormSection } from "./FormSection";
+import { FieldRow } from "./FieldGroup";
 import { FieldStack, FormStack } from "./FormStack";
 import { LoadingState } from "./LoadingState";
 import { PageHeader } from "./PageHeader";
@@ -551,6 +552,20 @@ describe("FormSection", () => {
     );
 
     expect(screen.getByRole("button", { name: "重置" })).toBeInTheDocument();
+  });
+});
+
+describe("FieldRow", () => {
+  it("owns the two-field responsive grid (stack below sm, pair at sm+)", () => {
+    render(
+      <FieldRow>
+        <p>甲</p>
+        <p>乙</p>
+      </FieldRow>,
+    );
+    const row = screen.getByText("甲").parentElement;
+    expect(row).toHaveClass("flex", "flex-col", "gap-4");
+    expect(row).toHaveClass("sm:grid", "sm:grid-cols-2");
   });
 });
 

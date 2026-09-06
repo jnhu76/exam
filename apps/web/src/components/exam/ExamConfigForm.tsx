@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FormSection } from "@/components/shared/FormSection";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/shared/FieldError";
-import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { Field, FieldGroup, FieldRow } from "@/components/shared/FieldGroup";
 
 /** A question's ID and its configured score value. */
 interface QuestionScore {
@@ -197,7 +197,7 @@ export function ExamConfigForm({
               {t(`admin.forms.exam.timingModeHint.${data.timingMode}`)}
             </p>
           </Field>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FieldRow>
             <Field>
               <Label>{t("admin.forms.exam.startTime")}</Label>
               <Input
@@ -216,7 +216,7 @@ export function ExamConfigForm({
                 />
               </Field>
             )}
-          </div>
+          </FieldRow>
           {timeError && (
             <FieldError>{t("admin.forms.exam.timeInvalid")}</FieldError>
           )}
@@ -233,7 +233,7 @@ export function ExamConfigForm({
               />
             </Field>
           )}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FieldRow>
             <Field>
               <Label>{t("admin.forms.exam.latestStart")}</Label>
               <Input
@@ -272,13 +272,13 @@ export function ExamConfigForm({
                 placeholder={t("admin.forms.exam.noLimit")}
               />
             </Field>
-          </div>
+          </FieldRow>
         </FieldGroup>
       </FormSection>
 
       <FormSection title={t("admin.forms.exam.sectionScore")}>
         <FieldGroup>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FieldRow>
             <Field>
               <div className="flex items-center justify-between">
                 <Label htmlFor="totalScore">
@@ -343,7 +343,7 @@ export function ExamConfigForm({
                 min={0}
               />
             </Field>
-          </div>
+          </FieldRow>
           {scoreError && (
             <FieldError>
               {t("admin.forms.exam.passingScoreExceeds", {
@@ -357,7 +357,7 @@ export function ExamConfigForm({
 
       <FormSection title={t("admin.forms.exam.sectionRetake")}>
         <FieldGroup>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FieldRow>
             <Field>
               <Label>{t("admin.forms.exam.retakePolicy")}</Label>
               <Select
@@ -396,7 +396,7 @@ export function ExamConfigForm({
                 disabled={data.retakePolicy === "unlimited"}
               />
             </Field>
-          </div>
+          </FieldRow>
           <Field>
             <Label>{t("admin.forms.exam.scoreStrategy")}</Label>
             <Select

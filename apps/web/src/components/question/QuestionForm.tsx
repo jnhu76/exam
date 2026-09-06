@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Trash2 } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
-import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { FieldRow, FieldGroup, Field } from "@/components/shared/FieldGroup";
 import {
   plainTextProjection,
   plainTextToDocument,
@@ -267,7 +267,7 @@ export function QuestionForm({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <FieldRow>
         <Field>
           <Label>{t("admin.forms.question.course")}</Label>
           <CourseSearchSelect
@@ -358,7 +358,7 @@ export function QuestionForm({
             </SelectContent>
           </Select>
         </Field>
-      </div>
+      </FieldRow>
 
       <Field>
         <div className="flex items-center justify-between">
