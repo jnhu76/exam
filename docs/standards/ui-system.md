@@ -156,6 +156,62 @@ Former wrapper components with no distinct role (`ConfirmActionDialog`,
 `SubmitConfirmDialog`, `ExamTopbar`, `RuntimeActionBar`, `AnswerPanel`) have
 been deleted; do not resurrect single-role wrappers over an existing authority.
 
+## Spatial governance boundary
+
+The closed rule for who owns spatial semantics (frozen, issue #445 P3 §H):
+
+1. Business pages may own one-off structural composition.
+2. Business pages may not redefine spatial semantics already owned by an
+   archetype, authoritative component contract, or shared mechanism.
+3. Promote behavior to a shared owner when the same semantics, same failure
+   mode, and same policy recur in at least two consumers, or when one observed
+   failure already proves that a shared policy is required.
+
+**What page-local structure still means (legal):** one-off grid/flex
+composition (`grid gap-4 md:grid-cols-2`, `flex flex-col gap-6`), local
+section ordering, a local narrow inner readability constraint
+(`<form className="max-w-sm">`), business-specific master/detail composition,
+and business-specific content grouping — as long as they do not redefine a
+shared spatial semantic. Page-root width is not page-local: see §Page
+geometry.
+
+**What a page may not redefine (illegal):** its own page-root max-width; a
+private action-column, status, or filter width; a private breakpoint; a
+page-local mobile card field map; a duplicated overflow/ResizeObserver
+measurement; a silent truncation contrary to the column's role contract. The
+distinction is semantic, not a regex ban — review judges ownership, not byte
+patterns.
+
+**Promotion precedent** (the recurrence rule in practice): the V1 action
+collision became `RowActions` + the actions-column authority (not a UsersPage
+width patch); the V3 long-token collision became column overflow/content
+semantics (not a CandidatesPage truncate patch); duplicated overflow observers
+became the shared `useOverflowObservation`; QuestionPage mobile cards plus the
+management-list recurrence became the shared `MobileRecordList` mechanism. An
+observed systemic failure justifies promotion even before a second consumer
+exists.
+
+## Page geometry (Model A)
+
+`PageContainer` owns all page-root widths. The page declares its container
+role explicitly; layouts own only the responsive gutter and never infer a
+container role from the URL. The role vocabulary is closed:
+
+| Role | Maximum | Use |
+| --- | --- | --- |
+| `auth` | 448px | authentication |
+| `form` | 896px | create/edit and focused forms |
+| `admin-standard` | 1280px | dashboards and ordinary admin pages |
+| `admin-wide` | 1536px | diagnostics and genuinely wide data |
+| `candidate` | 896px | candidate-facing list, detail, and result pages |
+| `exam-runtime` | 1280px | task-focused candidate runtime |
+
+The former `admin-sparse` (1024) role is **retired** (merged into
+`admin-standard`); re-adding a seventh role is a vocabulary-authority
+decision, not a page-local width. Page-root width ≠ local inner-content
+width: a narrower inner constraint (`max-w-sm` form, readability column)
+inside a declared-role page stays legal page-local composition.
+
 ## Tailwind boundary
 
 Business pages **may** use Tailwind freely for **structure and responsive
@@ -213,29 +269,129 @@ with `label` → `role="img"`).
 `DataTableShell` is the mandatory shell for equivalent management tables. It owns
 the complete outer boundary (`overflow-hidden` + flush body so `<Table>` meets
 the border), optional title/description/`toolbar` slot, footer slot, an
-`actionsDensity` prop (`"narrow"` default), and a scroll-overflow
-`ResizeObserver` mechanism.
+`actionsDensity` prop (`"narrow"` default), and the shared overflow
+observation. `DataWorkbench` (toolbar → table → footer as one continuous
+surface) shares every semantic authority with `DataTableShell` — archetype,
+column semantics, tier negotiation, overflow observation, responsive
+representation, mobile derivation — and differs only in visual composition;
+the two surfaces must never fork a semantic policy. Implementation ownership:
+[`docs/architecture/frontend.md`](../architecture/frontend.md).
 
-Column cell roles: **status** (StatusBadge), **date**, **duration**, **number**,
-**score**, **actions** (RowActions), plus text roles **primary-text**,
-**long-text**, **description**, **tag-list** (categorical `<Badge>`s). Headers
-use `surface-subtle`; body rows use `surface`.
+### Table archetypes (closed vocabulary)
 
-Management-list tables own a second representation below `lg`. The `mobile`
-slot on `DataTableShell` renders a `MobileRecordList` whose cards are derived
-from the same column declaration that feeds `DesktopDataTable`
-(`deriveMobileCardFields`); the viewport switch is CSS-only (`lg` breakpoints
-inside the shell, no JS breakpoint listeners). The priority-to-slot mapping is
-frozen: `high` renders in the card header — or as the card's primary content
-for `primary-text`/`long-text`; `normal` renders as a labeled meta line; `low`
-is omitted; the `actions` column becomes the card actions slot. Declaration
-order is preserved, and pages must not keep a second page-local mobile field
-map. The `detail-comparison` and `log-diagnostic` archetypes do not adopt the
-mobile slot and keep local horizontal scroll at every width (a DEV-time
-contract throw guards the shell).
+The page declares one archetype on the shell; the vocabulary is closed:
 
-Related: `DataTablePagination`,
-`DataToolbar`, `DesktopDataTable` / `MobileRecordCard` / `MobileRecordList`.
+| Archetype | Desktop | Viewport < lg | Container pressure |
+| --- | --- | --- | --- |
+| `management-list` | semantic table, container-driven tier negotiation | shared mobile cards (`MobileRecordList`) | tier degradation → local scroll |
+| `log-diagnostic` | table | **table** (never cards) | local horizontal scroll |
+| `detail-comparison` | table, sticky first context column | **table** (never cards) | local horizontal scroll |
+| `embedded-picker` | embedded/dialog authority, auto layout (no tier attribute) | unchanged | scrolls inside its dialog surface |
+
+Do not add an archetype. The mobile card slot is a `management-list`
+mechanism only — a DEV contract throw guards the shell against an illegal
+combination, and only a management-list with an explicit mobile slot
+participates in the viewport switch (production-safe fallback: desktop/scroll
+at every width).
+
+### Three independent signals
+
+Three signals stay independent; conflating any two is the historical root of
+the mobile-card and tier defects:
+
+- **viewport** → representation (`ResponsiveRepresentation`: < lg cards for
+  management-list, ≥ lg table);
+- **container width** → table tier / local scroll (`negotiateTier` from the
+  archetype's min/max tier bounds; fixed layout + col min-width enforce
+  `renderedTableMin = max(tierMin, contentMin)` physically);
+- **column priority** → mobile information selection only (never desktop tier
+  logic).
+
+Therefore a desktop viewport with a narrow content box degrades the **tier**
+(local scroll) — it never swaps to mobile cards. Measurement order is fixed:
+representation first, then table measurement — **mobile cards never
+participate in table overflow/tier measurement** (the desktop branch owns
+`useOverflowObservation`; the mobile branch is its sibling, not a descendant).
+
+### Column contract
+
+Column cell roles (closed set in `DataTableContract`): **status**
+(StatusBadge), **date**, **date-range**, **duration**, **number**, **score**,
+**short-id**, **type**, **actions** (RowActions), plus text roles
+**primary-text**, **secondary-text**, **long-text**, **description**,
+**tag-list** (categorical `<Badge>`s). Headers use `surface-subtle`; body
+rows use `surface`.
+
+A column declaration carries three separate dimensions — they are not
+interchangeable:
+
+- **role** — what kind of content this is (`primary-text`, `status`,
+  `score`, `actions`, … closed set in `DataTableContract`);
+- **overflow** — how the content physically behaves (closed vocabulary
+  `nowrap` / `wrap` / `break-token` / `truncate` / `truncate-middle` /
+  `line-clamp-2`, per-role allowed domains; truncation never happens silently
+  at the cell — presenter policies keep the full value accessible);
+- **priority** — whether/how the column participates in the mobile card
+  summary. Frozen vocabulary: `high` / `normal` / `low` — no additions. The
+  priority→slot mapping is frozen: `high` renders in the card header (or as
+  primary content for `primary-text`/`long-text`), `normal` as a labeled meta
+  line, `low` is omitted, `actions` becomes the card actions slot. Declaration
+  order is preserved; pages must not keep a second page-local mobile field
+  map — both representations derive from the same `DataViewColumnDef[]`.
+
+Physical widths are recipes (`apps/web/src/table/recipes.css`); the normative
+anchors: status column **8.5rem** (vocabulary-bound, derived from the
+statusMeta × supported-locale fixture), actions column **6rem** fine /
+**7.5rem** coarse pointer.
+
+### Row actions
+
+`RowActions` owns representation; the page declares action intent (typed
+declarations); the table recipe owns physical capacity. Representation is a
+pure function of the declaration count: N ≤ 2 → inline icon buttons;
+N > 2 → exactly one primary inline + one kebab (label lives in menu text).
+The inline bound (two icon buttons) is what the actions-column width is
+derived from — do not invent new action density policy.
+
+### Status capacity
+
+`statusMeta` owns the semantic status vocabulary/labels, `StatusBadge` owns
+rendering (§Status color), and the table status **role** owns physical
+capacity: the frozen 8.5rem column fits the widest legal badge across every
+status × supported locale (`apps/web/src/table/statusFixture.ts` re-derives
+that universe automatically; a new status or locale grows the fixture and
+reds the guard until the token is revisited). Do not document the historical
+7rem as current.
+
+## Dialogs
+
+`DialogContent` carries the closed size vocabulary `sm` 384 / `md` 512 /
+`lg` 672 (`size` prop). `xl` (896) is a documented extension rule only —
+added only when real content cannot avoid illegal horizontal scroll inside
+`lg`; it is not a runtime authority, and page-local `max-w-*` overrides are
+never legal. The dialog content column is capped at `max-h-[85dvh]`; header
+and footer stay fixed in the composition and the region marked
+`data-slot="dialog-body"` is the single vertical scroll owner (CSS
+convention in `surface/recipes.css`). Dialog-level horizontal scrolling is
+never legal. Radix owns focus trap/Escape/stacking; pages use the controlled
+`open`/`onOpenChange` pattern.
+
+## Form field layout
+
+`FormSection` is a titled `PageSection` whose content grid hosts the field
+primitives; it has no `columns` prop. `FieldRow` is the only multi-column
+form primitive (two columns at `sm+`, one-column stack below); a single
+full-span field declares `col-span-full`. `FieldGroup`/`Field`/`FieldStack`/
+`FormStack` own the remaining single-column field composition. Errors flow
+through `FieldError`; pages do not hand-roll field grids with bespoke
+breakpoints.
+
+## Toolbar filters
+
+`DataToolbar` is the single toolbar authority. `ToolbarFilter` widths are
+frozen: `narrow` **9rem** (short closed enums), `wide` **11.25rem** (entity
+selectors and free text), both full-width below `sm`; the search input is
+toolbar-owned. Do not introduce new filter widths.
 
 ## Accessibility
 
