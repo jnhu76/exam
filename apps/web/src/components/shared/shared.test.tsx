@@ -8,6 +8,7 @@ import { DataToolbar } from "./DataToolbar";
 import { EmptyState } from "./EmptyState";
 import { ErrorState } from "./ErrorState";
 import { FormSection } from "./FormSection";
+import { FieldRow } from "./FieldGroup";
 import { FieldStack, FormStack } from "./FormStack";
 import { LoadingState } from "./LoadingState";
 import { PageHeader } from "./PageHeader";
@@ -548,26 +549,19 @@ describe("FormSection", () => {
 
     expect(screen.getByRole("button", { name: "重置" })).toBeInTheDocument();
   });
+});
 
-  it("lays out one column by default and two columns only when declared", () => {
-    const { rerender } = render(
-      <FormSection title="单列">
+describe("FieldRow", () => {
+  it("owns the two-field responsive grid (stack below sm, pair at sm+)", () => {
+    render(
+      <FieldRow>
         <p>甲</p>
-      </FormSection>,
+        <p>乙</p>
+      </FieldRow>,
     );
-    // The content grid is the direct parent of the section's children.
-    const content = screen.getByText("甲").parentElement;
-    expect(content).toHaveClass("grid", "gap-4");
-    expect(content).not.toHaveClass("sm:grid-cols-2");
-
-    rerender(
-      <FormSection title="双列" columns={2}>
-        <p>甲</p>
-      </FormSection>,
-    );
-    // Two columns arrive at the sm breakpoint (below sm the section stacks —
-    // the shared form responsive behavior, same as FieldRow).
-    expect(content).toHaveClass("grid", "gap-4", "sm:grid-cols-2");
+    const row = screen.getByText("甲").parentElement;
+    expect(row).toHaveClass("flex", "flex-col", "gap-4");
+    expect(row).toHaveClass("sm:grid", "sm:grid-cols-2");
   });
 });
 

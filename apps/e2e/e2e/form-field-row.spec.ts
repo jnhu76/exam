@@ -3,11 +3,11 @@ import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
 
 /**
- * #460 UI-FORM-LAYOUT-CORRECTIVE-1 runtime spot-check — the migrated
- * ExamConfigForm field pairs (FieldRow, the only multi-column form
- * primitive): two columns at sm+ (desktop), one-column stack below sm.
- * No visual redesign: the pair renders the same classes as before, now from
- * the shared primitive.
+ * #460 UI-FORM-LAYOUT-CORRECTIVE-1 runtime spot-check — the FieldRow
+ * responsive contract on the migrated ExamConfigForm field pairs (the only
+ * multi-column form primitive): two columns at sm+ (desktop), one-column
+ * stack below sm. No visual redesign: the pair renders the same classes as
+ * before, now from the shared primitive.
  */
 
 async function openTimePair(page: Page, editUrl: string) {
