@@ -189,7 +189,7 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
           description={t("admin.users.invitations.description")}
         />
       ) : (
-        <DataTableShell minTableWidth="compact">
+        <DataTableShell>
           <Table>
             <DataTableColumns
               columns={[

@@ -160,7 +160,7 @@ export function ImportLogsPage() {
           </Button>
         )}
       </DataToolbar>
-      <DataTableShell>
+      <DataTableShell archetype="log-diagnostic">
         <Table>
           <DataTableColumns
             columns={[

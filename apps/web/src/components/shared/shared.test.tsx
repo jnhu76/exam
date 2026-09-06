@@ -697,9 +697,9 @@ describe("DataTableShell", () => {
     );
   });
 
-  it("owns local overflow and a governed minimum table width", () => {
+  it("owns local overflow and negotiates the archetype tier", () => {
     render(
-      <DataTableShell minTableWidth="wide">
+      <DataTableShell archetype="log-diagnostic">
         <table aria-label="宽表格" />
       </DataTableShell>,
     );
@@ -711,7 +711,11 @@ describe("DataTableShell", () => {
       .getByRole("table", { name: "宽表格" })
       .closest('[data-slot="table-scroll-region"]');
 
-    expect(shell).toHaveAttribute("data-table-min-width", "wide");
+    // jsdom has no layout: the hook's initial observation is unmeasured, so
+    // the negotiation falls back to the archetype minTier (compact) — the
+    // same deterministic initial state real browsers paint pre-measurement.
+    expect(shell).toHaveAttribute("data-table-archetype", "log-diagnostic");
+    expect(shell).toHaveAttribute("data-table-tier", "compact");
     expect(scrollRegion).toHaveAttribute("data-overflow-owner", "local");
   });
 
@@ -800,7 +804,7 @@ describe("DataTableShell", () => {
   });
 
   it("renders the overflow hint from container facts at any viewport width", () => {
-    // #445 P3 §5.3: the hint is gated by container overflow facts only — the
+    // issue 445 P3 §5.3: the hint is gated by container overflow facts only — the
     // former window.innerWidth < 640 gate is deleted, so a desktop-width
     // viewport with an overflowing table also shows the hint.
     Object.defineProperty(window, "innerWidth", {

@@ -12,6 +12,8 @@ import {
   DataTableColumns,
   DataTableHead,
   DataTableSpanCell,
+  type ColumnOverflow,
+  type ColumnPriority,
   type DataTableColumnRole,
 } from "@/components/shared/DataTableContract";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -19,13 +21,23 @@ import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { BookOpen } from "lucide-react";
 
 /**
- * Column meta: the existing role-based column-tagging contract, lifted onto a
- * TanStack ColumnDef. The role drives width/wrap/alignment via table/recipes.css
- * (the visual authority). Desktop and mobile may read different meta fields.
+ * Column meta: the role-based column contract (role + overflow + priority),
+ * lifted onto a TanStack ColumnDef. The role drives width/alignment and the
+ * overflow default via table/recipes.css (the visual authority); overflow and
+ * priority are single-source declarations the table derives DOM attributes
+ * from — headers/cells never repeat them (P3 §18).
+ *
+ * TanStack stays a row/header model only: no column-size state, no header
+ * sizing calls, no inline widths. Width authority is DataTableContract +
+ * recipes.css exclusively (P3-Corrective §5.5).
  */
 export interface DataViewColumnMeta {
   /** The semantic column role — drives CSS width/wrap/alignment. */
   role: DataTableColumnRole;
+  /** Optional overflow override (role default otherwise). */
+  overflow?: ColumnOverflow;
+  /** Optional priority override (role default otherwise). Metadata only. */
+  priority?: ColumnPriority;
 }
 
 /**
@@ -98,12 +110,15 @@ export function DesktopDataTable<TData>({
     getRowId,
   });
 
-  // Role list for the <colgroup>, preserving the existing contract.
+  // Role list for the <colgroup>, preserving the existing contract and
+  // carrying the single-source overflow/priority declarations.
   const roleColumns = useMemo(
     () =>
       columns.map((c, i) => ({
         role: c.meta?.role ?? "primary-text",
         key: (c.id as string | undefined) ?? `${c.meta?.role ?? "col"}-${i}`,
+        overflow: c.meta?.overflow,
+        priority: c.meta?.priority,
       })),
     [columns],
   );
@@ -115,9 +130,16 @@ export function DesktopDataTable<TData>({
         <TableRow>
           {table.getHeaderGroups().map((hg) =>
             hg.headers.map((header) => {
-              const role = header.column.columnDef.meta?.role ?? "primary-text";
+              const meta = header.column.columnDef.meta as
+                | DataViewColumnMeta
+                | undefined;
               return (
-                <DataTableHead key={header.id} role={role}>
+                <DataTableHead
+                  key={header.id}
+                  role={meta?.role ?? "primary-text"}
+                  overflow={meta?.overflow}
+                  priority={meta?.priority}
+                >
                   {header.isPlaceholder
                     ? null
                     : flexRender(
@@ -170,9 +192,16 @@ export function DesktopDataTable<TData>({
           table.getRowModel().rows.map((row) => (
             <TableRow key={row.id}>
               {row.getVisibleCells().map((cell) => {
-                const role = cell.column.columnDef.meta?.role ?? "primary-text";
+                const meta = cell.column.columnDef.meta as
+                  | DataViewColumnMeta
+                  | undefined;
                 return (
-                  <DataTableCell key={cell.id} role={role}>
+                  <DataTableCell
+                    key={cell.id}
+                    role={meta?.role ?? "primary-text"}
+                    overflow={meta?.overflow}
+                    priority={meta?.priority}
+                  >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </DataTableCell>
                 );

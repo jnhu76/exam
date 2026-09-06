@@ -16,6 +16,7 @@ import {
   DataTableCell,
   DataTableColumns,
   DataTableHead,
+  DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { DatePicker } from "@/components/shared/DatePicker";
@@ -366,12 +367,12 @@ export function AuditLogPage() {
         />
       ) : (
         <>
-          <DataTableShell>
+          <DataTableShell archetype="log-diagnostic">
             <Table>
               <DataTableColumns
                 columns={[
                   { role: "date" },
-                  { role: "short-id", key: "actor" },
+                  { role: "primary-text", key: "actor" },
                   { role: "type", key: "action" },
                   { role: "type", key: "target" },
                   { role: "short-id", key: "detail" },
@@ -382,7 +383,7 @@ export function AuditLogPage() {
                   <DataTableHead role="date">
                     {t("admin.audit.columns.time")}
                   </DataTableHead>
-                  <DataTableHead role="short-id">
+                  <DataTableHead role="primary-text">
                     {t("admin.audit.columns.actor")}
                   </DataTableHead>
                   <DataTableHead role="type">
@@ -408,10 +409,7 @@ export function AuditLogPage() {
                     <DataTableCell role="date" className="type-secondary">
                       {formatDateTime(item.createdAt)}
                     </DataTableCell>
-                    <DataTableCell
-                      role="short-id"
-                      className="truncate text-foreground"
-                    >
+                    <DataTableCell role="primary-text">
                       {item.actorName ?? item.actorId}
                     </DataTableCell>
                     <DataTableCell role="type">
@@ -427,11 +425,11 @@ export function AuditLogPage() {
                       </span>
                     </DataTableCell>
                     <DataTableCell role="type">{item.targetType}</DataTableCell>
-                    <DataTableCell
-                      role="short-id"
-                      className="truncate type-secondary"
-                    >
-                      {item.targetId}
+                    <DataTableCell role="short-id">
+                      <DataTableOverflowText
+                        mode="truncate-middle"
+                        value={item.targetId}
+                      />
                     </DataTableCell>
                   </TableRow>
                 ))}

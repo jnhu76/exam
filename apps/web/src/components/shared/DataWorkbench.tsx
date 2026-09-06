@@ -2,7 +2,11 @@ import { useId, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useOverflowObservation } from "@/hooks/useOverflowObservation";
 import { cn } from "@/lib/utils";
-import type { DataTableMinWidth } from "@/components/shared/DataTableShell";
+import {
+  ARCHETYPE_TIER_BOUNDS,
+  negotiateTier,
+  type TableArchetype,
+} from "@/components/shared/DataTableShell";
 
 /**
  * DataWorkbench — a single, continuous, compact data shell
@@ -42,7 +46,7 @@ export function DataWorkbench({
   footer,
   className,
   contentClassName,
-  minTableWidth = "standard",
+  archetype = "management-list",
 }: {
   /** The toolbar band (search + filters + actions). Rendered as the shell top. */
   toolbar?: ReactNode;
@@ -56,12 +60,21 @@ export function DataWorkbench({
   footer?: ReactNode;
   className?: string;
   contentClassName?: string;
-  minTableWidth?: DataTableMinWidth;
+  archetype?: TableArchetype;
 }) {
   const { t } = useTranslation();
   const shellId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
   const overflow = useOverflowObservation(scrollRef);
+
+  const tier =
+    archetype === "embedded-picker"
+      ? null
+      : negotiateTier(
+          overflow.containerWidth,
+          ARCHETYPE_TIER_BOUNDS[archetype].min,
+          ARCHETYPE_TIER_BOUNDS[archetype].max,
+        );
 
   const titleId = `${shellId}-label`;
 
@@ -79,7 +92,8 @@ export function DataWorkbench({
         <div
           ref={scrollRef}
           data-slot="admin-table-shell"
-          data-table-min-width={minTableWidth}
+          data-table-archetype={archetype}
+          {...(tier ? { "data-table-tier": tier } : {})}
           data-overflow-owner="local"
           data-overflowing={String(overflow.overflowing)}
           data-scroll-start={String(overflow.atStart)}

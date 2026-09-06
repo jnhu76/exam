@@ -19,6 +19,7 @@ import {
   DataTableCell,
   DataTableColumns,
   DataTableHead,
+  DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
@@ -78,11 +79,12 @@ function AnswerText({
     );
   }
   const text = formatAnswer(answer, t);
-  return (
-    <span className={truncate ? "block max-w-48 truncate" : ""} title={text}>
-      {text}
-    </span>
-  );
+  if (truncate) {
+    // Fill-blank answers are long prose: single-line truncate with the full
+    // value accessible via the contract presenter (title + keyboard focus).
+    return <DataTableOverflowText mode="truncate" value={text} />;
+  }
+  return <span>{text}</span>;
 }
 
 /** Displays the scored result of a single exam attempt, including per-question breakdown or a pending-status message. */
@@ -149,7 +151,10 @@ export function ResultPage() {
           </Card>
 
           <PageSection title={t("candidateResult.detail.title")}>
-            <DataTableShell contentClassName="p-0">
+            <DataTableShell
+              archetype="detail-comparison"
+              contentClassName="p-0"
+            >
               <Table>
                 <DataTableColumns
                   columns={[

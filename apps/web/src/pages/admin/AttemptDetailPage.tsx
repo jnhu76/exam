@@ -24,6 +24,7 @@ import {
   DataTableCell,
   DataTableColumns,
   DataTableHead,
+  DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
@@ -745,12 +746,12 @@ export function AttemptDetailPage() {
       </PageSection>
 
       <PageSection title={t("admin.attemptDetail.result.detailTitle")}>
-        <DataTableShell contentClassName="p-0">
+        <DataTableShell archetype="detail-comparison" contentClassName="p-0">
           <Table>
             <DataTableColumns
               columns={[
                 { role: "number" },
-                { role: "long-text", key: "question" },
+                { role: "long-text", key: "question", overflow: "truncate" },
                 { role: "type" },
                 { role: "secondary-text", key: "candidate-answer" },
                 { role: "secondary-text", key: "standard-answer" },
@@ -787,12 +788,8 @@ export function AttemptDetailPage() {
               {sortedQuestions.map((q) => (
                 <TableRow key={q.questionId}>
                   <DataTableCell role="number">{q.order + 1}</DataTableCell>
-                  <DataTableCell
-                    role="long-text"
-                    className="truncate"
-                    title={q.content}
-                  >
-                    {q.content}
+                  <DataTableCell role="long-text">
+                    <DataTableOverflowText mode="truncate" value={q.content} />
                   </DataTableCell>
                   <DataTableCell role="type">
                     <Badge variant="outline">

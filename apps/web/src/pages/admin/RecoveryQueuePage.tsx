@@ -13,6 +13,11 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -20,14 +25,7 @@ import { DatePicker } from "@/components/shared/DatePicker";
 import { Input } from "@/components/ui/input";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -420,40 +418,54 @@ export function RecoveryQueuePage() {
           description={t("admin.recoveryQueue.emptyDescription")}
         />
       ) : (
-        <DataTableShell>
+        <DataTableShell archetype="log-diagnostic">
           {/* Desktop table */}
           <div className="hidden md:block" data-testid="recovery-queue-table">
             <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "status", key: "incident" },
+                  { role: "type", key: "severity" },
+                  { role: "long-text", key: "exam" },
+                  { role: "primary-text", key: "candidate" },
+                  { role: "status", key: "attempt" },
+                  { role: "number", key: "linked" },
+                  { role: "secondary-text", key: "proctors" },
+                  { role: "date", key: "createdAt" },
+                ]}
+              />
               <TableHeader>
                 <TableRow>
-                  <TableHead>
+                  <DataTableHead role="status">
                     {t("admin.recoveryQueue.columns.incident")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="type">
                     {t("admin.recoveryQueue.columns.severity")}
-                  </TableHead>
-                  <TableHead>{t("admin.recoveryQueue.columns.exam")}</TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="long-text">
+                    {t("admin.recoveryQueue.columns.exam")}
+                  </DataTableHead>
+                  <DataTableHead role="primary-text">
                     {t("admin.recoveryQueue.columns.candidate")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="status">
                     {t("admin.recoveryQueue.columns.attempt")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="number">
                     {t("admin.recoveryQueue.columns.linked")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="secondary-text">
                     {t("admin.recoveryQueue.columns.proctors")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="date">
                     {t("admin.recoveryQueue.columns.createdAt")}
-                  </TableHead>
+                  </DataTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map((item) => (
                   <TableRow key={item.incident.id}>
-                    <TableCell>
+                    <DataTableCell role="status">
                       <Link
                         to={routes.admin.recoveryIncident(item.incident.id)}
                         className="text-sm font-medium underline-offset-4 hover:underline"
@@ -462,46 +474,43 @@ export function RecoveryQueuePage() {
                           status={incidentStatusKey(item.incident.status)}
                         />
                       </Link>
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="type">
                       {t(
                         `admin.recoveryQueue.severity.${item.incident.severity}` as never,
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className="block max-w-[200px] truncate text-sm"
-                        title={item.examSummary.title}
-                      >
-                        {item.examSummary.title}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="block max-w-[180px] truncate text-sm">
-                        {item.primaryCandidate?.displayName ??
-                          t("admin.recoveryQueue.noCandidate")}
-                      </span>
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="long-text">
+                      {/* Exam title is on the never-silent-truncate list:
+                          wrap, never ellipsis (issue 445 P3 §16). */}
+                      {item.examSummary.title}
+                    </DataTableCell>
+                    <DataTableCell role="primary-text">
+                      {item.primaryCandidate?.displayName ??
+                        t("admin.recoveryQueue.noCandidate")}
+                    </DataTableCell>
+                    <DataTableCell role="status">
                       {item.primaryAttempt ? (
                         <StatusBadge status={item.primaryAttempt.status} />
                       ) : (
                         t("admin.recoveryQueue.noAttempt")
                       )}
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="number">
                       {t("admin.recoveryQueue.linkedCount", {
                         count: item.linkedAttemptCount,
                       })}
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="secondary-text">
                       {item.activeProctors.length > 0
                         ? item.activeProctors
                             .map((p) => p.displayName)
                             .join("、")
                         : "—"}
-                    </TableCell>
-                    <TableCell>{formatTime(item.incident.createdAt)}</TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="date">
+                      {formatTime(item.incident.createdAt)}
+                    </DataTableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -527,7 +536,7 @@ export function RecoveryQueuePage() {
                       {formatTime(item.incident.createdAt)}
                     </span>
                   </span>
-                  <span className="block truncate text-sm font-medium">
+                  <span className="block text-sm font-medium">
                     {item.examSummary.title}
                   </span>
                   <span className="type-metadata">

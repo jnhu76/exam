@@ -20,6 +20,7 @@ import {
   DesktopDataTable,
   type DataViewColumnDef,
 } from "@/components/shared/DesktopDataTable";
+import { DataTableOverflowText } from "@/components/shared/DataTableContract";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { MobileRecordCard } from "@/components/shared/MobileRecordCard";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -256,16 +257,10 @@ export function QuestionPage() {
     },
     {
       id: "content",
-      meta: { role: "long-text" },
+      meta: { role: "long-text", overflow: "truncate" },
       header: t("admin.questions.columns.content" as never),
       cell: ({ row }) => (
-        <span
-          className="workbench-cell-text"
-          title={row.original.content}
-          aria-label={row.original.content}
-        >
-          {row.original.content}
-        </span>
+        <DataTableOverflowText mode="truncate" value={row.original.content} />
       ),
     },
     {

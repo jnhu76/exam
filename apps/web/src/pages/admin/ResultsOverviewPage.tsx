@@ -101,10 +101,7 @@ export function ResultsOverviewPage() {
       <div className="flex flex-col gap-6">
         <PageHeader title={t("admin.resultsOverview.title")} />
 
-        <DataTableShell
-          title={t("admin.resultsOverview.cardTitle")}
-          minTableWidth="compact"
-        >
+        <DataTableShell title={t("admin.resultsOverview.cardTitle")}>
           {exams.length === 0 ? (
             <EmptyState
               icon={<AppIcon icon={Gauge} size="hero" />}
