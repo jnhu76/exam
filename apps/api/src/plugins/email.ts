@@ -26,6 +26,7 @@ const emailPlugin: FastifyPluginAsync = async (fastify) => {
     fromName: config.email.fromName,
     fakeMode: config.email.fakeMode,
     fakeDelayMs: config.email.fakeDelayMs,
+    fakeSendEnteredFile: config.email.fakeSendEnteredFile,
     smtp: config.email.smtp,
   });
   fastify.decorate<EmailSender>("emailSender", sender);

@@ -50,6 +50,7 @@ const ENV_KEYS = [
   "EMAIL_RETRY_BASE_SECONDS",
   "EMAIL_FAKE_MODE",
   "EMAIL_FAKE_DELAY_MS",
+  "EMAIL_FAKE_SEND_ENTERED_FILE",
   "SMTP_HOST",
   "SMTP_PORT",
   "SMTP_SECURE",
@@ -1136,6 +1137,17 @@ describe("runtimeConfig", () => {
       process.env.EMAIL_FAKE_DELAY_MS = "soon";
       resetRuntimeConfigForTest();
       expect(() => getRuntimeConfig()).toThrow();
+    });
+
+    it("parses EMAIL_FAKE_SEND_ENTERED_FILE as an optional path (empty = disabled)", () => {
+      process.env.EMAIL_FAKE_SEND_ENTERED_FILE = "/tmp/exam-send-entered";
+      resetRuntimeConfigForTest();
+      expect(getRuntimeConfig().email.fakeSendEnteredFile).toBe(
+        "/tmp/exam-send-entered",
+      );
+      delete process.env.EMAIL_FAKE_SEND_ENTERED_FILE;
+      resetRuntimeConfigForTest();
+      expect(getRuntimeConfig().email.fakeSendEnteredFile).toBe("");
     });
 
     it("enabled=true + transport=fake parses without SMTP config", () => {
