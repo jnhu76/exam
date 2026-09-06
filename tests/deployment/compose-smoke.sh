@@ -29,12 +29,14 @@
 #   - #351 budget contract: with a send stuck in flight (fake transport,
 #     60s delay ≫ the 8s loop shutdown budget), `docker stop` still exits
 #     0 BEFORE stop_grace_period (never 137), the abandoned row stays
-#     `processing` with its ORIGINAL ownership evidence, and a restart
-#     recovers + re-claims it under a new owner (at-least-once).
+#     `processing` with its ORIGINAL ownership evidence (current lease
+#     representation), and a restart recovers + re-claims it under a new
+#     owner — the current at-least-once redelivery path.
 #   - #482 synchronization: `docker stop` is gated on BOTH a real
 #     happens-before pair — queue ownership (processing + lock) AND the
 #     fake-sender send-entered witness (written on entry to send(), before
-#     the simulated delay) — so the bounded-abandon warning is observed by
+#     the simulated delay: sender-adapter execution begun, no provider I/O
+#     implied) — so the bounded-abandon warning is observed by
 #     bounded polling of the stop window, not a one-shot log grep.
 #
 # Usage: ./compose-smoke.sh <run-number>
@@ -611,15 +613,19 @@ echo "  PASS: authenticated redis profile started, probed, and was torn down."
 # shutdown budget, `docker stop` must still end in the app's OWN graceful
 # exit (code 0) BEFORE stop_grace_period — not a Docker SIGKILL (137).
 # Also proves the abandoned row stays `processing` and is recovered and
-# re-claimed by the next app start (at-least-once redelivery).
+# re-claimed by the next app start — the current implementation's
+# at-least-once redelivery path.
 #
-# Synchronization model (#482 / ADR-011 §26): the two lifecycle boundaries
-# are asserted separately, in order, BEFORE the stop:
+# Synchronization model (#482; ADR-011 §26 Q1/Q2 + the accepted corrective
+# amendment 2026-09-06): the two lifecycle boundaries are asserted
+# separately, in order, BEFORE the stop:
 #   1. QUEUE OWNERSHIP: status=processing with non-empty locked_by AND
-#      locked_at — claim evidence only. It does NOT prove the send began.
+#      locked_at — claim evidence only. It does NOT prove execution began.
 #   2. SEND-ENTERED WITNESS: the fake sender writes EMAIL_FAKE_SEND_ENTERED_
-#      FILE on entry to send(), BEFORE the 60s simulated delay — so witness
-#      existence implies the delay is genuinely in flight.
+#      FILE on entry to send(), BEFORE the 60s simulated delay — witness
+#      existence implies sender-adapter execution has begun and the
+#      simulated attempt is still unresolved. It implies nothing about
+#      provider/network I/O or provider acceptance (this transport is fake).
 echo "--- TEST 17: stuck in-flight email send: bounded stop, exit 0, not 137 (#351) ---"
 STUCK_PROJECT="compose-smoke-stuck-${RUN_NUM}"
 STUCK_DATA_ROOT="${EXAM_DATA_ROOT}/stuck-stack"
@@ -670,9 +676,10 @@ docker exec "${STUCK_APP}" rm -f "${STUCK_WITNESS}" >/dev/null 2>&1 || true
 docker exec "${STUCK_DB}" psql -U exam -d exam -qc \
   "INSERT INTO email_outbox (id, organization_id, type, recipient_email, subject, body_text, status, attempt_count, max_attempts) SELECT gen_random_uuid()::text, id, 'test_email', 'stuck@example.com', 's', 't', 'pending', 0, 3 FROM organizations LIMIT 1;"
 
-# ── Tier A step 1: queue ownership sanity (ADR-011 §26 Q1/Q2) ────────────
-# status=processing + non-empty locked_by AND locked_at proves the row was
-# CLAIMED. It is NOT send-in-flight evidence — that is the witness's job.
+# ── Tier A step 1: queue ownership sanity (ADR-011 §26 Q1/Q2 — unchanged ─
+# by the corrective amendment). status=processing + non-empty locked_by AND
+# locked_at proves the row was CLAIMED. It is NOT sender-adapter-execution
+# evidence — that is the witness's job.
 STUCK_STATE=""
 for i in $(seq 1 30); do
   STUCK_STATE=$(docker exec "${STUCK_DB}" psql -U exam -d exam -tAc \
@@ -702,10 +709,13 @@ case "${STUCK_STATE}" in
     ;;
 esac
 
-# ── Tier A step 2: send-entered witness (ADR-011 §26 Q3) ─────────────────
-# HARD happens-before gate: the fake sender touches the witness file on
-# entry to send(), before the 60s delay. Only once it exists is the send
-# genuinely in flight and `docker stop` meaningful.
+# ── Tier A step 2: send-entered witness ──────────────────────────────────
+# ADR-011 corrective amendment §2: entry into the sender adapter is the
+# delivery-attempt execution boundary, distinct from provider/network I/O
+# and provider acceptance. HARD happens-before gate: the fake sender
+# touches the witness file on entry to send(), before the 60s delay. Once
+# it exists, sender-adapter execution has begun and the simulated attempt
+# is unresolved — the state `docker stop` is meant to interrupt.
 STUCK_WITNESS_SEEN=0
 for i in $(seq 1 30); do
   if docker exec "${STUCK_APP}" test -f "${STUCK_WITNESS}" 2>/dev/null; then
@@ -715,12 +725,12 @@ for i in $(seq 1 30); do
   sleep 1
 done
 if [ "${STUCK_WITNESS_SEEN}" != "1" ]; then
-  echo "  FAIL: send-entered witness never appeared — send execution not observed before stop."
+  echo "  FAIL: send-entered witness never appeared — sender-adapter execution not observed before stop."
   run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
   compose_down_best_effort "${STUCK_PROJECT}"
   exit 1
 fi
-echo "  PASS: send-entered witness observed — the 60s fake send is in flight."
+echo "  PASS: send-entered witness observed — sender-adapter execution begun; 60s simulated attempt unresolved."
 
 STUCK_T0=$(date +%s)
 STUCK_T0_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -742,7 +752,8 @@ echo "  PASS: docker stop → app exited ${STUCK_EXIT} in ${STUCK_ELAPSED}s (< 4
 
 # ── Tier B: bounded-abandon warning (observability evidence) ─────────────
 # #482: the one-shot `--tail=60 | grep` is gone. The stop landed on a
-# witnessed in-flight send, so the warning is emitted by the onClose
+# witnessed in-flight (simulated) send, so the warning is emitted by the
+# onClose
 # shutdown race before the process exits — deterministically inside this
 # stop window. Poll `logs --since` the stop start with a short bound;
 # no --tail, no unbounded wait.
@@ -765,24 +776,32 @@ if [ "${STUCK_WARN_SEEN}" != "1" ]; then
 fi
 echo "  PASS: email loop logged the bounded shutdown-timeout abandonment within the stop window."
 
-# ── Tier A: ownership evidence preserved across the abandonment (Q4) ─────
-# The bounded shutdown must NOT touch the row: original owner + claim
-# timestamp survive verbatim (redelivery is reachable only via lock-timeout
-# recovery — Q5 — never by rewriting processing → pending).
+# ── Tier A: ownership preserved across abandonment ───────────────────────
+# CURRENT-IMPLEMENTATION regression (ADR-011 corrective amendment §3.1):
+# the bounded shutdown leaves the row untouched — owner + claim timestamp
+# survive byte-for-byte, so an unknown-outcome row keeps fenced ownership
+# until the accepted recovery rule permits reclaim. recoverAbandoned →
+# pending → new claim is this implementation's recovery route, not a frozen
+# architecture requirement (a future accepted lease/ownership design only
+# needs equivalent fencing).
 STUCK_ROW_STATE=$(docker exec "${STUCK_DB}" psql -U exam -d exam -tAc \
   "SELECT status || '|' || COALESCE(locked_by, '') || '|' || COALESCE(locked_at::text, '') FROM email_outbox ORDER BY created_at DESC LIMIT 1")
 if [ "${STUCK_ROW_STATE}" != "processing|${STUCK_ORIGINAL_LOCKED_BY}|${STUCK_ORIGINAL_LOCKED_AT}" ]; then
-  echo "  FAIL: abandoned row ownership changed across the stop (state=${STUCK_ROW_STATE}; expected processing|${STUCK_ORIGINAL_LOCKED_BY}|${STUCK_ORIGINAL_LOCKED_AT}) — ADR-011 §26 Q4 violated."
+  echo "  FAIL: abandoned row ownership changed across the stop (state=${STUCK_ROW_STATE}; expected processing|${STUCK_ORIGINAL_LOCKED_BY}|${STUCK_ORIGINAL_LOCKED_AT}) — current-implementation regression: an unknown-outcome row must keep fenced ownership (ADR-011 corrective §3)."
   compose_down_best_effort "${STUCK_PROJECT}"
   exit 1
 fi
-echo "  PASS: abandoned row keeps status=processing with the ORIGINAL locked_by/locked_at."
+echo "  PASS: abandoned row keeps status=processing with the ORIGINAL locked_by/locked_at (current lease representation)."
 
 # Restart: lock timeout (6s) elapses, the next poll cycle's recoverAbandoned
 # re-queues the row (pending, lock fields cleared) and the NEW instance
-# claims it under a different owner — the #482/ADR-011 §26 Q5 at-least-once
-# redelivery proof. The transient `pending` state sits inside one poll
-# cycle and is intentionally not raced for.
+# claims it — CURRENT-IMPLEMENTATION recovery regression evidence
+# (ADR-011 corrective amendment §4): after accepted expiry, the restarted
+# process acquires fresh fenced ownership before retrying the attempt.
+# NEW_LOCKED_BY != ORIGINAL proves THIS restart performed the reclaim
+# (workerInstanceId is process-start-specific) — it is restart evidence,
+# not the definition of at-least-once delivery. The transient `pending`
+# state sits inside one poll cycle and is intentionally not raced for.
 STUCK_RESTART_T0=$(date +%s)
 docker start "${STUCK_APP}" >/dev/null
 STUCK_HEALTH=""
@@ -813,17 +832,17 @@ for i in $(seq 1 60); do
   sleep 1
 done
 if [ "${STUCK_RECLAIMED}" != "yes" ]; then
-  echo "  FAIL: abandoned row was not recovered and re-claimed by a NEW owner (state=${STUCK_STATE}; original owner=${STUCK_ORIGINAL_LOCKED_BY})."
+  echo "  FAIL: abandoned row was not recovered and re-claimed by the restarted process (state=${STUCK_STATE}; original owner=${STUCK_ORIGINAL_LOCKED_BY}) — restart-reclaim regression."
   run_compose "${STUCK_PROJECT}" logs --tail=40 app || true
   compose_down_best_effort "${STUCK_PROJECT}"
   exit 1
 fi
-echo "  PASS: row recovered and re-claimed by a NEW owner (Q5: ${STUCK_ORIGINAL_LOCKED_BY} → ${STUCK_NEW_LOCKED_BY})."
+echo "  PASS: row recovered and re-claimed by the restarted process (fresh fenced ownership; ${STUCK_ORIGINAL_LOCKED_BY} → ${STUCK_NEW_LOCKED_BY})."
 # Evidence of re-execution (not asserted): the new owner re-enters send(), so
 # the witness file is rewritten after the restart.
 STUCK_WITNESS_MTIME=$(docker exec "${STUCK_APP}" stat -c %Y "${STUCK_WITNESS}" 2>/dev/null || echo "0")
 if [ "${STUCK_WITNESS_MTIME}" -ge "${STUCK_RESTART_T0}" ] 2>/dev/null; then
-  echo "  PASS: witness rewritten after restart — the new owner's send re-entered execution."
+  echo "  PASS: witness rewritten after restart — the new owner re-entered sender-adapter execution."
 fi
 
 compose_down_best_effort "${STUCK_PROJECT}"

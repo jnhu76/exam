@@ -67,12 +67,14 @@
 - **根因假设**：TEST 17 是时序敏感用例——先观察到 "row claimed and send in flight (processing)"，随后在 60s 假发送延迟下 `docker stop`；断言要求 app 日志出现 bounded-abandon warning。本次 stop 后进程 10s 干净退出（exit 0），但日志采集窗口内未出现该 warning——stop 落在 bounded-abandon 路径发出日志之前。失败面是"日志存在性断言 × 固定时序窗口"的竞态，不是停止路径本身的行为错误（停止语义断言全部 PASS，exit 0 / 非 137 / outbox loop 干净停止均在同 run 或历史 run 通过）。
 - **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry、不断言弱化）；failed-job 重跑转绿后按正常流程合并 PR #479（merge commit d5e55489）。
 - **结构性修复（#482，同日完成）**：
-  - **根因（确认，非假设）**：TEST 17 把 queue claim 当作 send-in-flight 的代理——`email_outbox.status = processing` 只证明 worker 已通过 `FOR UPDATE SKIP LOCKED` 建立 queue ownership（`locked_at`/`locked_by` 非空，ADR-011 §26 Q1/Q2），**不**证明 `EmailSender.send()` 已开始执行。`docker stop` 落在 claim commit 与 send-enter 之间的竞态窗口时，bounded-abandon warning 合法地不会发出；一次性 `logs --tail=60 | grep` 与该生命周期零耦合，日志存在性断言比它观察的行为断言更脆。
-  - **修复（ADR-011 新增 §26 语义冻结 + 测试结构改造）**：
-    1. 显式 send-entered happens-before witness：`EMAIL_FAKE_SEND_ENTERED_FILE`（fake transport 专用、测试专用；production SMTP 不依赖）。`FakeEmailSender.send()` 进入 body、在 60s 模拟延迟**之前**同步写 witness 文件——"witness 存在 ⇒ 已进入 send ⇒ 60s 延迟正在飞行"；
-    2. TEST 17 同步模型改为：queue ownership 断言（processing + 非空 owner/timestamp，仅作 sanity）→ 等待 send-entered witness（有界轮询）→ `docker stop`。`status=processing` 不再被描述为 "send now in flight"；
+  - **根因（确认，非假设）**：TEST 17 把 queue claim 当作 send-in-flight 的代理——`email_outbox.status = processing` 只证明 worker 已通过 `FOR UPDATE SKIP LOCKED` 建立 queue ownership（`locked_at`/`locked_by` 非空；ADR-011 §26 Q1/Q2，人工 corrective amendment 未改动），**不**证明 `EmailSender.send()` 已开始执行。`docker stop` 落在 claim commit 与 send-enter 之间的竞态窗口时，bounded-abandon warning 合法地不会发出；一次性 `logs --tail=60 | grep` 与该生命周期零耦合，日志存在性断言比它观察的行为断言更脆。
+  - **修复（测试结构改造；语义 authority = ADR-011 §26 + accepted corrective amendment `docs/adr/ADR-011-amendment-2026-09-06-delivery-attempt-recovery.md`）**：
+    1. 显式 send-entered happens-before witness：`EMAIL_FAKE_SEND_ENTERED_FILE`（fake transport 专用、测试专用；production SMTP 不依赖）。`FakeEmailSender.send()` 进入 body、在 60s 模拟延迟**之前**同步写 witness 文件。witness 证明的是 **sender-adapter execution has begun**（60s 模拟 attempt 未决，test-specific happens-before），不证明 provider/network I/O 或 provider acceptance（corrective §2）；
+    2. TEST 17 同步模型改为：claim sanity → explicit fake send-entered witness → `docker stop` → behavior-first assertions。`status=processing` 不再被描述为 "send now in flight"；
     3. stop 后日志断言从一次性 grep 改为有界轮询 `docker logs --since <STOP_T0>`（15×1s 上限），只观察本次 shutdown interval；
-    4. 行为断言保持硬失败并加强：stop 前保存 ORIGINAL locked_by/locked_at，stop 后断言 row 保持 `processing` 且 **owner/timestamp 原样保留**（§26 Q4——shutdown 不得 rewrite processing→pending），restart 后由 **新 owner**（非空、≠原 owner）re-claim（§26 Q5 at-least-once redelivery proof）。
+    4. 行为断言保持硬失败并加强——这些是 **current implementation regression evidence**，不是所有未来实现必须采用的 ADR physical representation（corrective §6）：
+       - current implementation evidence：bounded shutdown 目前把原 owner/timestamp 逐字保留（byte-for-byte）；restart 目前产生新的 process-scoped owner（workerInstanceId 含 process-start UUID，故 B ≠ A）；recoverAbandoned 目前走 processing → pending → 新 claim；
+       - portable semantic（corrective §3/§4）：unknown-outcome work 不得仅为 retry 便利被立即置为可 claim（须保持 valid fenced ownership）；abandonment 后的 retry 必须先取得 valid fresh fenced ownership。
   - **结果**：warning 断言与 shutdown 序列确定性耦合后仍为硬 observability assertion（Tier B），行为断言（Tier A：ownership、witness、exit 0、<45s、非 137、ownership 保留、re-claim）为主要 correctness authority；未引入任何 retry/skip/grace 加宽。
 
 ### 2026-09-01 — CI API coverage 4-worker 并行下 DB 生命周期钩子漂移超时（PR #362 S1 anti-decay）
