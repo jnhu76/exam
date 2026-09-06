@@ -26,6 +26,7 @@ import {
   DataTableCell,
   DataTableColumns,
   DataTableHead,
+  DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { RowActions } from "@/components/shared/RowActions";
@@ -602,12 +603,12 @@ export function ExamCreatePage() {
                 )}
               />
             ) : (
-              <DataTableShell>
+              <DataTableShell archetype="embedded-picker">
                 <Table>
                   <DataTableColumns
                     columns={[
                       { role: "type" },
-                      { role: "long-text" },
+                      { role: "long-text", overflow: "truncate" },
                       { role: "score" },
                       { role: "actions" },
                     ]}
@@ -636,8 +637,11 @@ export function ExamCreatePage() {
                             {getTypeLabel(q.type, t) ?? q.type}
                           </Badge>
                         </DataTableCell>
-                        <DataTableCell role="long-text" className="truncate">
-                          {q.content}
+                        <DataTableCell role="long-text">
+                          <DataTableOverflowText
+                            mode="truncate"
+                            value={q.content}
+                          />
                         </DataTableCell>
                         <DataTableCell role="score">{q.score}</DataTableCell>
                         <DataTableCell role="actions">
@@ -954,7 +958,7 @@ export function ExamCreatePage() {
               <DataTableColumns
                 columns={[
                   { role: "type" },
-                  { role: "long-text" },
+                  { role: "long-text", overflow: "truncate" },
                   { role: "score" },
                   { role: "actions" },
                 ]}
@@ -983,8 +987,11 @@ export function ExamCreatePage() {
                         {getTypeLabel(q.type, t) ?? q.type}
                       </Badge>
                     </DataTableCell>
-                    <DataTableCell role="long-text" className="truncate">
-                      {q.content}
+                    <DataTableCell role="long-text">
+                      <DataTableOverflowText
+                        mode="truncate"
+                        value={q.content}
+                      />
                     </DataTableCell>
                     <DataTableCell role="score">{q.score}</DataTableCell>
                     <DataTableCell role="actions">

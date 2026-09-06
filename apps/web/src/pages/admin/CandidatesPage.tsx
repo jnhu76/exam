@@ -469,12 +469,12 @@ export function CandidatesPage() {
         />
       ) : (
         <>
-          <DataTableShell minTableWidth="standard">
+          <DataTableShell>
             <Table>
               <DataTableColumns
                 columns={[
-                  { role: "short-id" },
-                  { role: "primary-text" },
+                  { role: "primary-text", key: "username" },
+                  { role: "primary-text", key: "name" },
                   ...fields.map((field) => ({
                     role: "secondary-text" as const,
                     key: field.id,
@@ -485,7 +485,7 @@ export function CandidatesPage() {
               />
               <TableHeader>
                 <TableRow>
-                  <DataTableHead role="short-id">
+                  <DataTableHead role="primary-text">
                     {t("admin.candidates.columns.username")}
                   </DataTableHead>
                   <DataTableHead role="primary-text">
@@ -507,7 +507,7 @@ export function CandidatesPage() {
               <TableBody>
                 {filteredCandidates.map((candidate) => (
                   <TableRow key={candidate.id}>
-                    <DataTableCell role="short-id">
+                    <DataTableCell role="primary-text">
                       {candidate.username}
                     </DataTableCell>
                     <DataTableCell role="primary-text">

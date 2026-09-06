@@ -7,7 +7,7 @@
  * is specific to the unified Question Management workbench:
  *   - the continuous shell bands (toolbar as shell top, footer as shell bottom);
  *   - the sticky right action rail;
- *   - compact row geometry + single-line content truncation;
+ *   - compact row geometry;
  *   - the question-type badge and metadata-tag chip geometry.
  *
  * Scoping: every rule is anchored under [data-slot="data-workbench"], so these
@@ -119,18 +119,6 @@
 
 [data-slot="data-workbench"] [data-slot="table-body"] [data-slot="table-row"] {
   min-height: 2.75rem;
-}
-
-/* Content column: single-line truncation. The cell content (a span) clamps to
- * one line; the full text is exposed via the accessible title on the span set
- * by the page. */
-[data-slot="data-workbench"]
-  [data-slot="table-cell"][data-column-role="long-text"]
-  .workbench-cell-text {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 /* ──────────────────────────────────────────────────────────────────────

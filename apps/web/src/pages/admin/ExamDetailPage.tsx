@@ -687,8 +687,8 @@ export function ExamDetailPage() {
                 <Table>
                   <DataTableColumns
                     columns={[
-                      { role: "short-id" },
-                      { role: "primary-text" },
+                      { role: "primary-text", key: "identity" },
+                      { role: "primary-text", key: "name" },
                       { role: "status" },
                       { role: "number" },
                       { role: "score" },
@@ -697,7 +697,7 @@ export function ExamDetailPage() {
                   />
                   <TableHeader>
                     <TableRow>
-                      <DataTableHead role="short-id">
+                      <DataTableHead role="primary-text">
                         {t("admin.examDetail.enrollment.columns.identity")}
                       </DataTableHead>
                       <DataTableHead role="primary-text">
@@ -720,12 +720,10 @@ export function ExamDetailPage() {
                   <TableBody>
                     {enrollments.map((enrollment) => (
                       <TableRow key={enrollment.id}>
-                        <DataTableCell role="short-id">
-                          {/* Prefer the configured CandidateField-derived
-                           * identity; never fall back to a truncated internal
-                           * candidateId (unfriendly + leaks an impl detail).
-                           * "-" matches the missing-value convention used by
-                           * finalScore etc. in this table. */}
+                        <DataTableCell role="primary-text">
+                          {/* Candidate identity is a human identity: wrap,
+                           * never truncate (issue 445 V3). "-" matches the
+                           * missing-value convention used by finalScore etc. */}
                           {enrollment.candidateIdentity ?? "-"}
                         </DataTableCell>
                         <DataTableCell role="primary-text">

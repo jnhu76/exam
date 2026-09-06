@@ -11,6 +11,7 @@ import {
   DataTableCell,
   DataTableColumns,
   DataTableHead,
+  DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { Button } from "@/components/ui/button";
@@ -271,6 +272,7 @@ export function QuestionImportPage() {
       {parsedRows.length > 0 && !importResult && (
         <>
           <DataTableShell
+            archetype="embedded-picker"
             title={t("admin.questionImport.parsed", {
               count: parsedRows.length,
             })}
@@ -280,7 +282,7 @@ export function QuestionImportPage() {
                 columns={[
                   { role: "number" },
                   { role: "type" },
-                  { role: "long-text" },
+                  { role: "long-text", overflow: "truncate" },
                   { role: "score" },
                 ]}
               />
@@ -311,8 +313,11 @@ export function QuestionImportPage() {
                           : undefined) ?? row.type}
                       </Badge>
                     </DataTableCell>
-                    <DataTableCell role="long-text" className="truncate">
-                      {row.content}
+                    <DataTableCell role="long-text">
+                      <DataTableOverflowText
+                        mode="truncate"
+                        value={row.content}
+                      />
                     </DataTableCell>
                     <DataTableCell role="score">{row.score}</DataTableCell>
                   </TableRow>
@@ -366,6 +371,7 @@ export function QuestionImportPage() {
           </div>
 
           <DataTableShell
+            archetype="embedded-picker"
             title={t("admin.questionImport.previewColumns.detail")}
           >
             <Table>
@@ -373,7 +379,7 @@ export function QuestionImportPage() {
                 columns={[
                   { role: "number" },
                   { role: "status" },
-                  { role: "long-text" },
+                  { role: "long-text", overflow: "truncate" },
                 ]}
               />
               <TableHeader>

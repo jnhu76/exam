@@ -3,11 +3,81 @@ import { useTranslation } from "react-i18next";
 import { useOverflowObservation } from "@/hooks/useOverflowObservation";
 import { cn } from "@/lib/utils";
 
-export type DataTableMinWidth = "compact" | "standard" | "wide";
+export type DataTableTier = "compact" | "standard" | "wide";
+
+/**
+ * Closed table archetype vocabulary (issue 445 P3-Corrective §C). Pages declare the
+ * archetype; the shell derives the effective tier from the measured container
+ * width. `embedded-picker` is the named auto-layout exception: it stays inside
+ * the shell surface but is NOT governed by fixed-tier negotiation.
+ */
+export type TableArchetype =
+  | "management-list"
+  | "log-diagnostic"
+  | "detail-comparison"
+  | "embedded-picker";
+
+/**
+ * Physical tier floors (recipes.css `min-width` on the shell-scoped table).
+ * The negotiation is the ONLY consumer of these numbers — no runtime Σmin
+ * channel is built (P3-Corrective K2: fixed layout + col min-width +
+ * border-collapse physically enforce `renderedTableMin = max(tierMin,
+ * contentMin)` in Chromium; Σrole minima is a structural-test oracle only).
+ */
+export const TIER_MIN_WIDTH_PX: Record<DataTableTier, number> = {
+  compact: 720, //   45rem
+  standard: 980, // 61.25rem
+  wide: 1200, //     75rem
+};
+
+const TIER_ORDER: DataTableTier[] = ["compact", "standard", "wide"];
+
+/** Per-archetype tier bounds (P3-Corrective §C / §5.4). */
+export const ARCHETYPE_TIER_BOUNDS: Record<
+  Exclude<TableArchetype, "embedded-picker">,
+  { min: DataTableTier; max: DataTableTier }
+> = {
+  "management-list": { min: "compact", max: "standard" },
+  "log-diagnostic": { min: "compact", max: "wide" },
+  "detail-comparison": { min: "compact", max: "compact" },
+};
+
+/**
+ * Container-driven tier negotiation (pure, testable — no hysteresis):
+ *
+ *   effective = largest tier in [minTier, maxTier] whose tierMin ≤ container
+ *   if none fits → minTier (the initial/unmeasured container falls here; the
+ *   hook measures pre-paint so the first painted width is already negotiated).
+ *
+ * `minTier` caps how low a table degrades, `maxTier` caps how wide it may grow
+ * (management-list must never upgrade to wide on a huge container).
+ */
+export function negotiateTier(
+  containerWidth: number,
+  minTier: DataTableTier,
+  maxTier: DataTableTier,
+): DataTableTier {
+  const minIndex = TIER_ORDER.indexOf(minTier);
+  const maxIndex = TIER_ORDER.indexOf(maxTier);
+  let effective: DataTableTier = minTier;
+  for (let i = maxIndex; i >= minIndex; i--) {
+    const tier = TIER_ORDER[i];
+    if (tier !== undefined && TIER_MIN_WIDTH_PX[tier] <= containerWidth) {
+      effective = tier;
+      break;
+    }
+  }
+  return effective;
+}
 
 /**
  * Standard shell for data table pages, providing an optional title, description,
  * toolbar slot, content area, and footer within a bordered card container.
+ *
+ * The shell owns container-driven tier negotiation (from the archetype's
+ * min/max tier bounds and the measured container width) and the overflow
+ * affordance; it never computes column widths (that belongs to
+ * DataTableContract + recipes.css).
  */
 export function DataTableShell({
   title,
@@ -17,7 +87,7 @@ export function DataTableShell({
   footer,
   className,
   contentClassName,
-  minTableWidth = "standard",
+  archetype = "management-list",
 }: {
   title?: string;
   description?: string;
@@ -26,7 +96,7 @@ export function DataTableShell({
   footer?: ReactNode;
   className?: string;
   contentClassName?: string;
-  minTableWidth?: DataTableMinWidth;
+  archetype?: TableArchetype;
 }) {
   const { t } = useTranslation();
   const shellId = useId();
@@ -35,12 +105,22 @@ export function DataTableShell({
   const scrollRef = useRef<HTMLDivElement>(null);
   const overflow = useOverflowObservation(scrollRef);
 
+  const tier =
+    archetype === "embedded-picker"
+      ? null
+      : negotiateTier(
+          overflow.containerWidth,
+          ARCHETYPE_TIER_BOUNDS[archetype].min,
+          ARCHETYPE_TIER_BOUNDS[archetype].max,
+        );
+
   return (
     <section
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       data-slot="admin-table-shell"
-      data-table-min-width={minTableWidth}
+      data-table-archetype={archetype}
+      {...(tier ? { "data-table-tier": tier } : {})}
       className={cn("surface-content overflow-hidden", className)}
     >
       {(title || description || toolbar) && (

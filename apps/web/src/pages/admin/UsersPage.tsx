@@ -428,12 +428,12 @@ export function UsersPage() {
           description={t("admin.users.emptyDescription")}
         />
       ) : (
-        <DataTableShell minTableWidth="compact">
+        <DataTableShell>
           <Table>
             <DataTableColumns
               columns={[
-                { role: "short-id" },
-                { role: "primary-text" },
+                { role: "primary-text", key: "username" },
+                { role: "primary-text", key: "name" },
                 { role: "type" },
                 { role: "status" },
                 { role: "actions" },
@@ -441,7 +441,7 @@ export function UsersPage() {
             />
             <TableHeader>
               <TableRow>
-                <DataTableHead role="short-id">
+                <DataTableHead role="primary-text">
                   {t("admin.users.columns.username")}
                 </DataTableHead>
                 <DataTableHead role="primary-text">
@@ -461,7 +461,9 @@ export function UsersPage() {
             <TableBody>
               {users.map((user) => (
                 <TableRow key={user.id}>
-                  <DataTableCell role="short-id">{user.username}</DataTableCell>
+                  <DataTableCell role="primary-text">
+                    {user.username}
+                  </DataTableCell>
                   <DataTableCell role="primary-text">{user.name}</DataTableCell>
                   <DataTableCell role="type">
                     <Badge variant="outline">{roleLabel(user.role)}</Badge>
