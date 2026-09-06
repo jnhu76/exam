@@ -1,12 +1,6 @@
-import {
-  useCallback,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useOverflowObservation } from "@/hooks/useOverflowObservation";
 import { cn } from "@/lib/utils";
 import type {
   ActionsDensity,
@@ -39,9 +33,10 @@ import type {
  * shell, separate from the desktop table region, so a query scoped to
  * [data-slot="admin-table-shell"] matches only desktop table content.
  *
- * Overflow detection (scroll-fade / narrow hint) is ported from DataTableShell
- * so the viewport still owns local horizontal scroll and surfaces the same
- * affordances.
+ * Overflow facts come from the shared useOverflowObservation hook (the single
+ * measurement authority), so the viewport still owns local horizontal scroll
+ * and surfaces the same fade/hint affordances as DataTableShell, gated by
+ * container overflow facts only.
  */
 export function DataWorkbench({
   toolbar,
@@ -71,41 +66,7 @@ export function DataWorkbench({
   const { t } = useTranslation();
   const shellId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [overflow, setOverflow] = useState({
-    overflowing: false,
-    atStart: true,
-    atEnd: true,
-    narrow: false,
-  });
-  const updateOverflow = useCallback(() => {
-    const region = scrollRef.current;
-    if (!region) return;
-    const maxScroll = Math.max(0, region.scrollWidth - region.clientWidth);
-    const overflowing = maxScroll > 1;
-    setOverflow({
-      overflowing,
-      atStart: !overflowing || region.scrollLeft <= 1,
-      atEnd: !overflowing || region.scrollLeft >= maxScroll - 1,
-      narrow: window.innerWidth < 640,
-    });
-  }, []);
-
-  useLayoutEffect(() => {
-    const region = scrollRef.current;
-    if (!region) return;
-    updateOverflow();
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(updateOverflow);
-    observer?.observe(region);
-    if (region.firstElementChild) observer?.observe(region.firstElementChild);
-    window.addEventListener("resize", updateOverflow);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", updateOverflow);
-    };
-  }, [desktopTable, updateOverflow]);
+  const overflow = useOverflowObservation(scrollRef);
 
   const titleId = `${shellId}-label`;
 
@@ -130,7 +91,6 @@ export function DataWorkbench({
           data-scroll-start={String(overflow.atStart)}
           data-scroll-end={String(overflow.atEnd)}
           className={cn("min-w-0 overflow-x-auto", contentClassName)}
-          onScroll={updateOverflow}
         >
           {/* Desktop table — hidden below lg; admin-table-shell owns its grid. */}
           <div className="hidden lg:block">{desktopTable}</div>
@@ -141,7 +101,7 @@ export function DataWorkbench({
         {overflow.overflowing && !overflow.atEnd && (
           <span data-slot="table-scroll-fade-right" aria-hidden="true" />
         )}
-        {overflow.overflowing && overflow.narrow && (
+        {overflow.overflowing && (
           <div
             data-slot="table-scroll-hint"
             data-scroll-direction={

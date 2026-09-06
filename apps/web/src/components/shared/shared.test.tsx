@@ -780,10 +780,13 @@ describe("DataTableShell", () => {
     expect(region).toHaveAttribute("data-overflowing", "false");
   });
 
-  it("renders a non-interactive narrow-viewport hint only for overflow", () => {
+  it("renders the overflow hint from container facts at any viewport width", () => {
+    // #445 P3 §5.3: the hint is gated by container overflow facts only — the
+    // former window.innerWidth < 640 gate is deleted, so a desktop-width
+    // viewport with an overflowing table also shows the hint.
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
-      value: 420,
+      value: 1280,
     });
     render(
       <DataTableShell>
@@ -822,6 +825,12 @@ describe("DataTableShell", () => {
       "data-scroll-direction",
       "left",
     );
+
+    // A wide viewport does NOT re-gate the hint: overflowing is a container
+    // fact, not a viewport policy.
+    metrics.scrollLeft = 0;
+    fireEvent.scroll(region);
+    expect(screen.getByText("向右滑动查看更多")).toBeInTheDocument();
     expect(region).toHaveClass("overflow-x-auto");
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
       document.documentElement.clientWidth,

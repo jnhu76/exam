@@ -1,11 +1,23 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
 const indexCss = readFileSync(join(here, "../index.css"), "utf8");
+
+function listSourceFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "dist" || entry.name === "lint") continue;
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) listSourceFiles(path, out);
+    else if (/\.tsx?$/.test(entry.name) && !/\.test\./.test(entry.name)) {
+      out.push(path);
+    }
+  }
+  return out;
+}
 
 describe("table and color visual-finish authority", () => {
   it("publishes the refined perceptually-uniform product-blue token system", () => {
@@ -129,6 +141,23 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).toMatch(
       /@media \(pointer: coarse\)[\s\S]*?width:\s*2\.75rem/,
     );
+  });
+
+  it("keeps useOverflowObservation as the single overflow-measurement owner", () => {
+    // #445 P3 §8: exactly one module may read scrollWidth/clientWidth via a
+    // ResizeObserver loop. Before the convergence DataTableShell and
+    // DataWorkbench each carried a byte-identical copy of the algorithm; any
+    // second production owner (or a component re-deriving overflow facts)
+    // must fail here instead of drifting.
+    const webRoot = join(here, "..");
+    const owners = listSourceFiles(webRoot)
+      .map((path) => ({
+        path: relative(webRoot, path),
+        text: readFileSync(path, "utf8"),
+      }))
+      .filter(({ text }) => /ResizeObserver|scrollWidth/.test(text))
+      .map(({ path }) => path);
+    expect(owners).toEqual(["hooks/useOverflowObservation.ts"]);
   });
 
   it("defines non-interactive state-aware scroll affordances", () => {
