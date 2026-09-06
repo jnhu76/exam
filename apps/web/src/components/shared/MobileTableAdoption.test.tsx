@@ -26,6 +26,7 @@ import {
   DataTableShell,
   isMobileRepresentationAllowed,
 } from "./DataTableShell";
+import { DataWorkbench } from "./DataWorkbench";
 import { deriveMobileCardFields } from "./MobileRecordList";
 import type { DataViewColumnDef } from "./DesktopDataTable";
 
@@ -104,6 +105,28 @@ describe("mobile card representation structural guards (issue 457)", () => {
     },
   );
 
+  it.each(["detail-comparison", "log-diagnostic"] as const)(
+    "the workbench fails loud when mobileList meets archetype %s (DEV/test)",
+    (archetype) => {
+      expect(() =>
+        render(
+          <DataWorkbench
+            archetype={archetype}
+            desktopTable={<table />}
+            mobileList={<div>x</div>}
+          />,
+        ),
+      ).toThrow(/management-list mechanism/);
+    },
+  );
+
+  it("DataWorkbench reuses the single eligibility authority (no second predicate)", () => {
+    // R1 parity: the workbench consumes isMobileRepresentationAllowed from
+    // DataTableShell — the one predicate stays the authority for both shells.
+    const workbench = read("./DataWorkbench.tsx");
+    expect(workbench).toMatch(/isMobileRepresentationAllowed\(/);
+  });
+
   it.each(scrollOnlyConsumers)(
     "$file keeps horizontal scroll below lg (no mobile card slot)",
     ({ file, archetype }) => {
@@ -172,6 +195,42 @@ describe("mobile card representation structural guards (issue 457)", () => {
     );
     expect(dynamicDecl, "dynamic field declaration found").toBeTruthy();
     expect(dynamicDecl![0]).toMatch(/priority: "low"/);
+  });
+
+  it("keeps unbounded ScoreList candidateInfo off the card meta line (R3 audit correction)", () => {
+    // Deployment-defined candidate fields are unbounded in count/content —
+    // joining them into one JSX node does not make the information bounded.
+    // The declaration must carry priority "low": mobile omits the field while
+    // desktop keeps the full column (responsive information reduction, not
+    // data deletion).
+    const fields = deriveMobileCardFields([
+      {
+        id: "candidateName",
+        meta: { role: "primary-text" },
+        header: "考生",
+        cell: () => "n",
+      },
+      {
+        id: "candidateInfo",
+        meta: { role: "secondary-text", priority: "low" },
+        header: "考生信息",
+        cell: () => "i",
+      },
+      {
+        id: "submittedAt",
+        meta: { role: "date" },
+        header: "提交时间",
+        cell: () => "d",
+      },
+    ] as DataViewColumnDef<{ candidateName: string }>[]);
+    // candidateName (primary), submittedAt (meta) participate; the low
+    // candidateInfo column is absent from the derived card fields.
+    expect(fields.map((f) => f.id)).toEqual(["candidateName", "submittedAt"]);
+
+    // The audited page: candidateInfo carries the priority "low" override
+    // (removing it must fail this pin — M-F4).
+    const source = read("../../pages/admin/ScoreListPage.tsx");
+    expect(source).toMatch(/id: "candidateInfo",[\s\S]{0,400}priority: "low"/);
   });
 
   it.each([

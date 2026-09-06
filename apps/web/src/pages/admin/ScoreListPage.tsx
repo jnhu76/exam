@@ -164,7 +164,10 @@ export function ScoreListPage() {
     },
     {
       id: "candidateInfo",
-      meta: { role: "secondary-text" },
+      // Deployment-defined candidate fields are unbounded in count/content;
+      // joining them into one JSX node does not make the information bounded
+      // (R3 audit correction). Mobile omits the field; desktop keeps it.
+      meta: { role: "secondary-text", priority: "low" },
       header: t("admin.scoreList.columns.candidateInfo"),
       cell: ({ row }) =>
         Object.values(row.original.candidateFields).map(String).join(" / ") ||

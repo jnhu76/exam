@@ -113,18 +113,19 @@ function questionListPayload(
 
 /** The desktop table shell region (rows also render in the mobile card list). */
 function desktopShell(): HTMLElement {
-  // C3: admin-table-shell now contains both mobile and desktop regions via
-  // ResponsiveRepresentation. Scope to the desktop region so queries don't
-  // match mobile card content (jsdom doesn't apply CSS visibility).
+  // R2: admin-table-shell owns the desktop measurement branch ONLY (mobile
+  // cards are its sibling under the responsive owner), so scoping to it keeps
+  // desktop queries free of mobile card content (jsdom doesn't apply CSS
+  // visibility).
   return document.querySelector(
-    '[data-slot="admin-table-shell"] [data-slot="responsive-desktop-region"]',
+    '[data-slot="admin-table-shell"]',
   ) as HTMLElement;
 }
 
 /** The mobile card region (the CSS-hidden twin of the desktop table). */
 function mobileRegion(): HTMLElement {
   return document.querySelector(
-    '[data-slot="admin-table-shell"] [data-slot="responsive-mobile-region"]',
+    '[data-slot="responsive-mobile-region"]',
   ) as HTMLElement;
 }
 
