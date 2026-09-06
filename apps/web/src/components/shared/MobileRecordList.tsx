@@ -203,7 +203,11 @@ export function MobileRecordList<TData>({
               primary.length > 0 ? (
                 <>
                   {primary.map((f) => (
-                    <div key={f.id} className="min-w-0 break-words">
+                    <div
+                      key={f.id}
+                      data-field-id={f.id}
+                      className="min-w-0 break-words"
+                    >
                       {render(f.id)}
                     </div>
                   ))}
