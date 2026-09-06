@@ -12,7 +12,11 @@ import { loginAsAdmin } from "../lib/login";
 
 async function openTimePair(page: Page, editUrl: string) {
   await page.goto(editUrl);
-  await expect(page.getByText("手动选题")).toBeVisible({ timeout: 15_000 });
+  // Role-scoped: the raw text also appears inside the empty-state copy
+  // (请点击「手动选题」按钮…), which trips strict-mode resolution.
+  await expect(page.getByRole("button", { name: "手动选题" })).toBeVisible({
+    timeout: 15_000,
+  });
   const startLabel = page.getByText("开始时间", { exact: true }).first();
   await expect(startLabel).toBeVisible();
   const endLabel = page.getByText("结束时间", { exact: true }).first();
