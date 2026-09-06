@@ -113,6 +113,52 @@ describe("deriveMobileCardFields (frozen priority→slot mapping)", () => {
     ]);
     expect(fields.map((f) => f.id)).toEqual(["owner"]);
   });
+
+  // ── C5: stable column id contract ──
+
+  it("fails loud on a participating column without id/accessorKey (dev/test)", () => {
+    expect(() =>
+      deriveMobileCardFields<Row>([
+        { meta: { role: "secondary-text" } } as DataViewColumnDef<Row>,
+      ]),
+    ).toThrow(/explicit `id` or string `accessorKey`/);
+  });
+
+  it("ignores an id-less column that does not participate (low priority)", () => {
+    const fields = deriveMobileCardFields<Row>([
+      { meta: { role: "description" } } as DataViewColumnDef<Row>,
+      col("title", { role: "primary-text" }),
+    ]);
+    expect(fields.map((f) => f.id)).toEqual(["title"]);
+  });
+
+  it("renders card fields only under stable ids that match TanStack cell ids", () => {
+    // A field renders ⟺ its derived id is a real TanStack column id (the
+    // list looks cells up by cell.column.id). Mixing an explicit-id column
+    // with an accessorKey column proves both identity forms integrate; a
+    // positional `${role}-${index}` id would filter the field out instead.
+    const mixed: DataViewColumnDef<Row>[] = [
+      ...columns,
+      {
+        accessorKey: "owner",
+        meta: { role: "secondary-text" },
+        header: "Owner",
+      },
+    ];
+    render(
+      <MobileRecordList
+        columns={mixed}
+        rows={[rows[0]!]}
+        getRowId={(r) => r.id}
+      />,
+    );
+    const card = document.querySelector('[data-slot="mobile-record-card"]')!;
+    const fieldIds = [...card.querySelectorAll("[data-field-id]")].map((el) =>
+      el.getAttribute("data-field-id"),
+    );
+    expect(fieldIds).toHaveLength(4);
+    expect([...fieldIds].sort()).toEqual(["count", "kind", "owner", "title"]);
+  });
 });
 
 const columns: DataViewColumnDef<Row>[] = [

@@ -36,35 +36,55 @@ const PRIMARY_AREA_ROLES: readonly DataTableColumnRole[] = [
 ];
 
 export interface MobileCardField {
-  /** Stable column id (def.id ?? accessorKey ?? `${role}-${index}`). */
+  /** Stable column id (explicit `id` or string `accessorKey`; see
+   * {@link stableColumnId} — positional names are not legal identities). */
   id: string;
   role: DataTableColumnRole;
   priority: ColumnPriority;
   slot: MobileCardSlot;
 }
 
-function columnId<TData>(column: DataViewColumnDef<TData>, index: number) {
+/**
+ * The stable lookup identity of a card field: the column's explicit `id` or
+ * its string `accessorKey`. A positional fallback (`${role}-${index}`) is NOT
+ * a legal identity — the card renders cells by TanStack's column id, so a
+ * made-up positional name silently breaks the cell lookup.
+ */
+function stableColumnId<TData>(
+  column: DataViewColumnDef<TData>,
+): string | undefined {
   if (column.id !== undefined) return column.id;
   if ("accessorKey" in column && typeof column.accessorKey === "string") {
     return column.accessorKey;
   }
-  return `${column.meta?.role ?? "col"}-${index}`;
+  return undefined;
 }
 
 /**
  * The priority→card mapping (frozen rule, unit-tested directly). Pure: takes
  * the single-source column declarations, returns the participating fields in
  * declaration order with their card slot. `low` is dropped here; a second
- * actions column is a contract violation (fail-loud in dev/test).
+ * actions column is a contract violation (fail-loud in dev/test). A
+ * participating column without a stable id fails loud in dev/test and is
+ * omitted in production — it can never render under a positional identity.
  */
 export function deriveMobileCardFields<TData>(
   columns: DataViewColumnDef<TData>[],
 ): MobileCardField[] {
   const fields: MobileCardField[] = [];
-  columns.forEach((column, index) => {
+  columns.forEach((column) => {
     const role = column.meta?.role ?? "primary-text";
     const priority = columnPriority({ role, priority: column.meta?.priority });
     if (priority === "low") return;
+    const id = stableColumnId(column);
+    if (id === undefined) {
+      if (import.meta.env.DEV) {
+        throw new Error(
+          "MobileRecordList contract violation: a participating column needs an explicit `id` or string `accessorKey` (no positional fallback)",
+        );
+      }
+      return;
+    }
     let slot: MobileCardSlot;
     if (role === "actions") {
       if (import.meta.env.DEV && fields.some((f) => f.slot === "actions")) {
@@ -78,7 +98,7 @@ export function deriveMobileCardFields<TData>(
     } else {
       slot = "meta";
     }
-    fields.push({ id: columnId(column, index), role, priority, slot });
+    fields.push({ id, role, priority, slot });
   });
   return fields;
 }
