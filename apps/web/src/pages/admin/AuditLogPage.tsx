@@ -18,7 +18,7 @@ import {
   DataTableHead,
   DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
-import { DataToolbar } from "@/components/shared/DataToolbar";
+import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { DatePicker } from "@/components/shared/DatePicker";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -295,12 +295,11 @@ export function AuditLogPage() {
       />
       <DataToolbar>
         <Select value={actionFilter} onValueChange={(v) => setActionFilter(v)}>
-          <SelectTrigger
-            className="w-[220px]"
-            aria-label={t("admin.audit.filterActions.all")}
-          >
-            <SelectValue />
-          </SelectTrigger>
+          <ToolbarFilter size="narrow">
+            <SelectTrigger aria-label={t("admin.audit.filterActions.all")}>
+              <SelectValue />
+            </SelectTrigger>
+          </ToolbarFilter>
           <SelectContent>
             <SelectItem key="all" value="all">
               {t("admin.audit.filterActions.all")}
@@ -313,12 +312,11 @@ export function AuditLogPage() {
           </SelectContent>
         </Select>
         <Select value={targetFilter} onValueChange={(v) => setTargetFilter(v)}>
-          <SelectTrigger
-            className="w-[150px]"
-            aria-label={t("admin.audit.filterTargets.all")}
-          >
-            <SelectValue />
-          </SelectTrigger>
+          <ToolbarFilter size="narrow">
+            <SelectTrigger aria-label={t("admin.audit.filterTargets.all")}>
+              <SelectValue />
+            </SelectTrigger>
+          </ToolbarFilter>
           <SelectContent>
             {TARGET_FILTER_KEYS.map((key) => (
               <SelectItem key={key} value={key}>

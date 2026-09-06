@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { DataToolbar } from "@/components/shared/DataToolbar";
+import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
@@ -423,11 +423,13 @@ export function QuestionPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="w-auto lg:w-[180px]">
-                  <SelectValue
-                    placeholder={t("admin.questions.filterCourse" as never)}
-                  />
-                </SelectTrigger>
+                <ToolbarFilter size="wide">
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={t("admin.questions.filterCourse" as never)}
+                    />
+                  </SelectTrigger>
+                </ToolbarFilter>
                 <SelectContent>
                   <SelectItem value="all">
                     {t("admin.questions.filterAllCourses" as never)}
@@ -447,14 +449,15 @@ export function QuestionPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger
-                  aria-label={t("admin.questions.filterType" as never)}
-                  className="w-auto lg:w-[150px]"
-                >
-                  <SelectValue
-                    placeholder={t("admin.questions.filterType" as never)}
-                  />
-                </SelectTrigger>
+                <ToolbarFilter size="narrow">
+                  <SelectTrigger
+                    aria-label={t("admin.questions.filterType" as never)}
+                  >
+                    <SelectValue
+                      placeholder={t("admin.questions.filterType" as never)}
+                    />
+                  </SelectTrigger>
+                </ToolbarFilter>
                 <SelectContent>
                   <SelectItem value="all">
                     {t("admin.questions.filterAllTypes" as never)}
@@ -486,11 +489,15 @@ export function QuestionPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="w-auto lg:w-[140px]">
-                  <SelectValue
-                    placeholder={t("admin.questions.filterDifficulty" as never)}
-                  />
-                </SelectTrigger>
+                <ToolbarFilter size="narrow">
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={t(
+                        "admin.questions.filterDifficulty" as never,
+                      )}
+                    />
+                  </SelectTrigger>
+                </ToolbarFilter>
                 <SelectContent>
                   <SelectItem value="all">
                     {t("admin.questions.filterAllDifficulties" as never)}
@@ -505,15 +512,17 @@ export function QuestionPage() {
                 </SelectContent>
               </Select>
 
-              <TagFilterSelect
-                tags={tagVocabulary}
-                selected={filterTags}
-                onChange={(next) => {
-                  setFilterTags(next);
-                  setPage(1);
-                }}
-                aria-label={t("admin.questions.tagFilterLabel" as never)}
-              />
+              <ToolbarFilter size="wide">
+                <TagFilterSelect
+                  tags={tagVocabulary}
+                  selected={filterTags}
+                  onChange={(next) => {
+                    setFilterTags(next);
+                    setPage(1);
+                  }}
+                  aria-label={t("admin.questions.tagFilterLabel" as never)}
+                />
+              </ToolbarFilter>
             </DataToolbar>
           </DataWorkbenchToolbar>
         }

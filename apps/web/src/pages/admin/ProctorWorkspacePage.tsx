@@ -16,7 +16,7 @@ import {
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
-import { DataToolbar } from "@/components/shared/DataToolbar";
+import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -92,12 +92,13 @@ export function ProctorWorkspacePage() {
           value={statusFilter}
           onValueChange={(value) => setStatusFilter(value as StatusFilter)}
         >
-          <SelectTrigger
-            className="w-[180px]"
-            aria-label={t("admin.proctorWorkspace.statusFilter")}
-          >
-            <SelectValue />
-          </SelectTrigger>
+          <ToolbarFilter size="narrow">
+            <SelectTrigger
+              aria-label={t("admin.proctorWorkspace.statusFilter")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+          </ToolbarFilter>
           <SelectContent>
             {STATUS_FILTERS.map((status) => (
               <SelectItem key={status} value={status}>
