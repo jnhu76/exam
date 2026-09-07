@@ -42,6 +42,7 @@ import {
   PATROL_BASE_URL,
   collectShellFacts,
   createUserViaApi,
+  progressLog,
 } from "./patrol-fixtures";
 
 const BASE_SHA = execSync("git rev-parse --short HEAD", {
@@ -193,7 +194,7 @@ test.describe.serial("UI patrol comparison suites", () => {
       join(OUTPUT_DIR, "REVIEW-PROMPT.md"),
       COMPARISON_REVIEW_PROMPT,
     );
-    console.log(`\n[patrol-compare] DONE: ${OUTPUT_DIR}`);
+    progressLog(OUTPUT_DIR, `[patrol-compare] DONE: ${OUTPUT_DIR}`);
   });
 
   test("Set A: admin shell continuity across the route sequence (1280x800)", async () => {

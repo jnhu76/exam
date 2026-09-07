@@ -7,10 +7,22 @@
  * collector is what makes comparison sets interpretable — every tile in a
  * sheet is accompanied by the same DOM facts.
  */
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Page, APIRequestContext } from "@playwright/test";
 
 export const PATROL_BASE_URL =
   process.env.E2E_BASE_URL ?? "http://localhost:3001";
+
+/** Patrol run progress goes to the run's output dir, never to the console —
+ * the repo code-quality gate treats console output as a violation and CI
+ * parses artifacts, not stdout. Callers own creating `outputDir` first. */
+export function progressLog(outputDir: string, message: string): void {
+  appendFileSync(
+    join(outputDir, "progress.log"),
+    `${new Date().toISOString()} ${message}\n`,
+  );
+}
 
 /** Create a staff user through the admin API and return its login fixture. */
 export async function createUserViaApi(

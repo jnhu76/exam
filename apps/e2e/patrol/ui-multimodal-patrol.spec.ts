@@ -36,6 +36,7 @@ import {
   collectShellFacts,
   createUserViaApi,
   assignUserToCourse,
+  progressLog,
   type NavShellFacts,
   type TableShellFacts,
 } from "./patrol-fixtures";
@@ -415,7 +416,7 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
       },
     );
     exams.push(exam1);
-    console.log(`[patrol] exam1 seeded: ${exam1.examId}`);
+    progressLog(OUTPUT_DIR, `[patrol] exam1 seeded: ${exam1.examId}`);
 
     const exam2 = await seedExam(
       request as unknown as APIRequestContext,
@@ -426,7 +427,7 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
       },
     );
     exams.push(exam2);
-    console.log(`[patrol] exam2 seeded: ${exam2.examId}`);
+    progressLog(OUTPUT_DIR, `[patrol] exam2 seeded: ${exam2.examId}`);
     // Close exam2
     await closeExamApi(
       request as unknown as APIRequestContext,
@@ -446,7 +447,7 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
         },
       );
       exams.push(exam3);
-      console.log(`[patrol] exam3 seeded: ${exam3.examId}`);
+      progressLog(OUTPUT_DIR, `[patrol] exam3 seeded: ${exam3.examId}`);
       const candToken = await candidateApiToken(
         request as unknown as APIRequestContext,
         exam3.candidate,
@@ -457,7 +458,7 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
         exam3.examId,
       );
     } catch (e) {
-      console.log(`[patrol] exam3 seed failed (non-fatal): ${e}`);
+      progressLog(OUTPUT_DIR, `[patrol] exam3 seed failed (non-fatal): ${e}`);
     }
 
     // Create Teacher
@@ -555,8 +556,9 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
       JSON.stringify(routeCoverage, null, 2),
     );
 
-    console.log(
-      `\n[patrol] DONE: ${manifest.length} screenshots in ${OUTPUT_DIR}`,
+    progressLog(
+      OUTPUT_DIR,
+      `[patrol] DONE: ${manifest.length} screenshots in ${OUTPUT_DIR}`,
     );
   });
 
