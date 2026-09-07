@@ -8,6 +8,63 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-09-07
+
+### Added
+
+- A frozen user-facing message and error contract (#413): one documented
+  authority (`docs/contracts/api-contract.md` D0.1–D0.13) backed by
+  machine-readable error semantics across API routes and shared contracts,
+  localized web rendering of known machine errors, semantic authority cleanup,
+  tooling enforcement, and residual hygiene (C0–C6).
+- Shared Admin UI spatial contracts backed by browser-level regression gates:
+  unified overflow measurement, row action capacity, dialog and form spatial
+  vocabularies, table role matrix with tier negotiation and the fit equation,
+  semantic toolbar control sizing, page-role geometry vocabulary, and a mobile
+  card representation for management lists (#452, #453, #454, #455, #457,
+  #458, #459, #460).
+- Structural route→page metadata coverage enforcement, so routed pages can no
+  longer silently fall back to a generic title, plus navigation
+  current-location and scroll-continuity contracts across route families
+  (#490, #494).
+- Candidate notification when a new exam is assigned (#299), with production
+  email renderers converged onto one authority (#300).
+- A multi-role visual patrol harness with contact-sheet artifact-integrity
+  gates and a periodic Docker black-box discovery campaign (test/operations
+  infrastructure) (#466, #476).
+
+### Changed
+
+- The timing-mode umbrella #291 is closed: `deadline` and `untimed` candidate
+  runtime is covered by end-to-end tests; `timed_sync` remains a latent,
+  non-authorable mode pending durable admission queue work.
+- Enrollment bulk import classifies duplicate `candidateIds` within one
+  payload as `DUPLICATE` skips instead of failing the request (#408).
+- Documentation authority was consolidated: ADR authority precedence, an ADR
+  architecture map with grouped convergence, snapshot-timing and RBAC/queue
+  ADR alignment, Docker black-box campaign authority, and an agent-governance
+  corrective (#414, #442, #469, #472, and related docs PRs).
+- Admin pages now render coherently at a 390px baseline for both candidate and
+  Admin surfaces, and primary buttons preserve the keyboard focus ring
+  (#306, #412).
+- Test infrastructure: `@exam/db` vitest workers are capped at the
+  lifecycle-lane knee (#463), and the fresh-install gate uses a deterministic
+  send-entered witness with the ADR-011 claim-vs-execution boundary (#482).
+
+### Fixed
+
+- Grading-queue and other routed pages no longer fall back to the generic
+  "页面" title (#439 V5 and pageMeta coverage gaps).
+- Admin navigation preserves a single discoverable current destination across
+  list/detail/edit route families and stays coherent when the sidebar must
+  scroll (#494).
+- Duplicate candidates in one enrollment payload no longer produce a confusing
+  failure (#408).
+
+### Removed
+
+- The unused `@fastify/jwt` dependency (#436).
+
 ## [0.0.3] - 2026-09-03
 
 ### Added
@@ -225,7 +282,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/jnhu76/exam/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/jnhu76/exam/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/jnhu76/exam/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/jnhu76/exam/releases/tag/v0.0.1
