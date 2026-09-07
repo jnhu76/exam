@@ -235,12 +235,18 @@ route-specific footer geometry.
 
 **NAV-2 — Current location.** A user must always be able to determine their
 current application location from the navigation shell. For every routed
-destination represented in navigation: exactly one current nav destination
-(Primer rule: at most one `aria-current` at any time), visually
-distinguishable from non-current items, semantically marked
-(`aria-current="page"` — React Router `NavLink` is the single current-route
-authority; no second current-route source), and the current destination is
-discoverable inside the navigation viewport without manual scrolling. The
+destination represented in navigation — its exact route AND routed
+descendants that semantically belong to it (a destination represents a route
+family, e.g. `/admin/exams/:id/edit` resolves to 考试管理) — exactly one
+current nav destination (Primer rule: at most one `aria-current` at any
+time), visually distinguishable from non-current items, semantically marked
+(`aria-current="page"` — the explicit route-family matcher in
+`lib/navMatch.ts` is the single current-route authority, derived purely from
+`location.pathname`; no second current-route source, no mutable React state),
+and the current destination is discoverable inside the navigation viewport
+without manual scrolling. Family matching is segment-exact pattern matching,
+never React Router prefix accidents: `/admin/questions/import` resolves only
+to 题目导入, never to 题目管理. The
 contract is *current destination discoverable*; any reveal mechanism
 (minimum reveal, `block:"nearest"`, …) is an implementation choice. Centering
 the active item or resetting nav scroll on every route change violates

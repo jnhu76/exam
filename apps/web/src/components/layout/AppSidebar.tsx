@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { NavLink, useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -50,6 +50,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useVerticalOverflowObservation } from "@/hooks/useVerticalOverflowObservation";
 import { cn } from "@/lib/utils";
+import { matchNavDestination } from "@/lib/navMatch";
 import { routes } from "@/lib/routes";
 import { BrandHeader } from "./BrandHeader";
 
@@ -63,12 +64,13 @@ interface AppSidebarProps {
 
 /** A navigation item: route + icon + the i18n key for its label.
  *  `visible?` is a UX-only capability gate (see lib/capabilities.ts); it hides
- *  the entry for roles that lack the permission. Backend remains authoritative. */
+ *  the entry for roles that lack the permission. Backend remains authoritative.
+ *  Current-state matching is NOT per-item: lib/navMatch.ts owns the
+ *  route→destination authority (a destination represents a route family). */
 interface NavItem {
   labelKey: string;
   to: string;
   icon: LucideIcon;
-  end?: boolean;
   visible?: (user: Pick<MeResponse, "role" | "capabilities">) => boolean;
 }
 
@@ -133,7 +135,6 @@ const groups: NavGroup[] = [
         labelKey: "nav.items.questions",
         to: routes.admin.questions,
         icon: BookOpen,
-        end: true,
         visible: canSeeQuestions,
       },
       {
@@ -151,14 +152,12 @@ const groups: NavGroup[] = [
         labelKey: "nav.items.exams",
         to: routes.admin.exams,
         icon: ClipboardList,
-        end: true,
         visible: canSeeExams,
       },
       {
         labelKey: "nav.items.examProfiles",
         to: routes.admin.examProfiles,
         icon: LayoutTemplate,
-        end: true,
         visible: canSeeExams,
       },
       {
@@ -193,7 +192,6 @@ const groups: NavGroup[] = [
         labelKey: "nav.items.recoveryQueue",
         to: routes.admin.recovery,
         icon: LifeBuoy,
-        end: true,
         visible: canSeeRecovery,
       },
     ],
@@ -267,25 +265,30 @@ function SidebarLink({
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const Icon = item.icon;
   const label = t(item.labelKey as never);
+  // NAV-2 (issue 494): current state comes from the single route-family
+  // matcher (lib/navMatch.ts) — this destination is current when it wins the
+  // match for the current pathname, exactly once across the shell. aria-current
+  // and the active styling are driven by that one result, so there is no
+  // second (NavLink-computed) current notion to disagree with it.
+  const isCurrent = matchNavDestination(location.pathname) === item.to;
   return (
-    <NavLink
+    <Link
       data-slot="sidebar-nav-item"
       to={item.to}
-      end={item.end}
+      aria-current={isCurrent ? "page" : undefined}
       title={collapsed ? label : undefined}
       onClick={onNavigate}
-      className={({ isActive }) =>
-        cn(
-          "flex min-h-10 items-center gap-3 rounded-md px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
-          isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
-        )
-      }
+      className={cn(
+        "flex min-h-10 items-center gap-3 rounded-md px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
+        isCurrent && "bg-sidebar-accent font-medium text-sidebar-foreground",
+      )}
     >
       <AppIcon icon={Icon} size="nav" />
       {!collapsed && <span>{label}</span>}
-    </NavLink>
+    </Link>
   );
 }
 
@@ -316,8 +319,8 @@ export function SidebarContent({
   // navigation viewport. On route change (and on mount, for direct-URL
   // loads) reveal it with the minimum scroll necessary — block:"nearest" is
   // a no-op while the item is already fully visible, never centers it, and
-  // never resets the user's scroll position. React Router NavLink remains the
-  // single current-route authority ([aria-current="page"]).
+  // never resets the user's scroll position. aria-current is rendered by the
+  // single route-family matcher (lib/navMatch.ts) — this query finds it.
   useEffect(() => {
     navRef.current
       ?.querySelector<HTMLElement>('[aria-current="page"]')

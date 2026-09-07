@@ -88,6 +88,212 @@ export const SHELL_COMPARISON_VIEWPORT = { width: 1280, height: 800 };
 export const ROLE_COMPARISON_VIEWPORT = { width: 1440, height: 900 };
 
 /**
+ * §43 Set E — navigation hierarchy continuity (#494 corrective-1). The
+ * varying dimension is the ROUTE INSIDE one navigation family; persona,
+ * viewport (1280×800), browser and seed stay constant. Every tile of a
+ * family must keep the SAME current destination (its family root), proving
+ * the sidebar "looks like one navigation system" as routed descendants move.
+ * Questions import is the negative control: 题目导入 is current, 题目管理 is
+ * never current (exactly-one).
+ */
+export interface HierarchyIds {
+  examId: string;
+  questionId: string;
+  profileId: string;
+  attemptId: string;
+  incidentId: string;
+}
+
+export interface HierarchyStop {
+  id: string;
+  label: string;
+  buildRoute: (ids: HierarchyIds) => string;
+  /** Expected current destination href for every tile in this family. */
+  expectedHref: string;
+  /** Optional exactly-one negative: this stop must NOT mark this href current. */
+  notCurrentHref?: string;
+}
+
+export interface HierarchySet {
+  id: string;
+  sheetBase: string;
+  title: string;
+  /** zh-CN rendered destination label, for the review notes. */
+  destinationLabel: string;
+  stops: HierarchyStop[];
+}
+
+export const HIERARCHY_SETS: readonly HierarchySet[] = [
+  {
+    id: "exams",
+    sheetBase: "NAV-HIERARCHY-exams-1280x800",
+    title: "Exam family — route hierarchy @1280x800",
+    destinationLabel: "考试管理",
+    stops: [
+      {
+        id: "01",
+        label: "Exams list",
+        buildRoute: () => "/admin/exams",
+        expectedHref: "/admin/exams",
+      },
+      {
+        id: "02",
+        label: "New exam",
+        buildRoute: () => "/admin/exams/new",
+        expectedHref: "/admin/exams",
+      },
+      {
+        id: "03",
+        label: "Exam detail",
+        buildRoute: (i) => `/admin/exams/${i.examId}`,
+        expectedHref: "/admin/exams",
+      },
+      {
+        id: "04",
+        label: "Exam edit",
+        buildRoute: (i) => `/admin/exams/${i.examId}/edit`,
+        expectedHref: "/admin/exams",
+      },
+      {
+        id: "05",
+        label: "Exam scores",
+        buildRoute: (i) => `/admin/exams/${i.examId}/scores`,
+        expectedHref: "/admin/exams",
+      },
+      {
+        id: "06",
+        label: "Exam proctor",
+        buildRoute: (i) => `/admin/exams/${i.examId}/proctor`,
+        expectedHref: "/admin/exams",
+      },
+      {
+        id: "07",
+        label: "Exam monitor",
+        buildRoute: (i) => `/admin/exams/${i.examId}/proctor/monitor`,
+        expectedHref: "/admin/exams",
+      },
+      {
+        id: "08",
+        label: "Attempt detail",
+        buildRoute: (i) => `/admin/attempts/${i.attemptId}`,
+        expectedHref: "/admin/exams",
+      },
+    ],
+  },
+  {
+    id: "questions",
+    sheetBase: "NAV-HIERARCHY-questions-1280x800",
+    title: "Questions family — route hierarchy @1280x800",
+    destinationLabel: "题目管理 / 题目导入 (exactly-one)",
+    stops: [
+      {
+        id: "01",
+        label: "Questions list",
+        buildRoute: () => "/admin/questions",
+        expectedHref: "/admin/questions",
+      },
+      {
+        id: "02",
+        label: "New question",
+        buildRoute: () => "/admin/questions/new",
+        expectedHref: "/admin/questions",
+      },
+      {
+        id: "03",
+        label: "Edit question",
+        buildRoute: (i) => `/admin/questions/${i.questionId}/edit`,
+        expectedHref: "/admin/questions",
+      },
+      {
+        id: "04",
+        label: "Question import",
+        buildRoute: () => "/admin/questions/import",
+        expectedHref: "/admin/questions/import",
+        notCurrentHref: "/admin/questions",
+      },
+    ],
+  },
+  {
+    id: "profiles",
+    sheetBase: "NAV-HIERARCHY-profiles-1280x800",
+    title: "Exam profiles family — route hierarchy @1280x800",
+    destinationLabel: "策略模板",
+    stops: [
+      {
+        id: "01",
+        label: "Profiles list",
+        buildRoute: () => "/admin/exam-profiles",
+        expectedHref: "/admin/exam-profiles",
+      },
+      {
+        id: "02",
+        label: "New profile",
+        buildRoute: () => "/admin/exam-profiles/new",
+        expectedHref: "/admin/exam-profiles",
+      },
+      {
+        id: "03",
+        label: "Edit profile",
+        buildRoute: (i) => `/admin/exam-profiles/${i.profileId}/edit`,
+        expectedHref: "/admin/exam-profiles",
+      },
+    ],
+  },
+  {
+    id: "recovery",
+    sheetBase: "NAV-HIERARCHY-recovery-1280x800",
+    title: "Recovery family — route hierarchy @1280x800",
+    destinationLabel: "恢复中心",
+    stops: [
+      {
+        id: "01",
+        label: "Recovery queue",
+        buildRoute: () => "/admin/recovery",
+        expectedHref: "/admin/recovery",
+      },
+      {
+        id: "02",
+        label: "Incident detail",
+        buildRoute: (i) => `/admin/recovery/incidents/${i.incidentId}`,
+        expectedHref: "/admin/recovery",
+      },
+      {
+        id: "03",
+        label: "Attempt detail",
+        buildRoute: (i) => `/admin/recovery/attempts/${i.attemptId}`,
+        expectedHref: "/admin/recovery",
+      },
+      {
+        id: "04",
+        label: "Exam detail",
+        buildRoute: (i) => `/admin/recovery/exams/${i.examId}`,
+        expectedHref: "/admin/recovery",
+      },
+    ],
+  },
+  {
+    id: "grading",
+    sheetBase: "NAV-HIERARCHY-grading-1280x800",
+    title: "Grading family — route hierarchy @1280x800",
+    destinationLabel: "待评分",
+    stops: [
+      {
+        id: "01",
+        label: "Grading queue",
+        buildRoute: () => "/admin/grading-queue",
+        expectedHref: "/admin/grading-queue",
+      },
+      {
+        id: "02",
+        label: "Grading detail",
+        buildRoute: (i) => `/admin/grading-queue/${i.examId}`,
+        expectedHref: "/admin/grading-queue",
+      },
+    ],
+  },
+];
+
+/**
  * §40 — the permanent black-box multimodal comparison review prompt. The
  * patrol writes it into every run output; reviewers (human or multimodal
  * model) MUST compare equivalent states across a set instead of judging

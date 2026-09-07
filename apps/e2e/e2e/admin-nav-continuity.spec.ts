@@ -1,5 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
+import { IncidentSeverity, IncidentType } from "@exam/domain";
 import { loginAsAdmin } from "../lib/login";
+import {
+  adminApiToken,
+  adminPost,
+  candidateApiToken,
+  candidateStartAttempt,
+} from "../lib/flow";
+import { seedExam } from "../lib/seed";
 
 /**
  * UI-NAV-CONTINUITY-1 (#494) — deterministic gates for the navigation-shell
@@ -227,6 +235,154 @@ test.describe("NAV continuity contract (#494)", () => {
       // NAV-1: navigation scrolling never leaks into document scrolling.
       expect(facts.docScrollY, `document scroll on ${route}`).toBe(0);
     }
+  });
+
+  test("NAV-2: descendant routes resolve to exactly one family destination", async ({
+    page,
+    request,
+  }) => {
+    // Real fixtures through the production API so every routed descendant
+    // mounts its real page (shell semantics are what this gate asserts).
+    const s = await seedExam(request, `nav-desc-${Date.now()}`);
+    const adminToken = await adminApiToken(request);
+    const attemptId = await candidateStartAttempt(
+      request,
+      await candidateApiToken(request, s.candidate),
+      s.examId,
+    );
+    const createRes = await adminPost(
+      request,
+      adminToken,
+      `/api/admin/exams/${s.examId}/incidents`,
+      {
+        operationId: crypto.randomUUID(),
+        type: IncidentType.NetworkInterruption,
+        severity: IncidentSeverity.Critical,
+        description: "NAV-2 descendant gate — network disruption",
+        attemptId,
+        candidateId: s.candidate.profileId,
+      },
+    );
+    expect(createRes.ok()).toBe(true);
+    const { incident } = (await createRes.json()) as {
+      incident: { id: string };
+    };
+    const profileRes = await adminPost(
+      request,
+      adminToken,
+      "/api/exam-profiles",
+      {
+        name: `nav-desc-${Date.now()}`,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        retakePolicy: "max_attempts",
+        maxAttempts: 2,
+        scoreStrategy: "highest",
+        resultPublicationMode: "after_grading",
+        interruptionTimePolicy: "strict",
+      },
+    );
+    expect(profileRes.ok()).toBe(true);
+    const profile = (await profileRes.json()) as { id: string };
+
+    const cases = [
+      { route: "/admin/questions", expected: "/admin/questions" },
+      { route: "/admin/questions/new", expected: "/admin/questions" },
+      {
+        route: `/admin/questions/${s.questionId}/edit`,
+        expected: "/admin/questions",
+      },
+      { route: "/admin/questions/import", expected: "/admin/questions/import" },
+      { route: "/admin/exams", expected: "/admin/exams" },
+      { route: "/admin/exams/new", expected: "/admin/exams" },
+      { route: `/admin/exams/${s.examId}`, expected: "/admin/exams" },
+      { route: `/admin/exams/${s.examId}/edit`, expected: "/admin/exams" },
+      { route: `/admin/exams/${s.examId}/scores`, expected: "/admin/exams" },
+      { route: `/admin/exams/${s.examId}/proctor`, expected: "/admin/exams" },
+      {
+        route: `/admin/exams/${s.examId}/proctor/monitor`,
+        expected: "/admin/exams",
+      },
+      { route: `/admin/attempts/${attemptId}`, expected: "/admin/exams" },
+      { route: "/admin/exam-profiles", expected: "/admin/exam-profiles" },
+      { route: "/admin/exam-profiles/new", expected: "/admin/exam-profiles" },
+      {
+        route: `/admin/exam-profiles/${profile.id}/edit`,
+        expected: "/admin/exam-profiles",
+      },
+      {
+        route: `/admin/grading-queue/${s.examId}`,
+        expected: "/admin/grading-queue",
+      },
+      { route: "/admin/recovery", expected: "/admin/recovery" },
+      {
+        route: `/admin/recovery/incidents/${incident.id}`,
+        expected: "/admin/recovery",
+      },
+      {
+        route: `/admin/recovery/attempts/${attemptId}`,
+        expected: "/admin/recovery",
+      },
+      {
+        route: `/admin/recovery/exams/${s.examId}`,
+        expected: "/admin/recovery",
+      },
+    ];
+
+    let reference: NavFacts | null = null;
+    for (const { route, expected } of cases) {
+      await gotoAdmin(page, route);
+      const facts = await collectNavFacts(page);
+
+      // Exactly one semantic current destination pointing at the family root.
+      expect(facts.currentCount, `exactly one aria-current on ${route}`).toBe(
+        1,
+      );
+      expect(facts.currentHrefs, `current href on ${route}`).toEqual([
+        expected,
+      ]);
+      expect(
+        verticallyInside(facts.currentRects[0]!, facts.region),
+        `current item inside nav viewport on ${route}`,
+      ).toBe(true);
+
+      // Shell geometry stays constant across the family walk (NAV-1/NAV-5).
+      if (reference === null) {
+        reference = facts;
+      } else {
+        expect(
+          Math.abs(facts.sidebar.width - reference.sidebar.width),
+          `sidebar width on ${route}`,
+        ).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(facts.sidebar.height - reference.sidebar.height),
+          `sidebar height on ${route}`,
+        ).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(facts.footer.y - reference.footer.y),
+          `footer y on ${route}`,
+        ).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(facts.footer.height - reference.footer.height),
+          `footer height on ${route}`,
+        ).toBeLessThanOrEqual(1);
+      }
+      expect(
+        verticallyInside(facts.footer, facts.sidebar),
+        `footer inside sidebar on ${route}`,
+      ).toBe(true);
+      expect(facts.docScrollY, `document scroll on ${route}`).toBe(0);
+    }
+
+    // Mandatory negative proof: 题目管理 (questions list family root) must NOT
+    // be current on the import route — exactly-one, never dual-current.
+    await gotoAdmin(page, "/admin/questions/import");
+    const importFacts = await collectNavFacts(page);
+    expect(importFacts.currentCount).toBe(1);
+    expect(importFacts.currentHrefs).toEqual(["/admin/questions/import"]);
+    await expect(
+      page.getByTestId("app-sidebar").locator('a[href="/admin/questions"]'),
+    ).not.toHaveAttribute("aria-current", "page");
   });
 
   test("NAV-2: direct-URL load of a lower destination reveals the current item", async ({

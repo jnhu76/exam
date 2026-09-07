@@ -277,8 +277,12 @@ function patternPrecision(pattern: string): {
  * Tests whether a concrete relative path (e.g. "exams/123/edit") matches a
  * pattern (e.g. "exams/:id/edit"). A `:seg` segment matches any non-empty
  * path segment. Static segments must match exactly.
+ *
+ * Exported for the navigation-destination matcher (lib/navMatch.ts), which
+ * reuses this same segment-exact matching instead of introducing a second
+ * route parser or React Router prefix accidents.
  */
-function pathMatchesPattern(path: string, pattern: string): boolean {
+export function pathMatchesPattern(path: string, pattern: string): boolean {
   if (pattern === "") return path === "";
   const pathSegs = path === "" ? [] : path.split("/");
   const patSegs = pattern.split("/");

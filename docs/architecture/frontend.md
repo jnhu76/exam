@@ -98,7 +98,7 @@ The normative NAV-1…NAV-6 contract lives in
 | NAV-1/3/5/6 shell structure, region ownership, responsive bands | `components/layout/AdminLayout.tsx` + `components/layout/AppSidebar.tsx` (`SidebarContent` is the single navigation authority for desktop sidebar and mobile drawer) |
 | NAV-4 vertical overflow facts (facts-only measurement) | `hooks/useVerticalOverflowObservation.ts` — sibling of `useOverflowObservation`, must never learn nav/role/route vocabulary |
 | NAV-2 current-destination reveal (minimum reveal on route change; never centers, never resets scroll) | `components/layout/AppSidebar.tsx` (`SidebarContent` consumes the vertical overflow facts) |
-| NAV-2 semantic current state | React Router `NavLink` `aria-current="page"` (single current-route authority — do not duplicate) |
+| NAV-2 semantic current state (exactly one `aria-current="page"`; destinations represent route families, derived from `location.pathname`) | `lib/navMatch.ts` (single route→destination authority — do not duplicate; `SidebarLink` renders `aria-current` from its result) |
 
 `SidebarLink`/nav groups are capability-filtered (UX-only, see
 §Authentication and authorization projection); filtering removes
