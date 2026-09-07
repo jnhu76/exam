@@ -110,6 +110,48 @@ export interface TableShellFacts {
   hintInViewport: boolean;
 }
 
+/**
+ * Coverage status of a declared table sibling (#494 corrective-2 §8-§12).
+ * TABLE_PRESENT — a rendered table matches the declared archetype and the
+ * screenshot is eligible for table-geometry visual review.
+ * TABLE_COVERAGE_GAP — the page was captured but no rendered table was
+ * available (e.g. an empty state under the canonical seed). This never fails
+ * the patrol and never counts as a table visual PASS; it must be visible in
+ * the tile figcaption and in comparison-sets.json.
+ */
+export type TableCoverageStatus = "TABLE_PRESENT" | "TABLE_COVERAGE_GAP";
+
+export interface TableCoverageClassification {
+  status: TableCoverageStatus;
+  /** Rendered tables backing the status (empty for a coverage gap). */
+  tables: TableShellFacts[];
+}
+
+/** Classify one declared table sibling against the shell facts collected on
+ * its page. Zero rendered tables is a coverage gap; rendered tables that
+ * match none of the declared archetype mean the patrol's own declaration has
+ * drifted from the product (wrong set membership, renamed archetype) — that
+ * is a patrol contract failure and must RED, not silently pass. */
+export function classifyTableCoverage(
+  declaredArchetype: string,
+  tables: readonly TableShellFacts[],
+): TableCoverageClassification {
+  if (tables.length === 0) {
+    return { status: "TABLE_COVERAGE_GAP", tables: [] };
+  }
+  const matching = tables.filter(
+    (table) => table.archetype === declaredArchetype,
+  );
+  if (matching.length === 0) {
+    throw new Error(
+      `PATROL CONTRACT FAILURE: page renders ${tables.length} table(s) with archetype(s) [${tables
+        .map((table) => table.archetype ?? "null")
+        .join(", ")}] but the comparison set declares "${declaredArchetype}"`,
+    );
+  }
+  return { status: "TABLE_PRESENT", tables: matching };
+}
+
 /** NAV-1…NAV-5 + table (#494 §30) DOM facts for the current document.
  * Returns nulls on layouts without the admin sidebar (candidate runtime). */
 export async function collectShellFacts(page: Page): Promise<{

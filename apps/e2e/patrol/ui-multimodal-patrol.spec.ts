@@ -594,7 +594,7 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
     }
 
     // Dynamic admin routes (exam detail, edit, scores, grading detail)
-    if (exams.length > 0) {
+    if (exams.length > 0 && exams[0]) {
       for (const dr of DYNAMIC_ROUTES.filter((r) =>
         r.roles.includes("Admin"),
       )) {
@@ -622,7 +622,7 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
         }
       }
       // Grading detail with exam3 (has submitted attempt, if available)
-      if (exams.length > 2) {
+      if (exams.length > 2 && exams[2]) {
         await navigateAndCapture(
           page,
           "admin",
@@ -666,7 +666,7 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
     }
 
     // Dynamic: exam detail for exam1
-    if (exams.length > 0) {
+    if (exams.length > 0 && exams[0]) {
       await navigateAndCapture(
         page,
         "teacher",
@@ -756,7 +756,7 @@ test.describe.serial("UI-MULTIMODAL-PATROL-1", () => {
     );
 
     // Proctor detail for exam1
-    if (exams.length > 0) {
+    if (exams.length > 0 && exams[0]) {
       await navigateAndCapture(
         page,
         "proctor",

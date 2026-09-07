@@ -6,7 +6,8 @@
  * their shape. A comparison set holds persona, viewport, responsive shell
  * state, browser, and seed constant, and varies exactly one meaningful
  * dimension (route / persona / viewport / state) so multimodal differences
- * are interpretable.
+ * are interpretable. Contact-sheet rendering lives in contact-sheet.ts —
+ * this module declares sets, it does not produce artifacts.
  */
 
 export interface SequenceStop {
@@ -58,19 +59,35 @@ export const ROLE_SURFACES = [
   { id: "proctor", label: "Proctor", route: "/admin/proctor" },
 ] as const;
 
-/** §39 Set D — table siblings grouped by archetype, same viewport. */
-export const TABLE_SIBLING_SETS = [
+/** §39 Set D — table siblings grouped by archetype, same viewport. Each
+ * sibling owns a stable ordering id — comparison-set definitions own their
+ * ordering ids, rendering never derives them from array positions (#494
+ * corrective-2). */
+export interface TableSiblingStop {
+  id: string;
+  label: string;
+  route: string;
+}
+
+export interface TableSiblingSet {
+  id: string;
+  archetype: string;
+  sheet: string;
+  routes: TableSiblingStop[];
+}
+
+export const TABLE_SIBLING_SETS: readonly TableSiblingSet[] = [
   {
     id: "management",
     archetype: "management-list",
     sheet: "TABLE-COMPARE-management-1280.png",
     routes: [
-      { label: "Users", route: "/admin/users" },
-      { label: "Candidates", route: "/admin/candidates" },
-      { label: "Courses", route: "/admin/courses" },
-      { label: "Questions", route: "/admin/questions" },
-      { label: "Exams", route: "/admin/exams" },
-      { label: "Grading Queue", route: "/admin/grading-queue" },
+      { id: "01", label: "Users", route: "/admin/users" },
+      { id: "02", label: "Candidates", route: "/admin/candidates" },
+      { id: "03", label: "Courses", route: "/admin/courses" },
+      { id: "04", label: "Questions", route: "/admin/questions" },
+      { id: "05", label: "Exams", route: "/admin/exams" },
+      { id: "06", label: "Grading Queue", route: "/admin/grading-queue" },
     ],
   },
   {
@@ -78,11 +95,11 @@ export const TABLE_SIBLING_SETS = [
     archetype: "log-diagnostic",
     sheet: "TABLE-COMPARE-diagnostic-1280.png",
     routes: [
-      { label: "Audit Logs", route: "/admin/audit-logs" },
-      { label: "Import Logs", route: "/admin/import-logs" },
+      { id: "01", label: "Audit Logs", route: "/admin/audit-logs" },
+      { id: "02", label: "Import Logs", route: "/admin/import-logs" },
     ],
   },
-] as const;
+];
 
 export const SHELL_COMPARISON_VIEWPORT = { width: 1280, height: 800 };
 export const ROLE_COMPARISON_VIEWPORT = { width: 1440, height: 900 };
@@ -357,50 +374,3 @@ For each HIGH/MEDIUM candidate provide:
 - which DOM fact should be measured to confirm it.
 
 Do NOT call something a defect solely because it looks different.`;
-
-/**
- * §36 — contact-sheet HTML. Tiles preserve set ordering; labels sit OUTSIDE
- * the application screenshots (never overlaid on the product UI). Images are
- * embedded as data URLs so rendering needs no file:// access.
- */
-export function buildContactSheetHtml(
-  title: string,
-  tiles: Array<{ label: string; imageBase64: string }>,
-): string {
-  const tileHtml = tiles
-    .map(
-      (tile) => `
-      <figure class="tile">
-        <figcaption>${escapeHtml(tile.label)}</figcaption>
-        <img alt="${escapeHtml(tile.label)}" src="data:image/png;base64,${tile.imageBase64}" />
-      </figure>`,
-    )
-    .join("\n");
-  return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>${escapeHtml(title)}</title>
-<style>
-  body { margin: 0; padding: 16px; background: #222; font-family: sans-serif; }
-  h1 { color: #fff; font-size: 16px; font-weight: 600; }
-  .grid { display: flex; flex-wrap: wrap; gap: 12px; }
-  .tile { margin: 0; background: #fff; padding: 6px; border-radius: 4px; }
-  .tile figcaption { font-size: 12px; font-weight: 600; padding-bottom: 4px; }
-  .tile img { display: block; width: 320px; height: auto; }
-</style>
-</head>
-<body>
-<h1>${escapeHtml(title)}</h1>
-<div class="grid">${tileHtml}</div>
-</body>
-</html>`;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}

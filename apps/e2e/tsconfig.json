@@ -8,5 +8,11 @@
     "lib": ["ES2022", "DOM"],
     "paths": {}
   },
-  "include": ["playwright.config.ts", "lib/**/*.ts", "e2e/**/*.ts"]
+  "include": [
+    "playwright.config.ts",
+    "playwright.patrol.config.ts",
+    "lib/**/*.ts",
+    "e2e/**/*.ts",
+    "patrol/**/*.ts"
+  ]
 }

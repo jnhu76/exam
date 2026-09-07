@@ -17,13 +17,7 @@
  * HIGH/MEDIUM candidate must be confirmed by deterministic DOM probes (§41).
  */
 import { test, expect, type Page } from "@playwright/test";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { loginAsAdmin, loginViaUi } from "../lib/login";
@@ -36,13 +30,20 @@ import {
   ROLE_SURFACES,
   SHELL_COMPARISON_VIEWPORT,
   TABLE_SIBLING_SETS,
-  buildContactSheetHtml,
 } from "./comparison-sets";
 import {
+  assertComparisonItem,
+  renderContactSheet,
+  sheetTileLabel,
+} from "./contact-sheet";
+import {
   PATROL_BASE_URL,
+  classifyTableCoverage,
   collectShellFacts,
   createUserViaApi,
   progressLog,
+  type TableCoverageStatus,
+  type TableShellFacts,
 } from "./patrol-fixtures";
 
 const BASE_SHA = execSync("git rev-parse --short HEAD", {
@@ -65,6 +66,16 @@ interface ComparisonItem {
   screenshot: string | null;
   sidebarScreenshot: string | null;
   navFacts: Awaited<ReturnType<typeof collectShellFacts>>["nav"];
+  tables: TableShellFacts[];
+  /** Only set for table-sibling sets (Set D). */
+  tableCoverage?: TableCoverageStatus;
+}
+
+interface TableCoverageSummary {
+  declaredSiblings: number;
+  tablePresent: number;
+  coverageGaps: number;
+  contractFailures: number;
 }
 
 interface ComparisonSetRecord {
@@ -74,6 +85,8 @@ interface ComparisonSetRecord {
   varies: string;
   reviewNotes: string[];
   items: ComparisonItem[];
+  /** Only set for table-sibling sets (Set D). */
+  tableCoverageSummary?: TableCoverageSummary;
 }
 
 const comparisonSets: ComparisonSetRecord[] = [];
@@ -91,6 +104,7 @@ async function captureComparisonTile(
   item: { id: string; label: string; route: string },
   viewport: { width: number; height: number },
 ): Promise<ComparisonItem> {
+  assertComparisonItem(item, `comparison tile in set "${setId}"`);
   await page.setViewportSize(viewport);
   await page.goto(item.route, { waitUntil: "domcontentloaded" });
   await waitForPageStable(page);
@@ -118,23 +132,8 @@ async function captureComparisonTile(
     screenshot: shotPath,
     sidebarScreenshot: sidebarPath,
     navFacts: facts.nav,
+    tables: facts.tables,
   };
-}
-
-async function renderContactSheet(
-  page: Page,
-  outPath: string,
-  title: string,
-  tiles: Array<{ label: string; imagePath: string }>,
-) {
-  const tilesHtml = tiles.map((tile) => ({
-    label: tile.label,
-    imageBase64: readFileSync(tile.imagePath).toString("base64"),
-  }));
-  await page.setContent(buildContactSheetHtml(title, tilesHtml), {
-    waitUntil: "load",
-  });
-  await page.screenshot({ path: outPath, fullPage: true });
 }
 
 test.describe.serial("UI patrol comparison suites", () => {
@@ -232,24 +231,22 @@ test.describe.serial("UI patrol comparison suites", () => {
 
     // §36 contact sheets from the captured set — full viewport tiles plus a
     // sidebar-only sheet; tile order preserves the route sequence.
-    await renderContactSheet(
-      page,
-      join(SHEETS_DIR, "NAV-COMPARE-admin-1280x800.png"),
-      `Admin shell continuity — route sequence @1280x800 (${BASE_SHA})`,
-      items.map((item) => ({
-        label: `${item.id} ${item.label}`,
+    await renderContactSheet(page, {
+      outputPath: join(SHEETS_DIR, "NAV-COMPARE-admin-1280x800.png"),
+      title: `Admin shell continuity — route sequence @1280x800 (${BASE_SHA})`,
+      tiles: items.map((item) => ({
+        label: sheetTileLabel(item),
         imagePath: item.screenshot!,
       })),
-    );
-    await renderContactSheet(
-      page,
-      join(SHEETS_DIR, "NAV-COMPARE-admin-1280x800-sidebars.png"),
-      `Admin sidebar continuity — route sequence @1280x800 (${BASE_SHA})`,
-      items.map((item) => ({
-        label: `${item.id} ${item.label}`,
+    });
+    await renderContactSheet(page, {
+      outputPath: join(SHEETS_DIR, "NAV-COMPARE-admin-1280x800-sidebars.png"),
+      title: `Admin sidebar continuity — route sequence @1280x800 (${BASE_SHA})`,
+      tiles: items.map((item) => ({
+        label: sheetTileLabel(item),
         imagePath: item.sidebarScreenshot!,
       })),
-    );
+    });
 
     // §42 harness proof (deterministic, no LLM in CI): grouping, ordering,
     // sidebar crops, and DOM metadata must all be present and correct.
@@ -322,15 +319,14 @@ test.describe.serial("UI patrol comparison suites", () => {
     };
     comparisonSets.push(record);
 
-    await renderContactSheet(
-      page,
-      join(SHEETS_DIR, "NAV-COMPARE-breakpoints-exams.png"),
-      `Responsive shell — /admin/exams across bands (${BASE_SHA})`,
-      items.map((item) => ({
-        label: `${item.id} ${item.label}`,
+    await renderContactSheet(page, {
+      outputPath: join(SHEETS_DIR, "NAV-COMPARE-breakpoints-exams.png"),
+      title: `Responsive shell — /admin/exams across bands (${BASE_SHA})`,
+      tiles: items.map((item) => ({
+        label: sheetTileLabel(item),
         imagePath: item.screenshot!,
       })),
-    );
+    });
 
     // lg+ bands expose the persistent sidebar; below lg the drawer is the
     // authority and the persistent sidebar's facts are absent by design.
@@ -380,7 +376,11 @@ test.describe.serial("UI patrol comparison suites", () => {
 
     const items: ComparisonItem[] = [];
     for (const surface of ROLE_SURFACES) {
-      await logins[surface.id]();
+      const login = logins[surface.id];
+      if (!login) {
+        throw new Error(`Set C has no login flow for persona "${surface.id}"`);
+      }
+      await login();
       items.push(
         await captureComparisonTile(
           page,
@@ -407,15 +407,14 @@ test.describe.serial("UI patrol comparison suites", () => {
     };
     comparisonSets.push(record);
 
-    await renderContactSheet(
-      page,
-      join(SHEETS_DIR, "ROLE-SHELL-COMPARE-1440x900.png"),
-      `Role shells — capability-filtered navigation grammar @1440x900 (${BASE_SHA})`,
-      items.map((item) => ({
-        label: `${item.id} ${item.label}`,
+    await renderContactSheet(page, {
+      outputPath: join(SHEETS_DIR, "ROLE-SHELL-COMPARE-1440x900.png"),
+      title: `Role shells — capability-filtered navigation grammar @1440x900 (${BASE_SHA})`,
+      tiles: items.map((item) => ({
+        label: sheetTileLabel(item),
         imagePath: item.sidebarScreenshot ?? item.screenshot!,
       })),
-    );
+    });
 
     for (const item of record.items) {
       expect(item.navFacts, `nav facts ${item.id}`).not.toBeNull();
@@ -430,15 +429,28 @@ test.describe.serial("UI patrol comparison suites", () => {
     for (const set of TABLE_SIBLING_SETS) {
       const items: ComparisonItem[] = [];
       for (const stop of set.routes) {
-        items.push(
-          await captureComparisonTile(
-            page,
-            `table-${set.id}`,
-            stop,
-            SHELL_COMPARISON_VIEWPORT,
-          ),
+        const tile = await captureComparisonTile(
+          page,
+          `table-${set.id}`,
+          stop,
+          SHELL_COMPARISON_VIEWPORT,
         );
+        // §8: an empty state is honest coverage data, not table geometry
+        // evidence. A rendered table with a DIFFERENT archetype than declared
+        // is a patrol contract failure and REDs here (classifier throws).
+        const coverage = classifyTableCoverage(set.archetype, tile.tables);
+        items.push({ ...tile, tableCoverage: coverage.status });
       }
+      const summary: TableCoverageSummary = {
+        declaredSiblings: items.length,
+        tablePresent: items.filter(
+          (item) => item.tableCoverage === "TABLE_PRESENT",
+        ).length,
+        coverageGaps: items.filter(
+          (item) => item.tableCoverage === "TABLE_COVERAGE_GAP",
+        ).length,
+        contractFailures: 0, // contract failures throw above; the run never records one
+      };
       const record: ComparisonSetRecord = {
         id: set.sheet.replace(".png", ""),
         kind: "table-sibling",
@@ -453,26 +465,51 @@ test.describe.serial("UI patrol comparison suites", () => {
         reviewNotes: [
           "Sibling tables of one archetype should share containment, toolbar geometry, and scroll affordance behavior.",
           "Use the DOM facts (archetype/tier/overflow/hintInViewport) to confirm or reject visual candidates.",
+          "Tiles marked [TABLE_COVERAGE_GAP] rendered no table (e.g. empty state under the canonical seed) — the screenshot proves page/empty-state rendering, NOT table-geometry consistency; do not review them as table evidence.",
         ],
         items,
+        tableCoverageSummary: summary,
       };
       comparisonSets.push(record);
 
-      await renderContactSheet(
-        page,
-        join(SHEETS_DIR, set.sheet),
-        `Table siblings — ${set.archetype} @1280x800 (${BASE_SHA})`,
-        items.map((item) => ({
-          label: `${item.id} ${item.label}`,
+      await renderContactSheet(page, {
+        outputPath: join(SHEETS_DIR, set.sheet),
+        title: `Table siblings — ${set.archetype} @1280x800 (${BASE_SHA})`,
+        tiles: items.map((item) => ({
+          label: sheetTileLabel(item),
           imagePath: item.screenshot!,
         })),
-      );
+      });
 
       for (const item of record.items) {
         expect(existsSync(item.screenshot!), `viewport shot ${item.id}`).toBe(
           true,
         );
+        // Coverage status and recorded tables must tell the same story.
+        if (item.tableCoverage === "TABLE_COVERAGE_GAP") {
+          expect(item.tables, `gap has no tables ${item.id}`).toHaveLength(0);
+        } else {
+          expect(
+            item.tables.length,
+            `present has tables ${item.id}`,
+          ).toBeGreaterThan(0);
+          expect(
+            item.tables.every((table) => table.archetype === set.archetype),
+            `archetype match ${item.id}`,
+          ).toBe(true);
+        }
+        expect(
+          item.tables.every((table) => table.containerWidth > 0),
+          `table width facts ${item.id}`,
+        ).toBe(true);
       }
+      // §9: a coverage gap never fails the patrol, but the summary must be
+      // explicit that table visual review covered fewer siblings than were
+      // declared.
+      expect(summary.declaredSiblings).toBe(set.routes.length);
+      expect(summary.tablePresent + summary.coverageGaps).toBe(
+        summary.declaredSiblings,
+      );
     }
   });
 });

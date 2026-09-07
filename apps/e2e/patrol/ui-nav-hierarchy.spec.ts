@@ -19,13 +19,7 @@
  * of the generated sheets remains a separate, mandatory human step.
  */
 import { test, expect, type Page } from "@playwright/test";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { IncidentSeverity, IncidentType } from "@exam/domain";
@@ -42,9 +36,9 @@ import {
   COMPARISON_REVIEW_PROMPT,
   HIERARCHY_SETS,
   SHELL_COMPARISON_VIEWPORT,
-  buildContactSheetHtml,
   type HierarchyIds,
 } from "./comparison-sets";
+import { renderContactSheet, sheetTileLabel } from "./contact-sheet";
 import {
   PATROL_BASE_URL,
   collectShellFacts,
@@ -276,7 +270,9 @@ test.describe.serial("UI patrol — Set E navigation hierarchy", () => {
           label: stop.label,
           route,
           expectedHref: stop.expectedHref,
-          notCurrentHref: stop.notCurrentHref,
+          ...(stop.notCurrentHref
+            ? { notCurrentHref: stop.notCurrentHref }
+            : {}),
           viewport: `${SHELL_COMPARISON_VIEWPORT.width}x${SHELL_COMPARISON_VIEWPORT.height}`,
           screenshot: shotPath,
           sidebarScreenshot: sidebarPath,
@@ -305,33 +301,21 @@ test.describe.serial("UI patrol — Set E navigation hierarchy", () => {
       };
       hierarchySets.push(record);
 
-      await page.setContent(
-        buildContactSheetHtml(
-          `${set.title} (${BASE_SHA})`,
-          items.map((item) => ({
-            label: `${item.stopId} ${item.label}`,
-            imagePath: item.screenshot,
-          })),
-        ),
-        { waitUntil: "load" },
-      );
-      await page.screenshot({
-        path: join(SHEETS_DIR, `${set.sheetBase}.png`),
-        fullPage: true,
+      await renderContactSheet(page, {
+        outputPath: join(SHEETS_DIR, `${set.sheetBase}.png`),
+        title: `${set.title} (${BASE_SHA})`,
+        tiles: items.map((item) => ({
+          label: sheetTileLabel({ id: item.stopId, label: item.label }),
+          imagePath: item.screenshot,
+        })),
       });
-      await page.setContent(
-        buildContactSheetHtml(
-          `${set.title} — sidebars (${BASE_SHA})`,
-          items.map((item) => ({
-            label: `${item.stopId} ${item.label}`,
-            imagePath: item.sidebarScreenshot!,
-          })),
-        ),
-        { waitUntil: "load" },
-      );
-      await page.screenshot({
-        path: join(SHEETS_DIR, `${set.sheetBase}-sidebars.png`),
-        fullPage: true,
+      await renderContactSheet(page, {
+        outputPath: join(SHEETS_DIR, `${set.sheetBase}-sidebars.png`),
+        title: `${set.title} — sidebars (${BASE_SHA})`,
+        tiles: items.map((item) => ({
+          label: sheetTileLabel({ id: item.stopId, label: item.label }),
+          imagePath: item.sidebarScreenshot!,
+        })),
       });
 
       // Harness proof: ordering, crops, and DOM metadata all present.

@@ -33,7 +33,9 @@ export default defineConfig({
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
     // Reduced motion removes animation nondeterminism for screenshots.
-    reducedMotion: "reduce",
+    // Playwright 1.61 takes context options under contextOptions; a bare
+    // `reducedMotion` key is silently dropped (it was never applied).
+    contextOptions: { reducedMotion: "reduce" },
     // Offline to avoid external requests slowing things down.
     offline: false,
   },
