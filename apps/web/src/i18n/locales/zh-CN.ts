@@ -3076,6 +3076,7 @@ const zhCN = {
       questionsImport: "题目导入",
       exams: "考试管理",
       examsNew: "新建考试",
+      gradingQueue: "待评分",
       proctorWorkspace: "监考工作台",
       results: "成绩查询",
       system: "系统监控",
