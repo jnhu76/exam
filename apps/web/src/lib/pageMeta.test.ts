@@ -5,12 +5,27 @@ import {
   getDocumentTitle,
   getPageTitle,
 } from "@/lib/pageMeta";
+import { routes } from "@/lib/routes";
 
 describe("page metadata", () => {
   it("returns static admin route titles", () => {
     expect(getPageTitle("/admin/dashboard")).toBe("仪表盘");
     expect(getPageTitle("/admin/settings")).toBe("平台设置");
     expect(getPageTitle("/admin/recovery")).toBe("恢复中心");
+  });
+
+  it("returns the grading queue title for its registered route", () => {
+    expect(getPageTitle(routes.admin.gradingQueue)).toBe("待评分");
+  });
+
+  it("resolves the grading queue title through trailing-slash normalization", () => {
+    expect(getPageTitle(`${routes.admin.gradingQueue}/`)).toBe("待评分");
+  });
+
+  it("builds the grading queue document title from the same authority", () => {
+    expect(getDocumentTitle(routes.admin.gradingQueue, "测评平台")).toBe(
+      "待评分 - 测评平台",
+    );
   });
 
   it("returns candidate-facing route titles", () => {

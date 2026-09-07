@@ -31,6 +31,7 @@ const staticRouteTitleKeys = new Map<string, string>([
   [routes.admin.questionsImport, "pageMeta.static.questionsImport"],
   [routes.admin.exams, "pageMeta.static.exams"],
   [routes.admin.examsNew, "pageMeta.static.examsNew"],
+  [routes.admin.gradingQueue, "pageMeta.static.gradingQueue"],
   [routes.admin.proctorWorkspace, "pageMeta.static.proctorWorkspace"],
   [routes.admin.results, "pageMeta.static.results"],
   [routes.admin.system, "pageMeta.static.system"],
