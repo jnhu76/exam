@@ -69,14 +69,16 @@ The root `App` wraps everything in `ErrorBoundary` → `BrowserRouter` →
 `BrandProvider loadRemote` → `AuthProvider restoreSession` → `DateTimeProvider`
 → `AppTitle` + `AppRoutes` + `<Toaster>`.
 
-## Responsive structure
+## Responsive structure and spatial authority map
 
-The admin shell is a **three-state** layout (one primary breakpoint `lg`):
+The admin shell is a **three-state** layout using the `lg` / `xl` boundaries:
 
 - **below `lg`**: a navigation drawer (`Sheet`, reusing the same `SidebarContent`
   as the desktop rail); topbar trigger is a `lg:hidden` button.
-- **`lg` to `xl`**: compact desktop rail (`w-14` collapsed / `w-[232px]` expanded).
-- **`xl` and above**: full/collapsible sidebar.
+- **`lg` to `xl`**: fixed compact desktop rail (`w-14`, 56px — no expanded
+  state at this width).
+- **`xl` and above**: full sidebar (`w-[232px]`), user-controlled collapse to
+  the 56px rail.
 
 No document-level horizontal overflow; wide tables scroll locally.
 Management-list tables switch between the desktop table and a mobile card list
@@ -84,6 +86,36 @@ at `lg` (CSS-only, both representations derived from one column declaration);
 other table archetypes keep local scroll at every width. The candidate
 exam runtime shares tokens, primitives, status, icons, and clarity but stays
 task-focused.
+
+The normative contract for everything spatial lives in
+[`docs/standards/ui-system.md`](../standards/ui-system.md) (§Spatial
+governance boundary, §Page geometry, §Tables). Implementation ownership:
+
+| Contract | Owning module (`apps/web/src/`) |
+| --- | --- |
+| page-root width, closed six-role vocabulary | `components/shared/PageContainer.tsx` (`roleClasses`; pages declare, layouts never infer from route) |
+| table archetype + tier negotiation + mobile eligibility | `components/shared/DataTableShell.tsx` (`TableArchetype`, `negotiateTier`, `ARCHETYPE_TIER_BOUNDS`, `isMobileRepresentationAllowed`) |
+| ordinary table-page surface composition | `DataTableShell` (title band / scroll frame / fades / hint / footer) |
+| continuous workbench surface composition | `components/shared/DataWorkbench.tsx` (toolbar → table → footer as one shell; Question Management) |
+| column role/overflow/priority + presenters | `components/shared/DataTableContract.tsx` (`ROLE_OVERFLOW`, `ROLE_ALLOWED_OVERFLOW`, `DataTableOverflowText`, `middleTruncate`) |
+| viewport representation switch (the only owner of the table representation-switch `lg` policy) | `components/shared/ResponsiveRepresentation.tsx` |
+| mobile card list + priority→slot derivation | `components/shared/MobileRecordList.tsx` (`deriveMobileCardFields`) / `MobileRecordCard.tsx` |
+| container-overflow facts (the only ResizeObserver) | `hooks/useOverflowObservation.ts` (facts only — no tier/archetype/representation vocabulary) |
+| physical column widths, tier floors, sticky context column | `table/recipes.css` (fixed layout + col width/min-width; `detail-comparison` sticky first child) |
+| desktop table rendering | `components/shared/DesktopDataTable.tsx` (TanStack stays a row/header model — no column sizing) |
+
+`DataTableShell` and `DataWorkbench` differ in **visual composition only**
+(stack of bordered surfaces vs one continuous surface). They must share the
+semantic authorities above — `DataWorkbench` imports tier negotiation and
+mobile eligibility from `DataTableShell` and consumes the same
+`ResponsiveRepresentation` + `useOverflowObservation`; forking a second
+breakpoint, tier, or measurement policy is a governance violation.
+
+Measurement order is fixed: `ResponsiveRepresentation` decides the
+representation first (viewport); only the desktop branch enters table
+measurement — overflow observation → tier negotiation → local scroll. Mobile
+cards are siblings of, never descendants of, the measurement node, so they
+cannot participate in overflow or tier decisions.
 
 ## API client boundary
 
