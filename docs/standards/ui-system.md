@@ -212,6 +212,85 @@ decision, not a page-local width. Page-root width ≠ local inner-content
 width: a narrower inner constraint (`max-w-sm` form, readability column)
 inside a declared-role page stays legal page-local composition.
 
+## Navigation shell continuity (NAV-1…NAV-6)
+
+Normative contract for the admin navigation shell (`AdminLayout` +
+`AppSidebar`/`SidebarContent`, ownership map in
+[`docs/architecture/frontend.md`](../architecture/frontend.md)). Frozen by
+issue #494 (UI-NAV-CONTINUITY-1) after the cross-screenshot review in #492
+proved that per-screenshot review cannot detect shell discontinuity. External
+precedent (Carbon UI shell, Primer NavList, Material navigation drawer/rail,
+PatternFly page/navigation) is consistent with every clause below.
+
+**NAV-1 — Stable shell structure.** For the same persona and the same
+responsive viewport band, changing business routes must not change the
+structural representation of the application shell: sidebar representation
+and width, group order, surviving-item order, brand/header region,
+navigation region, user/logout region, and topbar geometry are route
+invariant. Allowed to vary with the route: the active destination, the
+navigation scroll position when required to reveal the current destination,
+and capability-filtered item presence. Forbidden: route-specific sidebar
+width, route-specific group ordering, route-specific representation,
+route-specific footer geometry.
+
+**NAV-2 — Current location.** A user must always be able to determine their
+current application location from the navigation shell. For every routed
+destination represented in navigation — its exact route AND routed
+descendants that semantically belong to it (a destination represents a route
+family, e.g. `/admin/exams/:id/edit` resolves to 考试管理) — exactly one
+current nav destination (Primer rule: at most one `aria-current` at any
+time), visually distinguishable from non-current items, semantically marked
+(`aria-current="page"` — the explicit route-family matcher in
+`lib/navMatch.ts` is the single current-route authority, derived purely from
+`location.pathname`; no second current-route source, no mutable React state),
+and the current destination is discoverable inside the navigation viewport
+without manual scrolling. Family matching is segment-exact pattern matching,
+never React Router prefix accidents: `/admin/questions/import` resolves only
+to 题目导入, never to 题目管理. The
+contract is *current destination discoverable*; any reveal mechanism
+(minimum reveal, `block:"nearest"`, …) is an implementation choice. Centering
+the active item or resetting nav scroll on every route change violates
+NAV-1's minimal-motion intent.
+
+**NAV-3 — Stable information architecture.** Capability filtering may remove
+inaccessible destinations. It must not reorder groups, reorder surviving
+items, create empty group headings, create orphan separators, change group
+membership per route, or invent page-local nav structures. Given the same
+persona, navigation ordering is invariant across routes.
+
+**NAV-4 — Explicit overflow state.** Vertical navigation overflow is a
+supported component state, not an accidental consequence of
+`overflow-y:auto`. The system knows, as facts: whether the nav region
+overflows and whether it is at its scroll start/end (an equivalent fact
+vocabulary is acceptable). The measurement primitive is facts-only: it must
+never know sidebar, navigation, role, route, group, active item, or
+responsive-mode vocabulary — the same facts-only rule as
+`useOverflowObservation`.
+
+**NAV-5 — Region ownership.** The shell owns three vertical regions:
+brand/shell header, navigation, and user identity + logout. The header and
+footer regions do not shrink unpredictably; the footer never overlaps the
+navigation region; the navigation region owns the remaining vertical height
+and owns its own vertical scrolling; document scrolling never substitutes
+for navigation scrolling. The user/logout region stays outside the nav
+scroll region.
+
+**NAV-6 — Responsive representation.** The three-state model is a function
+of viewport band plus user collapse preference where authorized (below `lg`
+drawer; `lg`..<`xl` persistent 56px rail; `xl`+ 232px full sidebar with
+user-controlled collapse). Representation is never a function of business
+route, page type, table width, or nav item count.
+
+**Not contractual (mechanisms, do not freeze):** sticky group headings, any
+specific gradient/chevron/edge-cue implementation, the `scrollIntoView` API,
+exact scrollbar styling.
+
+Deterministic enforcement lives in `admin-shell-viewport.spec.ts` (current
+destination matrix, direct-URL reveal, stable ordering, region geometry,
+responsive representation, mobile drawer). Multimodal comparison of
+equivalent screenshots (not pixel-diff CI) is the patrol-side discovery
+mechanism for this contract.
+
 ## Tailwind boundary
 
 Business pages **may** use Tailwind freely for **structure and responsive

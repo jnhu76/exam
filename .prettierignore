@@ -12,3 +12,6 @@ coverage/
 opencode.jsonc
 formal/
 /data
+apps/e2e/test-results-patrol/
+.tmp/
+gui-test-screenshots/
