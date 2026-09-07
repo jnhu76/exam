@@ -128,6 +128,16 @@ test.describe("manual grading (P3-MOD-P1-2)", () => {
     // queue row (same path a human admin takes).
     await loginAsAdmin(page);
     await page.goto("/admin/grading-queue");
+
+    // #439 V5: the AdminLayout topbar (the <header> without an <h1>;
+    // the page's PageHeader owns one) must resolve the pageMeta title,
+    // not the "页面" fallback, and document.title must agree.
+    const topbar = page
+      .getByTestId("admin-layout")
+      .locator("header:not(:has(h1))");
+    await expect(topbar).toHaveText("待评分");
+    await expect(page).toHaveTitle(/^待评分 - /);
+
     const row = page.getByTestId(`grading-queue-row-${attemptId}`);
     await row.waitFor({ state: "visible", timeout: 15_000 });
     await row.click();
