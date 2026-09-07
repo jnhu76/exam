@@ -146,6 +146,11 @@ test.describe("manual grading (P3-MOD-P1-2)", () => {
       { timeout: 15_000 },
     );
 
+    // #490: the grading-detail route must resolve its own pageMeta title in
+    // the AdminLayout topbar (not the "页面" fallback) and in document.title.
+    await expect(topbar).toHaveText("手动评分");
+    await expect(page).toHaveTitle(/^手动评分 - /);
+
     // Candidate answer preserves both submitted lines (whitespace-pre-wrap).
     const answerEl = page.getByTestId(
       `grading-candidate-answer-${essayQuestionId}`,

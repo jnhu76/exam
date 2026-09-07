@@ -25,6 +25,14 @@ test.describe("P7-M exam profile management product path", () => {
       page.getByRole("heading", { name: "策略模板", exact: true }),
     ).toBeVisible();
 
+    // #490: the AdminLayout topbar (the <header> without an <h1>) must show
+    // the pageMeta title for this static route, and document.title must agree.
+    const topbar = page
+      .getByTestId("admin-layout")
+      .locator("header:not(:has(h1))");
+    await expect(topbar).toHaveText("策略模板");
+    await expect(page).toHaveTitle(/^策略模板 - /);
+
     // Open the create editor. The button appears both in the header actions
     // and in the empty-state action; either one leads to the editor.
     await page.getByRole("button", { name: "新建模板" }).first().click();

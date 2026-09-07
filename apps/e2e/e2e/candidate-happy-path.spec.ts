@@ -96,4 +96,26 @@ test.describe("candidate happy path", () => {
     expect(takeBody.gradingStatus).toBe("pending_manual");
     expect(takeBody.attemptStatus).toBe("submitted");
   });
+
+  test("exam settings route resolves its pageMeta title (#490)", async ({
+    page,
+    request,
+  }) => {
+    // #490 candidate-side representative: /exam/settings has no page-internal
+    // topbar (ExamLayout renders none), so document.title is the page identity
+    // the pageMeta registry must supply.
+    const seeded = await seedExam(request, "happy-settings", {
+      questionAnswer: true,
+      questionScore: 100,
+    });
+
+    await candidateLogin(page, seeded.candidate);
+    await page.getByRole("button", { name: "账号菜单" }).click();
+    await page.getByTestId("exam-settings-link").click();
+    await expect(page).toHaveURL(/\/exam\/settings(?:$|[/?#])/);
+    await expect(
+      page.getByRole("heading", { name: "账号设置", exact: true }),
+    ).toBeVisible();
+    await expect(page).toHaveTitle(/^账号设置 - /);
+  });
 });
