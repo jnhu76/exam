@@ -427,7 +427,14 @@ export function QuestionImportPage() {
                       )}
                     </DataTableCell>
                     <DataTableCell role="long-text" className="type-secondary">
-                      {d.message ?? "-"}
+                      {d.message ? (
+                        <DataTableOverflowText
+                          mode="truncate"
+                          value={d.message}
+                        />
+                      ) : (
+                        "-"
+                      )}
                     </DataTableCell>
                   </TableRow>
                 ))}

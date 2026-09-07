@@ -146,7 +146,10 @@ describe("CandidateFieldsPage", () => {
 
   it("renders second field correctly", async () => {
     renderPage();
-    expect(await screen.findByText("department")).toBeInTheDocument();
+    // Field names render through DataTableOverflowText in BOTH the desktop
+    // table and the mobile cards; scope to the desktop table representation.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("department")).toBeInTheDocument();
     expect(screen.getByText("选项")).toBeInTheDocument();
   });
 
@@ -313,7 +316,7 @@ describe("CandidateFieldsPage", () => {
   it("deletes a field after confirmation", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("employeeId");
+    await within(await screen.findByRole("table")).findByText("employeeId");
     const menu = await openRowMenu(user, 0);
     await user.click(within(menu).getByRole("menuitem", { name: "删除字段" }));
     const alertDialog = await screen.findByRole("alertdialog");
@@ -327,7 +330,7 @@ describe("CandidateFieldsPage", () => {
   it("moves a field up", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("department");
+    await within(await screen.findByRole("table")).findByText("department");
     const menu = await openRowMenu(user, 1);
     await user.click(within(menu).getByRole("menuitem", { name: "上移" }));
     expect(apiPatch).toHaveBeenCalledTimes(2);
@@ -336,7 +339,7 @@ describe("CandidateFieldsPage", () => {
   it("moves a field down", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("employeeId");
+    await within(await screen.findByRole("table")).findByText("employeeId");
     const menu = await openRowMenu(user, 0);
     await user.click(within(menu).getByRole("menuitem", { name: "下移" }));
     expect(apiPatch).toHaveBeenCalledTimes(2);
@@ -345,7 +348,7 @@ describe("CandidateFieldsPage", () => {
   it("first up item and last down item are disabled", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("employeeId");
+    await within(await screen.findByRole("table")).findByText("employeeId");
     const kebabs = await screen.findAllByRole("button", { name: "更多操作" });
     await user.click(kebabs[0]!);
     const firstMenu = await screen.findByRole("menu");
@@ -388,7 +391,9 @@ describe("CandidateFieldsPage", () => {
     renderPage();
     expect(await screen.findByText("加载字段配置失败")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试" }));
-    expect(await screen.findByText("employeeId")).toBeInTheDocument();
+    expect(
+      await within(await screen.findByRole("table")).findByText("employeeId"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("加载字段配置失败")).not.toBeInTheDocument();
   });
 
@@ -405,7 +410,7 @@ describe("CandidateFieldsPage", () => {
       return Promise.resolve([...mockFields]);
     });
     renderPage();
-    await screen.findByText("employeeId");
+    await within(await screen.findByRole("table")).findByText("employeeId");
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: /下载模板/ }));

@@ -10,6 +10,7 @@ import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { RowActions } from "@/components/shared/RowActions";
+import { DataTableOverflowText } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
   DesktopDataTable,
@@ -234,7 +235,12 @@ export function CandidateFieldsPage() {
       id: "name",
       meta: { role: "short-id" },
       header: t("admin.candidateFields.columns.fieldName"),
-      cell: ({ row }) => row.original.name,
+      cell: ({ row }) => (
+        <DataTableOverflowText
+          mode="truncate-middle"
+          value={row.original.name}
+        />
+      ),
     },
     {
       id: "label",

@@ -194,7 +194,12 @@ export function CoursePage() {
       id: "code",
       meta: { role: "short-id" },
       header: t("admin.courses.columns.code"),
-      cell: ({ row }) => row.original.code,
+      cell: ({ row }) => (
+        <DataTableOverflowText
+          mode="truncate-middle"
+          value={row.original.code}
+        />
+      ),
     },
     {
       id: "description",
