@@ -12,6 +12,16 @@ describe("page metadata", () => {
     expect(getPageTitle("/admin/dashboard")).toBe("仪表盘");
     expect(getPageTitle("/admin/settings")).toBe("平台设置");
     expect(getPageTitle("/admin/recovery")).toBe("恢复中心");
+    expect(getPageTitle("/admin/permissions")).toBe("权限注册表");
+    expect(getPageTitle("/admin/exam-profiles")).toBe("策略模板");
+    expect(getPageTitle("/admin/exam-profiles/new")).toBe("新建策略模板");
+    expect(getPageTitle("/exam/settings")).toBe("账号设置");
+  });
+
+  it("returns public identity page titles", () => {
+    expect(getPageTitle(routes.inviteAccept)).toBe("激活账号");
+    expect(getPageTitle(routes.forgotPassword)).toBe("忘记密码");
+    expect(getPageTitle(routes.resetPassword)).toBe("重置密码");
   });
 
   it("returns the grading queue title for its registered route", () => {
@@ -47,6 +57,25 @@ describe("page metadata", () => {
       "答题操作详情",
     );
     expect(getPageTitle("/admin/recovery/exams/exam-1")).toBe("考试恢复详情");
+  });
+
+  it("resolves the newly registered dynamic page titles", () => {
+    expect(getPageTitle("/admin/grading-queue/attempt-1")).toBe("手动评分");
+    expect(getPageTitle("/admin/exams/exam-1/edit")).toBe("编辑考试");
+    expect(getPageTitle("/admin/exam-profiles/profile-1/edit")).toBe(
+      "编辑策略模板",
+    );
+  });
+
+  it("keeps sub-page routes from resolving to the generic exam detail rule", () => {
+    // Dynamic rules are $-anchored: the detail pattern must never swallow
+    // /edit, /scores or /proctor siblings.
+    expect(getPageTitle("/admin/exams/exam-1/edit")).not.toBe("考试详情");
+    expect(getPageTitle("/admin/exams/exam-1/scores")).not.toBe("考试详情");
+    expect(getPageTitle("/admin/exams/exam-1/proctor")).not.toBe("考试详情");
+    expect(getPageTitle("/admin/exams/exam-1/proctor/monitor")).not.toBe(
+      "考试详情",
+    );
   });
 
   it("returns a stable fallback page title", () => {

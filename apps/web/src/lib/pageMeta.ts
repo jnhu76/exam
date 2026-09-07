@@ -11,15 +11,21 @@ export function getFallbackPageTitle(): string {
 }
 
 /** A pattern-based rule that maps a route regex to a page title key. */
-interface RouteTitleRule {
+export interface RouteTitleRule {
   pattern: RegExp;
   titleKey: string;
 }
 
-/** Static mapping from route paths to i18n keys. */
-const staticRouteTitleKeys = new Map<string, string>([
+/**
+ * Static mapping from route paths to i18n keys. Exported for the routed-page
+ * completeness gate (issue 490) — the only sanctioned external consumer.
+ */
+export const staticRouteTitleKeys = new Map<string, string>([
   [routes.login, "pageMeta.static.login"],
   [routes.launchpad, "pageMeta.static.launchpad"],
+  [routes.inviteAccept, "pageMeta.static.inviteAccept"],
+  [routes.forgotPassword, "pageMeta.static.forgotPassword"],
+  [routes.resetPassword, "pageMeta.static.resetPassword"],
   [routes.admin.dashboard, "pageMeta.static.dashboard"],
   [routes.admin.users, "pageMeta.static.users"],
   [routes.admin.candidates, "pageMeta.static.candidates"],
@@ -31,19 +37,27 @@ const staticRouteTitleKeys = new Map<string, string>([
   [routes.admin.questionsImport, "pageMeta.static.questionsImport"],
   [routes.admin.exams, "pageMeta.static.exams"],
   [routes.admin.examsNew, "pageMeta.static.examsNew"],
+  [routes.admin.examProfiles, "pageMeta.static.examProfiles"],
+  [routes.admin.examProfileNew, "pageMeta.static.examProfileNew"],
   [routes.admin.gradingQueue, "pageMeta.static.gradingQueue"],
   [routes.admin.proctorWorkspace, "pageMeta.static.proctorWorkspace"],
   [routes.admin.results, "pageMeta.static.results"],
   [routes.admin.system, "pageMeta.static.system"],
   [routes.admin.operations, "pageMeta.static.operations"],
   [routes.admin.auditLogs, "pageMeta.static.auditLogs"],
+  [routes.admin.permissions, "pageMeta.static.permissions"],
   [routes.admin.importLogs, "pageMeta.static.importLogs"],
   [routes.admin.recovery, "pageMeta.static.recovery"],
   [routes.exam.list, "pageMeta.static.examList"],
+  [routes.exam.settings, "pageMeta.static.examSettings"],
 ]);
 
-/** Regex-based title key rules for dynamic routes containing IDs. */
-const dynamicRouteTitleKeys: RouteTitleRule[] = [
+/**
+ * Regex-based title key rules for dynamic routes containing IDs. Exported for
+ * the routed-page completeness gate (issue 490); rules must stay mutually
+ * exclusive (the gate proves it against every routed pattern).
+ */
+export const dynamicRouteTitleKeys: RouteTitleRule[] = [
   {
     pattern: /^\/admin\/recovery\/incidents\/[^/]+$/,
     titleKey: "pageMeta.dynamic.recoveryIncident",
@@ -61,8 +75,15 @@ const dynamicRouteTitleKeys: RouteTitleRule[] = [
     titleKey: "pageMeta.dynamic.questionEdit",
   },
   {
-    pattern: /^\/admin\/exams\/[^/]+$/,
+    // INVARIANT: "new" is the create page's static segment, never an exam id;
+    // excluding it keeps the detail rule disjoint from the examsNew static
+    // registration (the pageMetaCoverage gate proves registry orthogonality).
+    pattern: /^\/admin\/exams\/(?!new$)[^/]+$/,
     titleKey: "pageMeta.dynamic.examDetail",
+  },
+  {
+    pattern: /^\/admin\/exams\/[^/]+\/edit$/,
+    titleKey: "pageMeta.dynamic.examEdit",
   },
   {
     pattern: /^\/admin\/exams\/[^/]+\/scores$/,
@@ -75,6 +96,14 @@ const dynamicRouteTitleKeys: RouteTitleRule[] = [
   {
     pattern: /^\/admin\/exams\/[^/]+\/proctor\/monitor$/,
     titleKey: "pageMeta.dynamic.examMonitor",
+  },
+  {
+    pattern: /^\/admin\/exam-profiles\/[^/]+\/edit$/,
+    titleKey: "pageMeta.dynamic.examProfileEdit",
+  },
+  {
+    pattern: /^\/admin\/grading-queue\/[^/]+$/,
+    titleKey: "pageMeta.dynamic.gradingDetail",
   },
   {
     pattern: /^\/admin\/attempts\/[^/]+$/,
