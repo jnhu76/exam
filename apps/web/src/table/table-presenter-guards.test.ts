@@ -17,9 +17,11 @@
  *   - Hand-built tables (`<DataTableColumns columns={[...]}>`): declarations
  *     pair positionally with the body row template's `DataTableCell` elements
  *     (row templates with a different cell count — span/loading rows — do not
- *     participate); each presenter-mode declaration's cell must render the
- *     presenter with the matching mode. If no row template can prove the
- *     pairing, the guard fails loud instead of skipping.
+ *     participate); in EVERY matching row template, each presenter-mode
+ *     declaration's cell must render the presenter with the matching mode —
+ *     a universal proof, so one compliant template can never keep a sibling
+ *     raw template green. If no row template can prove the pairing, the guard
+ *     fails loud instead of skipping.
  *   - Non-literal role/overflow/mode/cell values fail loud. The single
  *     non-literal `columns` consumer is DesktopDataTable, whose inputs are
  *     the DataViewColumnDefs already guarded per-column by this test.
@@ -36,17 +38,21 @@ import {
 } from "@/components/shared/DataTableContract";
 
 /**
- * The modes DataTableOverflowText owns, derived from its `mode` prop type so
- * the compiler ties this set to the component: removing a mode there fails
- * this file's compilation, and a new mode must be added here consciously or
- * the guard silently stops covering it.
+ * The modes DataTableOverflowText owns, as an exhaustive Record keyed by its
+ * `mode` prop type: adding or removing a mode on the component breaks this
+ * file's compilation, forcing a conscious governance decision here instead of
+ * the guard silently missing the new mode (closed vocabulary).
  */
 type PresenterMode = ComponentProps<typeof DataTableOverflowText>["mode"];
-const PRESENTER_MODES: ReadonlySet<string> = new Set<string>([
-  "truncate",
-  "truncate-middle",
-  "line-clamp-2",
-] satisfies PresenterMode[]);
+const PRESENTER_MODES: Record<PresenterMode, true> = {
+  truncate: true,
+  "truncate-middle": true,
+  "line-clamp-2": true,
+};
+
+function isPresenterMode(value: string): value is PresenterMode {
+  return value in PRESENTER_MODES;
+}
 
 /** The generic renderer piping runtime-guarded DataViewColumnDefs into the
  * colgroup; its `columns` prop is legitimately non-literal. */
@@ -234,20 +240,28 @@ function declarationSite(sourceFile: ts.SourceFile, node: ts.Node): number {
 }
 
 /**
- * Full semantic scan. Returns one message per violation, prefixed with
- * `path:line` so a red guard is immediately actionable.
+ * Full semantic scan over in-memory sources. Returns one message per
+ * violation, prefixed with `path:line` so a red guard is immediately
+ * actionable. Accepts an explicit source list so the in-suite mutation proof
+ * can exercise the scanner without touching files on disk.
  */
-function presenterPairingViolations(): string[] {
+function presenterPairingViolations(
+  sources: readonly { rel: string; text: string }[] = listSourceFiles(
+    webRoot,
+  ).map((path) => ({
+    rel: relative(webRoot, path),
+    text: readFileSync(path, "utf8"),
+  })),
+): string[] {
   const violations: string[] = [];
   const fail = (rel: string, line: number, message: string): void => {
     violations.push(`${rel}:${line} ${message}`);
   };
 
-  for (const path of listSourceFiles(webRoot)) {
-    const rel = relative(webRoot, path);
+  for (const { rel, text } of sources) {
     const sourceFile = ts.createSourceFile(
-      path,
-      readFileSync(path, "utf8"),
+      rel,
+      text,
       ts.ScriptTarget.Latest,
       /*setParentNodes*/ true,
       ts.ScriptKind.TSX,
@@ -276,7 +290,7 @@ function presenterPairingViolations(): string[] {
               declarationSite(sourceFile, metaInit),
               `column ${columnLabel}: meta role/overflow must be statically analyzable string literals`,
             );
-          } else if (PRESENTER_MODES.has(declaration.effective)) {
+          } else if (isPresenterMode(declaration.effective)) {
             const { effective } = declaration;
             const cellInit = getProp(node, "cell");
             const cell = cellInit ? unwrapAssertion(cellInit) : undefined;
@@ -360,7 +374,7 @@ function presenterPairingViolations(): string[] {
             continue;
           }
           const presenterIndices = declarations
-            .map((d, i) => (PRESENTER_MODES.has(d.effective) ? i : -1))
+            .map((d, i) => (isPresenterMode(d.effective) ? i : -1))
             .filter((i) => i >= 0);
           if (presenterIndices.length === 0) continue;
 
@@ -394,10 +408,12 @@ function presenterPairingViolations(): string[] {
             );
             continue;
           }
+          // Universal proof: EVERY matching row template must render the
+          // presenter in the presenter-mode column's cell — a compliant
+          // template must never keep a sibling raw template green.
           for (const index of presenterIndices) {
             const declaration = declarations[index];
             if (!declaration) continue;
-            let paired = false;
             for (const row of rowTemplates) {
               const cell = row[index];
               if (!cell) continue;
@@ -410,24 +426,21 @@ function presenterPairingViolations(): string[] {
                 );
               }
               if (
-                modes.length > 0 &&
-                modes.every((m) => m === declaration.effective)
+                modes.length === 0 ||
+                !modes.every((m) => m === declaration.effective)
               ) {
-                paired = true;
+                fail(
+                  rel,
+                  declarationSite(sourceFile, cell),
+                  `colgroup column #${index + 1} (${declaration.role}, effective "${declaration.effective}") must render DataTableOverflowText mode="${declaration.effective}" in body cell #${index + 1} (row template at this line)`,
+                );
               }
-            }
-            if (!paired) {
-              fail(
-                rel,
-                declarationSite(sourceFile, node),
-                `colgroup column #${index + 1} (${declaration.role}, effective "${declaration.effective}") must render DataTableOverflowText mode="${declaration.effective}" in body cell #${index + 1}`,
-              );
             }
           }
           // Reverse drift: a presenter inside a cell whose column declares a
           // non-presenter overflow contradicts the colgroup declaration.
           for (const [index, declaration] of declarations.entries()) {
-            if (PRESENTER_MODES.has(declaration.effective)) continue;
+            if (isPresenterMode(declaration.effective)) continue;
             for (const row of rowTemplates) {
               const cell = row[index];
               if (!cell) continue;
@@ -457,5 +470,62 @@ describe("table presenter-pairing structural guards (issue #461 C1)", () => {
     // TanStack shape (cell renderer) and hand-built colgroups (positional
     // pairing with body cells).
     expect(presenterPairingViolations()).toEqual([]);
+  });
+
+  it("reds when one row template renders the presenter and a sibling template drops it (in-memory mutation)", () => {
+    // Two body row templates share the colgroup's cell count: the mapped
+    // template renders the presenter, the static summary template returns the
+    // raw value. The pairing proof is universal over matching templates, so
+    // the compliant template must NOT keep the raw one green. In-memory
+    // fixture — no file on disk is touched.
+    const fixture = `import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+  DataTableOverflowText,
+} from "@/components/shared/DataTableContract";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+
+export function FixturePage({
+  rows,
+}: {
+  rows: Array<{ n: number; text: string }>;
+}) {
+  return (
+    <Table>
+      <DataTableColumns
+        columns={[{ role: "number" }, { role: "long-text", overflow: "truncate" }]}
+      />
+      <TableHeader>
+        <TableRow>
+          <DataTableHead role="number">N</DataTableHead>
+          <DataTableHead role="long-text">Text</DataTableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.n}>
+            <DataTableCell role="number">{row.n}</DataTableCell>
+            <DataTableCell role="long-text">
+              <DataTableOverflowText mode="truncate" value={row.text} />
+            </DataTableCell>
+          </TableRow>
+        ))}
+        <TableRow>
+          <DataTableCell role="number">0</DataTableCell>
+          <DataTableCell role="long-text">summary fallback</DataTableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
+  );
+}
+`;
+    const violations = presenterPairingViolations([
+      { rel: "pages/admin/FixturePage.tsx", text: fixture },
+    ]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(
+      /FixturePage\.tsx:\d+ colgroup column #2 \(long-text, effective "truncate"\) must render DataTableOverflowText mode="truncate" in body cell #2 \(row template at this line\)/,
+    );
   });
 });

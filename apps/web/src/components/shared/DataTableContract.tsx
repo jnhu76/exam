@@ -23,10 +23,11 @@ export type DataTableColumnRole =
  * resolves its overflow from the role default (`ROLE_OVERFLOW`) or declares an
  * explicit override on the column declaration.
  *
- * Pure-CSS policies: `nowrap`, `wrap`, `break-token`, `line-clamp-2`.
- * Content-presenter policies: `truncate`, `truncate-middle` — these keep the
- * full value accessible (title + keyboard focus) and are realized through
- * {@link DataTableOverflowText}, never through silent cell-level clipping.
+ * Pure-CSS policies: `nowrap`, `wrap`, `break-token`.
+ * Content-presenter policies: `truncate`, `truncate-middle`, `line-clamp-2` —
+ * these keep the full value accessible (title + keyboard focus) and are
+ * realized through {@link DataTableOverflowText}, never through silent
+ * cell-level clipping.
  */
 export type ColumnOverflow =
   | "nowrap"
