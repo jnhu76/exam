@@ -268,8 +268,8 @@ with `label` → `role="img"`).
 
 `DataTableShell` is the mandatory shell for equivalent management tables. It owns
 the complete outer boundary (`overflow-hidden` + flush body so `<Table>` meets
-the border), optional title/description/`toolbar` slot, footer slot, an
-`actionsDensity` prop (`"narrow"` default), and the shared overflow
+the border), optional title/description/`toolbar` slot, footer slot, the
+archetype-driven tier negotiation, and the shared overflow
 observation. `DataWorkbench` (toolbar → table → footer as one continuous
 surface) shares every semantic authority with `DataTableShell` — archetype,
 column semantics, tier negotiation, overflow observation, responsive

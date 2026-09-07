@@ -149,6 +149,16 @@ export function docsConvergenceViolations(
       "ui-system.md mentions admin-sparse without recording its retirement",
     );
   }
+  // Retired component APIs must not re-enter the governance docs (a doc
+  // mention re-freezes a deleted API as if it were live: the actionsDensity
+  // shell prop was removed in #453; its retirement has no doc record to keep,
+  // so any mention is drift). The source-level ban lives in
+  // table-layout.test.tsx ("removes the actionsDensity model everywhere").
+  for (const name of Object.keys(files)) {
+    if ((files[name] ?? "").includes("actionsDensity")) {
+      violations.push(`${name} mentions retired API: actionsDensity`);
+    }
+  }
   return violations;
 }
 

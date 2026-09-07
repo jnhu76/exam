@@ -71,12 +71,14 @@ The root `App` wraps everything in `ErrorBoundary` → `BrowserRouter` →
 
 ## Responsive structure and spatial authority map
 
-The admin shell is a **three-state** layout (one primary breakpoint `lg`):
+The admin shell is a **three-state** layout using the `lg` / `xl` boundaries:
 
 - **below `lg`**: a navigation drawer (`Sheet`, reusing the same `SidebarContent`
   as the desktop rail); topbar trigger is a `lg:hidden` button.
-- **`lg` to `xl`**: compact desktop rail (`w-14` collapsed / `w-[232px]` expanded).
-- **`xl` and above**: full/collapsible sidebar.
+- **`lg` to `xl`**: fixed compact desktop rail (`w-14`, 56px — no expanded
+  state at this width).
+- **`xl` and above**: full sidebar (`w-[232px]`), user-controlled collapse to
+  the 56px rail.
 
 No document-level horizontal overflow; wide tables scroll locally.
 Management-list tables switch between the desktop table and a mobile card list
