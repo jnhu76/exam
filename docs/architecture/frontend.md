@@ -87,6 +87,24 @@ other table archetypes keep local scroll at every width. The candidate
 exam runtime shares tokens, primitives, status, icons, and clarity but stays
 task-focused.
 
+### Navigation shell continuity wiring
+
+The normative NAV-1…NAV-6 contract lives in
+[`docs/standards/ui-system.md`](../standards/ui-system.md)
+(§Navigation shell continuity). Implementation ownership:
+
+| Contract | Owning module (`apps/web/src/`) |
+| --- | --- |
+| NAV-1/3/5/6 shell structure, region ownership, responsive bands | `components/layout/AdminLayout.tsx` + `components/layout/AppSidebar.tsx` (`SidebarContent` is the single navigation authority for desktop sidebar and mobile drawer) |
+| NAV-4 vertical overflow facts (facts-only measurement) | `hooks/useVerticalOverflowObservation.ts` — sibling of `useOverflowObservation`, must never learn nav/role/route vocabulary |
+| NAV-2 current-destination reveal (minimum reveal on route change; never centers, never resets scroll) | `components/layout/AppSidebar.tsx` (`SidebarContent` consumes the vertical overflow facts) |
+| NAV-2 semantic current state | React Router `NavLink` `aria-current="page"` (single current-route authority — do not duplicate) |
+
+`SidebarLink`/nav groups are capability-filtered (UX-only, see
+§Authentication and authorization projection); filtering removes
+destinations but must not reorder survivors or emit empty group headings
+(NAV-3).
+
 The normative contract for everything spatial lives in
 [`docs/standards/ui-system.md`](../standards/ui-system.md) (§Spatial
 governance boundary, §Page geometry, §Tables). Implementation ownership:
@@ -100,7 +118,8 @@ governance boundary, §Page geometry, §Tables). Implementation ownership:
 | column role/overflow/priority + presenters | `components/shared/DataTableContract.tsx` (`ROLE_OVERFLOW`, `ROLE_ALLOWED_OVERFLOW`, `DataTableOverflowText`, `middleTruncate`) |
 | viewport representation switch (the only owner of the table representation-switch `lg` policy) | `components/shared/ResponsiveRepresentation.tsx` |
 | mobile card list + priority→slot derivation | `components/shared/MobileRecordList.tsx` (`deriveMobileCardFields`) / `MobileRecordCard.tsx` |
-| container-overflow facts (the only ResizeObserver) | `hooks/useOverflowObservation.ts` (facts only — no tier/archetype/representation vocabulary) |
+| container-overflow facts, horizontal table regions (facts-only ResizeObserver owner) | `hooks/useOverflowObservation.ts` |
+| vertical overflow facts, navigation scroll regions (facts-only ResizeObserver owner) | `hooks/useVerticalOverflowObservation.ts` — these two are the only ResizeObserver measurement owners |
 | physical column widths, tier floors, sticky context column | `table/recipes.css` (fixed layout + col width/min-width; `detail-comparison` sticky first child) |
 | desktop table rendering | `components/shared/DesktopDataTable.tsx` (TanStack stays a row/header model — no column sizing) |
 

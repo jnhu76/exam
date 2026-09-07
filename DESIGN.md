@@ -200,6 +200,11 @@ No document-level horizontal overflow is allowed. Wide tables scroll locally.
 Candidate exam runtime remains task-focused and does not inherit dense admin
 table composition, but shares tokens, primitives, status, icons, and clarity.
 
+Navigation shell continuity (current location stays discoverable while the
+nav scrolls; the shell never changes shape when the route changes) is a
+frozen contract: see `docs/standards/ui-system.md` §Navigation shell
+continuity (NAV-1…NAV-6).
+
 ## Reference adaptation
 
 Koi UI informs list-page discipline, search/filter grouping, table containment,

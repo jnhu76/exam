@@ -143,14 +143,16 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
-  it("keeps useOverflowObservation as the single overflow-measurement owner", () => {
-    // issue 445 P3 §8: exactly one module may read scrollWidth/clientWidth via a
-    // ResizeObserver loop. Before the convergence DataTableShell and
+  it("keeps the overflow-observation facts hooks the single measurement owners", () => {
+    // issue 445 P3 §8: exactly one module may read scrollWidth/clientWidth via
+    // a ResizeObserver loop. Before the convergence DataTableShell and
     // DataWorkbench each carried a byte-identical copy of the algorithm; any
     // second production owner (or a component re-deriving overflow facts)
-    // must fail here instead of drifting. Test-infra (`src/test/`) is not a
-    // measurement owner — its ResizeObserver stub exists only so Radix
-    // popper primitives can mount under jsdom.
+    // must fail here instead of drifting. Issue 494 NAV-4 adds exactly one
+    // vertical sibling (facts-only, no nav/role/route vocabulary) — a third
+    // owner, or a component re-deriving facts, still fails here. Test-infra
+    // (`src/test/`) is not a measurement owner — its ResizeObserver stub
+    // exists only so Radix popper primitives can mount under jsdom.
     const webRoot = join(here, "..");
     const owners = listSourceFiles(webRoot)
       .filter((path) => !path.startsWith(join(webRoot, "test")))
@@ -159,8 +161,12 @@ describe("table and color visual-finish authority", () => {
         text: readFileSync(path, "utf8"),
       }))
       .filter(({ text }) => /ResizeObserver|scrollWidth/.test(text))
-      .map(({ path }) => path);
-    expect(owners).toEqual(["hooks/useOverflowObservation.ts"]);
+      .map(({ path }) => path)
+      .sort();
+    expect(owners).toEqual([
+      "hooks/useOverflowObservation.ts",
+      "hooks/useVerticalOverflowObservation.ts",
+    ]);
   });
 
   it("defines non-interactive state-aware scroll affordances", () => {

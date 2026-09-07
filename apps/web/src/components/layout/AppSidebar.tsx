@@ -40,13 +40,15 @@ import {
   Users,
   UsersRound,
 } from "lucide-react";
+import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { NavLink } from "react-router";
+import { NavLink, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useVerticalOverflowObservation } from "@/hooks/useVerticalOverflowObservation";
 import { cn } from "@/lib/utils";
 import { routes } from "@/lib/routes";
 import { BrandHeader } from "./BrandHeader";
@@ -304,6 +306,24 @@ export function SidebarContent({
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navRef = useRef<HTMLElement | null>(null);
+  // NAV-4 (issue 494): vertical overflow is an explicit component state; the
+  // facts-only hook owns measurement, this component owns interpretation.
+  const overflow = useVerticalOverflowObservation(navRef);
+
+  // NAV-2 (issue 494): the current destination must be discoverable inside the
+  // navigation viewport. On route change (and on mount, for direct-URL
+  // loads) reveal it with the minimum scroll necessary — block:"nearest" is
+  // a no-op while the item is already fully visible, never centers it, and
+  // never resets the user's scroll position. React Router NavLink remains the
+  // single current-route authority ([aria-current="page"]).
+  useEffect(() => {
+    navRef.current
+      ?.querySelector<HTMLElement>('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [location.pathname]);
+
   // P7-E2C (P3-3 closure): management items are individually capability-gated
   // so a partial-authority actor (e.g. Maintainer) never sees an item that
   // would 403 on click (dead navigation).
@@ -328,54 +348,83 @@ export function SidebarContent({
 
   return (
     <>
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
-        {visibleGroups.map((group, gi) => (
-          <section key={group.labelKey} className="flex flex-col gap-0.5">
-            {!collapsed && (
-              <p
-                data-testid="nav-group-label"
-                className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted"
-              >
-                {t(group.labelKey as never)}
-              </p>
-            )}
-            {gi > 0 && collapsed && <Separator className="my-2" />}
-            {group.items.map((item) => (
-              <SidebarLink
-                key={item.to}
-                collapsed={collapsed}
-                item={item}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </section>
-        ))}
-        {showManagement && (
-          <section className="flex flex-col gap-0.5">
-            {!collapsed && (
-              <p
-                data-testid="nav-group-label"
-                className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted"
-              >
-                {t("nav.groups.management")}
-              </p>
-            )}
-            {collapsed && <Separator className="my-2" />}
-            {management.map((item) => (
-              <SidebarLink
-                key={item.to}
-                collapsed={collapsed}
-                item={item}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </section>
+      <div
+        data-slot="nav-scroll-region"
+        data-overflowing={String(overflow.overflowing)}
+        data-at-start={String(overflow.atStart)}
+        data-at-end={String(overflow.atEnd)}
+        className="relative flex min-h-0 flex-1 flex-col"
+      >
+        <nav
+          ref={navRef}
+          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2"
+        >
+          {visibleGroups.map((group, gi) => (
+            <section key={group.labelKey} className="flex flex-col gap-0.5">
+              {!collapsed && (
+                <p
+                  data-testid="nav-group-label"
+                  className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted"
+                >
+                  {t(group.labelKey as never)}
+                </p>
+              )}
+              {gi > 0 && collapsed && <Separator className="my-2" />}
+              {group.items.map((item) => (
+                <SidebarLink
+                  key={item.to}
+                  collapsed={collapsed}
+                  item={item}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </section>
+          ))}
+          {showManagement && (
+            <section className="flex flex-col gap-0.5">
+              {!collapsed && (
+                <p
+                  data-testid="nav-group-label"
+                  className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted"
+                >
+                  {t("nav.groups.management")}
+                </p>
+              )}
+              {collapsed && <Separator className="my-2" />}
+              {management.map((item) => (
+                <SidebarLink
+                  key={item.to}
+                  collapsed={collapsed}
+                  item={item}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </section>
+          )}
+        </nav>
+
+        {/* NAV-4 (issue 494): restrained edge cues marking the scroll state — a
+            fade is shown only on the edge(s) with more nav beyond them. Same
+            restrained-affordance pattern as the table scroll fades. */}
+        {overflow.overflowing && !overflow.atStart && (
+          <span
+            data-slot="nav-scroll-fade-top"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 z-10 h-4 bg-linear-to-b from-sidebar to-transparent"
+          />
         )}
-      </nav>
+        {overflow.overflowing && !overflow.atEnd && (
+          <span
+            data-slot="nav-scroll-fade-bottom"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-linear-to-t from-sidebar to-transparent"
+          />
+        )}
+      </div>
 
       <Separator className="shrink-0 bg-sidebar-border" />
 
-      <div className="shrink-0 p-2">
+      <div data-testid="sidebar-footer" className="shrink-0 p-2">
         <div
           className={cn(
             "flex items-center gap-2",
