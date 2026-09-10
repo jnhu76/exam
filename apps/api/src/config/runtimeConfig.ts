@@ -37,6 +37,7 @@ import {
 } from "@exam/db";
 import { RuntimeConfigError } from "@exam/domain";
 import { resolveSettings, type ResolvedSettings } from "./settings.js";
+import { API_REFERENCE_UI_PATH } from "../openapi/docsPaths.js";
 
 // AppMode is sourced from the single-source resolver in @exam/db. Re-exported
 // here for backward compatibility with existing importers.
@@ -56,7 +57,6 @@ export type DeploymentMode = "singleTenant";
 export interface ApiReferenceConfig {
   enabled: boolean;
   uiPath: string;
-  specPath: string;
   staticCSP: boolean;
 }
 
@@ -601,12 +601,11 @@ export function loadRuntimeConfig(
     },
     apiReference: {
       enabled: apiReferenceEnabled,
-      uiPath: "/_dev/api-reference",
-      // The machine-readable spec route actually registered by @fastify/
-      // swagger-ui (`{uiPath}/json`). specPath must equal a real registered
-      // route — it is a projection of the router, not an independent
-      // authority (I6).
-      specPath: "/_dev/api-reference/json",
+      // Single runtime authority for the docs path identity (I6): the value
+      // comes from openapi/docsPaths.ts; the machine-readable spec route
+      // ({uiPath}/json) is derived in the public projection, never stored as
+      // an independently configurable field.
+      uiPath: API_REFERENCE_UI_PATH,
       staticCSP: true,
     },
     tenancy: {
@@ -677,7 +676,9 @@ export function buildPublicConfig() {
     apiReference: {
       enabled: config.apiReference.enabled,
       uiPath: config.apiReference.uiPath,
-      specPath: config.apiReference.specPath,
+      // Derived from the single uiPath authority (I6) — the spec route
+      // @fastify/swagger-ui actually registers under the UI path.
+      specPath: `${config.apiReference.uiPath}/json`,
     },
   };
 }
