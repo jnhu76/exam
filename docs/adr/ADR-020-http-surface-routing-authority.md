@@ -2,7 +2,7 @@
 
 ## Status
 
-PROPOSED (implemented in `fix/429-api-namespace-boundary` / PR #499; pending human acceptance)
+ACCEPTED (2026-09-10 — HTTP surface routing authority implemented in `fix/429-api-namespace-boundary` / PR #499)
 
 ## Metadata
 
@@ -12,7 +12,7 @@ PROPOSED (implemented in `fix/429-api-namespace-boundary` / PR #499; pending hum
 | Decision owners | jnhu76 |
 | Supersedes | — |
 | Superseded by | — |
-| Related decisions | #429 (unmatched /api namespace boundary), #500 (HTML shell immutable cache), #464 (HTTP authority umbrella), PR #499 |
+| Related decisions | #429 (unmatched /api namespace boundary), #500 (HTML shell immutable cache), #464 (PRE-442 Docker black-box findings closure tracker), PR #499 |
 
 ## Context
 
@@ -78,13 +78,13 @@ HTTP surface:
    docs exemption, tenancy, auth/authz) consumes Fastify encapsulation,
    route options/config, or registered plugin scope — not raw URL text.
 
-7. **Raw URL must not be re-parsed for policy classification.** The legal
+6. **Raw URL must not be re-parsed for policy classification.** The legal
    exceptions are logging/telemetry (error reports carry `request.url`),
    CSRF `Referer`/`Origin` parsing (`new URL(referer)` — origin parsing, not
    route identity), URL generation, and tests. Each production use is
    classified; unexplained policy classification of raw URL is a defect.
 
-8. **Generated OpenAPI is a projection.** The machine-readable spec route is
+7. **Generated OpenAPI is a projection.** The machine-readable spec route is
    whatever `@fastify/swagger-ui` actually registers (`/_dev/api-reference/json`).
    Public config projections (`apiReference.specPath`) must equal a real
    registered route; a config field with no router consumer is deleted,

@@ -270,9 +270,10 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational Authority and Maintainer Boundary | ACCEPTED through revision 4 | none | none |
 | [ADR-018](ADR-018-operational-observability-window.md) | Operational Observability Window | ACCEPTED | none | none |
 | [ADR-019](ADR-019-content-document-model.md) | Content Document Model | PROPOSED | none | none |
+| [ADR-020](ADR-020-http-surface-routing-authority.md) | HTTP Surface Routing & Policy Authority | ACCEPTED | none | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-020**.
+ADR numbers are stable and never reused. The next free number is **ADR-021**.
 Files that are audits *about* an ADR belong under `docs/archive/`, not in this
 folder with a conflicting ADR number.
