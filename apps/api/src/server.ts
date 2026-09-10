@@ -20,9 +20,8 @@ import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import { registerStaticFrontend } from "./plugins/staticFrontend.js";
-import { registerApiRoutes } from "./routes/registerApiRoutes.js";
+import apiSurfacePlugin from "./routes/apiSurface.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
-import { healthResponseSchema } from "./routes/healthSchema.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
 import { REDACT_CONFIG } from "./lib/logRedaction.js";
@@ -124,25 +123,10 @@ async function main() {
 
   await registerOpenApiDocs(app);
 
-  /**
-   * GET /api/health
-   *
-   * Simple liveness probe. Returns `{ status: "ok" }` when the server
-   * is running and can accept requests.
-   */
-  app.get(
-    "/api/health",
-    {
-      schema: {
-        response: {
-          200: healthResponseSchema,
-        },
-      },
-    },
-    async () => ({ status: "ok" }),
-  );
-
-  await registerApiRoutes(app);
+  // The whole /api namespace lives in one encapsulated scope: registered
+  // routes, the liveness probe, and the canonical unmatched-request JSON
+  // boundary (#429). Fastify owns all routing semantics for it.
+  await app.register(apiSurfacePlugin, { prefix: "/api" });
 
   const publicDir = resolve(
     fileURLToPath(new URL("../public", import.meta.url)),

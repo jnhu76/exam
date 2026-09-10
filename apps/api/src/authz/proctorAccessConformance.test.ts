@@ -38,7 +38,7 @@ import {
   type ProctorAccessValue,
   type RoutePermissionRegistryEntry,
 } from "./routeRegistry.js";
-import { registerApiRoutes } from "../routes/registerApiRoutes.js";
+import apiSurfacePlugin from "../routes/apiSurface.js";
 import { buildTestApp } from "../routes/testHelpers.js";
 
 const VALID_ACCESS_VALUES: readonly ProctorAccessValue[] = [
@@ -82,10 +82,11 @@ const wholeAppPlugin: FastifyPluginAsync = async (fastify) => {
       authz: scoped?.authz ?? null,
     });
   });
-  await registerApiRoutes(fastify);
+  // The real production composition: one /api scope owning every route.
+  await fastify.register(apiSurfacePlugin, { prefix: "/api" });
 };
 
-/** Registry path → runtime URL (registerApiRoutes applies the /api prefix). */
+/** Registry path → runtime URL (the apiSurface plugin applies the /api prefix). */
 function runtimeUrl(entry: RoutePermissionRegistryEntry): string {
   return `/api${entry.path}`;
 }

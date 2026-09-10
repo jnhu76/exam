@@ -6,8 +6,7 @@ import {
 } from "fastify-type-provider-zod";
 
 import { openApiConfig } from "./config.js";
-import { registerApiRoutes } from "../routes/registerApiRoutes.js";
-import { healthResponseSchema } from "../routes/healthSchema.js";
+import apiSurfacePlugin from "../routes/apiSurface.js";
 import type {
   AuthzPreHandler,
   AuthzMetadata,
@@ -16,20 +15,12 @@ import type {
 import type { PermissionKey } from "@exam/authz";
 
 /**
- * Build a throwaway Fastify instance pre-loaded with all route plugins and
- * the Swagger plugin. The returned instance can be used to generate the
- * OpenAPI spec via `app.swagger()` and must be closed afterwards.
- *
- * @returns A ready Fastify instance with the Swagger plugin registered.
+ * Register the decorator stubs route modules need to register on a throwaway
+ * Fastify instance (OpenAPI generation, whole-app boundary fixtures). The
+ * stubs exist only to satisfy Fastify's decorator contract when routes
+ * register; they carry no runtime behavior.
  */
-export async function buildSwaggerApp(): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
-
-  // Zod is the runtime contract source — register the same compilers the
-  // runtime app uses so the spec reflects runtime-validated schemas.
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-
+export function decorateApiRouteStubs(app: FastifyInstance): void {
   const authenticate = async () => {};
   Object.assign(authenticate, { _isAuthenticate: true });
   app.decorate("authenticate", authenticate);
@@ -106,24 +97,32 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   app.decorate("db", null as unknown as never);
   app.decorate("now", () => new Date());
   app.decorateRequest("ctx", null as unknown as never);
+}
+
+/**
+ * Build a throwaway Fastify instance pre-loaded with all route plugins and
+ * the Swagger plugin. The returned instance can be used to generate the
+ * OpenAPI spec via `app.swagger()` and must be closed afterwards.
+ *
+ * @returns A ready Fastify instance with the Swagger plugin registered.
+ */
+export async function buildSwaggerApp(): Promise<FastifyInstance> {
+  const app = Fastify({ logger: false });
+
+  // Zod is the runtime contract source — register the same compilers the
+  // runtime app uses so the spec reflects runtime-validated schemas.
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+
+  decorateApiRouteStubs(app);
 
   await app.register(swaggerPlugin as never, openApiConfig);
 
-  // Mirror server.ts: GET /api/health (public liveness probe).
-  app.get(
-    "/api/health",
-    {
-      schema: {
-        response: {
-          200: healthResponseSchema,
-        },
-      },
-    },
-    async () => ({ status: "ok" }),
-  );
-
-  // Register all API route modules — shared with runtime server.
-  await registerApiRoutes(app);
+  // The SAME single API surface authority the runtime server uses
+  // (server.ts): one /api scope owning the liveness probe, every route
+  // module, and the unmatched-request policy. This eliminates the old
+  // duplicated health + route-list mirror.
+  await app.register(apiSurfacePlugin, { prefix: "/api" });
 
   await app.ready();
   return app;

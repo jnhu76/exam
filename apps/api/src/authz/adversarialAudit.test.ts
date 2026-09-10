@@ -4,7 +4,7 @@ import {
   buildTestApp,
   createAssignedUserForTest,
 } from "../routes/testHelpers.js";
-import { registerApiRoutes } from "../routes/registerApiRoutes.js";
+import apiSurfacePlugin from "../routes/apiSurface.js";
 import type { TestContext } from "../routes/testHelpers.js";
 
 /**
@@ -25,7 +25,8 @@ describe("P7-E adversarial audit", () => {
   let maintainerToken: string;
 
   const apiRoutes: FastifyPluginAsync = async (fastify) => {
-    await registerApiRoutes(fastify);
+    // The real production composition: one /api scope owning every route.
+    await fastify.register(apiSurfacePlugin, { prefix: "/api" });
   };
 
   beforeAll(async () => {
