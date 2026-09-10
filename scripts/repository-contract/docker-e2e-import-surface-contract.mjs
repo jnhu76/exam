@@ -88,9 +88,14 @@ for (const rel of SCAN_DIRS) {
     throw err;
   }
   for (const file of files) {
-    const text = readFileSync(file, "utf-8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:])\/\/.*$/gm, "$1");
+    // Strip // and /* */ comments WITHOUT touching string/template literals:
+    // literals are matched first and re-emitted verbatim, so a `//` inside a
+    // string (e.g. a URL) can never be taken for a comment start and hide a
+    // real import on the rest of the line.
+    const text = readFileSync(file, "utf-8").replace(
+      /("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g,
+      (m) => (m.startsWith("//") || m.startsWith("/*") ? "" : m),
+    );
     const importerRepo = posix.normalize(
       relative(ROOT, file).split(sep).join("/"),
     );
@@ -168,10 +173,24 @@ if (!e2eBlock) {
         .replace(/\s+#.*$/, "");
       const parts = spec.split(":");
       if (parts.length < 2) {
-        errors.push(
-          `Cannot parse e2e volume entry '${line.trim()}' — expected short ` +
-            "syntax '<host>:<container>[:opts]' (#503 import-surface guard).",
-        );
+        // Long-form volume entries (`type: bind, source: …, target: …`) are
+        // intentionally rejected: this guard is short-syntax-only by design
+        // (structural, no YAML dependency — same approach as
+        // deployment-topology-contract.mjs). Converting the e2e volumes to
+        // long form must update this guard consciously, not silently.
+        if (/^(type|source|target|read_only|volume|bind)\s*:/.test(spec)) {
+          errors.push(
+            `E2E volume entry '${line.trim()}' uses long-form volume syntax, ` +
+              "which this guard does not parse — keep the e2e service volumes " +
+              "in short syntax '<host>:<container>[:opts]' or extend the " +
+              "guard (#503 import-surface).",
+          );
+        } else {
+          errors.push(
+            `Cannot parse e2e volume entry '${line.trim()}' — expected short ` +
+              "syntax '<host>:<container>[:opts]' (#503 import-surface guard).",
+          );
+        }
         continue;
       }
       mounts.push({
