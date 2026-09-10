@@ -339,6 +339,9 @@ describe("#429 /api namespace boundary (router-native)", () => {
   });
 
   describe("#451 non-regression — OPTIONS dispatch is untouched (fixing #451 is OUT of scope)", () => {
+    // The authoritative OPTIONS/CORS wire contract (full matrix + envelope
+    // exception) lives in optionsCorsWireContract.test.ts and
+    // docs/contracts/api-contract.md §"OPTIONS / CORS wire contract".
     it("bare OPTIONS stays the strictPreflight 400, never the API boundary (unchanged from OLD_HEAD)", async () => {
       for (const path of ["/api/health", "/api/__429_unknown__"]) {
         const res = await fetch(`${baseUrl}${path}`, { method: "OPTIONS" });
