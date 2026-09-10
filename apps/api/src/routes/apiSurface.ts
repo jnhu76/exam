@@ -22,6 +22,11 @@ import { registerApiRouteModules } from "./registerApiRouteModules.js";
  * plugin must be registered with `{ prefix: "/api" }` on the root instance
  * (never wrapped in fastify-plugin: its purpose is the prefix
  * encapsulation).
+ *
+ * REGISTRATION ORDER: route modules call auth/authz decorators (e.g.
+ * `fastify.requireCapability(...)`) at registration time, so this plugin
+ * must be registered AFTER the root infrastructure plugins (auth, authz,
+ * db, tenant, ...) and BEFORE the static frontend fallback.
  */
 const apiSurfacePlugin: FastifyPluginAsync = async (api) => {
   // GET /health — public liveness probe. External contract: GET /api/health.
