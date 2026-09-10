@@ -133,7 +133,6 @@ describe("runtimeConfig", () => {
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.mode).toBe("singleTenant");
-      expect(config.tenancy.requireTenantBoundary).toBe(true);
     });
 
     it("accepts DEPLOYMENT_MODE=singleTenant", () => {
@@ -166,11 +165,16 @@ describe("runtimeConfig", () => {
   });
 
   describe("apiReference", () => {
-    it("uses /_dev/api-reference as uiPath", () => {
+    it("uses /_dev/api-reference as uiPath; the spec path is only derived in the public projection", () => {
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.apiReference.uiPath).toBe("/_dev/api-reference");
-      expect(config.apiReference.specPath).toBe("/api/openapi.json");
+      // The internal config stores no independent specPath (I6): the
+      // machine-readable spec route is derived from uiPath at projection.
+      expect(config.apiReference).not.toHaveProperty("specPath");
+      expect(buildPublicConfig().apiReference.specPath).toBe(
+        "/_dev/api-reference/json",
+      );
       expect(config.apiReference.staticCSP).toBe(true);
     });
 
@@ -233,7 +237,7 @@ describe("runtimeConfig", () => {
       expect(pub.deploymentMode).toBe("singleTenant");
       expect(pub.apiReference).toBeDefined();
       expect(pub.apiReference.uiPath).toBe("/_dev/api-reference");
-      expect(pub.apiReference.specPath).toBe("/api/openapi.json");
+      expect(pub.apiReference.specPath).toBe("/_dev/api-reference/json");
     });
 
     it("does not contain exposeSuperAdmin / tenantSwitcher / superAdminConsole fields", () => {

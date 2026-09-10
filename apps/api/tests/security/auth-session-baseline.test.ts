@@ -3,7 +3,6 @@ import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
 import authPlugin from "../../src/plugins/auth.js";
-import tenantPlugin from "../../src/plugins/tenant.js";
 import rateLimitPlugin from "../../src/plugins/rateLimit.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
 import zodProviderPlugin from "../../src/plugins/zodProvider.js";
@@ -74,7 +73,6 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
     await app.register(createDbPlugin(db));
     await app.register(auditLifecyclePlugin);
     await app.register(authPlugin);
-    await app.register(tenantPlugin);
     await app.register(rateLimitPlugin);
     await app.register(authRoutes, { prefix: "/api/auth" });
 

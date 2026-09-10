@@ -5,7 +5,6 @@ import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
 import authPlugin from "../plugins/auth.js";
 import authzScopedPlugin from "../plugins/authz.js";
-import tenantPlugin from "../plugins/tenant.js";
 import rateLimitPlugin from "../plugins/rateLimit.js";
 import nowPlugin from "../plugins/now.js";
 import zodProviderPlugin from "../plugins/zodProvider.js";
@@ -21,7 +20,10 @@ import { schema, type AssignableRole } from "@exam/db/src/schema/pg.js";
 import { sql } from "drizzle-orm";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { signJWT } from "@exam/auth/src/session.js";
-import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import {
+  getRuntimeConfig,
+  resetRuntimeConfigForTest,
+} from "../config/runtimeConfig.js";
 import { seed } from "@exam/db/src/seed.js";
 import type { Database } from "@exam/db/src/types.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
@@ -270,6 +272,18 @@ async function finishBuildTestApp(args: {
 
   const seedResult = await seed(db, hashPassword);
 
+  // Rate limiting is part of the /api surface (apiSurface registers the
+  // limiter internally, EXAM-HTTP-SURFACE-AUTHORITY-CLOSURE-1). Whole-app
+  // builds therefore opt OUT of the limiter unless the caller explicitly
+  // opts in with `rateLimit: true` (which registers the limiter at root for
+  // route-level probes and must observe it active).
+  if (opts?.rateLimit) {
+    delete process.env.RATE_LIMIT_DISABLED;
+  } else {
+    process.env.RATE_LIMIT_DISABLED = "true";
+  }
+  resetRuntimeConfigForTest();
+
   const app = Fastify();
   setupSecurity(app);
   setupErrorHandler(app);
@@ -280,7 +294,6 @@ async function finishBuildTestApp(args: {
   await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(authzScopedPlugin);
-  await app.register(tenantPlugin);
   // Email sender is built from runtime config (M3). Tests that need to drive
   // transport selection stub env + resetRuntimeConfigForTest before building.
   await app.register(emailPlugin);
@@ -867,7 +880,6 @@ export async function rebuildAppOnSameDb(
   await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(authzScopedPlugin);
-  await app.register(tenantPlugin);
   await app.register(emailPlugin);
   await app.register(routePlugin, { prefix: opts?.prefix ?? "/api" });
   await app.ready();

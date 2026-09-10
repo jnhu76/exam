@@ -5,7 +5,7 @@ import {
   buildTestApp,
   createAssignedUserForTest,
 } from "../routes/testHelpers.js";
-import { registerApiRoutes } from "../routes/registerApiRoutes.js";
+import apiSurfacePlugin from "../routes/apiSurface.js";
 import type { TestContext } from "../routes/testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
@@ -32,12 +32,13 @@ describe("P7-E2A Operational RBAC Boundary", () => {
   let maintainerUsername: string;
 
   const apiRoutes: FastifyPluginAsync = async (fastify) => {
-    await registerApiRoutes(fastify);
+    // The real production composition: one /api scope owning every route.
+    await fastify.register(apiSurfacePlugin, { prefix: "/api" });
   };
 
   beforeAll(async () => {
-    // registerApiRoutes applies the /api prefix itself — pass an empty prefix
-    // so buildTestApp does not double-prefix to /api/api.
+    // The apiSurface plugin owns the /api prefix itself — pass an empty
+    // prefix so buildTestApp does not double-prefix to /api/api.
     const built = await buildTestApp(apiRoutes as FastifyPluginAsync, {
       prefix: "",
     });

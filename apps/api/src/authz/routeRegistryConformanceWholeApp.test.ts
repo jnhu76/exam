@@ -11,13 +11,13 @@
  * only the 17 M10-A/B/C/D route plugins (an enumerated subset) and asserts
  * per-route metadata against `ROUTE_PERMISSION_REGISTRY`. It does NOT capture
  * the full runtime tree (auth/self/public/proctor-monitoring/client-events).
- * A future route added under `registerApiRoutes` with a `requireRole` gate
- * would therefore not be caught by it. This test closes that hole by
- * registering the REAL production composition (`registerApiRoutes`) and
+ * A future route added under the apiSurface composition with a `requireRole`
+ * gate would therefore not be caught by it. This test closes that hole by
+ * registering the REAL production composition (the apiSurface plugin) and
  * scanning every primary route.
  *
  * Methodology:
- *   1. Register the full production composition via `registerApiRoutes(app)`
+ *   1. Register the full production composition via the apiSurface plugin
  *      inside a Fastify app built with the production auth plugins (so the
  *      `requireRole` / `authenticate` / capability decorators exist and carry
  *      their `_isRequireRole` / `_isAuthenticate` / `.authz` introspection).
@@ -39,7 +39,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { Permission } from "@exam/authz";
 import type { PermissionKey } from "@exam/authz";
 import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
-import { registerApiRoutes } from "../routes/registerApiRoutes.js";
+import apiSurfacePlugin from "../routes/apiSurface.js";
 import { buildTestApp } from "../routes/testHelpers.js";
 
 function asArray<T>(value: T | T[]): T[] {
@@ -178,9 +178,10 @@ const wholeAppPlugin: FastifyPluginAsync = async (fastify) => {
     const captured = captureRoute(routeOptions);
     if (captured) capturedRoutes.push(captured);
   });
-  // The full production composition, applying the real /api and /api/auth
-  // prefixes exactly as the runtime server does (server.ts:117).
-  await registerApiRoutes(fastify);
+  // The full production composition: the apiSurface plugin owns the /api
+  // prefix and every route module, exactly as the runtime server does
+  // (server.ts).
+  await fastify.register(apiSurfacePlugin, { prefix: "/api" });
 };
 
 describe("P4-C1 whole-application authorization route regression lock", () => {
@@ -188,11 +189,10 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
 
   beforeAll(async () => {
     // Pass prefix: "" so buildTestApp does NOT add a second /api on top of
-    // registerApiRoutes's own /api (and /api/auth) prefixes. The full
-    // production composition is registered inside wholeAppPlugin via
-    // registerApiRoutes(fastify), which applies the real prefixes exactly as
-    // the runtime server does (server.ts:117 calls registerApiRoutes(app)
-    // with no extra wrapping prefix).
+    // the apiSurface plugin's own /api prefix. The full production
+    // composition is registered inside wholeAppPlugin via
+    // register(apiSurfacePlugin, { prefix: "/api" }), exactly as the
+    // runtime server does (server.ts).
     ctx = await buildTestApp(wholeAppPlugin, { prefix: "" });
   });
   afterAll(async () => {
@@ -319,6 +319,10 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
    */
   function isIntentionalPublic(method: string, url: string): boolean {
     const set: Array<[string, string]> = [
+      // #429 CORRECTIVE-3: GET /api/health (liveness probe) moved from a
+      // standalone server.ts registration into the apiSurface composition,
+      // so the whole-app composition now captures it like the runtime does.
+      ["GET", "/api/health"],
       ["POST", "/api/auth/login"],
       ["POST", "/api/auth/logout"],
       ["POST", "/api/auth/register"],
@@ -399,6 +403,10 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     // keyset migration stays on the existing route; NEW: audit-logs export,
     // audit-log actions, permission-registry, users/:id/effective-authority)
     // → 142 primary = 123 protected + 19 non-protected.
+    // #429 CORRECTIVE-3: the whole-app composition switched from
+    // registerApiRoutes to the apiSurface plugin, which also owns the
+    // liveness probe — GET /api/health (public) joined the composition →
+    // 143 primary = 123 protected + 20 non-protected.
     // This is a regression anchor, not a
     // hard-coded PASS: if a route is added/removed the counts move and the
     // failure message names the delta so the regression is triaged, not
@@ -408,9 +416,9 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
       "protected (capability/ownership-gated) routes",
     ).toBe(123);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
-      19,
+      20,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(142);
+    expect(capturedRoutes.length, "total primary routes").toBe(143);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

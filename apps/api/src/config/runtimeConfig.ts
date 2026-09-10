@@ -37,6 +37,7 @@ import {
 } from "@exam/db";
 import { RuntimeConfigError } from "@exam/domain";
 import { resolveSettings, type ResolvedSettings } from "./settings.js";
+import { API_REFERENCE_UI_PATH } from "../openapi/docsPaths.js";
 
 // AppMode is sourced from the single-source resolver in @exam/db. Re-exported
 // here for backward compatibility with existing importers.
@@ -56,7 +57,6 @@ export type DeploymentMode = "singleTenant";
 export interface ApiReferenceConfig {
   enabled: boolean;
   uiPath: string;
-  specPath: string;
   staticCSP: boolean;
 }
 
@@ -65,7 +65,6 @@ export interface TenancyConfig {
   defaultTenantSlug: string;
   exposeTenantSwitcher: boolean;
   exposeSuperAdmin: boolean;
-  requireTenantBoundary: boolean;
 }
 
 export interface AuthConfig {
@@ -602,8 +601,11 @@ export function loadRuntimeConfig(
     },
     apiReference: {
       enabled: apiReferenceEnabled,
-      uiPath: "/_dev/api-reference",
-      specPath: "/api/openapi.json",
+      // Single runtime authority for the docs path identity (I6): the value
+      // comes from openapi/docsPaths.ts; the machine-readable spec route
+      // ({uiPath}/json) is derived in the public projection, never stored as
+      // an independently configurable field.
+      uiPath: API_REFERENCE_UI_PATH,
       staticCSP: true,
     },
     tenancy: {
@@ -613,7 +615,6 @@ export function loadRuntimeConfig(
       // Not a current multi-tenant runtime mode; always false in Phase 1.
       exposeTenantSwitcher: false,
       exposeSuperAdmin: false,
-      requireTenantBoundary: true,
     },
     auth: {
       // Phase 1: no SuperAdmin product path; always false.
@@ -675,7 +676,9 @@ export function buildPublicConfig() {
     apiReference: {
       enabled: config.apiReference.enabled,
       uiPath: config.apiReference.uiPath,
-      specPath: config.apiReference.specPath,
+      // Derived from the single uiPath authority (I6) — the spec route
+      // @fastify/swagger-ui actually registers under the UI path.
+      specPath: `${config.apiReference.uiPath}/json`,
     },
   };
 }
