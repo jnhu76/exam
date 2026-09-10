@@ -2,13 +2,13 @@
 
 > This is a coarse navigation index only. GitHub is authoritative for live
 > open/closed state, and Issue
-> [#333](https://github.com/jnhu76/exam/issues/333) is the current sequencing
+> The current sequencing tracker is [#498](https://github.com/jnhu76/exam/issues/498)
 > and disposition authority. Do not duplicate an Issue specification here.
 
 ## Program / convergence
 
 - #320 Dedicated email-worker process boundary — bounded KEEP vs CONVERGE decision.
-- #333 Generic completion → stabilization → High-Assurance / ToB roadmap tracker.
+- #498 Baseline hardening closure roadmap tracker (#333 was the earlier generic-completion tracker).
 
 ## Generic product completion
 
@@ -67,7 +67,7 @@ idea into implementation authority.
 
 When selecting work:
 
-1. read #333 for the current lane and ordering;
+1. read the live tracker (#498) for the current lane and ordering;
 2. open the selected Issue and treat its current body/checkpoints as the task
    contract;
 3. reconcile that contract with current master before editing;

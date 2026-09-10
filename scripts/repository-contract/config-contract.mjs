@@ -20,8 +20,10 @@
  *     derived origin / fixed identity / dev-only absence). Literal
  *     Compose fallbacks may only mirror the semantic default exactly.
  *
- *   Docker test — the E2E stack derives PUBLIC_WEB_ORIGIN from the
- *     published EXAM_PORT (the origin the container browser uses).
+ *   Docker test — the E2E stack pins PUBLIC_WEB_ORIGIN to the
+ *     in-container origin (http://localhost:3000): the e2e browser shares
+ *     the app container's network namespace (network_mode: service:app),
+ *     so it never uses the host-published EXAM_PORT.
  *
  *   CI — the verify/coverage jobs provide the required DB/auth env; the
  *     e2e job binds PUBLIC_WEB_ORIGIN to the same single origin the
@@ -248,22 +250,32 @@ console.log("2. Checking docker-compose.yml app environment bindings...");
 }
 console.log("   Docker production binding check complete.");
 
-// ── 3. Docker test profile: PUBLIC_WEB_ORIGIN follows the published port ────
+// ── 3. Docker test profile: PUBLIC_WEB_ORIGIN is the in-container origin ────
 console.log("3. Checking docker-compose.test.yml public web origin...");
 {
   const composeTest = readFileSync(
     join(ROOT, "docker-compose.test.yml"),
     "utf-8",
   );
-  if (
-    !composeTest.includes(
-      "PUBLIC_WEB_ORIGIN: http://localhost:${EXAM_PORT:-3000}",
-    )
-  ) {
+  // The e2e container shares the app container's network namespace
+  // (network_mode: service:app): the browser reaches the app at
+  // http://localhost:3000 regardless of the host-published EXAM_PORT.
+  // Deriving the origin from EXAM_PORT pointed identity one-time links
+  // (#297) at a port nothing listens on inside the netns under remapped
+  // ports — witnessed by identity-lifecycle invitation specs failing.
+  if (!composeTest.includes("PUBLIC_WEB_ORIGIN: http://localhost:3000")) {
     fail(
-      "docker-compose.test.yml env missing PUBLIC_WEB_ORIGIN derived from " +
-        "EXAM_PORT — the e2e browser reaches the app through the published " +
-        "host port; identity one-time links must use that same origin.",
+      "docker-compose.test.yml env missing the pinned in-container " +
+        "PUBLIC_WEB_ORIGIN (http://localhost:3000) — the e2e browser shares " +
+        "the app network namespace and never uses the host-published " +
+        "EXAM_PORT; identity one-time links must use the in-container origin.",
+    );
+  }
+  if (/PUBLIC_WEB_ORIGIN:[^\n]*EXAM_PORT/.test(composeTest)) {
+    fail(
+      "docker-compose.test.yml must NOT derive PUBLIC_WEB_ORIGIN from " +
+        "EXAM_PORT — EXAM_PORT republishes the HOST port only; inside the " +
+        "shared network namespace the app always listens on :3000.",
     );
   }
 }

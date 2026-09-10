@@ -199,7 +199,7 @@ Redis service added to all compose files (`redis:7-alpine`):
 
 > Operational note: if `docker compose up` reports
 > `Bind for 0.0.0.0:6379 failed: port is already allocated`, a stale container
-> owns 6379. `docker compose -f docker-compose.dev.yml down && up -d` re-binds
+> owns 6379. `pnpm db:down && pnpm db:up` re-binds
 > cleanly. A container that started during the conflict shows `6379/tcp` with no
 > host mapping and is NOT reachable from the host.
 

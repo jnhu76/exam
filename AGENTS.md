@@ -163,6 +163,21 @@ pnpm e2e:docker
 
 不得把未执行的门禁报告为 PASS；工具不可用或测试不适用时，明确记录 `SKIPPED` 和原因。
 
+### Routine Execution Protocol（例行操作执行契约）
+
+```text
+REPOSITORY OWNS PROCEDURE
+AGENT EXECUTES PROCEDURE
+```
+
+例行操作优先使用仓库拥有的语义命令（`pnpm db:up`、`pnpm e2e:docker`、`pnpm verify` 等），不在会话中重建等价的低层命令序列；底层脚本与拓扑保持隐藏。禁止发明平行的 Compose 栈、数据库生命周期命令、E2E 拓扑、验证流水线或清理程序。宿主机端口重映射是配置值（`EXAM_PORT` / `DB_HOST_PORT` / `REDIS_HOST_PORT`），不是拓扑变体；Docker E2E 拓扑的唯一权威是 `docker-compose.test.yml`。
+
+在第 2 节四种模式语义下的操作分类：
+
+- **例行可逆**（调查授权即可执行）：`git status/diff`、读取 Issue/PR/文档、代码检索、`docker compose config`、`pnpm format:check`、`pnpm lint:*`、`pnpm typecheck`、`pnpm test`、`pnpm verify:static`、CI 查询、一次性本地见证、非破坏性 Docker 检查。
+- **施工类**（需要施工授权）：修改代码/测试/文档、commit、push、PR 创建与更新（git 写操作仍受第 2 节更严格的“明确要求”约束）。
+- **人工门禁**（必须停下）：merge、release、force-push、不安全或破坏性数据操作、无对应权威地更改产品/架构契约、接受实质性新架构决策。
+
 ## 8. 前端任务路由
 
 前端视觉事实不在本文件重复。修改业务页面前按顺序检查：
