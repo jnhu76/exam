@@ -204,11 +204,27 @@ fi
 # postgres-logical-backup.sh for the full semantics).
 EVIDENCE_OPERATION_ID="${EVIDENCE_OPERATION_ID:-cold_filesystem:$(date +%Y-%m-%dT%H)}"
 SPOOL="${DEST}/evidence.json"
-# Compute the size FIRST, then default to 0 — `du | cut || echo 0` would bind
-# the fallback to `cut` (which succeeds with empty output when du fails),
-# producing an invalid empty artifactSizeBytes in the spool JSON.
-SIZE_BYTES="$(du -sb "${DEST}" 2>/dev/null | cut -f1)"
-SIZE_BYTES="${SIZE_BYTES:-0}"
+# INVARIANT (#456): the artifact tree is PGDATA-derived (owned by the
+# container postgres user, mode 0700) and a non-root host operator cannot
+# traverse it — a host-side `du -sb` exits 1 and, under `set -euo pipefail`,
+# the failed command substitution killed this script silently. Measure the
+# size through the SAME container filesystem authority used for the copy
+# (the deployment's own postgres image; pg-basebackup.sh evidence_complete
+# is the established idiom). #351 fail-closed contract: a failed/empty/
+# non-numeric/zero measurement is never recorded as success evidence — it
+# aborts with a diagnostic BEFORE the spool is written.
+if ! SIZE_BYTES="$(docker run --rm -v "${DEST}:/to:ro" "${HELPER_IMAGE}" \
+    du -sb /to 2>/dev/null | cut -f1)" \
+  || [ -z "${SIZE_BYTES}" ] \
+  || ! [[ "${SIZE_BYTES}" =~ ^[0-9]+$ ]] \
+  || [ "${SIZE_BYTES}" -eq 0 ]; then
+  echo "FAIL: artifact size measurement failed (or produced no positive size)." >&2
+  echo "       operation: du -sb over the backup artifact at ${DEST}" >&2
+  echo "       expected authority: helper container (${HELPER_IMAGE}) — the tree is" >&2
+  echo "       container-postgres-owned and not host-traversable by a non-root operator." >&2
+  echo "       The copied artifact itself exists; fix the measurement cause and re-run." >&2
+  exit 1
+fi
 # startedAt = the real copy start (COLD_START_ISO, captured before the copy);
 # completedAt = when the copy finished (here, post-verification).
 COLD_END_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
