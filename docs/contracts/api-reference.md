@@ -1203,7 +1203,7 @@
   "apiReference": {
     "enabled": false,
     "uiPath": "/_dev/api-reference",
-    "specPath": "/api/openapi.json"
+    "specPath": "/_dev/api-reference/json"
   }
 }
 ```

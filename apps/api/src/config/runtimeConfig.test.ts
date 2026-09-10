@@ -170,7 +170,7 @@ describe("runtimeConfig", () => {
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.apiReference.uiPath).toBe("/_dev/api-reference");
-      expect(config.apiReference.specPath).toBe("/api/openapi.json");
+      expect(config.apiReference.specPath).toBe("/_dev/api-reference/json");
       expect(config.apiReference.staticCSP).toBe(true);
     });
 
@@ -233,7 +233,7 @@ describe("runtimeConfig", () => {
       expect(pub.deploymentMode).toBe("singleTenant");
       expect(pub.apiReference).toBeDefined();
       expect(pub.apiReference.uiPath).toBe("/_dev/api-reference");
-      expect(pub.apiReference.specPath).toBe("/api/openapi.json");
+      expect(pub.apiReference.specPath).toBe("/_dev/api-reference/json");
     });
 
     it("does not contain exposeSuperAdmin / tenantSwitcher / superAdminConsole fields", () => {

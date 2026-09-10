@@ -5,7 +5,6 @@ import fp from "fastify-plugin";
 import { randomUUID } from "node:crypto";
 import authPlugin from "../../src/plugins/auth.js";
 import authzScopedPlugin from "../../src/plugins/authz.js";
-import tenantPlugin from "../../src/plugins/tenant.js";
 import rateLimitPlugin from "../../src/plugins/rateLimit.js";
 import nowPlugin from "../../src/plugins/now.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
@@ -218,7 +217,6 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     await app.register(nowPlugin);
     await app.register(authPlugin);
     await app.register(authzScopedPlugin);
-    await app.register(tenantPlugin);
     await app.register(rateLimitPlugin);
     await app.register(courseRoutes, { prefix: "/api" });
     await app.register(questionRoutes, { prefix: "/api" });

@@ -603,7 +603,11 @@ export function loadRuntimeConfig(
     apiReference: {
       enabled: apiReferenceEnabled,
       uiPath: "/_dev/api-reference",
-      specPath: "/api/openapi.json",
+      // The machine-readable spec route actually registered by @fastify/
+      // swagger-ui (`{uiPath}/json`). specPath must equal a real registered
+      // route — it is a projection of the router, not an independent
+      // authority (I6).
+      specPath: "/_dev/api-reference/json",
       staticCSP: true,
     },
     tenancy: {

@@ -40,6 +40,7 @@ import {
   validatorCompiler,
 } from "fastify-type-provider-zod";
 import { decorateApiRouteStubs } from "../openapi/swagger.js";
+import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 import { registerStaticFrontend } from "../plugins/staticFrontend.js";
 import apiSurfacePlugin from "./apiSurface.js";
 
@@ -52,8 +53,16 @@ let baseUrl: string;
 let capturedRoutes: Array<{ url: string; routePath: string }> = [];
 
 beforeAll(async () => {
+  // The rate limiter is part of the apiSurface scope (EXAM-HTTP-SURFACE-
+  // AUTHORITY-CLOSURE-1). This suite drives the real composition at scale,
+  // so it disables the limiter explicitly; limiter behavior is pinned by
+  // the dedicated rate-limit suites.
+  process.env.RATE_LIMIT_DISABLED = "true";
+  resetRuntimeConfigForTest();
+
   const publicDir = await mkdtemp(join(tmpdir(), "exam-429-public-"));
   await mkdir(join(publicDir, "assets"));
+  await mkdir(join(publicDir, "fonts"));
   await writeFile(
     join(publicDir, "index.html"),
     `<!doctype html><html><head><title>${INDEX_MARKER}</title></head></html>`,
@@ -310,6 +319,8 @@ describe("#429 /api namespace boundary (router-native)", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("text/html");
       expect(await res.text()).toContain(INDEX_MARKER);
+      // #500: the HTML shell must revalidate — never immutable.
+      expect(res.headers.get("cache-control") ?? "").not.toContain("immutable");
     });
 
     it("missing static assets keep the real text/plain 404 (not SPA, not API JSON)", async () => {
@@ -376,10 +387,18 @@ describe("#429 /api namespace boundary (router-native)", () => {
       expect(urls.has("/api/exams")).toBe(true);
       // The static fallback stays at the root scope (its routePath keeps the
       // root prefix), i.e. the two scopes coexist.
-      const staticEntry = capturedRoutes.find((r) =>
-        r.url.endsWith("/index.html"),
-      );
-      expect(staticEntry?.routePath).toBe("/index.html");
+      // The static surfaces live in their own prefixed scopes: the assets
+      // and fonts wildcard routes carry a routePath RELATIVE to their scope
+      // (/assets/* and /fonts/* full URLs, `/*` routePath) — i.e. the web
+      // surfaces coexist with /api instead of being guessed by pathname.
+      const assetsEntry = capturedRoutes.find((r) => r.url === "/assets/*");
+      expect(assetsEntry?.routePath).toBe("/*");
+      const fontsEntry = capturedRoutes.find((r) => r.url === "/fonts/*");
+      expect(fontsEntry?.routePath).toBe("/*");
+      // The HTML shell is served by the root unmatched policy (setNotFoundHandler),
+      // which is NOT an onRoute entry — there is deliberately no per-file
+      // index.html route.
+      expect(urls.has("/index.html")).toBe(false);
     });
   });
 });

@@ -255,7 +255,7 @@ Route handler 不允许直接访问 db。所有业务数据访问必须走 repos
 - 所有 repository 方法必须接收 `RequestContext`
 - 所有业务查询必须带 `organizationId`
 - Phase 1 的 `organizationId` 来自 internal default organization
-- `tenantGuard` / organization guard 在 Phase 1 表示 organization data boundary guard，不表示可见多租户
+- HTTP surface 归属由 Fastify 路由/插件 scope 决定(见 `docs/adr/ADR-020-http-surface-routing-authority.md`);`organizationId` 来自 `RequestContext`,不通过路径解析判定
 - SuperAdmin 跨租户操作只属于 Phase 4 optional multiTenant，不能作为 Phase 1 当前产品路径要求
 
 ### 禁止

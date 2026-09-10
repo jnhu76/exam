@@ -941,11 +941,10 @@ exam/
 │   │       ├── schema.ts
 │   │       ├── migrations/
 │   │       └── repository/       # 每个实体一个 repo，必须接收 ctx
-│   ├── auth/               # session、RBAC、organization data boundary guard
+│   ├── auth/               # session、RBAC
 │   │   └── src/
 │   │       ├── session.ts
-│   │       ├── rbac.ts
-│   │       └── tenantGuard.ts
+│   │       └── rbac.ts
 │   ├── exam-engine/        # 计时、答题保存、交卷、批改
 │   │   └── src/
 │   │       ├── timer.ts

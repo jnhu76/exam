@@ -8,9 +8,15 @@ import {
   it,
 } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
-import rateLimit from "@fastify/rate-limit";
+import {
+  serializerCompiler,
+  validatorCompiler,
+} from "fastify-type-provider-zod";
 import setupSecurity from "../plugins/security.js";
+import { setupErrorHandler } from "../plugins/errors.js";
 import { registerOpenApiDocs } from "./registerDocs.js";
+import apiSurfacePlugin from "../routes/apiSurface.js";
+import { decorateApiRouteStubs } from "./swagger.js";
 import {
   resetRuntimeConfigForTest,
   getRuntimeConfig,
@@ -25,6 +31,9 @@ const ENV_KEYS = [
   "DATABASE_URL",
   "CORS_ORIGIN",
   "PUBLIC_WEB_ORIGIN",
+  "RATE_LIMIT_MAX",
+  "RATE_LIMIT_WINDOW_MS",
+  "RATE_LIMIT_DISABLED",
 ] as const;
 
 async function buildAppWithDocs(
@@ -46,9 +55,15 @@ async function buildAppWithDocs(
   return app;
 }
 
-async function buildAppWithDocsAndRateLimit(
+/**
+ * Build the REAL production composition for the docs × rate-limit boundary:
+ * docs registered at root, the whole /api surface (which embeds the rate
+ * limiter, EXAM-HTTP-SURFACE-AUTHORITY-CLOSURE-1). There is no allow-list
+ * and no URL inspection anywhere — the limiter covers exactly the /api
+ * scope by encapsulation (I7).
+ */
+async function buildCompositionWithRateLimit(
   env: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>,
-  rateLimitMax: number,
 ): Promise<FastifyInstance> {
   resetRuntimeConfigForTest();
   for (const key of ENV_KEYS) {
@@ -59,23 +74,14 @@ async function buildAppWithDocsAndRateLimit(
     }
   }
   resetRuntimeConfigForTest();
-  const config = getRuntimeConfig();
-  const uiPath = config.apiReference.uiPath;
   const app = Fastify({ logger: false });
-  await app.register(rateLimit, {
-    max: rateLimitMax,
-    timeWindow: 60 * 1000,
-    allowList(request) {
-      if (!config.apiReference.enabled) {
-        return false;
-      }
-      const url = request.url ?? "";
-      const pathOnly = url.split("?", 1)[0] ?? "";
-      return pathOnly === uiPath || pathOnly.startsWith(`${uiPath}/`);
-    },
-  });
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  setupSecurity(app);
+  setupErrorHandler(app);
+  decorateApiRouteStubs(app);
   await registerOpenApiDocs(app);
-  app.get("/api/health", async () => ({ status: "ok" }));
+  await app.register(apiSurfacePlugin, { prefix: "/api" });
   await app.ready();
   return app;
 }
@@ -271,12 +277,17 @@ describe("registerOpenApiDocs", () => {
       }
     });
 
-    it("does not consume the global rate-limit budget on API reference", async () => {
-      const app = await buildAppWithDocsAndRateLimit(
-        { API_DOCS_ENABLED: "true", NODE_ENV: "test" },
-        2,
-      );
+    it("the docs surface is outside the limiter by encapsulation; /api is inside (I7)", async () => {
+      const app = await buildCompositionWithRateLimit({
+        API_DOCS_ENABLED: "true",
+        NODE_ENV: "test",
+        APP_MODE: "test",
+        RATE_LIMIT_MAX: "2",
+        RATE_LIMIT_WINDOW_MS: "60000",
+      });
       try {
+        // Docs UI is outside the /api scope — the limiter never sees it, no
+        // allow-list needed: 5 requests with a limiter max of 2 all pass.
         for (let i = 0; i < 5; i += 1) {
           const docsResponse = await app.inject({
             method: "GET",
@@ -284,16 +295,15 @@ describe("registerOpenApiDocs", () => {
           });
           expect(docsResponse.statusCode).toBe(200);
         }
-        const apiResponse1 = await app.inject({
-          method: "GET",
-          url: "/api/health",
-        });
-        const apiResponse2 = await app.inject({
-          method: "GET",
-          url: "/api/health",
-        });
-        expect(apiResponse1.statusCode).toBe(200);
-        expect(apiResponse2.statusCode).toBe(200);
+        // The /api surface IS inside the limiter: the third request within
+        // the window is RATE_LIMITED.
+        const api1 = await app.inject({ method: "GET", url: "/api/health" });
+        const api2 = await app.inject({ method: "GET", url: "/api/health" });
+        const api3 = await app.inject({ method: "GET", url: "/api/health" });
+        expect(api1.statusCode).toBe(200);
+        expect(api2.statusCode).toBe(200);
+        expect(api3.statusCode).toBe(429);
+        expect(api3.json().error.code).toBe("RATE_LIMITED");
       } finally {
         await app.close();
       }

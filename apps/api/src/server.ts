@@ -10,8 +10,6 @@ import authzScopedPlugin from "./plugins/authz.js";
 import dbPlugin from "./plugins/db.js";
 import redisPlugin from "./plugins/redis.js";
 import nowPlugin from "./plugins/now.js";
-import tenantPlugin from "./plugins/tenant.js";
-import rateLimitPlugin from "./plugins/rateLimit.js";
 import heartbeatPlugin from "./plugins/heartbeat.js";
 import deadlineScannerPlugin from "./plugins/deadlineScanner.js";
 import emailPlugin from "./plugins/email.js";
@@ -114,8 +112,6 @@ async function main() {
   await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(authzScopedPlugin);
-  await app.register(tenantPlugin);
-  await app.register(rateLimitPlugin);
   await app.register(heartbeatPlugin);
   await app.register(deadlineScannerPlugin);
   await app.register(emailPlugin);
@@ -124,8 +120,9 @@ async function main() {
   await registerOpenApiDocs(app);
 
   // The whole /api namespace lives in one encapsulated scope: registered
-  // routes, the liveness probe, and the canonical unmatched-request JSON
-  // boundary (#429). Fastify owns all routing semantics for it.
+  // routes, the liveness probe, the rate limiter, and the canonical
+  // unmatched-request JSON boundary (#429). Fastify owns all routing
+  // semantics for it; docs/static never enter the limiter.
   await app.register(apiSurfacePlugin, { prefix: "/api" });
 
   const publicDir = resolve(

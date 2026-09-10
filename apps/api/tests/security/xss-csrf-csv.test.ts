@@ -3,7 +3,6 @@ import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
 import authPlugin from "../../src/plugins/auth.js";
-import tenantPlugin from "../../src/plugins/tenant.js";
 import rateLimitPlugin from "../../src/plugins/rateLimit.js";
 import authzPlugin from "../../src/plugins/authz.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
@@ -78,7 +77,6 @@ describe("XSS / CSRF / CSV Security Baseline (S08-lite)", () => {
     await app.register(createDbPlugin(db));
     await app.register(auditLifecyclePlugin);
     await app.register(authPlugin);
-    await app.register(tenantPlugin);
     await app.register(rateLimitPlugin);
     await app.register(authzPlugin);
     await app.register(examRoutes, { prefix: "/api" });

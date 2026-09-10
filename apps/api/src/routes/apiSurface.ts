@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import rateLimitPlugin from "../plugins/rateLimit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { healthResponseSchema } from "./healthSchema.js";
 import { registerApiRouteModules } from "./registerApiRouteModules.js";
@@ -23,12 +24,21 @@ import { registerApiRouteModules } from "./registerApiRouteModules.js";
  * (never wrapped in fastify-plugin: its purpose is the prefix
  * encapsulation).
  *
+ * RATE LIMIT IS AN API CONCERN: the rate-limit plugin is registered here —
+ * before any route — so the limiter covers exactly the /api surface by
+ * encapsulation and the docs/web surfaces never enter it (no allow-list,
+ * no URL inspection).
+ *
  * REGISTRATION ORDER: route modules call auth/authz decorators (e.g.
  * `fastify.requireCapability(...)`) at registration time, so this plugin
  * must be registered AFTER the root infrastructure plugins (auth, authz,
- * db, tenant, ...) and BEFORE the static frontend fallback.
+ * db, ...) and BEFORE the static frontend fallback.
  */
 const apiSurfacePlugin: FastifyPluginAsync = async (api) => {
+  // Rate limiting first: its onRoute hook must run before any route in this
+  // scope registers so per-route `config.rateLimit` overrides are observed.
+  await api.register(rateLimitPlugin);
+
   // GET /health — public liveness probe. External contract: GET /api/health.
   api.get(
     "/health",
