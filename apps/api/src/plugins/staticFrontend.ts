@@ -3,17 +3,38 @@ import type { FastifyInstance } from "fastify";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /**
- * Normalize a raw request-target to its pathname, or `null` when the target
- * is too malformed to parse (an invalid absolute-form such as
- * `http://[invalid`). Query string and — for parseable absolute-form
- * targets — the authority are stripped; percent-encoding is preserved.
+ * Mirrors find-my-way's absolute-form handling (`FULL_PATH_REGEXP` applied
+ * in find-my-way's `find()`): a request-target that does not start with `/`
+ * has its `http(s)://authority` prefix replaced by `/` — exactly the
+ * transformation the router applies before path matching. Targets the
+ * regex does not cover (e.g. `http://[invalid`, other schemes) are left
+ * untouched, like the router leaves them.
  */
-function pathnameOf(rawUrl: string): string | null {
-  try {
-    return new URL(rawUrl, "http://localhost").pathname;
-  } catch {
-    return null;
+const ABSOLUTE_FORM_PREFIX = /^https?:\/\/.*?\//;
+
+/**
+ * Extract the router-visible path from a raw request-target, without doing
+ * more work than find-my-way@9.6.0 itself does before matching:
+ *
+ * - query/fragment are split at the first `?` or `#` (find-my-way's
+ *   `safeDecodeURI` with Fastify's default `useSemicolonDelimiter: false`);
+ * - absolute-form targets get the same minimal `http(s)://authority`
+ *   stripping the router applies;
+ * - the path bytes are otherwise preserved verbatim: no dot-segment
+ *   normalization, no percent-decoding, no slash collapsing.
+ *
+ * The router never normalizes `.`/`..` segments (they match literally, so
+ * `/api/../x` never becomes `/x`), and it never decodes `%2F` into a path
+ * separator — the classifier must not either, or it would re-classify
+ * requests the router saw inside the `/api` namespace.
+ */
+function routerPathOf(rawUrl: string): string {
+  let path = rawUrl;
+  if (path.charCodeAt(0) !== 47 /* "/" */) {
+    path = path.replace(ABSOLUTE_FORM_PREFIX, "/");
   }
+  const queryIndex = path.search(/[?#]/);
+  return queryIndex === -1 ? path : path.slice(0, queryIndex);
 }
 
 /**
@@ -44,23 +65,20 @@ export async function registerStaticFrontend(
     },
   });
   app.setNotFoundHandler((req, reply) => {
-    // INVARIANT (#429): an unmatched request whose pathname is in the /api
-    // namespace ("/api" or "/api/**") always stays in the API JSON error
-    // boundary — it must never reach the SPA/static appearance fallback
-    // below (no HTML body, no immutable asset caching). Classification uses
-    // the URL pathname with the query string stripped, so
-    // "/api/__unknown__?x=a.js" cannot be mistaken for a static asset by
-    // its query suffix. Percent-encoded path segments are NOT decoded: the
-    // router does not decode them for static-path matching either, so
-    // "/api%2Fx" is consistently non-API on both paths. A request-target
-    // too malformed for the URL constructor skips this branch and keeps
-    // the SPA/static classification below — it never throws into the 500
-    // error handler.
-    const pathname = pathnameOf(req.url);
-    if (
-      pathname !== null &&
-      (pathname === "/api" || pathname.startsWith("/api/"))
-    ) {
+    // INVARIANT (#429): an unmatched request whose router-visible path is in
+    // the /api namespace ("/api" or "/api/**") always stays in the API JSON
+    // error boundary — it must never reach the SPA/static appearance
+    // fallback below (no HTML body, no immutable asset caching).
+    // Classification uses the same path semantics as the router: query
+    // stripped at the first ?/#, absolute-form authority stripped with the
+    // router's own prefix rule, and the remaining path bytes preserved
+    // verbatim. Dot segments are NOT normalized (the router matches them
+    // literally, so "/api/../x" never becomes "/x") and percent-encoding is
+    // NOT decoded (the router does not decode %2F into a path separator for
+    // static-path matching either, so "/api%2Fx" is consistently non-API on
+    // both paths).
+    const path = routerPathOf(req.url);
+    if (path === "/api" || path.startsWith("/api/")) {
       reply.code(404).send(buildErrorResponse(req.id, "RESOURCE_NOT_FOUND"));
       return;
     }
