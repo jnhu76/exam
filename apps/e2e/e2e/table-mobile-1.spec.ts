@@ -35,6 +35,28 @@ const CARD = '[data-slot="mobile-record-card"]';
 const MOBILE_REGION = '[data-slot="responsive-mobile-region"]';
 const DESKTOP_REGION = '[data-slot="responsive-desktop-region"]';
 
+/**
+ * The users management-list table's responsive regions. /admin/users also
+ * hosts the InvitationsCard (issue 297), whose own DataTableShell renders a
+ * second responsive-desktop-region as soon as invitations exist — the
+ * identity-lifecycle specs create them, so a full-run users page has two
+ * regions and global locators hit Playwright strict mode (#504). Every
+ * users-page assertion owns its table: the users table is the one declaring
+ * the username column (same zh header idiom as the desktop-table assertions
+ * below).
+ */
+function usersShell(page: Page) {
+  return page
+    .locator('[data-slot="admin-table-shell"]')
+    .filter({ has: page.locator("th", { hasText: "用户名" }) });
+}
+function usersDesktopRegion(page: Page) {
+  return usersShell(page).locator(DESKTOP_REGION);
+}
+function usersMobileRegion(page: Page) {
+  return usersShell(page).locator(MOBILE_REGION);
+}
+
 async function visibility(page: Page, selector: string): Promise<boolean> {
   return page.locator(selector).first().isVisible();
 }
@@ -55,12 +77,9 @@ test.describe("management-list mobile card representation (issue 457)", () => {
 
     // The viewport switch is CSS-only: below lg the card list is the
     // representation and the table region is display:none.
-    await expect(page.locator(MOBILE_REGION).last()).toBeVisible();
-    await expect(page.locator(DESKTOP_REGION).last()).toBeHidden();
-    const cards = page
-      .locator('[data-slot="admin-table-shell"]')
-      .last()
-      .locator(CARD);
+    await expect(usersMobileRegion(page)).toBeVisible();
+    await expect(usersDesktopRegion(page)).toBeHidden();
+    const cards = usersShell(page).locator(CARD);
     expect(await cards.count()).toBeGreaterThan(0);
 
     // Derived card content: high primary-text (username) in the primary
@@ -180,15 +199,16 @@ test.describe("management-list mobile card representation (issue 457)", () => {
 
     // The viewport switch is <lg only: at lg the table is the
     // representation even though the container is narrow (tier negotiation
-    // owns narrow-container degradation — ownership boundary frozen).
-    await expect(page.locator(DESKTOP_REGION)).toBeVisible();
-    await expect(page.locator(MOBILE_REGION)).toBeHidden();
-    const tier = await page
-      .locator('[data-slot="admin-table-shell"]')
-      .first()
-      .getAttribute("data-table-tier");
+    // owns narrow-container degradation — ownership boundary frozen). Owned
+    // by the users table: the invitations table renders its own region once
+    // identity-lifecycle invitations exist (#504).
+    await expect(usersDesktopRegion(page)).toBeVisible();
+    await expect(usersMobileRegion(page)).toBeHidden();
+    const tier = await usersShell(page).getAttribute("data-table-tier");
     expect(tier).toBe("compact");
-    expect(await page.locator(CARD).first().isVisible()).toBe(false);
+    expect(await usersShell(page).locator(CARD).first().isVisible()).toBe(
+      false,
+    );
   });
 
   test("negative: log-diagnostic keeps its scrolling table at 375px (no cards)", async ({
