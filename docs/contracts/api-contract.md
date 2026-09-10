@@ -123,7 +123,11 @@ The frozen wire matrix (`@fastify/cors` defaults, `strictPreflight: true`):
 
 The `400` for a bare OPTIONS is the plugin's `strictPreflight` protocol
 rejection (a browser never sends a preflight without `Origin` +
-`Access-Control-Request-Method`; the fetch spec requires both). It is
+`Access-Control-Request-Method`; the fetch spec requires both). The plugin
+writes the CORS headers before the strict-preflight check, so the `400`
+also carries `Access-Control-Allow-Origin` (the configured origin) and
+`Access-Control-Allow-Credentials` — browsers never act on them because
+they never issued such a request. It is
 **intentional and out of the envelope contract**: it is not a standardized
 API error (no `ErrorCode`, not produced by the API error pipeline, carries
 no `requestId`), and it applies to every surface, not only `/api`. Forcing

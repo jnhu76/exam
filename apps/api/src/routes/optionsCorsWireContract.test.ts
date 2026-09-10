@@ -95,6 +95,15 @@ describe("#451 OPTIONS/CORS wire contract", () => {
       expect(body).not.toContain("requestId");
       expect(() => JSON.parse(body)).toThrow();
     });
+
+    it("rejects Origin-without-Access-Control-Request-Method — the other half of the strictPreflight disjunction", async () => {
+      const res = await options("/api/health", {
+        Origin: CONFIGURED_ORIGIN,
+      });
+      expect(res.status).toBe(400);
+      expect(res.headers.get("content-type")).toContain("text/plain");
+      expect(await res.text()).toBe("Invalid Preflight Request");
+    });
   });
 
   describe("valid preflight — plugin defaults with the configured origin", () => {
@@ -126,7 +135,7 @@ describe("#451 OPTIONS/CORS wire contract", () => {
     });
   });
 
-  describe("invalid preflight combinations — deterministic, browser-enforced, no broadening", () => {
+  describe("disallowed preflight attributes — deterministic, browser-enforced, no broadening", () => {
     it("never reflects a disallowed origin: Allow-Origin stays the configured origin", async () => {
       const res = await options("/api/health", {
         Origin: "http://evil.example",
