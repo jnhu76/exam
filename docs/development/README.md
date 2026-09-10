@@ -159,7 +159,7 @@ Two execution modes for Playwright browser tests:
 
 - **WSL / local** (`bash scripts/e2e/run-wsl.sh`) — runs against the
   dev server + host Chromium. Best for development iteration.
-- **Docker** (`bash scripts/e2e/run.sh`) — builds and runs the full
+- **Docker** (`pnpm e2e:docker` → `bash scripts/e2e/run.sh`) — builds and runs the full
   stack in containers. Best for CI-parity.
 
 Both produce the same pass/fail set. See

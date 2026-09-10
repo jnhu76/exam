@@ -76,7 +76,7 @@ pnpm --filter @exam/api db:seed:e2e
 # 等价根别名
 pnpm seed:e2e
 # 本地 Docker E2E（容器入口 RUN_SEED=e2e 自动跑 db:seed:e2e）
-bash ./scripts/e2e/run.sh
+pnpm e2e:docker
 ```
 
 > CI E2E (`.github/workflows/ci.yml`) 与本地 Docker E2E (`scripts/e2e/run.sh` +
@@ -85,7 +85,7 @@ bash ./scripts/e2e/run.sh
 
 ### Docker E2E 端口与环境污染说明
 
-`docker-compose.test.yml` 将 `app:3000` 与 `db:5432` 直接映射到宿主机同名端口。
+`docker-compose.test.yml` 将 app / db / redis 的 host 端口暴露给宿主机（`EXAM_PORT` / `DB_HOST_PORT` / `REDIS_HOST_PORT`，默认 3000 / 5432 / 6379）——端口是配置值，不是拓扑变体。
 `scripts/e2e/run.sh` 在 `docker compose up` 之前会显式检查宿主机 `:3000` /
 `:5432` 是否已被其他进程占用（本地 `pnpm dev`、`pnpm --filter @exam/api start`、
 `docker-compose.dev.yml` 的 db、或其他服务），如果占用就 fail-fast，避免
@@ -98,7 +98,7 @@ bash ./scripts/e2e/run.sh
 ```bash
 pnpm db:down
 # 或换端口
-EXAM_PORT=3001 bash ./scripts/e2e/run.sh
+EXAM_PORT=3001 pnpm e2e:docker
 ```
 
 ---

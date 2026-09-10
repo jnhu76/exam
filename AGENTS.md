@@ -175,7 +175,7 @@ AGENT EXECUTES PROCEDURE
 在第 2 节四种模式语义下的操作分类：
 
 - **例行可逆**（调查授权即可执行）：`git status/diff`、读取 Issue/PR/文档、代码检索、`docker compose config`、`pnpm format:check`、`pnpm lint:*`、`pnpm typecheck`、`pnpm test`、`pnpm verify:static`、CI 查询、一次性本地见证、非破坏性 Docker 检查。
-- **施工类**（需要施工授权）：修改代码/测试/文档、commit、push、PR 创建与更新。
+- **施工类**（需要施工授权）：修改代码/测试/文档、commit、push、PR 创建与更新（git 写操作仍受第 2 节更严格的“明确要求”约束）。
 - **人工门禁**（必须停下）：merge、release、force-push、不安全或破坏性数据操作、无对应权威地更改产品/架构契约、接受实质性新架构决策。
 
 ## 8. 前端任务路由

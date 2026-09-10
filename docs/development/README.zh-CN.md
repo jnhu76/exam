@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文**
 
 > 本文面向 Exam 贡献者，介绍本地开发、测试、代码质量与架构入口。
-> 它是 `README.md` 的简体中文阅读版本，不是第二套工程规则；实际命令以 `package.json` scripts、CI workflow、代码和 [`docs/standards/`](../standards/) 中的规范为准。
+> 它是 `README.md` 的简体中文阅读版本，不是第二套工程规则；实际命令以 `package.json` scripts、CI workflow、代码、[`docs/standards/`](../standards/) 中的规范和 [`AGENTS.md`](../../AGENTS.md)（代理行为）为准；存在语义化 `pnpm` 命令时优先使用，不直接复述底层调用。
 
 ## 前置要求
 
@@ -145,7 +145,7 @@ pnpm lint:ui-gates      # 前端视觉 authority 门禁
 Playwright 浏览器测试有两种执行方式：
 
 - **WSL / 本地**：`bash scripts/e2e/run-wsl.sh` — 使用开发服务器 + 主机 Chromium，适合开发迭代。
-- **Docker**：`bash scripts/e2e/run.sh` — 在容器中构建并运行完整 stack，更接近 CI。
+- **Docker**：`pnpm e2e:docker`（即 `bash scripts/e2e/run.sh`）— 在容器中构建并运行完整 stack，更接近 CI。
 
 两种方式应得到相同的 pass / fail 集合。完整 E2E 契约见
 [`docs/standards/testing.md`](../standards/testing.md)。

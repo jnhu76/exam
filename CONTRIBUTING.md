@@ -6,7 +6,7 @@ of finding work, setting up your environment, and submitting changes.
 ## Finding Issues
 
 All active work is tracked in GitHub Issues. The current execution
-ordering lives in [#333](https://github.com/jnhu76/exam/issues/333).
+ordering lives in the active roadmap tracker, currently [#498](https://github.com/jnhu76/exam/issues/498).
 Pick an OPEN Issue from the index in
 [`docs/roadmap/post-mvp-issues.md`](docs/roadmap/post-mvp-issues.md).
 
