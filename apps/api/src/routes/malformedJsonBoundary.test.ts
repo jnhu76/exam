@@ -6,11 +6,13 @@ import { buildTestApp, type TestContext } from "./testHelpers.js";
 /**
  * #450 malformed-JSON HTTP boundary — production-composition witness.
  *
- * The whole /api surface (real route modules, rate limiter, production
- * `setupErrorHandler`) is mounted exactly like `server.ts` does. Malformed
- * JSON bytes are sent through Fastify's default content-type parser to prove
- * the client-error classification is systemic (any JSON route, any route
- * module), not a `/api/auth/login` special case.
+ * The whole /api surface (real route modules, the rate limiter registered
+ * by apiSurface — disabled under the test helper's RATE_LIMIT_DISABLED —
+ * and the production `setupErrorHandler`) is mounted exactly like
+ * `server.ts` does. Malformed JSON bytes are sent through the custom
+ * content-type parser in setupSecurity to prove the client-error
+ * classification is systemic (any JSON route, any route module), not a
+ * `/api/auth/login` special case.
  *
  * INVARIANT: body parsing happens before `authenticate` (preHandler), so
  * authenticated routes (courses/exams) share the same parser boundary as
