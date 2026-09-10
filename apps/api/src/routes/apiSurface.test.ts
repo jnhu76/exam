@@ -319,8 +319,9 @@ describe("#429 /api namespace boundary (router-native)", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("text/html");
       expect(await res.text()).toContain(INDEX_MARKER);
-      // #500: the HTML shell must revalidate — never immutable.
-      expect(res.headers.get("cache-control") ?? "").not.toContain("immutable");
+      // #500: the HTML shell must revalidate — exactly no-cache, never
+      // immutable.
+      expect(res.headers.get("cache-control") ?? "").toBe("no-cache");
     });
 
     it("missing static assets keep the real text/plain 404 (not SPA, not API JSON)", async () => {

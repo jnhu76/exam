@@ -14,6 +14,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import net from "node:net";
 import { registerStaticFrontend } from "./staticFrontend.js";
 
 const INDEX_MARKER = "exam-429-spa-fixture-marker";
@@ -55,7 +56,7 @@ describe("registerStaticFrontend — router-native web surface", () => {
       expect(res.headers.get("content-type"), path).toContain("text/html");
       expect(await res.text(), path).toContain(INDEX_MARKER);
       const cacheControl = res.headers.get("cache-control") ?? "";
-      expect(cacheControl, path).toContain("no-cache");
+      expect(cacheControl, path).toBe("no-cache");
       expect(cacheControl, path).not.toContain("immutable");
     }
   });
@@ -89,6 +90,13 @@ describe("registerStaticFrontend — router-native web surface", () => {
       expect(res.headers.get("content-type"), path).toContain("text/plain");
       expect(await res.text(), path).toBe("Not Found");
     }
+    // HEAD is inside the assets scope too (the wildcard registers GET+HEAD):
+    // a missing asset must never fall through to the SPA shell.
+    const head = await fetch(`${baseUrl}/assets/__missing__.js`, {
+      method: "HEAD",
+    });
+    expect(head.status).toBe(404);
+    expect(head.headers.get("content-type")).toContain("text/plain");
   });
 
   it("only GET/HEAD navigation reaches the shell; other unmatched methods get a plain 404 (§11)", async () => {
@@ -104,6 +112,48 @@ describe("registerStaticFrontend — router-native web surface", () => {
       expect(res.headers.get("content-type"), method).toContain("text/plain");
       expect(await res.text(), method).toBe("Not Found");
     }
+  });
+
+  it("TRACE unmatched stays a plain 404 too (any non-GET/HEAD method)", async () => {
+    // fetch()/undici refuse TRACE, so drive the request-target bytes over a
+    // raw socket (same technique as apiSurface.test.ts).
+    const address = app.addresses()[0];
+    if (!address) throw new Error("server lost its listen address");
+    const res = await new Promise<{ status: number; ct: string }>(
+      (resolve, reject) => {
+        const sock = net.connect(address.port, "127.0.0.1");
+        let data = "";
+        sock.setTimeout(5_000, () => {
+          sock.destroy();
+          reject(new Error("raw socket timeout"));
+        });
+        sock.on("error", reject);
+        sock.on("connect", () => {
+          sock.write(
+            `TRACE /random-non-api-path HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`,
+          );
+        });
+        sock.on("data", (chunk: Buffer) => {
+          data += chunk.toString("utf8");
+        });
+        sock.on("close", () => {
+          const [head] = data.split("\r\n\r\n");
+          const lines = (head ?? "").split("\r\n");
+          const statusLine = lines[0] ?? "";
+          const ct =
+            lines
+              .find((line) => line.toLowerCase().startsWith("content-type:"))
+              ?.split(":")[1]
+              ?.trim() ?? "";
+          resolve({
+            status: Number(statusLine.split(" ")[1] ?? "0"),
+            ct,
+          });
+        });
+      },
+    );
+    expect(res.status).toBe(404);
+    expect(res.ct).toContain("text/plain");
   });
 
   it("existing static assets under a subdirectory are still served", async () => {
