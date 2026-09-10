@@ -1,9 +1,13 @@
 # Testing & CI Contract
 
-> **Authority**: This document is the single source of truth for test boundaries,
-> environment variables, and CI lane contracts. Implementation may NOT deviate
-> from these rules without updating this document first. If this document
-> conflicts with code, this document wins until the code is updated.
+> **Authority**: This document is the single source of truth for test SEMANTICS —
+> boundaries, isolation, resource lifecycle, and the CI lane contract.
+> Implementation may NOT deviate from these rules without updating this
+> document first. Exact executable command wiring (flags, script names,
+> current invocation form) is owned by `package.json` scripts and
+> `.github/workflows/*`; command examples in this document are projections of
+> that wiring, and a mismatch is documentation drift to fix against the
+> scripts — never a second command authority.
 
 ## Table of Contents
 
@@ -597,18 +601,20 @@ E2E_WORKERS=4 bash scripts/e2e/run-wsl.sh
 
 ```bash
 # Standard run
-bash scripts/e2e/run.sh
+pnpm e2e:docker
 
-# With port remapping (if host ports are occupied)
-COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml bash scripts/e2e/run.sh
+# With host-port remapping (ports are configuration, not topology variants:
+# the same docker-compose.test.yml, no override YAML)
+EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
 ```
 
 ### Services
 
-| Service | Image | Port | DB |
+| Service | Image | Host port authority | DB |
 |---------|-------|------|----|
-| `db` | `postgres:18.4-bookworm` | 5432 (or 5433 with override) | `exam_test` |
-| `app` | Built from `Dockerfile` | 3000 (or 3300 with override) | N/A (connects to `db`) |
+| `db` | `postgres:18.4-bookworm` | `DB_HOST_PORT` (default 5432) | `exam_e2e` |
+| `app` | Built from `Dockerfile` | `EXAM_PORT` (default 3000) | N/A (connects to `db`) |
+| `redis` | `redis:7-alpine` | `REDIS_HOST_PORT` (default 6379) | N/A |
 | `e2e` | `mcr.microsoft.com/playwright:v1.61.0-noble` | N/A | N/A (connects to `app`) |
 
 ### Seed Data

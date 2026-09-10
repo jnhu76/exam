@@ -21,10 +21,15 @@
 #
 # 环境变量：
 #   EXAM_PORT            宿主机暴露给 app 的端口，默认 3000
+#   DB_HOST_PORT         宿主机暴露给 db 的端口，默认 5432
+#   REDIS_HOST_PORT      宿主机暴露给 redis 的端口，默认 6379
 #   JWT_SECRET           覆盖默认 change-me-in-development
 #   E2E_PROXY            E2E 容器内 npm install 时的 HTTP(S) 代理
 #   COMPOSE_PROJECT_NAME 隔离多个并发运行，默认 exam-e2e
 #   KEEP_STACK=1         等价于 --keep
+#
+# 拓扑权威是唯一的 docker-compose.test.yml —— 端口重映射只用上述环境变量，
+# 不通过 COMPOSE_FILE 叠加第二个 Compose 文件。
 #
 # 退出码：
 #   测试（playwright）或预检失败 → 退出码直传；清理失败仅作 stderr 诊断。
@@ -36,12 +41,10 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-# COMPOSE_FILE may be overridden by the caller (colon-separated, compose v2
-# syntax) to layer an override file — e.g. to remap host ports when :3000 or
-# :5432 are already in use:
-#   COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml \
-#     bash scripts/e2e/run.sh
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.test.yml}"
+# INVARIANT (compose authority): the Docker E2E topology is owned by exactly
+# one repository file — docker-compose.test.yml. This runner pins it; callers
+# remap HOST ports through the file's env authorities (EXAM_PORT /
+# DB_HOST_PORT / REDIS_HOST_PORT), never by layering another Compose file.
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-exam-e2e}"
 
 DO_BUILD=1
@@ -80,14 +83,9 @@ while (( "$#" )); do
 done
 
 compose() {
-  # Support colon-separated COMPOSE_FILE (e.g. base:override) by emitting
-  # one -f flag per path, matching `docker compose` multi-file semantics.
-  local -a files=()
-  local IFS=':'
-  read -r -a files <<< "$COMPOSE_FILE"
-  local -a fflags=()
-  for f in "${files[@]}"; do fflags+=("-f" "$f"); done
-  docker compose "${fflags[@]}" -p "$PROJECT_NAME" "$@"
+  # Single-file topology: docker-compose.test.yml is the whole Docker E2E
+  # authority — no caller-selectable layering (see the invariant above).
+  docker compose -f docker-compose.test.yml -p "$PROJECT_NAME" "$@"
 }
 
 log()  { printf '\033[1;36m[e2e]\033[0m %s\n' "$*"; }
@@ -112,7 +110,7 @@ cleanup() {
   local code=$?
   trap - EXIT
   if [[ "$KEEP_STACK" == "1" ]]; then
-    warn "KEEP_STACK=1，保留 stack。手动清理：docker compose -f $COMPOSE_FILE -p $PROJECT_NAME down -v"
+    warn "KEEP_STACK=1，保留 stack。手动清理：docker compose -f docker-compose.test.yml -p $PROJECT_NAME down -v"
     exit "$code"
   fi
   log "清理 stack（含数据卷）..."
@@ -122,7 +120,7 @@ cleanup() {
   fi
   err "compose down -v 失败 (project=$PROJECT_NAME)。docker compose 输出："
   printf '%s\n' "$down_out" >&2
-  err "手动清理：docker compose -f $COMPOSE_FILE -p $PROJECT_NAME down -v"
+  err "手动清理：docker compose -f docker-compose.test.yml -p $PROJECT_NAME down -v"
   if [[ "$code" -eq 0 ]]; then
     err "测试通过但清理失败 → 以 sentinel 70 退出。"
     exit 70
@@ -143,21 +141,22 @@ fi
 
 # ----- 0.5. 宿主机端口占用检测 -----
 #
-# docker-compose.test.yml 把 app:3000 / db:5432 直接映射到宿主机同名端口。
-# 如果宿主机上已经有别的进程在监听这两个端口（常见情况：本地 `pnpm dev`、
-# 残留的 `pnpm --filter @exam/api start`、或 docker-compose.dev.yml 的 db），
+# docker-compose.test.yml 把 app / db / redis 三个 host 端口暴露给宿主机
+# （EXAM_PORT / DB_HOST_PORT / REDIS_HOST_PORT）。如果宿主机上已经有别的
+# 进程在监听这些端口（常见情况：本地 `pnpm dev`、残留的
+# `pnpm --filter @exam/api start`、或 docker-compose.dev.yml 的 db/redis），
 # `docker compose up` 不会自动迁走它们：
 #   - 端口冲突时 compose 会报 bind 失败；
 #   - 但若宿主机上的旧进程刚好响应 health 探测，预检/Playwright 可能会无声地
 #     打到”假 app”，看到 rate-limit headers / 401 / 500 等无关行为。
 # 在 compose up 之前显式失败，能把”环境污染”变成可识别错误，而不是污染 E2E。
 #
-# 端口覆盖方式（需要配合 docker-compose.test.override.yml）：
-#   EXAM_PORT=3300 DB_HOST_PORT=5433 \
-#     COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml \
+# 端口是配置值而不是拓扑变体 —— 用环境变量重映射，无需 override YAML：
+#   EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 \
 #     bash scripts/e2e/run.sh
 APP_HOST_PORT="${EXAM_PORT:-3000}"
 DB_HOST_PORT="${DB_HOST_PORT:-5432}"
+REDIS_HOST_PORT="${REDIS_HOST_PORT:-6379}"
 
 port_owner() {
   local port="$1"
@@ -192,7 +191,7 @@ ensure_host_port_free() {
   err "  - 其他服务占用了同名端口"
   err "处理建议（任选其一）："
   err "  1) 停掉占用进程：lsof -iTCP:${port} -sTCP:LISTEN | tail -n +2"
-  err "  2) 停 dev compose：docker compose -f docker-compose.dev.yml down -v"
+  err "  2) 停 dev compose：pnpm db:down（或 docker compose -f docker-compose.dev.yml down -v）"
   err "  3) 改用其他端口：EXAM_PORT=3001 bash scripts/e2e/run.sh"
   return 1
 }
@@ -201,6 +200,11 @@ if ! ensure_host_port_free "$APP_HOST_PORT" "app"; then
   exit 1
 fi
 if ! ensure_host_port_free "$DB_HOST_PORT" "db"; then
+  exit 1
+fi
+# docker-compose.test.yml 同样发布 redis（REDIS_HOST_PORT）—— 碰撞模型
+# 必须覆盖全部三个 host 端口权威，不允许第二个硬编码机制。
+if ! ensure_host_port_free "$REDIS_HOST_PORT" "redis"; then
   exit 1
 fi
 

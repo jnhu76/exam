@@ -25,7 +25,7 @@ has one authority:
 | Engineering and verification policy | [`docs/standards/`](standards/) and executable repository gates |
 | Current implementation state | [`docs/status/`](status/) plus as-built code/test evidence |
 | Phase boundaries | [`docs/roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) |
-| Current backlog sequencing / disposition | Active roadmap tracker; currently GitHub Issue [#333](https://github.com/jnhu76/exam/issues/333) |
+| Current backlog sequencing / disposition | Active roadmap tracker; currently GitHub Issue [#498](https://github.com/jnhu76/exam/issues/498) |
 | Current task scope / acceptance / non-goals | The OPEN GitHub Issue selected by the current roadmap |
 | Historical evidence | [`docs/archive/`](archive/), Git, closed Issues, and merged PRs |
 
@@ -49,7 +49,7 @@ guidance.
 | [`roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) | Stable phase boundaries and acceptance scope |
 | [`roadmap/current.md`](roadmap/current.md) | Phase-level status summary; intentionally does not duplicate the live Issue queue |
 | [`roadmap/post-mvp-issues.md`](roadmap/post-mvp-issues.md) | Coarse Issue index; live state and ordering remain on GitHub |
-| GitHub Issue [#333](https://github.com/jnhu76/exam/issues/333) | Current generic-completion → stabilization → High-Assurance / ToB sequencing authority |
+| GitHub Issue [#498](https://github.com/jnhu76/exam/issues/498) | Current baseline-hardening closure sequencing authority (this pointer tracks the live tracker; #333 was the earlier generic-completion tracker) |
 
 ### Architecture (current implemented design)
 

@@ -96,7 +96,7 @@ bash ./scripts/e2e/run.sh
 不要同时跑两份 stack：开 Docker E2E 前请先停掉：
 
 ```bash
-docker compose -f docker-compose.dev.yml down -v
+pnpm db:down
 # 或换端口
 EXAM_PORT=3001 bash ./scripts/e2e/run.sh
 ```

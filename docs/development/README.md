@@ -4,6 +4,12 @@
 
 > Local development setup, testing, code quality, and architecture
 > references for Exam contributors.
+>
+> This guide is a human-friendly projection. Exact command wiring is owned by
+> `package.json` scripts, testing lifecycle semantics by
+> [`docs/standards/testing.md`](../standards/testing.md), and agent behavior
+> by [`AGENTS.md`](../../AGENTS.md). Where a semantic `pnpm` command exists,
+> prefer it over the underlying low-level invocation.
 
 ## Prerequisites
 

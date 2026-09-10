@@ -6,7 +6,7 @@
  * recording the browser/viewport/DPR/seed/API+Web addresses/command per shot.
  *
  * Prerequisites (a full stack must be running):
- *   docker compose -f docker-compose.dev.yml up -d
+ *   pnpm db:up
  *   pnpm db:migrate && pnpm db:seed:demo     # seeds the dev DB (exam)
  *   pnpm --filter api dev                     # http://localhost:3000
  *   pnpm --filter web dev                     # http://localhost:5173
