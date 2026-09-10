@@ -82,9 +82,59 @@ All standardized API errors use a single envelope:
 
 **Optional fields:**
 
-| Field            | Type      | Description                                                       |
-| ---------------- | --------- | ----------------------------------------------------------------- |
-| `error.details`  | `unknown` | Structured context — shape varies by `error.code` (see D0.8)      |
+| Field            | Type      | Description                                                  |
+| ---------------- | --------- | ------------------------------------------------------------ |
+| `error.details`  | `unknown` | Structured context — shape varies by `error.code` (see D0.8) |
+
+## OPTIONS / CORS wire contract
+
+The CORS/OPTIONS protocol layer is owned by `@fastify/cors`, registered on
+the root Fastify scope in `apps/api/src/plugins/cors.ts` with
+`origin` from runtime config (`CORS_ORIGIN`, comma-list resolved by
+`runtimeConfig.ts`) and `credentials: true`. The plugin answers OPTIONS
+requests from its `onRequest` hook **before routing**: neither the `/api`
+route set, the `/api` unmatched-request policy (#429), nor the static
+surfaces ever see an OPTIONS request. The identity of the HTTP surface is
+therefore irrelevant for OPTIONS; this contract is server-global.
+
+Allowed origin(s), methods, and headers are plugin-config/default values —
+the repository does not duplicate or re-classify them anywhere (no second
+CORS authority):
+
+- `origin`: the configured CORS origin(s). A disallowed `Origin` never gets
+  reflected; with a single-origin (string) config the response carries the
+  configured origin only. Enforcement is browser-side against
+  `Access-Control-Allow-Origin`.
+- `methods`: plugin default `GET,HEAD,POST` (echoed in
+  `Access-Control-Allow-Methods`); a preflight requesting another method
+  still answers `204` but the method is absent from the echo, so browsers
+  reject it.
+- `headers`: plugin default (`allowedHeaders: null`) reflects the request's
+  `Access-Control-Request-Headers` into `Access-Control-Allow-Headers`.
+
+The frozen wire matrix (`@fastify/cors` defaults, `strictPreflight: true`):
+
+| Case                                                            | Status | Content-Type | Body                                                                     |
+| --------------------------------------------------------------- | ------ | ------------ | ------------------------------------------------------------------------ |
+| bare `OPTIONS` (no `Origin` / no `Access-Control-Request-Method`) | `400`  | `text/plain` | `Invalid Preflight Request`                                              |
+| valid preflight (configured `Origin` + `Access-Control-Request-Method`) | `204`  | —            | empty; `Access-Control-Allow-Origin`/`-Methods`/`-Credentials`, `Vary`   |
+| valid preflight + `Access-Control-Request-Headers`               | `204`  | —            | as above plus reflected `Access-Control-Allow-Headers`                   |
+| preflight with disallowed `Origin`                               | `204`  | —            | as for valid, but `Access-Control-Allow-Origin` never names the caller's origin |
+
+The `400` for a bare OPTIONS is the plugin's `strictPreflight` protocol
+rejection (a browser never sends a preflight without `Origin` +
+`Access-Control-Request-Method`; the fetch spec requires both). The plugin
+writes the CORS headers before the strict-preflight check, so the `400`
+also carries `Access-Control-Allow-Origin` (the configured origin) and
+`Access-Control-Allow-Credentials` — browsers never act on them because
+they never issued such a request. It is
+**intentional and out of the envelope contract**: it is not a standardized
+API error (no `ErrorCode`, not produced by the API error pipeline, carries
+no `requestId`), and it applies to every surface, not only `/api`. Forcing
+it into the envelope or into `204` would require relaxing
+`strictPreflight` (non-compliant per the plugin) or duplicating the
+plugin's preflight-validity rule as a second authority — both rejected.
+Regression: `apps/api/src/routes/optionsCorsWireContract.test.ts`.
 
 ## Message & Error Contract
 
