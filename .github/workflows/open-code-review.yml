@@ -75,21 +75,21 @@ jobs:
       - name: Review PR with OpenCodeReview
         uses: alibaba/open-code-review@04284b5dc19e0f52528ca466a767e4a2c100e5f5
         with:
-          ocr_version: '1.11.6'
+          ocr_version: "1.11.6"
           llm_url: https://opencode.ai/zen/go/v1/chat/completions
           llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           llm_model: mimo-v2.5
-          llm_use_anthropic: 'false'
-          llm_extra_headers: 'x-opencode-session=${{ github.repository }}-pr-${{ github.event.pull_request.number || github.event.issue.number }}'
-          llm_extra_body: '{}'
+          llm_use_anthropic: "false"
+          llm_extra_headers: "x-opencode-session=${{ github.repository }}-pr-${{ github.event.pull_request.number || github.event.issue.number }}"
+          llm_extra_body: "{}"
           language: Chinese
           effort: high
-          llm_timeout: '300'
-          review_task_timeout: '20'
-          stream_progress: 'true'
-          sticky_summary: 'true'
-          incremental: 'true'
-          checkpoint_range: 'true'
+          llm_timeout: "300"
+          review_task_timeout: "20"
+          stream_progress: "true"
+          sticky_summary: "true"
+          incremental: "true"
+          checkpoint_range: "true"
           route_severity_below: low
           route_categories: style
           base_ref: ${{ steps.pr-context.outputs.base_ref }}
