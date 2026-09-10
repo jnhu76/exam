@@ -169,7 +169,7 @@ port_owner() {
 }
 
 ensure_host_port_free() {
-  local port="$1" label="$2"
+  local port="$1" label="$2" env_name="$3"
   local owner
   owner="$(port_owner "$port" || true)"
   if [[ -z "$owner" ]]; then
@@ -192,19 +192,21 @@ ensure_host_port_free() {
   err "处理建议（任选其一）："
   err "  1) 停掉占用进程：lsof -iTCP:${port} -sTCP:LISTEN | tail -n +2"
   err "  2) 停 dev compose：pnpm db:down（或 docker compose -f docker-compose.dev.yml down -v）"
-  err "  3) 改用其他端口：EXAM_PORT=3001 bash scripts/e2e/run.sh"
+  # 指引必须指向这个端口自己的 env 权威 —— db/redis 冲突时让用户改 EXAM_PORT
+  # 是错误指引（deployment-topology-contract.mjs 的 MG2 不变量）。
+  err "  3) 改用其他端口：${env_name}=3001 bash scripts/e2e/run.sh"
   return 1
 }
 
-if ! ensure_host_port_free "$APP_HOST_PORT" "app"; then
+if ! ensure_host_port_free "$APP_HOST_PORT" "app" EXAM_PORT; then
   exit 1
 fi
-if ! ensure_host_port_free "$DB_HOST_PORT" "db"; then
+if ! ensure_host_port_free "$DB_HOST_PORT" "db" DB_HOST_PORT; then
   exit 1
 fi
 # docker-compose.test.yml 同样发布 redis（REDIS_HOST_PORT）—— 碰撞模型
 # 必须覆盖全部三个 host 端口权威，不允许第二个硬编码机制。
-if ! ensure_host_port_free "$REDIS_HOST_PORT" "redis"; then
+if ! ensure_host_port_free "$REDIS_HOST_PORT" "redis" REDIS_HOST_PORT; then
   exit 1
 fi
 

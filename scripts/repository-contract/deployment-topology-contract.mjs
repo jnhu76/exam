@@ -455,24 +455,73 @@ if (!servicesBlock) {
   }
 
   // Rule 2: the E2E runner owns one topology file — no caller-selected
-  // Compose layering. The runner must pin docker-compose.test.yml literally
-  // and must not expand a caller-provided COMPOSE_FILE.
+  // Compose layering. The runner must pin docker-compose.test.yml as its ONLY
+  // -f/--file argument and must not expand a caller-provided COMPOSE_FILE
+  // (braced or unbraced — `$COMPOSE_FILE` and `${COMPOSE_FILE:-...}` are both
+  // caller-layering vectors).
   const runShPath = join(ROOT, "scripts", "e2e", "run.sh");
   try {
     const runSh = readFileSync(runShPath, "utf-8");
-    if (/\$\{COMPOSE_FILE[:-]/.test(runSh)) {
+    if (/\$\{?COMPOSE_FILE/.test(runSh)) {
       errors.push(
         "scripts/e2e/run.sh must not take a caller-controlled COMPOSE_FILE " +
-          "(colon-separated layering would let callers redefine the Docker " +
-          "E2E topology). The runner pins docker-compose.test.yml; host " +
-          "ports remap via EXAM_PORT / DB_HOST_PORT / REDIS_HOST_PORT.",
+          "(layering would let callers redefine the Docker E2E topology). " +
+          "The runner pins docker-compose.test.yml; host ports remap via " +
+          "EXAM_PORT / DB_HOST_PORT / REDIS_HOST_PORT.",
       );
     }
-    if (!/docker compose -f docker-compose\.test\.yml /.test(runSh)) {
+    // At least one topology file argument must be docker-compose.test.yml,
+    // and NO other -f/--file argument may carry a different value. Scoped to
+    // the compose() function: that is the ONLY place the runner selects
+    // topology files (cleanup/help text may mention other compose files
+    // without layering them, e.g. the dev-stack stop suggestion).
+    const composeFn = runSh.match(/compose\(\) \{[\s\S]*?\n\}/);
+    if (
+      composeFn === null ||
+      !/(?:^|\s)(?:-f|--file)\s+docker-compose\.test\.yml\b/.test(
+        composeFn[0],
+      ) ||
+      /(?:^|\s)(?:-f|--file)\s+(?!docker-compose\.test\.yml\b)\S+/.test(
+        composeFn[0],
+      )
+    ) {
       errors.push(
-        "scripts/e2e/run.sh must invoke docker compose with the pinned " +
-          "single topology file '-f docker-compose.test.yml' (the Docker " +
-          "E2E topology authority).",
+        "scripts/e2e/run.sh compose() must invoke docker compose with " +
+          "exactly one topology file argument, docker-compose.test.yml " +
+          "(-f/--file) — the Docker E2E topology authority. No second file " +
+          "may be layered.",
+      );
+    }
+    // MG1: the runner must preflight ALL THREE host-port authorities.
+    // The label↔env binding at the call site is the mechanically checkable
+    // fact that collision guidance names the port's OWN env var (MG2).
+    const portPreflights = [
+      ['"app"', "EXAM_PORT"],
+      ['"db"', "DB_HOST_PORT"],
+      ['"redis"', "REDIS_HOST_PORT"],
+    ];
+    for (const [label, env] of portPreflights) {
+      if (
+        !new RegExp(
+          `ensure_host_port_free\\s+\\S+\\s+${label}\\s+${env}\\b`,
+          "m",
+        ).test(runSh)
+      ) {
+        errors.push(
+          `scripts/e2e/run.sh must preflight the ${env} host port via ` +
+            `ensure_host_port_free <port> ${label} ${env} — all three host ` +
+            "port authorities (EXAM_PORT / DB_HOST_PORT / " +
+            "REDIS_HOST_PORT) must fail fast on collision.",
+        );
+      }
+    }
+    // MG2: the collision help must recommend the colliding port's own env
+    // authority — never a hardcoded EXAM_PORT for a db/redis collision.
+    if (!/改用其他端口[^\n]*\$\{env_name\}/.test(runSh)) {
+      errors.push(
+        "scripts/e2e/run.sh collision guidance must recommend the port's " +
+          "own env authority (${env_name}, passed by the caller) — telling " +
+          "a db/redis collision to change EXAM_PORT is wrong guidance.",
       );
     }
   } catch (err) {
