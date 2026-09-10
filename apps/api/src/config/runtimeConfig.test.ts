@@ -133,7 +133,6 @@ describe("runtimeConfig", () => {
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.mode).toBe("singleTenant");
-      expect(config.tenancy.requireTenantBoundary).toBe(true);
     });
 
     it("accepts DEPLOYMENT_MODE=singleTenant", () => {

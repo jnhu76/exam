@@ -65,7 +65,6 @@ export interface TenancyConfig {
   defaultTenantSlug: string;
   exposeTenantSwitcher: boolean;
   exposeSuperAdmin: boolean;
-  requireTenantBoundary: boolean;
 }
 
 export interface AuthConfig {
@@ -617,7 +616,6 @@ export function loadRuntimeConfig(
       // Not a current multi-tenant runtime mode; always false in Phase 1.
       exposeTenantSwitcher: false,
       exposeSuperAdmin: false,
-      requireTenantBoundary: true,
     },
     auth: {
       // Phase 1: no SuperAdmin product path; always false.
