@@ -1,6 +1,5 @@
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
-import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +19,7 @@ import emailOutboxLoopPlugin from "./plugins/emailOutboxLoop.js";
 import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
+import { registerStaticFrontend } from "./plugins/staticFrontend.js";
 import { registerApiRoutes } from "./routes/registerApiRoutes.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { healthResponseSchema } from "./routes/healthSchema.js";
@@ -149,33 +149,7 @@ async function main() {
   );
   app.log.info({ publicDir, exists: existsSync(publicDir) }, "static dir");
   if (existsSync(publicDir)) {
-    await app.register(fastifyStatic, {
-      root: publicDir,
-      prefix: "/",
-      wildcard: false,
-      immutable: true,
-      maxAge: "1y",
-      setHeaders: (res, pathname) => {
-        if (pathname.endsWith("index.html")) {
-          res.setHeader("Cache-Control", "no-cache");
-          res.setHeader("immutable", "false");
-        }
-      },
-    });
-    app.setNotFoundHandler((req, reply) => {
-      // SPA fallback: serve index.html only for navigation (route) requests,
-      // NOT for static asset requests. With `wildcard: false`, @fastify/static
-      // does not register a catch-all route, so requests for missing assets
-      // (e.g. /assets/*.js with a stale hash) would otherwise fall through here
-      // and return index.html as text/html — the browser then rejects the JS
-      // module (wrong MIME) and the app white-screens. Asset-looking requests
-      // get a real 404 instead. See fastify/fastify-static#299, fastify/help#74.
-      if (req.url.startsWith("/assets/") || /\.[^/]+$/.test(req.url)) {
-        reply.code(404).send("Not Found");
-        return;
-      }
-      reply.sendFile("index.html");
-    });
+    await registerStaticFrontend(app, publicDir);
   }
 
   registerShutdownSignals(app);
