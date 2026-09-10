@@ -8,12 +8,11 @@ describe("error handler", () => {
   async function buildApp() {
     const app = Fastify();
     setupErrorHandler(app);
-    app.get("/test-parse-error", async () => {
-      throw Object.assign(new Error("Unexpected token"), {
-        statusCode: 400,
-        code: "FST_ERR_CTP_EMPTY_JSON_BODY",
-      });
-    });
+    // #450 real-parser seam: actual malformed bytes go through Fastify's
+    // default JSON content-type parser (FST_ERR_CTP_* FastifyError), never a
+    // synthetic thrown object — the error handler must classify the real
+    // framework error shape.
+    app.post("/test-json-route", async () => ({ ok: true }));
     app.get("/test-generic-error", async () => {
       throw new Error("something broke");
     });
@@ -54,13 +53,56 @@ describe("error handler", () => {
     return app;
   }
 
-  it("normalizes Fastify parser errors to ErrorResponse v0", async () => {
+  // ── #450: real content-type parser errors stay canonical client 4xx ──
+
+  it("classifies malformed JSON bodies as canonical 400 client errors", async () => {
     const app = await buildApp();
     const res = await app.inject({
-      method: "GET",
-      url: "/test-parse-error",
+      method: "POST",
+      url: "/test-json-route",
+      headers: { "content-type": "application/json" },
+      payload: "{not-valid-json",
     });
     expect(res.statusCode).toBe(400);
+    expect(res.headers["content-type"]).toContain("application/json");
+    const body = res.json();
+    expect(body.error).toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "请求参数无效",
+    });
+    expect(body.error.requestId).toEqual(expect.any(String));
+    expect(body.error.requestId).not.toBe("");
+    expect(body.error.code).not.toBe("INTERNAL_ERROR");
+    await app.close();
+  });
+
+  it("classifies empty JSON bodies as canonical 400 client errors", async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/test-json-route",
+      headers: { "content-type": "application/json" },
+      payload: "",
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error).toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "请求参数无效",
+    });
+    expect(body.error.requestId).toEqual(expect.any(String));
+    await app.close();
+  });
+
+  it("classifies unsupported media types as canonical 4xx client errors", async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/test-json-route",
+      headers: { "content-type": "application/x-invalid" },
+      payload: "x",
+    });
+    expect(res.statusCode).toBe(415);
     const body = res.json();
     expect(body.error).toMatchObject({
       code: "VALIDATION_ERROR",

@@ -115,11 +115,22 @@ export default function setupSecurity(app: FastifyInstance): void {
         done(null, {});
         return;
       }
+      let parsedBody: unknown;
       try {
-        done(null, JSON.parse(str));
+        parsedBody = JSON.parse(str);
       } catch (err) {
+        // INVARIANT (#450): an unreadable request body is a CLIENT error.
+        // Fastify's default JSON parser surfaces parse failures as errors
+        // already classified 4xx; this custom parser must keep that contract.
+        // The raw SyntaxError carries no statusCode, so without this the
+        // error would miss the client-error classification in the global
+        // error handler and surface as 500 INTERNAL_ERROR. The stamp is
+        // scoped to the JSON.parse failure alone — nothing else flows here.
+        (err as Error & { statusCode?: number }).statusCode = 400;
         done(err as Error, undefined);
+        return;
       }
+      done(null, parsedBody);
     },
   );
 
