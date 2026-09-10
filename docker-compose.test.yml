@@ -154,6 +154,16 @@ services:
       # Docker E2E path because run.sh redirected the installer's output.
       - ./node_modules:/app/node_modules:ro
       - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
+      # ui-governance-1.spec.ts INTENTIONALLY imports web-side authorities
+      # (statusMeta/statusMetaUtils/i18n — the V4 matrix derives from them;
+      # see the spec header). The mount set must cover the suite's real
+      # cross-package import surface, so the e2e container exposes every
+      # repository source surface the specs import — read-only, never a
+      # second app execution path. scripts/repository-contract/
+      # docker-e2e-import-surface-contract.mjs derives that surface from the
+      # specs and fails when a required surface is not mounted read-only
+      # (#503).
+      - ./apps/web:/app/apps/web:ro
     environment:
       E2E_BASE_URL: "http://localhost:3000"
       HOME: /tmp
