@@ -1030,12 +1030,13 @@ describe("question routes", () => {
     expect(fields.some((f) => f.field === "score")).toBe(true);
   });
 
-  it("POST /api/questions/import marks a score-1e999 row as an error", async () => {
+  it("POST /api/questions/import with confirm=true does not persist a score-1e999 row", async () => {
+    const uniqueContent = `Import non-finite score? ${uniquePrefix()}`;
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/questions/import",
       headers: { "content-type": "application/json" },
-      payload: `{"courseId":"${courseId}","rows":[{"type":"true_false","content":"Import non-finite score?","standardAnswer":true,"score":1e999}]}`,
+      payload: `{"courseId":"${courseId}","confirm":true,"rows":[{"type":"true_false","content":"${uniqueContent}","standardAnswer":true,"score":1e999}]}`,
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(200);
@@ -1044,6 +1045,19 @@ describe("question routes", () => {
     expect(body.valid).toBe(0);
     expect(body.errors).toBe(1);
     expect(body.details[0].status).toBe("error");
+
+    // The confirmed write path must not persist the invalid row: the
+    // question is absent from the authoritative read path (server-side
+    // substring search over content).
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}&search=${encodeURIComponent(uniqueContent)}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(listRes.statusCode).toBe(200);
+    const list = listRes.json();
+    expect(list.total).toBe(0);
+    expect(list.items).toHaveLength(0);
   });
 
   // ── P3-MOD-P2-2: MVP question creation proof — type-specific readback ──
