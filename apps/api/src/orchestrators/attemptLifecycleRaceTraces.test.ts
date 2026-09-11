@@ -14,8 +14,10 @@
  * (testing/barrier.ts, onceAsync from the proctor-assignment harness). The
  * compositions below are the documented caller role of each seam (save route:
  * attempts.candidate.ts; submit: submitAndGradeAttempt.ts; deadline freeze:
- * the scanner's ensureAttemptDeadlineReconciled composition) — no production
- * code is gated or changed.
+ * the route-side lazy reconciliation via ensureAttemptDeadlineReconciled —
+ * the background scanner's autoSubmitAndGrade uses its own Exam-FOR-UPDATE
+ * composition and is not driven here) — no production code is gated or
+ * changed.
  *
  * Each trace runs REPLAYS times with a fresh attempt fixture per repetition;
  * a repetition that lands in any other ordering fails the trace. Fixed
@@ -473,8 +475,9 @@ describe("attempt lifecycle deterministic race traces (EXAM-341)", () => {
   }
 
   /**
-   * Deadline-freeze racer — the scanner/route reconciliation composition:
-   * EA lock → canonical lazy deadline reconciliation → hold before commit.
+   * Deadline-freeze racer — the route-side lazy reconciliation composition:
+   * EA lock → canonical lazy deadline reconciliation
+   * (ensureAttemptDeadlineReconciled) → hold before commit.
    */
   function deadlineFreezeRacer(
     racerDb: Database,
