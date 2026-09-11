@@ -60,8 +60,8 @@ docker run --rm -v "${DATA_ROOT}:/d" alpine:latest sh -c '
   echo "max_connections = 100" > /d/postgres/'"${PG_MAJOR}"'/docker/postgresql.conf
   head -c 4096 /dev/urandom > /d/postgres/'"${PG_MAJOR}"'/docker/base/payload
   chown -R 999:999 /d/postgres
-  chmod 700 /d/postgres /d/postgres/'"${PG_MAJOR}"' /d/postgres/'"${PG_MAJOR}"'/docker
-  chmod 600 /d/postgres/'"${PG_MAJOR}"'/docker/PG_VERSION /d/postgres/'"${PG_MAJOR}"'/docker/postgresql.conf
+  chmod 700 /d/postgres /d/postgres/'"${PG_MAJOR}"' /d/postgres/'"${PG_MAJOR}"'/docker /d/postgres/'"${PG_MAJOR}"'/docker/base
+  chmod 600 /d/postgres/'"${PG_MAJOR}"'/docker/PG_VERSION /d/postgres/'"${PG_MAJOR}"'/docker/postgresql.conf /d/postgres/'"${PG_MAJOR}"'/docker/base/payload
 '
 
 echo "--- 2. guard: the fixture must be genuinely host-restricted ---"

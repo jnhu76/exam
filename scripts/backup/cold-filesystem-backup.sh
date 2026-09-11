@@ -222,7 +222,10 @@ if ! SIZE_BYTES="$(docker run --rm -v "${DEST}:/to:ro" "${HELPER_IMAGE}" \
   echo "       operation: du -sb over the backup artifact at ${DEST}" >&2
   echo "       expected authority: helper container (${HELPER_IMAGE}) — the tree is" >&2
   echo "       container-postgres-owned and not host-traversable by a non-root operator." >&2
-  echo "       The copied artifact itself exists; fix the measurement cause and re-run." >&2
+  echo "       The copied artifact itself exists and is intact (PG_VERSION verified" >&2
+  echo "       above) — only the evidence spool was not written. Keep or move the" >&2
+  echo "       artifact aside, fix the measurement cause, and re-run with a FRESH" >&2
+  echo "       destination path (this script never overwrites an existing one)." >&2
   exit 1
 fi
 # startedAt = the real copy start (COLD_START_ISO, captured before the copy);
