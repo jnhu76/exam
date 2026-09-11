@@ -35,6 +35,8 @@ invocation), so the repo-root `.env` is never read for interpolation.
 | Persistence & cold restore | `pnpm test:deployment:persistence` | release / manual | not yet measured; multi-recreation flow | isolated project + temp root |
 | Logical backup & restore | `pnpm test:deployment:logical` | release / manual | destructive pg_restore inside its own stack | isolated project + temp root |
 | Upgrade & uninstall lifecycle | `pnpm test:deployment:upgrade` | release / manual | ~2–4 min warm (one image build, three stack boots); operator-mode legs (no build override) against two local image tags | isolated project + temp root + teardown env-file copy |
+| Cold-backup restricted tree | `pnpm test:deployment:cold-backup` (`cold-backup-restricted-tree.sh`) | release / manual | ~1 min; no stack boot (container-built uid-999/0700 fixture) | temp roots only; SKIPs (explicitly, never a false pass) when the operator can traverse the fixture |
+| Cleanup boundary | `pnpm test:deployment:cleanup` (`cleanup-boundary-regression.sh`) | release / manual | <1 min; no stack boot (driver + container-built fixture) | temp roots only, prefix-scoped sweep; deterministic unavailable-helper simulation, no registry/credential contact |
 | PITR | `pnpm test:deployment:pitr` | nightly / manual (WAL archive + basebackup cycles) | slowest of the suite | isolated project + temp root + dedicated WAL archive path |
 
 PR-blocking set = fresh-install gate only (it composes the compose smoke).

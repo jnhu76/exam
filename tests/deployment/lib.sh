@@ -232,15 +232,19 @@ cleanup_temp_root() {
   if [ ! -d "${d}" ]; then
     return 0
   fi
+  local helper_failed="no"
   if ! docker run --rm --pull=never -v "${d}:/d" "${CLEANUP_HELPER_IMAGE}" \
       sh -c 'rm -rf /d/* /d/.[!.]* 2>/dev/null || true' >/dev/null 2>&1; then
-    echo "WARN: cleanup_temp_root: container-assisted removal failed for ${d}" >&2
-    echo "      (helper ${CLEANUP_HELPER_IMAGE} unavailable locally;" >&2
-    echo "      --pull=never refuses a registry pull on a cleanup path)." >&2
+    helper_failed="yes"
   fi
   rmdir "${d}" 2>/dev/null || rm -rf "${d}" 2>/dev/null || true
   if [ -d "${d}" ]; then
     echo "WARN: cleanup_temp_root could not fully remove ${d} (left in place)." >&2
+    if [ "${helper_failed}" = "yes" ]; then
+      echo "      container-assisted removal failed first (helper" >&2
+      echo "      ${CLEANUP_HELPER_IMAGE} unavailable locally; --pull=never" >&2
+      echo "      refuses a registry pull on a cleanup path)." >&2
+    fi
   fi
 }
 
