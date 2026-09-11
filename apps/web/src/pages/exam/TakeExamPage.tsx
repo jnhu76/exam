@@ -55,6 +55,10 @@ import { transientReducer, type TransientState } from "@/exam/transientReducer";
 // No frontend reconstruction of isEditable / canSave / answerSource / lock
 // state is permitted.
 import { deriveTakeExamView } from "@/exam/deriveTakeExamView";
+import {
+  isTerminalHeartbeatSignal,
+  isTerminalSaveRejection,
+} from "@/exam/terminalAttemptSignal";
 import { trackExamEvent, clearPendingForAttempt } from "@/lib/examTelemetry";
 
 type SaveRejectionDisplay = {
@@ -234,6 +238,10 @@ export function TakeExamPage() {
   // loader (initial load, retry, post-submit reload) and any concurrent GET.
   const loadGenerationRef = useRef(0);
   const currentAttemptIdRef = useRef<string | undefined>(attemptId);
+  // EXAM-519: in-flight guard for the terminal-signal reconciliation re-read.
+  // Concurrent terminal signals (heartbeat 409 + a settling autosave
+  // rejection in the same episode) collapse into at most one active take GET.
+  const reconciliationInFlightRef = useRef<Promise<void> | null>(null);
   const { scheduleSave, flush, getScopeGeneration } = useSubmitFlush(attemptId);
 
   /** Returns the current time adjusted by the server clock offset. */
@@ -356,6 +364,52 @@ export function TakeExamPage() {
     }
   }, [attemptId, fetchSnapshot, applySnapshot, t]);
 
+  /**
+   * EXAM-519 — one authoritative re-read per terminal-signal episode.
+   *
+   * Triggered by terminal heartbeat/save signals: re-reads
+   * GET /api/candidate/attempts/:attemptId/take and routes the frozen
+   * snapshot through the SAME applySnapshot seam as the page loader, so the
+   * existing view derivation locks the UI (isLocked ← !snapshot.isEditable).
+   * The signal only triggers the re-read; the snapshot remains the authority
+   * — no client-invented terminal state.
+   *
+   * Deliberately does NOT flip isLoading (no full-page spinner flash on a
+   * background convergence) and does NOT write loadError: a failed re-read
+   * keeps the current UI and the terminal signal's own feedback (save
+   * rejection alert), and the next heartbeat retries. The generation guard
+   * (same discipline as loadSnapshot) rejects a reconciliation that resolves
+   * after a route change or a superseding page-level load.
+   */
+  const reconcileAuthoritativeAttempt = useCallback(() => {
+    if (!attemptId) return Promise.resolve();
+    if (reconciliationInFlightRef.current) {
+      return reconciliationInFlightRef.current;
+    }
+    const attemptAtStart = attemptId;
+    const generationAtStart = loadGenerationRef.current;
+    const promise = fetchSnapshot(attemptAtStart)
+      .then((data) => {
+        if (
+          generationAtStart !== loadGenerationRef.current ||
+          currentAttemptIdRef.current !== attemptAtStart
+        ) {
+          return;
+        }
+        applySnapshot(data);
+      })
+      .catch(() => {
+        // Best-effort convergence; next terminal signal retries.
+      })
+      .finally(() => {
+        if (reconciliationInFlightRef.current === promise) {
+          reconciliationInFlightRef.current = null;
+        }
+      });
+    reconciliationInFlightRef.current = promise;
+    return promise;
+  }, [attemptId, fetchSnapshot, applySnapshot]);
+
   useEffect(() => {
     void loadSnapshot();
   }, [loadSnapshot]);
@@ -439,6 +493,11 @@ export function TakeExamPage() {
     deadlineHandledRef.current = false;
     heartbeatFailureRef.current = 0;
     heartbeatFailureReportedRef.current = false;
+    // EXAM-519: drop any in-flight reconciliation from the PREVIOUS attempt.
+    // The generation guard already makes its late apply a no-op; clearing the
+    // ref here ensures the NEW attempt's terminal signals start a fresh
+    // re-read instead of joining a promise that may never settle.
+    reconciliationInFlightRef.current = null;
   }
 
   // P3-FSM-0: the view is derived PURELY from the authoritative snapshot.
@@ -627,6 +686,14 @@ export function TakeExamPage() {
           },
           { attemptId, questionId, level: "warn" },
         );
+        // EXAM-519: a terminal rejection (attempt submitted/closed/deadline)
+        // is an authority signal — re-read the frozen snapshot once so the
+        // page locks instead of staying stale-editable. The accurate
+        // rejection alert above remains the terminal feedback. Non-terminal
+        // rejections (version conflicts, invalid answers) do NOT reconcile.
+        if (isTerminalSaveRejection(result.reason)) {
+          void reconcileAuthoritativeAttempt();
+        }
         throw new Error("save rejected by server");
       } catch (err) {
         // Scope guard at the TOP of catch: api.post() rejecting does NOT go
@@ -816,7 +883,20 @@ export function TakeExamPage() {
       }
       heartbeatFailureRef.current = 0;
       heartbeatFailureReportedRef.current = false;
-    } catch {
+    } catch (err) {
+      // EXAM-519: a terminal heartbeat (409 INVALID_STATE_TRANSITION) is the
+      // server reporting the attempt left in_progress — an authority signal,
+      // NOT a connectivity failure. Re-read the frozen snapshot once (the
+      // existing view derivation then locks the page); never show the
+      // "connection restored" hint for an attempt that can no longer save.
+      // Once the applied snapshot is already locked, no further re-read is
+      // needed — the next 409 is a no-op, so convergence cannot loop.
+      if (isTerminalHeartbeatSignal(err)) {
+        if (!viewRef.current?.isLocked) {
+          void reconcileAuthoritativeAttempt();
+        }
+        return;
+      }
       setIsDisconnected(true);
       heartbeatFailureRef.current += 1;
       if (
@@ -831,7 +911,7 @@ export function TakeExamPage() {
         );
       }
     }
-  }, [attemptId]);
+  }, [attemptId, reconcileAuthoritativeAttempt]);
 
   useEffect(() => {
     const interval = setInterval(() => void handleHeartbeat(), 30000);
