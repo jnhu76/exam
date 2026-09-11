@@ -966,6 +966,33 @@ export const QueueStatusResponseSchema = z.object({
 export type QueueStatusResponse = z.infer<typeof QueueStatusResponseSchema>;
 
 /**
+ * #292 — operator visibility over the durable admission queue (Admin-only;
+ * automatic policy owns admission, so this surface is read-only).
+ */
+export const AdmissionItemSchema = z.object({
+  candidateId: z.string().uuid(),
+  status: z.enum(["waiting", "admitted", "consumed"]),
+  /** Position among active memberships; null for consumed rows (history). */
+  position: z.number().int().positive().nullable(),
+  joinedAt: z.string().datetime(),
+  admittedAt: z.string().datetime().nullable(),
+  consumedAt: z.string().datetime().nullable(),
+  consumedAttemptId: z.string().uuid().nullable(),
+});
+
+export const ExamAdmissionsResponseSchema = z.object({
+  examId: z.string().uuid(),
+  batchSize: z.number().int().positive(),
+  batchIntervalSeconds: z.number().int().positive(),
+  items: z.array(AdmissionItemSchema),
+});
+
+export type AdmissionItem = z.infer<typeof AdmissionItemSchema>;
+export type ExamAdmissionsResponse = z.infer<
+  typeof ExamAdmissionsResponseSchema
+>;
+
+/**
  * Detailed exam view for a candidate, including exam metadata, control flags, attempt history,
  * availability status, and the recommended primary action.
  *

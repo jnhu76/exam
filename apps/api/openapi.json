@@ -20282,6 +20282,206 @@
         }
       }
     },
+    "/api/admin/exams/{examId}/admissions": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "examId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Teacher"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "examId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "batchSize": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "batchIntervalSeconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "candidateId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["waiting", "admitted", "consumed"]
+                          },
+                          "position": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0,
+                            "nullable": true
+                          },
+                          "joinedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "admittedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "consumedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "consumedAttemptId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "candidateId",
+                          "status",
+                          "position",
+                          "joinedAt",
+                          "admittedAt",
+                          "consumedAt",
+                          "consumedAttemptId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "examId",
+                    "batchSize",
+                    "batchIntervalSeconds",
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode)."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode)."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/exam-profiles": {
       "get": {
         "security": [

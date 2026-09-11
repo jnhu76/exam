@@ -10,6 +10,8 @@ export interface SeededExam {
   examTitle: string;
   candidateIds: string[];
   candidate: SeededCandidate;
+  /** Extra enrolled candidates (#292 queue scenarios). Empty by default. */
+  extraCandidates: SeededCandidate[];
   /** text_response question ids, when `textResponseQuestions` was set (P3-MOD-P0-4). */
   textResponseQuestionIds: string[];
 }
@@ -206,6 +208,13 @@ export async function seedExam(
      */
     interruptionTimePolicy?: "strict" | "operator_incident";
     /**
+     * #292 — seed a requireQueue exam with the given frozen batch policy.
+     * Merged into controlFlags at create time (frozen post-publish).
+     */
+    requireQueue?: { batchSize: number; batchInterval: number };
+    /** Seeds N extra candidates enrolled in the same exam. */
+    additionalCandidates?: number;
+    /**
      * Optional text_response questions to include (P3-MOD-P0-4). Independent
      * QuestionType rendered as a textarea; the legacy fill_blank-null
      * encoding is deprecated for free-text questions.
@@ -299,6 +308,8 @@ export async function seedExam(
       shuffleOptions: false,
       detectTabSwitch: false,
       disableCopyPaste: false,
+      ...(opts.requireQueue ?? {}),
+      requireQueue: opts.requireQueue !== undefined,
       showResultImmediately: true,
     },
     retakePolicy: "unlimited",
@@ -311,8 +322,17 @@ export async function seedExam(
   await adminPost(request, baseURL, token, `/api/exams/${examId}/publish`, {});
 
   const candidate = await createCandidate(request, baseURL, token, unique);
+  const extraCandidates: SeededCandidate[] = [];
+  for (let i = 0; i < (opts.additionalCandidates ?? 0); i += 1) {
+    extraCandidates.push(
+      await createCandidate(request, baseURL, token, `${unique}-x${i}`),
+    );
+  }
   await adminPost(request, baseURL, token, `/api/exams/${examId}/enrollments`, {
-    candidateIds: [candidate.profileId],
+    candidateIds: [
+      candidate.profileId,
+      ...extraCandidates.map((c) => c.profileId),
+    ],
   });
 
   return {
@@ -320,8 +340,12 @@ export async function seedExam(
     questionId,
     courseId,
     examTitle,
-    candidateIds: [candidate.profileId],
+    candidateIds: [
+      candidate.profileId,
+      ...extraCandidates.map((c) => c.profileId),
+    ],
     candidate,
+    extraCandidates,
     textResponseQuestionIds,
   };
 }

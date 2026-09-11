@@ -349,6 +349,17 @@ export class RetakeDeferredError extends AppError {
   }
 }
 
+/**
+ * #292 — the candidate has no durable admitted (and not consumed) admission
+ * membership for a requireQueue exam. HTTP 409; the wire message matches the
+ * legacy queue-conflict contract.
+ */
+export class QueueAdmissionRequiredError extends AppError {
+  constructor(message = "Queue admission required before starting this exam") {
+    super(message, "QUEUE_ADMISSION_REQUIRED", 409);
+  }
+}
+
 /** Startup / runtime configuration error (HTTP 500). */
 export class RuntimeConfigError extends AppError {
   constructor(message: string, details?: unknown) {

@@ -1125,6 +1125,18 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     },
     {
       method: "GET",
+      path: "/admin/exams/:examId/admissions",
+      legacyGate: "Admin",
+      permission: Permission.ExamView,
+      scope: Scope.Exam,
+      resolver: "exam",
+      resource: { type: "list", listOf: "candidate" },
+      sensitive: false,
+      proctorAccess: "admin_only",
+      migrationStage: 8,
+    },
+    {
+      method: "GET",
       path: "/admin/exams/:examId/candidates/status",
       legacyGate: "Admin",
       permission: Permission.ExamEnrollmentManage,

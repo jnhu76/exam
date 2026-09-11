@@ -259,6 +259,28 @@ type AttemptStatus =
 | graded | 所有评分完成 | terminal |
 | voided | 终态覆盖；`submitted_answers` **可有可无**（取决于 void 前是否提交过） | terminal |
 
+### 3.1.1 准入运行时（#292 durable admission，与计时正交）
+
+`requireQueue=true` 的考试由 `exam_admissions` 表承载准入事实，是**唯一权威**（旧进程内 `examQueues` Map 已删除）。准入只回答一个问题：**该考生是否被允许 START**；不拥有、不推导任何计时语义（`timed_sync` 共享截止、`openAt/closeAt`、personal deadline 全部仍归 timer/engine 所有）。
+
+行生命周期（无状态枚举列，全部由时间戳推导）：
+
+| 状态 | 条件 | 说明 |
+| ---- | ---- | ---- |
+| waiting | `admitted_at IS NULL` | 已入队，等待批次放行 |
+| admitted | `admitted_at NOT NULL AND consumed_at IS NULL` | 已获准入 |
+| consumed | `consumed_at NOT NULL` | 已被一次 attempt start 消费（`consumed_attempt_id` 指向 attempt） |
+
+权威与边界：
+
+- **唯一活跃成员**：partial unique index 保证（org, exam, candidate) 至多一条活跃行；重考重新 join 插入新行。
+- **批次策略**：anchor = 活跃行最早 `joined_at`；`releasedBatches = floor(elapsed/interval)+1`，`releasedCount = releasedBatches × batchSize`。位次由 `(joined_at, id)` 在活跃行上推导，**不持久化 position**。interval 单位为秒；首批在 anchor 时刻即放行；批不满也按时放行。策略源=已发布考试的冻结 `controlFlags`（draft-only 编辑权威，发布后不可变）。
+- **需求驱动**：join/status/start 三条 canonical 路径上按需 reconcile（CAS 写 `admitted_at`，幂等），**无后台 scheduler/worker**。
+- **原子边界**：start gate 在 `startOrRestoreAttempt` 事务内、Enrollment 锁之后执行；`admitted → consume + attempt create` 同事务提交，无 crash window、无双 start 路径。resume/restore 不查准入（准入只管 START，不管重入）。
+- **懒 join 已废除**：start 不再隐式入队（旧 gate 的 guard 副作用）；join 是显式 command（`POST /attempts/:examId/queue`）。
+- **运维面**：`GET /admin/exams/:examId/admissions`（ExamView, exam scope, admin_only）只读可见；无 manual admit 产品语义，准入由冻结策略自动执行（无需 audit action；行本身即 domain history）。
+- **迁移**：旧进程内成员不可迁移（LEGACY_RUNTIME_MIGRATION=discard-and-rejoin）；in_progress attempt 的 resume 不受影响。
+
 ### 3.2 GradingStatus（独立维度）
 
 ```ts

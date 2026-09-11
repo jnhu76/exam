@@ -9,6 +9,7 @@ import {
   LoadAttemptParamsSchema,
   LoadAttemptResponseSchema,
   QueueStatusResponseSchema,
+  type QueueStatusResponse,
   RestoreAttemptRequestSchema,
   RestoreAttemptResponseSchema,
   SaveAnswerParamsSchema,
@@ -44,6 +45,7 @@ import {
   projectEnrollmentForLifecycleState,
 } from "@exam/exam-engine";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
+import { createExamAdmissionRepo } from "@exam/db/src/repository/examAdmissionRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { Permission } from "@exam/authz";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -56,6 +58,10 @@ import { createAttemptTimeAdjustmentRepo } from "@exam/db/src/repository/attempt
 import {
   startOrRestoreAttempt,
   restoreInterruptedAttempt,
+  joinAdmissionQueue,
+  reconcileAdmission,
+  previewAdmissionStatus,
+  type AdmissionQueueView,
 } from "@exam/exam-engine";
 import { saveAnswer } from "@exam/exam-engine";
 import {
@@ -66,6 +72,7 @@ import {
 import type { SubmitInterruptionResolution } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
+  createExamAdmissionRepoAdapter,
   createGradingWorksetRepoAdapter,
   createInterruptionEpisodeRepoAdapter,
   createInterruptionEventRepoAdapter,
@@ -95,52 +102,20 @@ const heartbeatResponseSchema = z.object({
 });
 
 /**
- * A candidate's entry in the in-memory exam queue, tracking when they joined.
+ * #292 — maps an engine-derived queue view onto the candidate wire contract.
+ * The wire vocabulary (waiting/ready + position) is unchanged from the
+ * legacy gate; the authority behind it is now the durable admission row.
  */
-interface QueueEntry {
-  candidateId: string;
-  joinedAt: Date;
-}
-
-/**
- * In-memory exam admission queues keyed by examId.
- * Used for batch-release queue gating when requireQueue is enabled.
- */
-const examQueues = new Map<string, QueueEntry[]>();
-
-/**
- * Computes the queue admission status for a candidate, adding them to the
- * in-memory queue if not already present. Returns position, wait count,
- * and estimated wait based on batch release intervals.
- */
-function getQueueStatus(exam: Exam, candidateId: string, now: Date) {
-  const queue = examQueues.get(exam.id) ?? [];
-  const existing = queue.find((entry) => entry.candidateId === candidateId);
-  const entry = existing ?? { candidateId, joinedAt: now };
-  if (!existing) {
-    queue.push(entry);
-    examQueues.set(exam.id, queue);
-  }
-
-  const position = queue.indexOf(entry) + 1;
-  const elapsedSeconds = Math.floor(
-    (now.getTime() - queue[0]!.joinedAt.getTime()) / 1000,
-  );
-  const releasedBatches =
-    Math.floor(elapsedSeconds / exam.controlFlags.batchInterval) + 1;
-  const releasedCount = releasedBatches * exam.controlFlags.batchSize;
-  const status = position <= releasedCount ? "ready" : "waiting";
-  const batchesUntilReady = Math.max(
-    0,
-    Math.ceil(position / exam.controlFlags.batchSize) - releasedBatches,
-  );
-
+function toQueueStatusResponse(
+  examId: string,
+  view: AdmissionQueueView,
+): QueueStatusResponse {
   return QueueStatusResponseSchema.parse({
-    examId: exam.id,
-    status,
-    position,
-    waitCount: Math.max(0, position - releasedCount),
-    estimatedWaitSeconds: batchesUntilReady * exam.controlFlags.batchInterval,
+    examId,
+    status: view.ready ? "ready" : "waiting",
+    position: view.position,
+    waitCount: view.waitCount,
+    estimatedWaitSeconds: view.estimatedWaitSeconds,
   });
 }
 
@@ -594,7 +569,49 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!enrollment) {
         throw new NotFoundError("Enrollment not found");
       }
-      return getQueueStatus(exam, candidateProfile.id, fastify.now());
+      const now = fastify.now();
+
+      // #292: an in-progress candidate is already in — re-joining must not
+      // insert a fresh membership (the legacy gate re-queued the candidate
+      // at the tail and locked them out of their own attempt).
+      const activeAttempt = await createAttemptRepo(
+        fastify.db,
+      ).findActiveByEnrollment(ctx, enrollment.id);
+      if (activeAttempt) {
+        return toQueueStatusResponse(exam.id, {
+          state: "admitted",
+          position: 1,
+          waitCount: 0,
+          estimatedWaitSeconds: 0,
+          ready: true,
+        });
+      }
+
+      if (exam.controlFlags.requireQueue) {
+        const deps = {
+          repo: createExamAdmissionRepoAdapter(
+            createExamAdmissionRepo(fastify.db),
+            ctx,
+          ),
+        };
+        await joinAdmissionQueue(deps, exam, candidateProfile.id, now);
+        await reconcileAdmission(deps, exam, candidateProfile.id, now);
+        const view = await previewAdmissionStatus(
+          deps,
+          exam,
+          candidateProfile.id,
+          now,
+        );
+        return toQueueStatusResponse(exam.id, view);
+      }
+      // requireQueue=false: the queue surface only reports "no barrier".
+      return toQueueStatusResponse(exam.id, {
+        state: "admitted",
+        position: 1,
+        waitCount: 0,
+        estimatedWaitSeconds: 0,
+        ready: true,
+      });
     },
   );
 
@@ -648,15 +665,9 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Exam not found");
       }
       const { exam } = statusResult;
-      if (
-        exam.controlFlags.requireQueue &&
-        getQueueStatus(exam, candidateId, now).status !== "ready"
-      ) {
-        throw new ConflictError(
-          "Queue admission required before starting this exam",
-        );
-      }
-
+      // #292: admission is enforced INSIDE startOrRestoreAttempt (engine
+      // authority, same transaction as the attempt create). The legacy
+      // route-level in-memory guard is gone.
       let attempt: ExamAttempt;
       let isNew: boolean;
       try {
@@ -704,6 +715,12 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
                 eventRepo,
                 adjustmentRepo,
                 gradingWorksetRepo,
+                admission: {
+                  repo: createExamAdmissionRepoAdapter(
+                    createExamAdmissionRepo(tx),
+                    ctx,
+                  ),
+                },
               },
             );
             return result;
@@ -727,12 +744,6 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw error;
       }
 
-      examQueues.set(
-        examId,
-        (examQueues.get(examId) ?? []).filter(
-          (entry) => entry.candidateId !== candidateId,
-        ),
-      );
       if (isNew) {
         return reply
           .code(201)
