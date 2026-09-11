@@ -977,10 +977,9 @@ describe("candidateAnswer rendering", () => {
     await screen.findByText(/期末考试 — 张三/);
     const answerEl = screen.getByTestId("grading-candidate-answer-q1");
     expect(answerEl).toHaveTextContent(longAnswer);
-    // The candidate-answer box uses the type-long-response semantic recipe
-    // (UI-RECIPE-1A), which owns white-space: pre-wrap as a CSS property
-    // rather than a primitive utility class.
-    expect(answerEl).toHaveClass("type-long-response");
+    // The whitespace/containment styling contract is owned by the shared
+    // ReadOnlyLongText component test; this page test only proves the answer
+    // content flows into that role.
   });
 
   it("renders array answer joined by Chinese comma", async () => {
@@ -1123,18 +1122,16 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     await screen.findByText(/期末考试 — 张三/);
 
     // textContent collapses newlines to spaces; verify the literal text is
-    // present, and rely on the whitespace-pre-wrap class assertion (separate
-    // test) to prove the line breaks are visually preserved.
+    // present. Visual whitespace preservation is owned by the shared
+    // ReadOnlyLongText component test (type-long-response pre-wrap contract).
     const rubricEl = screen.getByTestId("grading-rubric-q1");
     expect(rubricEl).toHaveTextContent("评分细则：");
     expect(rubricEl).toHaveTextContent("1. 逻辑清晰");
     expect(rubricEl).toHaveTextContent("2. 概念准确");
-    expect(rubricEl).toHaveClass("whitespace-pre-wrap");
 
     const refEl = screen.getByTestId("grading-standard-answer-q1");
     expect(refEl).toHaveTextContent("参考答案第一行");
     expect(refEl).toHaveTextContent("参考答案第二行");
-    expect(refEl).toHaveClass("whitespace-pre-wrap");
   });
 
   it("shows not-set labels when standardAnswer and rubric are null", async () => {
@@ -1193,7 +1190,7 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     ).toBeUndefined();
   });
 
-  it("preserves multiline whitespace-pre-wrap on rubric and standardAnswer", async () => {
+  it("flows multiline rubric and standardAnswer into the read-only role unchanged", async () => {
     getMock.mockResolvedValue({
       ...baseData,
       questions: [
@@ -1211,11 +1208,13 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     });
     renderPage();
     await screen.findByText(/期末考试 — 张三/);
-    expect(screen.getByTestId("grading-rubric-q1")).toHaveClass(
-      "whitespace-pre-wrap",
+    // textContent preserves the raw multiline strings; the rendering contract
+    // (pre-wrap) is owned by the ReadOnlyLongText component test.
+    expect(screen.getByTestId("grading-rubric-q1").textContent).toBe(
+      "细则1\n细则2",
     );
-    expect(screen.getByTestId("grading-standard-answer-q1")).toHaveClass(
-      "whitespace-pre-wrap",
+    expect(screen.getByTestId("grading-standard-answer-q1").textContent).toBe(
+      "行1\n行2\n行3",
     );
   });
 

@@ -22,6 +22,7 @@ import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FormSection } from "@/components/shared/FormSection";
 import { FieldGroup, Field, FieldRow } from "@/components/shared/FieldGroup";
 import { FieldError } from "@/components/shared/FieldError";
+import { DefinitionList } from "@/components/shared/DefinitionList";
 import {
   DataTableCell,
   DataTableColumns,
@@ -835,63 +836,80 @@ export function ExamCreatePage() {
               <h3 className="type-section-title">
                 {t("admin.examWizard.review.basicHeading")}
               </h3>
-              <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
-                <dt className="text-muted-foreground">
-                  {t("admin.examWizard.fields.title")}
-                </dt>
-                <dd>{state.title || "—"}</dd>
-                <dt className="text-muted-foreground">
-                  {t("admin.examWizard.fields.course")}
-                </dt>
-                <dd>
-                  {courses.find((c) => c.id === state.courseId)?.name ?? "—"}
-                </dd>
-              </dl>
+              <DefinitionList
+                className="mt-1 grid gap-x-6 gap-y-2 sm:grid-cols-2"
+                items={[
+                  {
+                    label: t("admin.examWizard.fields.title"),
+                    value: state.title || "—",
+                  },
+                  {
+                    label: t("admin.examWizard.fields.course"),
+                    value:
+                      courses.find((c) => c.id === state.courseId)?.name ?? "—",
+                  },
+                ]}
+              />
             </div>
             <Separator />
             <div>
               <h3 className="type-section-title">
                 {t("admin.examWizard.review.scheduleHeading")}
               </h3>
-              <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
-                <dt className="text-muted-foreground">
-                  {t("admin.examWizard.schedule.startTime")}
-                </dt>
-                <dd>{state.openAt ? formatDateTime(state.openAt) : "—"}</dd>
-                <dt className="text-muted-foreground">
-                  {t("admin.examWizard.schedule.endTime")}
-                </dt>
-                <dd>{state.closeAt ? formatDateTime(state.closeAt) : "—"}</dd>
-              </dl>
+              <DefinitionList
+                className="mt-1 grid gap-x-6 gap-y-2 sm:grid-cols-2"
+                items={[
+                  {
+                    label: t("admin.examWizard.schedule.startTime"),
+                    value: state.openAt ? formatDateTime(state.openAt) : "—",
+                  },
+                  {
+                    label: t("admin.examWizard.schedule.endTime"),
+                    value: state.closeAt ? formatDateTime(state.closeAt) : "—",
+                  },
+                ]}
+              />
             </div>
             <Separator />
             <div>
               <h3 className="type-section-title">
                 {t("admin.examWizard.review.scoringHeading")}
               </h3>
-              <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
-                <dt className="text-muted-foreground">
-                  {t("admin.examWizard.questions.totalScore")}
-                </dt>
-                <dd>{state.totalScore}</dd>
-                <dt className="text-muted-foreground">
-                  {t("admin.examWizard.questions.passingScore")}
-                </dt>
-                <dd>{state.passingScore}</dd>
-                {selectedQuestions.length > 0 &&
-                  state.totalScore !== computedTotal && (
-                    <>
-                      <dt className="text-destructive">
-                        {t("admin.examWizard.review.warningsHeading")}
-                      </dt>
-                      <dd className="text-destructive">
-                        {t("admin.examWizard.review.scoreMismatchWarning", {
-                          score: computedTotal,
-                        })}
-                      </dd>
-                    </>
-                  )}
-              </dl>
+              <DefinitionList
+                className="mt-1 grid gap-x-6 gap-y-2 sm:grid-cols-2"
+                items={[
+                  {
+                    label: t("admin.examWizard.questions.totalScore"),
+                    value: state.totalScore,
+                  },
+                  {
+                    label: t("admin.examWizard.questions.passingScore"),
+                    value: state.passingScore,
+                  },
+                  ...(selectedQuestions.length > 0 &&
+                  state.totalScore !== computedTotal
+                    ? [
+                        {
+                          label: (
+                            <span className="text-destructive">
+                              {t("admin.examWizard.review.warningsHeading")}
+                            </span>
+                          ),
+                          value: (
+                            <span className="text-destructive">
+                              {t(
+                                "admin.examWizard.review.scoreMismatchWarning",
+                                {
+                                  score: computedTotal,
+                                },
+                              )}
+                            </span>
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             </div>
             <Separator />
             <div>

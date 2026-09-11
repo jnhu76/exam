@@ -14,6 +14,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { ReadOnlyLongText } from "@/components/shared/ReadOnlyLongText";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -490,9 +491,9 @@ export function GradingDetailPage() {
                 <Label>
                   {t("admin.gradingDetail.question.candidateAnswer")}
                 </Label>
-                <div
+                <ReadOnlyLongText
                   data-testid={`grading-candidate-answer-${q.questionId}`}
-                  className="type-long-response min-h-16 rounded-md border bg-muted/30 p-3"
+                  className="min-h-16"
                 >
                   {(() => {
                     // issue 301 corrective pass: the frozen answerMode is the
@@ -521,28 +522,28 @@ export function GradingDetailPage() {
                     }
                     return formatAnswer(q.candidateAnswer);
                   })()}
-                </div>
+                </ReadOnlyLongText>
               </div>
               <div className="space-y-2">
                 <Label>
                   {t("admin.gradingDetail.question.standardAnswer")}
                 </Label>
-                <div
+                <ReadOnlyLongText
                   data-testid={`grading-standard-answer-${q.questionId}`}
-                  className="min-h-12 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
+                  className="min-h-12"
                 >
                   {formatStandardAnswer(q.standardAnswer)}
-                </div>
+                </ReadOnlyLongText>
               </div>
               <div className="space-y-2">
                 <Label>{t("admin.gradingDetail.question.rubric")}</Label>
-                <div
+                <ReadOnlyLongText
                   data-testid={`grading-rubric-${q.questionId}`}
-                  className="min-h-12 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
+                  className="min-h-12"
                 >
                   {q.rubric ||
                     i18n.t("admin.gradingDetail.format.notSet" as never)}
-                </div>
+                </ReadOnlyLongText>
               </div>
               <div className="space-y-2">
                 <Label htmlFor={`score-${q.questionId}`}>

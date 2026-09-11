@@ -87,9 +87,9 @@ describe("migrated consumers use semantic recipes (UI-RECIPE-1A §E)", () => {
       reason: "long Chinese reading consumer",
     },
     {
-      file: "pages/admin/GradingDetailPage.tsx",
+      file: "components/shared/ReadOnlyLongText.tsx",
       recipe: "type-long-response",
-      reason: "long-response consumer",
+      reason: "long-response consumer (shared read-only long-text authority)",
     },
   ];
 

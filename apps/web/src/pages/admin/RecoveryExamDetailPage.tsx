@@ -15,6 +15,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { DefinitionList } from "@/components/shared/DefinitionList";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FieldError } from "@/components/shared/FieldError";
@@ -316,44 +317,33 @@ export function RecoveryExamDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Exam summary */}
         <PageSection title={t("admin.recoveryExam.sections.exam")}>
-          <dl className="flex flex-col gap-2">
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryExam.sections.exam")}
-              </dt>
-              <dd className="text-sm font-medium break-words">
-                {data.examSummary.title}
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryQueue.columns.severity")}
-              </dt>
-              <dd>
-                <StatusBadge status={data.examSummary.status} />
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryExam.timingMode")}
-              </dt>
-              <dd className="text-sm">
-                {t(
+          <DefinitionList
+            className="flex flex-col gap-2"
+            items={[
+              {
+                label: t("admin.recoveryExam.sections.exam"),
+                value: (
+                  <span className="font-medium">{data.examSummary.title}</span>
+                ),
+              },
+              {
+                label: t("admin.recoveryQueue.columns.severity"),
+                value: <StatusBadge status={data.examSummary.status} />,
+              },
+              {
+                label: t("admin.recoveryExam.timingMode"),
+                value: t(
                   `admin.recoveryExam.timingModeValue.${data.examSummary.timingMode}` as never,
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryExam.examCloseAt")}
-              </dt>
-              <dd className="text-sm">
-                {data.examSummary.closeAt === null
-                  ? "—"
-                  : formatTime(data.examSummary.closeAt)}
-              </dd>
-            </div>
-          </dl>
+                ),
+              },
+              {
+                label: t("admin.recoveryExam.examCloseAt"),
+                value: data.examSummary.closeAt
+                  ? formatTime(data.examSummary.closeAt)
+                  : "—",
+              },
+            ]}
+          />
         </PageSection>
 
         {/* Incident stats — counts by status and severity */}
