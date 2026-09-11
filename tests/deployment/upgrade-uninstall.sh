@@ -206,7 +206,19 @@ stage preserve "PASS: data + state survive down/up (reinstall keeps data)"
 # ── [delete] full removal -> clean reinstall ────────────────────────────
 stage delete "full removal: down, delete data root + env file, fresh install"
 compose_operator down 2>&1 | tail -2
-[ -d "${EXAM_DATA_ROOT}" ] && cleanup_temp_root "${EXAM_DATA_ROOT}"
+# #462: the fresh-install assertions below assume this data root is ABSENT
+# — the cleanup is MANDATORY. A failed helper (image unavailable, pull
+# refused) must fail HERE at the cleanup boundary, never let the leg
+# proceed into generate-env/up on stale PGDATA (the historical BB-008
+# chain reported a downstream app-health failure instead of the real
+# cleanup failure).
+if [ -d "${EXAM_DATA_ROOT}" ]; then
+  remove_temp_root "${EXAM_DATA_ROOT}" || {
+    echo "[delete] FAIL: mandatory data-root cleanup failed;" >&2
+    echo "        NOT entering the fresh-install stage on stale state." >&2
+    exit 1
+  }
+fi
 rm -f "${ENV_FILE}"
 [ ! -f "${ENV_FILE}" ] || {
   echo "[delete] FAIL: env file still present after removal."; exit 1; }

@@ -197,10 +197,22 @@ safe_temp_root() {
   printf -v "${var}" '%s' "${d}"
 }
 
-# Remove a temp root created by safe_temp_root. Files inside may be owned
-# by the container postgres user (not host-readable), so removal is
-# container-assisted. Paths NOT recorded by safe_temp_root are never
-# touched.
+# Remove a temp root created by safe_temp_root (BEST-EFFORT — exit-trap
+# hygiene). Files inside may be owned by the container postgres user (not
+# host-readable), so removal is container-assisted. Paths NOT recorded by
+# safe_temp_root are never touched.
+#
+# Helper authority (#462): the deployment's OWN postgres image — the same
+# filesystem authority the backup scripts use (#456). It is guaranteed
+# present exactly when container-owned (uid 999) content exists (the db
+# service must have run to write it), and --pull=never makes the helper a
+# purely local decision: a missing image fails deterministically at the
+# cleanup boundary instead of silently depending on registry/credential
+# availability (the historical BB-008 chain: alpine pull → credential
+# helper failure → swallowed || true → stale PGDATA → misleading
+# downstream app-health failure). CLEANUP_HELPER_IMAGE is overridable for
+# the cleanup-boundary regression (simulating an unavailable helper
+# without touching real Docker credentials).
 cleanup_temp_root() {
   local d="$1"
   local i
@@ -220,13 +232,51 @@ cleanup_temp_root() {
   if [ ! -d "${d}" ]; then
     return 0
   fi
-  docker run --rm -v "${d}:/d" alpine:latest \
-    sh -c 'rm -rf /d/* /d/.[!.]* 2>/dev/null || true' \
-    >/dev/null 2>&1 || true
+  if ! docker run --rm --pull=never -v "${d}:/d" "${CLEANUP_HELPER_IMAGE}" \
+      sh -c 'rm -rf /d/* /d/.[!.]* 2>/dev/null || true' >/dev/null 2>&1; then
+    echo "WARN: cleanup_temp_root: container-assisted removal failed for ${d}" >&2
+    echo "      (helper ${CLEANUP_HELPER_IMAGE} unavailable locally;" >&2
+    echo "      --pull=never refuses a registry pull on a cleanup path)." >&2
+  fi
   rmdir "${d}" 2>/dev/null || rm -rf "${d}" 2>/dev/null || true
   if [ -d "${d}" ]; then
     echo "WARN: cleanup_temp_root could not fully remove ${d} (left in place)." >&2
   fi
+}
+
+# Remove a temp root created by safe_temp_root, FAILING the caller when the
+# root cannot be removed (#462). Use this when subsequent assertions assume
+# the state is ABSENT (the upgrade/uninstall [delete] leg asserts a truly
+# fresh database); use cleanup_temp_root for best-effort exit hygiene.
+# A mandatory cleanup of a path safe_temp_root never registered is a
+# harness bug and fails loudly — silently "succeeding" would be a false
+# pass for exactly the assertions that depend on the absence.
+remove_temp_root() {
+  local d="${1:?remove_temp_root: missing path}"
+  local registered="no"
+  local i
+  for i in "${SAFE_TEMP_ROOTS[@]}"; do
+    if [ "${i}" = "${d}" ]; then
+      registered="yes"
+    fi
+  done
+  if [ "${registered}" != "yes" ]; then
+    echo "FAIL: remove_temp_root: '${d}' is not a registered safe_temp_root;" >&2
+    echo "      refusing (mandatory cleanup must target only harness-created roots)." >&2
+    return 1
+  fi
+  cleanup_temp_root "${d}"
+  if [ -d "${d}" ]; then
+    echo "FAIL: mandatory cleanup could not remove '${d}'." >&2
+    echo "       operation: container-assisted rm -rf of the temp root" >&2
+    echo "                  (PGDATA-derived content may be uid-999 owned)" >&2
+    echo "       expected authority: helper container ${CLEANUP_HELPER_IMAGE}" >&2
+    echo "                          (--pull=never; no registry dependency)" >&2
+    echo "       result: directory still present — dependent assertions MUST NOT" >&2
+    echo "               run against this stale state." >&2
+    return 1
+  fi
+  return 0
 }
 
 # ── PostgreSQL version discovery ─────────────────────────────────────────
@@ -236,6 +286,12 @@ cleanup_temp_root() {
 PG_IMAGE="$(sed -n 's/^[[:space:]]*image:[[:space:]]*\(postgres:[^[:space:]]*\).*/\1/p' \
   "${COMPOSE_FILE}" | head -1)"
 PG_MAJOR="$(printf '%s' "${PG_IMAGE}" | sed -n 's/^postgres:\([0-9][0-9]*\).*/\1/p')"
+
+# Cleanup helper image (#462): the deployment's OWN postgres image by
+# default (see cleanup_temp_root for the authority rationale). The env
+# override exists solely as the regression seam for simulating an
+# unavailable helper deterministically.
+CLEANUP_HELPER_IMAGE="${CLEANUP_HELPER_IMAGE:-${PG_IMAGE}}"
 
 # ── Exam probe state ─────────────────────────────────────────────────────
 # psql -tAc against the project's db container with the deployment's
