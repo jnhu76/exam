@@ -207,8 +207,14 @@ export function requiresManualGrading(questions: QuestionSnapshot[]): boolean {
  * non-null `standardAnswer` (a reference answer used as grader guidance), so
  * `standardAnswer` MUST NOT decide whether the question is in the manual
  * grading queue.
+ *
+ * The parameter is narrowed to the parts the predicate reads so the write
+ * boundary (#437) can reuse the same authority during validation, before a
+ * full QuestionSnapshot exists.
  */
-export function isManualGradedQuestion(question: QuestionSnapshot): boolean {
+export function isManualGradedQuestion(
+  question: Pick<QuestionSnapshot, "type">,
+): boolean {
   return question.type === "text_response";
 }
 

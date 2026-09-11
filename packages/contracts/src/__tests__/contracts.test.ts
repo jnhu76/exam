@@ -813,6 +813,92 @@ describe("question contracts", () => {
     expect(result.success).toBe(false);
   });
 
+  // ── #437: auto-graded types require a non-null typed standardAnswer at
+  //    the write boundary; text_response may carry null (reference answer) ──
+
+  it.each([
+    [
+      "single_choice",
+      {
+        options: [
+          { id: "A", content: "Option A" },
+          { id: "B", content: "Option B" },
+        ],
+      },
+    ],
+    [
+      "multiple_choice",
+      {
+        options: [
+          { id: "A", content: "Option A" },
+          { id: "B", content: "Option B" },
+          { id: "C", content: "Option C" },
+        ],
+      },
+    ],
+    ["true_false", {}],
+    ["fill_blank", { content: "The answer is ____" }],
+  ] as const)(
+    "CreateQuestionRequestSchema rejects %s with standardAnswer: null",
+    (type, extra) => {
+      const result = CreateQuestionRequestSchema.safeParse({
+        courseId: "550e8400-e29b-41d4-a716-446655440000",
+        type,
+        content: "Prompt",
+        standardAnswer: null,
+        score: 10,
+        ...extra,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some(
+            (issue) => issue.path[0] === "standardAnswer",
+          ),
+        ).toBe(true);
+      }
+    },
+  );
+
+  it.each([
+    [
+      "single_choice",
+      "A",
+      {
+        options: [
+          { id: "A", content: "Option A" },
+          { id: "B", content: "Option B" },
+        ],
+      },
+    ],
+    [
+      "multiple_choice",
+      ["A", "B"],
+      {
+        options: [
+          { id: "A", content: "Option A" },
+          { id: "B", content: "Option B" },
+          { id: "C", content: "Option C" },
+        ],
+      },
+    ],
+    ["true_false", true, {}],
+    ["fill_blank", "42", { content: "The answer is ____" }],
+  ] as const)(
+    "CreateQuestionRequestSchema accepts %s with a valid typed standardAnswer",
+    (type, answer, extra) => {
+      const result = CreateQuestionRequestSchema.safeParse({
+        courseId: "550e8400-e29b-41d4-a716-446655440000",
+        type,
+        content: "Prompt",
+        standardAnswer: answer,
+        score: 10,
+        ...extra,
+      });
+      expect(result.success).toBe(true);
+    },
+  );
+
   it("QuestionImportRowSchema parses basic row", () => {
     const result = QuestionImportRowSchema.safeParse({
       type: "true_false",

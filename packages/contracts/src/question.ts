@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { plainTextProjection } from "@exam/domain";
+import { isManualGradedQuestion, plainTextProjection } from "@exam/domain";
 import { AnswerModeEnum, ContentSlotSchema } from "./contentDocument.js";
 import type { AnswerMode, ContentSlot } from "./contentDocument.js";
 
@@ -52,13 +52,14 @@ export const GradingRuleSchema = z.object({
 /**
  * Schema for a question's standard answer.
  *
- * Objective questions (single_choice, multiple_choice, true_false, graded
- * fill_blank) require a non-null, typed standardAnswer. Subjective /
- * manually-graded questions carry `standardAnswer: null` — the platform treats
- * a null standardAnswer as "subjective" (see hasSubjectiveQuestions /
- * subjectiveQuestionIds). We therefore accept null here and enforce the
- * type-specific answer shape for objective questions in validateQuestionType
- * (which early-returns when the answer is null).
+ * Grading mode is a property of the question TYPE: `text_response` is
+ * manually graded and its standardAnswer is an optional reference answer
+ * (null is legal); every other type is auto-graded and requires a non-null,
+ * correctly-typed standardAnswer. Null is accepted at this scalar level so
+ * text_response can carry a reference-answer-less row; the type-aware
+ * cross-field rule in {@link validateQuestionType} rejects null for
+ * auto-graded types, reusing the canonical manual-grading predicate
+ * `isManualGradedQuestion`.
  */
 const StandardAnswerSchema = z
   .unknown()
@@ -179,10 +180,19 @@ function validateQuestionType(
     });
   }
 
-  // Subjective / manually-graded questions carry a null standardAnswer: skip
-  // the type-specific standardAnswer format checks below. Objective questions
-  // (non-null standardAnswer) still require a correctly-typed answer.
+  // Null standardAnswer is legal ONLY for text_response (its reference
+  // answer is optional); every auto-graded type requires a non-null typed
+  // answer here — the write boundary must not create a question that the
+  // publish guard would later reject. Reuses isManualGradedQuestion so the
+  // grading-mode authority stays single-sourced.
   if (question.standardAnswer == null) {
+    if (!isManualGradedQuestion({ type: question.type })) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "auto-graded questions require a standardAnswer",
+        path: ["standardAnswer"],
+      });
+    }
     return;
   }
 

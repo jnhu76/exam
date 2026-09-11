@@ -160,7 +160,9 @@ export async function publishExam(
   //     require a non-empty, non-placeholder standardAnswer.
   //   - text_response requires a non-empty, non-placeholder rubric;
   //     standardAnswer is optional for text_response.
-  // Draft-time empty values are allowed; publish enforces.
+  // The write boundary (#437) already rejects null standardAnswer for
+  // auto-graded types; publish remains the freeze gate — rubric for
+  // text_response, defense-in-depth for answers.
   //
   // The auto-grading check is gated on an explicit autoGradedTypes set rather
   // than a bare `else`, so any future subjective type (added to QuestionType)

@@ -238,9 +238,10 @@ export const questions = pgTable(
         }>
       >()
       .notNull(),
-    // Nullable: a null/undefined standardAnswer marks the question as
-    // subjective (manually graded). Objective questions keep a typed answer.
-    // See QuestionSnapshot / hasSubjectiveQuestions for the convention.
+    // Nullable so historical rows and text_response's optional reference
+    // answer can carry null. Grading mode derives from question TYPE
+    // (isManualGradedQuestion), NOT from answer nullness — the write boundary
+    // rejects null standardAnswer for auto-graded types (protocol §1.4).
     standardAnswer: jsonb("standard_answer").$type<unknown>(),
     // P3-L0-1: rubric authoring/editing source (dual-layer). text_response
     // requires non-empty at publish (P3-L0-5); objective questions are null.

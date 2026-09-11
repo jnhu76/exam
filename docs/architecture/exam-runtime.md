@@ -111,7 +111,9 @@ function getGradingMode(type: QuestionType): GradingMode {
 | fill_blank | 必须为 Plain（禁止 content_document / 富文本内容） |
 | 全部题型 | answerMode 仅允许出现在 text_response；Rich 题的 content 必须等于服务端派生的 plainTextProjection |
 
-创建草稿时允许空值；发布时强制校验。
+auto 题的 standardAnswer 在写入边界（create/update/import）即强制非空（#437）；
+text_response 的 rubric 仍允许草稿期为空，发布时强制。发布校验是最终冻结安全门，
+对写入边界做 defense-in-depth 复查。
 
 ### 1.7 Content 双模式（issue 301，ADR-019）
 

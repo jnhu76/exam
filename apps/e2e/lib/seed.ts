@@ -10,18 +10,8 @@ export interface SeededExam {
   examTitle: string;
   candidateIds: string[];
   candidate: SeededCandidate;
-  /** Subjective (manual-graded) question ids, when `subjectiveQuestions` was set. */
-  subjectiveQuestionIds: string[];
   /** text_response question ids, when `textResponseQuestions` was set (P3-MOD-P0-4). */
   textResponseQuestionIds: string[];
-}
-
-/** A subjective (manual-graded) question to seed: fill_blank with null answer. */
-export interface SubjectiveQuestionSeed {
-  /** Score weight for this question. */
-  score: number;
-  /** Content must include a `____` placeholder for the fill_blank input. */
-  content?: string;
 }
 
 /**
@@ -215,12 +205,10 @@ export async function seedExam(
      * dedicated seed path (see candidate-save-submit / disconnect-restore).
      */
     interruptionTimePolicy?: "strict" | "operator_incident";
-    /** Optional subjective (manual-graded) fill_blank questions to include. */
-    subjectiveQuestions?: SubjectiveQuestionSeed[];
     /**
      * Optional text_response questions to include (P3-MOD-P0-4). Independent
-     * QuestionType rendered as a textarea; not the legacy fill_blank-null
-     * encoding.
+     * QuestionType rendered as a textarea; the legacy fill_blank-null
+     * encoding is deprecated for free-text questions.
      */
     textResponseQuestions?: TextResponseQuestionSeed[];
     /**
@@ -252,25 +240,12 @@ export async function seedExam(
   });
   const questionId = question.id as string;
 
-  // Objective (true_false) question renders FIRST, subjective (fill_blank)
+  // Objective (true_false) question renders FIRST, manual-graded (text_response)
   // questions AFTER — this matches spec assumptions (e.g. manual-grading answers
-  // the objective Q1 first, then navigates to subjective Q2). HEAD had this
-  // order; a later edit (to fix totalScore) accidentally reversed it by
+  // the objective Q1 first, then navigates to the manual question Q2). HEAD had
+  // this order; a later edit (to fix totalScore) accidentally reversed it by
   // initializing questionIds empty and pushing base last.
   const questionIds: string[] = [questionId];
-  const subjectiveQuestionIds: string[] = [];
-  for (const sq of opts.subjectiveQuestions ?? []) {
-    const created = await adminPost(request, baseURL, token, "/api/questions", {
-      courseId,
-      type: "fill_blank",
-      content: sq.content ?? `主观题-${unique}-____`,
-      // null standardAnswer marks the question as subjective (manual-graded).
-      standardAnswer: null,
-      score: sq.score,
-    });
-    subjectiveQuestionIds.push(created.id as string);
-    questionIds.push(created.id as string);
-  }
   // P3-MOD-P0-4: text_response is an independent QuestionType. Per
   // exam-protocol.md §1.1 the legacy `fill_blank + standardAnswer=null`
   // encoding is deprecated for free-text questions.
@@ -289,13 +264,10 @@ export async function seedExam(
     questionIds.push(created.id as string);
   }
 
-  const subjectiveTotal =
-    opts.subjectiveQuestions?.reduce((sum, q) => sum + q.score, 0) ?? 0;
   const textResponseTotal =
     opts.textResponseQuestions?.reduce((sum, q) => sum + q.score, 0) ?? 0;
   const baseQuestionScore = opts.questionScore ?? 100;
-  const computedTotalScore =
-    baseQuestionScore + subjectiveTotal + textResponseTotal;
+  const computedTotalScore = baseQuestionScore + textResponseTotal;
 
   // #291 Phase A mode-legal timing shape. timed_window keeps the historical
   // defaults byte-identically (60min duration, +24h closeAt). deadline carries
@@ -350,7 +322,6 @@ export async function seedExam(
     examTitle,
     candidateIds: [candidate.profileId],
     candidate,
-    subjectiveQuestionIds,
     textResponseQuestionIds,
   };
 }
