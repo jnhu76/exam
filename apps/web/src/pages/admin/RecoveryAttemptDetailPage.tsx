@@ -18,6 +18,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { DefinitionList } from "@/components/shared/DefinitionList";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FieldError } from "@/components/shared/FieldError";
@@ -752,104 +753,85 @@ export function RecoveryAttemptDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Attempt overview */}
         <PageSection title={t("admin.recoveryAttempt.sections.overview")}>
-          <dl className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <dt className="type-metadata">
-                {t("admin.recoveryAttempt.statusLabel")}
-              </dt>
-              <dd>
-                <StatusBadge status={attempt.status} />
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryAttempt.startedAt")}
-              </dt>
-              <dd className="text-sm">
-                {attempt.startedAt ? formatTime(attempt.startedAt) : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryAttempt.submittedAt")}
-              </dt>
-              <dd className="text-sm">
-                {attempt.submittedAt ? formatTime(attempt.submittedAt) : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryAttempt.gradedAt")}
-              </dt>
-              <dd className="text-sm">
-                {attempt.gradedAt ? formatTime(attempt.gradedAt) : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryAttempt.lastActivityAt")}
-              </dt>
-              <dd className="text-sm">
-                {attempt.lastActivityAt
+          <DefinitionList
+            className="flex flex-col gap-2"
+            items={[
+              {
+                label: t("admin.recoveryAttempt.statusLabel"),
+                value: <StatusBadge status={attempt.status} />,
+                className: "flex items-center gap-2",
+              },
+              {
+                label: t("admin.recoveryAttempt.startedAt"),
+                value: attempt.startedAt ? formatTime(attempt.startedAt) : "—",
+              },
+              {
+                label: t("admin.recoveryAttempt.submittedAt"),
+                value: attempt.submittedAt
+                  ? formatTime(attempt.submittedAt)
+                  : "—",
+              },
+              {
+                label: t("admin.recoveryAttempt.gradedAt"),
+                value: attempt.gradedAt ? formatTime(attempt.gradedAt) : "—",
+              },
+              {
+                label: t("admin.recoveryAttempt.lastActivityAt"),
+                value: attempt.lastActivityAt
                   ? formatTime(attempt.lastActivityAt)
-                  : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryAttempt.effectiveDeadline")}
-              </dt>
-              <dd className="text-sm">
-                {attempt.effectiveDeadlineAt
-                  ? formatTime(attempt.effectiveDeadlineAt)
-                  : "—"}
-                {effectiveDiffers && (
-                  <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
-                    <AppIcon icon={CircleAlert} size="inline" />
-                    {t("admin.recoveryAttempt.effectiveDeadlineDiffers")}
-                  </span>
-                )}
-              </dd>
-            </div>
-          </dl>
+                  : "—",
+              },
+              {
+                label: t("admin.recoveryAttempt.effectiveDeadline"),
+                value: (
+                  <>
+                    {attempt.effectiveDeadlineAt
+                      ? formatTime(attempt.effectiveDeadlineAt)
+                      : "—"}
+                    {effectiveDiffers && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
+                        <AppIcon icon={CircleAlert} size="inline" />
+                        {t("admin.recoveryAttempt.effectiveDeadlineDiffers")}
+                      </span>
+                    )}
+                  </>
+                ),
+              },
+            ]}
+          />
         </PageSection>
 
         {/* Exam + candidate */}
         <div className="flex flex-col gap-4">
           <PageSection title={t("admin.recoveryAttempt.sections.exam")}>
-            <dl className="flex flex-col gap-2">
-              <div>
-                <dt className="type-metadata">
-                  {t("admin.recoveryAttempt.sections.exam")}
-                </dt>
-                <dd className="text-sm font-medium break-words">
-                  <Link
-                    to={routes.admin.recoveryExam(data.examSummary.id)}
-                    className="underline-offset-4 hover:underline"
-                  >
-                    {data.examSummary.title}
-                  </Link>
-                </dd>
-              </div>
-              <div>
-                <dt className="type-metadata">
-                  {t("admin.recoveryQueue.columns.severity")}
-                </dt>
-                <dd>
-                  <StatusBadge status={data.examSummary.status} />
-                </dd>
-              </div>
-              <div>
-                <dt className="type-metadata">
-                  {t("admin.recoveryAttempt.examCloseAt")}
-                </dt>
-                <dd className="text-sm">
-                  {data.examSummary.closeAt === null
-                    ? "—"
-                    : formatTime(data.examSummary.closeAt)}
-                </dd>
-              </div>
-            </dl>
+            <DefinitionList
+              className="flex flex-col gap-2"
+              items={[
+                {
+                  label: t("admin.recoveryAttempt.sections.exam"),
+                  value: (
+                    <span className="font-medium">
+                      <Link
+                        to={routes.admin.recoveryExam(data.examSummary.id)}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {data.examSummary.title}
+                      </Link>
+                    </span>
+                  ),
+                },
+                {
+                  label: t("admin.recoveryQueue.columns.severity"),
+                  value: <StatusBadge status={data.examSummary.status} />,
+                },
+                {
+                  label: t("admin.recoveryAttempt.examCloseAt"),
+                  value: data.examSummary.closeAt
+                    ? formatTime(data.examSummary.closeAt)
+                    : "—",
+                },
+              ]}
+            />
           </PageSection>
           <PageSection title={t("admin.recoveryAttempt.sections.candidate")}>
             <p className="text-sm">{data.candidateSummary.displayName}</p>

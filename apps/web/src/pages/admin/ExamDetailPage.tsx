@@ -24,6 +24,7 @@ import { DataTableShell } from "@/components/shared/DataTableShell";
 import { RowActions } from "@/components/shared/RowActions";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { PageSection } from "@/components/shared/PageSection";
+import { DefinitionList } from "@/components/shared/DefinitionList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -605,39 +606,38 @@ export function ExamDetailPage() {
       </div>
 
       <PageSection title={t("admin.examDetail.config.title")}>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <span className="type-secondary">
-            {t("admin.examDetail.config.timingMode")}
-          </span>
-          <span>{labelFor(policyLabels.timingMode)(exam.timingMode)}</span>
-          <span className="type-secondary">
-            {t("admin.examDetail.config.retakePolicy")}
-          </span>
-          <span>{labelFor(policyLabels.retakePolicy)(exam.retakePolicy)}</span>
-          <span className="type-secondary">
-            {t("admin.examDetail.config.scoreStrategy")}
-          </span>
-          <span>
-            {labelFor(policyLabels.scoreStrategy)(exam.scoreStrategy)}
-          </span>
-          <span className="type-secondary">
-            {t("admin.examDetail.config.maxAttempts")}
-          </span>
-          <span>{exam.maxAttempts}</span>
-          <span className="type-secondary">
-            {t("admin.examDetail.config.startTime")}
-          </span>
-          <span>{formatDateTime(exam.openAt)}</span>
-          <span className="type-secondary">
-            {t("admin.examDetail.config.endTime")}
-          </span>
-          {/* closeAt is null for untimed exams; formatting null would render
-           * an epoch timestamp. "—" matches the RecoveryExamDetailPage
-           * missing-timestamp convention. */}
-          <span>
-            {exam.closeAt === null ? "—" : formatDateTime(exam.closeAt)}
-          </span>
-        </div>
+        <DefinitionList
+          className="grid grid-cols-2 gap-2"
+          items={[
+            {
+              label: t("admin.examDetail.config.timingMode"),
+              value: labelFor(policyLabels.timingMode)(exam.timingMode),
+            },
+            {
+              label: t("admin.examDetail.config.retakePolicy"),
+              value: labelFor(policyLabels.retakePolicy)(exam.retakePolicy),
+            },
+            {
+              label: t("admin.examDetail.config.scoreStrategy"),
+              value: labelFor(policyLabels.scoreStrategy)(exam.scoreStrategy),
+            },
+            {
+              label: t("admin.examDetail.config.maxAttempts"),
+              value: exam.maxAttempts,
+            },
+            {
+              label: t("admin.examDetail.config.startTime"),
+              value: formatDateTime(exam.openAt),
+            },
+            {
+              label: t("admin.examDetail.config.endTime"),
+              // closeAt is null for untimed exams; formatting null would render
+              // an epoch timestamp. "—" matches the RecoveryExamDetailPage
+              // missing-timestamp convention.
+              value: exam.closeAt === null ? "—" : formatDateTime(exam.closeAt),
+            },
+          ]}
+        />
       </PageSection>
 
       <Tabs defaultValue="enrollment">

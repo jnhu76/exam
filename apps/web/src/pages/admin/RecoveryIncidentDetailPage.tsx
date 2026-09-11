@@ -15,6 +15,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { DefinitionList } from "@/components/shared/DefinitionList";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FieldError } from "@/components/shared/FieldError";
@@ -542,107 +543,92 @@ export function RecoveryIncidentDetailPage() {
           title={t("admin.recoveryIncident.sections.overview")}
           className="lg:col-span-2"
         >
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryIncident.header.status")}
-              </dt>
-              <dd>
-                <StatusBadge status={incidentStatusKey(data.incident.status)} />
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryIncident.header.severity")}
-              </dt>
-              <dd className="text-sm">
-                {t(
+          <DefinitionList
+            className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2"
+            items={[
+              {
+                label: t("admin.recoveryIncident.header.status"),
+                value: (
+                  <StatusBadge
+                    status={incidentStatusKey(data.incident.status)}
+                  />
+                ),
+              },
+              {
+                label: t("admin.recoveryIncident.header.severity"),
+                value: t(
                   `admin.recoveryQueue.severity.${data.incident.severity}` as never,
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryIncident.header.type")}
-              </dt>
-              <dd className="text-sm">
-                {t(
+                ),
+              },
+              {
+                label: t("admin.recoveryIncident.header.type"),
+                value: t(
                   `admin.recoveryIncident.type.${data.incident.type}` as never,
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryIncident.header.createdAt")}
-              </dt>
-              <dd className="text-sm">{formatTime(data.incident.createdAt)}</dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryIncident.reportedBy")}
-              </dt>
-              <dd className="text-sm">{data.incident.reportedBy}</dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryIncident.header.version")}
-              </dt>
-              <dd className="text-sm">{data.incident.version}</dd>
-            </div>
-            {data.incident.resolvedBy && (
-              <div>
-                <dt className="type-metadata">
-                  {t("admin.recoveryIncident.resolvedBy")}
-                </dt>
-                <dd className="text-sm">{data.incident.resolvedBy}</dd>
-              </div>
-            )}
-            {data.incident.resolutionSummary && (
-              <div className="sm:col-span-2">
-                <dt className="type-metadata">
-                  {t("admin.recoveryIncident.resolutionSummary")}
-                </dt>
-                <dd className="text-sm">{data.incident.resolutionSummary}</dd>
-              </div>
-            )}
-          </dl>
+                ),
+              },
+              {
+                label: t("admin.recoveryIncident.header.createdAt"),
+                value: formatTime(data.incident.createdAt),
+              },
+              {
+                label: t("admin.recoveryIncident.reportedBy"),
+                value: data.incident.reportedBy,
+              },
+              {
+                label: t("admin.recoveryIncident.header.version"),
+                value: data.incident.version,
+              },
+              ...(data.incident.resolvedBy
+                ? [
+                    {
+                      label: t("admin.recoveryIncident.resolvedBy"),
+                      value: data.incident.resolvedBy,
+                    },
+                  ]
+                : []),
+              ...(data.incident.resolutionSummary
+                ? [
+                    {
+                      label: t("admin.recoveryIncident.resolutionSummary"),
+                      value: data.incident.resolutionSummary,
+                      className: "sm:col-span-2",
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </PageSection>
 
         {/* Exam summary — links to the Recovery Exam detail (cross-navigation). */}
         <PageSection title={t("admin.recoveryIncident.sections.exam")}>
-          <dl className="flex flex-col gap-2">
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryIncident.sections.exam")}
-              </dt>
-              <dd className="text-sm font-medium break-words">
-                <Link
-                  to={routes.admin.recoveryExam(data.examSummary.id)}
-                  className="underline-offset-4 hover:underline"
-                >
-                  {data.examSummary.title}
-                </Link>
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryQueue.columns.severity")}
-              </dt>
-              <dd>
-                <StatusBadge status={data.examSummary.status} />
-              </dd>
-            </div>
-            <div>
-              <dt className="type-metadata">
-                {t("admin.recoveryIncident.examCloseAt")}
-              </dt>
-              <dd className="text-sm">
-                {data.examSummary.closeAt === null
-                  ? "—"
-                  : formatTime(data.examSummary.closeAt)}
-              </dd>
-            </div>
-          </dl>
+          <DefinitionList
+            className="flex flex-col gap-2"
+            items={[
+              {
+                label: t("admin.recoveryIncident.sections.exam"),
+                value: (
+                  <span className="font-medium">
+                    <Link
+                      to={routes.admin.recoveryExam(data.examSummary.id)}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {data.examSummary.title}
+                    </Link>
+                  </span>
+                ),
+              },
+              {
+                label: t("admin.recoveryQueue.columns.severity"),
+                value: <StatusBadge status={data.examSummary.status} />,
+              },
+              {
+                label: t("admin.recoveryIncident.examCloseAt"),
+                value: data.examSummary.closeAt
+                  ? formatTime(data.examSummary.closeAt)
+                  : "—",
+              },
+            ]}
+          />
         </PageSection>
 
         {/* Candidate summaries */}

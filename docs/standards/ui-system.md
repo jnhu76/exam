@@ -141,6 +141,8 @@ Per-component role ownership (from the component-authority record):
 | generic confirmation dialog | `ConfirmDialog` |
 | metric / KPI presentation | `StatsCard` (+ `type-metric`) |
 | content container (arbitrary body) | `PageSection` |
+| description metadata (label → value definition list) | `DefinitionList` |
+| read-only long-text answer well (multiline plain text) | `ReadOnlyLongText` |
 | titled form-field section | `FormSection` (composes `PageSection`; owns the form content grid) |
 | tabular-data container | `DataTableShell` |
 | list / data-table operation toolbar | `DataToolbar` (single toolbar authority; optional `search` slot) |
