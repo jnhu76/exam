@@ -73,6 +73,10 @@ jobs:
             core.setOutput('head_sha', pullRequest.head.sha);
 
       - name: Review PR with OpenCodeReview
+        # Third-party review action is advisory only; its infra (tool install)
+        # flakes independently of the diff, so a failure must never turn a PR
+        # red or gate other jobs. Review comments still land via the action.
+        continue-on-error: true
         uses: alibaba/open-code-review@04284b5dc19e0f52528ca466a767e4a2c100e5f5
         with:
           ocr_version: "1.11.6"
