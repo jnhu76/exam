@@ -1085,6 +1085,97 @@ describe("question contracts", () => {
   });
 });
 
+describe("question score write boundary (#438)", () => {
+  const baseCreate = {
+    courseId: "550e8400-e29b-41d4-a716-446655440000",
+    type: "true_false",
+    content: "Score boundary?",
+    standardAnswer: true,
+  };
+  const baseRow = {
+    type: "true_false",
+    content: "Import score boundary?",
+    standardAnswer: true,
+  };
+
+  it("rejects non-finite scores at create", () => {
+    for (const score of [Infinity, -Infinity, NaN]) {
+      const result = CreateQuestionRequestSchema.safeParse({
+        ...baseCreate,
+        score,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) => issue.path[0] === "score"),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("rejects non-positive scores at create (existing invariant)", () => {
+    for (const score of [0, -1]) {
+      const result = CreateQuestionRequestSchema.safeParse({
+        ...baseCreate,
+        score,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) => issue.path[0] === "score"),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("accepts fractional and arbitrarily large finite scores at create", () => {
+    for (const score of [0.5, 1, 1000000]) {
+      expect(
+        CreateQuestionRequestSchema.safeParse({ ...baseCreate, score }).success,
+      ).toBe(true);
+    }
+  });
+
+  it("rejects non-finite scores at update", () => {
+    for (const score of [Infinity, -Infinity, NaN]) {
+      const result = UpdateQuestionRequestSchema.safeParse({ score });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) => issue.path[0] === "score"),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("accepts fractional scores at update", () => {
+    expect(UpdateQuestionRequestSchema.safeParse({ score: 0.5 }).success).toBe(
+      true,
+    );
+  });
+
+  it("rejects non-finite scores on import rows", () => {
+    for (const score of [Infinity, -Infinity, NaN]) {
+      const result = QuestionImportRowSchema.safeParse({
+        ...baseRow,
+        score,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) => issue.path[0] === "score"),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("accepts fractional scores on import rows", () => {
+    expect(
+      QuestionImportRowSchema.safeParse({ ...baseRow, score: 0.5 }).success,
+    ).toBe(true);
+  });
+});
+
 describe("score contracts", () => {
   it("ScoreListQuerySchema coerces and defaults", () => {
     const result = ScoreListQuerySchema.parse({

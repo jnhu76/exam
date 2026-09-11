@@ -40,6 +40,17 @@ const AttachmentSchema = z.object({
 });
 
 /**
+ * Question score write rule (#438): strictly positive AND finite.
+ * `z.number().positive()` alone accepts Infinity because zod's number
+ * checks are comparison-based, and the JSON wire can deliver it via an
+ * overflowing exponent token (`1e999` parses to Infinity) that the
+ * `double precision` column would persist verbatim — so every supported
+ * write boundary must reject non-finite. No upper bound is imposed here:
+ * an arbitrary maximum is product policy, not this numeric invariant.
+ */
+export const QuestionScoreSchema = z.number().positive().finite();
+
+/**
  * Schema for a question's grading rule, configuring multi-select scoring mode,
  * fill-blank matching mode, and case sensitivity.
  */
@@ -335,7 +346,7 @@ export const CreateQuestionRequestSchema = z
     options: z.array(OptionInputSchema).optional(),
     standardAnswer: StandardAnswerSchema,
     attachments: z.array(AttachmentSchema).default([]),
-    score: z.number().positive(),
+    score: QuestionScoreSchema,
     difficulty: z.number().int().min(1).max(5).default(3),
     tags: QuestionTagsSchema.default([]),
     gradingRule: GradingRuleSchema.default({
@@ -425,7 +436,7 @@ export const UpdateQuestionRequestSchema = z
     options: z.array(OptionInputSchema).optional(),
     standardAnswer: StandardAnswerSchema.optional(),
     attachments: z.array(AttachmentSchema).optional(),
-    score: z.number().positive().optional(),
+    score: QuestionScoreSchema.optional(),
     difficulty: z.number().int().min(1).max(5).optional(),
     tags: QuestionTagsSchema.optional(),
     gradingRule: GradingRuleSchema.optional(),
@@ -449,7 +460,7 @@ export const QuestionImportRowSchema = z.object({
   optionC: z.string().optional(),
   optionD: z.string().optional(),
   standardAnswer: StandardAnswerSchema,
-  score: z.number().positive(),
+  score: QuestionScoreSchema,
   difficulty: z.number().int().min(1).max(5).optional(),
   tags: z.string().optional(),
   gradingRule: GradingRuleSchema.default({
@@ -464,7 +475,9 @@ export type QuestionImportRow = z.infer<typeof QuestionImportRowSchema>;
 
 /**
  * Request schema for batch-importing questions into a course.
- * Accepts 1 to 500 raw rows that will be validated against QuestionImportRowSchema.
+ * Accepts 1 to 500 raw rows that the import route validates per-row against
+ * CreateQuestionRequestSchema (mapping the CSV option columns A-D and
+ * splitting tags), which is also the single score write authority.
  */
 export const QuestionImportRequestSchema = z.object({
   courseId: z.string().uuid(),

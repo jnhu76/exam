@@ -961,6 +961,105 @@ describe("question routes", () => {
     expect(body.details[1].status).toBe("error");
   });
 
+  // ── #438: non-finite question scores rejected at the write boundary ──
+  // The JSON wire cannot carry NaN (the parser throws), but an overflowing
+  // exponent token (`1e999`) parses to Infinity — which a plain
+  // `z.number().positive()` rule accepted and the `double precision` column
+  // stores verbatim. Raw-string payloads below exercise the real parser
+  // behavior (JSON.stringify would collapse Infinity to null first).
+
+  it("POST /api/questions rejects score 1e999 (JSON Infinity)", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      headers: { "content-type": "application/json" },
+      payload: `{"courseId":"${courseId}","type":"true_false","content":"Non-finite score?","standardAnswer":true,"score":1e999}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    const fields = body.error.details.fields as Array<{ field: string }>;
+    expect(fields.some((f) => f.field === "score")).toBe(true);
+  });
+
+  it("POST /api/questions accepts fractional score 0.5", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "Fractional score?",
+        standardAnswer: true,
+        score: 0.5,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().score).toBe(0.5);
+  });
+
+  it("PATCH /api/questions/:id rejects score 1e999 (JSON Infinity)", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "Patch score boundary?",
+        standardAnswer: true,
+        score: 5,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      headers: { "content-type": "application/json" },
+      payload: `{"score":1e999}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    const fields = body.error.details.fields as Array<{ field: string }>;
+    expect(fields.some((f) => f.field === "score")).toBe(true);
+  });
+
+  it("POST /api/questions/import with confirm=true does not persist a score-1e999 row", async () => {
+    const uniqueContent = `Import non-finite score? ${uniquePrefix()}`;
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions/import",
+      headers: { "content-type": "application/json" },
+      payload: `{"courseId":"${courseId}","confirm":true,"rows":[{"type":"true_false","content":"${uniqueContent}","standardAnswer":true,"score":1e999}]}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBe(1);
+    expect(body.valid).toBe(0);
+    expect(body.errors).toBe(1);
+    expect(body.details[0].status).toBe("error");
+
+    // The confirmed write path must not persist the invalid row: the
+    // question is absent from the authoritative read path (server-side
+    // substring search over content).
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}&search=${encodeURIComponent(uniqueContent)}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(listRes.statusCode).toBe(200);
+    const list = listRes.json();
+    expect(list.total).toBe(0);
+    expect(list.items).toHaveLength(0);
+  });
+
   // ── P3-MOD-P2-2: MVP question creation proof — type-specific readback ──
   // Proves each type's canonical fields are PERSISTED and read back through
   // the production GET path (not just echoed in the create response), and
