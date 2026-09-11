@@ -147,6 +147,33 @@ for (const base of Object.keys(MANUAL_TOOLS)) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Internal workspace packages must be private (#428). The internal/@exam/*
+// manifests are repository implementation packages: no registry publish
+// workflow or publishConfig exists anywhere in the repo. `private:true` makes
+// an accidental `pnpm publish` fail closed by package-manager semantics. The
+// check discovers packages/* dynamically (no hardcoded package list) so a new
+// internal package that omits the marker is caught.
+// ---------------------------------------------------------------------------
+for (const entry of await readdir(join(ROOT, "packages"), {
+  withFileTypes: true,
+})) {
+  if (!entry.isDirectory()) continue;
+  const manifestPath = join(ROOT, "packages", entry.name, "package.json");
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  } catch {
+    continue; // not a package manifest (pnpm ignores such directories)
+  }
+  if (manifest.name?.startsWith("@exam/") && manifest.private !== true) {
+    errors.push(
+      `packages/${entry.name}/package.json must declare "private": true — ` +
+        `${manifest.name} is an internal workspace package.`,
+    );
+  }
+}
+
 if (errors.length > 0) {
   console.error("FAIL: Package script contract regression:");
   for (const e of errors) console.error(`  - ${e}`);
