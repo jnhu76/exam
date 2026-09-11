@@ -75,7 +75,7 @@ describe("question routes", () => {
     expect(res.json().type).toBe("true_false");
   });
 
-  it("POST /api/questions creates a subjective (null standardAnswer) single_choice question", async () => {
+  it("POST /api/questions rejects single_choice with standardAnswer: null", async () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/questions",
@@ -93,13 +93,14 @@ describe("question routes", () => {
       },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode).toBe(400);
     const body = res.json();
-    expect(body.type).toBe("single_choice");
-    expect(body.standardAnswer).toBeNull();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    const fields = body.error.details.fields as Array<{ field: string }>;
+    expect(fields.some((f) => f.field === "standardAnswer")).toBe(true);
   });
 
-  it("POST /api/questions creates a subjective (null standardAnswer) fill_blank question", async () => {
+  it("POST /api/questions rejects fill_blank with standardAnswer: null", async () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/questions",
@@ -113,8 +114,11 @@ describe("question routes", () => {
       },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(res.statusCode).toBe(201);
-    expect(res.json().standardAnswer).toBeNull();
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    const fields = body.error.details.fields as Array<{ field: string }>;
+    expect(fields.some((f) => f.field === "standardAnswer")).toBe(true);
   });
 
   it("POST /api/questions still rejects single_choice with a non-option answer", async () => {
@@ -337,6 +341,153 @@ describe("question routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().content).toBe("Updated content.");
+  });
+
+  // ── #437: update validates the MERGED final state, not just the patch ──
+
+  it("PATCH rejects clearing the standardAnswer of an auto-graded question", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "fill_blank",
+        content: "The answer is ____",
+        standardAnswer: "abc",
+        score: 5,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      payload: { standardAnswer: null },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    const fields = body.error.details.fields as Array<{ field: string }>;
+    expect(fields.some((f) => f.field === "standardAnswer")).toBe(true);
+  });
+
+  it("PATCH rejects a type-only transition into auto grading without an answer", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "text_response",
+        content: "The answer is ____",
+        standardAnswer: null,
+        rubric: "Rubric",
+        score: 5,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    // The payload carries only `type`; the merged state is fill_blank + null
+    // answer, which must be rejected even though the patch itself has no
+    // standardAnswer field.
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      payload: { type: "fill_blank" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    const fields = body.error.details.fields as Array<{ field: string }>;
+    expect(fields.some((f) => f.field === "standardAnswer")).toBe(true);
+  });
+
+  it("PATCH accepts a simultaneous transition into auto grading with a valid answer", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "text_response",
+        content: "The answer is ____",
+        standardAnswer: null,
+        rubric: "Rubric",
+        score: 5,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      payload: { type: "fill_blank", standardAnswer: "answer" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().type).toBe("fill_blank");
+    expect(res.json().standardAnswer).toBe("answer");
+  });
+
+  it("PATCH preserves text_response with standardAnswer: null", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "text_response",
+        content: "Explain your reasoning.",
+        standardAnswer: null,
+        rubric: "Rubric",
+        score: 5,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      payload: { standardAnswer: null },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().standardAnswer).toBeNull();
+  });
+
+  it("PATCH rejects an incompatible stored answer across auto types", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "The answer is ____",
+        standardAnswer: true,
+        score: 5,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    // Stored answer `true` is invalid for fill_blank; the final merged state
+    // must be rejected even though the patch carries no answer.
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      payload: { type: "fill_blank" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    const fields = body.error.details.fields as Array<{ field: string }>;
+    expect(fields.some((f) => f.field === "standardAnswer")).toBe(true);
   });
 
   it("DELETE /api/questions/:id deletes a question", async () => {

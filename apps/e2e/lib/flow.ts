@@ -88,9 +88,8 @@ export async function answerTrueFalse(
 
 /**
  * Type free-text into the first fill_blank input on the take page.
- * FillBlankInput renders a text input for both auto-graded (string
- * standardAnswer) and legacy subjective (null standardAnswer) fill_blank
- * questions.
+ * FillBlankInput renders a text input for auto-graded fill_blank questions
+ * (string standardAnswer).
  */
 export async function answerFillBlank(page: Page, text: string): Promise<void> {
   const input = page
