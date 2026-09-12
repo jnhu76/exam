@@ -9,6 +9,7 @@ import i18n from "@/i18n";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { downloadFile } from "@/lib/download";
+import { createContextSafeUuid } from "@/lib/uuid";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -449,6 +450,14 @@ export function AttemptDetailPage() {
   );
   const [flagNotes, setFlagNotes] = useState("");
   const [flagging, setFlagging] = useState(false);
+  // INVARIANT: one logical misconduct command = one operationId (J5-R0 §8.2).
+  // Minted when the dialog opens, retained across same-dialog retries so an
+  // unconfirmed failure replays the SAME identity (a retry is not a new
+  // command), and retired when the dialog closes or the command is confirmed
+  // — the next dialog is a new command with a new identity.
+  const [flagCommandIdentity, setFlagCommandIdentity] = useState<string | null>(
+    null,
+  );
 
   const loadResult = useCallback(async () => {
     if (!id) return;
@@ -518,8 +527,13 @@ export function AttemptDetailPage() {
     setExpandedEventId((prev) => (prev === eventId ? null : eventId));
   }, []);
 
+  const setFlagDialog = useCallback((open: boolean) => {
+    setFlagDialogOpen(open);
+    setFlagCommandIdentity(open ? createContextSafeUuid() : null);
+  }, []);
+
   const handleFlag = useCallback(async () => {
-    if (!liveAttempt) return;
+    if (!liveAttempt || !flagCommandIdentity) return;
     const notes = flagNotes.trim();
     if (!notes) {
       toast.error(t("admin.attemptDetail.flag.notesRequired"));
@@ -529,10 +543,10 @@ export function AttemptDetailPage() {
     try {
       await api.post(
         `/api/admin/attempts/${liveAttempt.attemptId}/misconduct`,
-        { severity: flagSeverity, notes },
+        { operationId: flagCommandIdentity, severity: flagSeverity, notes },
       );
       toast.success(t("admin.attemptDetail.flag.flagged"));
-      setFlagDialogOpen(false);
+      setFlagDialog(false);
       setFlagNotes("");
       setLiveMisconduct({
         flaggedAt: new Date().toISOString(),
@@ -545,7 +559,14 @@ export function AttemptDetailPage() {
     } finally {
       setFlagging(false);
     }
-  }, [liveAttempt, flagSeverity, flagNotes, t]);
+  }, [
+    liveAttempt,
+    flagCommandIdentity,
+    flagSeverity,
+    flagNotes,
+    setFlagDialog,
+    t,
+  ]);
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
@@ -588,7 +609,7 @@ export function AttemptDetailPage() {
             <Button
               variant="outline"
               className="w-fit"
-              onClick={() => setFlagDialogOpen(true)}
+              onClick={() => setFlagDialog(true)}
             >
               {t("admin.attemptDetail.actions.flagMisconduct")}
             </Button>
@@ -604,7 +625,7 @@ export function AttemptDetailPage() {
           onToggleEvent={toggleEvent}
         />
 
-        <Dialog open={flagDialogOpen} onOpenChange={setFlagDialogOpen}>
+        <Dialog open={flagDialogOpen} onOpenChange={setFlagDialog}>
           <DialogContent aria-describedby={undefined} size="sm">
             <DialogHeader>
               <DialogTitle>
@@ -657,7 +678,7 @@ export function AttemptDetailPage() {
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setFlagDialogOpen(false)}
+                onClick={() => setFlagDialog(false)}
                 disabled={flagging}
               >
                 {t("admin.attemptDetail.live.flagDialog.cancel")}

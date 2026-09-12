@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -6,8 +6,9 @@ import { BrandProvider } from "@/components/layout/BrandProvider";
 import { AttemptDetailPage } from "./AttemptDetailPage";
 import { permissionsForRole } from "@exam/authz";
 
-const { apiGet } = vi.hoisted(() => ({
+const { apiGet, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
+  apiPost: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -38,6 +39,7 @@ vi.mock("@/lib/api", () => ({
   },
   api: {
     get: (...args: unknown[]) => apiGet(...args),
+    post: (...args: unknown[]) => apiPost(...args),
   },
   setNavigate: () => {},
 }));
@@ -103,6 +105,7 @@ const mockGradedResult = {
 describe("AttemptDetailPage", () => {
   beforeEach(() => {
     apiGet.mockReset();
+    apiPost.mockReset();
   });
 
   it("displays earned score (sum of question scores) not totalScore", async () => {
@@ -396,5 +399,118 @@ describe("AttemptDetailPage", () => {
     // The objective frozen standardAnswer is rendered for the admin (the server
     // does not strip it for Admin, unlike the candidate projection).
     expect(screen.getAllByText("a").length).toBeGreaterThan(0);
+  });
+
+  // ── #524: misconduct flag must carry a dialog-frozen operationId ────────
+  // The route contract (MisconductMarkWithOperationRequestSchema) requires
+  // operationId; the stale caller posted {severity, notes} and the API always
+  // answered 400 VALIDATION_ERROR. One logical dialog command = one
+  // operationId: minted on dialog open, retained across same-dialog retries,
+  // retired on close/confirm.
+
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  const mockLiveResult = {
+    attemptId: "attempt-1",
+    status: "in_progress",
+    showResultImmediately: false,
+    examTitle: "进行中考试",
+  };
+
+  function mockLiveView() {
+    apiGet.mockImplementation(async (url: string) =>
+      typeof url === "string" && url.includes("/timeline")
+        ? { events: [] }
+        : mockLiveResult,
+    );
+  }
+
+  async function renderLiveView() {
+    mockLiveView();
+    renderPage();
+    await screen.findByText("尝试状态");
+  }
+
+  async function submitFlag(notes = "考生查看手机") {
+    fireEvent.click(screen.getByRole("button", { name: "标记违规" }));
+    fireEvent.change(screen.getByLabelText("违规说明"), {
+      target: { value: notes },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认标记" }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalled());
+  }
+
+  async function waitSubmitSettled() {
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "确认标记" })).toBeEnabled(),
+    );
+  }
+
+  function postedBody(call: number): Record<string, unknown> {
+    return apiPost.mock.calls[call]![1] as Record<string, unknown>;
+  }
+
+  it("#524 T1: flag misconduct POST carries operationId (uuid) with severity + notes", async () => {
+    apiPost.mockResolvedValue({});
+    await renderLiveView();
+    await submitFlag();
+
+    expect(apiPost).toHaveBeenCalledTimes(1);
+    expect(apiPost.mock.calls[0]![0]).toBe(
+      "/api/admin/attempts/attempt-1/misconduct",
+    );
+    const body = postedBody(0);
+    expect(body.operationId).toMatch(UUID_RE);
+    expect(body).toMatchObject({ severity: "warning", notes: "考生查看手机" });
+  });
+
+  it("#524 T2: same-dialog retry after unconfirmed failure reuses the same operationId", async () => {
+    apiPost.mockResolvedValue({});
+    apiPost.mockRejectedValueOnce(new Error("network drop"));
+    await renderLiveView();
+    await submitFlag();
+    await waitSubmitSettled();
+
+    // The failure keeps the dialog open; the retry is the SAME logical
+    // command and must replay the SAME identity.
+    fireEvent.click(screen.getByRole("button", { name: "确认标记" }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+
+    expect(postedBody(0).operationId).toMatch(UUID_RE);
+    expect(postedBody(1).operationId).toBe(postedBody(0).operationId);
+  });
+
+  it("#524 T3: a new dialog after cancel mints a fresh operationId", async () => {
+    apiPost.mockRejectedValue(new Error("network drop"));
+    await renderLiveView();
+    await submitFlag();
+    await waitSubmitSettled();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    fireEvent.click(screen.getByRole("button", { name: "标记违规" }));
+    fireEvent.change(screen.getByLabelText("违规说明"), {
+      target: { value: "第二次标记" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认标记" }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
+
+    expect(postedBody(0).operationId).toMatch(UUID_RE);
+    expect(postedBody(1).operationId).toMatch(UUID_RE);
+    expect(postedBody(1).operationId).not.toBe(postedBody(0).operationId);
+  });
+
+  it("#524 T4: payload semantics unchanged — endpoint, severity, notes", async () => {
+    apiPost.mockResolvedValue({});
+    await renderLiveView();
+    await submitFlag("考试作弊记录");
+
+    expect(apiPost.mock.calls[0]![0]).toBe(
+      "/api/admin/attempts/attempt-1/misconduct",
+    );
+    expect(postedBody(0)).toMatchObject({
+      severity: "warning",
+      notes: "考试作弊记录",
+    });
   });
 });

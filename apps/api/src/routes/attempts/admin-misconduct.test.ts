@@ -374,6 +374,34 @@ describe("attempt routes", () => {
       });
     });
 
+    // #524 pin: the stale pre-operationId caller (AttemptDetailPage) posted
+    // {severity, notes}; the route contract rejects it before any receipt,
+    // projection, or audit side effect.
+    it("rejects a body without operationId with 400 VALIDATION_ERROR and no side effects (#524 stale caller)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Misconduct Stale Caller Exam",
+      );
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/misconduct`,
+        payload: { severity: "warning", notes: "stale caller body" },
+        cookies: { "auth-token": t.adminToken },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe("VALIDATION_ERROR");
+      expect(await listReceipts(attemptId)).toHaveLength(0);
+      expect(await countMisconductAudits(attemptId)).toHaveLength(0);
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(attempt?.misconduct).toBeNull();
+    });
+
     it("replays the same operationId: returns the stored immutable fact, no projection churn, no new audit/receipt", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
