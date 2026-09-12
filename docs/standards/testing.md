@@ -25,7 +25,11 @@
 ## 1. CI Lanes
 
 The CI pipeline (`.github/workflows/ci.yml`) runs on every PR to `master`.
-After `static` passes, `verify` and `e2e` run **in parallel**.
+`static` is the first authority gate. After it passes, `verify-build` produces
+one same-workflow build artifact while `deployment-fresh-install` independently
+proves the canonical Docker source-build path. Web/API/package coverage and
+both E2E shards consume the `verify-build` artifact instead of rebuilding the
+same `dist/**` outputs on separate runners.
 
 ### 1.1 Static Checks
 
@@ -38,24 +42,30 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 | **Allowed resources** | CPU only (format, lint, typecheck) |
 | **Forbidden** | Database access, network calls, file writes outside repo |
 | **Timeout** | 10 minutes |
+| **Cache** | pnpm store plus GitHub-backed `.turbo` cache. Turbo remains the authority for task hashes; the GitHub cache only persists its local CAS between runners/runs. |
 | **Failure attribution** | `format:check` → Prettier issue; `lint` → ESLint issue; `lint:copy` → hardcoded business copy; `lint:arch` → dependency boundary violation; `typecheck` → TypeScript error |
 
-### 1.2 Package Build (workspace packages)
+### 1.2 Build Once + Artifact Fan-out
 
 | Field | Value |
 |-------|-------|
-| **Job** | `verify` (step 0) |
-| **Command** | `pnpm --filter "./packages/*" build` |
-| **Why needed** | `@exam/web coverage` runs vitest directly (bypassing Turbo's task graph), so the `^build` dependency in `turbo.json` does NOT apply. Without this step, `@exam/domain/dist` and `@exam/contracts/dist` don't exist, causing Vite import-analysis failures. |
-| **Scope** | All packages in `packages/` (domain, contracts, auth, db, authz, exam-engine, import-export). NOT apps/ (web, api). |
-| **Cache** | Turbo caches each package's `dist/**` |
+| **Job** | `verify-build` |
+| **Command** | `pnpm build` |
+| **Dependency** | Runs after `static` |
+| **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
+| **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
+| **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}-{run_attempt}` for this workflow run only (1-day retention). |
+| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and both E2E shards download this same-workflow artifact and do not rebuild it. |
+| **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
+| **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment fresh-install does not consume it; that lane continues to build the Docker image from the current checkout. |
 
 ### 1.3 Web Coverage
 
 | Field | Value |
 |-------|-------|
-| **Job** | `verify` (step 1) |
+| **Job** | `web-coverage` |
 | **Command** | `pnpm --filter @exam/web coverage` |
+| **Input build** | Downloads the current workflow's `verify-build` artifact before running coverage. |
 | **Services** | None (pure jsdom) |
 | **Env vars** | `APP_MODE=test`, `NODE_ENV=test` (from vitest config) |
 | **Allowed resources** | CPU (jsdom + V8 coverage instrumentation) |
@@ -67,8 +77,9 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 
 | Field | Value |
 |-------|-------|
-| **Job** | `verify` (step 2) |
+| **Job** | `api-coverage` |
 | **Command** | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage` |
+| **Input build** | Downloads the current workflow's `verify-build` artifact before running coverage. |
 | **Services** | PostgreSQL (via CI service container on `localhost:5432`) |
 | **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test`, `JWT_SECRET=ci-test-secret`, `APP_MODE=ci`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `REDIS_URL=redis://localhost:6379`, `TEST_DB_ISOLATION=worker-database`, `API_TEST_MAX_WORKERS=4` |
 | **Allowed resources** | PostgreSQL (`exam_test`), Redis, CPU |
@@ -79,8 +90,9 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 
 | Field | Value |
 |-------|-------|
-| **Job** | `verify` (step 3) |
+| **Job** | `package-coverage` |
 | **Command** | `pnpm --filter "./packages/*" coverage` |
+| **Input build** | Downloads the current workflow's `verify-build` artifact before running coverage. |
 | **Services** | PostgreSQL (for `@exam/db` tests only) |
 | **Env vars** | Same as API coverage (inherited from job-level `env:`) |
 | **Allowed resources** | PostgreSQL (`exam_test`), CPU |
@@ -88,38 +100,30 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 | **Note** | Each package's coverage is independent. `@exam/auth` tests are pure unit tests (no DB). `@exam/db` tests require PostgreSQL. Other packages (domain, contracts, authz, exam-engine, import-export) are pure unit tests. |
 | **Failure attribution** | Check which package failed in the step output |
 
-### 1.6 Full Build
+### 1.6 Deployment Fresh-install
 
 | Field | Value |
 |-------|-------|
-| **Job** | `verify` (step 4) |
-| **Command** | `pnpm build` |
-| **Services** | None |
-| **Allowed resources** | CPU, filesystem |
-| **Forbidden** | Network calls (unless package build requires it) |
+| **Job** | `deployment-fresh-install` |
+| **Command** | `bash tests/deployment/fresh-install.sh ci` |
+| **Dependency** | Runs after `static`; deliberately independent of `verify-build` |
+| **Build authority** | Every acceptance boot still uses `docker compose ... up --build` against the current checkout. |
+| **Cache** | CI-only BuildKit `type=gha` layer cache is a performance input; it cannot replace source-build authority. |
+| **Forbidden shortcut** | Must not consume the `verify-build` artifact or a registry image in place of the Dockerfile build. |
 
 ### 1.7 E2E (Playwright)
 
 | Field | Value |
 |-------|-------|
 | **Job** | `e2e` (matrix: `shardIndex: [1, 2]`, `shardTotal: [2]`) |
-| **Command** | `pnpm --filter @exam/e2e test:e2e -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}` |
+| **Command** | `pnpm --filter @exam/e2e exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}` |
+| **Input build** | Downloads the current workflow's `verify-build` artifact; the shards do not run `pnpm build` independently. |
+| **Browser cache** | `~/.cache/ms-playwright` is cached by OS + E2E package/lockfile state; system dependencies are still installed every shard. |
 | **Services** | PostgreSQL (`exam_e2e` on `localhost:5432`) |
 | **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=2`, fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
 | **Allowed resources** | PostgreSQL (`exam_e2e`), CPU, Chromium |
 | **Forbidden** | `exam` or `exam_test` databases, a host port that contradicts `DB_HOST_PORT` (default 5432) |
 | **Failure attribution** | Server startup → check `server.log`; test failure → check `test-results/`; shard-specific → check shard index |
-
-### 1.8 E2E Merge
-
-| Field | Value |
-|-------|-------|
-| **Job** | `e2e-merge` |
-| **Command** | `npx playwright merge-reports --reporter html ./all-blob-reports` |
-| **Services** | None |
-| **Env vars** | None |
-| **Input** | Downloaded blob reports from all E2E shards |
-| **Failure attribution** | Invalid zip → corrupt artifact; empty merge → all shards skipped/cancelled |
 
 ---
 
@@ -133,7 +137,7 @@ After `static` passes, `verify` and `e2e` run **in parallel**.
 | CI verify | `postgresql://exam:exam@localhost:5432/exam_test` | Both DATABASE_URL and TEST_DATABASE_URL point to same test DB |
 | CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
 | Docker test | `postgresql://db:5432/exam_test` | Container internal |
-| WSL E2E | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_e2e` (default 5432) | E2E seed + runtime |
+| WSL E2E | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_e2e` (default 5432) | E2E runtime |
 
 **Rules:**
 - `DATABASE_URL` is for **runtime/dev** use only.
@@ -335,7 +339,7 @@ The following patterns are **mandatory** when testing time-dependent behavior:
 These are allowed with caution:
 
 | Pattern | When acceptable |
-|---------|-----------------|
+|---------|-------------|
 | `waitFor(() => expect(el).toBeInTheDocument())` | Waiting for DOM to appear (small timeout, e.g., 1000ms) |
 | `fireEvent.change(el, { target: { value } })` | Non-critical fields in slow tests where `userEvent.type` would exceed timeout |
 | Backoff/retry pure function tests | Testing algorithmic logic without real time |
@@ -450,7 +454,7 @@ durability boundary.
 | **Sharding** | Supported (`E2E_WORKERS`, default 2) | Not supported (single process) |
 | **Blob reports** | Merged locally after run | Not used (list reporter only) |
 | **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs | `docker compose down -v` |
-| **Cleanup ordering** | Strict: stop servers BEFORE `DROP DATABASE` (issue #256-A). DROP is loud (no `\|\| true`); failure surfaces DB name + PG error and escalates exit to sentinel 70 if tests passed | N/A (single compose down) |
+| **Cleanup ordering** | Strict: stop servers BEFORE `DROP DATABASE` (issue #256-A). DROP is loud (no `\|\| true`); failure surfaces DB name + PG error and escalates exit to sentinel 70 if tests passed | N/A |
 | **DB retention** | `E2E_KEEP_WORKER_DB_ON_FAILURE=1` retains `exam_e2e_w*` only on Playwright failure (success always cleans) | N/A |
 | **Use case** | Fast local iteration | CI-like parity, reproducible builds |
 
@@ -462,36 +466,27 @@ durability boundary.
 | **Shard index** | `${{ matrix.shardIndex }}` (1-based) |
 | **Database per shard** | Single shared `exam_e2e` (CI doesn't create per-shard DBs) |
 | **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
-| **fail-fast** | `false` (all shards run even if one fails) |
-| **Blob zip naming** | `report-${{ matrix.shardIndex }}.zip` |
-| **Artifact naming** | `e2e-blob-shard-${{ matrix.shardIndex }}` |
-| **Upload retention** | 1 day |
+| **fail-fast** | `true` (the sibling shard is cancelled after a shard failure) |
+| **Test command** | `pnpm --filter @exam/e2e exec playwright test --shard={index}/{total}` |
+| **Failure diagnostics** | Each failing shard writes a step summary and uploads a 1-day `e2e-failure-diagnostics-{shardIndex}` artifact when files exist. |
 
-### 4.3 Playwright Report Merge Contract
+### 4.3 CI E2E Build/Input Contract
 
-**Preconditions:**
-1. Each shard uploads a blob zip with a unique name: `report-{N}.zip`.
-2. Artifact names are unique per shard: `e2e-blob-shard-{N}`.
-3. `download-artifact` with `merge-multiple: true` flattens all zips into `all-blob-reports/`.
+The GitHub-hosted E2E shards use the build artifact produced by `verify-build`
+for the same workflow run. They do not independently run `pnpm build`.
 
-**Validation steps (before merge):**
-1. `find all-blob-reports -maxdepth 2 -type f` — list all files.
-2. Reject non-`.zip` files (no `.gitkeep`, no HTML report zips, no stray files).
-3. For each `.zip`: `unzip -t "$z"` — verify zip integrity.
-4. Count blob zips; warn if zero (all shards skipped/cancelled).
+The shard still performs its real mutable/runtime work independently:
 
-**Merge command:**
-```bash
-npx playwright merge-reports --reporter html ./all-blob-reports
-```
+1. install workspace dependencies;
+2. download the same-workflow build artifact;
+3. restore/install Chromium;
+4. migrate and seed its PostgreSQL service;
+5. start the API server;
+6. execute its Playwright shard.
 
-**Post-merge:**
-- Merged HTML report uploaded as `playwright-html-report` artifact (14-day retention).
-
-**Forbidden:**
-- Feeding HTML report zips to `merge-reports` (only blob zips are valid input).
-- Artifact name collisions (two shards with the same artifact name → second overwrites first).
-- Sharing data state between shards (each shard must be self-contained).
+The build artifact may contain only deterministic build products (`dist/**`).
+It must never contain database state, test results, coverage output, secrets, or
+runtime-generated files.
 
 ### 4.4 run-wsl.sh Cleanup Contract (issue #256-A)
 
@@ -613,9 +608,9 @@ EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
 | Service | Image | Host port authority | DB |
 |---------|-------|------|----|
 | `db` | `postgres:18.4-bookworm` | `DB_HOST_PORT` (default 5432) | `exam_e2e` |
-| `app` | Built from `Dockerfile` | `EXAM_PORT` (default 3000) | N/A (connects to `db`) |
+| `app` | Built from `Dockerfile` | `EXAM_PORT` (default 3000) | N/A |
 | `redis` | `redis:7-alpine` | `REDIS_HOST_PORT` (default 6379) | N/A |
-| `e2e` | `mcr.microsoft.com/playwright:v1.61.0-noble` | N/A | N/A (connects to `app`) |
+| `e2e` | `mcr.microsoft.com/playwright:v1.61.0-noble` | N/A | N/A |
 
 ### Seed Data
 
@@ -650,19 +645,19 @@ EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
 |-----------|-------|
 | `matrix.shardIndex` | `[1, 2]` |
 | `matrix.shardTotal` | `[2]` |
-| `fail-fast` | `false` |
+| `fail-fast` | `true` |
+| `build input` | same-workflow `verify-build` artifact (`packages/*/dist`, `apps/api/dist`, `apps/web/dist`) |
+| `browser cache` | `~/.cache/ms-playwright`, keyed by OS + E2E package/lockfile state |
 
-### Blob Report Contract
+### Failure Artifact Contract
 
 | Step | Detail |
 |------|--------|
-| **Blob zip name** | `report-{shardIndex}.zip` |
-| **Artifact name** | `e2e-blob-shard-{shardIndex}` |
-| **Upload path** | `apps/e2e/blob-report/*.zip` |
-| **Download path** | `apps/e2e/all-blob-reports/` |
-| **Merge input validation** | Reject non-zip files, verify zip integrity |
-| **Merge command** | `npx playwright merge-reports --reporter html ./all-blob-reports` |
-| **Output artifact** | `playwright-html-report` (14-day retention) |
+| **When** | failure only |
+| **Artifact name** | `e2e-failure-diagnostics-{shardIndex}` |
+| **Contents** | server log/tail, Playwright error contexts, failure screenshots, summary |
+| **Retention** | 1 day |
+| **Upload policy** | best effort (`continue-on-error`), ignore when no files exist |
 
 ---
 
@@ -676,7 +671,7 @@ After any change to test configuration, CI workflow, or vitest config, verify:
 - [ ] `pnpm --filter @exam/web coverage` passes
 - [ ] `pnpm --filter "@exam/api" coverage` passes (with `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`)
 - [ ] `pnpm verify` passes (full pipeline)
-- [ ] E2E blob report merge produces valid HTML report
+- [ ] Both CI E2E shards consume the same-workflow build artifact and execute their real Playwright tests
 - [ ] No `as any` casts in test files
 - [ ] All time-dependent tests use fake timers
 - [ ] No `TEST_DATABASE_URL` fallback to `DATABASE_URL` in test configs
