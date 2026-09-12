@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { RequestContext } from "@exam/domain";
+import type { QuestionSnapshot, RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
 import { getIsolatedTestDb } from "../testDb.js";
+import { createDatabase } from "../database.js";
 import { schema } from "../schema/pg.js";
 import { createAttemptRepo } from "./attemptRepo.js";
 import { createEnrollmentRepo } from "./enrollmentRepo.js";
@@ -170,6 +171,8 @@ async function createDisruptedAttempt(
 describe("attemptRepo custom methods", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
+  let databaseUrl: string | undefined;
+  let schemaName: string | undefined;
   let attemptRepo: ReturnType<typeof createAttemptRepo>;
   let enrollmentRepo: ReturnType<typeof createEnrollmentRepo>;
   let ctx: RequestContext;
@@ -181,6 +184,8 @@ describe("attemptRepo custom methods", () => {
     const result = await getIsolatedTestDb("db-attempt-enrollment");
     db = result.db;
     cleanup = result.cleanup;
+    databaseUrl = result.databaseUrl;
+    schemaName = result.schemaName;
     ids = makeIds();
     attemptRepo = createAttemptRepo(db);
     enrollmentRepo = createEnrollmentRepo(db);
@@ -279,6 +284,121 @@ describe("attemptRepo custom methods", () => {
     );
     expect(found).toBeDefined();
     expect(found!.attemptNo).toBe(1);
+  });
+
+  // #294 T9 — the frozen presentation order is DURABLE authority. A shuffled
+  // snapshot written through the real repo must round-trip EXACTLY (question
+  // array order, normalized order fields, option order, identity fields)
+  // across a brand-new physical connection — repository/app reconstruction —
+  // proving resume/restart after a process restart replays the same order.
+  it("T9: randomized frozen questionSnapshot round-trips exactly across a fresh connection", async () => {
+    // Deterministic shuffle result of a published [q1,q2,q3] set → frozen
+    // [q2,q3,q1] with q2 options [e,d] and q1 options [b,c,a]. Fixture data
+    // (not a second shuffle implementation) — the engine materializer is
+    // proven by the exam-engine unit/integration tests.
+    const frozen: QuestionSnapshot[] = [
+      {
+        originalQuestionId: "q2",
+        type: "multiple_choice",
+        content: "Q2",
+        contentDocument: null,
+        answerMode: null,
+        attachments: [],
+        options: [
+          { id: "e", content: "E" },
+          { id: "d", content: "D" },
+        ],
+        standardAnswer: ["d"],
+        score: 33,
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        order: 0,
+        rubric: null,
+      },
+      {
+        originalQuestionId: "q3",
+        type: "fill_blank",
+        content: "Q3",
+        contentDocument: null,
+        answerMode: null,
+        attachments: [],
+        options: [],
+        standardAnswer: "x",
+        score: 33,
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        order: 1,
+        rubric: null,
+      },
+      {
+        originalQuestionId: "q1",
+        type: "single_choice",
+        content: "Q1",
+        contentDocument: null,
+        answerMode: null,
+        attachments: [],
+        options: [
+          { id: "b", content: "B" },
+          { id: "c", content: "C" },
+          { id: "a", content: "A" },
+        ],
+        standardAnswer: "b",
+        score: 34,
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        order: 2,
+        rubric: null,
+      },
+    ];
+
+    const now = new Date();
+    const attempt = await attemptRepo.create(ctx, {
+      examId: ids.examId,
+      enrollmentId,
+      candidateId: ids.candidateId,
+      attemptNo: 2,
+      status: "in_progress",
+      questionSnapshot: frozen,
+      answers: [],
+      startedAt: now,
+      deadlineAt: new Date(now.getTime() + 3600000),
+      lastActivityAt: now,
+    });
+
+    // Reconstruction: brand-new pool + repo instance reads durable JSONB.
+    const conn = await createDatabase(databaseUrl!, schemaName!);
+    try {
+      const freshRepo = createAttemptRepo(conn.db);
+      const read = await freshRepo.findById(ctx, attempt.id);
+
+      expect(read).not.toBeNull();
+      expect(read!.questionSnapshot.map((q) => q.originalQuestionId)).toEqual([
+        "q2",
+        "q3",
+        "q1",
+      ]);
+      expect(read!.questionSnapshot.map((q) => q.order)).toEqual([0, 1, 2]);
+      expect(read!.questionSnapshot[0]!.options.map((o) => o.id)).toEqual([
+        "e",
+        "d",
+      ]);
+      expect(read!.questionSnapshot[2]!.options.map((o) => o.id)).toEqual([
+        "b",
+        "c",
+        "a",
+      ]);
+      // Identity fields survive the round-trip unchanged.
+      expect(read!.questionSnapshot[2]!.standardAnswer).toBe("b");
+      expect(read!.questionSnapshot[2]!.score).toBe(34);
+    } finally {
+      await conn.sql.end();
+    }
   });
 
   it("findByExamAndCandidate returns attempts for exam+candidate", async () => {

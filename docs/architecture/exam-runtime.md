@@ -216,16 +216,19 @@ const OPEN_STATUSES = new Set(["published", "open"]);
 
 - Exam 处于 `published` 或 `open` 时，被分配/合格的 Candidate 可以开始 attempt。
 - 一个 Exam 可以有多个 Attempt（取决于 retake 策略）。
-- QuestionSnapshot（含 rubric）在 `publishExam` 发布时从 live questions 一次性构建并冻结到 `exam.questionSnapshot`；Attempt 创建时**复制**这份已冻结的 exam 快照（`startOrRestoreAttempt`），不重新读取 live questions，也不产生新版本——同一发布下的所有 attempt 共享同一冻结内容。
+- QuestionSnapshot（含 rubric）在 `publishExam` 发布时从 live questions 一次性构建并冻结到 `exam.questionSnapshot`；Attempt 创建时通过 `materializeAttemptPresentation` 按 `controlFlags` 生成 per-attempt 表示序（question shuffle / option shuffle），最终冻结到 `attempt.questionSnapshot`；Resume / restore / restart 均读取该冻结快照，不重新随机化，也不重新读取 live questions。
 
 ```text
 live questions（可变命题源）
     │ publishExam —— 发布 = 冻结点（buildQuestionSnapshot）
     ▼
 exam.questionSnapshot
-    │ startOrRestoreAttempt —— attempt 开始 = 复制既有冻结快照
+    │ materializeAttemptPresentation —— attempt 开始 = per-attempt 表示解析
     ▼
-attempt.questionSnapshot
+attempt.questionSnapshot   （frozen: array order ≡ order field ≡ 0..n-1）
+    │ resume / restore / restart —— replay frozen snapshot (never re-randomize)
+    ▼
+candidate UI / grading / result  （identity-based: originalQuestionId / option.id）
 ```
 
 - Exam 进入 `closed/canceled/archived` 后不再接受新 attempt；已有 attempt 的生命周期不受 Exam 状态变化影响（attempt 状态机独立，见 §3）。

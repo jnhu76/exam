@@ -23,6 +23,10 @@ import {
   requiresManualGrading,
 } from "@exam/domain";
 import { buildSubmittedAnswersSnapshot } from "./answerProtocol.js";
+import {
+  materializeAttemptPresentation,
+  type RandomSource,
+} from "./attemptPresentation.js";
 import { isCandidateRetakeDeferred } from "./candidateResultVisibility.js";
 import {
   calculateDeadlineAt,
@@ -134,6 +138,14 @@ export interface StartAttemptResult {
 /** Options for customizing the un-assigned candidate error behavior. */
 export interface StartAttemptOptions {
   unassignedErrorFactory?: (message: string) => Error;
+  /**
+   * #294 — injectable RNG seam for the per-attempt presentation materializer.
+   * Production defaults to Math.random inside the materializer; tests inject
+   * a deterministic sequence so shuffle behavior is proven without
+   * probability. The draw happens exactly once per new-attempt creation;
+   * resume/restore never re-randomizes.
+   */
+  rng?: RandomSource;
 }
 
 /** Required interruption/grading dependencies for the restore path. */
@@ -378,7 +390,11 @@ export async function startOrRestoreAttempt(
     candidateId,
     attemptNo,
     status: "in_progress",
-    questionSnapshot: exam.questionSnapshot as QuestionSnapshot[],
+    questionSnapshot: materializeAttemptPresentation(
+      exam.questionSnapshot as QuestionSnapshot[],
+      exam.controlFlags,
+      options.rng,
+    ),
     answers: [],
     startedAt: now,
     deadlineAt,
