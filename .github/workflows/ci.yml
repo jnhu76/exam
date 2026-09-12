@@ -103,7 +103,7 @@ jobs:
       - name: Upload build outputs
         uses: actions/upload-artifact@v4
         with:
-          name: build-outputs-${{ github.sha }}
+          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             packages/*/dist/
             apps/api/dist/
@@ -205,7 +205,7 @@ jobs:
       - name: Download build outputs
         uses: actions/download-artifact@v4
         with:
-          name: build-outputs-${{ github.sha }}
+          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
 
       - name: Coverage
@@ -273,7 +273,7 @@ jobs:
       - name: Download build outputs
         uses: actions/download-artifact@v4
         with:
-          name: build-outputs-${{ github.sha }}
+          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
 
       - name: Coverage
@@ -330,7 +330,7 @@ jobs:
       - name: Download build outputs
         uses: actions/download-artifact@v4
         with:
-          name: build-outputs-${{ github.sha }}
+          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
 
       - name: Coverage
@@ -404,7 +404,7 @@ jobs:
       - name: Download build outputs
         uses: actions/download-artifact@v4
         with:
-          name: build-outputs-${{ github.sha }}
+          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
 
       - name: Cache Playwright Chromium
