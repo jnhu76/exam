@@ -56,7 +56,7 @@ deployment fresh-install acceptance moved to the `release` workflow
 | **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
 | **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
 | **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}` for this workflow run only (1-day retention). The name is run-scoped, not attempt-scoped, so partial reruns of downstream jobs still resolve it; `overwrite: true` lets a full rerun replace the same-run artifact. |
-| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and both E2E shards download this same-workflow artifact and do not rebuild it. |
+| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and the four E2E shards download this same-workflow artifact and do not rebuild it. |
 | **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
 | **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment fresh-install (release acceptance, §1.6) does not consume it; that gate continues to build the Docker image from the current checkout. |
 
@@ -116,7 +116,7 @@ deployment fresh-install acceptance moved to the `release` workflow
 
 | Field | Value |
 |-------|-------|
-| **Job** | `e2e` (matrix: `shardIndex: [1, 2]`, `shardTotal: [2]`) |
+| **Job** | `e2e` (matrix: `shardIndex: [1, 2, 3, 4]`, `shardTotal: [4]`) |
 | **Command** | `pnpm --filter @exam/e2e exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}` |
 | **Input build** | Downloads the current workflow's `verify-build` artifact; the shards do not run `pnpm build` independently. |
 | **Browser cache** | `~/.cache/ms-playwright` is cached by OS + E2E package/lockfile state; system dependencies are still installed every shard. |
@@ -463,11 +463,11 @@ durability boundary.
 
 | Aspect | Rule |
 |--------|------|
-| **Shard count** | 2 (defined in `matrix.shardTotal: [2]`) |
+| **Shard count** | 4 (defined in `matrix.shardTotal: [4]`) |
 | **Shard index** | `${{ matrix.shardIndex }}` (1-based) |
 | **Database per shard** | Single shared `exam_e2e` (CI doesn't create per-shard DBs) |
 | **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
-| **fail-fast** | `true` (the sibling shard is cancelled after a shard failure) |
+| **fail-fast** | `true` (the sibling shards are cancelled after a shard failure) |
 | **Test command** | `pnpm --filter @exam/e2e exec playwright test --shard={index}/{total}` |
 | **Failure diagnostics** | Each failing shard writes a step summary and uploads a 1-day `e2e-failure-diagnostics-{shardIndex}` artifact when files exist. |
 
@@ -644,8 +644,8 @@ EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
 
 | Parameter | Value |
 |-----------|-------|
-| `matrix.shardIndex` | `[1, 2]` |
-| `matrix.shardTotal` | `[2]` |
+| `matrix.shardIndex` | `[1, 2, 3, 4]` |
+| `matrix.shardTotal` | `[4]` |
 | `fail-fast` | `true` |
 | `build input` | same-workflow `verify-build` artifact (`packages/*/dist`, `apps/api/dist`, `apps/web/dist`) |
 | `browser cache` | `~/.cache/ms-playwright`, keyed by OS + E2E package/lockfile state |
