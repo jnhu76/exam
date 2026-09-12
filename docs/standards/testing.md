@@ -55,7 +55,7 @@ deployment fresh-install acceptance moved to the `release` workflow
 | **Dependency** | Runs after `static` |
 | **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
 | **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
-| **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}-{run_attempt}` for this workflow run only (1-day retention). |
+| **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}` for this workflow run only (1-day retention). The name is run-scoped, not attempt-scoped, so partial reruns of downstream jobs still resolve it; `overwrite: true` lets a full rerun replace the same-run artifact. |
 | **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and both E2E shards download this same-workflow artifact and do not rebuild it. |
 | **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
 | **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment fresh-install (release acceptance, §1.6) does not consume it; that gate continues to build the Docker image from the current checkout. |

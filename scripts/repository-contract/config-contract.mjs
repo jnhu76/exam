@@ -332,6 +332,73 @@ console.log("4. Checking CI workflow env contract...");
 }
 console.log("   CI env contract check complete.");
 
+// ── 4b. CI build artifact identity: run-scoped, not attempt-scoped ──────────
+console.log("4b. Checking CI build artifact identity contract...");
+{
+  // The build artifact belongs to the workflow RUN, not the rerun ATTEMPT.
+  // A partial rerun ("Re-run failed jobs") keeps the original attempt's
+  // build artifact; a consumer looking up an attempt-scoped name would fail
+  // with Artifact not found. A full rerun re-uploads the same run-scoped
+  // name, which requires upload overwrite (artifact names are immutable
+  // within a run). Cross-run provenance is preserved because artifact
+  // lookup is scoped to the current github.run_id.
+  const ciPath = join(ROOT, ".github/workflows/ci.yml");
+  const ciContent = readFileSync(ciPath, "utf-8");
+
+  const RUN_SCOPED = "build-outputs-${{ github.run_id }}";
+  const ATTEMPT_SCOPED =
+    "build-outputs-${{ github.run_id }}-${{ github.run_attempt }}";
+
+  if (ciContent.includes(ATTEMPT_SCOPED)) {
+    fail(
+      "ci.yml build artifact name must be run-scoped — an attempt-scoped " +
+        `name is not downloadable by partial-rerun consumers: ${ATTEMPT_SCOPED}`,
+    );
+  }
+
+  // Every producer/consumer reference must use the exact run-scoped name;
+  // a mismatch would silently change whose build a consumer tests against.
+  const artifactNames = [
+    ...ciContent.matchAll(/^\s*name:\s*(build-outputs.*?)\s*$/gm),
+  ].map((match) => match[1]);
+  if (artifactNames.length < 2) {
+    fail(
+      "ci.yml must declare the build-outputs artifact producer and at " +
+        "least one consumer",
+    );
+  }
+  for (const name of artifactNames) {
+    if (name !== RUN_SCOPED) {
+      fail(
+        `ci.yml build-outputs artifact name must be exactly "${RUN_SCOPED}" ` +
+          `(found "${name}") — producer/consumer identity must match`,
+      );
+    }
+  }
+
+  // Without overwrite, the full-rerun upload fails on the immutable
+  // same-run artifact name.
+  const uploadStart = ciContent.indexOf("name: Upload build outputs");
+  if (uploadStart === -1) {
+    fail("ci.yml must contain the 'Upload build outputs' step");
+  } else {
+    const uploadBlock = ciContent.slice(
+      uploadStart,
+      ciContent.indexOf("- name:", uploadStart),
+    );
+    if (!uploadBlock.includes("actions/upload-artifact@")) {
+      fail("'Upload build outputs' step must use actions/upload-artifact");
+    }
+    if (!uploadBlock.includes("overwrite: true")) {
+      fail(
+        "'Upload build outputs' must set overwrite: true so a full rerun " +
+          "can replace the same-run run-scoped artifact",
+      );
+    }
+  }
+}
+console.log("   CI artifact identity check complete.");
+
 // ── 5. Local/WSL profile: launch_api binds PUBLIC_WEB_ORIGIN per port ───────
 console.log("5. Checking WSL runner public web origin contract...");
 {

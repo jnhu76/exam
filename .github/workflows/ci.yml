@@ -103,13 +103,19 @@ jobs:
       - name: Upload build outputs
         uses: actions/upload-artifact@v7
         with:
-          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
+          # INVARIANT: the build artifact belongs to the workflow RUN, not the
+          # rerun ATTEMPT — a partial rerun (Re-run failed jobs) downloads by
+          # the same run-scoped name, while overwrite lets a full rerun replace
+          # the same-run artifact instead of failing on the immutable name.
+          # Cross-run isolation is provided by github.run_id itself.
+          name: build-outputs-${{ github.run_id }}
           path: |
             packages/*/dist/
             apps/api/dist/
             apps/web/dist/
           retention-days: 1
           if-no-files-found: error
+          overwrite: true
 
   web-coverage:
     name: Web coverage
@@ -139,7 +145,7 @@ jobs:
       - name: Download build outputs
         uses: actions/download-artifact@v8
         with:
-          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
+          name: build-outputs-${{ github.run_id }}
           path: .
 
       - name: Coverage
@@ -207,7 +213,7 @@ jobs:
       - name: Download build outputs
         uses: actions/download-artifact@v8
         with:
-          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
+          name: build-outputs-${{ github.run_id }}
           path: .
 
       - name: Coverage
@@ -264,7 +270,7 @@ jobs:
       - name: Download build outputs
         uses: actions/download-artifact@v8
         with:
-          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
+          name: build-outputs-${{ github.run_id }}
           path: .
 
       - name: Coverage
@@ -338,7 +344,7 @@ jobs:
       - name: Download build outputs
         uses: actions/download-artifact@v8
         with:
-          name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
+          name: build-outputs-${{ github.run_id }}
           path: .
 
       - name: Cache Playwright Chromium
