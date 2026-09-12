@@ -1,9 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
-import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { api, ApiError } from "@/lib/api";
-import type { RecoveryAggregateResponse as RecoveryIncidentAggregateResponse } from "@exam/contracts";
+import { api } from "@/lib/api";
+import type { ProctorIncidentDetail } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
 import { recoveryErrorMessageKey } from "@/lib/recoveryErrors";
 import { routes } from "@/lib/routes";
@@ -26,43 +25,41 @@ import {
 import { ArrowLeft, CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
 
 /**
- * A point-in-time aggregate read (contract §6.3): the page renders exactly the
- * server snapshot — a snapshot older than this threshold is flagged as stale.
- * The stale flag is driven by the shared projection hook's wall-clock tick, so
- * it self-updates as time advances (no manual polling).
+ * Point-in-time read — the page renders exactly the server snapshot; the
+ * stale flag self-updates via the projection hook's wall-clock tick.
  */
 const SNAPSHOT_STALE_MS = 2 * 60_000;
-const NAMESPACE = "admin.recoveryIncident";
+const NAMESPACE = "admin.proctorRecoveryIncident";
 
 /**
- * J5-I1C1 — one config-driven incident command dialog (investigate /
- * add_note / change_severity / resolve / dismiss).
+ * Proctor Recovery incident detail (J6, EXAM-303).
  *
- * Every command mints ONE operationId per dialog session (reused on retry —
- * J5-R0 §8.2) and sends the incident's `version` as `expectedVersion` (all
- * commands except add_note, whose wire schema has no version field). A 409
- * `INCIDENT_VERSION_CONFLICT` surfaces the dedicated "reload and retry"
- * message; every confirmed outcome reloads the authoritative aggregate.
+ * Narrow Proctor projection over `GET /api/admin/incidents/:incidentId/detail`
+ * (assignment_scoped): incident row + event history (notes are events) + link
+ * metadata + summaries already within Proctor read authority. Per the EXAM-303
+ * freeze (F3, human-gate corrective) the wire carries NO time-adjustment
+ * ledger, NO auditReferences, and NO Admin attempt-command execution details —
+ * the page cannot render what the server never sends.
+ *
+ * The operations area renders ONLY the server-computed `allowedActions`
+ * (status candidates ∩ caller capabilities): for a Proctor this is the
+ * investigate family on non-terminal incidents — resolve/dismiss (Admin
+ * terminal judgment) is structurally absent, and link_attempt appears only on
+ * non-anchored incidents.
  */
-/**
- * Recovery Incident Detail (J5-I1B2, contract §6.3) — read-only Admin
- * aggregate. Only wire-confirmed fields render (Task 7 field mapping); the
- * action area is NOT rendered in the read-only phase — `allowedActions` is a
- * computed result, never a disabled-button state (contract §6.4 note).
- */
-export function RecoveryIncidentDetailPage() {
+export function ProctorRecoveryIncidentDetailPage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
   const { incidentId } = useParams<{ incidentId: string }>();
 
   const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
-    useRecoveryProjection<RecoveryIncidentAggregateResponse>({
+    useRecoveryProjection<ProctorIncidentDetail>({
       load: ({ signal }) =>
-        api.get<RecoveryIncidentAggregateResponse>(
-          `/api/admin/recovery/incidents/${incidentId}`,
+        api.get<ProctorIncidentDetail>(
+          `/api/admin/incidents/${incidentId}/detail`,
           { signal },
         ),
-      getSnapshotAt: (d) => d.snapshotAt,
+      getSnapshotAt: () => null,
       staleAfterMs: SNAPSHOT_STALE_MS,
       deps: [incidentId],
     });
@@ -80,21 +77,16 @@ export function RecoveryIncidentDetailPage() {
     return (
       <EmptyState
         icon={<AppIcon icon={ShieldAlert} size="state" />}
-        title={t("admin.recoveryIncident.notFound")}
-        description={t("admin.recoveryIncident.notFoundDescription")}
+        title={t("admin.proctorRecoveryIncident.notFound")}
+        description={t("admin.proctorRecoveryIncident.notFoundDescription")}
       />
     );
   }
 
-  const snapshotStale = isStale;
-  const attemptStatusById = new Map(
-    data.attemptSummaries.map((a) => [a.id, a.status]),
-  );
-
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
       <PageHeader
-        title={t("admin.recoveryIncident.title")}
+        title={t("admin.proctorRecoveryIncident.title")}
         description={data.incident.description}
         actions={
           <div className="flex gap-2">
@@ -106,47 +98,36 @@ export function RecoveryIncidentDetailPage() {
             >
               <AppIcon icon={RefreshCw} size="inline" className="mr-1" />
               {isRefreshing
-                ? t("admin.recoveryIncident.refreshing")
-                : t("admin.recoveryIncident.refresh")}
+                ? t("admin.proctorRecoveryIncident.refreshing")
+                : t("admin.proctorRecoveryIncident.refresh")}
             </Button>
             <Button variant="outline" size="sm" asChild>
-              <Link to={routes.admin.recovery}>
+              <Link to={routes.admin.proctorRecovery}>
                 <AppIcon icon={ArrowLeft} size="inline" className="mr-1" />
-                {t("admin.recoveryIncident.back")}
+                {t("admin.proctorRecoveryIncident.back")}
               </Link>
             </Button>
           </div>
         }
       />
 
-      {/* Background-refresh failure: old data stays on screen + inline warning
-          (a full-screen ErrorState is shown only when there is no data). */}
+      {/* Background-refresh failure: old data stays on screen + inline
+          warning; full ErrorState only when there is no data at all. */}
       {error && (
         <InlineErrorBanner>
           {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
         </InlineErrorBanner>
       )}
 
-      {/* Snapshot indicator — the aggregate is one consistent read; the stale
-          flag self-updates via the projection hook's wall-clock tick. */}
-      <div className="flex items-center gap-2 type-metadata">
-        {snapshotStale && (
-          <AppIcon icon={CircleAlert} size="inline" className="text-warning" />
-        )}
-        {t("admin.recoveryIncident.snapshotAt", {
-          time: formatTime(data.snapshotAt),
-        })}
-        {snapshotStale && (
-          <span className="text-warning">
-            {t("admin.recoveryIncident.snapshotStale")}
-          </span>
-        )}
-      </div>
+      {isStale && (
+        <div className="flex items-center gap-2 type-metadata text-warning">
+          <AppIcon icon={CircleAlert} size="inline" />
+          {t("admin.proctorRecoveryIncident.snapshotStale")}
+        </div>
+      )}
 
-      {/* Operations (J5-I1C1) — server-computed eligibility (allowedActions),
-          never a client-side derivation from status. Empty allowedActions
-          keeps the page read-only (§6.2/§6.3 note: a computed result, not a
-          disabled-button state). */}
+      {/* Operations — server-computed eligibility, never a client-side
+          derivation from status. */}
       {data.allowedActions.length > 0 && (
         <PageSection
           title={t("admin.recoveryOps.operationsTitle")}
@@ -272,52 +253,45 @@ export function RecoveryIncidentDetailPage() {
                 refresh={refresh}
               />
             )}
-            {data.allowedActions.includes("resolve") && (
+            {data.allowedActions.includes("link_attempt") && (
               <IncidentCommand
                 incidentId={data.incident.id}
                 incidentVersion={data.incident.version}
-                endpoint="/resolve"
-                titleKey="admin.recoveryOps.actions.resolve"
-                confirmLabelKey="admin.recoveryOps.actions.resolve"
-                doneToastKey="admin.recoveryOps.actions.resolveDone"
-                description={t("admin.recoveryOps.resolveDescription", {
+                endpoint="/attempts"
+                titleKey="admin.recoveryOps.actions.linkAttempt"
+                confirmLabelKey="admin.recoveryOps.actions.linkAttempt"
+                doneToastKey="admin.recoveryOps.actions.linkAttemptDone"
+                description={t("admin.recoveryOps.linkAttemptDescription", {
                   id: data.incident.id,
                 })}
-                destructive
                 fields={[
                   {
                     kind: "text",
-                    key: "resolutionSummary",
-                    labelKey: "admin.recoveryOps.resolutionSummaryLabel",
+                    key: "attemptId",
+                    labelKey: "admin.proctorRecoveryIncident.attemptIdLabel",
                     required: true,
                     requiredErrorKey:
-                      "admin.recoveryOps.resolutionSummaryRequired",
-                    maxLength: 1000,
+                      "admin.proctorRecoveryIncident.attemptIdRequired",
                   },
-                ]}
-                refresh={refresh}
-              />
-            )}
-            {data.allowedActions.includes("dismiss") && (
-              <IncidentCommand
-                incidentId={data.incident.id}
-                incidentVersion={data.incident.version}
-                endpoint="/dismiss"
-                titleKey="admin.recoveryOps.actions.dismiss"
-                confirmLabelKey="admin.recoveryOps.actions.dismiss"
-                doneToastKey="admin.recoveryOps.actions.dismissDone"
-                description={t("admin.recoveryOps.dismissDescription", {
-                  id: data.incident.id,
-                })}
-                destructive
-                fields={[
                   {
-                    kind: "text",
-                    key: "reasonText",
-                    labelKey: "admin.recoveryOps.reasonTextLabel",
+                    kind: "select",
+                    key: "relationshipType",
+                    labelKey: "admin.proctorRecoveryIncident.relationshipLabel",
                     required: true,
-                    requiredErrorKey: "admin.recoveryOps.reasonRequired",
-                    maxLength: 1000,
+                    requiredErrorKey:
+                      "admin.proctorRecoveryIncident.relationshipRequired",
+                    options: [
+                      {
+                        value: "affected",
+                        labelKey:
+                          "admin.recoveryIncident.relationshipType.affected",
+                      },
+                      {
+                        value: "referenced",
+                        labelKey:
+                          "admin.recoveryIncident.relationshipType.referenced",
+                      },
+                    ],
                   },
                 ]}
                 refresh={refresh}
@@ -330,7 +304,7 @@ export function RecoveryIncidentDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Incident overview */}
         <PageSection
-          title={t("admin.recoveryIncident.sections.overview")}
+          title={t("admin.proctorRecoveryIncident.sections.overview")}
           className="lg:col-span-2"
         >
           <DefinitionList
@@ -361,21 +335,9 @@ export function RecoveryIncidentDetailPage() {
                 value: formatTime(data.incident.createdAt),
               },
               {
-                label: t("admin.recoveryIncident.reportedBy"),
-                value: data.incident.reportedBy,
-              },
-              {
                 label: t("admin.recoveryIncident.header.version"),
                 value: data.incident.version,
               },
-              ...(data.incident.resolvedBy
-                ? [
-                    {
-                      label: t("admin.recoveryIncident.resolvedBy"),
-                      value: data.incident.resolvedBy,
-                    },
-                  ]
-                : []),
               ...(data.incident.resolutionSummary
                 ? [
                     {
@@ -389,99 +351,46 @@ export function RecoveryIncidentDetailPage() {
           />
         </PageSection>
 
-        {/* Exam summary — links to the Recovery Exam detail (cross-navigation). */}
-        <PageSection title={t("admin.recoveryIncident.sections.exam")}>
+        {/* Exam + anchor attempt — summaries already within Proctor read
+            authority (the assigned-exam list row / monitoring row). */}
+        <PageSection title={t("admin.proctorRecoveryIncident.sections.exam")}>
           <DefinitionList
             className="flex flex-col gap-2"
             items={[
               {
-                label: t("admin.recoveryIncident.sections.exam"),
+                label: t("admin.proctorRecoveryIncident.sections.exam"),
                 value: (
-                  <span className="font-medium">
-                    <Link
-                      to={routes.admin.recoveryExam(data.examSummary.id)}
-                      className="underline-offset-4 hover:underline"
-                    >
-                      {data.examSummary.title}
-                    </Link>
-                  </span>
+                  <span className="font-medium">{data.examSummary.title}</span>
                 ),
               },
               {
-                label: t("admin.recoveryQueue.columns.severity"),
-                value: <StatusBadge status={data.examSummary.status} />,
-              },
-              {
-                label: t("admin.recoveryIncident.examCloseAt"),
-                value: data.examSummary.closeAt
-                  ? formatTime(data.examSummary.closeAt)
-                  : "—",
+                label: t("admin.proctorRecovery.columns.attempt"),
+                value: data.primaryAttempt ? (
+                  <span className="flex items-center gap-2">
+                    <Link
+                      to={routes.admin.attemptDetail(data.primaryAttempt.id)}
+                      className="text-sm underline-offset-4 hover:underline"
+                    >
+                      {data.primaryAttempt.id}
+                    </Link>
+                    <StatusBadge status={data.primaryAttempt.status} />
+                  </span>
+                ) : (
+                  t("admin.recoveryQueue.noAttempt")
+                ),
               },
             ]}
           />
         </PageSection>
 
-        {/* Candidate summaries */}
-        <PageSection title={t("admin.recoveryIncident.sections.candidates")}>
-          {data.candidateSummaries.length === 0 ? (
-            <p className="type-secondary">
-              {t("admin.recoveryIncident.noCandidates")}
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {data.candidateSummaries.map((c) => (
-                <li key={c.id} className="text-sm">
-                  {c.displayName}
-                </li>
-              ))}
-            </ul>
-          )}
-        </PageSection>
-
-        {/* Attempt summaries */}
+        {/* Events — chronological (server-ordered) */}
         <PageSection
-          title={t("admin.recoveryIncident.sections.attempts")}
+          title={t("admin.proctorRecoveryIncident.sections.events")}
           className="lg:col-span-2"
         >
-          {data.attemptSummaries.length === 0 ? (
-            <p className="type-secondary">
-              {t("admin.recoveryIncident.noAttempts")}
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y">
-              {data.attemptSummaries.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2"
-                >
-                  <Link
-                    to={routes.admin.recoveryAttempt(a.id)}
-                    className="text-sm font-medium underline-offset-4 hover:underline"
-                  >
-                    {a.id}
-                  </Link>
-                  <StatusBadge status={a.status} />
-                  <span className="type-metadata">
-                    {t("admin.recoveryIncident.effectiveDeadline")}:{" "}
-                    {a.effectiveDeadlineAt === null
-                      ? "—"
-                      : formatTime(a.effectiveDeadlineAt)}
-                  </span>
-                  <span className="type-metadata">
-                    {t("admin.recoveryIncident.score")}:{" "}
-                    {a.score == null ? "—" : a.score}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </PageSection>
-
-        {/* Events — chronological (server-ordered) */}
-        <PageSection title={t("admin.recoveryIncident.sections.events")}>
           {data.events.length === 0 ? (
             <p className="type-secondary">
-              {t("admin.recoveryIncident.noEvents")}
+              {t("admin.proctorRecoveryIncident.noEvents")}
             </p>
           ) : (
             <ol className="flex flex-col gap-3">
@@ -496,7 +405,6 @@ export function RecoveryIncidentDetailPage() {
                     <span className="type-metadata">
                       {formatTime(e.createdAt)}
                     </span>
-                    <span className="type-metadata">{e.actorId ?? "—"}</span>
                   </span>
                   <PayloadSummary payload={e.payload} />
                 </li>
@@ -506,10 +414,10 @@ export function RecoveryIncidentDetailPage() {
         </PageSection>
 
         {/* Notes */}
-        <PageSection title={t("admin.recoveryIncident.sections.notes")}>
+        <PageSection title={t("admin.proctorRecoveryIncident.sections.notes")}>
           {data.notes.length === 0 ? (
             <p className="type-secondary">
-              {t("admin.recoveryIncident.noNotes")}
+              {t("admin.proctorRecoveryIncident.noNotes")}
             </p>
           ) : (
             <ul className="flex flex-col gap-3">
@@ -517,7 +425,7 @@ export function RecoveryIncidentDetailPage() {
                 <li key={n.operationId} className="flex flex-col gap-0.5">
                   <span className="text-sm">{n.body}</span>
                   <span className="type-metadata">
-                    {n.actorId ?? "—"} · {formatTime(n.createdAt)}
+                    {formatTime(n.createdAt)}
                   </span>
                 </li>
               ))}
@@ -525,55 +433,22 @@ export function RecoveryIncidentDetailPage() {
           )}
         </PageSection>
 
-        {/* Action links */}
-        <PageSection title={t("admin.recoveryIncident.sections.actions")}>
-          {data.actions.length === 0 ? (
-            <p className="type-secondary">
-              {t("admin.recoveryIncident.noActions")}
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y">
-              {data.actions.map((a) => (
-                <li key={a.id} className="flex flex-col gap-0.5 py-2">
-                  <span className="flex flex-wrap items-center gap-x-2 text-sm">
-                    <span className="font-medium">
-                      {t(
-                        `admin.recoveryIncident.actionType.${a.actionType}` as never,
-                      )}
-                    </span>
-                    <Link
-                      to={routes.admin.recoveryAttempt(a.attemptId)}
-                      className="text-xs underline-offset-4 hover:underline"
-                    >
-                      {a.attemptId}
-                    </Link>
-                  </span>
-                  <span className="type-metadata">
-                    {t("admin.recoveryIncident.actor")}: {a.actorId ?? "—"} ·{" "}
-                    {t("admin.recoveryIncident.operationId")}: {a.operationId} ·{" "}
-                    {formatTime(a.linkedAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </PageSection>
-
-        {/* Attempt memberships */}
+        {/* Attempt memberships — link metadata; the attempt id links to the
+            assignment-scoped attempt detail the Proctor already may read. */}
         <PageSection title={t("admin.recoveryIncident.sections.memberships")}>
-          {data.attemptMemberships.length === 0 ? (
+          {data.attemptLinks.length === 0 ? (
             <p className="type-secondary">
               {t("admin.recoveryIncident.noMemberships")}
             </p>
           ) : (
             <ul className="flex flex-col divide-y">
-              {data.attemptMemberships.map((m) => (
+              {data.attemptLinks.map((m) => (
                 <li
                   key={m.id}
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
                 >
                   <Link
-                    to={routes.admin.recoveryAttempt(m.attemptId)}
+                    to={routes.admin.attemptDetail(m.attemptId)}
                     className="text-sm underline-offset-4 hover:underline"
                   >
                     {m.attemptId}
@@ -583,17 +458,46 @@ export function RecoveryIncidentDetailPage() {
                       `admin.recoveryIncident.relationshipType.${m.relationshipType}` as never,
                     )}
                   </span>
-                  {attemptStatusById.get(m.attemptId) && (
-                    <StatusBadge status={attemptStatusById.get(m.attemptId)!} />
-                  )}
+                  <span className="type-metadata">
+                    {formatTime(m.linkedAt)}
+                  </span>
                 </li>
               ))}
             </ul>
           )}
         </PageSection>
 
-        {/* Interruption evidence links — stubs; full episodes live on the
-            attempt operations page (Task 7 mapping DECISION-1). */}
+        {/* Linked operator actions — incident-domain link metadata only
+            (type / linked id / time). The underlying execution details are
+            Admin recovery surface and are deliberately not present on this
+            wire (freeze F3). */}
+        <PageSection title={t("admin.recoveryIncident.sections.actions")}>
+          {data.actionLinks.length === 0 ? (
+            <p className="type-secondary">
+              {t("admin.recoveryIncident.noActions")}
+            </p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {data.actionLinks.map((a) => (
+                <li key={a.id} className="flex flex-col gap-0.5 py-2">
+                  <span className="flex flex-wrap items-center gap-x-2 text-sm">
+                    <span className="font-medium">
+                      {t(
+                        `admin.recoveryIncident.actionType.${a.actionType}` as never,
+                      )}
+                    </span>
+                    <span className="type-metadata">
+                      {formatTime(a.linkedAt)}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </PageSection>
+
+        {/* Interruption evidence links — episode ids only; the full episode
+            ledger is Admin recovery surface (freeze F3). */}
         <PageSection title={t("admin.recoveryIncident.sections.interruptions")}>
           {data.interruptionLinks.length === 0 ? (
             <p className="type-secondary">
@@ -607,81 +511,8 @@ export function RecoveryIncidentDetailPage() {
                     {l.interruptionId}
                   </span>
                   <span className="type-metadata">
-                    {t("admin.recoveryIncident.sections.attempts")}:{" "}
-                    <Link
-                      to={routes.admin.recoveryAttempt(l.attemptId)}
-                      className="underline-offset-4 hover:underline"
-                    >
-                      {l.attemptId}
-                    </Link>{" "}
-                    · {formatTime(l.linkedAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </PageSection>
-
-        {/* Time adjustment summaries — incident-scoped (contract §6.1/§6.3). */}
-        <PageSection title={t("admin.recoveryIncident.sections.adjustments")}>
-          {data.timeAdjustmentSummaries.length === 0 ? (
-            <p className="type-secondary">
-              {t("admin.recoveryIncident.noAdjustments")}
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y">
-              {data.timeAdjustmentSummaries.map((adj) => (
-                <li key={adj.id} className="flex flex-col gap-1 py-2">
-                  <span className="flex flex-wrap items-center gap-x-2 text-sm">
-                    <span className="font-medium">
-                      {t(
-                        `admin.recoveryIncident.policy.${adj.policy}` as never,
-                      )}
-                    </span>
-                    <span className="type-metadata">
-                      {t(
-                        `admin.recoveryIncident.source.${adj.source}` as never,
-                      )}
-                    </span>
-                    <span className="text-xs">+{adj.addedSeconds}s</span>
-                  </span>
-                  <span className="type-metadata">
-                    {t("admin.recoveryIncident.beforeDeadline")}:{" "}
-                    {formatTime(adj.beforeDeadline)}
-                    {" · "}
-                    {t("admin.recoveryIncident.afterDeadline")}:{" "}
-                    {formatTime(adj.afterDeadline)}
-                  </span>
-                  <span className="type-metadata">
-                    {t("admin.recoveryIncident.actor")}: {adj.actorId ?? "—"} ·{" "}
-                    {adj.reasonText ?? adj.reasonCode ?? "—"} ·{" "}
-                    {formatTime(adj.createdAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </PageSection>
-
-        {/* Audit references */}
-        <PageSection title={t("admin.recoveryIncident.sections.audit")}>
-          {data.auditReferences.length === 0 ? (
-            <p className="type-secondary">
-              {t("admin.recoveryIncident.noAudit")}
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y">
-              {data.auditReferences.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
-                >
-                  <span className="text-sm font-medium">{r.action}</span>
-                  <span className="type-metadata">
-                    {r.actorName ?? r.actorId ?? "—"}
-                  </span>
-                  <span className="type-metadata">
-                    {formatTime(r.createdAt)}
+                    {t("admin.proctorRecoveryIncident.attemptIdLabel")}:{" "}
+                    {l.attemptId} · {formatTime(l.linkedAt)}
                   </span>
                 </li>
               ))}

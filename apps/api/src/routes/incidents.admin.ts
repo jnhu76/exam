@@ -1497,86 +1497,50 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const params = IncidentIdParamsSchema.parse(request.params);
       const ctx = ensureTargetOrg(getRequestContext(request));
-      const repo = createIncidentRepo(fastify.db);
 
-      const incident = await repo.findById(ctx, params.incidentId);
-      if (!incident) throw new NotFoundError("Incident not found");
-
-      const exam = await createExamRepo(fastify.db).findById(
-        ctx,
-        incident.examId,
-      );
-      // The scoped resolver already validated the incident→exam→org chain;
-      // a missing exam row here can only be a data fault — fail closed.
-      if (!exam) throw new NotFoundError("Exam not found");
-
-      const [events, actionLinks, attemptLinks, interruptionLinks] =
-        await Promise.all([
-          repo.listEventsByIncident(ctx, incident.id),
-          repo.listActionsByIncident(ctx, incident.id),
-          repo.listAttemptsByIncident(ctx, incident.id),
-          repo.listInterruptionLinksByIncident(ctx, incident.id),
-        ]);
-
-      const primaryAttempt = incident.attemptId
-        ? ((
-            await createAttemptRepo(fastify.db).findByIds(ctx, [
-              incident.attemptId,
-            ])
-          )[0] ?? null)
-        : null;
-
-      // Notes derived from note_added events (event payload body), in stable
-      // event_sequence order — the same derivation the Admin aggregate uses.
-      const notes = events
-        .filter((event) => event.eventType === "note_added")
-        .map((event) => ({
-          operationId: event.operationId,
-          actorId: event.actorId,
-          body:
-            (event.payload as { body?: string } | null)?.body?.toString() ?? "",
-          createdAt: event.createdAt.toISOString(),
-        }));
+      const detail = await createRecoveryRepo(
+        fastify.db,
+      ).getProctorIncidentDetail(ctx, params.incidentId);
+      if (!detail) throw new NotFoundError("Incident not found");
 
       const allowedActions = deriveAllowedActionsForCaller({
-        statusActionCandidates: deriveStatusActionCandidates(incident.status),
+        statusActionCandidates: deriveStatusActionCandidates(
+          detail.incident.status,
+        ),
         capabilities: ctx.capabilities,
-        incidentAttemptId: incident.attemptId,
+        incidentAttemptId: detail.incident.attemptId,
       });
 
       return reply.send(
         ProctorIncidentDetailSchema.parse({
-          incident: toIncidentResponse(incident),
-          examSummary: { id: exam.id, title: exam.title, status: exam.status },
-          primaryAttempt: primaryAttempt
-            ? {
-                id: primaryAttempt.id,
-                candidateId: primaryAttempt.candidateId,
-                status: primaryAttempt.status,
-              }
-            : null,
-          events: events.map((event) => ({
-            ...event,
-            createdAt: event.createdAt.toISOString(),
+          incident: toIncidentResponse(detail.incident),
+          examSummary: detail.examSummary,
+          primaryAttempt: detail.primaryAttempt,
+          events: detail.events.map((e) => ({
+            ...e,
+            createdAt: e.createdAt.toISOString(),
           })),
-          notes,
-          actionLinks: actionLinks.map((link) => ({
-            id: link.id,
-            actionType: link.actionType,
-            actionId: link.actionId,
-            linkedAt: link.linkedAt.toISOString(),
+          notes: detail.notes.map((n) => ({
+            ...n,
+            createdAt: n.createdAt.toISOString(),
           })),
-          attemptLinks: attemptLinks.map((link) => ({
-            id: link.id,
-            attemptId: link.attemptId,
-            relationshipType: link.relationshipType,
-            linkedAt: link.linkedAt.toISOString(),
+          actionLinks: detail.actionLinks.map((l) => ({
+            id: l.id,
+            actionType: l.actionType,
+            actionId: l.actionId,
+            linkedAt: l.linkedAt.toISOString(),
           })),
-          interruptionLinks: interruptionLinks.map((link) => ({
-            id: link.id,
-            attemptId: link.attemptId,
-            interruptionId: link.interruptionId,
-            linkedAt: link.linkedAt.toISOString(),
+          attemptLinks: detail.attemptLinks.map((l) => ({
+            id: l.id,
+            attemptId: l.attemptId,
+            relationshipType: l.relationshipType,
+            linkedAt: l.linkedAt.toISOString(),
+          })),
+          interruptionLinks: detail.interruptionLinks.map((l) => ({
+            id: l.id,
+            attemptId: l.attemptId,
+            interruptionId: l.interruptionId,
+            linkedAt: l.linkedAt.toISOString(),
           })),
           allowedActions,
         }),

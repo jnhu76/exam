@@ -172,6 +172,21 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     label: "proctor-workspace",
   },
 
+  // Proctor Recovery Center (J6, #303) — Proctor-facing incident work
+  // surface, gated on the backend assignment-scoped incident read
+  // capability. Per-incident scoping is enforced server-side (404 for
+  // unassigned exams); this gate is only the shell boundary.
+  {
+    pattern: "proctor/recovery",
+    capability: Permission.IncidentView,
+    label: "proctor-recovery-worklist",
+  },
+  {
+    pattern: "proctor/recovery/incidents/:incidentId",
+    capability: Permission.IncidentView,
+    label: "proctor-recovery-incident-detail",
+  },
+
   // Results
   {
     pattern: "results",

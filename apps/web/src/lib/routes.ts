@@ -30,6 +30,9 @@ export const routes = {
     examProctor: (id: string) => `/admin/exams/${id}/proctor`,
     examProctorMonitor: (id: string) => `/admin/exams/${id}/proctor/monitor`,
     proctorWorkspace: "/admin/proctor",
+    proctorRecovery: "/admin/proctor/recovery",
+    proctorRecoveryIncident: (id: string) =>
+      `/admin/proctor/recovery/incidents/${id}`,
     results: "/admin/results",
     gradingQueue: "/admin/grading-queue",
     gradingDetail: (id: string) => `/admin/grading-queue/${id}`,

@@ -273,6 +273,56 @@ export interface IncidentAggregate {
   snapshotAt: Date;
 }
 
+// ── Proctor Incident Detail types (#303, narrow read projection) ──
+
+/**
+ * Narrow incident detail for the Proctor Recovery Center — a strict subset of
+ * {@link IncidentAggregate}. F3 corrective (human-gate 2026-09-12) freezes
+ * this projection to only incident-domain truth an assigned Proctor already
+ * holds read authority over. Fields deliberately omitted:
+ *   - timeAdjustmentSummaries (Admin time-adjustment ledger)
+ *   - auditReferences (Admin audit trail)
+ *   - candidateSummaries (Admin candidate identity resolution)
+ *   - attemptSummaries (Admin linked-attempt status aggregation)
+ */
+export interface ProctorIncidentDetailResult {
+  incident: ExamIncidentRow;
+  examSummary: { id: string; title: string; status: string };
+  primaryAttempt: {
+    id: string;
+    candidateId: string | null;
+    status: string;
+  } | null;
+  events: IncidentAggregateEventSummary[];
+  notes: IncidentAggregateNoteSummary[];
+  actionLinks: Array<{
+    id: string;
+    actionType: string;
+    actionId: string;
+    attemptId: string;
+    actorId: string | null;
+    operationId: string;
+    linkedAt: Date;
+  }>;
+  attemptLinks: Array<{
+    id: string;
+    attemptId: string;
+    relationshipType: string;
+    linkedAt: Date;
+    linkedBy: string;
+    operationId: string;
+  }>;
+  interruptionLinks: Array<{
+    id: string;
+    attemptId: string;
+    interruptionId: string;
+    linkedAt: Date;
+    linkedBy: string;
+    operationId: string;
+  }>;
+  snapshotAt: Date;
+}
+
 // ── Attempt Operations Context types (J5-I1A3, contract §6.4) ──
 
 export interface AttemptOperationsInterruptionEpisode {
@@ -1168,6 +1218,188 @@ export function createRecoveryRepo(db: Database) {
     );
   }
 
+  // ── Proctor Incident Detail (#303, narrow read projection) ──
+
+  /**
+   * Narrow incident detail for the Proctor Recovery Center.
+   *
+   * Returns the incident row + append-only event history + link metadata +
+   * exam summary + anchor attempt — the subset already within Proctor read
+   * authority. Deliberately OMITS the Admin recovery-only fields the full
+   * aggregate carries:
+   *   - timeAdjustmentSummaries (Admin time-adjustment ledger)
+   *   - auditReferences (Admin audit trail)
+   *   - candidateSummaries (Admin candidate identity resolution)
+   *   - attemptSummaries (Admin linked-attempt status aggregation)
+   *   - activeProctors (Admin proctor assignment visibility)
+   *
+   * F3 corrective (human-gate 2026-09-12): these fields are Admin-only
+   * read authority; projecting them here would violate the authority freeze.
+   *
+   * Snapshot consistency: the whole read (incident + dimensions) runs inside
+   * one read-only REPEATABLE READ transaction, matching getIncidentAggregate.
+   * The `snapshotAt` is the actual PostgreSQL
+   * `transaction_timestamp()` — not a request-side clock reading.
+   *
+   * Returns null if the incident does not exist in the caller's org (404 at
+   * route). Broken parent chain (exam not resolvable) fails closed with
+   * AuthzUnavailableError (503), matching the Admin aggregate contract.
+   */
+  async function getProctorIncidentDetail(
+    ctx: TenantContext | RequestContext,
+    incidentId: string,
+  ): Promise<ProctorIncidentDetailResult | null> {
+    const orgId = resolveOrganizationId(ctx);
+
+    return db.transaction(
+      async (tx) => {
+        const incidentRepo = createIncidentRepo(tx);
+
+        const incident = await incidentRepo.findById(ctx, incidentId);
+        if (!incident) return null;
+
+        // All dimension reads bound to `tx` → same REPEATABLE READ snapshot.
+        const events = await incidentRepo.listEventsByIncident(ctx, incidentId);
+        const actionLinks = await incidentRepo.listActionsByIncident(
+          ctx,
+          incidentId,
+        );
+        const attemptLinks = await incidentRepo.listAttemptsByIncident(
+          ctx,
+          incidentId,
+        );
+        const interruptionLinks =
+          await incidentRepo.listInterruptionLinksByIncident(ctx, incidentId);
+
+        // Exam summary — narrow projection (id/title/status only, no closeAt
+        // needed for the Proctor wire shape).
+        const examRows = await tx
+          .select({
+            id: exams.id,
+            title: exams.title,
+            status: exams.status,
+          })
+          .from(exams)
+          .where(
+            and(eq(exams.organizationId, orgId), eq(exams.id, incident.examId)),
+          )
+          .limit(1);
+        const examRow = examRows[0];
+        if (!examRow) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_PROCTOR_DETAIL_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
+          );
+        }
+
+        // Primary attempt — narrow projection (id/candidateId/status only).
+        const primaryAttempt = incident.attemptId
+          ? ((
+              await tx
+                .select({
+                  id: examAttempts.id,
+                  candidateId: examAttempts.candidateId,
+                  status: examAttempts.status,
+                })
+                .from(examAttempts)
+                .where(
+                  and(
+                    eq(examAttempts.organizationId, orgId),
+                    eq(examAttempts.id, incident.attemptId),
+                  ),
+                )
+                .limit(1)
+            )[0] ?? null)
+          : null;
+
+        // Notes derived from note_added events (event payload body), in stable
+        // event_sequence order — the same derivation the Admin aggregate uses.
+        const notes = events
+          .filter((e) => e.eventType === "note_added")
+          .map((e) => ({
+            operationId: e.operationId,
+            actorId: e.actorId,
+            body:
+              (e.payload as { body?: string } | null)?.body?.toString() ?? "",
+            createdAt: e.createdAt,
+          }));
+
+        // Transaction snapshot timestamp — queried INSIDE the RR transaction
+        // so it is the actual PostgreSQL snapshot time, not a request-side
+        // clock reading. // adr-006-allow: DB snapshot identity stamp (see
+        // ADR-006 allowlist entry).
+        const snapshotRows = (await tx.execute(
+          sql`SELECT transaction_timestamp() AS ts`,
+        )) as unknown as Array<{ ts: string }>;
+        const rawSnapshotTs = snapshotRows[0]?.ts;
+        const snapshotAt = rawSnapshotTs ? new Date(rawSnapshotTs) : null;
+        if (!snapshotAt || Number.isNaN(snapshotAt.getTime())) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_PROCTOR_DETAIL_SNAPSHOT_INVALID: incident ${incident.id}`,
+          );
+        }
+
+        return {
+          incident,
+          examSummary: {
+            id: examRow.id,
+            title: examRow.title,
+            status: examRow.status,
+          },
+          primaryAttempt: primaryAttempt
+            ? {
+                id: primaryAttempt.id,
+                candidateId: primaryAttempt.candidateId,
+                status: primaryAttempt.status,
+              }
+            : null,
+          events: events.map((e) => ({
+            id: e.id,
+            eventSequence: e.eventSequence,
+            eventType: e.eventType,
+            commandType: e.commandType,
+            operationId: e.operationId,
+            actorId: e.actorId,
+            beforeVersion: e.beforeVersion,
+            afterVersion: e.afterVersion,
+            payload: e.payload,
+            createdAt: e.createdAt,
+          })),
+          notes,
+          actionLinks: actionLinks.map((a) => ({
+            id: a.id,
+            actionType: a.actionType,
+            actionId: a.actionId,
+            attemptId: a.attemptId,
+            actorId: a.actorId,
+            operationId: a.operationId,
+            linkedAt: a.linkedAt,
+          })),
+          attemptLinks: attemptLinks.map((m) => ({
+            id: m.id,
+            attemptId: m.attemptId,
+            relationshipType: m.relationshipType,
+            linkedAt: m.linkedAt,
+            linkedBy: m.linkedBy,
+            operationId: m.operationId,
+          })),
+          interruptionLinks: interruptionLinks.map((l) => ({
+            id: l.id,
+            attemptId: l.attemptId,
+            interruptionId: l.interruptionId,
+            linkedAt: l.linkedAt,
+            linkedBy: l.linkedBy,
+            operationId: l.operationId,
+          })),
+          snapshotAt,
+        };
+      },
+      {
+        isolationLevel: "repeatable read",
+        accessMode: "read only",
+      },
+    );
+  }
+
   /**
    * getAttemptOperationsContext — the full per-Attempt operations ledger
    * (J5-I1A3, contract §6.4).
@@ -2032,6 +2264,7 @@ export function createRecoveryRepo(db: Database) {
   return {
     listIncidentQueue,
     getIncidentAggregate,
+    getProctorIncidentDetail,
     getAttemptOperationsContext,
     getExamRecoveryContext,
   };
