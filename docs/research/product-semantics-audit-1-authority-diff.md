@@ -1,7 +1,7 @@
 # EXAM-BOUNDED-PRODUCT-SEMANTICS-AUDIT-1 — Phase 2: Authority Comparison
 
 - BASE = CODE_REALITY_FREEZE_SHA = `0b893262`
-- Phase-1 输入：`docs/research/product-semantics-audit-1-code-reality.md`（已冻结；本报告不得反向修改其对代码事实的描述）
+- Phase-1 输入：`docs/research/product-semantics-audit-1-code-reality.md`（已冻结；本报告不得反向修改其对代码事实的描述。corrective-1 例外：仅移除 Phase-1 中的文档裁决注记以恢复冻结纯度，代码事实未变。）
 - Phase-2 阅读顺序遵循 §15：contracts（timed-sync-semantics、exam-policy-authority）→ SPEC §2.5-2.7/§2.2/§3 → architecture（exam-runtime §3.1.1）→ issue（#294 body、#516 tracker）。
 - 判定维度：CODE REALITY（Phase-1）vs NORMATIVE INTENT（下表各 authority），不使用"code wins/docs wins"。
 
@@ -23,7 +23,7 @@
 | 答案版本协议 | SC-10/C20 | — | SPEC | exam-runtime | ADR-008 | — | **ALIGNED** |
 | 评分公式/精度 | SC-11（无舍入，浮点和） | — | — | — | — | — | **UNDERSPECIFIED**（小数累加精度无测试无约定） |
 | 手工评分 hold/无 regrade | SC-12/C12 | — | — | — | ADR-008 | — | **ALIGNED** |
-| 结果可见性/发布 | SC-13/C8；mode 权威=`resultPublicationMode` | exam-policy-authority:225 三模式 | SPEC §2.6 **仅有 legacy `showResultImmediately` 行**，三模式与手动发布动作缺失 | — | — | — | **DOC_STALE**（SPEC 产品契约缺实际发布模型） |
+| 结果可见性/发布 | SC-13/C8；mode 权威=`resultPublicationMode` | exam-policy-authority:225 三模式 | SPEC 含 `publishResults` 动作（:496），但缺当前三模式发布模型与可见性真值表 | — | — | — | **DOC_STALE**（发布模型/真值表缺失） |
 | shuffle 两旗标 | L-1/L-2：stored+candidate-visible+零读者 | contracts 定义；exam-policy-authority:114 **LATENT (stored, not enforced) 已裁决** | SPEC §2.6 列为管控项（开/闭卷预设）+ :1045 Phase2 能力 | — | — | #294 body：“latent policy fields” | **LATENT_POLICY**（#294 持有；SPEC 行未标 runtime 缺失，有冻结风险） |
 | detectTabSwitch | L-3/SC-23：旗标仅门控横幅；检测→持久化→监考 warningLevel 管线存在且**不受旗标门控**；无 incident/处置流 | — | SPEC:315/1046 “Phase 1 minimal behavior；处置 Phase 2” | exam-policy-authority:115 **LATENT（client hint, listener unconditional）已裁决** | — | — | **LATENT_POLICY**（文档化；残留=旗标/行为解耦的呈现决策） |
 | disableCopyPaste | L-4：无禁用代码，仅横幅 | exam-policy-authority:116 **binding**：“client warning banner only — LATENT (client hint)” | SPEC:316/1047 “前端禁用右键/选择/复制” | — | — | — | **DOC_STALE**（SPEC 行为表述 vs 更具体的 binding authority 已收敛为 banner-only；初判 CODE_DRIFT 经 adversarial review 撤销） |
@@ -61,7 +61,7 @@
 9. （代码注释，非 docs）timer.ts:84 称 “operator start command (B2) persists T0”——B2 不存在于代码（timed-sync 契约文档本身准确）。
 
 ### UNDERSPECIFIED（代码择一行为、无权威声明该行为是有意的）
-1. **晚加入/重考在批次时刻表已流过时立即获准**（H-1/H-2，合并计数）：exam-runtime §3.1.1 文档化了机制（批不满照放、entitlement 不变），但“历史空转产能使插队零等待”这一用户可见推论无任何权威声明为产品意图；且可被策略性利用（等批次流过后入队）。
+1. **晚加入/重考在批次时刻表已流过时立即获准**（H-1/H-2，合并计数）：exam-runtime §3.1.1 文档化了机制（批不满照放、entitlement 不变），但“历史 release capacity 已流逝使晚加入零额外等待”这一用户可见推论无任何权威声明为产品意图；且可被策略性利用（等批次流过后入队）。
 2. **published≡open 考生等价**（SC-14）。
 3. **评分浮点累加无精度约定**（SC-11 + U-2）。
 4. **等待估计公式的精度/语义**（A-2；与 H-1/H-2 分立保留）。
@@ -83,7 +83,7 @@ shuffleQuestions、shuffleOptions、restrictIp、requireLockdown、timed_sync（
 
 | # | P | 发现 | 依据 | 后果类型 |
 |---|---|---|---|---|
-| 1 | P1 | 晚加入/重考在已流过的批次时刻表下立即获准（插队零等待），可策略性利用 | H-1/H-2/A-11 | 可观察 + 弱权威 + 冻结风险最高 |
+| 1 | P1 | 晚加入/重考在其序位的历史批次边界已流逝时立即获准（复用已流逝的历史 release capacity，零额外等待），可策略性利用 | H-1/H-2/A-11 | 可观察 + 弱权威 + 冻结风险最高 |
 | 2 | P1 | SPEC §2.6 缺失成绩发布三模式模型与可见性真值表（发布动作已记载，模型缺失） | DOC_STALE-1 | 产品契约缺口，多端可见 |
 | 3 | P1 | 控制旗标族“旗标≠行为”解耦：切屏检测无条件采集不受门控、复制粘贴/shuffle 无行为、监考已见 warning 级——作者侧无法通过旗标表达真实管控强度，仅横幅变化 | L-3/L-4/SC-23 + epa:114-116 | 用户可见 + 权威歧义（残留为文案/呈现决策与处置流缺位，后者 SPEC 标 Phase 2） |
 | 4 | P2 | shuffle 旗标 latent 但 SPEC 列为管控项且考生可见 → #294 必须收编或降格，否则双载体 | L-1/L-2 | 冻结风险 |
@@ -104,7 +104,7 @@ shuffleQuestions、shuffleOptions、restrictIp、requireLockdown、timed_sync（
 | 19 | P3 | estimatedWaitSeconds 仅整 batch 粒度、route 层无数值断言 | A-2/U-1 | 展示精度 |
 | 20 | P3 | 多选 Set 去重（API 层可观察） | A-5 | 边缘语义 |
 
-（adversarial review 处置：原 #20 admission id 平序降为实现细节移出 Top 20；原 #1/#2 旗标发现合并重写为 #3；“位次改善”移出 accidental（exam-runtime:277 已文档化）。）
+（adversarial review 处置：原 #20 admission id 平序降为实现细节移出 Top 20；原 #1/#2 旗标发现合并重写为 #3；“位次改善”因 exam-runtime:277 已文档化而改判 ALIGNED——Phase-1 §5 的 A-1 行保留为 raw 观测（corrective-1 恢复冻结纯度），分类计数以本报告为准。）
 
 ---
 
@@ -128,7 +128,7 @@ shuffleQuestions、shuffleOptions、restrictIp、requireLockdown、timed_sync（
 4. 心跳容忍度：维持部署配置（文档化默认 60s）还是下沉为考试策略字段。
 5. 向导 60% 及格线默认：保留客户端启发式 or 服务端默认值权威化。
 6. published≡open：文档化等价 or 强制 open-only 门控。
-7. （随 #294）shuffle 载体=既有 controlFlags（SPEC 预设表已暗示）+ seed 持久化位置/确定性范围。
+7. （随 #294）shuffle 载体=既有 controlFlags（SPEC 预设表已暗示）；seed 采纳与否为可选实现选择（快照冻结最终序已满足确定性要求），若采用则需定持久化位置与确定性范围。
 
 ---
 
@@ -158,7 +158,9 @@ P3=8
 BLOCKS_#294=no
 ```
 
-Correctness defect：**未发现**。Phase-1 全部 C1-C20 不变量均有可执行证据；发现的缺口全部为 latent/文档/权威归属类，不构成 current-product reproducible correctness defect，故未触发 §0 的 defect-issue 分支。
+注：类别**非互斥**——同一语义可同时计入多类（如 `questionSelectionMode:"random"` 既在 LATENT_POLICY 又在 DEAD_SEMANTIC）；计数按发现条目归档，不做跨类去重。
+
+Correctness defect：**未发现**，未触发 §0 的 defect-issue 分支。多数高价值不变量（C1-C16、C19、C20）有可执行证据；C17（published≡open）为结构推断、无显式测试；C18 的“无舍入”算术形态由代码证实，而精度边界行为未测试（U-2）。发现的缺口全部为 latent/文档/权威归属类，不构成 current-product reproducible correctness defect。
 
 TOP_10_PRODUCT_SEMANTIC_RISKS = 上表 #1-#10。
 
@@ -168,10 +170,10 @@ TOP_10_PRODUCT_SEMANTIC_RISKS = 上表 #1-#10。
 建议：CONTINUE_TO_#294
 ```
 
-理由：#294 的机制面（身份体系、冻结快照、per-attempt seam、order 字段、id-based grading）全部 READY；其策略面（模式集合、seed 范围）恰是 #294 issue 自身声明的决策空间，SPEC §2.6 与 exam-policy-authority:114 已暗示载体为既有 controlFlags。未发现 BLOCKS_#294 级语义缺口或 correctness defect。
+理由：#294 的机制面（身份体系、冻结快照、per-attempt seam、order 字段、id-based grading）全部 READY——开考拷贝点重排一次、快照冻结最终序即满足确定性顺序要求；其策略面（载体旗标、组合、冻结点）恰是 #294 issue 自身声明的决策空间，SPEC §2.6 与 exam-policy-authority:114 已暗示载体为既有 controlFlags；seed 为可选实现选择而非前提。未发现 BLOCKS_#294 级语义缺口或 correctness defect。
 
 附带建议（不改变顺序、不 tick roadmap）：
-- #294 施工前把 Open decision #7（载体+seed）在其 Issue 内落定，即可视为 BLOCKED_BY_SEMANTIC_GAP 清零。
+- #294 施工前在 Issue 内确认载体（既有 shuffle 旗标）与冻结点（开考拷贝、快照冻结最终序）；seed 采纳与否为该 Issue 内的可选实现选择。
 - Open decisions #1/#2（admission 公平性/补救）建议作为独立产品决策记录，不阻塞 #294/#303/#304。
 - #516 tracker 的 “[ ] #292 completed and closed” 复选框与 issue 现实（CLOSED）不一致——按 §27 不自动改，仅记录。
 
@@ -182,5 +184,6 @@ TOP_10_PRODUCT_SEMANTIC_RISKS = 上表 #1-#10。
 - Nonblocking 全部吸收：disableCopyPaste 方向改判 DOC_STALE；“位次改善”改判已文档化；H-1/H-2 与等待估计去重计数；id 平序移出 Top 20；DOC_STALE-1 收窄（SPEC:496 已记载 publishResults）；SPEC:1046-1047 过期行补录。
 - 审计新增（评审未提出）：epa:118 queue 行 #292 后过期（§12-6）。
 - 核心结论在评审前后一致：P0=0、无 correctness defect、BLOCKS_#294=no、CONTINUE_TO_#294。
+- corrective-1（人工 review REQUEST_CHANGES 后吸收）：① Phase-1 恢复冻结纯度——SPEC/exam-policy-authority/ADR/exam-runtime 裁决与“已文档化”注记全部移入本报告（L-3/L-4/A-1/A-10/SC-23/§12-6,7，代码事实未变）；② #294 seed 过度声明撤销（ROADMAP_ENTRY_BLOCKED=NO，seed → OPTIONAL_IMPLEMENTATION_CHOICE）；③ §1 matrix 发布行与 DOC_STALE-1 表述统一（publishResults 已记载，缺三模式模型+真值表）；④ 证据强度表述收窄（C17 结构推断、C18 精度未测）；⑤ “插队”措辞精度化（复用已流逝历史 release capacity，非超越前方序位）；⑥ 分类注明 non-exclusive。
 
 （审计完成。按 §28 STOP：未改任何代码/测试/规范文档/Issue/roadmap；docs/research/ 下两份报告为本次审计唯一产物。）

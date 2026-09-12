@@ -11,7 +11,7 @@
 
 产品实际承诺的语义核心（状态机、冻结快照、身份化评分、服务端时钟、可见性门、幂等命令、持久准入）有强代码所有权和强可执行证据。但全仓普查发现四类系统性问题：
 
-1. **Latent policy 群**：`controlFlags` 中 6/10 个旗标（`shuffleQuestions`、`shuffleOptions`、`detectTabSwitch`、`disableCopyPaste`、`restrictIp`、`requireLockdown`）对运行时行为零门控，但可 authored、被存储、随 API 裸暴露给考生端。其中切屏检测/复制粘贴为“旗标仅门控横幅、检测行为存在但无条件采集”（L-3/L-4，exam-policy-authority.md:115-116 已裁决为 LATENT client hint）；shuffle/restrictIp/requireLockdown 为纯零读者。（初版“UI 承诺不存在的检测”的表述经 adversarial review 证伪并已修订——检测管线见 SC-23。）
+1. **Latent policy 群**：`controlFlags` 中 6/10 个旗标（`shuffleQuestions`、`shuffleOptions`、`detectTabSwitch`、`disableCopyPaste`、`restrictIp`、`requireLockdown`）无服务端运行时强制读者，但可 authored、被存储、随 API 裸暴露给考生端。其中 shuffle/restrictIp/requireLockdown 为纯零读者；切屏检测/复制粘贴为“旗标仅门控考生侧横幅、检测/遥测行为存在且不受旗标门控”（L-3/L-4，管线见 SC-23）。（初版“UI 承诺不存在的检测”的表述经 adversarial review 证伪并已修订。）
 2. **timed_sync 半成品**：运行时机制完整（T0 门、共享 deadline、`sync_started_at` 列），但 authoring 枚举排除它、策略校验器拒绝它，且宣称持久化 T0 的“operator start command (B2)”在 apps/api 中**不存在**（timer.ts:84 注释与代码矛盾——正是“只信代码”原则的实例）。
 3. **Admission 的双计数呈现**：调度序数（全量行）与 UI 位置（活跃行）是两个事实；位置随他人开考“改善”是实现结构产物。历史 batch 产能不足时，晚加入者/重考生可立即获准——无 owner 声明这是否是产品意图。
 4. **第二权威群**：API route 层重复实现终态集合、“考试已结束”谓词、过期比较；web 层重复枚举词表。当前全部对齐，但无共享 seam 防漂移。
@@ -82,7 +82,7 @@ Audit
 
 ---
 
-## 3. Semantic cards（material 22 张）
+## 3. Semantic cards（material 23 张）
 
 格式压缩为：`SURFACE / QUESTION / AUTHORITY(file:line) / MECHANISM / PERSISTENCE / FREEZE_POINT / OBSERVABILITY / FAILURE / EVIDENCE / STATUS / CONFIDENCE`。
 
@@ -136,7 +136,7 @@ Audit
 
 ### SC-10 答案版本协议
 - 守卫序 + 幂等键 `${questionId}:${clientSeq}`；同键同 payload→replay 不写；同键异 payload→CONFLICTING_PAYLOAD；baseVersion < current→STALE_VERSION；接受→version+1（answerProtocol.ts:171-231）。save 使用**上下文有效 deadline**而非 attempt.deadlineAt（:495-510）。
-- EVIDENCE: saveAnswer.test 1-6 + route 层 stale/replay/concurrent（submitFreezeBarrier, ADR-008）。STATUS: ACTIVE / HIGH。
+- EVIDENCE: saveAnswer.test 1-6 + route 层 stale/replay/concurrent 测试（submitFreezeBarrier）。STATUS: ACTIVE / HIGH。
 
 ### SC-11 评分公式与精度
 - single/true_false: 严格等值; multiple: 去重排序后比较, partial_half 半分, all_correct_full 全对才得分（gradingEngine.ts:41-65）; fill_blank: `|` 备选、trim、caseSensitive ?? false、keyword=includes; text_response 手工分 [0,max] 且 Number.isFinite（manualGrading.ts:157-159）。
@@ -197,9 +197,9 @@ Audit
 - SURFACE: 考生端考试遥测（`exam_telemetry`/`log`，批量 20/5s/上限 200，clientEventBuffer.ts:5-17）→ POST /client-events（clientEvents.ts:53-79，认证 + 大小/深度/批量上限 clientEvent.ts:24-36）→ `client_events` append-only 表 → 只读监考面。
 - AUTHORITY: proctorMonitoringService.ts——`COUNTED_EVENT_NAMES`（:83-84 起，含 visibility_lost/browser_offline/save_failed/submit_failed 等）、在线判定 online/stale/offline（阈值 30s/90s，proctorMonitoring.ts:26-27）、`computeWarningLevel`（:206-233，任一计数>0 → warning 级）。
 - OBSERVABILITY: GET /admin/exams/:id/proctor/attempts + GET /admin/attempts/:id/proctor-events（proctorMonitoring.ts:109/:141）；web ExamMonitoringPage 15s 轮询。
-- AUTHORIZATION: 绑定权威 ADR-015（Accepted，2026-08-02）assignment-scoped。
+- AUTHORIZATION: 监考读面按 assignment-scoped capability 授权——proctor 路由 capability gate + `listProctorDiscoverable` 仅返回有 ACTIVE Proctor-to-Exam assignment 的可见考试（examRepo.ts:35-63）。
 - KEY SEMANTIC: 遥测采集**不受任何 controlFlags 门控**（无条件采集）；controlFlags 只门控考生侧提示横幅（L-3/L-4）。
-- EVIDENCE: 路由/服务层代码直读 + contracts/proctorMonitoring schema；E2E proctor-monitoring-ui.spec。STATUS: ACTIVE / HIGH（SPEC §4.5 “Phase 1 不实现” 为过期表述，见 Phase-2）。
+- EVIDENCE: 路由/服务层代码直读 + contracts/proctorMonitoring schema；E2E proctor-monitoring-ui.spec。STATUS: ACTIVE / HIGH。
 
 ---
 
@@ -209,8 +209,8 @@ Audit
 |---|---|---|---|---|---|---|
 | L-1 | `shuffleQuestions` | contracts/exam.ts:61 | control_flags jsonb | legacy form :434（向导不可） | **0** | #294 的既存载体；裸暴露给考生 |
 | L-2 | `shuffleOptions` | exam.ts:62 | 同上 | legacy form :445 | **0** | 同上 |
-| L-3 | `detectTabSwitch` | exam.ts:63 | 同上 | legacy form :454 | StartExamPage:253 **仅门控警告横幅** | **旗标≠行为解耦**：切屏检测管线存在且**不受旗标门控**——TakeExamPage.tsx:928-947 无条件发送 `visibility_lost/visibility_restored`（含 durationMs）→ POST /client-events（clientEvents.ts:53-79）持久化 → proctorMonitoringService.ts:83-84 计入 `COUNTED_EVENT_NAMES`、:206-233 `computeWarningLevel`（visibilityLostCount>0 → "warning"）→ 监考 API 呈现。旗标无法关闭检测；无 incident/处置流（SPEC:1046 标 Phase 2）。exam-policy-authority.md:115 已裁决为 LATENT（"client hint, not enforcement"） |
-| L-4 | `disableCopyPaste` | exam.ts:64 | 同上 | legacy form :465 | StartExamPage:260 **仅警告横幅** | 无 onCopy/onPaste/contextmenu 处理（TakeExamPage grep 证实）；exam-policy-authority.md:116 已裁决为 LATENT（"client hint"）——SPEC:316/1047 “前端禁用…”为过期表述（见 Phase-2） |
+| L-3 | `detectTabSwitch` | exam.ts:63 | 同上 | legacy form :454 | StartExamPage:253 **仅门控警告横幅** | **旗标≠行为解耦**：切屏检测管线存在且**不受旗标门控**——TakeExamPage.tsx:928-947 无条件发送 `visibility_lost/visibility_restored`（含 durationMs）→ POST /client-events（clientEvents.ts:53-79）持久化 → proctorMonitoringService.ts:83-84 计入 `COUNTED_EVENT_NAMES`、:206-233 `computeWarningLevel`（visibilityLostCount>0 → "warning"）→ 监考 API 呈现。旗标无法关闭检测；无 incident/处置流写路径（rg 证实） |
+| L-4 | `disableCopyPaste` | exam.ts:64 | 同上 | legacy form :465 | StartExamPage:260 **仅警告横幅** | 无 onCopy/onPaste/contextmenu 处理（TakeExamPage grep 证实）；旗标运行时效果仅考生侧警告横幅 |
 | L-5 | `restrictIp` | exam.ts:68 | 同上 | legacy form（类型仅在） | **0**（连 UI 显示都无） | 纯 latent |
 | L-6 | `requireLockdown` | exam.ts:69 | 同上 | 同上 | **0** | 纯 latent |
 | L-7 | `questionSelectionMode:"random"` | contracts exam.ts:36, DB 列 | exams.question_selection_mode | 否（向导硬编码 manual, wizardState.ts:191） | publish 硬拒绝非 manual（examCommands.ts:125-129） | 死面 |
@@ -226,7 +226,7 @@ Audit
 
 | # | 行为 | 机制 | observable? | persisted? | tested? | 有意? | 冻结风险 |
 |---|---|---|---|---|---|---|---|
-| A-1 | 队列位置随他人开考“改善” | ordinal(全量行) vs position(活跃行) 双计数（admissionCommands.ts:175-206） | 是（考生页） | 否（派生） | 是（断言“shrinks”） | **有 owner**：exam-runtime.md:277 明文记载（“UI position 可因他人 start 提前，entitlement 不变”）；属已文档化呈现语义 | 低：已文档化 |
+| A-1 | 队列位置随他人开考“改善” | ordinal(全量行) vs position(活跃行) 双计数（admissionCommands.ts:175-206） | 是（考生页） | 否（派生） | 是（断言“shrinks”） | 未声明（代码无意图断言） | 中：位置承诺由实现结构承载，entitlement 不变 |
 | A-2 | estimatedWait 只按整 batch 数（floor），不插值 | :278-288 | 是 | 否 | 部分（值仅单元级断言） | 未声明 | 低 |
 | A-3 | published≡open（考生视角） | OPEN_STATUSES + 惰性 reconcile | 是（状态标签区分, 行为不区分） | 是 | 隐含 | 未声明 | 中 |
 | A-4 | 边界方向不一致：heartbeat `>=`、deadline `>=`、lateEntry 严格 `>`、minSubmit 可行性严格 `<` | 各处 | 是（边界一秒之差） | 否 | 各自有边界测试 | 约定未命名 | 中 |
@@ -235,8 +235,8 @@ Audit
 | A-7 | 无活跃行队列视图 position:1/ready:false | :252-263 | 是 | 否 | 无 | 未声明 | 低 |
 | A-8 | 向导 passingScore 默认 = round(total×0.6)（客户端启发式成为持久策略） | ExamCreatePage.tsx:444 | 是 | 是 | 无 | UI 产物 | **中高**：60% 及格线悄悄变成 per-exam 契约 |
 | A-9 | `state.now ?? new Date()` 隐藏墙钟回退 | answerProtocol.ts:110 | 理论上（测试可触发不同 now） | 否 | 无 | 实现产物 | 低 |
-| A-10 | ~~UI 承诺不存在的检测~~ **修订（adversarial review）**：检测管线存在且不受旗标门控（见 L-3）——真实残留是“旗标仅门控横幅、行为无条件”的解耦，且已被 exam-policy-authority.md:115 记录 | 见 L-3 | 是 | — | — | 已文档化 LATENT | 低（残留为文案对齐决策） |
-| A-11 | 历史产能不足时晚加入者/重考生立即获准（与 §7 H-1/H-2 合并计数） | batchNumber<=releasedBatches | 是 | 否 | 无（未作为意图断言） | 未声明 | **高**：可被利用（等待人人有份后插队零成本） |
+| A-10 | 切屏检测与旗标解耦（初版“UI 承诺不存在的检测”经 adversarial review 证伪并修订） | 见 L-3：管线无条件运行，旗标仅门控横幅 | 是 | 是（client_events 表） | 是（代码直读，SC-23） | 未声明 | 中：作者侧旗标无法表达真实管控强度 |
+| A-11 | 历史产能不足时晚加入者/重考生立即获准（与 §7 H-1/H-2 合并计数） | batchNumber<=releasedBatches | 是 | 否 | 无（未作为意图断言） | 未声明 | **高**：晚加入者在其序位的历史批次边界流逝后可立即获准（复用已流逝的历史 release capacity，而非超越前方序位），可被策略性利用 |
 
 ---
 
@@ -263,7 +263,7 @@ Audit
 ## 7. Semantic holes（多语义可行、无 owner 裁决）
 
 - **H-1 晚加入 vs 历史空转产能**：设 batchSize=10、interval=30s、前 5 分钟只有 2 人排队。T+5min 新 joiner ordinal=3 → batch 1 → releasedBatches≥11 → 立即获准。多个可行语义（按实际等待人数推进 vs 按时刻表推进）中代码选择了后者（releasedCount 与实际人数无关, :156），无测试把它断言为产品意图。
-- **H-2 重考插队**：retake=fresh membership（T6 证实排在既有行后），但若 elapsed 已远超其 batch 边界则立即获准。“重考是否应重新等待完整 interval”无 owner。
+- **H-2 重考 vs 已流逝批次边界**：retake=fresh membership（T6 证实排在既有行后），但其序位对应的批次边界若已流逝则立即获准（复用历史 release capacity）。“重考是否应重新等待完整 interval”无 owner。
 - **H-3 unpublish→republish 对存量 exam_admissions 的影响**：无任何代码触及（republish 不清 queue、不清 anchor）。是否重置 epoch 属产品决策。
 - **H-4 队列故障运行期补救缺失**（SC-22）：发布后 batchSize/interval 冻结、无 manual admit。卡死队列的唯一出路是 unpublish（副作用 H-3 未定义）。
 - **H-5 心跳容忍度归属**：部署配置（默认 60s）vs 客户端 30s 硬编码，2:1 为隐式；考试级监控策略字段不存在。“网络抖动多久算失联”是产品问题，当前由部署默认值代答。
@@ -332,17 +332,31 @@ Audit
 
 ## 11. #294 readiness appendix（不实现）
 
-**已有语义权威（READY_FOR_IMPLEMENTATION 的机制面）**：
+**已有语义权威（机制面已就绪）**：
 - 身份体系端到端 id-based（C4），选项快照无 isCorrect 泄漏，多选评分排序后比较（顺序不敏感）→ shuffle-safe。
 - 冻结模型：publish 快照 + 开考逐字拷贝（attemptCommands.ts:381 是唯一 per-candidate seam）；freeze/grading/result 全部按 `order` 字段或 id 寻址 → per-candidate 重排只需改开考拷贝点，下游天然兼容。
 - resume：per-attempt 快照持久化 → 重排后 resume 自然稳定（C5/C2）。
 - 客户端不重排（快照序即展示序）→ 服务端序即可。
 
-**BLOCKED_BY_SEMANTIC_GAP（策略面）**：
-1. **旗标归属**：`shuffleQuestions/shuffleOptions` 已存在、legacy UI 可 authored、默认 false、考生可见、零运行时语义。#294 若引入新旗标即成 SECOND_AUTHORITY。**最小产品问题**：既有 controlFlags 两旗标是否升格为本特性的策略载体？向导是否需要可 authored？
-2. **seed 契约**：全仓无 seed 字段。per-candidate 确定性重排需要持久 seed（attempt 列 or 快照内字段）+ 决定确定性范围（per-attempt / per-sitting / per-exam）与算法暴露面（是否可复现审计）。
-3. **冻结点确认**：shuffle 应发生在开考拷贝点并随 attempt 快照冻结（产品语义“开考后顺序不变”——代码已隐含，需声明）。
-4. **timed_sync 交互**（若未来启用）：sitting 级 vs candidate 级顺序，随 L-8 一起决策。
+**#294 readiness 判定**：
+
+```text
+#294:
+ROADMAP_ENTRY_BLOCKED = NO
+
+MUST_RESOLVE_INSIDE_#294:
+- existing shuffle flags are the policy carrier
+- supported combinations
+- shuffle occurs at attempt creation
+- final order is frozen in attempt snapshot
+
+OPTIONAL_IMPLEMENTATION_CHOICE:
+- persisted seed
+```
+
+依据：`attempt.questionSnapshot` 可直接持久化随机后的最终顺序——每个 attempt 在开考拷贝点重排一次、随后快照冻结，resume/restart 经 C5/C2 天然稳定；持久 seed 并非 “server-generated deterministic order state” 的必要条件。（corrective-1：初版把 “per-candidate 重排需要持久 seed” 写为 BLOCKED_BY_SEMANTIC_GAP 属过度声明，经 review 撤销。）
+
+边界备注：`shuffleQuestions/shuffleOptions` 已存在、legacy UI 可 authored、默认 false、考生可见、零运行时语义——#294 若另立新旗标即成 SECOND_AUTHORITY。若未来启用 timed_sync，sitting 级 vs candidate 级顺序随 L-8 一并决策，不构成阻塞。
 
 ---
 
@@ -353,9 +367,7 @@ Audit
 3. `timer.ts:23` 自称 SOLE authority——attempts.shared.ts:151 存在第二实现（当前对齐）。
 4. `exam.ts:2191`“no manual-admit product semantic exists”——与代码缺席一致（本例注释可信）。
 5. `examPolicy.ts` 及 contracts 注释称 timed_sync“rejected … by the ONE matrix authority”——与运行时支持（attemptCommands:200-208）并存，是“拒绝口径”而非“无机制”。
-6. **exam-policy-authority.md:118**（binding 文档）“Queue admission: **none at runtime** — LATENT (Phase 2)”——#292 后过期：requireQueue 运行时已交付（attemptCommands.ts:297-310 准入门 + exam_admissions 表）。同文档 ：122 行（untimed/deadline 标 NOT IMPLEMENTED）同为前-#291/前-#292 旧现实。
-7. **SPEC §4.5（:827-829）“监考端 Phase 1 不实现”**——只读监考监控面已交付（SC-23，ADR-015 Accepted）；SPEC:1046-1047 “防切屏 Phase 1 minimal behavior / 排队分批 Phase 2”中排队分批同样已交付。
 
 ---
 
-（Phase 1 结束。本报告冻结于 BASE=0b893262。规范文档对比见 Phase-2 报告：product-semantics-audit-1-authority-diff.md）
+（Phase 1 结束。本报告冻结于 BASE=0b893262，仅含代码事实——post-freeze 的规范文档裁决与注记（exam-policy-authority/SPEC/ADR/exam-runtime 相关判定）全部移入 Phase-2 报告 product-semantics-audit-1-authority-diff.md。）
