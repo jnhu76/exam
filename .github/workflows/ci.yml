@@ -91,9 +91,9 @@ jobs:
   deployment-fresh-install:
     name: Deployment fresh-install gate
     runs-on: ubuntu-latest
-    # 30 min: GH runners have NO docker layer cache, so the first
-    # up --build pays the full source build every run (p50 ~12-20 min).
-    # Measured after the first CI runs; tighten when real data exists.
+    # Keep the cold-cache 30-minute ceiling: the first cache population still
+    # pays the full source build. Warm runs restore BuildKit layers from GHA,
+    # but every acceptance stage still executes `up --build`.
     timeout-minutes: 30
     needs: static
 
@@ -108,7 +108,39 @@ jobs:
         with:
           node-version: "24.15.x"
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up Docker Compose
+        uses: docker/setup-compose-action@v2
+        with:
+          version: latest
+
+      - name: Expose GitHub cache runtime to BuildKit
+        uses: crazy-max/ghaction-github-runtime@v4
+
+      - name: Enable GHA layer cache for the CI source-build override
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("docker-compose.build.yml")
+          text = path.read_text()
+          old = """services:\n  app:\n    build: .\n    image: exam-local:dev\n    pull_policy: build\n"""
+          new = """services:\n  app:\n    build:\n      context: .\n      cache_from:\n        - type=gha,scope=exam-app\n      cache_to:\n        - type=gha,scope=exam-app,mode=max,ignore-error=true\n    image: exam-local:dev\n    pull_policy: build\n"""
+          if old not in text:
+              raise SystemExit("docker-compose.build.yml no longer matches the CI cache overlay contract")
+          path.write_text(text.replace(old, new))
+          PY
+          docker compose -f docker-compose.yml -f docker-compose.build.yml config >/dev/null
+
       - name: Fresh-install acceptance gate
+        env:
+          # Compose delegates builds to Buildx/Bake so cache_from/cache_to can
+          # use the GitHub Actions cache backend. This changes build transport,
+          # not the acceptance contract: fresh-install.sh still uses up --build.
+          COMPOSE_BAKE: "true"
         run: bash tests/deployment/fresh-install.sh ci
 
   web-coverage:
@@ -326,8 +358,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browsers
-        run: pnpm --filter @exam/e2e exec playwright install --with-deps chromium
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('apps/e2e/package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install Playwright system dependencies
+        run: pnpm --filter @exam/e2e exec playwright install-deps chromium
+
+      - name: Install Playwright Chromium on cache miss
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @exam/e2e exec playwright install chromium
 
       - name: Build
         run: pnpm build
