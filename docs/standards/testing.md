@@ -467,35 +467,25 @@ durability boundary.
 | **Database per shard** | Single shared `exam_e2e` (CI doesn't create per-shard DBs) |
 | **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
 | **fail-fast** | `true` (the sibling shard is cancelled after a shard failure) |
-| **Blob zip naming** | `report-${{ matrix.shardIndex }}.zip` |
-| **Artifact naming** | `e2e-blob-shard-${{ matrix.shardIndex }}` |
-| **Upload retention** | 1 day |
+| **Failure diagnostics** | Each failing shard writes a step summary and uploads a 1-day `e2e-failure-diagnostics-{shardIndex}` artifact when files exist. |
 
-### 4.3 Playwright Report Merge Contract
+### 4.3 CI E2E Build/Input Contract
 
-**Preconditions:**
-1. Each shard uploads a blob zip with a unique name: `report-{N}.zip`.
-2. Artifact names are unique per shard: `e2e-blob-shard-{N}`.
-3. `download-artifact` with `merge-multiple: true` flattens all zips into `all-blob-reports/`.
+The GitHub-hosted E2E shards use the exact build produced by `verify-build` for
+the same workflow run. They do not independently run `pnpm build`.
 
-**Validation steps (before merge):**
-1. `find all-blob-reports -maxdepth 2 -type f` — list all files.
-2. Reject non-`.zip` files (no `.gitkeep`, no HTML report zips, no stray files).
-3. For each `.zip`: `unzip -t "$z"` — verify zip integrity.
-4. Count blob zips; warn if zero (all shards skipped/cancelled).
+The shard still performs its real mutable/runtime work independently:
 
-**Merge command:**
-```bash
-npx playwright merge-reports --reporter html ./all-blob-reports
-```
+1. install workspace dependencies;
+2. download the exact-run build artifact;
+3. restore/install Chromium;
+4. migrate and seed its PostgreSQL service;
+5. start the API server;
+6. execute its Playwright shard.
 
-**Post-merge:**
-- Merged HTML report uploaded as `playwright-html-report` artifact (14-day retention).
-
-**Forbidden:**
-- Feeding HTML report zips to `merge-reports` (only blob zips are valid input).
-- Artifact name collisions (two shards with the same artifact name → second overwrites first).
-- Sharing data state between shards (each shard must be self-contained).
+The build artifact may contain only deterministic build products (`dist/**`).
+It must never contain database state, test results, coverage output, secrets, or
+runtime-generated files.
 
 ### 4.4 run-wsl.sh Cleanup Contract (issue #256-A)
 
@@ -655,18 +645,18 @@ EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
 | `matrix.shardIndex` | `[1, 2]` |
 | `matrix.shardTotal` | `[2]` |
 | `fail-fast` | `true` |
+| `build input` | exact-run `verify-build` artifact (`packages/*/dist`, `apps/api/dist`, `apps/web/dist`) |
+| `browser cache` | `~/.cache/ms-playwright`, keyed by OS + E2E package/lockfile state |
 
-### Blob Report Contract
+### Failure Artifact Contract
 
 | Step | Detail |
 |------|--------|
-| **Blob zip name** | `report-{shardIndex}.zip` |
-| **Artifact name** | `e2e-blob-shard-{shardIndex}` |
-| **Upload path** | `apps/e2e/blob-report/*.zip` |
-| **Download path** | `apps/e2e/all-blob-reports/` |
-| **Merge input validation** | Reject non-zip files, verify zip integrity |
-| **Merge command** | `npx playwright merge-reports --reporter html ./all-blob-reports` |
-| **Output artifact** | `playwright-html-report` (14-day retention) |
+| **When** | failure only |
+| **Artifact name** | `e2e-failure-diagnostics-{shardIndex}` |
+| **Contents** | server log/tail, Playwright error contexts, failure screenshots, summary |
+| **Retention** | 1 day |
+| **Upload policy** | best effort (`continue-on-error`), ignore when no files exist |
 
 ---
 
@@ -680,7 +670,7 @@ After any change to test configuration, CI workflow, or vitest config, verify:
 - [ ] `pnpm --filter @exam/web coverage` passes
 - [ ] `pnpm --filter "@exam/api" coverage` passes (with `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`)
 - [ ] `pnpm verify` passes (full pipeline)
-- [ ] E2E blob report merge produces valid HTML report
+- [ ] Both CI E2E shards consume the exact-run build artifact and execute their real Playwright tests
 - [ ] No `as any` casts in test files
 - [ ] All time-dependent tests use fake timers
 - [ ] No `TEST_DATABASE_URL` fallback to `DATABASE_URL` in test configs
