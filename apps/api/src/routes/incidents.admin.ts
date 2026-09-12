@@ -268,8 +268,11 @@ const RecoveryListQuerySchema = z
 // Proctor Recovery worklist query (#303). Deliberately narrower than
 // RecoveryListQuerySchema: no examId/candidateId/assignedProctorUserId — the
 // Proctor filter is server-derived from the actor identity, never a client
-// parameter.
+// parameter. `status` is the closed domain enum (single status, matching the
+// UI's four-state filter); it is an incident-domain predicate, not a scope
+// widening, so it stays inside the assignment-filtered collection.
 const ProctorWorklistQuerySchema = z.object({
+  status: RecoveryIncidentStatusSchema.optional(),
   unresolvedOnly: RecoveryBooleanQuerySchema.optional(),
   cursor: RecoveryCursorWireSchema.optional().nullable(),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
@@ -1378,12 +1381,6 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     },
   );
 
-  const ProctorWorklistQuerySchema = z.object({
-    unresolvedOnly: RecoveryBooleanQuerySchema.optional(),
-    cursor: RecoveryCursorWireSchema.optional().nullable(),
-    limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-  });
-
   // ── Proctor Recovery Center (J6, #303) — narrow Proctor-scoped reads ──
   //
   // EXAM-303 authority freeze (F3, human-gate corrective 2026-09-12): these
@@ -1437,6 +1434,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       ).listIncidentQueue(ctx, {
         limit: query.limit,
         cursor: query.cursor ? parseRecoveryCursor(query.cursor) : null,
+        status: query.status ?? null,
         unresolvedOnly: query.unresolvedOnly ?? null,
         assignedProctorUserId,
       });

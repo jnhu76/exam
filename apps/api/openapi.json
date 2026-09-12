@@ -46366,6 +46366,15 @@
         "parameters": [
           {
             "schema": {
+              "type": "string",
+              "enum": ["open", "investigating", "resolved", "dismissed"]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
               "anyOf": [
                 {
                   "type": "string",

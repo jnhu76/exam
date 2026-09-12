@@ -42,10 +42,13 @@ const NAMESPACE = "admin.proctorRecoveryIncident";
  * the page cannot render what the server never sends.
  *
  * The operations area renders ONLY the server-computed `allowedActions`
- * (status candidates ∩ caller capabilities): for a Proctor this is the
- * investigate family on non-terminal incidents — resolve/dismiss (Admin
- * terminal judgment) is structurally absent, and link_attempt appears only on
- * non-anchored incidents.
+ * (status candidates ∩ caller capabilities): for a Proctor that is the entire
+ * investigate family — investigate / add_note / change_severity / link_action /
+ * link_attempt / link_interruption — while resolve/dismiss (Admin terminal
+ * judgment) is structurally absent and link_attempt appears only on
+ * non-anchored incidents. Every button posts to the canonical
+ * assignment-scoped incident command route; this page never derives
+ * eligibility from status or from the caller's role.
  */
 export function ProctorRecoveryIncidentDetailPage() {
   const { t } = useTranslation();
@@ -295,6 +298,78 @@ export function ProctorRecoveryIncidentDetailPage() {
                           "admin.recoveryIncident.relationshipType.referenced",
                       },
                     ],
+                  },
+                ]}
+                refresh={refresh}
+              />
+            )}
+            {data.allowedActions.includes("link_action") && (
+              <IncidentCommand
+                incidentId={data.incident.id}
+                incidentVersion={data.incident.version}
+                endpoint="/actions"
+                titleKey="admin.recoveryOps.actions.linkAction"
+                confirmLabelKey="admin.recoveryOps.actions.linkAction"
+                doneToastKey="admin.recoveryOps.actions.linkActionDone"
+                description={t("admin.recoveryOps.linkActionDescription", {
+                  id: data.incident.id,
+                })}
+                fields={[
+                  {
+                    kind: "select",
+                    key: "actionType",
+                    labelKey: "admin.proctorRecoveryIncident.actionTypeLabel",
+                    required: true,
+                    requiredErrorKey:
+                      "admin.proctorRecoveryIncident.actionTypeRequired",
+                    options: [
+                      {
+                        value: "time_grant",
+                        labelKey:
+                          "admin.recoveryIncident.actionType.time_grant",
+                      },
+                      {
+                        value: "force_submit",
+                        labelKey:
+                          "admin.recoveryIncident.actionType.force_submit",
+                      },
+                    ],
+                  },
+                  {
+                    kind: "text",
+                    key: "actionId",
+                    labelKey: "admin.proctorRecoveryIncident.actionIdLabel",
+                    required: true,
+                    requiredErrorKey:
+                      "admin.proctorRecoveryIncident.actionIdRequired",
+                  },
+                ]}
+                refresh={refresh}
+              />
+            )}
+            {data.allowedActions.includes("link_interruption") && (
+              <IncidentCommand
+                incidentId={data.incident.id}
+                incidentVersion={data.incident.version}
+                endpoint="/interruptions"
+                titleKey="admin.recoveryOps.actions.linkInterruption"
+                confirmLabelKey="admin.recoveryOps.actions.linkInterruption"
+                doneToastKey="admin.recoveryOps.actions.linkInterruptionDone"
+                description={t(
+                  "admin.recoveryOps.linkInterruptionDescription",
+                  {
+                    id: data.incident.id,
+                  },
+                )}
+                fields={[
+                  {
+                    kind: "text",
+                    key: "interruptionId",
+                    labelKey:
+                      "admin.proctorRecoveryIncident.interruptionIdLabel",
+                    required: true,
+                    requiredErrorKey:
+                      "admin.proctorRecoveryIncident.interruptionIdRequired",
                   },
                 ]}
                 refresh={refresh}

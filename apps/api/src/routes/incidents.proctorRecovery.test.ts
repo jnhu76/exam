@@ -14,6 +14,7 @@
  *     resolve/dismiss; an Admin on the same endpoint does.
  */
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyPluginAsync } from "fastify";
 import { schema } from "@exam/db/src/schema/pg.js";
@@ -36,8 +37,11 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
   let examAId: string;
   let examUId: string;
   let examBId: string;
+  /** Second same-org exam — the cross-exam relationship-graph violation. */
+  let examCId: string;
   let attemptAId: string;
   let linkedAttemptId: string;
+  let crossExamAttemptId: string;
   let incidentAId: string;
   let incidentA2Id: string;
   let incidentUId: string;
@@ -288,6 +292,44 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
       "prc-unassigned",
     );
     p2Token = p2.token;
+
+    // ── Cross-exam relationship-graph fixture (ADR-014 §7) ──
+    // A second exam in the SAME org plus an attempt on it. The composite FK
+    // `(organization_id, attempt_id) → exam_attempts` accepts a link from an
+    // exam-A incident to this attempt (the org matches), so only the
+    // application-layer scope quadruple can reject it. Linking it to an
+    // assigned-exam incident therefore reproduces exactly the corruption the
+    // Proctor projection must fail closed on.
+    examCId = randomUUID();
+    await insertExam(examCId, orgAId, "PRC cross exam");
+    const crossEnrollmentId = randomUUID();
+    await ctx.db.insert(schema.examEnrollments).values({
+      id: crossEnrollmentId,
+      organizationId: orgAId,
+      examId: examCId,
+      candidateId: candidateProfileId,
+      status: "active",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    crossExamAttemptId = randomUUID();
+    await ctx.db.insert(schema.examAttempts).values({
+      id: crossExamAttemptId,
+      organizationId: orgAId,
+      examId: examCId,
+      enrollmentId: crossEnrollmentId,
+      candidateId: candidateProfileId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: new Date(now.getTime() + 3600_000),
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
   });
 
   afterAll(async () => {
@@ -437,5 +479,105 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
       expect(res.statusCode, why).toBe(404);
       expect(res.json().error.code, why).toBe("RESOURCE_NOT_FOUND");
     }
+  });
+
+  it("worklist: the status filter is a real incident predicate, not a dropped parameter", async () => {
+    // Four-state filter contract (#303 corrective B1): the UI sends
+    // `?status=<closed IncidentStatus>`; the API must apply it. `incidentAId`
+    // is only reachable on the assigned exam, so it stands in for both the
+    // matching and the excluded case.
+    const openRes = await inject(
+      p1Token,
+      "GET",
+      "/api/admin/proctor/incidents?status=open",
+    );
+    expect(openRes.statusCode).toBe(200);
+    const openIds = openRes
+      .json()
+      .items.map((i: { incident: { id: string } }) => i.incident.id);
+    expect(openIds).toContain(incidentAId);
+    expect(
+      openRes
+        .json()
+        .items.every(
+          (i: { incident: { status: string } }) => i.incident.status === "open",
+        ),
+    ).toBe(true);
+
+    // A status no incident on the assigned exam holds → empty page, proving
+    // the predicate actually reached SQL (a dropped parameter would return
+    // the unfiltered two-item page).
+    const dismissedRes = await inject(
+      p1Token,
+      "GET",
+      "/api/admin/proctor/incidents?status=dismissed",
+    );
+    expect(dismissedRes.statusCode).toBe(200);
+    expect(dismissedRes.json().items).toEqual([]);
+
+    // Out-of-enum values are rejected by the wire contract, never coerced.
+    const invalid = await inject(
+      p1Token,
+      "GET",
+      "/api/admin/proctor/incidents?status=bogus",
+    );
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("worklist: status filter stays inside the assignment scope (unassigned Proctor still sees nothing)", async () => {
+    for (const status of ["open", "investigating", "resolved", "dismissed"]) {
+      const res = await inject(
+        p2Token,
+        "GET",
+        `/api/admin/proctor/incidents?status=${status}`,
+      );
+      expect(res.statusCode, status).toBe(200);
+      expect(res.json().items, status).toEqual([]);
+    }
+  });
+
+  it("detail: a cross-exam link fails closed with 503 AUTHZ_UNAVAILABLE and projects no ids", async () => {
+    // Corrupt the assigned exam's NON-anchored incident with a link to an
+    // attempt that belongs to ANOTHER exam in the same org. The composite FK
+    // accepts it, so only the shared ADR-014 §7 scope-quadruple validator can
+    // reject it. (A non-anchored incident is required: ADR-014 §2 makes anchor
+    // and membership mutually exclusive, so an anchored target would fail the
+    // exclusivity leg first.)
+    const linkId = randomUUID();
+    await ctx.db.insert(schema.examIncidentAttempts).values({
+      id: linkId,
+      organizationId: orgAId,
+      incidentId: incidentA2Id,
+      attemptId: crossExamAttemptId,
+      relationshipType: "referenced",
+      linkedAt: new Date(),
+      linkedBy: ctx.admin.id,
+      operationId: randomUUID(),
+    });
+    try {
+      const res = await inject(
+        p1Token,
+        "GET",
+        `/api/admin/incidents/${incidentA2Id}/detail`,
+      );
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.code).toBe("AUTHZ_UNAVAILABLE");
+      // Fail-closed means NO partial graph: the foreign attempt id must not
+      // appear anywhere in the response body.
+      expect(res.body).not.toContain(crossExamAttemptId);
+      expect(res.body).not.toContain(examCId);
+    } finally {
+      await ctx.db
+        .delete(schema.examIncidentAttempts)
+        .where(eq(schema.examIncidentAttempts.id, linkId));
+    }
+    // The uncorrupted projection still resolves after cleanup.
+    const restored = await inject(
+      p1Token,
+      "GET",
+      `/api/admin/incidents/${incidentA2Id}/detail`,
+    );
+    expect(restored.statusCode).toBe(200);
   });
 });
