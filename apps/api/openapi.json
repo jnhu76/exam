@@ -47066,6 +47066,9 @@
                           "link_interruption"
                         ]
                       }
+                    },
+                    "snapshotAt": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -47077,7 +47080,8 @@
                     "actionLinks",
                     "attemptLinks",
                     "interruptionLinks",
-                    "allowedActions"
+                    "allowedActions",
+                    "snapshotAt"
                   ],
                   "additionalProperties": false
                 }
