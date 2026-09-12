@@ -111,7 +111,7 @@ Every `exams` column that functions as policy/config (`packages/db/src/schema/pg
 | Result publication | `result_publication_mode` | yes | candidate result view (`scores.ts:216`) | published row | `results` | **SUPPORTED** |
 | Interruption | `interruption_time_policy` + 2 caps | yes | attempt snapshot + restore evaluation | **attempt snapshot** (frozen at creation) | `interruption` | **SUPPORTED** |
 | Late start / min submit | `latest_start_offset_minutes`/`min_submit_after_start_minutes` | yes | attempt-start gate / submit gate | published row | `timing` | **SUPPORTED** |
-| Shuffle | `control_flags.shuffleQuestions`/`shuffleOptions` | yes (UI checkbox) | `materializeAttemptPresentation` at attempt creation (`attemptCommands.ts:384`); resume/restart replays frozen snapshot | snapshot | **SUPPORTED** (#294 implemented; policy-resolved, snapshot-frozen) |
+| Shuffle | `control_flags.shuffleQuestions`/`shuffleOptions` | yes (UI checkbox) | `materializeAttemptPresentation` at new-attempt creation; resume/restart replay frozen snapshot | **attempt snapshot** (frozen at creation) | `control` | **SUPPORTED** (#294; policy-resolved, snapshot-frozen) |
 | Tab-switch detect | `control_flags.detectTabSwitch` | yes (UI checkbox) | client **warning banner only** (`StartExamPage:204`); TakeExam listener runs unconditionally | n/a | `control` | **LATENT** (client hint, not enforcement) |
 | Copy/paste disable | `control_flags.disableCopyPaste` | yes (UI checkbox) | client **warning banner only** (`StartExamPage:215`) | n/a | `control` | **LATENT** (client hint) |
 | Queue admission | `control_flags.requireQueue`+`batchSize`+`batchInterval` | yes (UI checkbox) | **none** at runtime | n/a | `control` | **LATENT** (Phase 2) |
