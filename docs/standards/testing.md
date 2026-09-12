@@ -54,7 +54,7 @@ same `dist/**` outputs on separate runners.
 | **Dependency** | Runs after `static` |
 | **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
 | **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
-| **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` for this workflow run only (1-day retention). |
+| **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}-{run_attempt}` for this workflow run only (1-day retention). |
 | **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and both E2E shards download this same-workflow artifact and do not rebuild it. |
 | **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
 | **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment fresh-install does not consume it; that lane continues to build the Docker image from the current checkout. |
@@ -454,7 +454,7 @@ durability boundary.
 | **Sharding** | Supported (`E2E_WORKERS`, default 2) | Not supported (single process) |
 | **Blob reports** | Merged locally after run | Not used (list reporter only) |
 | **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs | `docker compose down -v` |
-| **Cleanup ordering** | Strict: stop servers BEFORE `DROP DATABASE` (issue #256-A). DROP is loud (no `\|\| true`); failure surfaces DB name + PG error and escalates exit to sentinel 70 if tests passed | N/A (single compose down) |
+| **Cleanup ordering** | Strict: stop servers BEFORE `DROP DATABASE` (issue #256-A). DROP is loud (no `\|\| true`); failure surfaces DB name + PG error and escalates exit to sentinel 70 if tests passed | N/A |
 | **DB retention** | `E2E_KEEP_WORKER_DB_ON_FAILURE=1` retains `exam_e2e_w*` only on Playwright failure (success always cleans) | N/A |
 | **Use case** | Fast local iteration | CI-like parity, reproducible builds |
 
