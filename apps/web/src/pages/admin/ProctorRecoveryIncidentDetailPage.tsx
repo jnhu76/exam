@@ -120,8 +120,8 @@ export function ProctorRecoveryIncidentDetailPage() {
       )}
 
       {isStale && (
-        <div className="flex items-center gap-2 type-metadata text-warning">
-          <AppIcon icon={CircleAlert} size="inline" />
+        <div className="flex items-center gap-2 type-metadata">
+          <AppIcon icon={CircleAlert} size="inline" className="text-warning" />
           {t("admin.proctorRecoveryIncident.snapshotStale")}
         </div>
       )}
