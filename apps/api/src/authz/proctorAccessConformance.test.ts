@@ -175,6 +175,7 @@ describe("J4-I1B proctorAccess structural conformance (ADR-015 §8)", () => {
       "POST /admin/incidents/:incidentId/actions",
       "POST /admin/incidents/:incidentId/attempts",
       "POST /admin/incidents/:incidentId/interruptions",
+      "GET /admin/incidents/:incidentId/detail",
     ];
     for (const key of matrix) {
       const [method, path] = key.split(" ");
@@ -228,13 +229,19 @@ describe("J4-I1B proctorAccess structural conformance (ADR-015 §8)", () => {
     ).toEqual([]);
   });
 
-  it("the assignment_filtered_collection route exists at runtime", () => {
-    const entry = ROUTE_PERMISSION_REGISTRY.find(
-      (e) => e.method === "GET" && e.path === "/admin/proctor/exams",
-    );
-    expect(entry).toBeDefined();
-    expect(entry!.proctorAccess).toBe("assignment_filtered_collection");
-    expect(runtimeRouteFor(entry!)).toBeDefined();
+  it("the assignment_filtered_collection routes exist at runtime", () => {
+    const collectionPaths = [
+      "/admin/proctor/exams",
+      "/admin/proctor/incidents",
+    ] as const;
+    for (const path of collectionPaths) {
+      const entry = ROUTE_PERMISSION_REGISTRY.find(
+        (e) => e.method === "GET" && e.path === path,
+      );
+      expect(entry, path).toBeDefined();
+      expect(entry!.proctorAccess, path).toBe("assignment_filtered_collection");
+      expect(runtimeRouteFor(entry!), path).toBeDefined();
+    }
   });
 
   it("AttemptForceSubmit and AttemptMisconductMark are REMOVED from the Proctor preset (ADR-015 §13)", () => {

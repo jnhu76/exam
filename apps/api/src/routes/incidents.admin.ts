@@ -6,6 +6,8 @@ import {
   ErrorResponseSchema,
   ExamRecoveryContextSchema,
   IncidentResponseSchema,
+  ProctorIncidentDetailSchema,
+  ProctorRecoveryWorklistResponseSchema,
   RecoveryAggregateResponseSchema,
   RecoveryIncidentSeveritySchema,
   RecoveryIncidentStatusSchema,
@@ -17,10 +19,11 @@ import {
   IncidentRelationshipType,
   NotFoundError,
 } from "@exam/domain";
-import { Permission, type PermissionKey } from "@exam/authz";
+import { Permission, Role, type PermissionKey } from "@exam/authz";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import {
   createRecoveryRepo,
+  deriveStatusActionCandidates,
   type AttemptAllowedAction,
   type IncidentAllowedAction,
   type IncidentQueueCursor,
@@ -261,6 +264,16 @@ const RecoveryListQuerySchema = z
       });
     }
   });
+
+// Proctor Recovery worklist query (#303). Deliberately narrower than
+// RecoveryListQuerySchema: no examId/candidateId/assignedProctorUserId — the
+// Proctor filter is server-derived from the actor identity, never a client
+// parameter.
+const ProctorWorklistQuerySchema = z.object({
+  unresolvedOnly: RecoveryBooleanQuerySchema.optional(),
+  cursor: RecoveryCursorWireSchema.optional().nullable(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
 
 // Recovery wire schemas (Queue item/response, Incident aggregate, A3 context,
 // A4 exam context) live canonically in `@exam/contracts` and are imported at
@@ -1360,6 +1373,212 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
           })),
           nextCursor: encodeRecoveryCursor(nextCursor),
           snapshotAt: snapshotAt.toISOString(),
+        }),
+      );
+    },
+  );
+
+  const ProctorWorklistQuerySchema = z.object({
+    unresolvedOnly: RecoveryBooleanQuerySchema.optional(),
+    cursor: RecoveryCursorWireSchema.optional().nullable(),
+    limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  });
+
+  // ── Proctor Recovery Center (J6, #303) — narrow Proctor-scoped reads ──
+  //
+  // EXAM-303 authority freeze (F3, human-gate corrective 2026-09-12): these
+  // projections expose ONLY incident-domain truth an assigned Proctor already
+  // holds read authority over. They deliberately OMIT the Admin recovery-only
+  // fields the shared repo carries (time-adjustment ledger/summaries,
+  // auditReferences, activeProctors, execution details of Admin attempt
+  // commands); an action link pointing at an Admin-only action appears as its
+  // incident-domain link metadata only. Mutations keep flowing through the
+  // existing assignment_scoped incident command routes above — zero new
+  // commands, zero new state, canonical audit inherited.
+
+  // Worklist: incidents of the caller's ACTIVE proctor assignments. Mirrors
+  // GET /admin/proctor/exams: Admin short-circuits to org-wide; a Proctor is
+  // SQL-filtered by server-derived actor identity — never a client parameter.
+  // Scoping, keyset pagination and the snapshot live inside the ONE shared
+  // queue query (recoveryRepo.listIncidentQueue); this route only narrows the
+  // wire projection.
+  fastify.get(
+    "/admin/proctor/incidents",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.IncidentView),
+      ],
+      schema: {
+        querystring: ProctorWorklistQuerySchema,
+        ...{ security: cookieAuth },
+        "x-role": ["Admin", "Proctor"],
+        response: {
+          200: ProctorRecoveryWorklistResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          // Broken parent chains fail closed as 503 AUTHZ_UNAVAILABLE —
+          // declared so the OpenAPI contract documents the designed response.
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const query = ProctorWorklistQuerySchema.parse(request.query ?? {});
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const runtimeCtx = getRequestContext(request);
+      const assignedProctorUserId = runtimeCtx.roles.includes(Role.Admin)
+        ? null
+        : runtimeCtx.actorId;
+
+      const { items, nextCursor, snapshotAt } = await createRecoveryRepo(
+        fastify.db,
+      ).listIncidentQueue(ctx, {
+        limit: query.limit,
+        cursor: query.cursor ? parseRecoveryCursor(query.cursor) : null,
+        unresolvedOnly: query.unresolvedOnly ?? null,
+        assignedProctorUserId,
+      });
+
+      return reply.send(
+        ProctorRecoveryWorklistResponseSchema.parse({
+          items: items.map((item) => ({
+            incident: toIncidentResponse(item.incident),
+            examSummary: item.examSummary,
+            primaryAttempt: item.primaryAttempt
+              ? {
+                  id: item.primaryAttempt.id,
+                  candidateId: item.primaryAttempt.candidateId,
+                  status: item.primaryAttempt.status,
+                }
+              : null,
+          })),
+          nextCursor: encodeRecoveryCursor(nextCursor),
+          snapshotAt: snapshotAt.toISOString(),
+        }),
+      );
+    },
+  );
+
+  // Narrow incident detail for the Proctor Recovery Center: incident row +
+  // append-only event history (notes are events) + link metadata + summaries
+  // already within Proctor read authority (exam row, anchor attempt status).
+  // The assignment_scoped gate (authoritative incident resolver + active
+  // assignment check) yields the canonical 404 for unassigned / foreign /
+  // nonexistent incidents. allowedActions = status candidates ∩ caller
+  // capabilities — a Proctor structurally never sees resolve/dismiss here
+  // (IncidentResolve is Admin-only), so Admin terminal judgment cannot be
+  // surfaced from this endpoint.
+  fastify.get(
+    "/admin/incidents/:incidentId/detail",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireScopedCapability(
+          Permission.IncidentView,
+          "incident",
+          "incidentId",
+          { proctorAccess: "assignment_scoped" },
+        ),
+      ],
+      schema: {
+        params: IncidentIdParamsSchema,
+        ...{ security: cookieAuth },
+        "x-role": ["Admin", "Proctor"],
+        response: {
+          200: ProctorIncidentDetailSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = IncidentIdParamsSchema.parse(request.params);
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const repo = createIncidentRepo(fastify.db);
+
+      const incident = await repo.findById(ctx, params.incidentId);
+      if (!incident) throw new NotFoundError("Incident not found");
+
+      const exam = await createExamRepo(fastify.db).findById(
+        ctx,
+        incident.examId,
+      );
+      // The scoped resolver already validated the incident→exam→org chain;
+      // a missing exam row here can only be a data fault — fail closed.
+      if (!exam) throw new NotFoundError("Exam not found");
+
+      const [events, actionLinks, attemptLinks, interruptionLinks] =
+        await Promise.all([
+          repo.listEventsByIncident(ctx, incident.id),
+          repo.listActionsByIncident(ctx, incident.id),
+          repo.listAttemptsByIncident(ctx, incident.id),
+          repo.listInterruptionLinksByIncident(ctx, incident.id),
+        ]);
+
+      const primaryAttempt = incident.attemptId
+        ? ((
+            await createAttemptRepo(fastify.db).findByIds(ctx, [
+              incident.attemptId,
+            ])
+          )[0] ?? null)
+        : null;
+
+      // Notes derived from note_added events (event payload body), in stable
+      // event_sequence order — the same derivation the Admin aggregate uses.
+      const notes = events
+        .filter((event) => event.eventType === "note_added")
+        .map((event) => ({
+          operationId: event.operationId,
+          actorId: event.actorId,
+          body:
+            (event.payload as { body?: string } | null)?.body?.toString() ?? "",
+          createdAt: event.createdAt.toISOString(),
+        }));
+
+      const allowedActions = deriveAllowedActionsForCaller({
+        statusActionCandidates: deriveStatusActionCandidates(incident.status),
+        capabilities: ctx.capabilities,
+        incidentAttemptId: incident.attemptId,
+      });
+
+      return reply.send(
+        ProctorIncidentDetailSchema.parse({
+          incident: toIncidentResponse(incident),
+          examSummary: { id: exam.id, title: exam.title, status: exam.status },
+          primaryAttempt: primaryAttempt
+            ? {
+                id: primaryAttempt.id,
+                candidateId: primaryAttempt.candidateId,
+                status: primaryAttempt.status,
+              }
+            : null,
+          events: events.map((event) => ({
+            ...event,
+            createdAt: event.createdAt.toISOString(),
+          })),
+          notes,
+          actionLinks: actionLinks.map((link) => ({
+            id: link.id,
+            actionType: link.actionType,
+            actionId: link.actionId,
+            linkedAt: link.linkedAt.toISOString(),
+          })),
+          attemptLinks: attemptLinks.map((link) => ({
+            id: link.id,
+            attemptId: link.attemptId,
+            relationshipType: link.relationshipType,
+            linkedAt: link.linkedAt.toISOString(),
+          })),
+          interruptionLinks: interruptionLinks.map((link) => ({
+            id: link.id,
+            attemptId: link.attemptId,
+            interruptionId: link.interruptionId,
+            linkedAt: link.linkedAt.toISOString(),
+          })),
+          allowedActions,
         }),
       );
     },

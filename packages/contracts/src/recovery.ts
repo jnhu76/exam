@@ -434,3 +434,76 @@ export const ExamRecoveryContextSchema = z.object({
 });
 
 export type ExamRecoveryContext = z.infer<typeof ExamRecoveryContextSchema>;
+
+// ── Proctor Recovery Center (J6, #303) — narrow Proctor-scoped projections ──
+//
+// SCOPE (EXAM-303 authority freeze F3, human-gate corrective 2026-09-12):
+// these projections expose ONLY incident-domain truth an assigned Proctor
+// already has read authority over. They deliberately OMIT every Admin
+// recovery-only field the shared repo happens to carry: time-adjustment
+// ledger/summaries, auditReferences, activeProctors, candidate/account
+// operational details, and attempt-command execution details. An incident
+// action link that points at an Admin-only action is represented by its
+// incident-domain link metadata only (type / linked id / relationship).
+
+export const ProctorRecoveryAttemptSummarySchema = z.object({
+  id: z.string(),
+  candidateId: z.string().nullable(),
+  status: z.string(),
+});
+
+export const ProctorRecoveryWorklistItemSchema = z.object({
+  incident: IncidentResponseSchema,
+  examSummary: RecoveryExamSummarySchema,
+  primaryAttempt: ProctorRecoveryAttemptSummarySchema.nullable(),
+});
+
+export const ProctorRecoveryWorklistResponseSchema = z.object({
+  items: z.array(ProctorRecoveryWorklistItemSchema),
+  nextCursor: z.string().nullable(),
+  snapshotAt: z.string(),
+});
+
+export const ProctorIncidentActionLinkSchema = z.object({
+  id: z.string().uuid(),
+  actionType: z.enum(["time_grant", "force_submit"]),
+  actionId: z.string(),
+  linkedAt: z.string(),
+});
+
+export const ProctorIncidentAttemptLinkSchema = z.object({
+  id: z.string().uuid(),
+  attemptId: z.string(),
+  relationshipType: z.enum(["affected", "referenced"]),
+  linkedAt: z.string(),
+});
+
+export const ProctorIncidentInterruptionLinkSchema = z.object({
+  id: z.string().uuid(),
+  attemptId: z.string(),
+  interruptionId: z.string().uuid(),
+  linkedAt: z.string(),
+});
+
+export const ProctorIncidentDetailSchema = z.object({
+  incident: IncidentResponseSchema,
+  examSummary: RecoveryExamSummarySchema,
+  primaryAttempt: ProctorRecoveryAttemptSummarySchema.nullable(),
+  events: z.array(RecoveryAggregateEventSchema),
+  notes: z.array(RecoveryAggregateNoteSchema),
+  actionLinks: z.array(ProctorIncidentActionLinkSchema),
+  attemptLinks: z.array(ProctorIncidentAttemptLinkSchema),
+  interruptionLinks: z.array(ProctorIncidentInterruptionLinkSchema),
+  allowedActions: z.array(RecoveryAllowedActionSchema),
+});
+
+export type ProctorRecoveryAttemptSummary = z.infer<
+  typeof ProctorRecoveryAttemptSummarySchema
+>;
+export type ProctorRecoveryWorklistItem = z.infer<
+  typeof ProctorRecoveryWorklistItemSchema
+>;
+export type ProctorRecoveryWorklistResponse = z.infer<
+  typeof ProctorRecoveryWorklistResponseSchema
+>;
+export type ProctorIncidentDetail = z.infer<typeof ProctorIncidentDetailSchema>;

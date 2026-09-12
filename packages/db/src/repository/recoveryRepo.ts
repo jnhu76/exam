@@ -2057,7 +2057,9 @@ export function createRecoveryRepo(db: Database) {
  * `incident.investigate` / `incident.resolve` sees fewer actions, and an
  * anchored Incident never exposes `link_attempt`.
  */
-function deriveStatusActionCandidates(status: string): IncidentAllowedAction[] {
+export function deriveStatusActionCandidates(
+  status: string,
+): IncidentAllowedAction[] {
   const APPEND_ONLY: IncidentAllowedAction[] = [
     "add_note",
     "link_action",
