@@ -229,6 +229,13 @@ export function canSeeRecovery(
   return can(user, Permission.IncidentRecoveryView);
 }
 
+/** Proctor Recovery Center nav — Admin + Proctor with `incident.view`. */
+export function canSeeProctorRecovery(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return can(user, Permission.IncidentView);
+}
+
 // ── Exam-page action visibility (task 10.4) ──
 
 export function canPublishExam(

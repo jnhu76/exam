@@ -59,7 +59,7 @@ export function ProctorRecoveryIncidentDetailPage() {
           `/api/admin/incidents/${incidentId}/detail`,
           { signal },
         ),
-      getSnapshotAt: () => null,
+      getSnapshotAt: (d) => d.snapshotAt,
       staleAfterMs: SNAPSHOT_STALE_MS,
       deps: [incidentId],
     });
@@ -261,9 +261,12 @@ export function ProctorRecoveryIncidentDetailPage() {
                 titleKey="admin.recoveryOps.actions.linkAttempt"
                 confirmLabelKey="admin.recoveryOps.actions.linkAttempt"
                 doneToastKey="admin.recoveryOps.actions.linkAttemptDone"
-                description={t("admin.recoveryOps.linkAttemptDescription", {
-                  id: data.incident.id,
-                })}
+                description={t(
+                  "admin.recoveryOps.linkAttemptDescription" as never,
+                  {
+                    id: data.incident.id,
+                  },
+                )}
                 fields={[
                   {
                     kind: "text",

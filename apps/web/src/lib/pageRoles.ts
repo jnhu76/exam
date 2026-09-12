@@ -171,6 +171,16 @@ export const ROUTE_PAGE_ROLES: readonly RoutePageRole[] = [
     page: "RecoveryExamDetailPage",
     role: "admin-standard",
   },
+  {
+    route: "/admin/proctor/recovery",
+    page: "ProctorRecoveryPage",
+    role: "admin-standard",
+  },
+  {
+    route: "/admin/proctor/recovery/incidents/:incidentId",
+    page: "ProctorRecoveryIncidentDetailPage",
+    role: "admin-standard",
+  },
   { route: "/admin/*", page: "PlaceholderPage", role: "admin-standard" },
 
   // /exam (ExamLayout owns the gutter; candidate pages declare `candidate`)

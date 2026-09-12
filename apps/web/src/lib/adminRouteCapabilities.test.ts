@@ -281,6 +281,8 @@ describe("ADMIN_ROUTE_CAPABILITIES — coverage integrity", () => {
       "recovery/incidents/:id",
       "recovery/attempts/:id",
       "recovery/exams/:id",
+      "proctor/recovery",
+      "proctor/recovery/incidents/:incidentId",
     ];
     const registered = new Set(ADMIN_ROUTE_CAPABILITIES.map((e) => e.pattern));
     for (const r of appRoutes) {

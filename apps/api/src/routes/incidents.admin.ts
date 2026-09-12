@@ -1543,6 +1543,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
             linkedAt: l.linkedAt.toISOString(),
           })),
           allowedActions,
+          snapshotAt: detail.snapshotAt.toISOString(),
         }),
       );
     },

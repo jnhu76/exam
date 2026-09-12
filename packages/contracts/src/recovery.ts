@@ -495,6 +495,7 @@ export const ProctorIncidentDetailSchema = z.object({
   attemptLinks: z.array(ProctorIncidentAttemptLinkSchema),
   interruptionLinks: z.array(ProctorIncidentInterruptionLinkSchema),
   allowedActions: z.array(RecoveryAllowedActionSchema),
+  snapshotAt: z.string(),
 });
 
 export type ProctorRecoveryAttemptSummary = z.infer<

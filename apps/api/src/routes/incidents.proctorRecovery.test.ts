@@ -364,6 +364,7 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
       "interruptionLinks",
       "notes",
       "primaryAttempt",
+      "snapshotAt",
     ]);
     expect(body.incident.id).toBe(incidentAId);
     expect(body.examSummary).toMatchObject({ id: examAId });
