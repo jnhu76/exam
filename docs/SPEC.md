@@ -315,7 +315,7 @@ untimed 示例：
 | `detectTabSwitch` | 关 | 开 | Phase 1 minimal behavior；完整审计与处置进入 Phase 2 |
 | `disableCopyPaste` | 关 | 开 | 前端禁用右键/选择/复制 |
 | `requireQueue` | 关 | 开 | 队列入场（**#292 已交付**）：与计时模式**正交**的准入维度，由 PostgreSQL `exam_admissions` 承载；重启/多实例安全，幂等 join/admit/start，见 exam-runtime.md §3.1.1 |
-| `batchSize` | - | 10 | 每批放行人数；anchor=最早活跃 `joined_at`，首批即时放行，批不满按时放行 |
+| `batchSize` | - | 10 | 每批放行人数；anchor=最早 `joined_at`（含已消费记录），schedule ordinal 由全部 membership 推导，UI position 由活跃 membership 推导；首批即时放行，批不满按时放行 |
 | `batchInterval` | - | 3 | 批次间隔秒数 |
 | `restrictIp` | 关 | 开 | 仅允许考场 IP 段 [Phase 2] |
 | `requireLockdown` | 关 | 关 | 强制 Electron 锁屏 [Deferred] |

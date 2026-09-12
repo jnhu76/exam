@@ -137,6 +137,7 @@ async function createQueueExam(
   adminToken: string,
   title: string,
   profileIds: string[],
+  controlFlags = QUEUE_FLAGS,
 ): Promise<string> {
   const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   const course = await request("POST", "/api/courses", {
@@ -176,7 +177,7 @@ async function createQueueExam(
       passingScore: 60,
       totalScore: 100,
       questionIds: [asRecord(question.json).id as string],
-      controlFlags: { ...QUEUE_FLAGS },
+      controlFlags,
     },
   });
   if (exam.status !== 201)
@@ -319,11 +320,25 @@ describe("durable admission across real process boundaries (#292 Q7/Q8)", () => 
     "D2/Q8: two processes observe the same truth and the batch cap holds globally",
     { timeout: 240_000 },
     async () => {
+      // Use a short interval so the corrected schedule boundary is reachable
+      // in a process test without changing the production polling cadence.
       const sa = await boot();
+      const localExamId = await createQueueExam(
+        (method, path, opts = {}) => call(sa.baseUrl, method, path, opts),
+        adminToken,
+        "Durability Progress Exam",
+        [c1.profileId, c2.profileId],
+        { ...QUEUE_FLAGS, batchInterval: 2 },
+      );
+      const localQueueAt = (base: string, token: string) =>
+        call(base, "POST", `/api/attempts/${localExamId}/queue`, { token });
+      const localStartAt = (base: string, token: string) =>
+        call(base, "POST", `/api/attempts/${localExamId}/start`, { token });
+
       const sb = await boot();
 
-      const qa1 = await queueAt(sa.baseUrl, c1.token);
-      const qb2 = await queueAt(sb.baseUrl, c2.token);
+      const qa1 = await localQueueAt(sa.baseUrl, c1.token);
+      const qb2 = await localQueueAt(sb.baseUrl, c2.token);
       expect(asRecord(qa1.json)).toMatchObject({
         status: "ready",
         position: 1,
@@ -335,25 +350,26 @@ describe("durable admission across real process boundaries (#292 Q7/Q8)", () => 
       });
 
       // The cap binds through either process.
-      const denied = await startAt(sb.baseUrl, c2.token);
+      const denied = await localStartAt(sb.baseUrl, c2.token);
       expect(denied.status).toBe(409);
 
-      // Head consumes; the NEXT batch slot becomes eligible through the
-      // OTHER process — progression without over-admission.
-      const admitted = await startAt(sa.baseUrl, c1.token);
+      // Head consumes; the NEXT batch slot becomes eligible at the schedule
+      // boundary — progression without over-admission.
+      const admitted = await localStartAt(sa.baseUrl, c1.token);
       expect(admitted.status).toBe(201);
-      const progressed = await queueAt(sb.baseUrl, c2.token);
+      await new Promise((r) => setTimeout(r, 2_500));
+      const progressed = await localQueueAt(sb.baseUrl, c2.token);
       expect(asRecord(progressed.json)).toMatchObject({
         status: "ready",
         position: 1,
       });
-      const started = await startAt(sb.baseUrl, c2.token);
+      const started = await localStartAt(sb.baseUrl, c2.token);
       expect(started.status).toBe(201);
 
       const rows = await db
         .select()
         .from(schema.examAttempts)
-        .where(eq(schema.examAttempts.examId, examId));
+        .where(eq(schema.examAttempts.examId, localExamId));
       expect(rows).toHaveLength(2);
     },
   );

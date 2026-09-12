@@ -8,7 +8,9 @@
 -- history and a retake re-join inserts a fresh row.
 --
 -- QUEUE ADMISSION IS NOT TIME AUTHORITY: joined_at is an ordering key and
--- the batch anchor; nothing here derives or alters exam/attempt timing.
+-- the durable batch anchor (earliest joined_at across all memberships,
+-- including consumed history rows); nothing here derives or alters exam/attempt
+-- timing.
 --
 -- No backfill: the legacy process-local queue state was ephemeral and
 -- cannot be migrated (LEGACY_RUNTIME_MIGRATION=discard-and-rejoin).

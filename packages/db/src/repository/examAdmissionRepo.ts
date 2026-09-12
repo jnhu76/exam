@@ -151,7 +151,7 @@ export function createExamAdmissionRepo(db: Database) {
       return rows[0] ? toRecord(rows[0]) : null;
     },
 
-    async earliestActiveJoinedAt(
+    async earliestJoinedAt(
       ctx: TenantContext | RequestContext,
       organizationId: string,
       examId: string,
@@ -164,12 +164,39 @@ export function createExamAdmissionRepo(db: Database) {
           and(
             eq(examAdmissions.organizationId, organizationId),
             eq(examAdmissions.examId, examId),
-            isNull(examAdmissions.consumedAt),
           ),
         )
         .orderBy(asc(examAdmissions.joinedAt), asc(examAdmissions.id))
         .limit(1);
       return rows[0]?.joinedAt ?? null;
+    },
+
+    async countAllAhead(
+      ctx: TenantContext | RequestContext,
+      organizationId: string,
+      examId: string,
+      joinedAt: Date,
+      id: string,
+    ): Promise<number> {
+      void resolveOptionalOrganizationId(ctx);
+      const rows = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(examAdmissions)
+        .where(
+          and(
+            eq(examAdmissions.organizationId, organizationId),
+            eq(examAdmissions.examId, examId),
+            // Stable schedule ordinal: all memberships (active + consumed).
+            or(
+              lt(examAdmissions.joinedAt, joinedAt),
+              and(
+                eq(examAdmissions.joinedAt, joinedAt),
+                lt(examAdmissions.id, id),
+              ),
+            ),
+          ),
+        );
+      return rows[0]?.count ?? 0;
     },
 
     async countActiveAhead(
@@ -188,7 +215,7 @@ export function createExamAdmissionRepo(db: Database) {
             eq(examAdmissions.organizationId, organizationId),
             eq(examAdmissions.examId, examId),
             isNull(examAdmissions.consumedAt),
-            // Durable ordering key: (joined_at, id) — stable tie-breaker.
+            // UI position ordering key: (joined_at, id) over active rows.
             or(
               lt(examAdmissions.joinedAt, joinedAt),
               and(

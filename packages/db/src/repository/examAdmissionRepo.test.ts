@@ -88,6 +88,65 @@ async function seedCandidateProfile(candidateId: string): Promise<void> {
   });
 }
 
+/** Creates a fresh exam for tests that depend on exact schedule counts. */
+async function createFreshExam(): Promise<string> {
+  const now = new Date();
+  const courseId = randomUUID();
+  await db.insert(schema.courses).values({
+    id: courseId,
+    organizationId: orgId,
+    name: `Admission Course ${courseId.slice(0, 4)}`,
+    code: `AC-${courseId.slice(0, 4)}`,
+    description: "",
+    createdAt: now,
+    updatedAt: now,
+  });
+  const id = randomUUID();
+  await db.insert(schema.exams).values({
+    id,
+    organizationId: orgId,
+    title: `Admission Exam ${id.slice(0, 4)}`,
+    description: "",
+    courseId,
+    status: "open",
+    timingMode: "timed_window",
+    durationMinutes: 60,
+    openAt: now,
+    closeAt: new Date(Date.now() + 86400000),
+    passingScore: 60,
+    totalScore: 100,
+    questionSelectionMode: "manual",
+    questionIds: [],
+    questionSnapshot: [],
+    controlFlags: {
+      shuffleQuestions: false,
+      shuffleOptions: false,
+      detectTabSwitch: false,
+      disableCopyPaste: false,
+      requireQueue: true,
+      batchSize: 10,
+      batchInterval: 3,
+      restrictIp: false,
+      requireLockdown: false,
+      showResultImmediately: true,
+    },
+    retakePolicy: "unlimited",
+    scoreStrategy: "highest",
+    maxAttempts: 3,
+    latestStartOffsetMinutes: null,
+    minSubmitAfterStartMinutes: null,
+    resultPublicationMode: "immediate",
+    resultsPublishedAt: null,
+    interruptionTimePolicy: "strict",
+    interruptionGracePerIncidentSeconds: null,
+    interruptionGracePerAttemptSeconds: null,
+    syncStartedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  } as never);
+  return id;
+}
+
 beforeAll(async () => {
   const isolated = await getIsolatedTestDb("exam-admission-repo");
   db = isolated.db;
@@ -235,55 +294,59 @@ describe("examAdmissionRepo (real PostgreSQL)", () => {
     expect(second).toBeNull();
   });
 
-  it("countActiveAhead + earliestActiveJoinedAt order over ACTIVE rows by (joined_at, id)", async () => {
+  it("schedule authority uses ALL rows; consumption only shrinks active position", async () => {
+    const localExamId = await createFreshExam();
     const repo = createExamAdmissionRepo(db);
     const ids = [randomUUID(), randomUUID(), randomUUID()];
     for (const id of ids) {
       await seedCandidateProfile(id);
     }
-    const t0 = new Date(Date.now() - 10_000);
+    const t0 = new Date("2025-01-01T09:00:00.000Z");
     const a = await repo.joinActive(ctx, {
       organizationId: orgId,
-      examId,
+      examId: localExamId,
       candidateId: ids[0]!,
       joinedAt: t0,
     });
     await repo.admitOnce(ctx, a.id, t0);
     const b = await repo.joinActive(ctx, {
       organizationId: orgId,
-      examId,
+      examId: localExamId,
       candidateId: ids[1]!,
       joinedAt: new Date(t0.getTime() + 1000),
     });
     const c = await repo.joinActive(ctx, {
       organizationId: orgId,
-      examId,
+      examId: localExamId,
       candidateId: ids[2]!,
       joinedAt: new Date(t0.getTime() + 2000),
     });
 
+    // Schedule ordinal is derived from ALL memberships (active + consumed).
     expect(
-      await repo.countActiveAhead(ctx, orgId, examId, b.joinedAt, b.id),
+      await repo.countAllAhead(ctx, orgId, localExamId, b.joinedAt, b.id),
     ).toBe(1);
     expect(
-      await repo.countActiveAhead(ctx, orgId, examId, c.joinedAt, c.id),
+      await repo.countAllAhead(ctx, orgId, localExamId, c.joinedAt, c.id),
     ).toBe(2);
-    expect(await repo.earliestActiveJoinedAt(ctx, orgId, examId)).toEqual(t0);
+    expect(await repo.earliestJoinedAt(ctx, orgId, localExamId)).toEqual(t0);
 
-    // Consuming the head shifts the anchor and positions (legacy parity).
+    // Consuming the head shrinks the UI position but MUST NOT shift the
+    // schedule anchor or ordinal.
     await repo.consumeActive(
       ctx,
       orgId,
-      examId,
+      localExamId,
       ids[0]!,
       new Date(),
       await seedAttempt(ids[0]!),
     );
-    expect(await repo.earliestActiveJoinedAt(ctx, orgId, examId)).toEqual(
-      b.joinedAt,
-    );
+    expect(await repo.earliestJoinedAt(ctx, orgId, localExamId)).toEqual(t0);
     expect(
-      await repo.countActiveAhead(ctx, orgId, examId, c.joinedAt, c.id),
+      await repo.countAllAhead(ctx, orgId, localExamId, c.joinedAt, c.id),
+    ).toBe(2);
+    expect(
+      await repo.countActiveAhead(ctx, orgId, localExamId, c.joinedAt, c.id),
     ).toBe(1);
   });
 
@@ -315,5 +378,205 @@ describe("examAdmissionRepo (real PostgreSQL)", () => {
     });
     expect(second.id).not.toBe(first.id);
     expect(second.consumedAt).toBeNull();
+  });
+});
+
+describe("durable schedule authority across instances", () => {
+  async function seedCandidate(candidateId: string): Promise<void> {
+    await seedCandidateProfile(candidateId);
+  }
+
+  it("T3 — restart invariance: a fresh repo instance reads the same schedule facts", async () => {
+    const localExamId = await createFreshExam();
+    const repo1 = createExamAdmissionRepo(db);
+    const aId = randomUUID();
+    const bId = randomUUID();
+    await seedCandidate(aId);
+    await seedCandidate(bId);
+
+    const t0 = new Date("2025-01-01T09:00:00.000Z");
+    await repo1.joinActive(ctx, {
+      organizationId: orgId,
+      examId: localExamId,
+      candidateId: aId,
+      joinedAt: t0,
+    });
+    const b = await repo1.joinActive(ctx, {
+      organizationId: orgId,
+      examId: localExamId,
+      candidateId: bId,
+      joinedAt: new Date(t0.getTime() + 1000),
+    });
+
+    // Simulate API restart: a brand-new repo instance against the same DB.
+    const repo2 = createExamAdmissionRepo(db);
+    expect(await repo2.earliestJoinedAt(ctx, orgId, localExamId)).toEqual(t0);
+    expect(
+      await repo2.countAllAhead(ctx, orgId, localExamId, b.joinedAt, b.id),
+    ).toBe(1);
+  });
+
+  it("T4 — multi-instance invariance: two repo instances agree on release authority", async () => {
+    const localExamId = await createFreshExam();
+    const repoA = createExamAdmissionRepo(db);
+    const repoB = createExamAdmissionRepo(db);
+    const aId = randomUUID();
+    const bId = randomUUID();
+    await seedCandidate(aId);
+    await seedCandidate(bId);
+
+    const t0 = new Date("2025-01-01T09:00:00.000Z");
+    await repoA.joinActive(ctx, {
+      organizationId: orgId,
+      examId: localExamId,
+      candidateId: aId,
+      joinedAt: t0,
+    });
+    const b = await repoA.joinActive(ctx, {
+      organizationId: orgId,
+      examId: localExamId,
+      candidateId: bId,
+      joinedAt: new Date(t0.getTime() + 1000),
+    });
+
+    const [anchorA, anchorB, ordinalA, ordinalB] = await Promise.all([
+      repoA.earliestJoinedAt(ctx, orgId, localExamId),
+      repoB.earliestJoinedAt(ctx, orgId, localExamId),
+      repoA.countAllAhead(ctx, orgId, localExamId, b.joinedAt, b.id),
+      repoB.countAllAhead(ctx, orgId, localExamId, b.joinedAt, b.id),
+    ]);
+    expect(anchorA).toEqual(anchorB);
+    expect(anchorA).toEqual(t0);
+    expect(ordinalA).toBe(ordinalB);
+    expect(ordinalA).toBe(1);
+  });
+
+  it("C1 — concurrent duplicate joins converge on one durable membership", async () => {
+    const repoA = createExamAdmissionRepo(db);
+    const repoB = createExamAdmissionRepo(db);
+    const candidateId = randomUUID();
+    await seedCandidate(candidateId);
+
+    const [first, second] = await Promise.all([
+      repoA.joinActive(ctx, {
+        organizationId: orgId,
+        examId,
+        candidateId,
+        joinedAt: new Date(),
+      }),
+      repoB.joinActive(ctx, {
+        organizationId: orgId,
+        examId,
+        candidateId,
+        joinedAt: new Date(),
+      }),
+    ]);
+    expect(first.id).toBe(second.id);
+  });
+
+  it("C2 — concurrent admitOnce converges on one admitted fact", async () => {
+    const repo = createExamAdmissionRepo(db);
+    const candidateId = randomUUID();
+    await seedCandidate(candidateId);
+    const row = await repo.joinActive(ctx, {
+      organizationId: orgId,
+      examId,
+      candidateId,
+      joinedAt: new Date(),
+    });
+
+    const t1 = new Date();
+    const t2 = new Date(t1.getTime() + 1);
+    const [a, b] = await Promise.all([
+      repo.admitOnce(ctx, row.id, t1),
+      repo.admitOnce(ctx, row.id, t2),
+    ]);
+    const admitted = a ?? b;
+    expect(admitted).not.toBeNull();
+    expect([a, b].filter((x) => x !== null)).toHaveLength(1);
+  });
+
+  it("C3 — concurrent consumeActive converges on one consumed fact", async () => {
+    const repo = createExamAdmissionRepo(db);
+    const candidateId = randomUUID();
+    await seedCandidate(candidateId);
+    const row = await repo.joinActive(ctx, {
+      organizationId: orgId,
+      examId,
+      candidateId,
+      joinedAt: new Date(),
+    });
+    await repo.admitOnce(ctx, row.id, new Date());
+
+    const attemptId = await seedAttempt(candidateId);
+    const [a, b] = await Promise.all([
+      repo.consumeActive(
+        ctx,
+        orgId,
+        examId,
+        candidateId,
+        new Date(),
+        attemptId,
+      ),
+      repo.consumeActive(
+        ctx,
+        orgId,
+        examId,
+        candidateId,
+        new Date(),
+        attemptId,
+      ),
+    ]);
+    expect([a, b].filter((x) => x !== null)).toHaveLength(1);
+  });
+
+  it("C4 — consumption of a predecessor does not change another candidate's schedule ordinal", async () => {
+    const localExamId = await createFreshExam();
+    const repo = createExamAdmissionRepo(db);
+    const aId = randomUUID();
+    const bId = randomUUID();
+    await seedCandidate(aId);
+    await seedCandidate(bId);
+
+    const t0 = new Date("2025-01-01T09:00:00.000Z");
+    const a = await repo.joinActive(ctx, {
+      organizationId: orgId,
+      examId: localExamId,
+      candidateId: aId,
+      joinedAt: t0,
+    });
+    const b = await repo.joinActive(ctx, {
+      organizationId: orgId,
+      examId: localExamId,
+      candidateId: bId,
+      joinedAt: new Date(t0.getTime() + 1000),
+    });
+    await repo.admitOnce(ctx, a.id, new Date());
+    await repo.admitOnce(ctx, b.id, new Date());
+
+    const ordinalBefore = await repo.countAllAhead(
+      ctx,
+      orgId,
+      localExamId,
+      b.joinedAt,
+      b.id,
+    );
+    await repo.consumeActive(
+      ctx,
+      orgId,
+      localExamId,
+      aId,
+      new Date(),
+      await seedAttempt(aId),
+    );
+    const ordinalAfter = await repo.countAllAhead(
+      ctx,
+      orgId,
+      localExamId,
+      b.joinedAt,
+      b.id,
+    );
+    expect(ordinalBefore).toBe(1);
+    expect(ordinalAfter).toBe(1);
   });
 });

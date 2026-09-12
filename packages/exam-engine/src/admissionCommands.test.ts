@@ -66,18 +66,24 @@ function makeAdmissionRepo(
         ) ?? null
       );
     },
-    async earliestActiveJoinedAt(organizationId, examId) {
-      const active = store.filter(
+    async earliestJoinedAt(organizationId, examId) {
+      const rows = store.filter(
+        (r) => r.organizationId === organizationId && r.examId === examId,
+      );
+      if (rows.length === 0) return null;
+      return rows.reduce(
+        (min, r) => (r.joinedAt < min ? r.joinedAt : min),
+        rows[0]!.joinedAt,
+      );
+    },
+    async countAllAhead(organizationId, examId, joinedAt, id) {
+      return store.filter(
         (r) =>
           r.organizationId === organizationId &&
           r.examId === examId &&
-          r.consumedAt === null,
-      );
-      if (active.length === 0) return null;
-      return active.reduce(
-        (min, r) => (r.joinedAt < min ? r.joinedAt : min),
-        active[0]!.joinedAt,
-      );
+          (r.joinedAt < joinedAt ||
+            (r.joinedAt.getTime() === joinedAt.getTime() && r.id < id)),
+      ).length;
     },
     async countActiveAhead(organizationId, examId, joinedAt, id) {
       return store.filter(
@@ -336,6 +342,191 @@ describe("previewAdmissionStatus (derived position — never stored)", () => {
 
     const v2 = await previewAdmissionStatus(deps, exam, "c2", at(2));
     expect(v2.position).toBe(1);
+  });
+});
+
+describe("batch schedule semantics corrective", () => {
+  it("T1 — consumption of predecessor must NOT accelerate release (batchSize=1, interval=30)", async () => {
+    const repo = makeAdmissionRepo();
+    const deps: AdmissionDeps = { repo };
+    const exam = requireQueueExam({ batchSize: 1, batchInterval: 30 });
+
+    await joinAdmissionQueue(deps, exam, "A", T0);
+    await joinAdmissionQueue(deps, exam, "B", at(0.1));
+
+    // A is admitted and starts immediately (first batch).
+    await reconcileAdmission(deps, exam, "A", at(1));
+    await repo.consumeActive(
+      exam.organizationId,
+      exam.id,
+      "A",
+      at(1),
+      "attempt-A",
+    );
+
+    // OLD BUG: with anchor = earliest ACTIVE joined_at, B becomes position 1
+    // and the elapsed time from B's join is <30s, yet releasedBatches=1
+    // admits B immediately. This must NOT happen.
+    const early = await reconcileAdmission(deps, exam, "B", at(2));
+    expect(early?.admittedAt).toBeNull();
+
+    const view = await previewAdmissionStatus(deps, exam, "B", at(2));
+    expect(view.ready).toBe(false);
+    expect(view.state).toBe("waiting");
+    expect(view.estimatedWaitSeconds).toBe(30);
+
+    // B's legitimate second-batch boundary is at T0+30s.
+    const atBoundary = await reconcileAdmission(deps, exam, "B", at(30));
+    expect(atBoundary?.admittedAt).not.toBeNull();
+  });
+
+  it("T2 — multiple consumed predecessors must not keep moving C earlier", async () => {
+    const repo = makeAdmissionRepo();
+    const deps: AdmissionDeps = { repo };
+    const exam = requireQueueExam({ batchSize: 1, batchInterval: 30 });
+
+    await joinAdmissionQueue(deps, exam, "A", T0);
+    await joinAdmissionQueue(deps, exam, "B", at(0.1));
+    await joinAdmissionQueue(deps, exam, "C", at(0.2));
+
+    await reconcileAdmission(deps, exam, "A", at(1));
+    await repo.consumeActive(
+      exam.organizationId,
+      exam.id,
+      "A",
+      at(1),
+      "attempt-A",
+    );
+
+    // B's boundary is t0+30; do not let B start before then.
+    expect(
+      (await reconcileAdmission(deps, exam, "B", at(2)))?.admittedAt,
+    ).toBeNull();
+    const bAdmitted = await reconcileAdmission(deps, exam, "B", at(30));
+    expect(bAdmitted?.admittedAt).not.toBeNull();
+    await repo.consumeActive(
+      exam.organizationId,
+      exam.id,
+      "B",
+      at(31),
+      "attempt-B",
+    );
+
+    // C is now the only active candidate but must still wait for batch 3.
+    expect(
+      (await reconcileAdmission(deps, exam, "C", at(32)))?.admittedAt,
+    ).toBeNull();
+    expect(
+      (await previewAdmissionStatus(deps, exam, "C", at(32)))
+        .estimatedWaitSeconds,
+    ).toBeGreaterThan(0);
+    const cAdmitted = await reconcileAdmission(deps, exam, "C", at(60));
+    expect(cAdmitted?.admittedAt).not.toBeNull();
+  });
+
+  it("T5 — late join is placed at the next unreleased batch boundary", async () => {
+    const repo = makeAdmissionRepo();
+    const deps: AdmissionDeps = { repo };
+    const exam = requireQueueExam({ batchSize: 2, batchInterval: 30 });
+
+    await joinAdmissionQueue(deps, exam, "A", T0);
+    await joinAdmissionQueue(deps, exam, "B", at(1));
+    // First batch (A+B) releases at T0.
+    await reconcileAdmission(deps, exam, "A", at(2));
+    await reconcileAdmission(deps, exam, "B", at(2));
+
+    // C joins after the first batch has already released.
+    await joinAdmissionQueue(deps, exam, "C", at(10));
+    // C's ordinal is 3 → batch 2 → release at T0+30, not immediately.
+    expect(
+      (await reconcileAdmission(deps, exam, "C", at(11)))?.admittedAt,
+    ).toBeNull();
+    expect(
+      (await previewAdmissionStatus(deps, exam, "C", at(11)))
+        .estimatedWaitSeconds,
+    ).toBe(30);
+
+    const cAdmitted = await reconcileAdmission(deps, exam, "C", at(30));
+    expect(cAdmitted?.admittedAt).not.toBeNull();
+  });
+
+  it("T6 — retake inserts a fresh membership with a new schedule identity", async () => {
+    const repo = makeAdmissionRepo();
+    const deps: AdmissionDeps = { repo };
+    const exam = requireQueueExam({ batchSize: 1, batchInterval: 30 });
+
+    const aFirst = await joinAdmissionQueue(deps, exam, "A", T0);
+    await joinAdmissionQueue(deps, exam, "B", at(1));
+
+    await reconcileAdmission(deps, exam, "A", at(2));
+    await repo.consumeActive(
+      exam.organizationId,
+      exam.id,
+      "A",
+      at(2),
+      "attempt-A",
+    );
+
+    // A retakes: fresh membership must be after B in the schedule.
+    const aRetake = await joinAdmissionQueue(deps, exam, "A", at(3));
+    expect(aRetake.id).not.toBe(aFirst.id);
+
+    // B is batch 2 (t0+30); A's retake is batch 3 (t0+60).
+    expect(
+      (await reconcileAdmission(deps, exam, "A", at(30)))?.admittedAt,
+    ).toBeNull();
+    const bAdmitted = await reconcileAdmission(deps, exam, "B", at(30));
+    expect(bAdmitted?.admittedAt).not.toBeNull();
+
+    const aAdmitted = await reconcileAdmission(deps, exam, "A", at(60));
+    expect(aAdmitted?.admittedAt).not.toBeNull();
+  });
+
+  it("M4 — restoring active-anchor semantics re-introduces the acceleration bug", async () => {
+    // Mutation proof: if schedule authority is incorrectly derived from the
+    // ACTIVE set, T1's consumption cascade makes B ready immediately.
+    const correctedRepo = makeAdmissionRepo();
+    const activeAnchorRepo: ExamAdmissionRepository = {
+      ...correctedRepo,
+      earliestJoinedAt: async (organizationId, examId) => {
+        const active = correctedRepo.rows.filter(
+          (r) =>
+            r.organizationId === organizationId &&
+            r.examId === examId &&
+            r.consumedAt === null,
+        );
+        if (active.length === 0) return null;
+        return active.reduce(
+          (min, r) => (r.joinedAt < min ? r.joinedAt : min),
+          active[0]!.joinedAt,
+        );
+      },
+      countAllAhead: async (organizationId, examId, joinedAt, id) =>
+        correctedRepo.rows.filter(
+          (r) =>
+            r.organizationId === organizationId &&
+            r.examId === examId &&
+            r.consumedAt === null &&
+            (r.joinedAt < joinedAt ||
+              (r.joinedAt.getTime() === joinedAt.getTime() && r.id < id)),
+        ).length,
+    };
+    const deps: AdmissionDeps = { repo: activeAnchorRepo };
+    const exam = requireQueueExam({ batchSize: 1, batchInterval: 30 });
+
+    await joinAdmissionQueue(deps, exam, "A", T0);
+    await joinAdmissionQueue(deps, exam, "B", at(0.1));
+    await reconcileAdmission(deps, exam, "A", at(1));
+    await correctedRepo.consumeActive(
+      exam.organizationId,
+      exam.id,
+      "A",
+      at(1),
+      "attempt-A",
+    );
+
+    const early = await reconcileAdmission(deps, exam, "B", at(2));
+    expect(early?.admittedAt).not.toBeNull();
   });
 });
 

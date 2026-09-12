@@ -68,13 +68,29 @@ export interface ExamAdmissionRepository {
     candidateId: string,
   ): Promise<ExamAdmissionRecord | null>;
 
-  /** Earliest joined_at among ACTIVE memberships of the exam (the batch anchor). */
-  earliestActiveJoinedAt(
+  /**
+   * Earliest joined_at among ALL memberships of the exam (the immutable batch
+   * anchor). Consumed rows are history, but they keep the epoch from shifting
+   * when the active set shrinks.
+   */
+  earliestJoinedAt(
     organizationId: string,
     examId: string,
   ): Promise<Date | null>;
 
-  /** Count of ACTIVE memberships strictly ahead of (joinedAt, id). */
+  /**
+   * Count of ALL memberships (active + consumed) strictly ahead of
+   * (joinedAt, id). This is the candidate's stable schedule ordinal; it never
+   * changes when another candidate starts.
+   */
+  countAllAhead(
+    organizationId: string,
+    examId: string,
+    joinedAt: Date,
+    id: string,
+  ): Promise<number>;
+
+  /** Count of ACTIVE memberships strictly ahead of (joinedAt, id) — UI position. */
   countActiveAhead(
     organizationId: string,
     examId: string,
@@ -116,10 +132,10 @@ export interface AdmissionDeps {
 }
 
 /**
- * Pure batch release schedule (as-built parity with the legacy in-memory
- * gate): the anchor is the earliest active joined_at; every interval seconds
- * another batchSize candidates are released; the first batch is released at
- * the anchor instant (elapsed 0 → batch 1). Underfilled batches release on
+ * Pure batch release schedule: the anchor is the earliest joined_at across
+ * all memberships (active + consumed). Every interval seconds another
+ * batchSize candidates are released; the first batch is released at the
+ * anchor instant (elapsed 0 → batch 1). Underfilled batches release on
  * schedule regardless of the actual waiting count.
  */
 export function computeBatchRelease(input: {
@@ -140,6 +156,11 @@ export function computeBatchRelease(input: {
   return { releasedBatches, releasedCount: releasedBatches * batchSize };
 }
 
+/** Stable batch number for a schedule ordinal. */
+export function computeBatchNumber(ordinal: number, batchSize: number): number {
+  return Math.ceil(ordinal / batchSize);
+}
+
 /** Derived lifecycle state — never stored, always computed. */
 export function deriveAdmissionState(
   record: Pick<ExamAdmissionRecord, "admittedAt" | "consumedAt">,
@@ -150,6 +171,24 @@ export function deriveAdmissionState(
   return record.admittedAt === null ? "waiting" : "admitted";
 }
 
+/** Stable schedule ordinal — never changes because of consumption. */
+async function scheduleOrdinal(
+  deps: AdmissionDeps,
+  organizationId: string,
+  examId: string,
+  record: ExamAdmissionRecord,
+): Promise<number> {
+  return (
+    (await deps.repo.countAllAhead(
+      organizationId,
+      examId,
+      record.joinedAt,
+      record.id,
+    )) + 1
+  );
+}
+
+/** UI position among currently active rows — may improve as others start. */
 async function activePosition(
   deps: AdmissionDeps,
   organizationId: string,
@@ -202,10 +241,7 @@ export async function previewAdmissionStatus(
     exam.id,
     candidateId,
   );
-  const anchor = await deps.repo.earliestActiveJoinedAt(
-    exam.organizationId,
-    exam.id,
-  );
+  const anchor = await deps.repo.earliestJoinedAt(exam.organizationId, exam.id);
   const { releasedBatches, releasedCount } = computeBatchRelease({
     anchor,
     now,
@@ -227,16 +263,20 @@ export async function previewAdmissionStatus(
   }
 
   const state = deriveAdmissionState(active);
+  const ordinal = await scheduleOrdinal(
+    deps,
+    exam.organizationId,
+    exam.id,
+    active,
+  );
   const position = await activePosition(
     deps,
     exam.organizationId,
     exam.id,
     active,
   );
-  const batchesUntilReady = Math.max(
-    0,
-    Math.ceil(position / exam.controlFlags.batchSize) - releasedBatches,
-  );
+  const batchNumber = computeBatchNumber(ordinal, exam.controlFlags.batchSize);
+  const batchesUntilReady = Math.max(0, batchNumber - releasedBatches);
 
   return {
     state,
@@ -254,6 +294,11 @@ export async function previewAdmissionStatus(
  * Demand-driven reconciliation: materializes the durable admitted fact when
  * the derived predicate says the candidate is eligible. Idempotent (Q5):
  * the CAS write happens at most once; concurrent reconciliations converge.
+ *
+ * The release predicate uses the candidate's stable schedule ordinal (count
+ * over ALL memberships), not their current UI position among active rows, so
+ * another candidate starting cannot move this candidate's batch boundary
+ * earlier (batch schedule semantics corrective).
  *
  * Returns the (possibly admitted) ACTIVE membership.
  */
@@ -275,24 +320,22 @@ export async function reconcileAdmission(
     return active;
   }
 
-  const anchor = await deps.repo.earliestActiveJoinedAt(
-    exam.organizationId,
-    exam.id,
-  );
-  const { releasedCount } = computeBatchRelease({
+  const anchor = await deps.repo.earliestJoinedAt(exam.organizationId, exam.id);
+  const { releasedBatches } = computeBatchRelease({
     anchor,
     now,
     batchSize: exam.controlFlags.batchSize,
     batchIntervalSeconds: exam.controlFlags.batchInterval,
   });
-  const position = await activePosition(
+  const ordinal = await scheduleOrdinal(
     deps,
     exam.organizationId,
     exam.id,
     active,
   );
+  const batchNumber = computeBatchNumber(ordinal, exam.controlFlags.batchSize);
 
-  if (position > releasedCount) {
+  if (batchNumber > releasedBatches) {
     return active;
   }
   return (await deps.repo.admitOnce(active.id, now)) ?? active;

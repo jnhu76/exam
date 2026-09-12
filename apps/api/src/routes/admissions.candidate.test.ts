@@ -160,6 +160,67 @@ describe("durable admission candidate API (#292)", () => {
     await ctx.cleanup();
   }, 30_000);
 
+  /** Helper for tests that need to observe progression across batch boundaries. */
+  async function createProgressExam(
+    batchInterval: number,
+    profileIds: string[],
+  ): Promise<string> {
+    const slug = uniquePrefix();
+    const course = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: `QA progress course ${slug}`,
+        code: `QAP-${slug}`,
+        description: "",
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    const courseId = asRecord(course.json()).id as string;
+    const question = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: `QA progress question ${slug}: 2+2=4`,
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    const nowMs = Date.now();
+    const exam = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: `QA progress exam ${slug}`,
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(nowMs - 5_000).toISOString(),
+        closeAt: new Date(nowMs + 3_600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [asRecord(question.json()).id as string],
+        controlFlags: { requireQueue: true, batchSize: 1, batchInterval },
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    const id = asRecord(exam.json()).id as string;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${id}/publish`,
+      cookies: { "auth-token": adminToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${id}/enrollments`,
+      payload: { candidateIds: profileIds },
+      cookies: { "auth-token": adminToken },
+    });
+    return id;
+  }
+
   const queue = (token: string) =>
     ctx.app.inject({
       method: "POST",
@@ -263,29 +324,66 @@ describe("durable admission candidate API (#292)", () => {
   });
 
   it("C2/C4: admission progression across candidates keeps one admitted fact per join", async () => {
-    // c1 consumed its slot; the tail candidate reconciles + starts.
+    // Use a short interval so the corrected schedule boundary is reachable
+    // in an API test without changing the production polling cadence.
+    const progressExamId = await createProgressExam(2, [
+      candidates[0]!.profileId,
+      candidates[1]!.profileId,
+    ]);
+    const queueAt = (token: string) =>
+      ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${progressExamId}/queue`,
+        cookies: { "auth-token": token },
+      });
+    const startAt = (token: string) =>
+      ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${progressExamId}/start`,
+        cookies: { "auth-token": token },
+      });
+
+    const head = candidates[0]!;
     const tail = candidates[1]!;
-    const status = await queue(tail.token);
+
+    const headQueue = await queueAt(head.token);
+    expect(headQueue.json()).toMatchObject({ status: "ready", position: 1 });
+    const tailWaiting = await queueAt(tail.token);
+    expect(tailWaiting.json()).toMatchObject({
+      status: "waiting",
+      position: 2,
+    });
+
+    const started = await startAt(head.token);
+    expect(started.statusCode).toBe(201);
+
+    // The tail is NOT admitted immediately: it must wait for its batch boundary.
+    const tooEarly = await queueAt(tail.token);
+    expect(tooEarly.json()).toMatchObject({ status: "waiting" });
+
+    await new Promise((r) => setTimeout(r, 2_500));
+    const status = await queueAt(tail.token);
     expect(status.json()).toMatchObject({ status: "ready", position: 1 });
+
     const rows = await ctx.db
       .select()
       .from(schema.examAdmissions)
       .where(
         and(
-          eq(schema.examAdmissions.examId, examId),
+          eq(schema.examAdmissions.examId, progressExamId),
           eq(schema.examAdmissions.candidateId, tail.profileId),
         ),
       );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.admittedAt).not.toBeNull();
 
-    const started = await start(tail.token);
-    expect(started.statusCode).toBe(201);
+    const tailStarted = await startAt(tail.token);
+    expect(tailStarted.statusCode).toBe(201);
 
     const attempts = await ctx.db
       .select()
       .from(schema.examAttempts)
-      .where(eq(schema.examAttempts.examId, examId));
+      .where(eq(schema.examAttempts.examId, progressExamId));
     expect(attempts).toHaveLength(2);
   });
 

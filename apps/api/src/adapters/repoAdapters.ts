@@ -424,8 +424,10 @@ export function createExamAdmissionRepoAdapter(
     joinActive: (input) => repo.joinActive(ctx, input),
     findActive: (organizationId, examId, candidateId) =>
       repo.findActive(ctx, organizationId, examId, candidateId),
-    earliestActiveJoinedAt: (organizationId, examId) =>
-      repo.earliestActiveJoinedAt(ctx, organizationId, examId),
+    earliestJoinedAt: (organizationId, examId) =>
+      repo.earliestJoinedAt(ctx, organizationId, examId),
+    countAllAhead: (organizationId, examId, joinedAt, id) =>
+      repo.countAllAhead(ctx, organizationId, examId, joinedAt, id),
     countActiveAhead: (organizationId, examId, joinedAt, id) =>
       repo.countActiveAhead(ctx, organizationId, examId, joinedAt, id),
     admitOnce: (id, admittedAt) => repo.admitOnce(ctx, id, admittedAt),
