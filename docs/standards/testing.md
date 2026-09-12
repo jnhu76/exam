@@ -26,7 +26,7 @@
 
 The CI pipeline (`.github/workflows/ci.yml`) runs on every PR to `master`.
 `static` is the first authority gate. After it passes, `verify-build` produces
-one exact-commit build artifact while `deployment-fresh-install` independently
+one exact-workflow build artifact while `deployment-fresh-install` independently
 proves the canonical Docker source-build path. Web/API/package coverage and
 both E2E shards consume the `verify-build` artifact instead of rebuilding the
 same `dist/**` outputs on separate runners.
@@ -55,7 +55,7 @@ same `dist/**` outputs on separate runners.
 | **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
 | **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
 | **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` for this workflow run only (1-day retention). |
-| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and both E2E shards download this exact-run artifact and do not rebuild it. |
+| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and both E2E shards download this same-run artifact and do not rebuild it. |
 | **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
 | **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment fresh-install does not consume it; that lane continues to build the Docker image from the current checkout. |
 
@@ -472,13 +472,13 @@ durability boundary.
 
 ### 4.3 CI E2E Build/Input Contract
 
-The GitHub-hosted E2E shards use the exact build produced by `verify-build` for
-the same workflow run. They do not independently run `pnpm build`.
+The GitHub-hosted E2E shards use the build artifact produced by `verify-build`
+for the same workflow run. They do not independently run `pnpm build`.
 
 The shard still performs its real mutable/runtime work independently:
 
 1. install workspace dependencies;
-2. download the exact-run build artifact;
+2. download the same-run build artifact;
 3. restore/install Chromium;
 4. migrate and seed its PostgreSQL service;
 5. start the API server;
@@ -646,7 +646,7 @@ EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
 | `matrix.shardIndex` | `[1, 2]` |
 | `matrix.shardTotal` | `[2]` |
 | `fail-fast` | `true` |
-| `build input` | exact-run `verify-build` artifact (`packages/*/dist`, `apps/api/dist`, `apps/web/dist`) |
+| `build input` | same-run `verify-build` artifact (`packages/*/dist`, `apps/api/dist`, `apps/web/dist`) |
 | `browser cache` | `~/.cache/ms-playwright`, keyed by OS + E2E package/lockfile state |
 
 ### Failure Artifact Contract
@@ -671,7 +671,7 @@ After any change to test configuration, CI workflow, or vitest config, verify:
 - [ ] `pnpm --filter @exam/web coverage` passes
 - [ ] `pnpm --filter "@exam/api" coverage` passes (with `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`)
 - [ ] `pnpm verify` passes (full pipeline)
-- [ ] Both CI E2E shards consume the exact-run build artifact and execute their real Playwright tests
+- [ ] Both CI E2E shards consume the same-run build artifact and execute their real Playwright tests
 - [ ] No `as any` casts in test files
 - [ ] All time-dependent tests use fake timers
 - [ ] No `TEST_DATABASE_URL` fallback to `DATABASE_URL` in test configs
