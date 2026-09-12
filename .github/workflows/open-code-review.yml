@@ -60,7 +60,7 @@ jobs:
       - name: Get PR context for manual trigger
         id: pr-context
         if: github.event_name == 'issue_comment'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const prNumber = context.issue.number;

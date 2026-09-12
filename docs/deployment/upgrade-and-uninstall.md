@@ -253,14 +253,14 @@ Properties of the resulting deployment:
 | Contract | Where proven |
 |---|---|
 | Pin re-derivation / explicit override / stale-canonical re-pin | `node --test scripts/generate-env.test.mjs` (derive, explicit-wins, re-pin drift) |
-| Fresh install from nothing (env authority, first migration, bootstrap) | `tests/deployment/fresh-install.sh` (PR-blocking gate) |
+| Fresh install from nothing (env authority, first migration, bootstrap) | `tests/deployment/fresh-install.sh` (release acceptance gate) |
 | Container recreation with data + journal continuity (`down` → `up`, new container IDs, canary port) | fresh-install gate `[persist]` stage |
 | **Upgrade mechanics**: image-pin swap → `up -d` recreates app/worker, db untouched, probe row + journal + invariants intact, login OK | `tests/deployment/upgrade-uninstall.sh` `[upgrade]`/`[upgrade-flip]` |
 | **Uninstall preserve mode**: `down` keeps PGDATA; re-`up` restores state | `tests/deployment/upgrade-uninstall.sh` `[preserve]` |
 | **Uninstall full removal**: data + env file deleted → fresh DB (0 orgs), fresh bootstrap, old credentials rejected, new login OK | `tests/deployment/upgrade-uninstall.sh` `[delete]` |
 
-Run the lifecycle suite locally (release/manual class — the PR-blocking
-set is unchanged):
+Run the lifecycle suite locally (release/manual class — PRs run no
+deployment gate):
 
 ```bash
 pnpm test:deployment:upgrade

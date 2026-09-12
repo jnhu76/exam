@@ -18,9 +18,14 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Upper bound for the whole publication pipeline; the fresh-install
+    # acceptance below carries its own tighter 30-minute ceiling (cold
+    # source build is the dominant cost — there is no GHA layer cache on
+    # this lane).
+    timeout-minutes: 60
     steps:
       - name: Checkout exact release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -51,6 +56,31 @@ jobs:
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "notes=$notes" >> "$GITHUB_OUTPUT"
+
+      # Fresh-install acceptance (#327 script) gates EVERY irreversible
+      # publication below: no tag, no GitHub Release, and no release image
+      # may exist until the canonical operator path (isolated generate-env →
+      # compose up --build → first migration/bootstrap → down/up persistence
+      # → residue asserts) passes on this exact release commit. The run
+      # number only namespaces the disposable compose project; the script
+      # owns env/data isolation and teardown. Trigger moved here from PR CI
+      # — docs/deployment/gates.md is the gate authority.
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.15.x"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up Docker Compose
+        uses: docker/setup-compose-action@v2
+        with:
+          version: latest
+
+      - name: Fresh-install acceptance
+        timeout-minutes: 30
+        run: bash tests/deployment/fresh-install.sh "${{ github.run_number }}"
 
       - name: Create or verify immutable tag
         shell: bash
@@ -102,7 +132,7 @@ jobs:
       # them to different source. `latest` is deliberately NOT published
       # (mutable convenience must never be an upgrade/rollback authority).
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -110,7 +140,7 @@ jobs:
 
       - name: Derive image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/jnhu76/exam
           # type=raw passes .release-version through EXACTLY (v-prefixed):
@@ -133,7 +163,7 @@ jobs:
 
       - name: Build and push release image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true

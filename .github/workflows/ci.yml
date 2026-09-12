@@ -101,7 +101,7 @@ jobs:
         run: pnpm build
 
       - name: Upload build outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -110,72 +110,6 @@ jobs:
             apps/web/dist/
           retention-days: 1
           if-no-files-found: error
-
-  # #327 — disposable true fresh-install acceptance, PR-blocking. Drives the
-  # canonical operator path (generate-env into an isolated path → compose
-  # --env-file up --build → first migration/bootstrap → down/up persistence →
-  # residue assertions) so deployment drift cannot stay green while unit/E2E
-  # bypass the production Compose topology. Source-build authority: every
-  # stage runs `up --build` against the current checkout (cache = perf only).
-  # Slower deployment suites (launchpad/persistence/logical/PITR) stay
-  # release/manual gates — see docs/deployment/gates.md.
-  deployment-fresh-install:
-    name: Deployment fresh-install gate
-    runs-on: ubuntu-latest
-    # Keep the cold-cache 30-minute ceiling: the first cache population still
-    # pays the full source build. Warm runs restore BuildKit layers from GHA,
-    # but every acceptance stage still executes `up --build`.
-    timeout-minutes: 30
-    needs: static
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24.15.x"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Set up Docker Compose
-        uses: docker/setup-compose-action@v2
-        with:
-          version: latest
-
-      - name: Expose GitHub cache runtime to BuildKit
-        uses: crazy-max/ghaction-github-runtime@v4
-
-      - name: Enable GHA layer cache for the CI source-build override
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("docker-compose.build.yml")
-          text = path.read_text()
-          old = """services:\n  app:\n    build: .\n    image: exam-local:dev\n    pull_policy: build\n"""
-          new = """services:\n  app:\n    build:\n      context: .\n      cache_from:\n        - type=gha,scope=exam-app\n      cache_to:\n        - type=gha,scope=exam-app,mode=max,ignore-error=true\n    image: exam-local:dev\n    pull_policy: build\n"""
-          if old not in text:
-              raise SystemExit("docker-compose.build.yml no longer matches the CI cache overlay contract")
-          path.write_text(text.replace(old, new))
-          PY
-          # Validate only the source-build override here. The canonical full
-          # compose file intentionally requires generated deployment secrets,
-          # and fresh-install.sh owns that env-generation/validation boundary.
-          docker compose -f docker-compose.build.yml config >/dev/null
-
-      - name: Fresh-install acceptance gate
-        env:
-          # Compose delegates builds to Buildx/Bake so cache_from/cache_to can
-          # use the GitHub Actions cache backend. This changes build transport,
-          # not the acceptance contract: fresh-install.sh still uses up --build.
-          COMPOSE_BAKE: "true"
-        run: bash tests/deployment/fresh-install.sh ci
 
   web-coverage:
     name: Web coverage
@@ -203,7 +137,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download build outputs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
@@ -271,7 +205,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download build outputs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
@@ -328,7 +262,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download build outputs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
@@ -402,7 +336,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download build outputs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-outputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
@@ -525,7 +459,7 @@ jobs:
 
       - name: Upload E2E failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         continue-on-error: true
         with:
           name: e2e-failure-diagnostics-${{ matrix.shardIndex }}
