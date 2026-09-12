@@ -111,7 +111,7 @@ Every `exams` column that functions as policy/config (`packages/db/src/schema/pg
 | Result publication | `result_publication_mode` | yes | candidate result view (`scores.ts:216`) | published row | `results` | **SUPPORTED** |
 | Interruption | `interruption_time_policy` + 2 caps | yes | attempt snapshot + restore evaluation | **attempt snapshot** (frozen at creation) | `interruption` | **SUPPORTED** |
 | Late start / min submit | `latest_start_offset_minutes`/`min_submit_after_start_minutes` | yes | attempt-start gate / submit gate | published row | `timing` | **SUPPORTED** |
-| Shuffle | `control_flags.shuffleQuestions`/`shuffleOptions` | yes (UI checkbox) | **none** — engine never shuffles | n/a | `control` | **LATENT** (stored, not enforced) |
+| Shuffle | `control_flags.shuffleQuestions`/`shuffleOptions` | yes (UI checkbox) | `materializeAttemptPresentation` at attempt creation (`attemptCommands.ts:384`); resume/restart replays frozen snapshot | snapshot | **SUPPORTED** (#294 implemented; policy-resolved, snapshot-frozen) |
 | Tab-switch detect | `control_flags.detectTabSwitch` | yes (UI checkbox) | client **warning banner only** (`StartExamPage:204`); TakeExam listener runs unconditionally | n/a | `control` | **LATENT** (client hint, not enforcement) |
 | Copy/paste disable | `control_flags.disableCopyPaste` | yes (UI checkbox) | client **warning banner only** (`StartExamPage:215`) | n/a | `control` | **LATENT** (client hint) |
 | Queue admission | `control_flags.requireQueue`+`batchSize`+`batchInterval` | yes (UI checkbox) | **none** at runtime | n/a | `control` | **LATENT** (Phase 2) |
@@ -280,8 +280,8 @@ A JSON bag is not a coherent policy schema. Per-flag audit:
 
 | Flag | Authorable? | Persisted? | Consumed? | Enforced? | Classification |
 | --- | --- | --- | --- | --- | --- |
-| `shuffleQuestions` | yes (UI) | yes | **no** — engine never shuffles (`buildQuestionSnapshot` is deterministic) | no | LATENT — stored, not enforced |
-| `shuffleOptions` | yes (UI) | yes | **no** | no | LATENT |
+| `shuffleQuestions` | yes (UI) | yes | `materializeAttemptPresentation` (`attemptPresentation.ts`); per-attempt frozen order drawn at `startOrRestoreAttempt` new-attempt creation | server-authoritative at creation | SUPPORTED — #294 (policy-resolved, snapshot-frozen, no seed) |
+| `shuffleOptions` | yes (UI) | yes | `materializeAttemptPresentation`; shuffles choice-question `options[]` per-attempt at creation | server-authoritative at creation | SUPPORTED — #294 |
 | `detectTabSwitch` | yes (UI) | yes | client **warning banner** (`StartExamPage:204`); `TakeExamPage` listener runs unconditionally | client hint only | LATENT — not server-enforced |
 | `disableCopyPaste` | yes (UI) | yes | client **warning banner** (`StartExamPage:215`) | client hint only | LATENT — not server-enforced |
 | `requireQueue` | yes (UI) | yes | **no** runtime queue consumer | no | LATENT — Phase 2 |
@@ -294,7 +294,7 @@ A JSON bag is not a coherent policy schema. Per-flag audit:
 
 **Findings recorded (not fixed in M1):**
 
-- **P2-CF-1:** `shuffleQuestions`/`shuffleOptions` are authorable and persisted but **never enforced** — a candidate authoring "shuffle on" gets no shuffle. This is a product-integrity gap (authoring promises behavior the engine does not provide). Recorded for a separate follow-up; M1 does not implement shuffle.
+- **P2-CF-1:** ~~`shuffleQuestions`/`shuffleOptions` are authorable and persisted but **never enforced**~~ **RESOLVED (#294 implemented):** per-attempt snapshot-frozen order materialized at `startOrRestoreAttempt` new-attempt creation via `materializeAttemptPresentation`; no seed persisted.
 - **P2-CF-2:** `detectTabSwitch`/`disableCopyPaste` are presented as control flags but are **client hints only** (warning banner; no enforcement). The UI should not imply server enforcement. Recorded separately.
 - **P2-CF-3:** `restrictIp`/`requireLockdown` are authorable but have **zero** runtime effect — a candidate can enable them and get no restriction. Recorded separately.
 - **P2-CF-4:** `showResultImmediately` is a deprecated legacy input that still appears in the authoring UI and persists a stale value. Recorded separately.

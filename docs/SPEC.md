@@ -310,8 +310,8 @@ untimed 示例：
 
 | 管控项 | 开卷预设 | 闭卷预设 | 说明 |
 |--------|:--------:|:--------:|------|
-| `shuffleQuestions` | 关 | 开 | 题目乱序 |
-| `shuffleOptions` | 关 | 开 | 选项乱序 |
+| `shuffleQuestions` | 关 | 开 | 题目乱序（**#294 已交付**：`materializeAttemptPresentation` per-attempt 冻结；resume/restart 重播冻结快照） |
+| `shuffleOptions` | 关 | 开 | 选项乱序（**#294 已交付**：仅 single_choice / multiple_choice；per-attempt 冻结） |
 | `detectTabSwitch` | 关 | 开 | Phase 1 minimal behavior；完整审计与处置进入 Phase 2 |
 | `disableCopyPaste` | 关 | 开 | 前端禁用右键/选择/复制 |
 | `requireQueue` | 关 | 开 | 队列入场（**#292 已交付**）：与计时模式**正交**的准入维度，由 PostgreSQL `exam_admissions` 承载；重启/多实例安全，幂等 join/admit/start，见 exam-runtime.md §3.1.1 |

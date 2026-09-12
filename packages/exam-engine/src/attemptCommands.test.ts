@@ -98,6 +98,85 @@ function makeSnapshot(): QuestionSnapshot[] {
   ];
 }
 
+/**
+ * #294 — deterministic RNG for tests. Yields the fixed [0,1) sequence in
+ * order; exhausted draws return 0 (never called past the expected count in a
+ * passing test). Fisher–Yates only consumes as many draws as swaps it makes.
+ */
+function sequenceRng(...values: number[]): () => number {
+  let i = 0;
+  return () => values[i++] ?? 0;
+}
+
+/**
+ * #294 — published snapshot with one question of each shuffle-relevant shape:
+ * q1 single_choice (3 options), q2 multiple_choice (2 options), q3 fill_blank
+ * (no option-order semantic). Used to prove latent behavior at BASE and the
+ * randomized/frozen contract after implementation.
+ */
+function makeThreeQuestionSnapshot(): QuestionSnapshot[] {
+  return [
+    {
+      originalQuestionId: "q1",
+      type: "single_choice",
+      content: "Q1",
+      contentDocument: null,
+      answerMode: null,
+      attachments: [],
+      options: [
+        { id: "a", content: "A" },
+        { id: "b", content: "B" },
+        { id: "c", content: "C" },
+      ],
+      standardAnswer: "b",
+      score: 34,
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      order: 0,
+      rubric: null,
+    },
+    {
+      originalQuestionId: "q2",
+      type: "multiple_choice",
+      content: "Q2",
+      contentDocument: null,
+      answerMode: null,
+      attachments: [],
+      options: [
+        { id: "d", content: "D" },
+        { id: "e", content: "E" },
+      ],
+      standardAnswer: ["d"],
+      score: 33,
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      order: 1,
+      rubric: null,
+    },
+    {
+      originalQuestionId: "q3",
+      type: "fill_blank",
+      content: "Q3",
+      contentDocument: null,
+      answerMode: null,
+      attachments: [],
+      options: [],
+      standardAnswer: "x",
+      score: 33,
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      order: 2,
+      rubric: null,
+    },
+  ];
+}
+
 function makeExam(overrides: Partial<Exam> = {}): Exam {
   return {
     id: "exam-1",
@@ -911,6 +990,70 @@ describe("attemptCommands", () => {
       );
 
       expect(result.questionSnapshot).toEqual(snapshot);
+    });
+
+    // #294 §5 — the latent-reality test from BASE (attempt copied published
+    // order verbatim even with both flags true) was flipped by the
+    // implementation: with the injected RNG seam the new attempt now receives
+    // the deterministic frozen presentation order (T2/T4 at the engine seam).
+    // Draw order: question shuffle consumes 2 draws ([q1,q2,q3] → [q2,q3,q1]
+    // for rng 0.1,0), then q2's options consume 1 draw, then q1's options
+    // consume 2 draws.
+    it("T2/T4: new attempt materializes deterministic frozen order from shuffle flags", async () => {
+      const published = makeThreeQuestionSnapshot();
+      const exam = makeExam({
+        controlFlags: {
+          ...makeExam().controlFlags,
+          shuffleQuestions: true,
+          shuffleOptions: true,
+        },
+        questionSnapshot: published,
+      });
+      const enrollment = makeEnrollment();
+      const examRepo = {
+        findById: () => exam,
+        findByIdForUpdate: () => exam,
+        update: () => exam,
+      };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo();
+      const rng = sequenceRng(0.1, 0, 0.1, 0.1, 0);
+
+      const { attempt: result } = await startOrRestoreAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+        { ...startDeps, rng },
+      );
+
+      // Questions: published [q1,q2,q3] → frozen [q2,q3,q1] with order
+      // renormalized 0..n-1.
+      expect(result.questionSnapshot.map((q) => q.originalQuestionId)).toEqual([
+        "q2",
+        "q3",
+        "q1",
+      ]);
+      expect(result.questionSnapshot.map((q) => q.order)).toEqual([0, 1, 2]);
+      // Options: q2 (multiple_choice, [d,e]) → [e,d]; q1 (single_choice,
+      // [a,b,c]) → [b,c,a]; q3 (fill_blank) unchanged.
+      expect(result.questionSnapshot[0]!.options.map((o) => o.id)).toEqual([
+        "e",
+        "d",
+      ]);
+      expect(result.questionSnapshot[2]!.options.map((o) => o.id)).toEqual([
+        "b",
+        "c",
+        "a",
+      ]);
+      // Identity is untouched by the shuffle.
+      expect(
+        result.questionSnapshot.map((q) => q.originalQuestionId),
+      ).not.toEqual(["q1", "q2", "q3"]);
+      // The published snapshot is not mutated by the materializer.
+      expect(exam.questionSnapshot).toEqual(published);
     });
 
     it("uses findByExamAndCandidateForUpdate for enrollment lookup (transaction-safe)", async () => {
