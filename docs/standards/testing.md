@@ -466,7 +466,7 @@ durability boundary.
 | **Shard index** | `${{ matrix.shardIndex }}` (1-based) |
 | **Database per shard** | Single shared `exam_e2e` (CI doesn't create per-shard DBs) |
 | **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
-| **fail-fast** | `false` (all shards run even if one fails) |
+| **fail-fast** | `true` (the sibling shard is cancelled after a shard failure) |
 | **Blob zip naming** | `report-${{ matrix.shardIndex }}.zip` |
 | **Artifact naming** | `e2e-blob-shard-${{ matrix.shardIndex }}` |
 | **Upload retention** | 1 day |
@@ -654,7 +654,7 @@ EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
 |-----------|-------|
 | `matrix.shardIndex` | `[1, 2]` |
 | `matrix.shardTotal` | `[2]` |
-| `fail-fast` | `false` |
+| `fail-fast` | `true` |
 
 ### Blob Report Contract
 
