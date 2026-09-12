@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -18,7 +18,10 @@ import {
   Shield,
   LoaderCircle,
 } from "lucide-react";
-import type { CandidateExamDetailResponse } from "@exam/contracts";
+import type {
+  CandidateExamDetailResponse,
+  QueueStatusResponse,
+} from "@exam/contracts";
 import { trackExamEvent } from "@/lib/examTelemetry";
 
 interface AttemptResponse {
@@ -36,6 +39,11 @@ export function StartExamPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Durable admission queue flow (issue 292): joining → waiting → admitted.
+  const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(
+    null,
+  );
+  const cancelQueuePollRef = useRef(false);
 
   /** Fetches the candidate exam detail from the API. */
   const loadExam = useCallback(async () => {
@@ -58,15 +66,40 @@ export function StartExamPage() {
     loadExam();
   }, [loadExam]);
 
-  /** Creates a new attempt via the API and navigates to the exam-taking page. */
+  /**
+   * Creates a new attempt via the API and navigates to the exam-taking page.
+   * requireQueue exams join the durable admission queue first (issue 292): the
+   * queue panel polls the same command endpoint until the server materializes
+   * admission, then starts. The client owns no admission truth — every poll
+   * re-derives readiness server-side.
+   */
   const enterExam = useCallback(async () => {
     if (!examId) return;
     setIsStarting(true);
     setError(null);
+    cancelQueuePollRef.current = false;
     try {
+      if (exam?.controlFlags.requireQueue) {
+        let status = await api.post<QueueStatusResponse>(
+          `/api/attempts/${examId}/queue`,
+        );
+        while (status.status !== "ready") {
+          setQueueStatus(status);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          if (cancelQueuePollRef.current) {
+            setIsStarting(false);
+            return;
+          }
+          status = await api.post<QueueStatusResponse>(
+            `/api/attempts/${examId}/queue`,
+          );
+        }
+        setQueueStatus(status);
+      }
       const attempt = await api.post<AttemptResponse>(
         `/api/attempts/${examId}/start`,
       );
+      setQueueStatus(null);
       trackExamEvent("exam_started", {}, { examId, attemptId: attempt.id });
       navigate(routes.exam.take(attempt.id));
     } catch (err) {
@@ -94,9 +127,17 @@ export function StartExamPage() {
       }
       setError(message);
       toast.error(message);
+      setQueueStatus(null);
       setIsStarting(false);
     }
-  }, [examId, navigate, t]);
+  }, [examId, exam, navigate, t]);
+
+  // Stop polling when the page unmounts (INVARIANT: no orphan poll loops).
+  useEffect(() => {
+    return () => {
+      cancelQueuePollRef.current = true;
+    };
+  }, []);
 
   /** Handles the primary action: start a new attempt, resume an active one, or view results. */
   async function handleStart() {
@@ -268,6 +309,35 @@ export function StartExamPage() {
         </div>
       )}
 
+      {/* Durable queue waiting truth (issue 292) while the poll loop runs. */}
+      {queueStatus && queueStatus.status !== "ready" && (
+        <PageSection
+          title={t("startExam.queue.title")}
+          contentClassName="flex flex-col gap-1 text-sm"
+        >
+          <div data-testid="exam-queue-panel" className="flex flex-col gap-1">
+            <span className="type-body">{t("startExam.queue.waiting")}</span>
+            <span className="type-secondary">
+              {t("startExam.queue.position", {
+                position: queueStatus.position,
+              })}
+            </span>
+            {queueStatus.waitCount > 0 && (
+              <span className="type-secondary">
+                {t("startExam.queue.ahead", { count: queueStatus.waitCount })}
+              </span>
+            )}
+            {queueStatus.estimatedWaitSeconds > 0 && (
+              <span className="type-secondary">
+                {t("startExam.queue.estimated", {
+                  seconds: queueStatus.estimatedWaitSeconds,
+                })}
+              </span>
+            )}
+          </div>
+        </PageSection>
+      )}
+
       <div className="flex justify-end">
         <Button
           size="lg"
@@ -287,7 +357,11 @@ export function StartExamPage() {
               className="animate-spin"
             />
           )}
-          {isStarting ? t("startExam.actions.entering") : actionLabel}
+          {isStarting
+            ? queueStatus && queueStatus.status !== "ready"
+              ? t("startExam.queue.joining")
+              : t("startExam.actions.entering")
+            : actionLabel}
         </Button>
       </div>
     </PageContainer>

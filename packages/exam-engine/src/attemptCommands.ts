@@ -56,6 +56,11 @@ import {
   lockEnrollmentAndActiveAttempt,
   type EnrollmentActiveAttemptLock,
 } from "./lockSeam.js";
+import {
+  ensureStartAdmission,
+  type AdmissionDeps,
+  type ExamAdmissionRecord,
+} from "./admissionCommands.js";
 
 /** Repository interface for persisting exam attempt records. */
 export interface AttemptRepository {
@@ -140,6 +145,16 @@ export interface StartOrRestoreDependencies {
 }
 
 /**
+ * #292 — durable admission gate. REQUIRED (fail-closed) whenever the exam's
+ * frozen controlFlags have requireQueue=true; irrelevant otherwise. There is
+ * no in-engine default: omitting it for a requireQueue exam throws, so a
+ * caller cannot silently bypass admission.
+ */
+export interface StartAdmissionDependency {
+  admission: AdmissionDeps;
+}
+
+/**
  * Starts or restores an exam attempt for the given candidate.
  *
  * Uses the canonical Enrollment→active-Attempt lock seam (R3/R8). If an
@@ -158,7 +173,9 @@ export async function startOrRestoreAttempt(
   examId: string,
   candidateId: string,
   now: Date,
-  options: StartAttemptOptions & StartOrRestoreDependencies,
+  options: StartAttemptOptions &
+    StartOrRestoreDependencies &
+    Partial<StartAdmissionDependency>,
 ): Promise<StartAttemptResult> {
   const exam = await examRepo.findById(examId);
   if (!exam) {
@@ -269,6 +286,29 @@ export async function startOrRestoreAttempt(
     }
   }
 
+  // #292: durable admission gates the NEW-attempt path only — resume and
+  // restore return earlier without consulting the queue (admission gates
+  // START, not re-entry). The gate runs inside this transaction AFTER the
+  // enrollment lock; consumption is committed atomically with the attempt
+  // create below, so "admitted → attempt" has no crash window and no
+  // duplicate-admission path.
+  let admission: AdmissionDeps | null = null;
+  let admissionRecord: ExamAdmissionRecord | null = null;
+  if (exam.controlFlags.requireQueue) {
+    if (!options.admission) {
+      throw new ValidationError(
+        "Admission gate dependency is required when the exam requires queue admission",
+      );
+    }
+    admission = options.admission;
+    admissionRecord = await ensureStartAdmission(
+      admission,
+      exam,
+      candidateId,
+      now,
+    );
+  }
+
   // ADR-005 Slice 3 §4.3: late-entry cutoff on a NEW attempt only.
   // #291 Phase B: for timed_sync the buffer is anchored at the operator-
   // triggered sitting start (T0), not at openAt — the buffer is relative to
@@ -345,6 +385,25 @@ export async function startOrRestoreAttempt(
     lastActivityAt: now,
     interruptionTimingPolicySnapshot: snapshot,
   });
+
+  // #292: consume the admission membership in the SAME transaction as the
+  // attempt create (THE atomic admitted → start boundary). The enrollment
+  // lock serializes concurrent starts, so the CAS below cannot race; zero
+  // rows is a programming error and must abort the whole transaction.
+  if (admission) {
+    const consumed = await admission.repo.consumeActive(
+      exam.organizationId,
+      examId,
+      candidateId,
+      now,
+      attempt.id,
+    );
+    if (!consumed) {
+      throw new ValidationError(
+        "Admission membership was not consumable for this start",
+      );
+    }
+  }
 
   if (enrollment.status !== "started") {
     assertEnrollmentTransition(enrollment.status, "started");

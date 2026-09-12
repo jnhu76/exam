@@ -3024,6 +3024,16 @@ const zhCN = {
       maxAttemptsExhausted: "已达到最大考试次数，无法再次开始考试。",
       retakeAvailable: "可重考，当前最高成绩将保留。",
     },
+    // #292 durable admission queue — waiting/readiness truth only.
+    queue: {
+      joining: "正在排队入场...",
+      title: "排队入场",
+      waiting: "排队等待入场中",
+      position: "当前第 {{position}} 位",
+      ahead: "前方还有 {{count}} 人",
+      estimated: "预计等待约 {{seconds}} 秒",
+      admitted: "已获准入，正在进入考试...",
+    },
   },
 
   /** ExamLayout (candidate runtime shell) nav/menu copy. */

@@ -8,6 +8,8 @@ import type {
   RequestContext,
 } from "@exam/domain";
 import type { createExamRepo } from "@exam/db/src/repository/examRepo.js";
+import type { createExamAdmissionRepo } from "@exam/db/src/repository/examAdmissionRepo.js";
+import type { ExamAdmissionRepository } from "@exam/exam-engine";
 import type { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import type { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import type { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
@@ -404,5 +406,47 @@ export function createRestoreEngineRepos(
       ctx,
     ),
     adjustments: createTimeAdjustmentRepoAdapter(repos.timeAdjustmentRepo, ctx),
+  };
+}
+
+/**
+ * #292 — adapts the DB admission repo (ctx-bound method style) to the
+ * engine's {@link ExamAdmissionRepository} port. Rows are structurally
+ * identical; the adapter only binds the request context. Must be constructed
+ * against the ACTIVE transaction's repo so the admission consume participates
+ * in the attempt-start transaction.
+ */
+export function createExamAdmissionRepoAdapter(
+  repo: ReturnType<typeof createExamAdmissionRepo>,
+  ctx: RequestContext,
+): ExamAdmissionRepository {
+  return {
+    joinActive: (input) => repo.joinActive(ctx, input),
+    findActive: (organizationId, examId, candidateId) =>
+      repo.findActive(ctx, organizationId, examId, candidateId),
+    earliestJoinedAt: (organizationId, examId) =>
+      repo.earliestJoinedAt(ctx, organizationId, examId),
+    countAllAhead: (organizationId, examId, joinedAt, id) =>
+      repo.countAllAhead(ctx, organizationId, examId, joinedAt, id),
+    countActiveAhead: (organizationId, examId, joinedAt, id) =>
+      repo.countActiveAhead(ctx, organizationId, examId, joinedAt, id),
+    admitOnce: (id, admittedAt) => repo.admitOnce(ctx, id, admittedAt),
+    consumeActive: (
+      organizationId,
+      examId,
+      candidateId,
+      consumedAt,
+      attemptId,
+    ) =>
+      repo.consumeActive(
+        ctx,
+        organizationId,
+        examId,
+        candidateId,
+        consumedAt,
+        attemptId,
+      ),
+    listByExam: (organizationId, examId) =>
+      repo.listByExam(ctx, organizationId, examId),
   };
 }

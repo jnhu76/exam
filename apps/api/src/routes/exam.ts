@@ -13,12 +13,15 @@ import {
   EnrollCandidatesRequestSchema,
   ExamSchema,
   CandidateStatusResponseSchema,
+  ExamAdmissionsResponseSchema,
   ErrorResponseSchema,
   normalizeInterruptionPolicyConfiguration,
   DeleteDisabledReasonCodeEnum,
   ScoreViewDisabledReasonCodeEnum,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
+import { createExamAdmissionRepo } from "@exam/db/src/repository/examAdmissionRepo.js";
+import { deriveAdmissionViews } from "@exam/exam-engine";
 import { createGraderExamAssignmentRepo } from "@exam/db/src/repository/graderExamAssignmentRepo.js";
 import { createExamProfileRepo } from "@exam/db/src/repository/examProfileRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
@@ -2181,6 +2184,69 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       return CandidateStatusResponseSchema.parse({
         candidates,
         total: candidates.length,
+      });
+    },
+  );
+
+  /**
+   * GET /admin/exams/:examId/admissions — operator visibility over the
+   * durable admission queue (#292). READ-ONLY by design: admission is owned
+   * by the automatic batch policy derived from the frozen exam flags, and no
+   * manual-admit product semantic exists, so there are no operator actions
+   * to authorize or audit beyond this scoped view.
+   */
+  fastify.get(
+    "/admin/exams/:examId/admissions",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireScopedCapability(Permission.ExamView, "exam", "examId", {
+          teacherAccess: "course_assignment_scoped",
+        }),
+      ],
+      schema: {
+        params: examIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin", "Teacher"],
+        response: {
+          200: ExamAdmissionsResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const { examId } = request.params as { examId: string };
+      const exam = (await createExamRepo(fastify.db).findById(
+        ctx,
+        examId,
+      )) as Exam | null;
+      if (!exam) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      const records = await createExamAdmissionRepo(fastify.db).listByExam(
+        ctx,
+        ctx.organizationId,
+        examId,
+      );
+      const items = deriveAdmissionViews(records).map((item) => ({
+        candidateId: item.candidateId,
+        status: item.state,
+        position: item.position,
+        joinedAt: item.joinedAt.toISOString(),
+        admittedAt: item.admittedAt?.toISOString() ?? null,
+        consumedAt: item.consumedAt?.toISOString() ?? null,
+        consumedAttemptId: item.consumedAttemptId,
+      }));
+
+      return ExamAdmissionsResponseSchema.parse({
+        examId,
+        batchSize: exam.controlFlags.batchSize,
+        batchIntervalSeconds: exam.controlFlags.batchInterval,
+        items,
       });
     },
   );

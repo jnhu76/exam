@@ -2444,6 +2444,87 @@ export const attemptCommandReceipts = pgTable(
   ],
 );
 
+/**
+ * #292 — durable exam admission membership (requireQueue runtime).
+ *
+ * PROCESS MEMORY IS NOT PRODUCT STATE: this table replaces the legacy
+ * process-local `examQueues` map as the ONLY admission authority. Each row
+ * is one admission membership; lifecycle facts are timestamps, never a
+ * stored status enum:
+ *
+ *   waiting   = admitted_at IS NULL (not yet released by the batch schedule)
+ *   admitted  = admitted_at NOT NULL AND consumed_at IS NULL
+ *   consumed  = consumed_at NOT NULL (attempt started; consumed_attempt_id set)
+ *
+ * INVARIANT: at most one ACTIVE membership per (organization, exam,
+ * candidate) — the partial unique index carries it at the DB, not in
+ * application code. Re-joining after consumption (retake flow) inserts a
+ * fresh row.
+ *
+ * QUEUE ADMISSION IS NOT TIME AUTHORITY: joined_at is an ordering key and
+ * the batch anchor; nothing in this table derives or alters exam/attempt
+ * timing (deadlines stay engine-owned).
+ */
+export const examAdmissions = pgTable(
+  "exam_admissions",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidateProfiles.id),
+    joinedAt: timestamp("joined_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    admittedAt: timestamp("admitted_at", { withTimezone: true, mode: "date" }),
+    consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" }),
+    consumedAttemptId: text("consumed_attempt_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // Q3: one ACTIVE membership per candidate and exam. Consumed rows are
+    // history and do not block a retake re-join.
+    uniqueIndex("exam_admissions_org_exam_candidate_active_unique")
+      .on(table.organizationId, table.examId, table.candidateId)
+      .where(sql`consumed_at IS NULL`),
+    // Position/anchor math: active rows of an exam in durable join order.
+    index("exam_admissions_org_exam_joined_idx")
+      .on(table.organizationId, table.examId, table.joinedAt, table.id)
+      .where(sql`consumed_at IS NULL`),
+    // Operator visibility listing (all rows, join order).
+    index("exam_admissions_org_exam_created_idx").on(
+      table.organizationId,
+      table.examId,
+      table.joinedAt,
+      table.id,
+    ),
+    // Consume pairs consumed_at with the attempt it started (DB-enforced
+    // pair so a consumed row always resolves to attempt truth).
+    check(
+      "exam_admissions_consumed_pair_check",
+      sql`
+        (${table.consumedAt} IS NULL AND ${table.consumedAttemptId} IS NULL)
+        OR
+        (${table.consumedAt} IS NOT NULL AND ${table.consumedAttemptId} IS NOT NULL)
+      `,
+    ),
+    check(
+      "exam_admissions_admitted_before_consumed_check",
+      sql`${table.consumedAt} IS NULL OR ${table.admittedAt} IS NOT NULL`,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.consumedAttemptId],
+      foreignColumns: [examAttempts.organizationId, examAttempts.id],
+      name: "exam_admissions_org_attempt_fk",
+    }),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 /**
  * Staff invitations (#297) — pending-membership facts for email-invited staff.
@@ -2583,6 +2664,7 @@ export const schema = {
   teacherCourseAssignments,
   graderExamAssignments,
   attemptCommandReceipts,
+  examAdmissions,
   backupRuns,
   backupRunEvents,
   backupOperationalPolicy,

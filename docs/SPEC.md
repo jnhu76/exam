@@ -134,7 +134,7 @@ not_started → queued → in_progress → submitted → grading → graded
 | 状态 | 含义 | 当前实现接线 |
 |------|------|------|
 | `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startAttempt` 时直接进入 `in_progress`） |
-| `queued` | 排队中（requireQueue 时） | **目标设计（#292）**：准入是与计时模式正交的独立维度，由 #292 的准入记录承载，不建模为 attempt 状态；现行代码仅有一个进程内的过渡性准入 gate（非持久，由 #292 替换，见 #394） |
+| `queued` | 排队中（requireQueue 时） | **不作为 attempt 状态建模**：准入是与计时模式正交的独立维度，由 `exam_admissions` 准入记录承载（#292 durable admission runtime，见 exam-runtime.md §3.1.1）；attempt 直接 `in_progress` 起步 |
 | `in_progress` | 正在答题 | **已接线**：`startAttempt` 命令写入 |
 | `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Proctor 恢复工作台（J6）未实现 |
 | `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入 |
@@ -314,9 +314,9 @@ untimed 示例：
 | `shuffleOptions` | 关 | 开 | 选项乱序 |
 | `detectTabSwitch` | 关 | 开 | Phase 1 minimal behavior；完整审计与处置进入 Phase 2 |
 | `disableCopyPaste` | 关 | 开 | 前端禁用右键/选择/复制 |
-| `requireQueue` | 关 | 开 | 队列入场：与计时模式**正交**的准入维度，独立归属 **#292**；对应能力交付前，运行支持矩阵可临时拒绝部分组合（如 `timed_sync + requireQueue=true`，见 Phase B 冻结文档） |
-| `batchSize` | - | 10 | 每批放行人数（同上） |
-| `batchInterval` | - | 3 | 批次间隔秒数（同上） |
+| `requireQueue` | 关 | 开 | 队列入场（**#292 已交付**）：与计时模式**正交**的准入维度，由 PostgreSQL `exam_admissions` 承载；重启/多实例安全，幂等 join/admit/start，见 exam-runtime.md §3.1.1 |
+| `batchSize` | - | 10 | 每批放行人数；anchor=最早 `joined_at`（含已消费记录），schedule ordinal 由全部 membership 推导，UI position 由活跃 membership 推导；首批即时放行，批不满按时放行 |
+| `batchInterval` | - | 3 | 批次间隔秒数 |
 | `restrictIp` | 关 | 开 | 仅允许考场 IP 段 [Phase 2] |
 | `requireLockdown` | 关 | 关 | 强制 Electron 锁屏 [Deferred] |
 | `showResultImmediately` | 开 | 可配置 | 交卷后是否立即显示成绩 |
@@ -810,9 +810,9 @@ Admin 新建 Exam → 选择 Course
 | 判断 | 二选一 Radio | 同单选 |
 | 填空 | 文本输入框（支持多个空） | 每个空独立，blur 时保存 |
 
-**排队分批进入**（用于闭卷统考，**Phase 2 / planned**）：
+**排队分批进入**（用于闭卷统考，**#292 已交付 durable 准入运行时**）：
 
-> 该子流程依赖 `timed_sync` 计时模式与监考面板触发"开考"动作，两者均归属 Phase 2+ 硬化（见 §2.5、§4.5）。当前不实现该流程，下文为目标设计示意。
+> 准入运行时（join/批次放行/原子 start 边界/重启与多实例安全）已由 #292 交付，语义见 exam-runtime.md §3.1.1。下图中依赖 `timed_sync` 的"开考"触发与监考面板联动仍归属 Phase 2+（见 §2.5、§4.5）；`timed_sync` 考试开启 requireQueue 属于运行支持矩阵问题，与准入内核正交。
 
 ```
 Phase 2 运营人员点击"开考"
