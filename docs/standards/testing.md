@@ -26,10 +26,11 @@
 
 The CI pipeline (`.github/workflows/ci.yml`) runs on every PR to `master`.
 `static` is the first authority gate. After it passes, `verify-build` produces
-one same-workflow build artifact while `deployment-fresh-install` independently
-proves the canonical Docker source-build path. Web/API/package coverage and
-both E2E shards consume the `verify-build` artifact instead of rebuilding the
-same `dist/**` outputs on separate runners.
+one same-workflow build artifact. Web/API/package coverage and both E2E
+shards consume the `verify-build` artifact instead of rebuilding the same
+`dist/**` outputs on separate runners. PR CI runs no deployment suite: the
+deployment fresh-install acceptance moved to the `release` workflow
+(§1.6; gate authority in `docs/deployment/gates.md`).
 
 ### 1.1 Static Checks
 
@@ -57,7 +58,7 @@ same `dist/**` outputs on separate runners.
 | **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}-{run_attempt}` for this workflow run only (1-day retention). |
 | **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and both E2E shards download this same-workflow artifact and do not rebuild it. |
 | **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
-| **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment fresh-install does not consume it; that lane continues to build the Docker image from the current checkout. |
+| **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment fresh-install (release acceptance, §1.6) does not consume it; that gate continues to build the Docker image from the current checkout. |
 
 ### 1.3 Web Coverage
 
@@ -100,15 +101,15 @@ same `dist/**` outputs on separate runners.
 | **Note** | Each package's coverage is independent. `@exam/auth` tests are pure unit tests (no DB). `@exam/db` tests require PostgreSQL. Other packages (domain, contracts, authz, exam-engine, import-export) are pure unit tests. |
 | **Failure attribution** | Check which package failed in the step output |
 
-### 1.6 Deployment Fresh-install
+### 1.6 Deployment Fresh-install (release acceptance)
 
 | Field | Value |
 |-------|-------|
-| **Job** | `deployment-fresh-install` |
-| **Command** | `bash tests/deployment/fresh-install.sh ci` |
-| **Dependency** | Runs after `static`; deliberately independent of `verify-build` |
+| **Workflow** | `release` (`.github/workflows/release.yml`) — NOT PR CI |
+| **Command** | `bash tests/deployment/fresh-install.sh "<run number>"` |
+| **Ordering** | After `Validate release contract`; BEFORE immutable tag creation, GitHub Release creation, and release image publication — no irreversible release artifact exists until acceptance passes. |
 | **Build authority** | Every acceptance boot still uses `docker compose ... up --build` against the current checkout. |
-| **Cache** | CI-only BuildKit `type=gha` layer cache is a performance input; it cannot replace source-build authority. |
+| **Cache** | No GHA BuildKit layer cache on this lane (release runs stay simple); Docker build cache is performance only and cannot replace source-build authority. |
 | **Forbidden shortcut** | Must not consume the `verify-build` artifact or a registry image in place of the Dockerfile build. |
 
 ### 1.7 E2E (Playwright)

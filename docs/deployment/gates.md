@@ -2,8 +2,9 @@
 
 Authority for which deployment suite runs where, why, and how it isolates
 itself. Issue #327: deployment drift must not stay green solely because
-unit/E2E tests bypass the production Compose topology — but not every
-destructive/slow suite belongs in every PR.
+unit/E2E tests bypass the production Compose topology — and no deployment
+suite needs to block every PR: the fresh-install acceptance is the release
+deployment gate instead.
 
 ## The one Compose entry point
 
@@ -29,8 +30,8 @@ invocation), so the repo-root `.env` is never read for interpolation.
 
 | Gate | Script | Trigger | Runtime class (measured) | Isolation |
 | --- | --- | --- | --- | --- |
-| Fresh-install acceptance (PR-blocking) | `pnpm test:deployment:fresh` (`tests/deployment/fresh-install.sh`) | every PR (`deployment-fresh-install` CI job) | ~1:45 warm cache locally; CI pays a full cold image build on every run (no runner layer cache; p50 est. 12–20 min, bounded by the 30 min job timeout — re-baseline after the first CI runs) | mktemp env file (never repo-root `.env.deploy`; dev file proven untouched via checksum), mktemp `EXAM_DATA_ROOT`, unique Compose project + canary host port, `down` + guarded temp-root removal (removal is best-effort with a WARN; the compose-project residue assert is the hard gate), INT/TERM routed through the EXIT trap |
-| Compose smoke | `pnpm test:deployment:compose` (`compose-smoke.sh`) | every PR, inside the fresh-install gate; also runnable standalone | ~2–3 min warm | same as above (its own temp root + project) |
+| Fresh-install acceptance (release-blocking) | `pnpm test:deployment:fresh` (`tests/deployment/fresh-install.sh`) | release only (`release` workflow, after contract validation and BEFORE tag / GitHub Release / release image publication; includes compose smoke) | ~1:45 warm cache locally; each release run pays a full cold image build (no GHA layer cache on this lane; p50 est. 12–20 min, bounded by the 30 min step timeout) | mktemp env file (never repo-root `.env.deploy`; dev file proven untouched via checksum), mktemp `EXAM_DATA_ROOT`, unique Compose project + canary host port, `down` + guarded temp-root removal (removal is best-effort with a WARN; the compose-project residue assert is the hard gate), INT/TERM routed through the EXIT trap |
+| Compose smoke | `pnpm test:deployment:compose` (`compose-smoke.sh`) | inside the fresh-install gate (release); also runnable standalone | ~2–3 min warm | same as above (its own temp root + project) |
 | Launchpad bootstrap | `pnpm test:deployment:launchpad` | release / manual | not yet measured; bootstrap-only flow | isolated project + temp root (suite-owned) |
 | Persistence & cold restore | `pnpm test:deployment:persistence` | release / manual | not yet measured; multi-recreation flow | isolated project + temp root |
 | Logical backup & restore | `pnpm test:deployment:logical` | release / manual | destructive pg_restore inside its own stack | isolated project + temp root |
@@ -39,11 +40,15 @@ invocation), so the repo-root `.env` is never read for interpolation.
 | Cleanup boundary | `pnpm test:deployment:cleanup` (`cleanup-boundary-regression.sh`) | release / manual | <1 min; no stack boot (driver + container-built fixture) | temp roots only, prefix-scoped sweep; deterministic unavailable-helper simulation, no registry/credential contact |
 | PITR | `pnpm test:deployment:pitr` | nightly / manual (WAL archive + basebackup cycles) | slowest of the suite | isolated project + temp root + dedicated WAL archive path |
 
-PR-blocking set = fresh-install gate only (it composes the compose smoke).
-The launchpad/persistence/logical/PITR suites keep their destructive
-multi-minute flows out of every PR; they are the release/manual evidence
-layer. Promoting any of them to PR-blocking requires a measured runtime
-under ~10 min CI and a review of its destructive surface.
+PR deployment gate = none: no deployment suite blocks PRs. The release
+deployment gate = fresh-install acceptance only (it composes the compose
+smoke), running inside the `release` workflow after contract validation and
+before every irreversible publication step (immutable tag, GitHub Release,
+release image). The launchpad/persistence/logical/upgrade/cold-backup/
+cleanup/PITR suites keep their destructive multi-minute flows out of PRs;
+they are the release/manual evidence layer. Promoting any of them to
+PR-blocking requires a measured runtime under ~10 min CI and a review of
+its destructive surface.
 
 ## What the fresh-install gate proves (and how it fails)
 
