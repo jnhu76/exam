@@ -467,6 +467,7 @@ durability boundary.
 | **Database per shard** | Single shared `exam_e2e` (CI doesn't create per-shard DBs) |
 | **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
 | **fail-fast** | `true` (the sibling shard is cancelled after a shard failure) |
+| **Test command** | `pnpm --filter @exam/e2e exec playwright test --shard={index}/{total}` |
 | **Failure diagnostics** | Each failing shard writes a step summary and uploads a 1-day `e2e-failure-diagnostics-{shardIndex}` artifact when files exist. |
 
 ### 4.3 CI E2E Build/Input Contract
