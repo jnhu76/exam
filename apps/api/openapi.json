@@ -46361,6 +46361,884 @@
         }
       }
     },
+    "/api/admin/proctor/incidents": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["open", "investigating", "resolved", "dismissed"]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "unresolvedOnly",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "nullable": true
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Proctor"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "incident": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "examId": {
+                                "type": "string"
+                              },
+                              "attemptId": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "candidateId": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "network_interruption",
+                                  "device_failure",
+                                  "power_failure",
+                                  "candidate_unable_to_continue",
+                                  "suspected_misconduct",
+                                  "operator_error",
+                                  "system_outage",
+                                  "environmental_disruption",
+                                  "other"
+                                ]
+                              },
+                              "severity": {
+                                "type": "string",
+                                "enum": ["info", "minor", "major", "critical"]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "investigating",
+                                  "resolved",
+                                  "dismissed"
+                                ]
+                              },
+                              "occurredAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "resolutionSummary": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "resolvedAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "resolvedBy": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reportedBy": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "integer"
+                              },
+                              "createdAt": {
+                                "type": "string"
+                              },
+                              "updatedAt": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "examId",
+                              "attemptId",
+                              "candidateId",
+                              "type",
+                              "severity",
+                              "status",
+                              "occurredAt",
+                              "description",
+                              "resolutionSummary",
+                              "resolvedAt",
+                              "resolvedBy",
+                              "reportedBy",
+                              "version",
+                              "createdAt",
+                              "updatedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "examSummary": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "title", "status"],
+                            "additionalProperties": false
+                          },
+                          "primaryAttempt": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "candidateId": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "candidateId", "status"],
+                            "additionalProperties": false,
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "incident",
+                          "examSummary",
+                          "primaryAttempt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "snapshotAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["items", "nextCursor", "snapshotAt"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/incidents/{incidentId}/detail": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "incidentId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Proctor"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "incident": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "examId": {
+                          "type": "string"
+                        },
+                        "attemptId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "candidateId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "network_interruption",
+                            "device_failure",
+                            "power_failure",
+                            "candidate_unable_to_continue",
+                            "suspected_misconduct",
+                            "operator_error",
+                            "system_outage",
+                            "environmental_disruption",
+                            "other"
+                          ]
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["info", "minor", "major", "critical"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "investigating",
+                            "resolved",
+                            "dismissed"
+                          ]
+                        },
+                        "occurredAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "resolutionSummary": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "resolvedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "resolvedBy": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reportedBy": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "integer"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "examId",
+                        "attemptId",
+                        "candidateId",
+                        "type",
+                        "severity",
+                        "status",
+                        "occurredAt",
+                        "description",
+                        "resolutionSummary",
+                        "resolvedAt",
+                        "resolvedBy",
+                        "reportedBy",
+                        "version",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "examSummary": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "status"],
+                      "additionalProperties": false
+                    },
+                    "primaryAttempt": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "candidateId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "candidateId", "status"],
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "eventSequence": {
+                            "type": "integer"
+                          },
+                          "eventType": {
+                            "type": "string"
+                          },
+                          "commandType": {
+                            "type": "string"
+                          },
+                          "operationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "actorId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "beforeVersion": {
+                            "type": "integer"
+                          },
+                          "afterVersion": {
+                            "type": "integer"
+                          },
+                          "payload": {},
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "eventSequence",
+                          "eventType",
+                          "commandType",
+                          "operationId",
+                          "actorId",
+                          "beforeVersion",
+                          "afterVersion",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "operationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "actorId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "body": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "operationId",
+                          "actorId",
+                          "body",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "actionLinks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "actionType": {
+                            "type": "string",
+                            "enum": ["time_grant", "force_submit"]
+                          },
+                          "actionId": {
+                            "type": "string"
+                          },
+                          "linkedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "actionType",
+                          "actionId",
+                          "linkedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "attemptLinks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "attemptId": {
+                            "type": "string"
+                          },
+                          "relationshipType": {
+                            "type": "string",
+                            "enum": ["affected", "referenced"]
+                          },
+                          "linkedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "attemptId",
+                          "relationshipType",
+                          "linkedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "interruptionLinks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "attemptId": {
+                            "type": "string"
+                          },
+                          "interruptionId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "linkedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "attemptId",
+                          "interruptionId",
+                          "linkedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedActions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "investigate",
+                          "add_note",
+                          "change_severity",
+                          "resolve",
+                          "dismiss",
+                          "link_action",
+                          "link_attempt",
+                          "link_interruption"
+                        ]
+                      }
+                    },
+                    "snapshotAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "incident",
+                    "examSummary",
+                    "primaryAttempt",
+                    "events",
+                    "notes",
+                    "actionLinks",
+                    "attemptLinks",
+                    "interruptionLinks",
+                    "allowedActions",
+                    "snapshotAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode)."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                        },
+                        "details": {
+                          "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                        },
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Request id for support correlation"
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/recovery/incidents/{incidentId}": {
       "get": {
         "parameters": [

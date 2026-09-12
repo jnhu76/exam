@@ -29,6 +29,7 @@ interface Fixture {
   examId: string;
   candidateUserId: string;
   candidateId: string;
+  enrollmentId: string;
   attemptId: string;
   proctorUserId: string;
   ctx: RequestContext;
@@ -190,6 +191,7 @@ async function createFixture(db: Database, suffix: string): Promise<Fixture> {
     examId,
     candidateUserId,
     candidateId,
+    enrollmentId,
     attemptId,
     proctorUserId,
     ctx: context(organizationId, actorId),
@@ -4771,6 +4773,406 @@ describe("recovery exam recovery context repository", () => {
       await db
         .delete(schema.organizations)
         .where(eq(schema.organizations.id, foreignOrgId));
+    }
+  });
+});
+
+// ── EXAM-303 — Proctor Recovery Center narrow detail (F3 projection) ──
+//
+// The Proctor detail projection exposes the SAME incident relationship graph
+// the Admin aggregate does, to a caller whose authority is an active
+// assignment rather than organization-wide. It MUST therefore run the same
+// fail-closed ADR-014 §7 scope-quadruple validation: a corrupted link row
+// (composite FKs only prove org + attempt consistency, never
+// `incident.examId == attempt.examId`) must fail closed instead of projecting
+// attempt/interruption ids whose scope the incident does not own.
+describe("recovery proctor incident detail repository (#303)", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+  let fx: Fixture;
+  /** Exam-wide (non-candidate-focused) incident on fx.examId. */
+  let incidentId: string;
+  /** Second org-local attempt on the SAME exam — the valid link target. */
+  let sameExamAttemptId: string;
+  /** Attempt on a DIFFERENT exam in the same org — the cross-exam violation. */
+  let crossExamAttemptId: string;
+  /** Attempt on fx.examId belonging to a different candidate. */
+  let otherCandidateAttemptId: string;
+  let otherCandidateId: string;
+  let otherCandidateUserId: string;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("recovery-proctor-detail");
+    db = result.db;
+    cleanup = result.cleanup;
+    fx = await createFixture(db, "proctor-detail");
+    const now = new Date("2026-01-01T00:00:00.000Z");
+
+    // Same-exam sibling attempt (satisfies the scope quadruple). The
+    // enrollment is unique per (org, exam, candidate), so the second attempt
+    // reuses the fixture's enrollment — exactly how the canonical start path
+    // produces attemptNo 2.
+    sameExamAttemptId = randomUUID();
+    await db.insert(schema.examAttempts).values({
+      id: sameExamAttemptId,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      enrollmentId: fx.enrollmentId,
+      candidateId: fx.candidateId,
+      attemptNo: 2,
+      status: "submitted",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: ATTEMPT_DEADLINE_AT,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // A SECOND exam in the same org, plus an attempt on it. The composite FK
+    // `(organization_id, attempt_id) → exam_attempts` accepts this row because
+    // the org matches; only the application-layer scope quadruple can reject
+    // it. This is exactly the historical/corrupt shape the Proctor projection
+    // must not leak (the incident's exam is fx.examId, the attempt's is not).
+    const crossExamId = randomUUID();
+    const crossCourseId = randomUUID();
+    await db.insert(schema.courses).values({
+      id: crossCourseId,
+      organizationId: fx.organizationId,
+      name: "Cross exam course",
+      code: `CROSS-${crossCourseId.slice(0, 8)}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.exams).values({
+      id: crossExamId,
+      organizationId: fx.organizationId,
+      title: "Cross exam",
+      description: "",
+      courseId: crossCourseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: EXAM_CLOSE_AT,
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const crossEnrollmentId = randomUUID();
+    await db.insert(schema.examEnrollments).values({
+      id: crossEnrollmentId,
+      organizationId: fx.organizationId,
+      examId: crossExamId,
+      candidateId: fx.candidateId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    crossExamAttemptId = randomUUID();
+    await db.insert(schema.examAttempts).values({
+      id: crossExamAttemptId,
+      organizationId: fx.organizationId,
+      examId: crossExamId,
+      enrollmentId: crossEnrollmentId,
+      candidateId: fx.candidateId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: ATTEMPT_DEADLINE_AT,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Same exam, DIFFERENT candidate — the candidate leg of the quadruple.
+    otherCandidateId = randomUUID();
+    otherCandidateUserId = randomUUID();
+    await db.insert(schema.users).values({
+      id: otherCandidateUserId,
+      organizationId: fx.organizationId,
+      username: `proctor-detail-cand2-${otherCandidateUserId}`,
+      passwordHash: "hash",
+      name: "Proctor Detail Candidate Two",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.candidateProfiles).values({
+      id: otherCandidateId,
+      organizationId: fx.organizationId,
+      userId: otherCandidateUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    const otherEnrollmentId = randomUUID();
+    await db.insert(schema.examEnrollments).values({
+      id: otherEnrollmentId,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      candidateId: otherCandidateId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    otherCandidateAttemptId = randomUUID();
+    await db.insert(schema.examAttempts).values({
+      id: otherCandidateAttemptId,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      enrollmentId: otherEnrollmentId,
+      candidateId: otherCandidateId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: now,
+      deadlineAt: ATTEMPT_DEADLINE_AT,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }, 30_000);
+
+  afterAll(async () => {
+    await cleanup();
+  }, 30_000);
+
+  /** Exam-wide incident carrying an optional candidate focus. */
+  async function insertIncident(
+    candidateId: string | null,
+    description: string,
+  ): Promise<string> {
+    const id = randomUUID();
+    const at = new Date("2026-01-01T12:00:00.000Z");
+    await db.insert(schema.examIncidents).values({
+      id,
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      attemptId: null,
+      candidateId,
+      type: "network_interruption",
+      severity: "minor",
+      status: "open",
+      occurredAt: null,
+      description,
+      resolutionSummary: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      reportedBy: fx.actorId,
+      version: 1,
+      createdAt: at,
+      updatedAt: at,
+    });
+    return id;
+  }
+
+  async function dropIncident(id: string): Promise<void> {
+    await db
+      .delete(schema.examIncidentActions)
+      .where(eq(schema.examIncidentActions.incidentId, id));
+    await db
+      .delete(schema.examIncidentAttempts)
+      .where(eq(schema.examIncidentAttempts.incidentId, id));
+    await db
+      .delete(schema.examIncidentInterruptionLinks)
+      .where(eq(schema.examIncidentInterruptionLinks.incidentId, id));
+    await db
+      .delete(schema.examIncidents)
+      .where(
+        and(
+          eq(schema.examIncidents.organizationId, fx.organizationId),
+          eq(schema.examIncidents.id, id),
+        ),
+      );
+  }
+
+  it("projects an in-scope graph and reports the anchor-exclusive action set", async () => {
+    const repo = createRecoveryRepo(db);
+    const id = await insertIncident(null, "proctor-detail-valid");
+    try {
+      await db.insert(schema.examIncidentAttempts).values({
+        id: randomUUID(),
+        organizationId: fx.organizationId,
+        incidentId: id,
+        attemptId: sameExamAttemptId,
+        relationshipType: "affected",
+        linkedAt: new Date("2026-01-01T12:10:00.000Z"),
+        linkedBy: fx.actorId,
+        operationId: randomUUID(),
+      });
+      const detail = await repo.getProctorIncidentDetail(fx.ctx, id);
+      expect(detail).not.toBeNull();
+      expect(detail!.incident.id).toBe(id);
+      expect(detail!.attemptLinks.map((m) => m.attemptId)).toEqual([
+        sameExamAttemptId,
+      ]);
+      expect(detail!.snapshotAt).toBeInstanceOf(Date);
+    } finally {
+      await dropIncident(id);
+    }
+  });
+
+  it("fails closed with AUTHZ_UNAVAILABLE when a membership attempt belongs to another exam", async () => {
+    const repo = createRecoveryRepo(db);
+    const id = await insertIncident(
+      null,
+      "proctor-detail-membership-cross-exam",
+    );
+    try {
+      await db.insert(schema.examIncidentAttempts).values({
+        id: randomUUID(),
+        organizationId: fx.organizationId,
+        incidentId: id,
+        attemptId: crossExamAttemptId,
+        relationshipType: "affected",
+        linkedAt: new Date("2026-01-01T12:10:00.000Z"),
+        linkedBy: fx.actorId,
+        operationId: randomUUID(),
+      });
+      await expect(
+        repo.getProctorIncidentDetail(fx.ctx, id),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+        message: expect.stringContaining(
+          "RECOVERY_PROCTOR_DETAIL_MEMBERSHIP_EXAM_MISMATCH",
+        ),
+      });
+    } finally {
+      await dropIncident(id);
+    }
+  });
+
+  it("fails closed with AUTHZ_UNAVAILABLE when an action link targets another exam's attempt", async () => {
+    const repo = createRecoveryRepo(db);
+    const id = await insertIncident(null, "proctor-detail-action-cross-exam");
+    try {
+      await db.insert(schema.examIncidentActions).values({
+        id: randomUUID(),
+        organizationId: fx.organizationId,
+        incidentId: id,
+        actionType: "force_submit",
+        actionId: crossExamAttemptId,
+        attemptId: crossExamAttemptId,
+        actorId: fx.actorId,
+        linkedAt: new Date("2026-01-01T12:10:00.000Z"),
+        operationId: randomUUID(),
+      });
+      await expect(
+        repo.getProctorIncidentDetail(fx.ctx, id),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+        message: expect.stringContaining(
+          "RECOVERY_PROCTOR_DETAIL_ACTION_ATTEMPT_SCOPE",
+        ),
+      });
+    } finally {
+      await dropIncident(id);
+    }
+  });
+
+  it("fails closed with AUTHZ_UNAVAILABLE when an interruption link targets another exam's attempt", async () => {
+    const repo = createRecoveryRepo(db);
+    const id = await insertIncident(
+      null,
+      "proctor-detail-interruption-cross-exam",
+    );
+    const interruptionId = randomUUID();
+    try {
+      await db.insert(schema.attemptInterruptions).values({
+        id: interruptionId,
+        organizationId: fx.organizationId,
+        attemptId: crossExamAttemptId,
+        createdAt: new Date("2026-01-01T12:05:00.000Z"),
+      });
+      await db.insert(schema.examIncidentInterruptionLinks).values({
+        id: randomUUID(),
+        organizationId: fx.organizationId,
+        incidentId: id,
+        attemptId: crossExamAttemptId,
+        interruptionId,
+        linkedBy: fx.actorId,
+        linkedAt: new Date("2026-01-01T12:10:00.000Z"),
+        operationId: randomUUID(),
+      });
+      await expect(
+        repo.getProctorIncidentDetail(fx.ctx, id),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+        message: expect.stringContaining(
+          "RECOVERY_PROCTOR_DETAIL_INTERRUPTION_ATTEMPT_SCOPE",
+        ),
+      });
+    } finally {
+      await dropIncident(id);
+      await db
+        .delete(schema.attemptInterruptions)
+        .where(eq(schema.attemptInterruptions.id, interruptionId));
+    }
+  });
+
+  it("fails closed when a candidate-focused incident links another candidate's attempt on the same exam", async () => {
+    const repo = createRecoveryRepo(db);
+    const id = await insertIncident(
+      fx.candidateId,
+      "proctor-detail-candidate-mismatch",
+    );
+    try {
+      await db.insert(schema.examIncidentAttempts).values({
+        id: randomUUID(),
+        organizationId: fx.organizationId,
+        incidentId: id,
+        attemptId: otherCandidateAttemptId,
+        relationshipType: "affected",
+        linkedAt: new Date("2026-01-01T12:10:00.000Z"),
+        linkedBy: fx.actorId,
+        operationId: randomUUID(),
+      });
+      await expect(
+        repo.getProctorIncidentDetail(fx.ctx, id),
+      ).rejects.toMatchObject({
+        name: "AuthzUnavailableError",
+        code: "AUTHZ_UNAVAILABLE",
+        statusCode: 503,
+        message: expect.stringContaining(
+          "RECOVERY_PROCTOR_DETAIL_MEMBERSHIP_CANDIDATE_MISMATCH",
+        ),
+      });
+    } finally {
+      await dropIncident(id);
     }
   });
 });

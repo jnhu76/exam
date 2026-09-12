@@ -77,6 +77,10 @@ export const ADMIN_NAV_FAMILIES: readonly NavFamily[] = [
   { to: "/admin/results", patterns: ["results"] },
   { to: "/admin/proctor", patterns: ["proctor"] },
   {
+    to: "/admin/proctor/recovery",
+    patterns: ["proctor/recovery", "proctor/recovery/incidents/:incidentId"],
+  },
+  {
     to: "/admin/recovery",
     patterns: [
       "recovery",

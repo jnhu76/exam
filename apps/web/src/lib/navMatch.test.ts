@@ -60,6 +60,8 @@ const EXPECTED_ROUTE_FAMILY: Record<string, string> = {
   "/admin/recovery/incidents/:incidentId": "/admin/recovery",
   "/admin/recovery/attempts/:attemptId": "/admin/recovery",
   "/admin/recovery/exams/:examId": "/admin/recovery",
+  "/admin/proctor/recovery": "/admin/proctor/recovery",
+  "/admin/proctor/recovery/incidents/:incidentId": "/admin/proctor/recovery",
   "/admin/proctor": "/admin/proctor",
 };
 

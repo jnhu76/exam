@@ -35,6 +35,10 @@ describe("routes", () => {
     expect(routes.admin.recoveryAttempt("a-1")).toBe(
       "/admin/recovery/attempts/a-1",
     );
+    expect(routes.admin.proctorRecovery).toBe("/admin/proctor/recovery");
+    expect(routes.admin.proctorRecoveryIncident("i-1")).toBe(
+      "/admin/proctor/recovery/incidents/i-1",
+    );
     expect(routes.admin.system).toBe("/admin/system");
   });
 

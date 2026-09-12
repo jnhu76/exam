@@ -21,6 +21,10 @@ import {
 } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import { resolveOrganizationId } from "./baseRepo.js";
+import {
+  incidentScopeViolation,
+  validateIncidentRelationshipGraph,
+} from "./incidentRelationshipGraph.js";
 import { createIncidentRepo, type ExamIncidentRow } from "./incidentRepo.js";
 import {
   createAttemptInterruptionEventRepo,
@@ -270,6 +274,56 @@ export interface IncidentAggregate {
    * request-side clock reading. // adr-006-allow: DB snapshot identity stamp,
    * not an exam-lifecycle time decision (see ADR-006 allowlist entry).
    */
+  snapshotAt: Date;
+}
+
+// ── Proctor Incident Detail types (#303, narrow read projection) ──
+
+/**
+ * Narrow incident detail for the Proctor Recovery Center — a strict subset of
+ * {@link IncidentAggregate}. F3 corrective (human-gate 2026-09-12) freezes
+ * this projection to only incident-domain truth an assigned Proctor already
+ * holds read authority over. Fields deliberately omitted:
+ *   - timeAdjustmentSummaries (Admin time-adjustment ledger)
+ *   - auditReferences (Admin audit trail)
+ *   - candidateSummaries (Admin candidate identity resolution)
+ *   - attemptSummaries (Admin linked-attempt status aggregation)
+ */
+export interface ProctorIncidentDetailResult {
+  incident: ExamIncidentRow;
+  examSummary: { id: string; title: string; status: string };
+  primaryAttempt: {
+    id: string;
+    candidateId: string | null;
+    status: string;
+  } | null;
+  events: IncidentAggregateEventSummary[];
+  notes: IncidentAggregateNoteSummary[];
+  actionLinks: Array<{
+    id: string;
+    actionType: string;
+    actionId: string;
+    attemptId: string;
+    actorId: string | null;
+    operationId: string;
+    linkedAt: Date;
+  }>;
+  attemptLinks: Array<{
+    id: string;
+    attemptId: string;
+    relationshipType: string;
+    linkedAt: Date;
+    linkedBy: string;
+    operationId: string;
+  }>;
+  interruptionLinks: Array<{
+    id: string;
+    attemptId: string;
+    interruptionId: string;
+    linkedAt: Date;
+    linkedBy: string;
+    operationId: string;
+  }>;
   snapshotAt: Date;
 }
 
@@ -668,15 +722,10 @@ export function createRecoveryRepo(db: Database) {
         // Null is projected as-is; the route derives the effective deadline
         // through the canonical seam, which maps closeAt=null → null.
 
-        // ADR-014 §2: anchor and membership are MUTUALLY EXCLUSIVE — an
-        // anchored Incident (attemptId set) rejects membership rows. A
-        // historical row carrying both is tenant-data corruption: fail closed
-        // instead of projecting a graph the authority forbids.
-        if (incident.attemptId !== null && attemptMemberships.length > 0) {
-          throw new AuthzUnavailableError(
-            `RECOVERY_AGG_ANCHOR_MEMBERSHIP_CONFLICT: incident ${incident.id}`,
-          );
-        }
+        // ADR-014 §2: anchor and membership are MUTUALLY EXCLUSIVE, and the
+        // whole relationship graph must satisfy the §7 scope quadruple. The
+        // shared validator owns that invariant for every read surface that
+        // projects link rows (Admin aggregate + Proctor Recovery detail).
 
         // Summary (linked) attempt set = anchor attempt (if any) ∪ membership
         // rows. This is the wire's `attemptSummaries` — exactly the durable
@@ -715,9 +764,9 @@ export function createRecoveryRepo(db: Database) {
         if (incident.candidateId) candidateIds.add(incident.candidateId);
         const timeAdjustmentSummaries: IncidentAggregateTimeAdjustmentSummary[] =
           [];
-        // adjustmentById is populated inside the referenced-attempt read block
-        // below (only when there are time_grant action links) and consumed in
-        // the per-action identity validation that follows.
+        // adjustmentById is populated by the time_grant referent read (only
+        // when the incident has time_grant action links) and consumed by the
+        // per-action identity loop after the graph validator.
         let adjustmentById = new Map<
           string,
           {
@@ -740,6 +789,53 @@ export function createRecoveryRepo(db: Database) {
           string,
           { examId: string; candidateId: string | null }
         >();
+        // Time adjustments referenced by THIS Incident's time_grant action
+        // identities ONLY (ADR-014 §7: action_id is the polymorphic referent;
+        // for time_grant it is exactly the attempt_time_adjustments.id). The
+        // projection is NOT the complete per-Attempt ledger — unrelated grants
+        // on the same Attempt (other incidents, administrative adjustments)
+        // must NOT leak in. J5-R0 §6.1 freezes the detail field as "linked
+        // time grants / actions"; the full per-Attempt ledger belongs to
+        // Attempt Operations Context.
+        //
+        // Read BEFORE the relationship-graph validation so the referent map is
+        // complete by the time the per-action identity loop runs (that loop
+        // stays after the validator, which keeps the validator as the single
+        // first gate on the graph itself).
+        const timeGrantActionIds = [
+          ...new Set(
+            actions
+              .filter((a) => a.actionType === "time_grant")
+              .map((a) => a.actionId),
+          ),
+        ];
+        if (timeGrantActionIds.length > 0) {
+          const timeAdjRows = await tx
+            .select({
+              id: attemptTimeAdjustments.id,
+              attemptId: attemptTimeAdjustments.attemptId,
+              policy: attemptTimeAdjustments.policy,
+              source: attemptTimeAdjustments.source,
+              beforeDeadline: attemptTimeAdjustments.beforeDeadline,
+              afterDeadline: attemptTimeAdjustments.afterDeadline,
+              addedSeconds: attemptTimeAdjustments.addedSeconds,
+              eligibleSeconds: attemptTimeAdjustments.eligibleSeconds,
+              reasonCode: attemptTimeAdjustments.reasonCode,
+              reasonText: attemptTimeAdjustments.reasonText,
+              actorId: attemptTimeAdjustments.actorId,
+              operationId: attemptTimeAdjustments.operationId,
+              createdAt: attemptTimeAdjustments.createdAt,
+            })
+            .from(attemptTimeAdjustments)
+            .where(
+              and(
+                eq(attemptTimeAdjustments.organizationId, orgId),
+                inArray(attemptTimeAdjustments.id, timeGrantActionIds),
+              ),
+            );
+          adjustmentById = new Map(timeAdjRows.map((r) => [r.id, r]));
+        }
+
         if (referencedIdList.length > 0) {
           const attRows = await tx
             .select({
@@ -780,200 +876,53 @@ export function createRecoveryRepo(db: Database) {
               candidateIds.add(a.candidateId);
             }
           }
-
-          // Time adjustments referenced by THIS Incident's time_grant action
-          // identities ONLY (ADR-014 §7: action_id is the polymorphic referent;
-          // for time_grant it is exactly the attempt_time_adjustments.id). The
-          // projection is NOT the complete per-Attempt ledger — unrelated grants
-          // on the same Attempt (other incidents, administrative adjustments)
-          // must NOT leak in. J5-R0 §6.1 freezes the detail field as "linked
-          // time grants / actions"; the full per-Attempt ledger belongs to
-          // Attempt Operations Context.
-          //
-          // `actions` is already read above; collect the time_grant referents
-          // and fetch by id (the adjustment PK), not by attempt_id.
-          const timeGrantActionIds = [
-            ...new Set(
-              actions
-                .filter((a) => a.actionType === "time_grant")
-                .map((a) => a.actionId),
-            ),
-          ];
-          const timeAdjRows =
-            timeGrantActionIds.length === 0
-              ? []
-              : await tx
-                  .select({
-                    id: attemptTimeAdjustments.id,
-                    attemptId: attemptTimeAdjustments.attemptId,
-                    policy: attemptTimeAdjustments.policy,
-                    source: attemptTimeAdjustments.source,
-                    beforeDeadline: attemptTimeAdjustments.beforeDeadline,
-                    afterDeadline: attemptTimeAdjustments.afterDeadline,
-                    addedSeconds: attemptTimeAdjustments.addedSeconds,
-                    eligibleSeconds: attemptTimeAdjustments.eligibleSeconds,
-                    reasonCode: attemptTimeAdjustments.reasonCode,
-                    reasonText: attemptTimeAdjustments.reasonText,
-                    actorId: attemptTimeAdjustments.actorId,
-                    operationId: attemptTimeAdjustments.operationId,
-                    createdAt: attemptTimeAdjustments.createdAt,
-                  })
-                  .from(attemptTimeAdjustments)
-                  .where(
-                    and(
-                      eq(attemptTimeAdjustments.organizationId, orgId),
-                      inArray(attemptTimeAdjustments.id, timeGrantActionIds),
-                    ),
-                  );
-          adjustmentById = new Map(timeAdjRows.map((r) => [r.id, r]));
         }
 
-        // ── Fail-closed relationship-graph validation (ADR-014 §7 scope
-        //    quadruple). The composite FKs only prove organization + attempt
-        //    consistency; they do NOT prove `incident.examId ==
-        //    attempt.examId`, nor that a candidate-focused incident's
-        //    membership belongs to the same candidate. The application layer
-        //    must verify these and fail closed on any contradiction — never
-        //    silently omit a summary, never disguise corruption as absence.
-        // Anchor attempt (if any) MUST resolve and belong to the incident's
-        // exam; its candidate MUST match the incident focus when set.
-        if (incident.attemptId) {
-          const a = attemptById.get(incident.attemptId);
-          if (!a) {
-            throw new AuthzUnavailableError(
-              `RECOVERY_AGG_ANCHOR_BROKEN: incident ${incident.id} attempt ${incident.attemptId}`,
-            );
-          }
-          const violation = incidentScopeViolation(incident, a);
-          if (violation === "EXAM_MISMATCH") {
-            throw new AuthzUnavailableError(
-              `RECOVERY_AGG_ANCHOR_EXAM_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} exam ${a.examId}`,
-            );
-          }
-          if (violation === "CANDIDATE_MISMATCH") {
-            throw new AuthzUnavailableError(
-              `RECOVERY_AGG_ANCHOR_CANDIDATE_MISMATCH: incident ${incident.id} attempt ${incident.attemptId} candidate ${a.candidateId}`,
-            );
-          }
-        }
-        // Every membership MUST resolve to an attempt of the incident's exam;
-        // for a candidate-focused incident, every membership attempt MUST
-        // belong to that candidate (ADR-014 §7 candidate matrix).
-        for (const m of attemptMemberships) {
-          const a = attemptById.get(m.attemptId);
-          if (!a) {
-            throw new AuthzUnavailableError(
-              `RECOVERY_AGG_MEMBERSHIP_BROKEN: incident ${incident.id} membership ${m.id} attempt ${m.attemptId}`,
-            );
-          }
-          const violation = incidentScopeViolation(incident, a);
-          if (violation === "EXAM_MISMATCH") {
-            throw new AuthzUnavailableError(
-              `RECOVERY_AGG_MEMBERSHIP_EXAM_MISMATCH: incident ${incident.id} membership ${m.id} attempt ${m.attemptId} exam ${a.examId}`,
-            );
-          }
-          if (violation === "CANDIDATE_MISMATCH") {
-            throw new AuthzUnavailableError(
-              `RECOVERY_AGG_MEMBERSHIP_CANDIDATE_MISMATCH: incident ${incident.id} membership ${m.id} attempt ${m.attemptId} candidate ${a.candidateId}`,
-            );
-          }
-        }
-        // Action links and interruption links each carry an attemptId that
-        // MUST resolve in-org and satisfy the scope quadruple — but the
-        // attempt does NOT need to be a membership (the relationships are
-        // independent, ADR-014 §7). An anchored incident rejects membership,
-        // but its action / interruption links still MUST point at the anchor
-        // attempt (same-Exam; candidate-matched when the incident is
-        // candidate-focused).
-        //
-        // Each action link ALSO carries a polymorphic actionId whose referent
-        // depends on action_type (ADR-014 §7): for time_grant it is the exact
-        // attempt_time_adjustments.id; for force_submit it IS the attemptId
-        // itself. action_id is plain text with no DB FK, so the application
-        // layer MUST fail-closed validate the referent on read — a missing or
-        // attempt-mismatched referent is tenant-graph corruption, never a
-        // partial projection. time_grant links additionally drive the
-        // timeAdjustmentSummaries projection: each linked adjustment is
-        // projected in action-link order (stable; independent of the
-        // adjustment's own createdAt), so actions[i] maps to its fact.
+        // ONE invariant, two surfaces: the Admin aggregate and the Proctor
+        // Recovery detail projection both call this validator, so a scope
+        // contradiction can never be closed on one surface and open on the
+        // other.
+        validateIncidentRelationshipGraph({
+          codePrefix: "RECOVERY_AGG",
+          incident,
+          attemptById,
+          attemptMemberships,
+          actionLinks: actions,
+          interruptionLinks,
+        });
+
+        // Every linked time_grant must resolve to an in-org adjustment whose
+        // attempt is the action link's own attempt, and every linked
+        // adjustment is projected in action-link order (stable; independent of
+        // the adjustment's own createdAt), so actions[i] maps to its fact.
         for (const act of actions) {
-          const a = attemptById.get(act.attemptId);
-          // Full quadruple: resolution + incident.attemptId null-or-matching
-          // (a link on an anchored incident points at the anchor) + exam +
-          // candidate focus — the same legs the write path enforces at link
-          // time and the attempt-operations read model re-verifies.
-          if (
-            !a ||
-            (incident.attemptId != null &&
-              act.attemptId !== incident.attemptId) ||
-            incidentScopeViolation(incident, a) != null
-          ) {
+          if (act.actionType !== "time_grant") continue;
+          const adjustment = adjustmentById.get(act.actionId);
+          if (!adjustment) {
             throw new AuthzUnavailableError(
-              `RECOVERY_AGG_ACTION_ATTEMPT_SCOPE: incident ${incident.id} action ${act.id} attempt ${act.attemptId}`,
+              `RECOVERY_AGG_TIME_GRANT_REFERENT_BROKEN: incident ${incident.id} action ${act.id} adjustment ${act.actionId}`,
             );
           }
-          switch (act.actionType) {
-            case "time_grant": {
-              const adjustment = adjustmentById.get(act.actionId);
-              if (!adjustment) {
-                throw new AuthzUnavailableError(
-                  `RECOVERY_AGG_TIME_GRANT_REFERENT_BROKEN: incident ${incident.id} action ${act.id} adjustment ${act.actionId}`,
-                );
-              }
-              if (adjustment.attemptId !== act.attemptId) {
-                throw new AuthzUnavailableError(
-                  `RECOVERY_AGG_TIME_GRANT_ATTEMPT_MISMATCH: incident ${incident.id} action ${act.id} actionAttempt ${act.attemptId} adjustmentAttempt ${adjustment.attemptId}`,
-                );
-              }
-              timeAdjustmentSummaries.push({
-                id: adjustment.id,
-                attemptId: adjustment.attemptId,
-                policy: adjustment.policy,
-                source: adjustment.source,
-                beforeDeadline: adjustment.beforeDeadline,
-                afterDeadline: adjustment.afterDeadline,
-                addedSeconds: adjustment.addedSeconds,
-                eligibleSeconds: adjustment.eligibleSeconds,
-                reasonCode: adjustment.reasonCode,
-                reasonText: adjustment.reasonText,
-                actorId: adjustment.actorId,
-                operationId: adjustment.operationId,
-                createdAt: adjustment.createdAt,
-              });
-              break;
-            }
-            case "force_submit": {
-              // ADR-014 §7: force_submit action_id IS the force-submitted
-              // attemptId (force submit is a one-time terminal fact). The
-              // audit-fact existence check is the canonical write command's
-              // authority at link time; this read model validates the identity
-              // invariant only.
-              if (act.actionId !== act.attemptId) {
-                throw new AuthzUnavailableError(
-                  `RECOVERY_AGG_FORCE_SUBMIT_ACTION_ID_MISMATCH: incident ${incident.id} action ${act.id} actionId ${act.actionId} attemptId ${act.attemptId}`,
-                );
-              }
-              break;
-            }
-            default: {
-              throw new AuthzUnavailableError(
-                `RECOVERY_AGG_ACTION_TYPE_UNSUPPORTED: incident ${incident.id} action ${act.id} type ${act.actionType}`,
-              );
-            }
-          }
-        }
-        for (const link of interruptionLinks) {
-          const a = attemptById.get(link.attemptId);
-          if (
-            !a ||
-            (incident.attemptId != null &&
-              link.attemptId !== incident.attemptId) ||
-            incidentScopeViolation(incident, a) != null
-          ) {
+          if (adjustment.attemptId !== act.attemptId) {
             throw new AuthzUnavailableError(
-              `RECOVERY_AGG_INTERRUPTION_ATTEMPT_SCOPE: incident ${incident.id} interruptionLink ${link.id} attempt ${link.attemptId}`,
+              `RECOVERY_AGG_TIME_GRANT_ATTEMPT_MISMATCH: incident ${incident.id} action ${act.id} actionAttempt ${act.attemptId} adjustmentAttempt ${adjustment.attemptId}`,
             );
           }
+          timeAdjustmentSummaries.push({
+            id: adjustment.id,
+            attemptId: adjustment.attemptId,
+            policy: adjustment.policy,
+            source: adjustment.source,
+            beforeDeadline: adjustment.beforeDeadline,
+            afterDeadline: adjustment.afterDeadline,
+            addedSeconds: adjustment.addedSeconds,
+            eligibleSeconds: adjustment.eligibleSeconds,
+            reasonCode: adjustment.reasonCode,
+            reasonText: adjustment.reasonText,
+            actorId: adjustment.actorId,
+            operationId: adjustment.operationId,
+            createdAt: adjustment.createdAt,
+          });
         }
 
         // Candidate summaries — fail closed if a non-null candidate focus
@@ -1158,6 +1107,235 @@ export function createRecoveryRepo(db: Database) {
           timeAdjustmentSummaries,
           auditReferences,
           statusActionCandidates,
+          snapshotAt,
+        };
+      },
+      {
+        isolationLevel: "repeatable read",
+        accessMode: "read only",
+      },
+    );
+  }
+
+  // ── Proctor Incident Detail (#303, narrow read projection) ──
+
+  /**
+   * Narrow incident detail for the Proctor Recovery Center.
+   *
+   * Returns the incident row + append-only event history + link metadata +
+   * exam summary + anchor attempt — the subset already within Proctor read
+   * authority. Deliberately OMITS the Admin recovery-only fields the full
+   * aggregate carries:
+   *   - timeAdjustmentSummaries (Admin time-adjustment ledger)
+   *   - auditReferences (Admin audit trail)
+   *   - candidateSummaries (Admin candidate identity resolution)
+   *   - attemptSummaries (Admin linked-attempt status aggregation)
+   *   - activeProctors (Admin proctor assignment visibility)
+   *
+   * F3 corrective (human-gate 2026-09-12): these fields are Admin-only
+   * read authority; projecting them here would violate the authority freeze.
+   *
+   * Snapshot consistency: the whole read (incident + dimensions) runs inside
+   * one read-only REPEATABLE READ transaction, matching getIncidentAggregate.
+   * The `snapshotAt` is the actual PostgreSQL
+   * `transaction_timestamp()` — not a request-side clock reading.
+   *
+   * Returns null if the incident does not exist in the caller's org (404 at
+   * route). Broken parent chain (exam not resolvable) or ANY relationship-graph
+   * contradiction fails closed with AuthzUnavailableError (503), matching the
+   * Admin aggregate contract: the composite FKs cannot prove
+   * `incident.examId == attempt.examId`, so the shared
+   * {@link validateIncidentRelationshipGraph} re-verifies the ADR-014 §7 scope
+   * quadruple for the anchor, every membership, and every action/interruption
+   * link. Without that check this narrow projection could hand an assigned
+   * Proctor attempt/interruption ids whose scope the incident does not own.
+   */
+  async function getProctorIncidentDetail(
+    ctx: TenantContext | RequestContext,
+    incidentId: string,
+  ): Promise<ProctorIncidentDetailResult | null> {
+    const orgId = resolveOrganizationId(ctx);
+
+    return db.transaction(
+      async (tx) => {
+        const incidentRepo = createIncidentRepo(tx);
+
+        const incident = await incidentRepo.findById(ctx, incidentId);
+        if (!incident) return null;
+
+        // All dimension reads bound to `tx` → same REPEATABLE READ snapshot.
+        const events = await incidentRepo.listEventsByIncident(ctx, incidentId);
+        const actionLinks = await incidentRepo.listActionsByIncident(
+          ctx,
+          incidentId,
+        );
+        const attemptLinks = await incidentRepo.listAttemptsByIncident(
+          ctx,
+          incidentId,
+        );
+        const interruptionLinks =
+          await incidentRepo.listInterruptionLinksByIncident(ctx, incidentId);
+
+        // Exam summary — narrow projection (id/title/status only, no closeAt
+        // needed for the Proctor wire shape).
+        const examRows = await tx
+          .select({
+            id: exams.id,
+            title: exams.title,
+            status: exams.status,
+          })
+          .from(exams)
+          .where(
+            and(eq(exams.organizationId, orgId), eq(exams.id, incident.examId)),
+          )
+          .limit(1);
+        const examRow = examRows[0];
+        if (!examRow) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_PROCTOR_DETAIL_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
+          );
+        }
+
+        // Primary attempt — narrow projection (id/candidateId/status only).
+        // Attempt resolution and the exam/candidate legs are NOT decided here:
+        // every referenced attempt read below feeds the shared relationship-
+        // graph validator, which owns the ADR-014 §7 scope quadruple and fails
+        // closed on any contradiction.
+        const referencedAttemptIds = new Set<string>();
+        if (incident.attemptId) referencedAttemptIds.add(incident.attemptId);
+        for (const m of attemptLinks) referencedAttemptIds.add(m.attemptId);
+        for (const a of actionLinks) referencedAttemptIds.add(a.attemptId);
+        for (const l of interruptionLinks) {
+          referencedAttemptIds.add(l.attemptId);
+        }
+        const referencedIdList = [...referencedAttemptIds];
+
+        const attemptById = new Map<
+          string,
+          {
+            id: string;
+            candidateId: string | null;
+            status: string;
+            examId: string;
+          }
+        >();
+        if (referencedIdList.length > 0) {
+          const attRows = await tx
+            .select({
+              id: examAttempts.id,
+              candidateId: examAttempts.candidateId,
+              status: examAttempts.status,
+              examId: examAttempts.examId,
+            })
+            .from(examAttempts)
+            .where(
+              and(
+                eq(examAttempts.organizationId, orgId),
+                inArray(examAttempts.id, referencedIdList),
+              ),
+            );
+          for (const row of attRows) attemptById.set(row.id, row);
+        }
+
+        validateIncidentRelationshipGraph({
+          codePrefix: "RECOVERY_PROCTOR_DETAIL",
+          incident,
+          attemptById,
+          attemptMemberships: attemptLinks,
+          actionLinks,
+          interruptionLinks,
+        });
+
+        const anchorAttempt = incident.attemptId
+          ? (attemptById.get(incident.attemptId) ?? null)
+          : null;
+        const primaryAttempt = anchorAttempt
+          ? {
+              id: anchorAttempt.id,
+              candidateId: anchorAttempt.candidateId,
+              status: anchorAttempt.status,
+            }
+          : null;
+
+        // Notes derived from note_added events (event payload body), in stable
+        // event_sequence order — the same derivation the Admin aggregate uses.
+        const notes = events
+          .filter((e) => e.eventType === "note_added")
+          .map((e) => ({
+            operationId: e.operationId,
+            actorId: e.actorId,
+            body:
+              (e.payload as { body?: string } | null)?.body?.toString() ?? "",
+            createdAt: e.createdAt,
+          }));
+
+        // Transaction snapshot timestamp — queried INSIDE the RR transaction
+        // so it is the actual PostgreSQL snapshot time, not a request-side
+        // clock reading. // adr-006-allow: DB snapshot identity stamp (see
+        // ADR-006 allowlist entry).
+        const snapshotRows = (await tx.execute(
+          sql`SELECT transaction_timestamp() AS ts`,
+        )) as unknown as Array<{ ts: string }>;
+        const rawSnapshotTs = snapshotRows[0]?.ts;
+        const snapshotAt = rawSnapshotTs ? new Date(rawSnapshotTs) : null;
+        if (!snapshotAt || Number.isNaN(snapshotAt.getTime())) {
+          throw new AuthzUnavailableError(
+            `RECOVERY_PROCTOR_DETAIL_SNAPSHOT_INVALID: incident ${incident.id}`,
+          );
+        }
+
+        return {
+          incident,
+          examSummary: {
+            id: examRow.id,
+            title: examRow.title,
+            status: examRow.status,
+          },
+          primaryAttempt: primaryAttempt
+            ? {
+                id: primaryAttempt.id,
+                candidateId: primaryAttempt.candidateId,
+                status: primaryAttempt.status,
+              }
+            : null,
+          events: events.map((e) => ({
+            id: e.id,
+            eventSequence: e.eventSequence,
+            eventType: e.eventType,
+            commandType: e.commandType,
+            operationId: e.operationId,
+            actorId: e.actorId,
+            beforeVersion: e.beforeVersion,
+            afterVersion: e.afterVersion,
+            payload: e.payload,
+            createdAt: e.createdAt,
+          })),
+          notes,
+          actionLinks: actionLinks.map((a) => ({
+            id: a.id,
+            actionType: a.actionType,
+            actionId: a.actionId,
+            attemptId: a.attemptId,
+            actorId: a.actorId,
+            operationId: a.operationId,
+            linkedAt: a.linkedAt,
+          })),
+          attemptLinks: attemptLinks.map((m) => ({
+            id: m.id,
+            attemptId: m.attemptId,
+            relationshipType: m.relationshipType,
+            linkedAt: m.linkedAt,
+            linkedBy: m.linkedBy,
+            operationId: m.operationId,
+          })),
+          interruptionLinks: interruptionLinks.map((l) => ({
+            id: l.id,
+            attemptId: l.attemptId,
+            interruptionId: l.interruptionId,
+            linkedAt: l.linkedAt,
+            linkedBy: l.linkedBy,
+            operationId: l.operationId,
+          })),
           snapshotAt,
         };
       },
@@ -2032,6 +2210,7 @@ export function createRecoveryRepo(db: Database) {
   return {
     listIncidentQueue,
     getIncidentAggregate,
+    getProctorIncidentDetail,
     getAttemptOperationsContext,
     getExamRecoveryContext,
   };
@@ -2057,7 +2236,9 @@ export function createRecoveryRepo(db: Database) {
  * `incident.investigate` / `incident.resolve` sees fewer actions, and an
  * anchored Incident never exposes `link_attempt`.
  */
-function deriveStatusActionCandidates(status: string): IncidentAllowedAction[] {
+export function deriveStatusActionCandidates(
+  status: string,
+): IncidentAllowedAction[] {
   const APPEND_ONLY: IncidentAllowedAction[] = [
     "add_note",
     "link_action",
@@ -2124,32 +2305,6 @@ function deriveAttemptStatusActionCandidates(
 }
 
 export type RecoveryRepo = ReturnType<typeof createRecoveryRepo>;
-
-/**
- * Exam + candidate legs of the ADR-014 §7 link scope quadruple — the frozen
- * incident→attempt relationship invariant shared by the queue enrichment, the
- * aggregate relationship graph, and the attempt-operations edge validation:
- * a referenced attempt must belong to the incident's exam and, when the
- * incident carries a candidate focus, to that candidate. Attempt resolution
- * and the incident.attemptId leg (anchor/membership exclusivity, null-or-
- * matching link target) stay caller-owned: they depend on the surface's row
- * shape and direction. Returns the violated leg so each caller maps it to its
- * own RECOVERY_QUEUE_* / RECOVERY_AGG_* / RECOVERY_OP_* error — this kernel
- * never throws and never formats surface-specific codes.
- */
-function incidentScopeViolation(
-  incident: { examId: string; candidateId: string | null },
-  attempt: { examId: string; candidateId: string | null },
-): "EXAM_MISMATCH" | "CANDIDATE_MISMATCH" | null {
-  if (attempt.examId !== incident.examId) return "EXAM_MISMATCH";
-  if (
-    incident.candidateId != null &&
-    attempt.candidateId !== incident.candidateId
-  ) {
-    return "CANDIDATE_MISMATCH";
-  }
-  return null;
-}
 
 /**
  * Enriches a whole queue page with a FIXED number of SQL queries (contract

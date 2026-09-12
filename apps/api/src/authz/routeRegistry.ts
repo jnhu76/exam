@@ -1556,4 +1556,42 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       proctorAccess: "admin_only",
       migrationStage: 8,
     },
+
+    // ── Proctor Recovery Center (J6, #303) — narrow Proctor-scoped reads ──
+    // Worklist: incidents across the caller's ACTIVE proctor assignments.
+    // incident.view IS in the Proctor preset, so admin_only is structurally
+    // impossible here (conformance); the collection filter is server-derived
+    // (assignedProctorUserId from ctx) exactly like /admin/proctor/exams.
+    {
+      method: "GET",
+      path: "/admin/proctor/incidents",
+      legacyGate: "Admin",
+      permission: Permission.IncidentView,
+      scope: Scope.Organization,
+      resolver: "organization",
+      resource: {
+        type: "list",
+        listOf: "incident",
+        filterSpec: "proctor-assigned-incidents",
+      },
+      sensitive: true,
+      proctorAccess: "assignment_filtered_collection",
+      migrationStage: 8,
+    },
+    // Narrow incident detail (row + events/notes + link metadata + summaries
+    // within Proctor read authority). The incident resolver + assignment gate
+    // give the canonical 404 for unassigned/foreign/nonexistent incidents;
+    // allowedActions is capability-intersected so Admin terminal judgment
+    // (resolve/dismiss) is structurally unreachable for a Proctor.
+    {
+      method: "GET",
+      path: "/admin/incidents/:incidentId/detail",
+      legacyGate: "Admin",
+      permission: Permission.IncidentView,
+      scope: Scope.Exam,
+      resolver: "incident",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 8,
+    },
   ];
