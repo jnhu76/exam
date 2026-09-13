@@ -26,7 +26,7 @@
 
 The CI pipeline (`.github/workflows/ci.yml`) runs on every PR to `master`.
 `static` is the first authority gate. After it passes, `verify-build` produces
-one same-workflow build artifact. Web/API/package coverage and both E2E
+one same-workflow build artifact. Web/API/package coverage and the four E2E
 shards consume the `verify-build` artifact instead of rebuilding the same
 `dist/**` outputs on separate runners. PR CI runs no deployment suite: the
 deployment fresh-install acceptance moved to the `release` workflow
@@ -121,7 +121,7 @@ deployment fresh-install acceptance moved to the `release` workflow
 | **Input build** | Downloads the current workflow's `verify-build` artifact; the shards do not run `pnpm build` independently. |
 | **Browser cache** | `~/.cache/ms-playwright` is cached by OS + E2E package/lockfile state; system dependencies are still installed every shard. |
 | **Services** | PostgreSQL (`exam_e2e` on `localhost:5432`) |
-| **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=2`, fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
+| **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=${{ matrix.shardTotal }}` (4), fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
 | **Allowed resources** | PostgreSQL (`exam_e2e`), CPU, Chromium |
 | **Forbidden** | `exam` or `exam_test` databases, a host port that contradicts `DB_HOST_PORT` (default 5432) |
 | **Failure attribution** | Server startup → check `server.log`; test failure → check `test-results/`; shard-specific → check shard index |
@@ -672,7 +672,7 @@ After any change to test configuration, CI workflow, or vitest config, verify:
 - [ ] `pnpm --filter @exam/web coverage` passes
 - [ ] `pnpm --filter "@exam/api" coverage` passes (with `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`)
 - [ ] `pnpm verify` passes (full pipeline)
-- [ ] Both CI E2E shards consume the same-workflow build artifact and execute their real Playwright tests
+- [ ] All four CI E2E shards consume the same-workflow build artifact and execute their real Playwright tests
 - [ ] No `as any` casts in test files
 - [ ] All time-dependent tests use fake timers
 - [ ] No `TEST_DATABASE_URL` fallback to `DATABASE_URL` in test configs
