@@ -1,7 +1,8 @@
 # #304 System-Generated Incidents — Reality Audit (EXAM-304-SYSTEM-INCIDENTS-REALITY-AUDIT-1, Lane A)
 
 - **Base**: current master `1a9ab85e6299f250c461eb30f7dd98e6876078f0` (worktree `/home/hoo/Source/exam-wt-304`, detached HEAD).
-- **Mode**: 调查/审计 (read-only code audit). No tracked file modified; no git mutation performed.
+- **Mode**: 调查/审计 (read-only code audit). No production file modified during evidence collection; this audit report is the only tracked artifact (committed on branch `docs/304-system-incidents-reality-audit`, PR #532).
+- **Review status**: human review round 1 = REQUEST_CHANGES on the freeze proposal — crash/restart completion gap (now §8.5/§8.6, F4A), ADR-014 §8 gate coherence (now ADR_RECONCILIATION_REQUIRED, §14), audit action model (F8 rewritten), dedupe arbiter left as OR (F4 frozen to one authority). All absorbed; freeze NOT posted to #304 until re-review passes.
 - **Method**: Phase 1 code-first (all claims cite file:line from this worktree), Phase 2 normative docs, then a pre-implementation authority freeze proposal.
 - **Probe logs**: `/tmp/maint1/probe-incidentCommands.log`, `/tmp/maint1/probe-scanners.log`, `/tmp/maint1/probe-authz.log` (tmp is volatile; digests recorded in §9).
 - **GitHub context (given, not re-fetched)**: #304 OPEN, ordered-chain item 6 of roadmap #516.
@@ -124,7 +125,7 @@ Legacy non-creator: POST `/admin/attempts/:attemptId/proctor-incident` is audit-
 - Recovery queue / force-submit: human flows (force-submit is a receipt-backed operator command). Not detectors.
 - `migration_backfill` detection source exists (`domain/types.ts:370-372`) — one-shot migration semantics, explicitly not a runtime detector.
 
-**SELECTED V1 DETECTORS (proposal): exactly one — CANDIDATE-D1 (heartbeat-disruption episode)**, consumed at the `markDisrupted → "marked"` outcome. Zero additional detectors in v1.
+**SELECTED V1 DETECTORS (proposal): exactly one — CANDIDATE-D1 (heartbeat-disruption episode)**. The `markDisrupted → "marked"` outcome triggers the first creation attempt; the durable episode ledger — not the one-shot return value — is the completion authority (§6, §8.6). Zero additional detectors in v1.
 
 ---
 
@@ -133,7 +134,8 @@ Legacy non-creator: POST `/admin/attempts/:attemptId/proctor-incident` is audit-
 **DETECTOR_EXECUTION_OWNER: the existing heartbeat scanner cycle.** No new scheduler is needed and none should be created:
 
 - The loop already exists, is lifecycle-managed (`setInterval` + `onClose` + `activeScan` single-flight guard, `heartbeat.ts:228-266`), iterates orgs with per-org System contexts (176-182), and the point where the stable fact is durably committed is precisely `markDisrupted` returning `{ outcome: "marked", attempt }` (`attemptCommands.ts:701`).
-- The incident creation belongs *after* a `marked` outcome (own transaction via the same `executeInTransaction` seam, or immediately following in the same loop iteration), consuming the episode id from the created episode.
+- **The incident creation must NOT be tied to the one-shot `marked` return value as its completion authority.** A crash between the episode commit and the incident command would leave a durably committed episode that no scanner pass ever revisits — after the crash, `listInProgress()` no longer returns the disrupted attempt, so the `marked` outcome is never observed again: a permanent missed incident (§8.5). At-most-once dedupe (F4) does not provide eventual completion.
+- Implementation shape (no new worker, no event bus, no outbox framework): the heartbeat cycle gains ONE bounded reconciliation leg — after the disruption scan, re-derive from the durable ledger the heartbeat-detected episodes that have no completed System-incident linkage yet, and invoke the idempotent System create command for each (`createSystemIncidentFromHeartbeatEpisode(E1)` → canonical incident + interruption link). Bounded = per-cycle, DB-discovered, arbiter-idempotent (§8.6 crash traces C1–C3).
 - Proof that no other seam is preferable: deadlineScanner already owns expiry (D2 rejected); systemMonitor has no cycle at all (it is a per-request computation); email worker owns outbox draining. A "bounded scheduler" abstraction is forbidden by the campaign discipline (#516: no generic detector framework).
 - Single-instance note: scanner metrics are documented "single-instance counters reset on server restart" (`deadlineScanner.ts:59-70`, `heartbeat.ts:44-51`) — the supported topology is one API process (status doc Gate 0.5 note, `docs/status/implementation-status.md:367-369`). Multi-instance convergence therefore rests on DB constraints, not the loop (§8/§9).
 
@@ -167,10 +169,7 @@ Legacy non-creator: POST `/admin/attempts/:attemptId/proctor-incident` is audit-
 
 **DURABLE_DEDUP_GAP: yes.** `exam_incidents` has NO source-fingerprint column and no uniqueness beyond `(organization_id, id)` (`schema/pg.ts:1731-1734`). Nothing in the DB expresses "at most one ACTIVE System incident per semantic condition/episode". The `(incidentId, interruptionId)` unique constrains links within one incident, not across incidents — two incidents could each link the same episode.
 
-Freeze semantics (to be made executable at implementation time by ONE of):
-- (a) deterministic `operationId` for the System create command derived from the episode id (uuid v5 namespace), riding the EXISTING operation-unique as the dedupe arbiter — zero schema change; or
-- (b) a partial unique index expressing "one unresolved System incident per interruption episode".
-Option (a) reuses the proven seam and is the minimal-long-term-correct choice; the semantic freeze is: **episode id = the source fingerprint; one episode ⇒ at most one System incident, enforced durably, never in process memory.**
+Frozen arbiter (single authority — no OR): a deterministic `operationId` for the System create command, derived from the episode id (uuid v5 namespace), riding the EXISTING `exam_incident_events_org_operation_unique (organization_id, operation_id)` as the dedupe arbiter — zero schema change. The partial-unique-index variant is NOT adopted: operation/retry identity and episode→incident uniqueness coincide here because the operationId is a pure function of the episode id, so a second schema-level source-fingerprint mechanism would add authority duplication, not a new guarantee. Semantic freeze: **episode id = the source fingerprint; one episode ⇒ at most one System incident, enforced durably by the operation-unique arbiter, never in process memory.**
 
 ### 8.3 Three traces with the proposed semantics (heartbeat detector)
 
@@ -184,13 +183,34 @@ Two racers (two org-loop iterations, or hypothetically two app instances) both o
 
 1. Both enter `markDisrupted`; the attempt row `FOR UPDATE` (642) serializes them. The loser observes `status !== "in_progress"` (648-650) or fresh `lastActivityAt` (652-661) and returns a no-op outcome. ⇒ exactly ONE `marked` outcome and ONE episode exist, guaranteed by the existing lock protocol (probe-verified by `heartbeat.test.ts` "does not count a no-op race (onDisrupted returns false) in markedCount").
 2. The single `marked` consumer then runs the System create command. If (pathologically) two consumers raced with the SAME deterministic operationId: the operation-unique 23505 fires and the `withIncidentOperationRecovery` wrapper converges to `idempotent_replayed` (`incidentOperationRecovery.ts:234-250` — insert-or-replay convergence, recovery at most once, never recursion).
-3. If two consumers used DIFFERENT operationIds for the same episode (only possible with option (b) absent), the current schema would allow two incidents — this is exactly the DURABLE_DEDUP_GAP; the freeze (F4) closes it by requiring constraint-backed dedupe keyed on the episode id.
+3. If two consumers used DIFFERENT operationIds for the same episode, the current schema would allow two incidents — this is exactly the DURABLE_DEDUP_GAP. The freeze (F4) closes it by mandating the operationId be a pure function of the episode id: every legitimate consumer of one episode carries the SAME operationId into the op-unique arbiter, so "different operationIds for one episode" is itself a contract violation, not a race the schema must tolerate.
 
 **CONCURRENT_DETECTOR_CONVERGENCE: attempt-row FOR UPDATE ⇒ one episode; deterministic operationId + existing op-unique (or a new partial unique) ⇒ one incident. No advisory locks, no process-memory coordination.**
 
-### 8.5 Restart semantics (A10)
+### 8.5 Restart semantics (A10) — split into safety and liveness
 
-**SAFE, conditional on durable dedupe.** Both scanners are stateless per cycle: full DB re-discovery each tick (`organizationRepo.list` → `listInProgress` / `listDeadlineCandidates`, `heartbeat.ts:174-184`, `deadlineScanner.ts:280-296`); process-memory objects are metrics/single-flight guards only (`heartbeatMetrics`, `deadlineScannerMetrics`). After an API restart the heartbeat scan re-evaluates `in_progress` attempts only; the already-disrupted attempt is invisible to the detector, so no storm is possible for D1 even without dedupe — but the dedupe constraint is still required for correctness of the create-consumer path across crash-retry (e.g. crash after episode commit, before/between incident-command retries: on restart the episode is committed; the System command must find "already exists for E1" durably, not remember it). If dedupe were process memory → BLOCKED; with F4 → safe.
+**Safety (no duplicate/storm): SAFE.** Both scanners are stateless per cycle: full DB re-discovery each tick (`organizationRepo.list` → `listInProgress` / `listDeadlineCandidates`, `heartbeat.ts:174-184`, `deadlineScanner.ts:280-296`); process-memory objects are metrics/single-flight guards only (`heartbeatMetrics`, `deadlineScannerMetrics`). After an API restart the heartbeat scan re-evaluates `in_progress` attempts only; the already-disrupted attempt is invisible to the detector, so no duplicate episode or attempt mutation can occur — with or without dedupe.
+
+**Liveness (no permanently missed incident): NOT guaranteed by dedupe or the `marked` return value.** Trace: episode E1 commits (attempt now `disrupted`) → process crashes before the System incident command runs → on restart `listInProgress()` no longer returns the disrupted attempt → E1 is never consumed again. DURABLE_DEDUP_GAP's fix (F4) guarantees at-most-ONE incident per episode; it does not guarantee that the one incident is EVER created:
+
+```text
+DEDUP ≠ DELIVERY
+SAFETY ≠ LIVENESS
+```
+
+This gap is closed by F4A (§8.6), not by dedupe. If completion authority were process memory or the one-shot `marked` return → BLOCKED.
+
+### 8.6 Durable completion (F4A) and crash traces
+
+**F4A — DURABLE COMPLETION (freeze):** a committed heartbeat-detected episode remains reconcilable until exactly one canonical System incident is durably linked to it. Scanner process memory and the one-shot `marked` return value are NOT completion authority.
+
+Implementation shape (the only freeze-sanctioned one): the heartbeat cycle's bounded reconciliation leg (§6) re-derives candidate work from the durable ledger — heartbeat-detected episodes (`detection_source="heartbeat_timeout"`) without a completed System-incident linkage — and invokes the System create command idempotently per episode; the F4 episode-derived operationId makes every retry converge to the same single incident.
+
+Crash/race traces this must satisfy (implementation evidence obligations, not design options):
+
+- **C1** episode commits → crash before incident command → restart → reconciliation leg finds the unconsumed episode → exactly one incident.
+- **C2** incident command commits → caller loses the result (crash before acknowledgement) → retry → `idempotent_replayed` returns the SAME incident (op-unique arbiter).
+- **C3** two reconcilers race on one episode → both derive the same episode-derived operationId → 23505 + `withIncidentOperationRecovery` insert-or-replay → exactly one incident/link.
 
 ---
 
@@ -270,7 +290,7 @@ Normative sources read: #304 body summary (given), #516 item 6 discipline (given
 | Area | Code reality | Normative intent | Classification |
 |---|---|---|---|
 | System actor identity | SYSTEM-M1 landed: role System + closed `system:*` ids + non-login + non-assignable (§1, §3) | ADR-010 §System Actor Policy (748-761): real System role, `actorId="system:…"`, never Admin; SYSTEM-M1 goal (1182-1183) | **ALIGNED** |
-| System incident permission | `system.incident.create` NOT in catalog; test asserts the reservation (`presets.test.ts:111`) | ADR-014 §8: RESERVED by name/shape only; gate UNSATISFIED until 5 conditions hold (592-606) | **ALIGNED** (reservation honored) — implementation must satisfy all 5 gate conditions |
+| System incident permission | `system.incident.create` NOT in catalog; test asserts the reservation (`presets.test.ts:111`) | ADR-014 §8: RESERVED by name/shape only; gate UNSATISFIED until 5 conditions hold (592-606) | **ALIGNED** (reservation honored) — but opening the gate requires the ADR corrective below (ADR_RECONCILIATION_REQUIRED) |
 | System incident command | None; sole create path is human-routed `createExamIncident` (§4) | ADR-014 §8 condition 3: "a canonical System-only incident command exists"; §17 non-goal today | **AUTHORITY_GAP** (by design; this is #304's work item) |
 | `source=system_incident` adjustments | Vocabulary in enum + CHECK branch, zero writers (`domain/types.ts:378`, `schema/pg.ts:730,769`) | ADR-013:644 "remains disabled until REC-I6 defines a System-only incident grant permission and incident authority"; ADR-014:18-19, 133-134 | **LATENT** (code+docs consistent; activation gated) |
 | Incident aggregate, creation matrix, idempotency, terminal monotonic | As built (§4) | ADR-014 §2/§7/§9 frozen | **ALIGNED** |
@@ -282,22 +302,25 @@ Normative sources read: #304 body summary (given), #516 item 6 discipline (given
 | Status/roadmap documents | — | `implementation-status.md:363` "System-generated incidents — not implemented (Issue #304)"; `post-mvp-issues.md:40` | **ALIGNED** (docs truthful) |
 | Human terminal judgment | Admin-only resolve/dismiss, terminal-monotonic (§4, §10) | #516 "human terminal judgment"; ADR-014 §8 matrix (System: resolve ❌) | **ALIGNED** |
 
-**VERDICT (reality audit): PASS.** #304's own body is code-accurate on every claim checked (incident aggregate, human commands, audit/evidence, Admin resolution surfaces, synthetic System concept, systemMonitor non-producer). The normative path for implementation is already frozen by ADR-014 §8's five-condition gate; the only genuine pre-implementation authority gaps are the detector set selection, the durable dedupe arbiter, and re-arm nuance — all addressed by the freeze below.
+**ADR_RECONCILIATION_REQUIRED (review round 1).** ADR-014 §8 binds ONE activation gate to both `system.incident.create` (conditions 1–3) and `source=system_incident` time adjustments (conditions 4–5, immediately followed by "Until then `source=system_incident` time adjustments remain disabled"); ADR-013:644 defers the same source to REC-I6. The freeze below opens incident CREATION (F1) while requiring time-grants to STAY disabled (F6) — under the current ADR text that is self-contradictory (the same gate would be OPEN and NOT OPEN at once). Resolution direction endorsed by review: **#304 = System may CREATE incidents; System never automatically GRANTS TIME.** This requires a narrow ADR corrective splitting the single §8 gate into a creation-activation gate (conditions 1–3 + audit/evidence conditions) and a time-grant-activation gate (conditions 4–5, REC-I6 authority) — a human authority step that MUST land before implementation starts. It changes no incident-architecture decision; it separates two activations that were incorrectly coupled.
+
+**VERDICT: CODE_REALITY_AUDIT = PASS; DB_RUNTIME_PROBES = PARTIAL / DEFERRED_TO_IMPLEMENTATION_EVIDENCE** (R2/R4/R5 executed; R1, R6, R7 and R3 row-inspection deferred — Docker unavailable, §9; the deferred probes become implementation evidence obligations, not open questions about current reality). #304's own body is code-accurate on every claim checked (incident aggregate, human commands, audit/evidence, Admin resolution surfaces, synthetic System concept, systemMonitor non-producer). Pre-implementation authority items: detector set selection, durable dedupe arbiter, crash-completion authority (F4A), re-arm nuance, and the ADR-014 §8 gate split — all addressed by the freeze below.
 
 ---
 
-## 15. PRE-IMPLEMENTATION AUTHORITY FREEZE (proposal F1–F10)
+## 15. PRE-IMPLEMENTATION AUTHORITY FREEZE (revised post-review; supersedes the round-1 proposal — NOT yet posted to #304)
 
-- **F1 — System actor identity**: System incidents are authored by a NEW closed synthetic id added to `SYSTEM_ACTOR_IDS` (e.g. `system:incident-detector`), constructed ONLY via `createSystemRequestContext` (`packages/authz/src/systemActor.ts`); System holds ZERO human incident permissions (`incident.*` stays human-only per ADR-014 §8 matrix); the ADR-014 §8 gate conditions 1–5 are the acceptance checklist for opening `system.incident.create`.
-- **F2 — Detector set (v1)**: exactly ONE detector — heartbeat-disruption (CANDIDATE-D1), consuming the already-durable `markDisrupted → "marked"` outcome. No deadline, systemMonitor, email, or admission detectors in v1 (D2/M/E classifications in §5).
+- **F1 — System actor identity**: System incidents are authored by a NEW closed synthetic id added to `SYSTEM_ACTOR_IDS` (e.g. `system:incident-detector`), constructed ONLY via `createSystemRequestContext` (`packages/authz/src/systemActor.ts`); System holds ZERO human incident permissions (`incident.*` stays human-only per ADR-014 §8 matrix). **CONDITION — ADR_RECONCILIATION_REQUIRED (§14): implementation MUST NOT start until a narrow accepted ADR corrective splits the ADR-014 §8 gate into a creation-activation gate and a time-grant-activation gate; the creation gate's conditions are then the acceptance checklist for `system.incident.create`.**
+- **F2 — Detector set (v1)**: exactly ONE detector — heartbeat-disruption (CANDIDATE-D1). The `markDisrupted → "marked"` outcome triggers the first creation attempt; completion authority is F4A, not the return value. No deadline, systemMonitor, email, or admission detectors in v1 (D2/M/E classifications in §5).
 - **F3 — Canonical source fact per detector**: the `attempt_interruption_events` `detected` row (`detection_source="heartbeat_timeout"`, unique per episode) is the ONE source fact; the incident references it via `exam_incident_interruption_links`; evidence fields are only those in §11's card. No new evidence store.
-- **F4 — Durable dedupe authority**: episode id = source fingerprint; same semantic episode ⇒ at most one System incident, enforced by a DB constraint path (deterministic episode-derived `operationId` riding `exam_incident_events_org_operation_unique`, or an equivalent partial unique index) — never Set/Map/process memory.
+- **F4 — Durable dedupe authority (single arbiter, no OR)**: episode id = source fingerprint; the System create command's `operationId` is a PURE FUNCTION of the episode id (uuid v5 namespace), and the EXISTING `exam_incident_events_org_operation_unique (organization_id, operation_id)` is the sole dedupe arbiter — one episode ⇒ at most one System incident, enforced durably, never Set/Map/process memory. No additional schema-level fingerprint mechanism (no second authority).
+- **F4A — Durable completion**: a committed heartbeat-detected episode remains reconcilable until exactly one canonical System incident is durably linked to it (§8.6). Completion authority = the durable episode ledger, re-read each heartbeat cycle by the bounded reconciliation leg (§6) — never scanner process memory, never the one-shot `marked` return value. Implementation evidence must cover C1 (crash before incident → restart → one incident), C2 (lost result → replay returns the SAME incident), C3 (concurrent reconcilers → one incident/link).
 - **F5 — Re-arm semantics**: choice (B): suppression is per episode; human resolve/dismiss terminalizes the case (never reopened); a NEW episode (condition cleared then recurred) MAY produce a new System incident. The stricter "dismiss = suppress per attempt" variant requires explicit product approval; default is (B).
-- **F6 — No automatic punishment**: the System command may create ONLY an evidence-bearing incident (type/severity mapping frozen at implementation, e.g. `network_interruption`/`info|minor`); it MUST NOT time-grant, force-submit, grade, misconduct-mark, or produce `source=system_incident` adjustments (that source stays disabled until its own REC-I6 gate).
+- **F6 — No automatic punishment (coherent with F1 under the split gate)**: the System command may create ONLY an evidence-bearing incident (type/severity mapping frozen at implementation, e.g. `network_interruption`/`info|minor`); it MUST NOT time-grant, force-submit, grade, misconduct-mark, or produce `source=system_incident` adjustments. Under the split ADR gate this freeze satisfies ONLY the creation gate; the time-grant gate stays CLOSED (its conditions + REC-I6 authority) — the round-1 F1/F6 contradiction is resolved by the ADR corrective, not by reinterpretation.
 - **F7 — Human terminal authority**: resolve/dismiss remain `IncidentResolve` Admin-only, terminal-monotonic; System incidents land in the same Recovery queue/detail surfaces and are judged by humans exactly like human-created ones.
-- **F8 — Audit distinguishes System-generated**: `exam_incidents.reported_by = "system:incident-detector"`; incident event `actorId` = the system id; audit action for the System create (new action, e.g. `incident.system_created`, active/atomic) — never write System ids into the users-FK-bound ledgers (`attempt_time_adjustments.actor_id`, `attempt_interruption_events.actor_id`; null convention there).
-- **F9 — No client-selected System actor**: the System command path is internal-only (scanner-owned); no HTTP input can set actor/role/reportedBy; `request.ctx` remains constructible only by `authenticate`; fakeAdmin/fakeProctor/fakeSystem spoofing is forbidden and must stay impossible.
-- **F10 — No generic detector framework**: no rules engine, event bus, ML, cooldown/threshold DSL, or scheduler abstraction; the detector lives in the existing heartbeat plugin seam (`DETECTOR_EXECUTION_OWNER`, §6); adding a second detector later is a new explicit decision, not a config change.
+- **F8 — Audit distinguishes System-generated WITHOUT a second action**: reuse the canonical `incident.created` audit action — one creation semantic = one action; System-generated creation is distinguished by `actorId = "system:incident-detector"` (audit row + incident event), `exam_incidents.reported_by = "system:incident-detector"`, and the narrow detector/source evidence (§11). Do NOT introduce `incident.system_created` (an actor difference is not a domain-action difference; a second action would force union queries for "all incident creations"). Never write System ids into the users-FK-bound ledgers (`attempt_time_adjustments.actor_id`, `attempt_interruption_events.actor_id`; null convention there).
+- **F9 — No client-selected System actor**: the System command path is internal-only (heartbeat-plugin-owned); no HTTP input can set actor/role/reportedBy; `request.ctx` remains constructible only by `authenticate`; fakeAdmin/fakeProctor/fakeSystem spoofing is forbidden and must stay impossible.
+- **F10 — No generic detector framework**: no rules engine, event bus, ML, cooldown/threshold DSL, outbox/scheduler abstraction, or new worker; the detector and its reconciliation leg live in the existing heartbeat plugin seam (`DETECTOR_EXECUTION_OWNER`, §6); adding a second detector later is a new explicit decision, not a config change.
 
 ---
 
