@@ -631,8 +631,14 @@ following hold as one authority chain:
 4. creation is triggered only by a bounded, explicitly named detector set
    reading a durable source fact; no generic rules engine;
 5. deterministic idempotency/deduplication plus durable
-   completion/reconciliation converge repeated evaluation of the same
-   underlying condition to exactly one System-created incident;
+   completion/reconciliation converge repeated processing of the same
+   durable source fact to exactly one System-created incident; distinct
+   source facts are not implicitly deduplicated into one incident.
+
+   For #304, the durable source identity is one interruption episode:
+   retries and reconciliation for the same episode converge to one
+   System-created incident, while a later interruption episode is a distinct
+   source fact and may create a new incident.
 6. System creation records the canonical `incident.created` audit with
    the System actor identity and narrow detector/source evidence;
 7. human/Admin terminal judgment (`incident.resolve` /
@@ -1194,7 +1200,8 @@ J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements, after acceptance:
 10. unit, integration, permission-matrix, concurrency, idempotency-replay,
     version-chain reconstruction, and audit tests.
 
-Remaining future work explicitly NOT authorized by acceptance of this ADR:
+Remaining future work explicitly NOT authorized by the original J3
+acceptance scope:
 M11 Proctor scope (J4), recovery centers (J5/J6), scenario closeout (J7),
 system incidents, incident retention, candidate reporting.
 
