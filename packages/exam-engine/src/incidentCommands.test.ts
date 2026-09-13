@@ -20,6 +20,7 @@ import {
   changeIncidentSeverity,
   createExamIncident,
   dismissExamIncident,
+  isMatchingCommittedOperation,
   linkIncidentAction,
   linkIncidentAttempt,
   linkIncidentInterruption,
@@ -1477,5 +1478,48 @@ describe("incidentCommands — wrapped PostgreSQL constraint detection (P1-B)", 
         linkIncidentInterruption(repo, ctx(), examWide.id, input, baseDeps),
       ).rejects.toBe(err);
     });
+  });
+});
+
+describe("isMatchingCommittedOperation — the one completion classification", () => {
+  const payload = { a: 1, b: { c: "x" } };
+
+  it("matches the same commandType with an order-insensitively equal payload", () => {
+    expect(
+      isMatchingCommittedOperation(
+        { commandType: "createExamIncident", payload: { b: { c: "x" }, a: 1 } },
+        "createExamIncident",
+        payload,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a different commandType under the same operationId", () => {
+    expect(
+      isMatchingCommittedOperation(
+        { commandType: "createSystemIncidentFromHeartbeatEpisode", payload },
+        "createExamIncident",
+        payload,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a different payload under the same commandType", () => {
+    expect(
+      isMatchingCommittedOperation(
+        { commandType: "createExamIncident", payload: { a: 2 } },
+        "createExamIncident",
+        payload,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects an absent operation (nothing committed under the operationId)", () => {
+    expect(
+      isMatchingCommittedOperation(undefined, "createExamIncident", payload),
+    ).toBe(false);
+    expect(
+      isMatchingCommittedOperation(null, "createExamIncident", payload),
+    ).toBe(false);
   });
 });

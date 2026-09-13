@@ -108,11 +108,32 @@ describe("ADR-014 — Incident permission matrix", () => {
     expect(candidatePerms.has(Permission.IncidentResolve)).toBe(false);
   });
 
-  it("System holds ZERO incident permissions (system.incident.create is reserved, NOT in catalog)", () => {
+  it("System holds ZERO human incident.* permissions (F1: no human-command grants)", () => {
     const systemPerms = asSet(permissionsForRole(Role.System));
     expect(systemPerms.has(Permission.IncidentView)).toBe(false);
     expect(systemPerms.has(Permission.IncidentCreate)).toBe(false);
     expect(systemPerms.has(Permission.IncidentInvestigate)).toBe(false);
     expect(systemPerms.has(Permission.IncidentResolve)).toBe(false);
+    expect(systemPerms.has(Permission.IncidentRecoveryView)).toBe(false);
+  });
+
+  it("System holds system.incident.create (ADR-014 Gate A item 2), no human preset does", () => {
+    expect(
+      asSet(permissionsForRole(Role.System)).has(
+        Permission.SystemIncidentCreate,
+      ),
+    ).toBe(true);
+    for (const role of [
+      Role.Admin,
+      Role.Proctor,
+      Role.Teacher,
+      Role.Grader,
+      Role.Candidate,
+      Role.Maintainer,
+    ]) {
+      expect(
+        asSet(permissionsForRole(role)).has(Permission.SystemIncidentCreate),
+      ).toBe(false);
+    }
   });
 });

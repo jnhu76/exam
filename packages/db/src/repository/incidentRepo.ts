@@ -97,6 +97,19 @@ export interface InsertInterruptionLinkInput {
   linkedAt: Date;
 }
 
+/**
+ * One committed row per `(organization_id, operation_id)` on the
+ * `exam_incident_events_org_operation_unique` arbiter. commandType and
+ * payload ride along so the caller classifies completion with the engine's
+ * `isMatchingCommittedOperation` — existence alone is never completion
+ * (#304 F4A).
+ */
+export interface CommittedIncidentOperation {
+  operationId: string;
+  commandType: string;
+  payload: Record<string, unknown>;
+}
+
 export function createIncidentRepo(db: Database) {
   // ── Incident CRUD ──
 
@@ -287,6 +300,47 @@ export function createIncidentRepo(db: Database) {
         ),
       );
     return rows[0] ?? null;
+  }
+
+  /**
+   * Batch probe of the `exam_incident_events_org_operation_unique` arbiter
+   * (#304 F4A). Returns each hit WITH its commandType and canonical payload
+   * so the caller classifies completion through the engine's
+   * `isMatchingCommittedOperation` (same command + same payload): a bare
+   * operationId hit is NOT completion — an operation committed under the
+   * same operationId with a different command/payload is a conflict that
+   * must surface, never be silently skipped. Indexed by that unique; an
+   * empty input short-circuits to an empty map. Link rows or incident
+   * fields are never probed for this decision.
+   */
+  async function listCommittedOperations(
+    ctx: TenantContext | RequestContext,
+    operationIds: string[],
+  ): Promise<Map<string, CommittedIncidentOperation>> {
+    if (operationIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        operationId: examIncidentEvents.operationId,
+        commandType: examIncidentEvents.commandType,
+        payload: examIncidentEvents.payload,
+      })
+      .from(examIncidentEvents)
+      .where(
+        and(
+          eq(examIncidentEvents.organizationId, resolveOrganizationId(ctx)),
+          inArray(examIncidentEvents.operationId, operationIds),
+        ),
+      );
+    return new Map(
+      rows.map((row) => [
+        row.operationId,
+        {
+          operationId: row.operationId,
+          commandType: row.commandType,
+          payload: row.payload as Record<string, unknown>,
+        },
+      ]),
+    );
   }
 
   async function listEventsByIncident(
@@ -507,6 +561,7 @@ export function createIncidentRepo(db: Database) {
     update,
     appendEvent,
     findEventByOperationId,
+    listCommittedOperations,
     listEventsByIncident,
     insertActionLink,
     findActionLinkByOperationId,

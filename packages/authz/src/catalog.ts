@@ -164,6 +164,11 @@ export const Permission = {
   SystemAutoSubmit: "system.auto_submit",
   SystemHeartbeatScan: "system.heartbeat_scan",
   SystemLifecycleReconcile: "system.lifecycle_reconcile",
+  // SystemIncidentCreate (system.incident.create): System-actor-only authority
+  // to create evidence-bearing incidents from a bounded detector (#304,
+  // ADR-014 §8 Gate A item 2). Held by the System preset only; creation is
+  // creation-only authority and implies no time-grant (Gate B stays CLOSED).
+  SystemIncidentCreate: "system.incident.create",
 
   // §4.10 Incident Management (ADR-014)
   IncidentView: "incident.view",

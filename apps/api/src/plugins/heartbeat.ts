@@ -15,10 +15,12 @@ import {
   createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { reconcileSystemIncidents } from "../orchestrators/systemIncidentDelivery.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
 const DEFAULT_HEARTBEAT_TIMEOUT_MS = 60_000;
 const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.Heartbeat;
+const INCIDENT_DETECTOR_ACTOR_ID = SYSTEM_ACTOR_IDS.IncidentDetector;
 
 /**
  * Minimal representation of an active exam attempt used by the heartbeat
@@ -48,6 +50,8 @@ export interface ScanResult {
 export const heartbeatMetrics = {
   lastScanAt: null as Date | null,
   disruptedCount: 0,
+  systemIncidentsCreated: 0,
+  systemIncidentConflicts: 0,
 };
 
 /**
@@ -151,6 +155,68 @@ export async function markAttemptDisrupted(
 }
 
 /**
+ * System incident reconciliation leg (#304 F4A): iterates organizations and,
+ * per org, runs the durable System-create reconciliation for every committed
+ * heartbeat-detected episode whose episode-derived operation has not yet
+ * committed in the op-unique arbiter. Runs AFTER the disruption scan in the
+ * same tick, so an episode marked this cycle gets its System incident in the
+ * same pass — but the scan outcome is never the completion authority: the
+ * arbiter probe inside {@link reconcileSystemIncidents} is, and every missed
+ * delivery is retried on a later cycle until it commits.
+ */
+export async function reconcileSystemIncidentsAcrossOrgs(
+  fastify: Parameters<FastifyPluginAsync>[0],
+  now: Date = fastify.now(),
+): Promise<{
+  createdCount: number;
+  replayedCount: number;
+  failedCount: number;
+  conflictCount: number;
+}> {
+  const db = fastify.db as Database;
+  const organizationRepo = createOrganizationRepo(db);
+  const organizations = await organizationRepo.list(
+    createSystemContext("system"),
+  );
+  let createdCount = 0;
+  let replayedCount = 0;
+  let failedCount = 0;
+  let conflictCount = 0;
+
+  for (const organization of organizations) {
+    const detectorCtx = createSystemRequestContext(
+      organization.id,
+      INCIDENT_DETECTOR_ACTOR_ID,
+    );
+    try {
+      const counts = await reconcileSystemIncidents(db, detectorCtx, {
+        now,
+        onError: (interruptionId, err) => {
+          fastify.log.error(
+            { err, interruptionId, organizationId: organization.id },
+            "Failed to create System incident for heartbeat episode",
+          );
+        },
+      });
+      createdCount += counts.createdCount;
+      replayedCount += counts.replayedCount;
+      failedCount += counts.failedCount;
+      conflictCount += counts.conflictCount;
+    } catch (err) {
+      // Discovery-level failure (e.g. ledger read): skip this org this cycle;
+      // the arbiter makes the next cycle converge.
+      failedCount++;
+      fastify.log.error(
+        { err, organizationId: organization.id },
+        "System incident reconciliation failed for organization",
+      );
+    }
+  }
+
+  return { createdCount, replayedCount, failedCount, conflictCount };
+}
+
+/**
  * Iterates over all organizations and scans their in-progress attempts for
  * staleness. Each stale attempt is marked as disrupted in its own transaction
  * with a row lock. The attempt row is the canonical domain-state owner; this
@@ -247,6 +313,33 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
               failedCount: result.failedCount,
             },
             "Marked stale exam attempts as disrupted",
+          );
+        }
+        // #304 F4A: after the disruption scan, reconcile System incidents for
+        // every committed heartbeat episode still missing its create
+        // operation. Best-effort per cycle; the op-unique arbiter guarantees
+        // convergence, never duplication.
+        const incidentCounts = await reconcileSystemIncidentsAcrossOrgs(
+          fastify,
+          tickNow,
+        );
+        heartbeatMetrics.systemIncidentsCreated += incidentCounts.createdCount;
+        heartbeatMetrics.systemIncidentConflicts +=
+          incidentCounts.conflictCount;
+        if (incidentCounts.createdCount > 0) {
+          fastify.log.info(
+            {
+              createdCount: incidentCounts.createdCount,
+              replayedCount: incidentCounts.replayedCount,
+              failedCount: incidentCounts.failedCount,
+            },
+            "Created System incidents from heartbeat episodes",
+          );
+        }
+        if (incidentCounts.conflictCount > 0) {
+          fastify.log.error(
+            { conflictCount: incidentCounts.conflictCount },
+            "Conflicting operations occupy heartbeat-derived System incident operationIds",
           );
         }
       } catch (err) {

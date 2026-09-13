@@ -288,6 +288,7 @@ const SYSTEM_PERMISSIONS: readonly PermissionKey[] = [
   Permission.SystemAutoSubmit,
   Permission.SystemHeartbeatScan,
   Permission.SystemLifecycleReconcile,
+  Permission.SystemIncidentCreate,
 ];
 
 // ───────────────────────── Preset registry ─────────────────────────

@@ -360,7 +360,29 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   [`docs/contracts/admin-recovery-center.md`](../contracts/admin-recovery-center.md)),
   J5-I1A (read models) is CLOSED, and J5-I1B (admin recovery center UI)
   is CLOSED.
-  System-generated incidents — not implemented (Issue #304).
+  System-generated incidents (#304) are **IMPLEMENTED (v1)** per the
+  EXAM-304-SYSTEM-INCIDENTS-REALITY-AUDIT-1 freeze and ADR-014 §8 Gate A:
+  closed System actor `system:incident-detector` holding
+  `system.incident.create` (System preset only; zero human `incident.*`
+  grants), exactly one bounded detector (the heartbeat-disruption episode), an
+  internal-only System create command that atomically commits the incident and
+  its interruption evidence link in one transaction, episode-derived
+  deterministic UUID-v5 `operationId` dedupe riding the existing
+  `exam_incident_events` operation-unique arbiter — completion requires the
+  committed operation to match the System command identity AND the episode's
+  canonical payload (`isMatchingCommittedOperation`, the same predicate as
+  the engine's idempotency pre-read; a colliding operationId with a
+  different command/payload surfaces as a counted, logged conflict, never a
+  silent skip) — a heartbeat-cycle
+  reconciliation leg that retries every committed heartbeat episode until its
+  create operation commits (C1–C6 evidence on real PostgreSQL, including the
+  operationId-collision conflict regression and the large-history
+  storm/backpressure convergence evidence), canonical
+  `incident.created` audit with the System actor identity, and PER_EPISODE
+  re-arm (a later episode is a distinct source fact and MAY create a new
+  incident; no attempt-level suppression). The System-Incident Time-Grant gate
+  (ADR-014 §8 Gate B) stays CLOSED: `source=system_incident` keeps zero
+  writers and no time authority.
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the
