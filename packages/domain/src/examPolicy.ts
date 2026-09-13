@@ -23,10 +23,11 @@ import type { ControlFlags, InterruptionTimePolicy } from "./types.js";
 
 /**
  * Timing + schedule policy. Phase A supports `timed_window`, `deadline` and
- * `untimed`; `timed_sync` stays a latent enum value rejected by the canonical
- * validator until the admission/queue runtime exists. `durationMinutes` is
- * null for modes without a personal duration (deadline/untimed); `closeAt`
- * is null only for `untimed`.
+ * `untimed`; `timed_sync` remains an enum value rejected by the canonical
+ * validator pending the B2 product-activation decision (the admission/queue
+ * runtime it would build on exists — #292). `durationMinutes` is null for
+ * modes without a personal duration (deadline/untimed); `closeAt` is null
+ * only for `untimed`.
  */
 export interface TimingPolicy {
   timingMode: TimingMode;
@@ -83,9 +84,10 @@ export interface InterruptionPolicy {
 }
 
 /**
- * Control flags. P7-M1 does NOT refactor these into typed columns. Most flags
- * are latent/unenforced today (see P7-M1 design §13); they are carried through
- * as-is so the validator does not invent rules for unimplemented dimensions.
+ * Control flags. P7-M1 does NOT refactor these into typed columns. The
+ * unsupported-for-activation flags (see `@exam/exam-engine` `validateExamPolicy`)
+ * are carried through as wire/history vocabulary: the validator rejects their
+ * activation, so no new policy can promise a capability the runtime lacks.
  */
 export interface ControlFlagPolicy {
   controlFlags: ControlFlags;
@@ -123,6 +125,7 @@ export const ExamPolicyConflictCode = {
   PassingScoreExceedsTotal: "PASSING_SCORE_EXCEEDS_TOTAL",
   RetakeMaxAttemptsInvalid: "RETAKE_MAX_ATTEMPTS_INVALID",
   InterruptionPolicyCapsInvalid: "INVALID_INTERRUPTION_POLICY",
+  UnsupportedExamControl: "UNSUPPORTED_EXAM_CONTROL",
 } as const;
 
 export type ExamPolicyConflictCode =

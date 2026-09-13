@@ -27,10 +27,12 @@ Single-tenant, Admin + Candidate reliable exam loop:
 ## Phase 2 — Exam Operation: ✅ GATE ITEMS IMPLEMENTED
 
 Core exam loop items are implemented and verified. `deadline` / `untimed`
-timing modes are implemented (#291 Phase A, PR #388). The remaining items
-(the `timed_sync` timing mode and queue admission, tracked by Issues #291
-and #292) are not implemented; `timed_sync` semantics are frozen in
-`docs/contracts/timed-sync-semantics.md`.
+timing modes are implemented (#291 Phase A, PR #388). Durable admission-queue
+gating is implemented (#292: durable `admittedAt`, fail-closed start gate,
+atomic membership consume, restart-safe). The remaining item is the
+`timed_sync` timing mode (semantics frozen in
+`docs/contracts/timed-sync-semantics.md`; product activation deferred to the
+B2 decision — the #292 admission runtime it would build on exists).
 
 ### Implemented
 
@@ -88,13 +90,16 @@ and #292) are not implemented; `timed_sync` semantics are frozen in
 - ✅ Result publishing modes (immediate / after_grading / manual).
 - ✅ Client telemetry pipeline (logger → buffer → batch POST → sanitize → DB).
 - ✅ Candidate/admin permission boundary enforced on every route.
+- ✅ Durable admission queue (#292): `requireQueue` exams join a durable,
+  restart-safe queue; admission is a durable server fact consumed atomically
+  at attempt start; candidate queue panel + operator views derive from the
+  durable rows.
 
 ### Deferred (Phase 2+ hardening)
 
-- `timed_sync` timing mode (semantics frozen, activation pending; `deadline`
-  and `untimed` are implemented; `requireQueue` code exists but is not
-  operationally wired).
-- Queue admission.
+- `timed_sync` timing mode (semantics frozen; `deadline` and `untimed` are
+  implemented; the #292 admission runtime exists — the remaining gate is the
+  B2 product-activation decision).
 
 ## Phase 3 — Collaboration, Permissions, Account Lifecycle: 🟡 PARTIALLY IMPLEMENTED
 
@@ -354,8 +359,9 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   the minimum Proctor incident activation are implemented per ADR-015 §23
   (A → B → C → D); closeout:
   [`docs/archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
-  The Proctor **product** Recovery Center UI (J6) is NOT IMPLEMENTED. The
-  Admin Recovery Center UI (J5-I1B) is CLOSED: J5-R0 contract is ACCEPTED
+  The Proctor **product** Recovery Center UI (J6) is **IMPLEMENTED** (#303,
+  PR #525: `ProctorRecoveryIncidentDetailPage` + Proctor recovery surface).
+  The Admin Recovery Center UI (J5-I1B) is CLOSED: J5-R0 contract is ACCEPTED
   (see
   [`docs/contracts/admin-recovery-center.md`](../contracts/admin-recovery-center.md)),
   J5-I1A (read models) is CLOSED, and J5-I1B (admin recovery center UI)

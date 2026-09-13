@@ -28,6 +28,20 @@ import {
 } from "@exam/domain";
 
 /**
+ * Control flags the runtime cannot enforce. Product vocabulary (wire/domain/
+ * DB) is retained for historical-row compatibility, but activation is rejected
+ * by the canonical validator. Order is normative: conflict findings are emitted
+ * in this order. (detectTabSwitch/disableCopyPaste/restrictIp/requireLockdown;
+ * #295 gates requireLockdown implementation — this list only stops promising.)
+ */
+const UNSUPPORTED_CONTROL_FLAGS = [
+  "detectTabSwitch",
+  "disableCopyPaste",
+  "restrictIp",
+  "requireLockdown",
+] as const satisfies readonly (keyof ControlFlags)[];
+
+/**
  * Project a published (or draft) Exam row into the typed resolved-policy value.
  *
  * This is a VALUE, not persistence. It normalizes the Exam row's optional
@@ -173,6 +187,24 @@ export function validateExamPolicy(
     });
   }
 
+  // ── Unsupported control flags: activation is rejected canonically. ──
+  // detectTabSwitch/disableCopyPaste/restrictIp/requireLockdown have NO
+  // runtime enforcement (#516 product truthfulness): a persisted field, an
+  // API-accepted value, or a client hint is not a capability, so authoring
+  // may not promise them. This is the ONE activation gate — create, draft
+  // update, and publish revalidation all funnel through validateExamPolicy.
+  // `false` stays legal; historical rows carrying `true` remain readable but
+  // can never become newly authoritative (no silent coercion, no migration).
+  for (const flag of UNSUPPORTED_CONTROL_FLAGS) {
+    if (policy.control.controlFlags[flag] === true) {
+      conflicts.push({
+        code: ExamPolicyConflictCode.UnsupportedExamControl,
+        fields: [flag],
+        message: `${flag} is not currently supported by runtime enforcement`,
+      });
+    }
+  }
+
   return conflicts;
 }
 
@@ -198,10 +230,9 @@ export function validateExamPolicyForExam(exam: Exam): ExamPolicyConflict[] {
  *                 exceed the global closeAt
  *   untimed       duration null, closeAt null (open-ended), strict only —
  *                 there is no deadline to compensate
- *   timed_sync    product activation deferred (B2); the mode core is
- *                 orthogonal to requireQueue — only timed_sync with
- *                 requireQueue=true waits for the #292 durable admission
- *                 runtime
+ *   timed_sync    product activation deferred pending the B2 decision;
+ *                 the mode core and #292 durable admission runtime already
+ *                 exist
  */
 function validateTimingModeMatrix(
   timing: ResolvedExamPolicy["timing"],
@@ -273,9 +304,8 @@ function validateTimingModeMatrix(
     return [];
   }
 
-  // timed_sync — product activation deferred (B2); the mode core is
-  // orthogonal to requireQueue, but requireQueue=true waits for the #292
-  // durable admission runtime.
+  // timed_sync — product activation remains deferred pending the B2
+  // decision; the mode core and #292 durable admission runtime already exist.
   return invalid(["timingMode"], "timed_sync is not supported yet");
 }
 

@@ -40,11 +40,15 @@ export interface ExamConfigData {
   questionSelectionMode: "manual" | "random";
   questionIds: string[];
   resultPublicationMode: "immediate" | "after_grading" | "manual";
+  // Round-trip shape of the exam's controlFlags: the control section only
+  // authors runtime-enforced behavior (shuffle*) plus showResultImmediately,
+  // which mirrors resultPublicationMode. The unsupported controls
+  // (detectTabSwitch/disableCopyPaste; the canonical validator rejects their
+  // activation) have no authoring UI, and the edit page passes the rest of
+  // the loaded wire object back verbatim on save.
   controlFlags: {
     shuffleQuestions: boolean;
     shuffleOptions: boolean;
-    detectTabSwitch: boolean;
-    disableCopyPaste: boolean;
     requireQueue: boolean;
     batchSize: number;
     batchInterval: number;
@@ -448,28 +452,6 @@ export function ExamConfigForm({
           />
           <Label className="font-normal">
             {t("admin.forms.exam.shuffleOptions")}
-          </Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            checked={data.controlFlags.detectTabSwitch}
-            onCheckedChange={(v) =>
-              updateFlags({ detectTabSwitch: v === true })
-            }
-          />
-          <Label className="font-normal">
-            {t("admin.forms.exam.detectTabSwitch")}
-          </Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            checked={data.controlFlags.disableCopyPaste}
-            onCheckedChange={(v) =>
-              updateFlags({ disableCopyPaste: v === true })
-            }
-          />
-          <Label className="font-normal">
-            {t("admin.forms.exam.disableCopyPaste")}
           </Label>
         </div>
         <div className="space-y-2">

@@ -399,6 +399,29 @@ describe("examCommands", () => {
       );
     });
 
+    // ── #516 product truthfulness: unsupported control flags ───────
+    // A historical/stale row may carry flags the runtime never enforced
+    // (create/update reject them now). The row stays readable, but publish
+    // — the authority/freeze boundary — must fail closed: it can never turn
+    // the unsupported flags into a newly authoritative published promise.
+    it("rejects publish of a stale row carrying unsupported control flags", async () => {
+      const stale = makeExam({
+        controlFlags: {
+          ...makeExam().controlFlags,
+          detectTabSwitch: true,
+          requireLockdown: true,
+        },
+      });
+      const repo = makeRepo(stale);
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /not currently supported/i,
+      );
+      // The rejection never rewrites the row: historical data stays readable,
+      // verbatim (no silent true→false coercion).
+      const reread = await repo.findById("exam-1");
+      expect(reread?.controlFlags).toEqual(stale.controlFlags);
+    });
+
     // ── P3-L0-5: publish validation ───────────────────────────────
 
     it("rejects text_response publish when rubric is null", async () => {

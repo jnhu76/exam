@@ -199,6 +199,100 @@ describe("validateExamPolicy — supported conflicts", () => {
   });
 });
 
+// ── #516 product truthfulness: unsupported control flags ─────────────
+// detectTabSwitch / disableCopyPaste / restrictIp / requireLockdown have NO
+// runtime enforcement. A persisted field, an API-accepted value, or a client
+// hint is not a capability, so the canonical validator rejects activating any
+// of them on create, draft update, and publish revalidation. `false` stays
+// legal; historical rows with `true` remain readable but can never become
+// newly authoritative.
+describe("validateExamPolicy — unsupported control flags (#516)", () => {
+  const UNSUPPORTED_FLAGS = [
+    "detectTabSwitch",
+    "disableCopyPaste",
+    "restrictIp",
+    "requireLockdown",
+  ] as const;
+
+  function examWithFlag(flag: string, value: boolean) {
+    return makeExam({
+      controlFlags: { ...makeExam().controlFlags, [flag]: value },
+    });
+  }
+
+  it.each(UNSUPPORTED_FLAGS)(
+    "rejects activating %s with UNSUPPORTED_EXAM_CONTROL",
+    (flag) => {
+      const conflicts = validateExamPolicyForExam(examWithFlag(flag, true));
+      expect(conflicts).toHaveLength(1);
+      expect(conflicts[0]?.code).toBe(CONFLICT.UnsupportedExamControl);
+      expect(conflicts[0]?.fields).toEqual([flag]);
+      expect(conflicts[0]?.message).toContain(flag);
+      expect(conflicts[0]?.message).toMatch(/not currently supported/i);
+    },
+  );
+
+  it("emits one conflict per activated flag, deterministically ordered", () => {
+    const allOn = makeExam({
+      controlFlags: {
+        ...makeExam().controlFlags,
+        detectTabSwitch: true,
+        disableCopyPaste: true,
+        restrictIp: true,
+        requireLockdown: true,
+      },
+    });
+    const found = validateExamPolicyForExam(allOn);
+    expect(found.map((c) => c.fields[0])).toEqual([...UNSUPPORTED_FLAGS]);
+  });
+
+  it("accepts the all-false baseline", () => {
+    expect(
+      validateExamPolicyForExam(examWithFlag("detectTabSwitch", false)),
+    ).toEqual([]);
+  });
+
+  it("assertExamPolicyValid throws with the structured field code", () => {
+    try {
+      assertExamPolicyValid(examWithFlag("requireLockdown", true));
+      throw new Error("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      const details = (err as ValidationError).details as {
+        fields: { field: string; code: string; message: string }[];
+      };
+      expect(details.fields[0]?.code).toBe(CONFLICT.UnsupportedExamControl);
+      expect(details.fields[0]?.field).toBe("requireLockdown");
+    }
+  });
+
+  it("rejects activation through the route-layer input shape", () => {
+    const exam = examWithFlag("disableCopyPaste", true);
+    expect(() =>
+      assertExamPolicyInputValid({
+        timingMode: exam.timingMode,
+        durationMinutes: exam.durationMinutes,
+        openAt: exam.openAt,
+        closeAt: exam.closeAt,
+        latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
+        minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
+        questionSelectionMode: exam.questionSelectionMode,
+        questionIds: exam.questionIds,
+        retakePolicy: exam.retakePolicy,
+        maxAttempts: exam.maxAttempts,
+        scoreStrategy: exam.scoreStrategy,
+        passingScore: exam.passingScore,
+        totalScore: exam.totalScore,
+        resultPublicationMode: exam.resultPublicationMode,
+        interruptionTimePolicy: "strict",
+        interruptionGracePerIncidentSeconds: null,
+        interruptionGracePerAttemptSeconds: null,
+        controlFlags: exam.controlFlags,
+      }),
+    ).toThrow(/disableCopyPaste is not currently supported/);
+  });
+});
+
 describe("validateExamPolicy — purity / determinism / non-mutation", () => {
   it("is deterministic (same input → same output)", () => {
     const exam = makeExam({
