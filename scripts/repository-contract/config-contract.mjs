@@ -396,6 +396,17 @@ console.log("4b. Checking CI build artifact identity contract...");
       );
     }
   }
+
+  // download-artifact resolves within the current run by default; an
+  // explicit run-id override would silently widen whose build a consumer
+  // tests against. Like the name checks above, this is a bounded textual
+  // check: quoted/folded scalar forms of the key are not recognized.
+  if (/^\s*run-id:/m.test(ciContent)) {
+    fail(
+      "ci.yml must not override the download-artifact run-id — build " +
+        "consumers resolve the artifact within the current workflow run",
+    );
+  }
 }
 console.log("   CI artifact identity check complete.");
 
