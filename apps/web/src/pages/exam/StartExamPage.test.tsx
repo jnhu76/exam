@@ -279,6 +279,43 @@ describe("StartExamPage", () => {
     expect(screen.getByText("20题")).toBeInTheDocument();
   });
 
+  it("never renders tab-switch/copy-paste enforcement warnings, even for a historical row with the flags true (#516)", async () => {
+    // Historical rows may still carry detectTabSwitch/disableCopyPaste=true
+    // (readable, but no longer activatable and never server-enforced). The
+    // start page must not present them as real enforcement.
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Legacy Flag Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: true,
+        disableCopyPaste: true,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: true,
+        requireLockdown: true,
+        showResultImmediately: true,
+      },
+      maxAttempts: 1,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Legacy Flag Exam")).toBeInTheDocument();
+    expect(screen.queryByText(/检测切屏/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/禁止复制粘贴/)).not.toBeInTheDocument();
+  });
+
   it("shows error state on load failure", async () => {
     apiGet.mockRejectedValueOnce(new Error("Network error"));
 

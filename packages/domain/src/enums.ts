@@ -193,8 +193,10 @@ export type TimingMode = (typeof TimingMode)[keyof typeof TimingMode];
 
 /**
  * Timing modes that authoring (exams and policy profiles) may select in
- * Phase A (#291). `timed_sync` stays latent until the admission/queue
- * runtime exists; the canonical exam-policy validator rejects it.
+ * Phase A (#291). `timed_sync` product activation is deferred to the B2
+ * decision — the mode core and the #292 admission runtime it would build on
+ * exist; the canonical exam-policy validator rejects the value until
+ * activation.
  */
 export type AuthoringTimingMode = Exclude<TimingMode, "timed_sync">;
 

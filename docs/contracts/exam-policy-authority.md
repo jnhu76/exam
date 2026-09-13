@@ -16,6 +16,17 @@ P7-E0 is CLOSED. Its central conclusion is binding here:
 > immutable snapshots/copies, and (2) immutable published Exam-row authority.
 > These must NOT be conflated.
 
+**Reconciliation (2026-09-13, #516 product-truthfulness corrective).** The
+matrix (§4), conflict rules (§9), and control_flags audit (§13) are maintained
+against current truth. Since M1: #294 landed (shuffle SUPPORTED, snapshot-
+frozen), #292 landed (durable admission — `requireQueue`/`batchSize`/
+`batchInterval` SUPPORTED), and the four enforcement-less control flags
+(`detectTabSwitch`/`disableCopyPaste`/`restrictIp`/`requireLockdown`) became
+**UNSUPPORTED FOR ACTIVATION**: the canonical validator rejects activating
+them (`UNSUPPORTED_EXAM_CONTROL`) on create/draft-update/publish, authoring UI
+no longer offers them, and historical rows carrying `true` remain readable.
+§17/§18 are preserved as the M1 review-time record.
+
 ---
 
 ## 1. Executive conclusion
@@ -45,8 +56,9 @@ The canonical validator centralizes cross-field checks that are today scattered
 across Zod refinements, route handlers, and inline `publishExam` guards — and
 closes three real gaps: `openAt < closeAt` on create/update, interruption-policy
 re-validation at publish, and `max_attempts` ↔ `maxAttempts` sanity. It does not
-invent rules for unimplemented dimensions (device binding, admission queue,
-proctoring levels) — those are explicitly P7-M2+.
+invent rules for unimplemented dimensions (device binding, proctoring levels) —
+those are explicitly P7-M2+. Since the #516 corrective it owns ONE product-
+truthfulness rule: the four enforcement-less control flags cannot be activated.
 
 **No DB migration. No profile persistence. No generic rule engine.**
 
@@ -112,16 +124,17 @@ Every `exams` column that functions as policy/config (`packages/db/src/schema/pg
 | Interruption | `interruption_time_policy` + 2 caps | yes | attempt snapshot + restore evaluation | **attempt snapshot** (frozen at creation) | `interruption` | **SUPPORTED** |
 | Late start / min submit | `latest_start_offset_minutes`/`min_submit_after_start_minutes` | yes | attempt-start gate / submit gate | published row | `timing` | **SUPPORTED** |
 | Shuffle | `control_flags.shuffleQuestions`/`shuffleOptions` | yes (UI checkbox) | `materializeAttemptPresentation` at new-attempt creation; resume/restart replay frozen snapshot | **attempt snapshot** (frozen at creation) | `control` | **SUPPORTED** (#294; policy-resolved, snapshot-frozen) |
-| Tab-switch detect | `control_flags.detectTabSwitch` | yes (UI checkbox) | client **warning banner only** (`StartExamPage:204`); TakeExam listener runs unconditionally | n/a | `control` | **LATENT** (client hint, not enforcement) |
-| Copy/paste disable | `control_flags.disableCopyPaste` | yes (UI checkbox) | client **warning banner only** (`StartExamPage:215`) | n/a | `control` | **LATENT** (client hint) |
-| Queue admission | `control_flags.requireQueue`+`batchSize`+`batchInterval` | yes (UI checkbox) | **none** at runtime | n/a | `control` | **LATENT** (Phase 2) |
-| IP restriction | `control_flags.restrictIp` | yes (UI checkbox) | **none** | n/a | `control` | **NOT IMPLEMENTED** |
-| Lockdown | `control_flags.requireLockdown` | yes (UI checkbox) | **none** | n/a | `control` | **NOT IMPLEMENTED** (Phase 2 desktop) |
+| Tab-switch detect | `control_flags.detectTabSwitch` | no (authoring UI removed; wire vocabulary retained) | none | n/a | `control` | **UNSUPPORTED FOR ACTIVATION** (canonical validator rejects `true`; historical rows readable) |
+| Copy/paste disable | `control_flags.disableCopyPaste` | no (authoring UI removed; wire vocabulary retained) | none | n/a | `control` | **UNSUPPORTED FOR ACTIVATION** (canonical validator rejects `true`; historical rows readable) |
+| Queue admission | `control_flags.requireQueue`+`batchSize`+`batchInterval` | yes (wire/API; no UI) | #292 durable admission: fail-closed start gate + atomic membership consume | published row + durable `admittedAt` | `control` | **SUPPORTED** (#292 durable admission) |
+| IP restriction | `control_flags.restrictIp` | no (wire vocabulary retained; no UI) | none | n/a | `control` | **UNSUPPORTED FOR ACTIVATION** (canonical validator rejects `true`; historical rows readable) |
+| Lockdown | `control_flags.requireLockdown` | no (wire vocabulary retained; no UI) | none | n/a | `control` | **UNSUPPORTED FOR ACTIVATION** (#295 decision gate — NO IMPLEMENTATION AUTHORIZED; canonical validator rejects `true`) |
 | `showResultImmediately` | `control_flags.showResultImmediately` | legacy input | coerced to `result_publication_mode` at create/update | n/a | (deprecated) | **DEPRECATED** (legacy input only) |
 | Identity / device binding / managed desktop / admission codes / proctoring levels | — | — | — | — | — | **NOT IMPLEMENTED** (P7-M2+ roadmap) |
-| `untimed` / `timed_sync` / `deadline` timing | enum values exist | blocked (Zod literal) | — | — | — | **NOT IMPLEMENTED** (Phase 2) |
+| `untimed` / `deadline` timing | enum values exist | yes (authoring, Phase A2 #291) | mode matrix in the canonical validator | published row | `timing` | **SUPPORTED** (#291 Phase A) |
+| `timed_sync` timing | enum value exists | blocked (canonical validator) | — | — | — | **NOT ACTIVATED** (B2 product decision; mode core + #292 admission runtime exist) |
 
-**"LATENT"** = code/schema exists and is authorable but the runtime does not enforce it. The M1 validator must **not** invent conflict rules for latent dimensions, but it SHOULD record this gap (§13, §15).
+**"LATENT"** = code/schema exists and is authorable but the runtime does not enforce it. No current product path may activate a latent control flag: the four enforcement-less flags are **UNSUPPORTED FOR ACTIVATION** (§13) — new activation fails closed; historical rows remain readable. The M1 rule stands in modified form: the validator does not invent conflict rules for unimplemented dimensions, but it DOES own the truthfulness rule that unsupported controls cannot be activated.
 
 ---
 
@@ -223,6 +236,7 @@ Only rules for **currently supported** combinations. Future dimensions (§12) ar
 | `min_submit_after_start_minutes >= 0` | (shape/DB) | Zod + DB CHECK | unchanged |
 | interruption policy cross-field (strict/op_incident ⇒ caps null; bounded_grace ⇒ both caps > 0; per-incident ≤ per-attempt) | `INVALID_INTERRUPTION_POLICY_*` | `validatePolicyCaps` (create Zod + route; **not publish**) | canonical validator (incl. publish revalidation) |
 | `result_publication_mode ∈ {immediate, after_grading, manual}` | (enum) | Zod | Zod (unchanged) |
+| `detectTabSwitch`/`disableCopyPaste`/`restrictIp`/`requireLockdown` must not be activated (`!== true`) | `UNSUPPORTED_EXAM_CONTROL` | absent before the #516 corrective — any client could persist the flags with zero enforcement | canonical validator (create + draft update + publish revalidation; ONE gate) |
 
 **Rules explicitly NOT added in M1** (unimplemented dimensions — §12): untimed+deadline-auto-submit, mobile+managed-desktop, anonymous+named-enrollment, monitoring+proctor-incident, multi-session+single-device. These are P7-M2+; no fake enums to reject combinations the system cannot create.
 
@@ -276,30 +290,31 @@ A future M2 profile resolver feeds this same boundary — it must NOT become a r
 
 ## 13. control_flags enforcement reality
 
-A JSON bag is not a coherent policy schema. Per-flag audit:
+A JSON bag is not a coherent policy schema. Per-flag audit (updated 2026-09-13,
+#516 product-truthfulness corrective):
 
 | Flag | Authorable? | Persisted? | Consumed? | Enforced? | Classification |
 | --- | --- | --- | --- | --- | --- |
 | `shuffleQuestions` | yes (UI) | yes | `materializeAttemptPresentation` (`attemptPresentation.ts`); per-attempt frozen order drawn at `startOrRestoreAttempt` new-attempt creation | server-authoritative at creation | SUPPORTED — #294 (policy-resolved, snapshot-frozen, no seed) |
 | `shuffleOptions` | yes (UI) | yes | `materializeAttemptPresentation`; shuffles choice-question `options[]` per-attempt at creation | server-authoritative at creation | SUPPORTED — #294 |
-| `detectTabSwitch` | yes (UI) | yes | client **warning banner** (`StartExamPage:204`); `TakeExamPage` listener runs unconditionally | client hint only | LATENT — not server-enforced |
-| `disableCopyPaste` | yes (UI) | yes | client **warning banner** (`StartExamPage:215`) | client hint only | LATENT — not server-enforced |
-| `requireQueue` | yes (UI) | yes | **no** runtime queue consumer | no | LATENT — Phase 2 |
-| `batchSize` / `batchInterval` | yes (UI) | yes | only meaningful if `requireQueue` (which is latent) | no | LATENT |
-| `restrictIp` | yes (UI) | yes | **no** | no | NOT IMPLEMENTED |
-| `requireLockdown` | yes (UI) | yes | **no** | no | NOT IMPLEMENTED (Phase 2 desktop) |
+| `detectTabSwitch` | no (UI checkbox removed; wire retained) | yes (historical rows readable) | **none** (browser visibility telemetry is unconditional and unrelated) | no | **UNSUPPORTED FOR ACTIVATION** — canonical validator rejects `true` |
+| `disableCopyPaste` | no (UI checkbox removed; wire retained) | yes (historical rows readable) | **none** | no | **UNSUPPORTED FOR ACTIVATION** — canonical validator rejects `true` |
+| `requireQueue` | yes (wire/API; no UI) | yes | #292 durable admission: fail-closed start gate; membership consumed atomically with attempt create | server-authoritative (durable `admittedAt`) | SUPPORTED — #292 durable admission |
+| `batchSize` / `batchInterval` | yes (wire/API; no UI) | yes | admission batch derivation (#292) | server-authoritative | SUPPORTED — #292 |
+| `restrictIp` | no (wire retained; no UI) | yes (historical rows readable) | **none** | no | **UNSUPPORTED FOR ACTIVATION** — canonical validator rejects `true` |
+| `requireLockdown` | no (wire retained; no UI) | yes (historical rows readable) | **none** | no | **UNSUPPORTED FOR ACTIVATION** — #295 decision gate: NO IMPLEMENTATION AUTHORIZED; activation rejected |
 | `showResultImmediately` | legacy input | yes (coerced) | coerced to `result_publication_mode`; response field of same name is unrelated | deprecated | DEPRECATED |
 
-**M1 action on control_flags:** NONE structural. Do NOT refactor into many DB columns. Typed domain parsing over the existing JSON is sufficient. The validator does not add conflict rules for latent flags.
+**M1 action on control_flags:** NONE structural. Do NOT refactor into many DB columns. Typed domain parsing over the existing JSON is sufficient. (Amended by the #516 corrective: the canonical validator now owns the ONE activation gate above — no per-route second truth.)
 
 **Findings recorded (not fixed in M1):**
 
 - **P2-CF-1:** ~~`shuffleQuestions`/`shuffleOptions` are authorable and persisted but **never enforced**~~ **RESOLVED (#294 implemented):** per-attempt snapshot-frozen order materialized at `startOrRestoreAttempt` new-attempt creation via `materializeAttemptPresentation`; no seed persisted.
-- **P2-CF-2:** `detectTabSwitch`/`disableCopyPaste` are presented as control flags but are **client hints only** (warning banner; no enforcement). The UI should not imply server enforcement. Recorded separately.
-- **P2-CF-3:** `restrictIp`/`requireLockdown` are authorable but have **zero** runtime effect — a candidate can enable them and get no restriction. Recorded separately.
+- **P2-CF-2:** ~~`detectTabSwitch`/`disableCopyPaste` are presented as control flags but are **client hints only**~~ **RESOLVED (#516 corrective):** authoring UI removed, candidate start-page enforcement warnings removed, and activation is rejected (`UNSUPPORTED_EXAM_CONTROL`) on create/draft-update/publish. Historical rows remain readable; browser visibility telemetry stays unconditional (it is not the `detectTabSwitch` capability).
+- **P2-CF-3:** ~~`restrictIp`/`requireLockdown` are authorable but have **zero** runtime effect~~ **RESOLVED (#516 corrective):** no longer activatable (canonical validator rejects `true`); historical rows stay readable. Implementation remains barred by the #295 decision gate.
 - **P2-CF-4:** `showResultImmediately` is a deprecated legacy input that still appears in the authoring UI and persists a stale value. Recorded separately.
 
-These are **not** M1 scope (§45 non-goals). They are recorded so a future truthfulness pass can decide whether latent flags should fail validation, be hidden from authoring, or be implemented.
+The deferred truthfulness decision is now made: unsupported controls **fail closed on activation**, are **not authored**, and are **not silently coerced** (`true` is never rewritten to `false` by the system).
 
 ---
 

@@ -19,8 +19,6 @@ const baseConfig: ExamConfigData = {
   controlFlags: {
     shuffleQuestions: false,
     shuffleOptions: false,
-    detectTabSwitch: false,
-    disableCopyPaste: false,
     requireQueue: false,
     batchSize: 10,
     batchInterval: 3,
@@ -315,6 +313,22 @@ describe("ExamConfigForm fields", () => {
     expect(screen.queryByText(/排队入场/)).not.toBeInTheDocument();
     expect(screen.queryByText(/限制访问网络/)).not.toBeInTheDocument();
     expect(screen.queryByText(/要求锁定环境/)).not.toBeInTheDocument();
+  });
+
+  it("does not author unsupported control flags (#516 product truthfulness)", () => {
+    // The runtime cannot enforce tab-switch detection or copy/paste blocking,
+    // so the authoring surface must not offer them (the canonical validator
+    // rejects their activation server-side).
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/检测切屏/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/禁止复制粘贴/)).not.toBeInTheDocument();
   });
 
   it("renders retake policy section", () => {

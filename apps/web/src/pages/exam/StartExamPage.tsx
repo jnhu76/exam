@@ -249,20 +249,6 @@ export function StartExamPage() {
             {exam.passingScore}/{exam.totalScore}
           </span>
         </div>
-
-        {exam.controlFlags.detectTabSwitch && (
-          <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
-            <AppIcon icon={TriangleAlert} size="inline" className="shrink-0" />
-            <span>{t("startExam.info.tabSwitchWarning")}</span>
-          </div>
-        )}
-
-        {exam.controlFlags.disableCopyPaste && (
-          <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
-            <AppIcon icon={TriangleAlert} size="inline" className="shrink-0" />
-            <span>{t("startExam.info.copyPasteWarning")}</span>
-          </div>
-        )}
       </PageSection>
 
       <div className="rounded-md border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
