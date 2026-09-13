@@ -7,9 +7,10 @@ import {
 import { Role, Permission } from "./catalog.js";
 
 describe("SYSTEM-M1 system actor — stable actor ids", () => {
-  it("exposes the two scanner actor ids", () => {
+  it("exposes the closed scanner/detector actor ids", () => {
     expect(SYSTEM_ACTOR_IDS.DeadlineScanner).toBe("system:deadline-scanner");
     expect(SYSTEM_ACTOR_IDS.Heartbeat).toBe("system:heartbeat");
+    expect(SYSTEM_ACTOR_IDS.IncidentDetector).toBe("system:incident-detector");
   });
 
   it("actor ids are unique", () => {
@@ -19,12 +20,13 @@ describe("SYSTEM-M1 system actor — stable actor ids", () => {
 });
 
 describe("SYSTEM-M1 system actor — System role's real grants (dotted)", () => {
-  it("SYSTEM_PERMISSIONS is exactly the 3 system-only perms", () => {
+  it("SYSTEM_PERMISSIONS is exactly the 4 system-only perms", () => {
     const perms = new Set(SYSTEM_PERMISSIONS);
-    expect(perms.size).toBe(3);
+    expect(perms.size).toBe(4);
     expect(perms.has(Permission.SystemAutoSubmit)).toBe(true);
     expect(perms.has(Permission.SystemHeartbeatScan)).toBe(true);
     expect(perms.has(Permission.SystemLifecycleReconcile)).toBe(true);
+    expect(perms.has(Permission.SystemIncidentCreate)).toBe(true);
   });
 });
 

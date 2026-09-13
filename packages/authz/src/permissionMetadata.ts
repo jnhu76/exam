@@ -165,6 +165,7 @@ export const PERMISSION_METADATA = {
   [Permission.SystemLifecycleReconcile]: {
     category: PermissionCategory.System,
   },
+  [Permission.SystemIncidentCreate]: { category: PermissionCategory.System },
 
   // §4.10 Incident Management
   [Permission.IncidentView]: { category: PermissionCategory.Incident },

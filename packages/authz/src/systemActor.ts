@@ -19,10 +19,11 @@ import { Role } from "@exam/domain";
 import { Role as AuthzRole } from "./catalog.js";
 import { permissionsForRole } from "./presets.js";
 
-/** Stable synthetic actor ids for the two background scanners. */
+/** Stable synthetic actor ids for the background scanners + incident detector. */
 export const SYSTEM_ACTOR_IDS = {
   DeadlineScanner: "system:deadline-scanner",
   Heartbeat: "system:heartbeat",
+  IncidentDetector: "system:incident-detector",
 } as const;
 
 /** Closed union of allowed system actor ids (compile-time enforcement). */

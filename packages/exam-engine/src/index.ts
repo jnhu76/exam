@@ -28,6 +28,7 @@ export * from "./operatorGrant.js";
 export * from "./lockSeam.js";
 export * from "./systemMonitor.js";
 export * from "./incidentCommands.js";
+export * from "./systemIncidentCommands.js";
 export {
   assignProctorToExam,
   revokeProctorFromExam,

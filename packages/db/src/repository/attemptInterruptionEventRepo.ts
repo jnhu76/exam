@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { AttemptInterruptionEvent, RequestContext } from "@exam/domain";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { attemptInterruptionEvents } from "../schema/pg.js";
+import {
+  attemptInterruptionEvents,
+  attemptInterruptions,
+  examAttempts,
+} from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import { resolveOrganizationId } from "./baseRepo.js";
 
@@ -12,6 +16,20 @@ export type InsertAttemptInterruptionEventInput = Omit<
   AttemptInterruptionEvent,
   "id" | "organizationId" | "createdAt"
 >;
+
+/**
+ * Durable fact set of one committed heartbeat-detected episode, joined with
+ * the attempt identity the System incident is derived from (#304 F3/F4A).
+ */
+export interface HeartbeatDetectedEpisodeRow {
+  interruptionId: string;
+  attemptId: string;
+  examId: string;
+  candidateId: string | null;
+  occurredAt: Date;
+  observedLastActivityAt: Date | null;
+  timeoutSeconds: number | null;
+}
 
 export function createAttemptInterruptionEventRepo(db: Database) {
   async function insert(
@@ -154,6 +172,66 @@ export function createAttemptInterruptionEventRepo(db: Database) {
     return rows[0] ?? null;
   }
 
+  /**
+   * Durable-ledger discovery for the System incident reconciliation leg
+   * (#304 F4A): every committed heartbeat-detected episode of the
+   * organization, oldest first. Deliberately NOT filtered by completion —
+   * the completion probe is the caller's batch check against the
+   * `exam_incident_events` operation-unique arbiter (the episode id cannot
+   * be turned into its UUID-v5 operationId inside SQL). The read grows with
+   * the organization's total episode count, which is the accepted LAN-scale
+   * cost of keeping the reconciliation stateless per cycle and the arbiter
+   * the single completion authority; if that ever outgrows the deployment
+   * profile, bounded discovery needs its own explicit authority decision.
+   */
+  async function listHeartbeatDetectedEpisodes(
+    ctx: TenantContext | RequestContext,
+  ): Promise<HeartbeatDetectedEpisodeRow[]> {
+    return db
+      .select({
+        interruptionId: attemptInterruptionEvents.interruptionId,
+        attemptId: attemptInterruptions.attemptId,
+        examId: examAttempts.examId,
+        candidateId: examAttempts.candidateId,
+        occurredAt: attemptInterruptionEvents.occurredAt,
+        observedLastActivityAt:
+          attemptInterruptionEvents.observedLastActivityAt,
+        timeoutSeconds: attemptInterruptionEvents.timeoutSeconds,
+      })
+      .from(attemptInterruptionEvents)
+      .innerJoin(
+        attemptInterruptions,
+        and(
+          eq(attemptInterruptions.id, attemptInterruptionEvents.interruptionId),
+          eq(
+            attemptInterruptions.organizationId,
+            attemptInterruptionEvents.organizationId,
+          ),
+        ),
+      )
+      .innerJoin(
+        examAttempts,
+        and(
+          eq(examAttempts.id, attemptInterruptions.attemptId),
+          eq(examAttempts.organizationId, attemptInterruptions.organizationId),
+        ),
+      )
+      .where(
+        and(
+          eq(
+            attemptInterruptionEvents.organizationId,
+            resolveOrganizationId(ctx),
+          ),
+          eq(attemptInterruptionEvents.eventType, "detected"),
+          eq(attemptInterruptionEvents.detectionSource, "heartbeat_timeout"),
+        ),
+      )
+      .orderBy(
+        asc(attemptInterruptionEvents.occurredAt),
+        asc(attemptInterruptionEvents.interruptionId),
+      );
+  }
+
   return {
     insert,
     findDetected,
@@ -161,5 +239,6 @@ export function createAttemptInterruptionEventRepo(db: Database) {
     listByInterruption,
     listByAttempt,
     findLatestOutcomeByAttempt,
+    listHeartbeatDetectedEpisodes,
   };
 }

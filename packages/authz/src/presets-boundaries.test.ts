@@ -155,12 +155,13 @@ describe("RBAC-M2 boundary #8 — System actor is non-login, non-assignable, SYS
     expect(ROLE_PRESETS[Role.System].assignable).toBe(false);
   });
 
-  it("System holds only the 3 system-only perms, nothing human-facing", () => {
+  it("System holds only the 4 system-only perms, nothing human-facing", () => {
     const sys = new Set(permissionsForRole(Role.System));
-    expect(sys.size).toBe(3);
+    expect(sys.size).toBe(4);
     expect(sys.has(Permission.SystemAutoSubmit)).toBe(true);
     expect(sys.has(Permission.SystemHeartbeatScan)).toBe(true);
     expect(sys.has(Permission.SystemLifecycleReconcile)).toBe(true);
+    expect(sys.has(Permission.SystemIncidentCreate)).toBe(true);
     // no human capability leaks
     expect(sys.has(Permission.UserCreate)).toBe(false);
     expect(sys.has(Permission.AttemptForceSubmit)).toBe(false);
@@ -188,6 +189,10 @@ describe("RBAC-M2 boundary #8 — System actor is non-login, non-assignable, SYS
       expect(
         set.has(Permission.SystemLifecycleReconcile),
         `${r} has lifecycle_reconcile`,
+      ).toBe(false);
+      expect(
+        set.has(Permission.SystemIncidentCreate),
+        `${r} has incident.create`,
       ).toBe(false);
     }
   });

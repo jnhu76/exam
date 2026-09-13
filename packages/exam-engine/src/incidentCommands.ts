@@ -327,7 +327,15 @@ export function sortKeys(value: unknown): unknown {
 
 // ── Pre-read operationId ──
 
-async function preReadOperationId(
+/**
+ * The ONE operationId replay/conflict check for every incident write command
+ * (ADR-014 §9): a committed event with the same operationId + commandType +
+ * canonical payload is an `idempotent_replayed` result; a committed event
+ * with a different command/payload is `IdempotencyConflictError`. Shared by
+ * the human commands below and the System incident seam
+ * (`systemIncidentCommands.ts`) — never duplicate this logic.
+ */
+export async function preReadOperationId(
   repo: IncidentRepo,
   ctx: RequestContext,
   operationId: string,

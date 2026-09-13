@@ -289,6 +289,31 @@ export function createIncidentRepo(db: Database) {
     return rows[0] ?? null;
   }
 
+  /**
+   * Batch completion probe against the
+   * `exam_incident_events_org_operation_unique` arbiter (#304 F4A): which of
+   * the given operationIds have a committed event row. Indexed by that
+   * unique; an empty input short-circuits to an empty set. The ONLY
+   * completion authority for System incident delivery — link rows or
+   * incident fields are never probed for this decision.
+   */
+  async function listCommittedOperationIds(
+    ctx: TenantContext | RequestContext,
+    operationIds: string[],
+  ): Promise<Set<string>> {
+    if (operationIds.length === 0) return new Set();
+    const rows = await db
+      .select({ operationId: examIncidentEvents.operationId })
+      .from(examIncidentEvents)
+      .where(
+        and(
+          eq(examIncidentEvents.organizationId, resolveOrganizationId(ctx)),
+          inArray(examIncidentEvents.operationId, operationIds),
+        ),
+      );
+    return new Set(rows.map((row) => row.operationId));
+  }
+
   async function listEventsByIncident(
     ctx: TenantContext | RequestContext,
     incidentId: string,
@@ -507,6 +532,7 @@ export function createIncidentRepo(db: Database) {
     update,
     appendEvent,
     findEventByOperationId,
+    listCommittedOperationIds,
     listEventsByIncident,
     insertActionLink,
     findActionLinkByOperationId,

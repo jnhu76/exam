@@ -437,6 +437,9 @@ importers:
 
   packages/exam-engine:
     dependencies:
+      '@exam/authz':
+        specifier: workspace:*
+        version: link:../authz
       '@exam/domain':
         specifier: workspace:*
         version: link:../domain
