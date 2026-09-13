@@ -46,6 +46,14 @@ The following boundaries remain unchanged by this acceptance:
 
 ### Revision notes
 
+- **Gate-split corrective (2026-09-13)** — per the Issue #533 corrective
+  (refs #304, #516), the single System activation gate of §8
+  is split into two independent gates: **Gate A — System Incident
+  Creation** (independently satisfiable, creation-only authority) and
+  **Gate B — System-Incident Time Grant** (CLOSED;
+  `source=system_incident` remains disabled). Opening Gate A does not
+  imply Gate B. No runtime, schema, or permission-catalog change is
+  authorized by this corrective.
 - **Acceptance (2026-08-01)** — accepted by the recorded decision owner after
   PR #241 review rounds R2–R5 closed the command identity, concurrency,
   relationship, action identity, migration, and rollback blockers. J2 is
@@ -591,22 +599,72 @@ judgment, same scrutiny class as `AttemptForceSubmit`).
 
 **System incidents.** `system.incident.create` is RESERVED by name and
 authority shape only — it is not added to the permission catalog or any
-preset in the initial implementation. This reservation does **NOT**
-satisfy the ADR-013 runtime activation gate ("until REC-I6 defines a
-System-only incident grant permission and incident authority"). The gate
-remains UNSATISFIED until ALL of the following hold:
+preset in the initial implementation. ADR-013's `source=system_incident`
+deferral is governed by TWO INDEPENDENT activation gates defined below.
+The name reservation satisfies neither gate, and neither gate implies the
+other:
 
-1. `system.incident.create` exists in the closed permission catalog;
-2. only the System actor receives it (no Admin/Proctor/Teacher/Grader
-   preset grant);
-3. a canonical System-only incident command exists;
-4. non-null `incidentId` is validated end-to-end through the grant path;
-5. `source=system_incident` has executable tests.
+```text
+SYSTEM INCIDENT CREATION
+IS NOT
+SYSTEM TIME-GRANT AUTHORITY.
 
-Until then, `source=system_incident` time adjustments remain disabled and
-the vocabulary-permissive ledger CHECK branch keeps zero writers. The
-initial implementation is operator-only. A future reader or agent MUST NOT
-infer from the reserved name that the gate is open.
+THE EXISTENCE OF AN INCIDENT
+DOES NOT CREATE
+AN ENTITLEMENT TO TIME.
+```
+
+**Gate A — System Incident Creation.** The authority gate for System to
+create an evidence-bearing `ExamIncident`. It may be satisfied
+independently of Gate B and remains UNSATISFIED until ALL of the
+following hold as one authority chain:
+
+1. a distinct closed synthetic System actor identity exists, constructed
+   only through the canonical System request context; no client may
+   select or spoof System identity;
+2. `system.incident.create` exists in the closed permission catalog and
+   is held by the System actor only (no Admin/Proctor/Teacher/Grader
+   preset grant); System does not receive human `incident.*` authority
+   merely for convenience;
+3. a canonical System-only internal incident-create command exists —
+   never a spoofed human command;
+4. creation is triggered only by a bounded, explicitly named detector set
+   reading a durable source fact; no generic rules engine;
+5. deterministic idempotency/deduplication plus durable
+   completion/reconciliation converge repeated evaluation of the same
+   underlying condition to exactly one System-created incident;
+6. System creation records the canonical `incident.created` audit with
+   the System actor identity and narrow detector/source evidence;
+7. human/Admin terminal judgment (`incident.resolve` /
+   `incident.dismiss`) remains the authoritative outcome for
+   System-created incidents.
+
+Gate A authority is creation-only: creating an incident grants no
+punishment authority and no deadline/time authority. Gate A open does NOT
+imply Gate B open.
+
+**Gate B — System-Incident Time Grant.** The separate authority gate for
+automatic `source=system_incident` time adjustments. It is **CLOSED**.
+Opening System Incident Creation is necessary neither as proof nor as
+sufficient authorization for automatic time grant: Gate A may be OPEN
+while Gate B remains CLOSED. The existence of `system.incident.create`
+in the catalog, a created System incident, an existing `incidentId`, or
+a triggered detector MUST NOT be read as granting any time authority.
+Gate B remains CLOSED until, at minimum:
+
+- an explicit System-only time-grant authority exists;
+- incident linkage is validated end-to-end through the grant path
+  (non-null `incidentId` in `attempt_time_adjustments`);
+- `source=system_incident` has an explicitly authorized runtime path with
+  executable tests proving its semantics and authorization boundary;
+- an explicit decision opens the gate — never inference from incident
+  creation.
+
+Until Gate B opens, `source=system_incident` time adjustments remain
+disabled and the vocabulary-permissive ledger CHECK branch keeps zero
+writers. The initial implementation is operator-only. A future reader or
+agent MUST NOT infer from the reserved name, from Gate A, or from any
+created incident that Gate B is open.
 
 **M11 boundary.** This design does not rely on "granted but not activated"
 for Proctor incident authority: the Proctor preset receives no incident
@@ -1154,8 +1212,8 @@ When accepted and implemented by J3:
 - exam-wide incidents record structured affected-attempt and interruption
   evidence without absorbing Attempt or episode authority;
 - the ADR-013 `incidentId` reservation is activated exactly as prescribed,
-  `source=system_incident` remains disabled, and its activation gate
-  remains explicitly unsatisfied by this ADR;
+  `source=system_incident` remains disabled, and the System-Incident
+  Time-Grant gate (§8 Gate B) remains explicitly unsatisfied by this ADR;
 - historical events are append-only, `event_sequence`-ordered, and
   reconstructable with a verifiable version chain;
 - concurrency, idempotency, and link uniqueness are DB-arbiterated;

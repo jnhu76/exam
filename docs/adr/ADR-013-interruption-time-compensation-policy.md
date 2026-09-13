@@ -641,8 +641,11 @@ Idempotency rules:
   decision and is not authorized by REC-I4.
 - `source=administrative_correction` additionally requires the Admin role and
   a narrower `attempt.time.correct` permission.
-- `source=system_incident` remains disabled until REC-I6 defines a System-only
-  incident grant permission and incident authority.
+- `source=system_incident` remains disabled. Its activation is governed by
+  the dedicated System-Incident Time-Grant gate (ADR-014 §8, Gate B), which
+  is independent of System incident-creation authority: System incident
+  creation authority, including a successfully created System incident,
+  does NOT satisfy the system_incident time-grant activation gate.
 - Operator requests require reason and actor attribution even if the current
   generic extension endpoint did not.
 - The existing flat `attempt.time.extend` endpoint is legacy capability, not
