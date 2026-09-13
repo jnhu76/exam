@@ -51,6 +51,7 @@ export const heartbeatMetrics = {
   lastScanAt: null as Date | null,
   disruptedCount: 0,
   systemIncidentsCreated: 0,
+  systemIncidentConflicts: 0,
 };
 
 /**
@@ -170,6 +171,7 @@ export async function reconcileSystemIncidentsAcrossOrgs(
   createdCount: number;
   replayedCount: number;
   failedCount: number;
+  conflictCount: number;
 }> {
   const db = fastify.db as Database;
   const organizationRepo = createOrganizationRepo(db);
@@ -179,6 +181,7 @@ export async function reconcileSystemIncidentsAcrossOrgs(
   let createdCount = 0;
   let replayedCount = 0;
   let failedCount = 0;
+  let conflictCount = 0;
 
   for (const organization of organizations) {
     const detectorCtx = createSystemRequestContext(
@@ -198,6 +201,7 @@ export async function reconcileSystemIncidentsAcrossOrgs(
       createdCount += counts.createdCount;
       replayedCount += counts.replayedCount;
       failedCount += counts.failedCount;
+      conflictCount += counts.conflictCount;
     } catch (err) {
       // Discovery-level failure (e.g. ledger read): skip this org this cycle;
       // the arbiter makes the next cycle converge.
@@ -209,7 +213,7 @@ export async function reconcileSystemIncidentsAcrossOrgs(
     }
   }
 
-  return { createdCount, replayedCount, failedCount };
+  return { createdCount, replayedCount, failedCount, conflictCount };
 }
 
 /**
@@ -320,6 +324,8 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
           tickNow,
         );
         heartbeatMetrics.systemIncidentsCreated += incidentCounts.createdCount;
+        heartbeatMetrics.systemIncidentConflicts +=
+          incidentCounts.conflictCount;
         if (incidentCounts.createdCount > 0) {
           fastify.log.info(
             {
@@ -328,6 +334,12 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
               failedCount: incidentCounts.failedCount,
             },
             "Created System incidents from heartbeat episodes",
+          );
+        }
+        if (incidentCounts.conflictCount > 0) {
+          fastify.log.error(
+            { conflictCount: incidentCounts.conflictCount },
+            "Conflicting operations occupy heartbeat-derived System incident operationIds",
           );
         }
       } catch (err) {

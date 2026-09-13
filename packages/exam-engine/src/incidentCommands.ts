@@ -312,6 +312,35 @@ export function payloadsEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
 }
 
+/**
+ * The replay arm of `preReadOperationId` as a pure predicate: a committed
+ * operation matches when it carries the SAME commandType and an
+ * order-insensitively equal canonical payload. This is the ONE completion
+ * classification — shared by `preReadOperationId`, the fresh-transaction
+ * recovery lookup (`incidentOperationRecovery`), and the #304 batch
+ * completion probe. Any "operationId exists" check that skips this
+ * comparison would mistake a colliding operation (e.g. a caller-supplied
+ * human operationId equal to the derived System one) for a completed
+ * operation.
+ */
+export function isMatchingCommittedOperation(
+  committed:
+    | { commandType: string; payload: Record<string, unknown> }
+    | null
+    | undefined,
+  commandType: string,
+  canonicalPayload: unknown,
+): boolean {
+  return (
+    committed != null &&
+    committed.commandType === commandType &&
+    payloadsEqual(
+      committed.payload,
+      canonicalPayload as Record<string, unknown>,
+    )
+  );
+}
+
 /** Recursively sort object keys for order-insensitive JSON comparison. */
 export function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);
@@ -346,11 +375,7 @@ export async function preReadOperationId(
   if (!existingEvent) return null;
 
   if (
-    existingEvent.commandType === commandType &&
-    payloadsEqual(
-      existingEvent.payload,
-      canonicalPayload as Record<string, unknown>,
-    )
+    isMatchingCommittedOperation(existingEvent, commandType, canonicalPayload)
   ) {
     const incident = await repo.findById(ctx, existingEvent.incidentId);
     if (!incident) throw new NotFoundError("Incident not found");

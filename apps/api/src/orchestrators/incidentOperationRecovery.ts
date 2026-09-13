@@ -44,7 +44,7 @@ import {
 import type { Database, TransactionDatabase } from "@exam/db/src/types.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
-import { payloadsEqual } from "@exam/exam-engine";
+import { isMatchingCommittedOperation } from "@exam/exam-engine";
 import type { IncidentCommandResult } from "@exam/exam-engine";
 
 /**
@@ -155,13 +155,7 @@ async function resolveCommittedOperation(
     };
     const existing = await repo.findEventByOperationId(ctx, operationId);
     if (!existing) return { kind: "absent" };
-    if (
-      existing.commandType === commandType &&
-      payloadsEqual(
-        existing.payload,
-        canonicalPayload as Record<string, unknown>,
-      )
-    ) {
+    if (isMatchingCommittedOperation(existing, commandType, canonicalPayload)) {
       const incident = await repo.findById(ctx, existing.incidentId);
       if (!incident) {
         // The committed event's incident vanished — extremely unlikely, but

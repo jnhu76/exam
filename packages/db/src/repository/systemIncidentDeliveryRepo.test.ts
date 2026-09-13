@@ -5,8 +5,10 @@
  * - `listHeartbeatDetectedEpisodes` returns exactly the organization's
  *   committed heartbeat-detected episode facts (joined attempt identity),
  *   excluding other detection sources and other organizations;
- * - `listCommittedOperationIds` probes the `exam_incident_events`
- *   operation-unique arbiter and short-circuits on empty input.
+ * - `listCommittedOperations` probes the `exam_incident_events`
+ *   operation-unique arbiter, returning each hit with its commandType and
+ *   canonical payload (existence alone is not completion), and
+ *   short-circuits on empty input.
  */
 
 import { randomUUID } from "node:crypto";
@@ -238,7 +240,7 @@ describe("system incident delivery discovery reads (#304)", () => {
     expect(betaEpisodes[0]!.interruptionId).toBe(beta.heartbeatEpisodeId);
   });
 
-  it("listCommittedOperationIds probes the operation-unique arbiter and short-circuits on empty input", async () => {
+  it("listCommittedOperations returns command identity + payload from the arbiter and short-circuits on empty input", async () => {
     const ctx = context(alpha.organizationId);
     const repo = createIncidentRepo(db);
 
@@ -273,18 +275,27 @@ describe("system incident delivery discovery reads (#304)", () => {
       createdAt: NOW,
     });
 
-    expect(await repo.listCommittedOperationIds(ctx, [])).toEqual(new Set());
-    const probed = await repo.listCommittedOperationIds(ctx, [
+    expect(await repo.listCommittedOperations(ctx, [])).toEqual(new Map());
+    const probed = await repo.listCommittedOperations(ctx, [
       committedId,
       absentId,
     ]);
-    expect(probed).toEqual(new Set([committedId]));
+    expect(probed.size).toBe(1);
+    // The hit carries its command identity + payload so the caller can
+    // classify completion — this fixture row is a HUMAN command, which the
+    // System reconciler must treat as a conflict, not completion.
+    expect(probed.get(committedId)).toEqual({
+      operationId: committedId,
+      commandType: "createExamIncident",
+      payload: {},
+    });
+    expect(probed.has(absentId)).toBe(false);
 
     // Cross-organization operation ids are invisible.
-    const betaProbed = await createIncidentRepo(db).listCommittedOperationIds(
+    const betaProbed = await createIncidentRepo(db).listCommittedOperations(
       context(beta.organizationId),
       [committedId],
     );
-    expect(betaProbed).toEqual(new Set());
+    expect(betaProbed.size).toBe(0);
   });
 });

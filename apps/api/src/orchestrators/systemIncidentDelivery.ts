@@ -4,16 +4,26 @@
  * DURABLE COMPLETION: a committed heartbeat-detected episode stays
  * reconcilable until its episode-derived deterministic System create
  * operation has durably committed in the `exam_incident_events`
- * operation-unique arbiter. The discovery read is stateless per cycle and
- * the probe is a batch check on that arbiter — process memory, the one-shot
- * `marked` return value, and human incident links are NEVER completion
- * authority (`FIELD/LINK EXISTS ≠ SYSTEM COMMAND COMPLETED`).
+ * operation-unique arbiter WITH the System command identity and the
+ * episode's canonical payload — the engine's `isMatchingCommittedOperation`
+ * predicate, the same comparison as `preReadOperationId`. A bare
+ * operationId hit is NOT completion: an operation committed under the same
+ * operationId with a different command/payload (e.g. a caller-supplied
+ * human operationId colliding with the derived one) falls through to
+ * delivery, whose pre-read raises `IdempotencyConflictError` — counted in
+ * `conflictCount` and reported via `onError`, never silently skipped. The
+ * discovery read is stateless per cycle and the probe is a batch check on
+ * that arbiter — process memory, the one-shot `marked` return value, and
+ * human incident links are NEVER completion authority
+ * (`FIELD/LINK EXISTS ≠ SYSTEM COMMAND COMPLETED`).
  */
 import type { RequestContext } from "@exam/domain";
+import { IdempotencyConflictError } from "@exam/domain";
 import type { IncidentCommandResult, IncidentRepo } from "@exam/exam-engine";
 import {
   createSystemIncidentFromHeartbeatEpisode,
   deriveSystemIncidentCanonicalPayload,
+  isMatchingCommittedOperation,
   SYSTEM_INCIDENT_CREATE_COMMAND,
   systemIncidentOperationId,
   type HeartbeatEpisodeFact,
@@ -30,6 +40,9 @@ export interface SystemIncidentDeliveryCounts {
   createdCount: number;
   replayedCount: number;
   failedCount: number;
+  /** Subset of `failedCount`: the arbiter holds a different operation under
+   * the episode's derived operationId (visible conflict, retried next cycle). */
+  conflictCount: number;
 }
 
 /**
@@ -128,7 +141,7 @@ export async function reconcileSystemIncidents(
       ctx,
     );
 
-  const committed = await createIncidentRepo(db).listCommittedOperationIds(
+  const committed = await createIncidentRepo(db).listCommittedOperations(
     ctx,
     episodes.map((episode) =>
       systemIncidentOperationId(episode.interruptionId),
@@ -139,12 +152,11 @@ export async function reconcileSystemIncidents(
     createdCount: 0,
     replayedCount: 0,
     failedCount: 0,
+    conflictCount: 0,
   };
 
   for (const episode of episodes) {
     const operationId = systemIncidentOperationId(episode.interruptionId);
-    if (committed.has(operationId)) continue;
-
     const fact: HeartbeatEpisodeFact = {
       interruptionId: episode.interruptionId,
       examId: episode.examId,
@@ -156,6 +168,21 @@ export async function reconcileSystemIncidents(
         timeoutSeconds: episode.timeoutSeconds,
       },
     };
+
+    // Completion = the committed operation matches THIS System command and
+    // the episode's canonical payload (preReadOperationId's replay
+    // predicate). An operationId committed with a different command/payload
+    // falls through to delivery, whose pre-read raises the
+    // IdempotencyConflictError a bare-existence probe used to hide.
+    if (
+      isMatchingCommittedOperation(
+        committed.get(operationId),
+        SYSTEM_INCIDENT_CREATE_COMMAND,
+        deriveSystemIncidentCanonicalPayload(fact),
+      )
+    ) {
+      continue;
+    }
 
     try {
       const result = await deliverSystemIncidentForHeartbeatEpisode(
@@ -171,6 +198,9 @@ export async function reconcileSystemIncidents(
       }
     } catch (err) {
       counts.failedCount++;
+      if (err instanceof IdempotencyConflictError) {
+        counts.conflictCount++;
+      }
       try {
         opts.onError?.(episode.interruptionId, err);
       } catch {

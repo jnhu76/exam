@@ -18,6 +18,13 @@
  *       delivery runs → both authorities coexist; the System path still
  *       converges to exactly one SYSTEM incident; human-path semantics are
  *       unchanged.
+ *   C5  a caller-supplied human operationId collides with the episode's
+ *       derived System operationId (different command + payload committed
+ *       first) → reconciliation reports a VISIBLE conflict (never a silent
+ *       skip): "operationId exists" ≠ "System command completed".
+ *   C6  storm/backpressure: repeated reconciliation over a large completed
+ *       history plus a few pending episodes → zero duplicates, pending
+ *       converge, no per-cycle failure mode.
  *
  * Episodes are committed through the production heartbeat path
  * (`markAttemptDisrupted`), so the durable fact source is the real
@@ -39,11 +46,16 @@ import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createAttemptInterruptionRepo } from "@exam/db/src/repository/attemptInterruptionRepo.js";
+import { createAttemptInterruptionEventRepo } from "@exam/db/src/repository/attemptInterruptionEventRepo.js";
 import { createIncidentRepo } from "@exam/db/src/repository/incidentRepo.js";
 import type { RequestContext } from "@exam/domain";
+import { IdempotencyConflictError } from "@exam/domain";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import type { IncidentRepo } from "@exam/exam-engine";
-import { linkIncidentInterruption } from "@exam/exam-engine";
+import {
+  linkIncidentInterruption,
+  systemIncidentOperationId,
+} from "@exam/exam-engine";
 import type { Database } from "@exam/db/src/types.js";
 import { markAttemptDisrupted } from "../plugins/heartbeat.js";
 import {
@@ -282,6 +294,46 @@ describe("system incident delivery — durable completion evidence (#304 C1–C4
       .where(eq(schema.examIncidents.organizationId, fixture.organizationId));
   }
 
+  /**
+   * Commits `count` durable heartbeat episodes for the fixture attempt via
+   * direct ledger inserts (the same shape the production scanner path
+   * commits). Used to build a bounded large history without mutating the
+   * attempt's status pointer once per episode.
+   */
+  async function commitEpisodes(
+    db: Database,
+    fixture: Fixture,
+    count: number,
+  ): Promise<string[]> {
+    const episodeIds = Array.from({ length: count }, () => randomUUID());
+    await db.insert(schema.attemptInterruptions).values(
+      episodeIds.map((id) => ({
+        id,
+        organizationId: fixture.organizationId,
+        attemptId: fixture.attemptId,
+        createdAt: NOW,
+      })),
+    );
+    const eventRepo = createAttemptInterruptionEventRepo(db);
+    for (const id of episodeIds) {
+      await eventRepo.insert(fixture.humanCtx, {
+        attemptId: fixture.attemptId,
+        interruptionId: id,
+        eventType: "detected",
+        detectionSource: "heartbeat_timeout",
+        occurredAt: NOW,
+        observedLastActivityAt: new Date(NOW.getTime() - 120_000),
+        timeoutSeconds: 60,
+        policy: "operator_incident",
+        eligibleSeconds: null,
+        timeAdjustmentId: null,
+        actorId: null,
+        reasonCode: "heartbeat_timeout",
+      });
+    }
+    return episodeIds;
+  }
+
   it("C1: episode commits → reconciliation creates exactly one System incident; a second pass creates nothing", async () => {
     const fixture = await seedFixture(dbShared, "c1");
     const episodeId = await commitHeartbeatEpisode(dbShared, fixture);
@@ -512,4 +564,167 @@ describe("system incident delivery — durable completion evidence (#304 C1–C4
     expect(humanLink).toBeTruthy();
     expect(systemLink).toBeTruthy();
   });
+
+  it("C5: caller-supplied human operationId colliding with the derived System operationId → VISIBLE conflict, never a silent skip", async () => {
+    const fixture = await seedFixture(dbShared, "c5");
+    const episodeId = await commitHeartbeatEpisode(dbShared, fixture);
+    const collisionOperationId = systemIncidentOperationId(episodeId);
+
+    // The human incident API accepts a caller-supplied operationId. The
+    // human create command commits FIRST under the episode-derived
+    // operationId, with its own command identity and payload — the exact
+    // adversarial case a bare-existence probe would mistake for completion.
+    const humanRepo = createIncidentRepo(dbShared);
+    const humanIncident = await humanRepo.insert(fixture.humanCtx, {
+      examId: fixture.examId,
+      attemptId: fixture.attemptId,
+      candidateId: fixture.candidateId,
+      type: "other",
+      severity: "info",
+      occurredAt: null,
+      description: "human case committed under the colliding operationId",
+      reportedBy: fixture.humanCtx.actorId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    await humanRepo.appendEvent(fixture.humanCtx, {
+      incidentId: humanIncident.id,
+      eventType: "incident_created",
+      commandType: "createExamIncident",
+      operationId: collisionOperationId,
+      actorId: fixture.humanCtx.actorId,
+      beforeVersion: 0,
+      afterVersion: 1,
+      payload: {},
+      createdAt: NOW,
+    });
+
+    const failures: Array<{ interruptionId: string; err: unknown }> = [];
+    const counts = await reconcileSystemIncidents(
+      dbShared,
+      fixture.detectorCtx,
+      {
+        now: NOW,
+        onError: (interruptionId, err) => {
+          failures.push({ interruptionId, err });
+        },
+      },
+    );
+
+    // NOT completed: no System incident exists for the episode.
+    expect(counts.createdCount).toBe(0);
+    // NOT silently skipped: the conflicting operation is counted and
+    // reported — the engine pre-read raises IdempotencyConflictError, the
+    // same arbiter semantics as every other incident command.
+    expect(counts.failedCount).toBe(1);
+    expect(counts.conflictCount).toBe(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.interruptionId).toBe(episodeId);
+    expect(failures[0]!.err).toBeInstanceOf(IdempotencyConflictError);
+
+    // The arbiter row still belongs to the human command; a later pass
+    // surfaces the same conflict again (never converts it into a skip).
+    const again = await reconcileSystemIncidents(
+      dbShared,
+      fixture.detectorCtx,
+      { now: NOW },
+    );
+    expect(again.createdCount).toBe(0);
+    expect(again.conflictCount).toBe(1);
+    expect(await orgSystemIncidents(fixture)).toHaveLength(1);
+  });
+
+  it("C6: storm/backpressure — large completed history + pending episodes converge with zero duplicates across repeated cycles", async () => {
+    const fixture = await seedFixture(dbShared, "c6");
+    const COMPLETED_EPISODES = 200;
+    const PENDING_EPISODES = 5;
+    const TOTAL = COMPLETED_EPISODES + PENDING_EPISODES;
+
+    const factFor = (episodeId: string) => ({
+      interruptionId: episodeId,
+      examId: fixture.examId,
+      attemptId: fixture.attemptId,
+      candidateId: fixture.candidateId,
+      detected: {
+        occurredAt: NOW,
+        observedLastActivityAt: new Date(NOW.getTime() - 120_000),
+        timeoutSeconds: 60,
+      },
+    });
+
+    // Bounded large history: real heartbeat episodes on the fixture attempt,
+    // delivered through the PRODUCTION path so the arbiter rows are genuine
+    // committed System operations, not synthetic rows.
+    const completedIds = await commitEpisodes(
+      dbShared,
+      fixture,
+      COMPLETED_EPISODES,
+    );
+    for (const episodeId of completedIds) {
+      const result = await deliverSystemIncidentForHeartbeatEpisode(
+        dbShared,
+        fixture.detectorCtx,
+        factFor(episodeId),
+        { now: NOW },
+      );
+      expect(result.outcome).toBe("applied");
+    }
+
+    // A few pending episodes on top of the large completed history.
+    const pendingIds = await commitEpisodes(
+      dbShared,
+      fixture,
+      PENDING_EPISODES,
+    );
+
+    // Repeated reconciliation cycles over the full history: pending
+    // converge, then every steady-state cycle is a clean no-op.
+    const cycle1 = await reconcileSystemIncidents(
+      dbShared,
+      fixture.detectorCtx,
+      { now: NOW },
+    );
+    expect(cycle1.createdCount).toBe(PENDING_EPISODES);
+    expect(cycle1.replayedCount).toBe(0);
+    expect(cycle1.failedCount).toBe(0);
+    expect(cycle1.conflictCount).toBe(0);
+
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const steady = await reconcileSystemIncidents(
+        dbShared,
+        fixture.detectorCtx,
+        { now: NOW },
+      );
+      expect(steady.createdCount).toBe(0);
+      expect(steady.replayedCount).toBe(0);
+      expect(steady.failedCount).toBe(0);
+      expect(steady.conflictCount).toBe(0);
+    }
+
+    // Zero duplicates: exactly one arbiter event, incident, and evidence
+    // link per episode — no storm, no pathological commit behavior.
+    expect(await orgSystemIncidents(fixture)).toHaveLength(TOTAL);
+    const events = await dbShared
+      .select({ operationId: schema.examIncidentEvents.operationId })
+      .from(schema.examIncidentEvents)
+      .where(
+        eq(schema.examIncidentEvents.organizationId, fixture.organizationId),
+      );
+    expect(events).toHaveLength(TOTAL);
+    const opIds = new Set(events.map((e) => e.operationId));
+    expect(opIds.size).toBe(TOTAL);
+    for (const id of [...completedIds, ...pendingIds]) {
+      expect(opIds.has(systemIncidentOperationId(id))).toBe(true);
+    }
+    const links = await dbShared
+      .select({ id: schema.examIncidentInterruptionLinks.id })
+      .from(schema.examIncidentInterruptionLinks)
+      .where(
+        eq(
+          schema.examIncidentInterruptionLinks.organizationId,
+          fixture.organizationId,
+        ),
+      );
+    expect(links).toHaveLength(TOTAL);
+  }, 180_000);
 });
