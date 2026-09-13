@@ -12,7 +12,8 @@
 //   deadline      duration null, closeAt present, strict only — global
 //                 cutoff without a personal duration
 //   untimed       duration null, closeAt null, strict only — open-ended
-//   timed_sync    rejected in Phase A (no admission/queue runtime yet)
+//   timed_sync    rejected pending the B2 product-activation decision; the
+//                 #292 durable admission runtime already exists
 
 import { describe, expect, it } from "vitest";
 import { ExamPolicyConflictCode } from "@exam/domain";

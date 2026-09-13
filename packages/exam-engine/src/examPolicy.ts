@@ -230,10 +230,9 @@ export function validateExamPolicyForExam(exam: Exam): ExamPolicyConflict[] {
  *                 exceed the global closeAt
  *   untimed       duration null, closeAt null (open-ended), strict only —
  *                 there is no deadline to compensate
- *   timed_sync    product activation deferred (B2); the mode core is
- *                 orthogonal to requireQueue — only timed_sync with
- *                 requireQueue=true waits for the #292 durable admission
- *                 runtime
+ *   timed_sync    product activation deferred pending the B2 decision;
+ *                 the mode core and #292 durable admission runtime already
+ *                 exist
  */
 function validateTimingModeMatrix(
   timing: ResolvedExamPolicy["timing"],
@@ -305,9 +304,8 @@ function validateTimingModeMatrix(
     return [];
   }
 
-  // timed_sync — product activation deferred (B2); the mode core is
-  // orthogonal to requireQueue, but requireQueue=true waits for the #292
-  // durable admission runtime.
+  // timed_sync — product activation remains deferred pending the B2
+  // decision; the mode core and #292 durable admission runtime already exist.
   return invalid(["timingMode"], "timed_sync is not supported yet");
 }
 
