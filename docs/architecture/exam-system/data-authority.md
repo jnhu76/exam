@@ -4,7 +4,7 @@
 
 ```text
 Last verified against commit:
-aeb9e938d5ddf87103a60607a85170cf87327845
+7a2b753f327c9214dcea10fcaf24afd22f54460c
 
 Verification scope:
 Persisted-state contract hardening (#542): current grading authority,
@@ -78,7 +78,9 @@ Draft answers (`exam_attempts.answers`) are authoritative for the candidate's wo
 | Attempt pass/fail | `exam_attempts.passed` | `finalizeTerminalGrading()` | At terminal closure |
 | Per-question results | `exam_attempts.gradingResult` | `finalizeTerminalGrading()` | At terminal closure |
 
-**Invariant**: `materializeGradingWorkset()` (submit-freeze, inside `submitAttempt()`) is the SOLE workset creation site. Every grading surface — terminal closure, manual scoring, submit re-entry — requires an exactly complete, terminal-consistent workset (`aggregateGradingEntries()` / `validateGradingWorksetConsistency()`), and both fail closed on a missing, partial, or mismatched workset.
+**Invariant**: `materializeGradingWorkset()` (submit-freeze, inside `submitAttempt()`) is the sole CURRENT RUNTIME / submit-freeze workset creation site. Every grading surface — terminal closure, manual scoring, submit re-entry — requires an exactly complete, terminal-consistent workset and fails closed on a missing, partial, or mismatched workset. The two gates check complementary layers: `aggregateGradingEntries()` checks the terminal shape (exact count, gradingMode, maxScore, terminal status, earnedScore presence/range), while `validateGradingWorksetConsistency()` additionally checks every frozen provenance field (`candidateAnswer`, `standardAnswer`, `correct`) against the canonical derivation from frozen submitted truth.
+
+The `recover:legacy-grading-workset` operator script is a bounded OFFLINE LEGACY-REPAIR EXCEPTION to that sole-creation rule: it reconstructs a missing workset from already-frozen submitted truth for proven historical crash residue only (§6.3), in a quiesced migration window, and never writes terminal facts. It is not a runtime creation surface and does not weaken the runtime single-authority rule — no route, orchestrator, or scanner may reach it.
 
 ### 6.1 Grading workset is the single durable truth
 

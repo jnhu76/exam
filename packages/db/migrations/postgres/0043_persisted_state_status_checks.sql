@@ -106,10 +106,14 @@
 --                     does NOT terminalize the attempt: score / passed /
 --                     grading_result / graded_at / enrollment projections
 --                     stay untouched, still owned by normal terminal grading.
---                     Zero workset → materialized exactly once; exact complete
---                     workset → validated no-op; partial or mismatched
---                     workset → fails closed with no writes. Use --dry-run
---                     to inspect the plan first.
+--                     Zero workset → materialized exactly once (canonical
+--                     derivation + grading_status realignment); exact complete
+--                     workset with a MATCHING canonical grading_status →
+--                     validated no-op; exact complete workset with a
+--                     MISMATCHED grading_status → fails closed (contradictory
+--                     mixed state — investigate before recovery); partial or
+--                     mismatched workset → fails closed with no writes. Use
+--                     --dry-run to inspect the plan first.
 --     5. Verify:      GET /api/system/diagnostics no longer reports the
 --                     attempt as submitted_workset_mismatch once the workset
 --                     is complete. submitted_not_terminalized (fired for

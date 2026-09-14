@@ -916,3 +916,255 @@ describe("recover-legacy-grading-workset (EXAM-542-CORRECTIVE-4)", () => {
     await restorePostMigrationShape(db);
   });
 });
+
+describe("recover-legacy-grading-workset (EXAM-542-CORRECTIVE-5)", () => {
+  let db: Database;
+  let conn: Awaited<ReturnType<typeof createDatabase>>;
+  let cleanup: () => Promise<void>;
+  let orgId: string;
+  let ctx: RequestContext;
+
+  beforeAll(async () => {
+    const iso = await setupIsolatedTestDb({
+      namespace: "script-recover-workset-c5",
+      databaseUrl: resolveTestDbUrl(),
+    });
+    cleanup = iso.cleanup;
+    conn = await createDatabase(resolveTestDbUrl(), iso.schemaName);
+    db = conn.db;
+    await migratePostgres(db, { migrationsSchema: iso.schemaName });
+    const rows = await db
+      .insert(schema.organizations)
+      .values({
+        id: crypto.randomUUID(),
+        name: "Recovery Org C5",
+        displayName: "Recovery Org C5",
+        slug: `rw5-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: schema.organizations.id });
+    orgId = rows[0]!.id;
+    ctx = { ...SYSTEM_CTX, organizationId: orgId };
+  }, 30_000);
+
+  afterAll(async () => {
+    await conn.sql.end();
+    await cleanup();
+  }, 30_000);
+
+  /** Seeds a submitted+backfilled residue row ready for workset injection. */
+  async function seedReadyResidue(
+    questionSnapshot: QuestionSnapshot[],
+    answers: unknown[],
+  ): Promise<string> {
+    const id = crypto.randomUUID();
+    await seedLegacyResidue(db, orgId, { id, questionSnapshot, answers });
+    await rewindGradingToSubmitted(db, id);
+    await runBackfill(db);
+    return id;
+  }
+
+  async function setGradingStatus(id: string, label: string) {
+    await db.execute(
+      sql.raw(
+        `UPDATE exam_attempts SET grading_status = '${label}' WHERE id = '${id}'`,
+      ),
+    );
+  }
+
+  it("T17: complete-looking objective workset with drifted candidateAnswer FAILS CLOSED — no validated_no_op, no writes", async () => {
+    const id = await seedReadyResidue(
+      objectiveSnapshot("q1", "b"),
+      draftAnswer("q1", "b"),
+    );
+
+    await db.insert(schema.attemptGradingEntries).values({
+      id: crypto.randomUUID(),
+      organizationId: orgId,
+      attemptId: id,
+      questionId: "q1",
+      gradingMode: "auto",
+      status: "completed_auto",
+      maxScore: 100,
+      earnedScore: 100,
+      candidateAnswer: "drifted", // canonical frozen submitted truth is "b"
+      standardAnswer: "b",
+      correct: true,
+    });
+
+    await expect(recoverLegacyGradingWorkset(db, id)).rejects.toThrow(
+      /candidateAnswer.*frozen submitted truth/s,
+    );
+    const entries = await getEntryRows(db, id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.candidateAnswer).toBe("drifted");
+    expect((await getAttemptRow(db, id)).gradingStatus).toBe("auto_graded");
+
+    await restorePostMigrationShape(db);
+  });
+
+  it("T18: complete-looking objective workset with drifted standardAnswer FAILS CLOSED", async () => {
+    const id = await seedReadyResidue(
+      objectiveSnapshot("q1", "b"),
+      draftAnswer("q1", "b"),
+    );
+
+    await db.insert(schema.attemptGradingEntries).values({
+      id: crypto.randomUUID(),
+      organizationId: orgId,
+      attemptId: id,
+      questionId: "q1",
+      gradingMode: "auto",
+      status: "completed_auto",
+      maxScore: 100,
+      earnedScore: 100,
+      candidateAnswer: "b",
+      standardAnswer: "drifted", // canonical frozen snapshot truth is "b"
+      correct: true,
+    });
+
+    await expect(recoverLegacyGradingWorkset(db, id)).rejects.toThrow(
+      /standardAnswer.*frozen questionSnapshot truth/s,
+    );
+    const entries = await getEntryRows(db, id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.standardAnswer).toBe("drifted");
+
+    await restorePostMigrationShape(db);
+  });
+
+  it("T19: complete-looking objective workset with canonical earnedScore but drifted correct FAILS CLOSED", async () => {
+    const id = await seedReadyResidue(
+      objectiveSnapshot("q1", "b"),
+      draftAnswer("q1", "b"),
+    );
+
+    await db.insert(schema.attemptGradingEntries).values({
+      id: crypto.randomUUID(),
+      organizationId: orgId,
+      attemptId: id,
+      questionId: "q1",
+      gradingMode: "auto",
+      status: "completed_auto",
+      maxScore: 100,
+      earnedScore: 100,
+      candidateAnswer: "b",
+      standardAnswer: "b",
+      correct: false, // canonical objective result is true
+    });
+
+    await expect(recoverLegacyGradingWorkset(db, id)).rejects.toThrow(
+      /correct.*!=.*expected/s,
+    );
+    const entries = await getEntryRows(db, id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.correct).toBe(false);
+
+    await restorePostMigrationShape(db);
+  });
+
+  it("T20: manual canonical workset + grading_status='auto_graded' FAILS CLOSED — no validated_no_op, no mutation", async () => {
+    const id = await seedReadyResidue(
+      manualSnapshot("m1"),
+      draftAnswer("m1", "考生作答"),
+    );
+
+    // Build the exact canonical manual workset via the accepted materialize
+    // branch (which also aligns the label to pending_manual), then flip the
+    // label back to the migration default — the non-zero branch must refuse.
+    await recoverLegacyGradingWorkset(db, id);
+    await setGradingStatus(id, "auto_graded");
+
+    await expect(recoverLegacyGradingWorkset(db, id)).rejects.toThrow(
+      /structurally valid but grading_status does not match the canonical frozen classification/s,
+    );
+    const attempt = await getAttemptRow(db, id);
+    expect(attempt.status).toBe("submitted");
+    expect(attempt.gradingStatus).toBe("auto_graded");
+    const entries = await getEntryRows(db, id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.status).toBe("pending_manual");
+    expect(entries[0]!.earnedScore).toBeNull();
+
+    await restorePostMigrationShape(db);
+  });
+
+  it("T20b: the real manual grading command refuses that drifted label — a validated_no_op would be a false success", async () => {
+    const id = await seedReadyResidue(
+      manualSnapshot("m1"),
+      draftAnswer("m1", "考生作答"),
+    );
+    await recoverLegacyGradingWorkset(db, id);
+    await setGradingStatus(id, "auto_graded");
+
+    await expect(
+      gradeManualViaGradingSurface(db, ctx, id, "m1", 80),
+    ).rejects.toThrow(/gradingStatus is auto_graded, expected pending_manual/s);
+
+    await restorePostMigrationShape(db);
+  });
+
+  it("T21: objective canonical workset + grading_status='pending_manual' FAILS CLOSED — no mutation", async () => {
+    const id = await seedReadyResidue(
+      objectiveSnapshot("q1", "b"),
+      draftAnswer("q1", "b"),
+    );
+
+    // Canonical objective workset with the matching label, then drift the
+    // label — the non-zero branch must refuse both directions of drift.
+    await recoverLegacyGradingWorkset(db, id);
+    await setGradingStatus(id, "pending_manual");
+
+    await expect(recoverLegacyGradingWorkset(db, id)).rejects.toThrow(
+      /structurally valid but grading_status does not match the canonical frozen classification/s,
+    );
+    const attempt = await getAttemptRow(db, id);
+    expect(attempt.status).toBe("submitted");
+    expect(attempt.gradingStatus).toBe("pending_manual");
+    const entries = await getEntryRows(db, id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.status).toBe("completed_auto");
+
+    await restorePostMigrationShape(db);
+  });
+
+  it("dry-run also refuses the mismatched-label non-zero workset without writing", async () => {
+    const id = await seedReadyResidue(
+      manualSnapshot("m1"),
+      draftAnswer("m1", "考生作答"),
+    );
+    await recoverLegacyGradingWorkset(db, id);
+    await setGradingStatus(id, "auto_graded");
+
+    // Dry-run takes no lock and must fail closed on the same contradictory
+    // shape, not report a would_validate plan over it.
+    await expect(
+      recoverLegacyGradingWorkset(db, id, { dryRun: true }),
+    ).rejects.toThrow(
+      /structurally valid but grading_status does not match the canonical frozen classification/s,
+    );
+    const attempt = await getAttemptRow(db, id);
+    expect(attempt.gradingStatus).toBe("auto_graded");
+    expect(await getEntryRows(db, id)).toHaveLength(1);
+
+    await restorePostMigrationShape(db);
+  });
+
+  it("non-zero exact manual workset with the matching canonical label still validates as a no-op", async () => {
+    const id = await seedReadyResidue(
+      manualSnapshot("m1"),
+      draftAnswer("m1", "考生作答"),
+    );
+
+    // Materialize (aligns label to pending_manual); a second run now hits the
+    // NON-zero branch with a matching label and must remain validated_no_op.
+    await recoverLegacyGradingWorkset(db, id);
+    const second = await recoverLegacyGradingWorkset(db, id);
+    expect(second.action).toBe("validated_no_op");
+    expect(second.gradingStatusAlignment).toBeNull();
+    expect(await getEntryRows(db, id)).toHaveLength(1);
+
+    await restorePostMigrationShape(db);
+  });
+});

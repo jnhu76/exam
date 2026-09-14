@@ -40,8 +40,14 @@
  *   submitted_answers IS NULL                    → refuse (run the backfill)
  *   questionSnapshot absent/empty/malformed      → refuse
  *   ZERO workset                                 → MAY MATERIALIZE (exactly
- *                                                   once, canonical derivation)
- *   EXACT COMPLETE workset                       → validate + NO-OP (idempotent)
+ *                                                   once, canonical derivation
+ *                                                   + label alignment)
+ *   EXACT COMPLETE workset + matching label      → validate + NO-OP (idempotent)
+ *   EXACT COMPLETE workset + mismatched label    → refuse (contradictory mixed
+ *                                                   state — the zero-workset
+ *                                                   label alignment does NOT
+ *                                                   extend to the non-zero
+ *                                                   branch)
  *   PARTIAL / MISMATCHED / EXTRA workset         → refuse via
  *                                                   validateGradingWorksetConsistency,
  *                                                   no insert, no overwrite
@@ -280,8 +286,23 @@ async function recoverInTx(
 
   // PARTIAL / MISMATCHED / EXTRA workset → validateGradingWorksetConsistency
   // throws and NOTHING is written (no fill-gaps, no overwrite).
-  // EXACT COMPLETE workset → validation passes → idempotent NO-OP.
+  // EXACT COMPLETE workset → validation passes → idempotent NO-OP, but only
+  // when the lifecycle label also matches the canonical frozen classification:
+  // ZERO workset = proven legacy residue (the materialize branch may align the
+  // label); NON-ZERO workset + mismatched label = contradictory, unexplained
+  // mixed state — investigate before recovery, no auto-realign here.
   validateGradingWorksetConsistency(attempt, existingEntries);
+
+  if (attempt.gradingStatus !== canonicalGradingStatus) {
+    throw new Error(
+      `recover: attempt ${attemptId} workset is structurally valid but ` +
+        `grading_status does not match the canonical frozen classification ` +
+        `('${attempt.gradingStatus ?? "NULL"}' != '${canonicalGradingStatus}'). ` +
+        "Refusing to return validated_no_op: a non-zero workset with a " +
+        "mismatched lifecycle label is contradictory data, not proven crash " +
+        "residue — investigate before recovery.",
+    );
+  }
 
   return {
     attemptId,

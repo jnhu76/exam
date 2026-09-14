@@ -795,7 +795,9 @@ describe("submitAttempt idempotent workset validation", () => {
         earnedScore: 30,
         candidateAnswer: "ans",
         standardAnswer: null,
-        correct: null,
+        // The real completeManualEntry write derives correct from the score
+        // (30 >= 60 → false); null is not a shape that writer produces.
+        correct: false,
         comment: "good effort",
         gradedBy: "grader-1",
         gradedAt: NOW,
@@ -833,5 +835,204 @@ describe("submitAttempt idempotent workset validation", () => {
         resolution: noneResolution,
       }),
     ).rejects.toThrow(/before authoritative submission freeze/i);
+  });
+});
+
+// ── exact durable-field validation (EXAM-542-CORRECTIVE-5) ────────
+//
+// A count-correct workset can still be wrong: candidateAnswer /
+// standardAnswer / correct are durable provenance carried into the terminal
+// result projection (aggregateGradingEntries reads entry.correct and
+// entry.candidateAnswer), so a drift in any of them is persisted-truth
+// corruption the previous validator let through.
+
+describe("validateGradingWorksetConsistency exact-field validation", () => {
+  function objectiveAttempt(): ExamAttempt {
+    return makeAttempt({
+      status: "submitted",
+      questionSnapshot: [objectiveSnapshot("q-obj", 40, "a")],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-obj", value: "a" }],
+      },
+      gradingStatus: "auto_graded",
+    });
+  }
+
+  function manualAttempt(): ExamAttempt {
+    return makeAttempt({
+      status: "submitted",
+      questionSnapshot: [textResponseSnapshot("q-text", 60)],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-text", value: "ans" }],
+      },
+      gradingStatus: "pending_manual",
+    });
+  }
+
+  it("objective candidateAnswer drift fails closed", () => {
+    const entry = makeEntry("attempt-1", "q-obj", {
+      candidateAnswer: "b", // canonical frozen submitted truth is "a"
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(objectiveAttempt(), [entry]),
+    ).toThrow(/candidateAnswer.*frozen submitted truth/i);
+  });
+
+  it("objective standardAnswer drift fails closed", () => {
+    const entry = makeEntry("attempt-1", "q-obj", {
+      standardAnswer: "c", // canonical frozen snapshot value is "a"
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(objectiveAttempt(), [entry]),
+    ).toThrow(/standardAnswer.*frozen questionSnapshot truth/i);
+  });
+
+  it("objective correct drift fails closed (canonical earnedScore, wrong correct)", () => {
+    const entry = makeEntry("attempt-1", "q-obj", {
+      earnedScore: 40,
+      correct: false, // canonical objective result for "a" vs "a" is true
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(objectiveAttempt(), [entry]),
+    ).toThrow(/correct.*!=.*expected/i);
+  });
+
+  it("manual candidateAnswer drift fails closed", () => {
+    const entry = makeEntry("attempt-1", "q-text", {
+      gradingMode: "manual",
+      status: "pending_manual",
+      maxScore: 60,
+      earnedScore: null,
+      candidateAnswer: "other answer", // canonical frozen submitted truth is "ans"
+      standardAnswer: null,
+      correct: null,
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(manualAttempt(), [entry]),
+    ).toThrow(/candidateAnswer.*frozen submitted truth/i);
+  });
+
+  it("manual standardAnswer drift fails closed", () => {
+    const entry = makeEntry("attempt-1", "q-text", {
+      gradingMode: "manual",
+      status: "pending_manual",
+      maxScore: 60,
+      earnedScore: null,
+      candidateAnswer: "ans",
+      standardAnswer: "drifted", // canonical frozen snapshot value is null
+      correct: null,
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(manualAttempt(), [entry]),
+    ).toThrow(/standardAnswer.*frozen questionSnapshot truth/i);
+  });
+
+  it("pending_manual entry with non-null correct fails closed", () => {
+    const entry = makeEntry("attempt-1", "q-text", {
+      gradingMode: "manual",
+      status: "pending_manual",
+      maxScore: 60,
+      earnedScore: null,
+      candidateAnswer: "ans",
+      standardAnswer: null,
+      correct: true, // pending manual work has no correctness yet
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(manualAttempt(), [entry]),
+    ).toThrow(/pending_manual entry must have null correct/i);
+  });
+
+  it("structured candidateAnswer compares structurally — key order alone is not drift", () => {
+    // A structured answer round-tripped through jsonb can come back with a
+    // different key order than the in-memory frozen snapshot; canonical jsonb
+    // equality (key-order-insensitive, array-order-preserving) must not
+    // false-reject it.
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [textResponseSnapshot("q-text", 60)],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-text", value: { points: 2, claim: "x" } }],
+      },
+      gradingStatus: "pending_manual",
+    });
+    const entry = makeEntry("attempt-1", "q-text", {
+      gradingMode: "manual",
+      status: "pending_manual",
+      maxScore: 60,
+      earnedScore: null,
+      candidateAnswer: { claim: "x", points: 2 },
+      standardAnswer: null,
+      correct: null,
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(attempt, [entry]),
+    ).not.toThrow();
+  });
+
+  it("structured candidateAnswer array-order difference IS drift — array order is preserved", () => {
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [textResponseSnapshot("q-text", 60)],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-text", value: ["a", "b"] }],
+      },
+      gradingStatus: "pending_manual",
+    });
+    const entry = makeEntry("attempt-1", "q-text", {
+      gradingMode: "manual",
+      status: "pending_manual",
+      maxScore: 60,
+      earnedScore: null,
+      candidateAnswer: ["b", "a"],
+      standardAnswer: null,
+      correct: null,
+    });
+    expect(() => validateGradingWorksetConsistency(attempt, [entry])).toThrow(
+      /candidateAnswer.*frozen submitted truth/i,
+    );
+  });
+
+  it("T22: legitimate completed_manual progression (real write-contract shape) remains valid", () => {
+    // The real completeManualEntry writes earnedScore + correct derived as
+    // earnedScore >= maxScore + comment/gradedBy/gradedAt. The validator must
+    // accept this grader-owned progression even though the initial expected
+    // entry was pending with null score.
+    const entry = makeEntry("attempt-1", "q-text", {
+      gradingMode: "manual",
+      status: "completed_manual",
+      maxScore: 60,
+      earnedScore: 30,
+      candidateAnswer: "ans",
+      standardAnswer: null,
+      correct: false, // 30 >= 60 is false — the real write contract
+      comment: "partial",
+      gradedBy: "grader-1",
+      gradedAt: NOW,
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(manualAttempt(), [entry]),
+    ).not.toThrow();
+  });
+
+  it("completed_manual correct not matching the write-contract derivation fails closed", () => {
+    const entry = makeEntry("attempt-1", "q-text", {
+      gradingMode: "manual",
+      status: "completed_manual",
+      maxScore: 60,
+      earnedScore: 60,
+      candidateAnswer: "ans",
+      standardAnswer: null,
+      correct: false, // 60 >= 60 is true — drifted durable truth
+      comment: "full",
+      gradedBy: "grader-1",
+      gradedAt: NOW,
+    });
+    expect(() =>
+      validateGradingWorksetConsistency(manualAttempt(), [entry]),
+    ).toThrow(/correct.*write-contract/i);
   });
 });

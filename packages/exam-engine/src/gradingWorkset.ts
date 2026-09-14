@@ -7,6 +7,7 @@ import type {
   QuestionSnapshot,
 } from "@exam/domain";
 import { gradeQuestion, isManualGradedQuestion } from "@exam/domain";
+import { payloadsEqual } from "./incidentCommands.js";
 
 /**
  * Repository port for the materialized grading workset (P3-L0-2E). The
@@ -200,14 +201,25 @@ export async function materializeGradingWorkset(
  * Throws on ANY inconsistency. Does not modify entries, does not fill gaps,
  * does not repair partial state, does not overwrite mismatched rows.
  *
- * Validation checks per frozen question:
- * - Entry exists (count + question ID set match)
- * - `gradingMode` matches canonical classification
- * - `maxScore` matches frozen `QuestionSnapshot.score`
- * - Objective: `status === completed_auto` and `earnedScore` matches canonical
- *   `gradeQuestion` result from frozen submitted answer
- * - Manual: `status ∈ {pending_manual, completed_manual}`; pending requires
- *   `earnedScore === null`; completed requires `0 <= earnedScore <= maxScore`
+ * Two rule classes, deliberately distinct (EXAM-542-CORRECTIVE-5):
+ *
+ * - Frozen structural consistency — fields whose drift corrupts durable
+ *   result truth must equal the canonical derivation on EVERY entry:
+ *   - Entry exists (count + question ID set match)
+ *   - `gradingMode` matches canonical classification
+ *   - `maxScore` matches frozen `QuestionSnapshot.score`
+ *   - `candidateAnswer` matches the frozen `submitted_answers` value
+ *   - `standardAnswer` matches the frozen `questionSnapshot` value
+ *   - Objective: `status === completed_auto`, `earnedScore` and `correct`
+ *     match the canonical `gradeQuestion` result
+ * - Current lifecycle progression — manual entries legitimately advance after
+ *   freeze (`pending_manual → completed_manual`), so a completed manual entry
+ *   is validated against the grader write contract, never against its initial
+ *   pending state: `0 <= earnedScore <= maxScore` and
+ *   `correct === (earnedScore >= maxScore)` (the completeManualEntry
+ *   derivation). A pending entry must still carry null earnedScore/correct.
+ *
+ * `comment` / `gradedBy` / `gradedAt` are grader-owned and not validated.
  *
  * @throws {Error} on any workset inconsistency.
  */
@@ -252,6 +264,23 @@ export function validateGradingWorksetConsistency(
       );
     }
 
+    // Provenance fields: structural (jsonb-canonical) equality — a stored
+    // JSON value may differ from the in-memory snapshot by key order alone.
+    if (!payloadsEqual(entry.candidateAnswer, exp.candidateAnswer)) {
+      throw new Error(
+        `Grading workset inconsistency for attempt ${attempt.id}, ` +
+          `question ${exp.questionId}: ` +
+          "candidateAnswer does not match frozen submitted truth.",
+      );
+    }
+    if (!payloadsEqual(entry.standardAnswer, exp.standardAnswer)) {
+      throw new Error(
+        `Grading workset inconsistency for attempt ${attempt.id}, ` +
+          `question ${exp.questionId}: ` +
+          "standardAnswer does not match frozen questionSnapshot truth.",
+      );
+    }
+
     if (exp.gradingMode === "auto") {
       if (entry.status !== "completed_auto") {
         throw new Error(
@@ -268,6 +297,14 @@ export function validateGradingWorksetConsistency(
             "(objective score must match canonical frozen truth).",
         );
       }
+      if (entry.correct !== exp.correct) {
+        throw new Error(
+          `Grading workset inconsistency for attempt ${attempt.id}, ` +
+            `question ${exp.questionId}: ` +
+            `correct ${entry.correct} != expected ${exp.correct} ` +
+            "(objective correctness must match canonical frozen truth).",
+        );
+      }
     } else {
       if (
         entry.status !== "pending_manual" &&
@@ -280,12 +317,21 @@ export function validateGradingWorksetConsistency(
             "(expected pending_manual or completed_manual).",
         );
       }
-      if (entry.status === "pending_manual" && entry.earnedScore !== null) {
-        throw new Error(
-          `Grading workset inconsistency for attempt ${attempt.id}, ` +
-            `question ${exp.questionId}: ` +
-            "pending_manual entry must have null earnedScore.",
-        );
+      if (entry.status === "pending_manual") {
+        if (entry.earnedScore !== null) {
+          throw new Error(
+            `Grading workset inconsistency for attempt ${attempt.id}, ` +
+              `question ${exp.questionId}: ` +
+              "pending_manual entry must have null earnedScore.",
+          );
+        }
+        if (entry.correct !== null) {
+          throw new Error(
+            `Grading workset inconsistency for attempt ${attempt.id}, ` +
+              `question ${exp.questionId}: ` +
+              "pending_manual entry must have null correct.",
+          );
+        }
       }
       if (entry.status === "completed_manual") {
         if (entry.earnedScore === null) {
@@ -301,6 +347,16 @@ export function validateGradingWorksetConsistency(
               `question ${exp.questionId}: ` +
               `completed_manual earnedScore ${entry.earnedScore} out of range ` +
               `[0, ${entry.maxScore}].`,
+          );
+        }
+        // The grader does not own `correct`: completeManualEntry derives it
+        // from the awarded score, so it stays exactly checkable.
+        if (entry.correct !== entry.earnedScore >= entry.maxScore) {
+          throw new Error(
+            `Grading workset inconsistency for attempt ${attempt.id}, ` +
+              `question ${exp.questionId}: ` +
+              `correct ${entry.correct} does not match the write-contract ` +
+              "derivation (earnedScore >= maxScore).",
           );
         }
       }
