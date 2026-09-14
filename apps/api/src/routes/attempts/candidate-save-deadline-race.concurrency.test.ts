@@ -31,7 +31,10 @@
  * updated + committed after the reader's snapshot raises 40001
  * (serialization_failure); `executeInTransaction` retries the whole save
  * transaction, which then observes the new authority. That retry-convergence
- * is the mechanism under test.
+ * is the mechanism under test. NOTE: the fix's correctness rests solely on
+ * that Exam-row lock in the preparation seam — an incidental FK parent check
+ * (SELECT ... FOR KEY SHARE OF exams) observed during investigation is NOT
+ * load-bearing and must not be treated as a substitute serialization point.
  */
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
