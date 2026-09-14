@@ -77,7 +77,6 @@ export const CandidateExamSummarySchema = z.object({
       "in_progress",
       "disrupted",
       "submitted",
-      "grading",
       "graded",
       "voided",
     ])

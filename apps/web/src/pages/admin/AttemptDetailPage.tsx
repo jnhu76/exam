@@ -484,11 +484,9 @@ export function AttemptDetailPage() {
         setError(
           data.status === "submitted"
             ? t("admin.attemptDetail.errors.statusSubmitted")
-            : data.status === "grading"
-              ? t("admin.attemptDetail.errors.statusGrading")
-              : data.status === "graded"
-                ? t("admin.attemptDetail.errors.statusGradedHidden")
-                : t("admin.attemptDetail.errors.resultHidden"),
+            : data.status === "graded"
+              ? t("admin.attemptDetail.errors.statusGradedHidden")
+              : t("admin.attemptDetail.errors.resultHidden"),
         );
       }
     } catch {

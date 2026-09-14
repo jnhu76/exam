@@ -198,21 +198,6 @@ describe("ResultPage", () => {
     expect(screen.queryByText("正在评分")).not.toBeInTheDocument();
   });
 
-  it("shows '正在评分' when status is grading and no score", async () => {
-    getMock.mockResolvedValue({
-      attemptId: "attempt-1",
-      status: "grading",
-      showResultImmediately: false,
-      examTitle: "能力测验",
-    });
-
-    renderPage();
-
-    expect(
-      await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("正在评分");
-  });
-
   it("truncates long fill blank answers with the full value in title", async () => {
     const longAnswer = "这是一个需要在悬停时查看完整内容的较长填空答案";
     getMock.mockResolvedValue({

@@ -2140,13 +2140,8 @@ describe("attemptCommands", () => {
       expect(outcome).toBe("already_in_progress");
     });
 
-    it("returns terminal when the locked attempt is submitted/grading/graded/voided", async () => {
-      for (const status of [
-        "submitted",
-        "grading",
-        "graded",
-        "voided",
-      ] as const) {
+    it("returns terminal when the locked attempt is submitted/graded/voided", async () => {
+      for (const status of ["submitted", "graded", "voided"] as const) {
         const attempt = makeAttempt({ status });
         const attRepo = makeAttemptRepo([attempt]);
         const { outcome } = await restoreAttemptState(

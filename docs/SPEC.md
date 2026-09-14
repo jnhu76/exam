@@ -124,9 +124,9 @@ ExamAttempt 是考试系统的核心实体，取代原来的"一份答卷"概念
 **ExamAttempt 状态机（目标设计）**：
 
 ```
-not_started → queued → in_progress → submitted → grading → graded
-                                     ↑                    ↓
-                                     └── disrupted   voided
+not_started → queued → in_progress → submitted → graded
+                                     ↑             ↓
+                                     └── disrupted voided
 ```
 
 > 上图是状态机的**长期目标设计**。当前实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/archive/phase1-archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §3。
@@ -137,10 +137,11 @@ not_started → queued → in_progress → submitted → grading → graded
 | `queued` | 排队中（requireQueue 时） | **不作为 attempt 状态建模**：准入是与计时模式正交的独立维度，由 `exam_admissions` 准入记录承载（#292 durable admission runtime，见 exam-runtime.md §3.1.1）；attempt 直接 `in_progress` 起步 |
 | `in_progress` | 正在答题 | **已接线**：`startAttempt` 命令写入 |
 | `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Proctor 恢复工作台（J6）未实现 |
-| `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入 |
-| `grading` | 正在批改 | 保留，**当前无写入路径**：`submitAttempt` 内联调用批改后直接落 `graded`；该状态保留以便 Phase 2 异步批改/AI 批改场景启用 |
-| `graded` | 批改完成 | **已接线** |
+| `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入。人工批改未完成时 attempt 停留在 `submitted` + `gradingStatus=pending_manual` |
+| `graded` | 批改完成 | **已接线**：终局批改在同一锁定事务内由 `submitted` 直接落 `graded` |
 | `voided` | 已作废（监考员或管理员操作） | **Phase 2+ / planned**：`voidAttempt` command 仅作为目标设计，未提供管控入口 |
+
+> **`grading` 处置裁决（#542）**：`grading` 曾长期作为 transition vocabulary 中的幻影状态存在（状态机表项 `submitted:grade → grading` 从未被任何生产路径持久化）。已按 UNREACHABLE_FOSSIL 处置：从领域枚举、转换表、wire 契约中移除，DB CHECK（`exam_attempts_status_check`）拒绝该值。理由：批改流水线的持久状态由 `gradingStatus`（P2D-J2，与 lifecycle 正交）承载，`submitted` 已是带恢复语义的持久中间态；引入持久 `grading` 属于为旧枚举值改产品。若 Phase 2 异步/AI 批改确需该状态，应作为显式的新决策重新引入（含 CHECK 迁移），而非复活幻影。
 
 **ExamAttempt 数据结构**：
 
@@ -153,7 +154,7 @@ ExamAttempt {
   attemptNo: number
 
   status: "not_started" | "queued" | "in_progress" | "disrupted"
-         | "submitted" | "grading" | "graded" | "voided"
+         | "submitted" | "graded" | "voided"
 
   startedAt?: Date
   submittedAt?: Date
@@ -476,12 +477,12 @@ draft → published → open → closed → archived
 **ExamAttempt 状态**（见 §2.2）：
 
 ```
-not_started → queued → in_progress → submitted → grading → graded
-                                     ↑                    ↓
-                                     └── disrupted   voided
+not_started → queued → in_progress → submitted → graded
+                                     ↑             ↓
+                                     └── disrupted voided
 ```
 
-> 当前实现仅有 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / grading / voided` 保留为目标设计但**当前无写入路径**。完整接线表见 §2.2。
+> 当前实现仅有 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / voided` 保留为目标设计但**当前无写入路径**。`grading` 已按 UNREACHABLE_FOSSIL 移除（#542，裁决见 §2.2）。完整接线表见 §2.2。
 
 **Command functions**（Phase 2 全部已实现）：
 

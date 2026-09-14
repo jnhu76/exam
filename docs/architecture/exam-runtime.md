@@ -237,7 +237,7 @@ candidate UI / grading / result  （identity-based: originalQuestionId / option.
 
 ## 3. Attempt 生命周期
 
-### 3.1 AttemptStatus（8 个值）
+### 3.1 AttemptStatus（7 个值）
 
 ```ts
 type AttemptStatus =
@@ -246,7 +246,6 @@ type AttemptStatus =
   | 'in_progress'
   | 'disrupted'
   | 'submitted'
-  | 'grading'
   | 'graded'
   | 'voided';
 ```
@@ -257,10 +256,11 @@ type AttemptStatus =
 | queued | 等待批量入场（Phase 2） | → in_progress |
 | in_progress | 考生正在作答，answers 可写 | → submitted, disrupted |
 | disrupted | 心跳超时，考生断连 | → in_progress (resume) |
-| submitted | 考生已提交，submitted_answers 已冻结 | → grading, graded |
-| grading | 自动评分进行中（瞬态） | → graded |
+| submitted | 考生已提交，submitted_answers 已冻结 | → graded |
 | graded | 所有评分完成 | terminal |
 | voided | 终态覆盖；`submitted_answers` **可有可无**（取决于 void 前是否提交过） | terminal |
+
+> `grading` 已移除（#542 UNREACHABLE_FOSSIL）：终局批改在同一锁定事务内 `submitted → graded`；批改流水线的持久状态由 `gradingStatus`（P2D-J2）承载。`exam_attempts_status_check`（migration 0043）在 DB 层拒绝该值。
 
 ### 3.1.1 准入运行时（#292 durable admission，与计时正交）
 
@@ -308,7 +308,7 @@ P3-L0-2E 收口后，`grading` 态不再是人工评分的等待态。含 text_r
   in_progress → submitted (gradingStatus=auto_graded)
               → graded (gradingStatus=auto_graded 或 fully_graded)
   （submit 冻结屏障物化全部 completed_auto 条目；submit 事务后由 finalizeGrading 聚合为终态；
-    `grading` 态可作瞬态经过，但持久化真相是 submitted → graded）
+    持久化真相是 submitted → graded；`grading` 已移除为 UNREACHABLE_FOSSIL #542）
 
 纯 text_response：
   in_progress → submitted (gradingStatus=pending_manual)
@@ -327,7 +327,7 @@ Deadline 触发：
   （deadline reconcile 走同一 submit 冻结屏障 + 工作集物化；之后按纯客观 / 纯 text / 混合走对应路径）
 ```
 
-> **`grading` 态落地语义：** `grading` 是瞬态、仅机器自动评分指示，**不**作为人工评分等待态。P3-L0-2E 之前文档把含主观题的 attempt 停在 `grading` 是历史模型，已废弃。
+> **`grading` 态已移除（#542 UNREACHABLE_FOSSIL）：** 终局批改在同一锁定事务内 `submitted → graded`；批改流水线的持久状态由 `gradingStatus`（P2D-J2）承载。`exam_attempts_status_check`（migration 0043）在 DB 层拒绝该值。
 
 > **人工评分完成单向性（P3-L0-2E Slice 3C/4）：** `gradeQuestion` 是"完成一个已存在的 pending_manual 工作项"的单向命令，**不是**改分/重评命令。前置：`attempt.status=submitted && attempt.gradingStatus=pending_manual && entry.gradingMode=manual && entry.status=pending_manual`。允许的迁移：`pending_manual → completed_manual`。某条目一旦变为 `completed_manual`，普通评分命令不得再次修改（同值不视为幂等，异值不视为改分——两者均被拒）。attempt 一旦到达 `graded + fully_graded`，普通人工评分调用不得修改评分条目或终态分数/结果字段。终态后的改分/重评不在当前协议范围内，需另行定义 revision 能力。
 
@@ -539,7 +539,7 @@ async function ensureAttemptDeadlineReconciled(attemptId: string, now: Date) {
 
     if (!isExpired(attempt, now)) return attempt;
 
-    if (['submitted', 'grading', 'graded'].includes(attempt.status)) return attempt;
+    if (['submitted', 'graded'].includes(attempt.status)) return attempt;
     if (['voided', 'not_started', 'queued'].includes(attempt.status)) return attempt;
 
     const questionSnapshot = await loadAttemptQuestionSnapshot(tx, attemptId);
@@ -593,7 +593,7 @@ async function ensureAttemptDeadlineReconciled(attemptId: string, now: Date) {
 | 状态 | 行为 |
 | ---- | ---- |
 | not_started / queued | 不生成 submitted_answers；返回 cannot start / deadline locked |
-| submitted / grading / graded | 已冻结，返回现有 submitted_answers |
+| submitted / graded | 已冻结，返回现有 submitted_answers |
 | voided | terminal，不做 reconciliation；`submitted_answers` 可有可无（void 前是否提交过而定），下游 grading/backfill 必须容错处理 |
 
 ---
@@ -660,7 +660,7 @@ interface CandidateQuestion {
 
 **答案来源路由**：
 - `in_progress` → `answerValue` 来自 draft `answers`，`answerSource = 'draft'`
-- `submitted` / `grading` / `graded` → `answerValue` 来自 `submitted_answers`，`answerSource = 'submitted'`
+- `submitted` / `graded` → `answerValue` 来自 `submitted_answers`，`answerSource = 'submitted'`
 - `not_started` / `queued` / `voided` → `answerValue = null`，`answerSource = 'none'`
 - `disrupted` → 返回 draft answers，但 `isEditable = false`
 
@@ -943,7 +943,7 @@ type TransientEvent =
 
 ### 9.2 Backfill 脚本（独立 TypeScript）
 
-**回填范围**：所有具有提交语义的 attempt — `submitted` / `grading` / `graded` / `voided`（with non-null `submittedAt`）。
+**回填范围**：所有具有提交语义的 attempt — `submitted` / `graded` / `voided`（with non-null `submittedAt`）。
 
 **格式转换**：从 `AnswerRecord[]` 规范化为 `SubmittedAnswersSnapshot`，复用 `buildSubmittedAnswersSnapshot()` 逻辑。
 

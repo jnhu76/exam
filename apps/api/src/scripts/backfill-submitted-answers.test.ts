@@ -5,6 +5,7 @@ import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { eq } from "drizzle-orm";
+import type { AttemptStatus } from "@exam/domain";
 import {
   runBackfill,
   buildSnapshotForAttempt,
@@ -34,7 +35,7 @@ const QUESTION_SNAPSHOT = [
 
 interface SeedInput {
   id: string;
-  status: string;
+  status: AttemptStatus;
   answers: unknown[];
   submittedAnswers?: unknown;
   submittedAt?: Date | null;

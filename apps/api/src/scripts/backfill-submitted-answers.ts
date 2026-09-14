@@ -2,7 +2,7 @@
  * P3-L0-4: backfill `submitted_answers` for historical attempts.
  *
  * Scope (per exam-protocol.md §9.2): all attempts with submit semantics —
- * `submitted` / `grading` / `graded` / `voided` (with non-null `submittedAt`).
+ * `submitted` / `graded` / `voided` (with non-null `submittedAt`).
  * Attempts without a frozen snapshot are filled by normalizing their draft
  * `answers` against the question snapshot via `buildSubmittedAnswersSnapshot`
  * (the same helper the live submit path uses — P3-L0-2).
@@ -38,7 +38,7 @@ import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
 
 /** Statuses that carry submit semantics and are in backfill scope. */
-const SUBMIT_STATUSES = ["submitted", "grading", "graded"] as const;
+const SUBMIT_STATUSES = ["submitted", "graded"] as const;
 
 /** voided is in scope only when it has a submittedAt (was submitted before void). */
 const VOIDED = "voided";
@@ -62,7 +62,7 @@ export interface BackfillOptions {
 }
 
 /**
- * Loads the candidate attempts for backfill: submitted/grading/graded (any
+ * Loads the candidate attempts for backfill: submitted/graded (any
  * submittedAt) + voided-with-submittedAt. Pure DB read; no writes.
  */
 export async function loadBackfillCandidates(
@@ -74,13 +74,9 @@ export async function loadBackfillCandidates(
     .where(
       and(
         isNull(schema.examAttempts.submittedAnswers),
-        // status in submitted/grading/graded, OR (voided AND submittedAt not null)
+        // status in submitted/graded, OR (voided AND submittedAt not null)
         or(
-          inArray(schema.examAttempts.status, [
-            "submitted",
-            "grading",
-            "graded",
-          ]),
+          inArray(schema.examAttempts.status, ["submitted", "graded"]),
           and(
             eq(schema.examAttempts.status, "voided"),
             isNotNull(schema.examAttempts.submittedAt),

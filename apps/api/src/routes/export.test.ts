@@ -676,7 +676,8 @@ describe("CSV export integration", () => {
         organizationId: ctx.org.id,
         examId: largeExamId,
         candidateId,
-        status: "active" as const,
+        // Post-grading enrollment state (the attempts below are graded+passed).
+        status: "completed" as const,
         attemptCount: 1,
         createdAt: now,
         updatedAt: now,

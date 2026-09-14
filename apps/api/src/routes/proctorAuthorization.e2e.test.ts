@@ -109,7 +109,7 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
       organizationId: ctx.org.id,
       examId,
       candidateId: candidateProfileId,
-      status: "active",
+      status: "started",
       attemptCount: 1,
       createdAt: now,
       updatedAt: now,

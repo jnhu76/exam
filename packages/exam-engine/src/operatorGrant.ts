@@ -383,7 +383,6 @@ export async function grantAttemptTime(
   //    of the interruptionId supplied.
   if (
     reconciled.status === "submitted" ||
-    reconciled.status === "grading" ||
     reconciled.status === "graded" ||
     reconciled.status === "voided"
   ) {

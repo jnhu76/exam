@@ -27,13 +27,8 @@ describe("attemptStateMachine", () => {
       expect(result).toEqual({ ok: true, next: "in_progress" });
     });
 
-    it("submitted → grading via grade", () => {
+    it("submitted → graded via grade (terminal grading closes in one step, #542)", () => {
       const result = transition("submitted", "grade");
-      expect(result).toEqual({ ok: true, next: "grading" });
-    });
-
-    it("grading → graded via complete_grading", () => {
-      const result = transition("grading", "complete_grading");
       expect(result).toEqual({ ok: true, next: "graded" });
     });
   });
@@ -47,12 +42,10 @@ describe("attemptStateMachine", () => {
       ["queued", "submit" as const],
       ["queued", "disrupt" as const],
       ["queued", "restore" as const],
+      ["queued", "grade" as const],
       ["submitted", "submit" as const],
       ["submitted", "disrupt" as const],
       ["submitted", "restore" as const],
-      ["grading", "submit" as const],
-      ["grading", "disrupt" as const],
-      ["grading", "restore" as const],
       ["graded", "submit" as const],
       ["graded", "disrupt" as const],
       ["graded", "restore" as const],
@@ -81,11 +74,6 @@ describe("attemptStateMachine", () => {
 
     it("rejects in_progress → restore (not disrupted)", () => {
       const result = transition("in_progress", "restore");
-      expect(result).toEqual({ ok: false, reason: "INVALID_SOURCE_STATUS" });
-    });
-
-    it("rejects in_progress → complete_grading (not grading)", () => {
-      const result = transition("in_progress", "complete_grading");
       expect(result).toEqual({ ok: false, reason: "INVALID_SOURCE_STATUS" });
     });
   });

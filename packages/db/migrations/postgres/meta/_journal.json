@@ -300,6 +300,13 @@
       "when": 1788900000007,
       "tag": "0042_exam_admissions",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788900000008,
+      "tag": "0043_persisted_state_status_checks",
+      "breakpoints": true
     }
   ]
 }

@@ -169,17 +169,6 @@ describe("AttemptDetailPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows status-specific message when result is grading", async () => {
-    apiGet.mockResolvedValue({
-      attemptId: "attempt-1",
-      status: "grading",
-      showResultImmediately: false,
-      examTitle: "期末考试",
-    });
-    renderPage();
-    expect(await screen.findByText("该尝试正在评分中")).toBeInTheDocument();
-  });
-
   it("shows status-specific message when graded but not visible", async () => {
     apiGet.mockResolvedValue({
       attemptId: "attempt-1",

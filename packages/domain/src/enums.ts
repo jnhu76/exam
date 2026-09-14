@@ -89,7 +89,14 @@ export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];
 /**
  * Exam attempt lifecycle status.
  *
- * Transitions: not_started → queued → in_progress → disrupted | submitted → grading → graded | voided.
+ * Transitions: not_started → queued → in_progress → disrupted | submitted → graded | voided.
+ *
+ * INVARIANT (#542): `not_started`, `queued`, and `voided` are reserved
+ * vocabulary with no current writer (docs/SPEC.md §2.2 target design);
+ * `grading` was removed as an unreachable fossil — terminal grading closes
+ * `submitted → graded` in one locked transaction, and the durable
+ * grading-pipeline state is `gradingStatus` (P2D-J2), orthogonal to this
+ * lifecycle.
  */
 export const AttemptStatus = {
   NotStarted: "not_started",
@@ -97,7 +104,6 @@ export const AttemptStatus = {
   InProgress: "in_progress",
   Disrupted: "disrupted",
   Submitted: "submitted",
-  Grading: "grading",
   Graded: "graded",
   Voided: "voided",
 } as const;

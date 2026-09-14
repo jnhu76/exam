@@ -5,7 +5,7 @@ import type { Database } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
-import type { Permission, QuestionSnapshot } from "@exam/domain";
+import type { ExamStatus, Permission, QuestionSnapshot } from "@exam/domain";
 import { buildTestApp, uniquePrefix, type TestContext } from "./testHelpers.js";
 import userRoutes from "./user.js";
 import roleAssignmentRoutes from "./roleAssignments.js";
@@ -104,7 +104,7 @@ async function createCandidateUser(ctx: TestContext, label: string) {
   return userId;
 }
 
-async function createExam(ctx: TestContext, status: string) {
+async function createExam(ctx: TestContext, status: ExamStatus) {
   const courseId = crypto.randomUUID();
   const examId = crypto.randomUUID();
   const now = new Date();

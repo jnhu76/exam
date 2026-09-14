@@ -23,7 +23,7 @@ function examRow(orgId: string, courseId: string, title: string) {
     title,
     description: "",
     courseId,
-    status: "draft",
+    status: "draft" as const,
     timingMode: "timed_window",
     durationMinutes: 60,
     openAt: now,

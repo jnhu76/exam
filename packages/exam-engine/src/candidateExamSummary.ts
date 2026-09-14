@@ -84,10 +84,7 @@ export function deriveCandidateExamState(
   }
 
   if (latestAttempt) {
-    if (
-      latestAttempt.status === "submitted" ||
-      latestAttempt.status === "grading"
-    ) {
+    if (latestAttempt.status === "submitted") {
       return {
         availabilityStatus: "submitted_pending_grade",
         primaryAction: "view_history",

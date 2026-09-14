@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "@exam/db/src/schema/pg.js";
-import type { Role } from "@exam/domain";
+import type { ExamStatus, Role } from "@exam/domain";
 import proctorMonitoringRoutes from "./proctorMonitoring.js";
 import {
   buildTestApp,
@@ -45,7 +45,7 @@ describe("GET /api/admin/proctor/exams", () => {
   async function seedExam(
     organizationId: string,
     courseId: string,
-    status: string,
+    status: ExamStatus,
     title: string,
   ) {
     const id = randomUUID();

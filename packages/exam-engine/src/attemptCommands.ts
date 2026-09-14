@@ -515,11 +515,7 @@ export async function submitAttempt(
   // frozen snapshot + reason + submittedAt unchanged (double-submit safety).
   // P3-L0-2E: validate the existing workset for exact consistency — fail
   // closed on partial, mismatched, or extra entries.
-  if (
-    attempt.status === "submitted" ||
-    attempt.status === "grading" ||
-    attempt.status === "graded"
-  ) {
+  if (attempt.status === "submitted" || attempt.status === "graded") {
     validateGradingWorksetConsistency(attempt, existingEntries);
     return attempt;
   }
@@ -745,7 +741,6 @@ export async function restoreAttemptState(
   }
   if (
     attempt.status === "submitted" ||
-    attempt.status === "grading" ||
     attempt.status === "graded" ||
     attempt.status === "voided"
   ) {

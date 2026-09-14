@@ -212,7 +212,6 @@ describe("resolveCandidateResultVisibility", () => {
       "in_progress",
       "disrupted",
       "submitted",
-      "grading",
       "voided",
     ] as const) {
       const {

@@ -1,12 +1,7 @@
 import type { AttemptStatus } from "@exam/domain";
 
 /** Commands that drive the attempt state machine transitions. */
-export type AttemptCommand =
-  | "submit"
-  | "disrupt"
-  | "restore"
-  | "grade"
-  | "complete_grading";
+export type AttemptCommand = "submit" | "disrupt" | "restore" | "grade";
 
 /** Reasons a state transition may be rejected by the guard. */
 export type TransitionRejectionReason =
@@ -36,13 +31,15 @@ export interface TransitionGuards {
 }
 
 /** Valid state transitions for exam attempts keyed by "currentStatus:command". */
+// `grade` closes terminal grading directly (submitted → graded) in the same
+// locked transaction — there is no durable `grading` lifecycle state (#542);
+// the scoring pipeline's durable state is `exam_attempts.grading_status`.
 const TRANSITION_TABLE: Record<string, AttemptStatus> = {
   "in_progress:submit": "submitted",
   "in_progress:disrupt": "disrupted",
   "disrupted:submit": "submitted",
   "disrupted:restore": "in_progress",
-  "submitted:grade": "grading",
-  "grading:complete_grading": "graded",
+  "submitted:grade": "graded",
 };
 
 /**

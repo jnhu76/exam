@@ -338,8 +338,6 @@ export interface ForceSubmitExecutionPlan {
  *   "no_change" receipt would make the receipt's immutable fact lie. The
  *   candidate submit orchestrator (`submitAndGradeAttempt`) owns crash
  *   recovery of its own `submitted` rows. outcome=no_change, no audit.
- * - `grading`: transient mid-flight state not resumable from a row read —
- *   untouched (existing route contract). outcome=no_change, no audit.
  * - `graded`: terminal no-op. outcome=no_change, no audit.
  * - `voided` / `not_started` / `queued`: invalid transition → 409, before
  *   any receipt (mirrors the engine's own `InvalidStateTransitionError`).
@@ -356,8 +354,6 @@ export function planForceSubmitExecution(
       return appliedPlan(beforeStatus, locked, appliedAt);
     case "submitted":
       return noOpPlan("submitted", locked, appliedAt);
-    case "grading":
-      return noOpPlan("grading", locked, appliedAt);
     case "graded":
       return noOpPlan("graded", locked, appliedAt);
     case "voided":
@@ -401,9 +397,9 @@ function appliedPlan(
   };
 }
 
-/** Plan for a terminal no-op (`submitted`/`grading`/`graded`) row. */
+/** Plan for a terminal no-op (`submitted`/`graded`) row. */
 function noOpPlan(
-  afterStatus: "submitted" | "grading" | "graded",
+  afterStatus: "submitted" | "graded",
   locked: ExamAttempt,
   appliedAt: string,
 ): ForceSubmitExecutionPlan {

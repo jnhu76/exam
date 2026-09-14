@@ -35,11 +35,10 @@ describe("domain enums expose stable string values", () => {
     expect(ExamStatus.Archived).toBe("archived");
   });
 
-  it("AttemptStatus 定义当前可达状态（in_progress/disrupted/submitted/grading/graded）", () => {
+  it("AttemptStatus 定义当前可达状态（in_progress/disrupted/submitted/graded）", () => {
     expect(AttemptStatus.InProgress).toBe("in_progress");
     expect(AttemptStatus.Disrupted).toBe("disrupted");
     expect(AttemptStatus.Submitted).toBe("submitted");
-    expect(AttemptStatus.Grading).toBe("grading");
     expect(AttemptStatus.Graded).toBe("graded");
   });
 
@@ -47,6 +46,10 @@ describe("domain enums expose stable string values", () => {
     expect(AttemptStatus.NotStarted).toBe("not_started");
     expect(AttemptStatus.Queued).toBe("queued");
     expect(AttemptStatus.Voided).toBe("voided");
+  });
+
+  it("AttemptStatus 不含 grading（#542：unreachable fossil 已移除，提交→批改 在同一事务内落 graded）", () => {
+    expect(Object.values(AttemptStatus)).not.toContain("grading");
   });
 
   it("EnrollmentStatus 覆盖分配/开始/完成/阻断四种资格状态", () => {

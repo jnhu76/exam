@@ -407,7 +407,6 @@ describe("gradeAttempt", () => {
     const exam = makeExam();
     const attempt = makeAttempt();
     const enrollment = makeEnrollment();
-    const gradingAttempt = { ...attempt, status: "grading" as const };
     const gradedAttempt = { ...attempt, status: "graded" as const };
     let attemptCallCount = 0;
     const examRepo: ExamRepository = {
@@ -423,7 +422,6 @@ describe("gradeAttempt", () => {
       create: () => attempt,
       update: () => {
         attemptCallCount++;
-        if (attemptCallCount === 1) return gradingAttempt;
         return gradedAttempt;
       },
       refreshLastActivityIfInProgress: () => attempt,

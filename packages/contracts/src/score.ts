@@ -255,7 +255,7 @@ const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
  * - `pending_publish` — manual publication mode and the admin has not yet
  *   called publish-results (resultsPublishedAt is null).
  * - `not_started` — attempt is in any non-graded lifecycle state (in_progress,
- *   submitted, grading, voided, disrupted, etc.). The result is not yet
+ *   submitted, voided, disrupted, etc.). The result is not yet
  *   computable; the label is historical, not literal.
  */
 export const HiddenReasonEnum = z.enum([
@@ -280,7 +280,6 @@ const HiddenAttemptResultSchema = z.object({
     "in_progress",
     "disrupted",
     "submitted",
-    "grading",
     "graded",
     "voided",
   ]),

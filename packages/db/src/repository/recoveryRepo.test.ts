@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AttemptStatus,
   AttemptTimeAdjustment,
   InterruptionTimePolicy,
   RequestContext,
@@ -3191,7 +3192,7 @@ describe("recovery attempt operations context repository", () => {
    */
   async function createAttempt(
     overrides: Partial<{
-      status: string;
+      status: AttemptStatus;
       deadlineAt: Date | null;
       misconduct: boolean;
     }> = {},

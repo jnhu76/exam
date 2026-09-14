@@ -398,7 +398,7 @@ describe("Proctor scoped routes — cross-org isolation", () => {
         organizationId: ctx.org.id,
         examId: orgAExamId,
         candidateId: candidateProfileId,
-        status: "active",
+        status: "started",
         attemptCount: 0,
       });
       orgAAttemptId = randomUUID();

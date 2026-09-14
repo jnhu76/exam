@@ -991,7 +991,7 @@
 | reason | 触发条件 | 客户端建议处理 |
 | --- | --- | --- |
 | `STALE_VERSION` | `baseVersion < serverVersion`（乐观并发冲突） | 以 `details.serverAnswer` 合并/覆盖本地状态；用 `serverVersion` 重试 |
-| `ATTEMPT_ALREADY_SUBMITTED` | attempt 已在 `submitted` / `grading` / `graded` | 停止保存，提示考试已结束，引导跳转到结果页 |
+| `ATTEMPT_ALREADY_SUBMITTED` | attempt 已在 `submitted` / `graded` | 停止保存，提示考试已结束，引导跳转到结果页 |
 | `ATTEMPT_CLOSED` | attempt 在 `voided` 等终止状态（Phase 1 暂未持续触发） | 停止保存，提示考试已被关闭 |
 | `DEADLINE_EXCEEDED` | `now > deadlineAt`（当前实现中，lazy deadline reconciliation 会先冻结 attempt，实际返回 `ATTEMPT_ALREADY_SUBMITTED`；`DEADLINE_EXCEEDED` 保留为契约枚举值但当前路径不触发） | 停止继续保存；已保存答案仍可 submit |
 
