@@ -12,11 +12,7 @@ import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { eq, sql } from "drizzle-orm";
-import type {
-  Exam,
-  QuestionSnapshot,
-  RequestContext,
-} from "@exam/domain";
+import type { Exam, QuestionSnapshot, RequestContext } from "@exam/domain";
 import { gradeQuestion, lockEnrollmentAndAttempt } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
