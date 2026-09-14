@@ -3,7 +3,7 @@
 > This file is a phase-level status summary, not the executable backlog.
 > Stable phase boundaries live in [`phase-roadmap.md`](phase-roadmap.md).
 > Current sequencing and disposition live in GitHub Issue
-> [#498](https://github.com/jnhu76/exam/issues/498); each selected OPEN Issue
+> [#552](https://github.com/jnhu76/exam/issues/552); each selected OPEN Issue
 > carries its own scope, acceptance criteria, and non-goals.
 
 ## Status snapshot
@@ -11,10 +11,10 @@
 | Phase / program | Status | Notes |
 | --- | --- | --- |
 | Phase 1 — Minimal Deliverable | ✅ CLOSED | Admin + Candidate reliable exam loop delivered. |
-| Phase 2 — Exam Operation | ✅ CLOSED for the supported MVP subset | Additional timing/admission/high-assurance capabilities remain scheduled separately. |
-| Phase 3 — Collaboration / Permissions | 🟨 GENERIC PRODUCT COMPLETION | Core authorization infrastructure and built-in scoped-role slices are implemented; remaining generic-product work was sequenced in #333 (historical; the live tracker is now #498). |
+| Phase 2 — Exam Operation | ✅ CLOSED for the supported MVP subset | Additional high-assurance capabilities remain scheduled separately. |
+| Phase 3 — Collaboration / Permissions | ✅ GENERIC RUNTIME COMPLETE | Generic Runtime completed under #516. Current production-hardening work is sequenced by #552; High-Assurance activation is deferred until that roadmap closes. |
 | P7 — System Readiness and Exam Modes | ✅ CLOSED | Final evidence: [`../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md). |
-| Phase 4 — Platformization | ⬜ NOT STARTED | Begins only after the generic edition is completed and stabilized. |
+| Phase 4 — Platformization | ⬜ NOT STARTED | ToB/platform work remains demand-driven and outside the current execution lane. |
 
 For implementation reality, use
 [`../status/implementation-status.md`](../status/implementation-status.md) plus
@@ -25,44 +25,52 @@ master, treat the disagreement as documentation drift and reconcile it.
 
 The repository is **Issues-first** for executable work:
 
-1. the live tracker (#498; #333 previously, during generic completion) defines campaign ordering, deferred/decision-gated
-   disposition, and anti-scope-creep guardrails.
-2. The selected OPEN Issue is the task contract for scope, acceptance criteria,
-   and non-goals.
-3. Before implementation, that Issue must be reconciled with current master;
-   stale assumptions are updated rather than blindly implemented.
-4. Roadmap documents summarize stable phase boundaries and context; they do not
-   maintain a second copy of live Issue state.
-5. Closed Issues, merged PRs, and audits are historical evidence, not current
+1. the live tracker (#552) defines the current campaign ordering,
+   deferred/decision-gated disposition, and anti-scope-creep guardrails;
+2. the selected OPEN Issue is the task contract for scope, acceptance criteria,
+   and non-goals;
+3. before implementation, that Issue must be reconciled with current master;
+   stale assumptions are updated rather than blindly implemented;
+4. roadmap documents summarize stable phase boundaries and context; they do not
+   maintain a second copy of live Issue state;
+5. closed Issues, merged PRs, and audits are historical evidence, not current
    runtime truth.
 
 The coarse Issue catalog is [`post-mvp-issues.md`](post-mvp-issues.md). Always
-use GitHub itself for current open/closed state and the live tracker (#498) for ordering.
+use GitHub itself for current open/closed state and the live tracker (#552) for
+ordering.
 
-## Generic-edition sequence
+## Current execution sequence
 
-The current program shape is:
+The current authorized phase sequence is:
 
 ```text
-current generic Exam
+#516 Generic Runtime Completion — COMPLETE
         ↓
-S0 — evidence-first simplification / convergence
+#552 Generic Production Hardening — CURRENT
         ↓
-S1 — complete the generic product feature loop
+#315 device/session binding
         ↓
-S2 — generic edition stabilization / freeze
+#316 secondary identity verification
         ↓
-S3 — ToB customization architecture
+#317 continuous monitoring
         ↓
-S4 — modularization / plugin seams driven by real customization needs
+#293 final Controlled / Strict composition
 ```
 
-The authoritative detail, including current checkpoints and issue ordering,
-remains in the live tracker (#498) so this document does not become another rapidly stale backlog.
+#552 owns the bounded production-hardening work derived from the corrected
+production reality audit. The internal High-Assurance order remains
+`#315 → #316 → #317 → #293`, but it does not become the main execution chain
+until #552 closes unless an explicit human authority decision changes the phase
+order.
+
+The authoritative detail, including current checkpoints and child ordering,
+remains in the live tracker (#552) so this document does not become another
+rapidly stale backlog.
 
 ## Permanent boundary
 
 Mandatory cloud runtime dependencies remain out of scope. Platformization such
 as service APIs, webhooks, optional multi-tenant operation, external log
-shipping, and custom roles must follow the post-freeze sequencing and decision
-gates recorded in the live tracker and their active Issues.
+shipping, and custom roles remains demand-driven and must follow its own
+explicit decision/implementation Issues rather than being pulled into #552.

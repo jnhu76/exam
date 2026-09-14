@@ -131,7 +131,7 @@ Historical material — plans, audits, and phase history — lives under
 | --- | --- | --- |
 | Phase 1 — Minimal Deliverable | ✅ Complete | Admin + Candidate reliable exam loop |
 | Phase 2 — Exam Operation | ✅ Complete — MVP subset | Lifecycle, recovery, grading, diagnostics |
-| Phase 3 — Collaboration / Permissions | 🚧 In progress | Authorization infra + scoped roles built; remaining product work tracked in the active roadmap tracker [#498](https://github.com/jnhu76/exam/issues/498) |
+| Phase 3 — Collaboration / Permissions | ✅ Generic Runtime complete | Authorization infra + scoped roles built; current production hardening is sequenced by [#552](https://github.com/jnhu76/exam/issues/552) before High-Assurance activation |
 | P7 — System Readiness | ✅ Complete | Hardening, backup/DR, operational control, RBAC remediation |
 | Phase 4 — Platformization | ⏳ Not started | Multi-tenant, API keys, webhooks — deferred |
 
