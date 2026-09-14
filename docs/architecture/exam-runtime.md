@@ -517,6 +517,8 @@ OR
 
 **关键区分**：本兜底是 recovery 行为——它使 legacy/schema-admissible NULL 行在考试窗口关闭后不会无限期保持 active，并在内联 reconciliation 与 scanner 之间保持一致。它**不**定义当前任何 timing mode 会正常产生 NULL `deadlineAt`。"runtime 可安全处理 NULL" 与 "NULL 是合法协议时序状态" 不是同一命题；P0-C 将二者混同，P0-C1 在此显式分离。
 
+**Save 变更的 deadline 串行化点（EXAM-543）**：save 变更的权威 deadline 判定消费 `prepareReconciledAttemptMutation` 冻结的 `effectiveDeadline`。该 seam 在 EA 锁序（Enrollment → Attempt）之后以 `Exam FOR UPDATE` 读取 exam 行——与 scanner `autoSubmitAndGrade` 和 operator time grant 同一锁序，不新增反向边。作用：并发 exam 命令（如 `extendExam`）在本事务快照之后、锁获取之前提交的 `closeAt` 变更，使锁读在 REPEATABLE READ 下抛 40001，`executeInTransaction` 整体重试 save 事务并按新权威重跑 reconciliation；在本事务持锁之后才提交的 `closeAt` 变则排队等在本事务之后（save-wins 线性化——请求在旧权威仍为当前真相时到达并完成）。两种交错都保证：save 的 deadline 判定不会被并发已提交的 `closeAt` 变更无声失效，也不存在第二个 deadline 判定权威。
+
 ### 5.2 入口
 
 以下 4 个 candidate 端点共享 `ensureAttemptDeadlineReconciled(attemptId, serverNow)`：

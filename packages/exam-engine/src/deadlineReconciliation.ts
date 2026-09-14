@@ -284,7 +284,9 @@ export interface PreparedAttemptMutation {
  *   2. invoke/reuse the canonical deadline reconciliation
  *      (`ensureAttemptDeadlineReconciled`) — preserving all freeze/grade
  *      behavior — to obtain the authoritative current Attempt;
- *   3. load the Exam state required for the canonical effective deadline;
+ *   3. load the Exam state required for the canonical effective deadline
+ *      under the Exam row lock (Enrollment → Attempt → Exam; EXAM-543) so
+ *      the deadline decision serializes against concurrent exam commands;
  *   4. call `computeEffectiveDeadline` — do NOT reimplement the min logic;
  *   5. mint the narrow {@link ReconciledAttemptMutationContext} carrying
  *      attemptId, effectiveDeadline, checkedAt, and AttemptRepository affinity.
@@ -329,7 +331,21 @@ export async function prepareReconciledAttemptMutation(
   );
 
   // 3. Load the Exam state required for the canonical effective deadline.
-  const exam = await examRepo.findById(attempt.examId);
+  //
+  // INVARIANT (EXAM-543): this is the save mutation's deadline serialization
+  // point. The read is a locked read (Enrollment → Attempt → Exam, the same
+  // order as the deadline scanner and operator time grants) so the
+  // effective deadline cannot be evaluated from a stale `closeAt` that a
+  // concurrently committed exam command has already replaced. Under
+  // REPEATABLE READ, a closeAt change committed after this transaction's
+  // snapshot raises 40001 here; `executeInTransaction` retries the whole
+  // save transaction, which then re-runs reconciliation against the new
+  // authority. A closeAt change that commits only after this lock is
+  // acquired waits behind this transaction — the save-wins linearization
+  // (the request arrived while the pre-change authority was current).
+  // A plain read would let an in-flight save commit (or reconcile) against
+  // deadline authority that is no longer the committed one.
+  const exam = await examRepo.findByIdForUpdate(attempt.examId);
   if (!exam) {
     throw new NotFoundError("Exam not found");
   }
