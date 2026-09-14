@@ -1,14 +1,15 @@
 # Post-MVP Work Index
 
 > This is a coarse navigation index only. GitHub is authoritative for live
-> open/closed state, and Issue
-> The current sequencing tracker is [#498](https://github.com/jnhu76/exam/issues/498)
-> and disposition authority. Do not duplicate an Issue specification here.
+> open/closed state. The current sequencing and disposition authority is
+> [#552](https://github.com/jnhu76/exam/issues/552). Do not duplicate an Issue
+> specification here.
 
 ## Program / convergence
 
+- #552 Generic Production Hardening roadmap — **CURRENT EXECUTION AUTHORITY**.
+- #516 Generic Runtime Completion — completed historical phase boundary.
 - #320 Dedicated email-worker process boundary — bounded KEEP vs CONVERGE decision.
-- #498 Baseline hardening closure roadmap tracker (#333 was the earlier generic-completion tracker).
 
 ## Generic product completion
 
@@ -32,16 +33,20 @@ barrier tracker #302 is closed and likewise not part of the executable queue.
 
 ## High-Assurance exam capabilities
 
-These are deferred from the generic-release path but remain committed work:
+High-Assurance is the next major capability phase **after #552 closes**. It is
+not the current execution lane. The remaining High-Assurance-specific runtime
+sequence is:
 
-- #292 Operational admission queue.
-- #293 Controlled / Strict high-assurance readiness umbrella.
-- #303 Proctor Recovery Center.
-- #304 System-generated incidents.
 - #315 Device/session binding runtime.
 - #316 Secondary identity verification.
 - #317 Continuous monitoring policy/runtime.
-- the `timed_sync` portion of #291.
+- #293 Controlled / Strict high-assurance readiness umbrella and final composition.
+
+Completed generic-runtime foundations such as #292 (durable operational
+admission), #303 (Proctor Recovery Center), and #304 (System-generated
+incidents) are historical prerequisites, not remaining High-Assurance work.
+#294 randomization is independent capability evidence and is not a substitute
+for #315/#316/#317.
 
 ## ToB integration / platformization
 
@@ -67,7 +72,7 @@ idea into implementation authority.
 
 When selecting work:
 
-1. read the live tracker (#498) for the current lane and ordering;
+1. read the live tracker (#552) for the current lane and ordering;
 2. open the selected Issue and treat its current body/checkpoints as the task
    contract;
 3. reconcile that contract with current master before editing;
