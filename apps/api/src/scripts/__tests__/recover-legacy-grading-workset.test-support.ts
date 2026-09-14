@@ -12,7 +12,11 @@ import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { eq, sql } from "drizzle-orm";
-import type { Exam, QuestionSnapshot, RequestContext } from "@exam/domain";
+import type {
+  AnswerRecord,
+  QuestionSnapshot,
+  RequestContext,
+} from "@exam/domain";
 import { gradeQuestion, lockEnrollmentAndAttempt } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
@@ -135,7 +139,7 @@ export function draftAnswer(questionId: string, value: unknown) {
 interface ResidueSeedInput {
   id: string;
   questionSnapshot: QuestionSnapshot[];
-  answers: unknown[];
+  answers: AnswerRecord[];
 }
 
 /** Seeds the exact historical #542 grading crash residue. */
@@ -150,106 +154,106 @@ export async function seedLegacyResidue(
   const examId = crypto.randomUUID();
   const courseId = crypto.randomUUID();
 
-  await db.insert(schema.courses).values({
-    id: courseId,
-    organizationId: orgId,
-    name: "Recovery Course",
-    code: `RC-${courseId.slice(0, 8)}`,
-    description: "",
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(schema.exams).values({
-    id: examId,
-    organizationId: orgId,
-    title: `Recovery-${input.id.slice(0, 8)}`,
-    description: "",
-    courseId,
-    status: "closed",
-    timingMode: "timed_window",
-    durationMinutes: 60,
-    openAt: now,
-    closeAt: new Date(now.getTime() + 86400000),
-    passingScore: 60,
-    totalScore: 100,
-    questionSelectionMode: "manual",
-    questionIds: [],
-    questionSnapshot: [],
-    controlFlags: {
-      shuffleQuestions: false,
-      shuffleOptions: false,
-      detectTabSwitch: false,
-      disableCopyPaste: false,
-      requireQueue: false,
-      batchSize: 1,
-      batchInterval: 1,
-      restrictIp: false,
-      requireLockdown: false,
-      showResultImmediately: true,
-    },
-    retakePolicy: "unlimited",
-    scoreStrategy: "highest",
-    maxAttempts: 1,
-    latestStartOffsetMinutes: null,
-    minSubmitAfterStartMinutes: null,
-    resultPublicationMode: "immediate",
-    resultsPublishedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(schema.users).values({
-    id: userId,
-    organizationId: orgId,
-    username: `u-${userId.slice(0, 8)}`,
-    passwordHash: "x",
-    name: "Candidate",
-    role: "Candidate",
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(schema.candidateProfiles).values({
-    id: candidateId,
-    organizationId: orgId,
-    userId,
-    fields: {},
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(schema.examEnrollments).values({
-    id: enrollmentId,
-    organizationId: orgId,
-    examId,
-    candidateId,
-    status: "started",
-    attemptCount: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(schema.examAttempts).values({
-    id: input.id,
-    organizationId: orgId,
-    examId,
-    enrollmentId,
-    candidateId,
-    attemptNo: 1,
-    status: "submitted",
-    questionSnapshot: input.questionSnapshot,
-    answers: input.answers as never,
-    submittedAnswers: null,
-    submittedAt: now,
-    createdAt: now,
-    updatedAt: now,
-  });
+  return executeInTransaction(db, async (tx) => {
+    await tx.insert(schema.courses).values({
+      id: courseId,
+      organizationId: orgId,
+      name: "Recovery Course",
+      code: `RC-${courseId.slice(0, 8)}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await tx.insert(schema.exams).values({
+      id: examId,
+      organizationId: orgId,
+      title: `Recovery-${input.id.slice(0, 8)}`,
+      description: "",
+      courseId,
+      status: "closed",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(now.getTime() + 86400000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 1,
+        batchInterval: 1,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      latestStartOffsetMinutes: null,
+      minSubmitAfterStartMinutes: null,
+      resultPublicationMode: "immediate",
+      resultsPublishedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await tx.insert(schema.users).values({
+      id: userId,
+      organizationId: orgId,
+      username: `u-${userId.slice(0, 8)}`,
+      passwordHash: "x",
+      name: "Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await tx.insert(schema.candidateProfiles).values({
+      id: candidateId,
+      organizationId: orgId,
+      userId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await tx.insert(schema.examEnrollments).values({
+      id: enrollmentId,
+      organizationId: orgId,
+      examId,
+      candidateId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await tx.insert(schema.examAttempts).values({
+      id: input.id,
+      organizationId: orgId,
+      examId,
+      enrollmentId,
+      candidateId,
+      attemptNo: 1,
+      status: "submitted",
+      questionSnapshot: input.questionSnapshot,
+      answers: input.answers,
+      submittedAnswers: null,
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
 
-  await dropStatusCheck(db);
-  await db.execute(
-    sql.raw(
-      `UPDATE exam_attempts SET status = 'grading' WHERE id = '${input.id}'`,
-    ),
-  );
+    await dropStatusCheck(tx);
+    await tx.execute(
+      sql`UPDATE exam_attempts SET status = 'grading' WHERE id = ${input.id}`,
+    );
 
-  return { examId, enrollmentId, candidateId };
+    return { examId, enrollmentId, candidateId };
+  });
 }
 
 export async function dropStatusCheck(db: Database) {
@@ -284,19 +288,20 @@ export async function rewindGradingToSubmitted(
   attemptId: string,
 ) {
   await db.execute(
-    sql.raw(
-      `UPDATE exam_attempts SET status = 'submitted' WHERE id = '${attemptId}' AND status = 'grading'`,
-    ),
+    sql`UPDATE exam_attempts SET status = 'submitted'
+        WHERE id = ${attemptId} AND status = 'grading'`,
   );
 }
 
 export async function getAttemptRow(db: Database, id: string) {
-  return (
+  const row = (
     await db
       .select()
       .from(schema.examAttempts)
       .where(eq(schema.examAttempts.id, id))
-  )[0]!;
+  )[0];
+  if (!row) throw new Error(`attempt row not found: ${id}`);
+  return row;
 }
 
 export async function getEntryRows(db: Database, attemptId: string) {
@@ -332,7 +337,7 @@ export async function gradeManualViaGradingSurface(
     const txAttemptRepo = createAttemptRepo(tx);
     const txEnrollmentRepo = createEnrollmentRepo(tx);
     const txEntryRepo = createAttemptGradingEntryRepo(tx);
-    const { enrollments, attempts } = createExamEngineRepos(
+    const { enrollments, attempts, exams } = createExamEngineRepos(
       {
         examRepo: createExamRepo(tx),
         attemptRepo: txAttemptRepo,
@@ -347,10 +352,8 @@ export async function gradeManualViaGradingSurface(
     );
     const attempt = await attempts.findById(attemptId);
     if (!attempt) throw new Error("attempt disappeared");
-    const exam = (await createExamRepo(tx).findById(
-      ctx,
-      attempt.examId,
-    )) as unknown as Exam;
+    const exam = await exams.findById(attempt.examId);
+    if (!exam) throw new Error("exam disappeared");
     return gradeQuestion(
       attempts,
       enrollments,
@@ -371,7 +374,7 @@ export async function seedReadyResidue(
   db: Database,
   orgId: string,
   questionSnapshot: QuestionSnapshot[],
-  answers: unknown[],
+  answers: AnswerRecord[],
 ): Promise<string> {
   const id = crypto.randomUUID();
   await seedLegacyResidue(db, orgId, { id, questionSnapshot, answers });
@@ -386,8 +389,6 @@ export async function setGradingStatus(
   label: string,
 ) {
   await db.execute(
-    sql.raw(
-      `UPDATE exam_attempts SET grading_status = '${label}' WHERE id = '${id}'`,
-    ),
+    sql`UPDATE exam_attempts SET grading_status = ${label} WHERE id = ${id}`,
   );
 }
