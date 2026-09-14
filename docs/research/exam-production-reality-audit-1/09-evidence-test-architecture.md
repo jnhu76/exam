@@ -29,7 +29,7 @@ scope：把测试证据按"它证明了哪个不变量"分类，不只数数量�
 | integration wiring proof | apps/api routes 同目录 co-located 测试（181 文件主体）；真实 PostgreSQL（TEST_DB_ISOLATION=worker-database 每 worker 独立 schema/库 + testInfraLock） | 强：非 mock-heavy，数据库语义真实 |
 | DB concurrency proof | 双连接并发测试断言真实 SQLSTATE（40001/23505）：admin-force-submit.concurrency、admin-time-grants.concurrency（可重复跑 test:operator-grant-race:repeat）、publishResults.concurrency、submitFreezeBarrier、incidents.admin.concurrency、attemptLifecycleRaceTraces（EXAM-341 确定性锁序竞态轨迹 S1A save-wins 等） | 强：竞态是确定性构造而非 sleep 竞猜 |
 | process restart proof | `runtime/processRestartDeadline.process.test.ts` + `restartProcessHarness.ts`：真实子进程 SIGKILL 后扫描追赶 ≤30s | 强：非 app.close 等价物 |
-| API security proof | permissionBoundary（42 its：跨角色拒绝+零写入+无审计副作用）、m10dPermissionBoundary（17 路由×4 角色=68×403+零写）、proctorAuthorization.e2e（allow/deny 全矩阵+吊销/角色丧失）、routeRegistryConformanceWholeApp（结构锁：全 app 恰一门/受保护路由）、presets-boundaries/maintainerPreset（预设精确钉死） | 强；缺口：examProfile 收窄与 clientEvents 所有权无负测试（与 F1-04/F4-04 对应） |
+| API security proof | permissionBoundary（42 its：跨角色拒绝+零写入+无审计副作用）、m10dPermissionBoundary（17 路由×4 角色=68×403+零写）、proctorAuthorization.e2e（allow/deny 全矩阵+吊销/角色丧失）、routeRegistryConformanceWholeApp（结构锁：全 app 恰一门/受保护路由）、presets-boundaries/maintainerPreset（预设精确钉死） | 强；已确认残余缺口：clientEvents 所有权无负测试（F3-04） |
 | browser E2E proof | 57 Playwright spec + patrol 配置 | 存在；覆盖面未逐条审计（UNKNOWN 细目） |
 | load/capacity proof | **不存在**（仓库内无负载测试/容量 harness；无 k6/autocannon/artillery 依赖） | 缺失——本审计以 /tmp 一次性探针补做（08 报告），非仓库证据 |
 | deployment/recovery proof | tests/deployment 9 套件：compose 契约、fresh-install、launchpad、持久化+冷恢复、冷备、逻辑备恢复、PITR、升级/卸载、清理边界；backup_runs 表 DB 级真实性 CHECK | 强（真实 Docker Compose） |
@@ -47,7 +47,7 @@ scope：把测试证据按"它证明了哪个不变量"分类，不只数数量�
 - fake process restart / fake concurrency？未发现（真实 SIGKILL harness、真实 SQLSTATE 断言）。
 - mock-heavy？未发现；fake 仅两处且合理：email sender（部署测试有 witness 文件验证）、时钟（显式注入 now）。
 - UI snapshot 冒充 runtime proof？未发现（web 144 文件以行为测试为主，另加 pageGeometryContract 等结构契约）。
-- 测试绿但真实 failure mode 未覆盖：**容量/负载**（corpus 中无负载 harness）、clientEvents 污染路径、trailer：examProfile 越权路径一行——**corrective 修正**：原 F1-04（examProfile 越权）已 REJECTED，其"无负测试覆盖"评价相应撤回；examProfile 的 org-scope fail-closed 本身有负测试（examProfile.test.ts RBAC denial + foreign-org matrix，见 P7-M2 §19）。
+- 测试绿但真实 failure mode 未覆盖：**容量/负载**（corpus 中无负载 harness）、clientEvents 污染路径。原 F1-04（examProfile 越权）已 REJECTED，其"无负测试覆盖"评价已撤回；examProfile 的 org-scope fail-closed 本身有负测试（examProfile.test.ts RBAC denial + foreign-org matrix，见 P7-M2 §19）。
 - 高价值测试清单（评级最高）：processRestartDeadline.process、attemptLifecycleRaceTraces、routeRegistryConformanceWholeApp、admin-time-grants.concurrency（含 repeat 模式）、proctorAuthorization.e2e、deployment/pitr。
 
 ### 4.2 EXECUTED EVIDENCE（实际执行过的，与 corpus 分离）
