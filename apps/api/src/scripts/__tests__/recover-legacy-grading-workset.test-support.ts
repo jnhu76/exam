@@ -17,9 +17,9 @@ import { gradeQuestion, lockEnrollmentAndAttempt } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
-} from "../adapters/repoAdapters.js";
-import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
-import { runBackfill } from "./backfill-submitted-answers.js";
+} from "../../adapters/repoAdapters.js";
+import { submitAndGradeAttempt } from "../../orchestrators/submitAndGradeAttempt.js";
+import { runBackfill } from "../backfill-submitted-answers.js";
 
 const now = new Date();
 

@@ -16,7 +16,7 @@ import {
   setupRecoveryTestEnvironment,
   teardownRecoveryTestEnvironment,
   type RecoveryTestEnvironment,
-} from "./recover-legacy-grading-workset.test-support.js";
+} from "./__tests__/recover-legacy-grading-workset.test-support.js";
 
 describe("recover-legacy-grading-workset — non-zero consistency guards", () => {
   let env: RecoveryTestEnvironment;

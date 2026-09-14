@@ -19,7 +19,7 @@ import {
   setupRecoveryTestEnvironment,
   teardownRecoveryTestEnvironment,
   type RecoveryTestEnvironment,
-} from "./recover-legacy-grading-workset.test-support.js";
+} from "./__tests__/recover-legacy-grading-workset.test-support.js";
 
 describe("recover-legacy-grading-workset — operator protocol integration", () => {
   let env: RecoveryTestEnvironment;
