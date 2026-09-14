@@ -563,7 +563,7 @@ async function reconstructInProgressOutcome(
 
 /**
  * #9: Reconstructs a terminal outcome from the latest terminalized event (R10).
- * Used when the attempt is already submitted/grading/graded/voided on entry.
+ * Used when the attempt is already submitted/graded/voided on entry.
  * Fails closed on adjustment identity mismatch.
  */
 async function reconstructTerminalOutcome(

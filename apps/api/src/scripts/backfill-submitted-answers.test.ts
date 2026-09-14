@@ -4,7 +4,7 @@ import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { AttemptStatus } from "@exam/domain";
 import {
   runBackfill,
@@ -284,24 +284,85 @@ describe("backfill-submitted-answers (P3-L0-4)", () => {
     expect(row[0]?.submittedAnswers).toBeNull();
   });
 
-  it("backfills a post-disposition grading residue (grading→graded, gradingStatus=auto_graded from 0004)", async () => {
-    // Simulates the recovery chain: a historical crash residue was
-    // dispositioned from 'grading' to 'graded' by the operator. The row
-    // retains grading_status='auto_graded' (backfilled by migration 0004
-    // on ALL historical rows). The backfill must pick it up and populate
-    // submitted_answers from draft answers.
+  it("T4: fails closed when unresolved legacy grading rows exist — nothing is processed, nothing is silently skipped", async () => {
+    // Simulate a pre-0043 deployment holding historical crash residue: drop
+    // the status CHECK (0043 refuses to install over such rows anyway), then
+    // flip a seeded submitted row to the raw historical vocabulary value.
+    // Raw SQL on purpose — 'grading' is NOT current AttemptStatus vocabulary.
+    const stuckId = crypto.randomUUID();
+    const inScopeId = crypto.randomUUID();
+    await seedAttempt(db, orgId, {
+      id: stuckId,
+      status: "submitted",
+      answers: [{ questionId: "q1", answer: "b", version: 1, savedAt: now }],
+    });
+    await seedAttempt(db, orgId, {
+      id: inScopeId,
+      status: "submitted",
+      answers: [{ questionId: "q1", answer: "b", version: 1, savedAt: now }],
+    });
+    await db.execute(
+      sql.raw(
+        `ALTER TABLE exam_attempts DROP CONSTRAINT exam_attempts_status_check`,
+      ),
+    );
+    await db.execute(
+      sql.raw(
+        `UPDATE exam_attempts SET status = 'grading' WHERE id = '${stuckId}'`,
+      ),
+    );
+
+    // Refuses in both real and dry-run mode, before any candidate work.
+    await expect(runBackfill(db)).rejects.toThrow(
+      /legacy status='grading'.*0043_persisted_state_status_checks/s,
+    );
+    await expect(runBackfill(db, { dryRun: true })).rejects.toThrow(
+      /legacy status='grading'/,
+    );
+
+    // Fail-closed means fail-BEFORE-processing: the in-scope row was not
+    // written, and the stuck row still holds its historical status.
+    for (const id of [stuckId, inScopeId]) {
+      const row = await db
+        .select()
+        .from(schema.examAttempts)
+        .where(eq(schema.examAttempts.id, id));
+      expect(row[0]?.submittedAnswers).toBeNull();
+    }
+    const stuck = await db
+      .select()
+      .from(schema.examAttempts)
+      .where(eq(schema.examAttempts.id, stuckId));
+    expect(stuck[0]?.status as string).toBe("grading");
+
+    // Restore the pre-test shape: disposition the stuck row with the same
+    // supported rewind recipe (ADD CONSTRAINT validates existing rows, so
+    // the residue must be dispositioned before the CHECK comes back).
+    await db.execute(
+      sql.raw(
+        `UPDATE exam_attempts SET status = 'submitted' WHERE id = '${stuckId}' AND status = 'grading'`,
+      ),
+    );
+    await db.execute(
+      sql.raw(`
+        ALTER TABLE exam_attempts ADD CONSTRAINT exam_attempts_status_check
+        CHECK ("status" IN ('not_started', 'queued', 'in_progress', 'disrupted', 'submitted', 'graded', 'voided'))
+      `),
+    );
+  });
+
+  it("T5: after the documented disposition (rewind to submitted), the formerly stuck row enters scope and is backfilled", async () => {
+    // Simulates the runbook Option A precondition — the human repair has
+    // already rewound the residue row to 'submitted' (the state the
+    // historical writer's guard proves it held). The test proves the
+    // backfill then picks the row up; it does NOT claim the repair itself
+    // was performed by runtime code.
     const id = crypto.randomUUID();
     await seedAttempt(db, orgId, {
       id,
-      status: "graded",
+      status: "submitted",
       answers: [{ questionId: "q1", answer: "b", version: 1, savedAt: now }],
-      submittedAnswers: null,
     });
-    // Set grading_status to the historical artifact value.
-    await db
-      .update(schema.examAttempts)
-      .set({ gradingStatus: "auto_graded" as never })
-      .where(eq(schema.examAttempts.id, id));
 
     const stats = await runBackfill(db);
     expect(stats.backfilled).toBeGreaterThanOrEqual(1);

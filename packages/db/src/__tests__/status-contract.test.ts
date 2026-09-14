@@ -321,7 +321,7 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     }
   });
 
-  it("0043 fails closed on a legacy grading row, rewrites nothing, then converges after explicit disposition", async () => {
+  it("T1: 0043 fails closed on a proven legacy grading crash residue, rewrites nothing, then converges after the supported disposition", async () => {
     // Simulate a 0042-state database: constraints not yet installed.
     await sql.begin(async (tx) => {
       await tx.unsafe(`ALTER TABLE exams DROP CONSTRAINT exams_status_check`);
@@ -336,9 +336,11 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
       );
     });
 
-    // A legacy row of the kind a pre-#J2-convergence deployment can hold.
-    // This is a crash residue: status='grading' but no terminal facts
-    // (score, passed, gradingResult, gradedAt all NULL).
+    // The historically PROVEN residue: the old gradeAttempt committed
+    // WRITE 1 (status='grading') and the process died before WRITE 2 —
+    // status='grading' with ALL terminal facts NULL (total_score, passed,
+    // grading_result, graded_at). WRITE 2 was one atomic UPDATE, so no
+    // subset of facts can be present.
     const legacyId = await insertAttempt("grading", {
       gradingStatus: "auto_graded",
     });
@@ -363,11 +365,13 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     `) as unknown as Array<{ status: string }>;
     expect(legacyRows[0]?.status).toBe("grading");
 
-    // CRASH RESIDUE VOID PATH: for a crash residue with no terminal facts,
-    // the safe disposition is to void it (never fabricate graded semantics).
-    // This avoids creating a zombie terminal with NULL scoring fields.
+    // Supported disposition (runbook Option A — offline legacy data repair
+    // exception): rewind the row to 'submitted', the state the historical
+    // writer's own guard proves it held. No terminal facts are fabricated
+    // and no zombie terminal is created; the bounded WHERE clause keeps the
+    // repair idempotent.
     await sql.unsafe(
-      `UPDATE exam_attempts SET status = 'voided' WHERE id = '${legacyId}'`,
+      `UPDATE exam_attempts SET status = 'submitted' WHERE id = '${legacyId}' AND status = 'grading'`,
     );
     await sql.begin(async (tx) => {
       for (const stmt of statements) {
@@ -377,15 +381,40 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     for (const conname of STATUS_CHECK_NAMES) {
       expect(await constraintDef(conname), conname).toBeDefined();
     }
-    // Pre-existing allowed rows all survived the upgrade.
+    // Pre-existing allowed rows all survived the upgrade; the dispositioned
+    // row keeps its (empty) terminal facts — nothing was scored offline.
     const counts = (await sql`
       SELECT count(*)::int AS n FROM exam_attempts
     `) as unknown as Array<{ n: number }>;
     expect(counts[0]?.n).toBe(insertedAttemptIds.length);
+    const after = (await sql`
+      SELECT status, total_score AS score, passed, grading_result, graded_at
+      FROM exam_attempts WHERE id = ${legacyId}
+    `) as unknown as Array<{
+      status: string;
+      score: number | null;
+      passed: boolean | null;
+      grading_result: unknown;
+      graded_at: Date | null;
+    }>;
+    expect(after[0]?.status).toBe("submitted");
+    expect(after[0]?.score).toBeNull();
+    expect(after[0]?.passed).toBeNull();
+    expect(after[0]?.grading_result).toBeNull();
+    expect(after[0]?.graded_at).toBeNull();
   });
 
-  it("0043 converges after a safe candidate disposition (crash residue with complete grading facts)", async () => {
-    // Drop ALL CHECKs so 0043 can install them fresh.
+  it("T2: a schema-possible grading hybrid (terminal facts present) is NOT a recognized safe candidate — identical fail-closed, no rewrite", async () => {
+    // `grading` + complete terminal facts is not producible by any
+    // single-writer sequential run of the historical writer: WRITE 2
+    // persisted status='graded' and all four terminal facts in ONE atomic
+    // UPDATE, and no migration ever wrote those columns. The only
+    // theoretical producer is the historical system itself under an
+    // unprotected concurrent double-grade interleaving (pre-lock async
+    // window) — unproven whether any deployment hit it. This fixture
+    // manufactures the shape via manual SQL purely to prove the migration
+    // treats it as unknown data — it is NOT evidence the shape is
+    // historical, and 0043 provides no scripted promotion to 'graded' for it.
     await sql.begin(async (tx) => {
       await tx.unsafe(
         `ALTER TABLE exams DROP CONSTRAINT IF EXISTS exams_status_check`,
@@ -401,12 +430,7 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
       );
     });
 
-    // A crash residue where the second write succeeded before the crash:
-    // status='grading' but ALL terminal facts are present.
-    // This is the "safe candidate" — the grading engine wrote score/passed/
-    // gradingResult/gradedAt before the crash, and only the status transition
-    // to 'graded' was lost.
-    const safeId = await insertAttempt("grading", {
+    const hybridId = await insertAttempt("grading", {
       gradingStatus: "auto_graded",
     });
     await sql.unsafe(`
@@ -414,34 +438,37 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
       SET total_score = 85, passed = true,
           grading_result = '[{"questionId":"q1","earnedScore":85,"maxScore":100,"passed":true}]'::jsonb,
           graded_at = now()
-      WHERE id = '${safeId}'
+      WHERE id = '${hybridId}'
     `);
 
-    // Verify terminal facts are present before disposition.
-    const before = (await sql`
-      SELECT status, total_score AS score, passed, grading_result IS NOT NULL AS has_result, graded_at IS NOT NULL AS has_graded_at
-      FROM exam_attempts WHERE id = ${safeId}
-    `) as unknown as Array<{
-      status: string;
-      score: number;
-      passed: boolean;
-      has_result: boolean;
-      has_graded_at: boolean;
-    }>;
-    expect(before[0]?.status).toBe("grading");
-    expect(before[0]?.score).toBe(85);
-    expect(before[0]?.passed).toBe(true);
-    expect(before[0]?.has_result).toBe(true);
-    expect(before[0]?.has_graded_at).toBe(true);
-
-    // Safe disposition: set to graded. Terminal facts are already complete —
-    // no fabrication, no enrollment projection (separate follow-up).
-    await sql.unsafe(
-      `UPDATE exam_attempts SET status = 'graded' WHERE id = '${safeId}'`,
-    );
-
-    // 0043 converges.
+    // Same fail-closed as the proven residue: the preflight keys on the
+    // status value alone, with no fact-completeness "safe" branch.
     const statements = readMigrationStatements(STATUS_CHECK_TAG);
+    await expect(
+      sql.begin(async (tx) => {
+        for (const stmt of statements) {
+          await tx.unsafe(stmt);
+        }
+      }),
+    ).rejects.toThrow(/0043 preflight/);
+
+    // Nothing installed, nothing rewritten — the contradictory row (and its
+    // facts) survives untouched for human investigation per the runbook.
+    for (const conname of STATUS_CHECK_NAMES) {
+      expect(await constraintDef(conname), conname).toBeUndefined();
+    }
+    const row = (await sql`
+      SELECT status, total_score AS score FROM exam_attempts WHERE id = ${hybridId}
+    `) as unknown as Array<{ status: string; score: number | null }>;
+    expect(row[0]?.status).toBe("grading");
+    expect(row[0]?.score).toBe(85);
+
+    // Leave the database convergent for any later assertions. The runbook
+    // forbids the scripted recipes for contradictory rows, so model the
+    // post-investigation outcome here: the manufactured garbage is removed
+    // (its origin is known — this test made it), not dispositioned.
+    await sql.unsafe(`DELETE FROM exam_attempts WHERE id = '${hybridId}'`);
+    insertedAttemptIds.splice(insertedAttemptIds.indexOf(hybridId), 1);
     await sql.begin(async (tx) => {
       for (const stmt of statements) {
         await tx.unsafe(stmt);
@@ -450,35 +477,12 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     for (const conname of STATUS_CHECK_NAMES) {
       expect(await constraintDef(conname), conname).toBeDefined();
     }
-
-    // Terminal facts preserved.
-    const after = (await sql`
-      SELECT status, total_score AS score, passed, grading_result IS NOT NULL AS has_result, graded_at IS NOT NULL AS has_graded_at
-      FROM exam_attempts WHERE id = ${safeId}
-    `) as unknown as Array<{
-      status: string;
-      score: number;
-      passed: boolean;
-      has_result: boolean;
-      has_graded_at: boolean;
-    }>;
-    expect(after[0]?.status).toBe("graded");
-    expect(after[0]?.score).toBe(85);
-    expect(after[0]?.passed).toBe(true);
-    expect(after[0]?.has_result).toBe(true);
-    expect(after[0]?.has_graded_at).toBe(true);
   });
 
-  it("crash residue dispositioned to graded produces a zombie terminal (known gap, enrollment unfixed)", async () => {
-    // This test documents the enrollment inconsistency: a crash residue with
-    // no terminal facts that is dispositioned to graded creates a zombie
-    // terminal. The grading engine's idempotency guard (status === 'graded'
-    // → return false) prevents re-entry, so the enrollment projection is
-    // never fixed. This is a known follow-up, not a migration correctness
-    // issue — the 0043 preflight correctly fails closed, and the operator
-    // must choose the void path for crash residues.
-
-    // Drop ALL CHECKs so 0043 can install them fresh.
+  it("T3: arbitrary unknown status values fail closed the same way", async () => {
+    // The preflight is vocabulary-driven, not grading-specific: any
+    // out-of-vocabulary status (unknown or contradictory legacy data)
+    // blocks the migration.
     await sql.begin(async (tx) => {
       await tx.unsafe(
         `ALTER TABLE exams DROP CONSTRAINT IF EXISTS exams_status_check`,
@@ -494,29 +498,34 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
       );
     });
 
-    const zombieId = await insertAttempt("grading", {
-      gradingStatus: "auto_graded",
-    });
-    // Intentionally incomplete: no score, passed, gradingResult, gradedAt.
-    await sql.unsafe(
-      `UPDATE exam_attempts SET status = 'graded', graded_at = now() WHERE id = '${zombieId}'`,
-    );
-
-    // The row is now terminal but factually empty.
+    const unknownId = await insertAttempt("regrading");
+    const statements = readMigrationStatements(STATUS_CHECK_TAG);
+    await expect(
+      sql.begin(async (tx) => {
+        for (const stmt of statements) {
+          await tx.unsafe(stmt);
+        }
+      }),
+    ).rejects.toThrow(/0043 preflight/);
+    for (const conname of STATUS_CHECK_NAMES) {
+      expect(await constraintDef(conname), conname).toBeUndefined();
+    }
     const row = (await sql`
-      SELECT status, total_score AS score, passed, grading_result, graded_at IS NOT NULL AS has_graded_at
-      FROM exam_attempts WHERE id = ${zombieId}
-    `) as unknown as Array<{
-      status: string;
-      score: number | null;
-      passed: boolean | null;
-      grading_result: unknown;
-      has_graded_at: boolean;
-    }>;
-    expect(row[0]?.status).toBe("graded");
-    expect(row[0]?.score).toBeNull();
-    expect(row[0]?.passed).toBeNull();
-    expect(row[0]?.grading_result).toBeNull();
-    expect(row[0]?.has_graded_at).toBe(true);
+      SELECT status FROM exam_attempts WHERE id = ${unknownId}
+    `) as unknown as Array<{ status: string }>;
+    expect(row[0]?.status).toBe("regrading");
+
+    // Converge again for any later work on this schema.
+    await sql.unsafe(
+      `UPDATE exam_attempts SET status = 'submitted' WHERE id = '${unknownId}'`,
+    );
+    await sql.begin(async (tx) => {
+      for (const stmt of statements) {
+        await tx.unsafe(stmt);
+      }
+    });
+    for (const conname of STATUS_CHECK_NAMES) {
+      expect(await constraintDef(conname), conname).toBeDefined();
+    }
   });
 });

@@ -30,51 +30,89 @@
 -- explicitly first, then re-run. A NULL grading_status is legal and passes
 -- untouched (legacy rows are classified at read time, never rewritten).
 --
--- ── OPERATOR RECOVERY RUNBOOK (when 0043 preflight raises) ──────────────
+-- ── OPERATOR RUNBOOK (when 0043 preflight raises) ─────────────────────────
 --
--- If this migration raises with "0043 preflight: exam_attempts.status has N
--- row(s) outside the accepted vocabulary", the operator must disposition
--- those rows before re-running. Legacy `grading` rows are crash residues:
--- the old gradeAttempt wrote status='grading' then crashed before writing
--- status='graded' with terminal facts (score, passed, gradingResult,
--- gradedAt). Two populations exist:
+-- CONTEXT — the historical writer (proven from commit 795c6c64 through the
+-- commit that removed it; window 2026-06-01 → 2026-06-14):
 --
---   SAFE CANDIDATE (rare): the second write succeeded before the crash —
---   all of score, passed, gradingResult, gradedAt are non-NULL.
---   Disposition: UPDATE exam_attempts SET status = 'graded' WHERE id = '...';
---   then run `pnpm --filter @exam/api backfill:submitted-answers` to
---   populate submitted_answers from draft answers.
+--   WRITE 1  UPDATE exam_attempts SET status='grading'        (own autocommit)
+--   compute  pure in-memory scoring — no DB writes
+--   WRITE 2  UPDATE exam_attempts SET status='graded',
+--            grading_result=..., total_score=..., passed=...,
+--            graded_at=...                                    (ONE statement)
+--   WRITE 3  UPDATE exam_enrollments SET ...                  (own autocommit)
 --
---   CRASH RESIDUE (common): score, passed, gradingResult, or gradedAt is
---   NULL — grading never completed. Do NOT set status='graded' (this
---   creates a zombie terminal with no scoring facts and a stale enrollment
---   projection). Instead:
---     Option A (recommended): SET status = 'voided' — marks the row as
---       known-bad without fabricating terminal semantics.
---     Option B: re-grade through the grading engine by setting status back
---       to 'submitted' and triggering the grading pipeline (requires the
---       grading workset to be present or reconstructed).
+-- WRITE 2 was a single atomic UPDATE: status and all four terminal facts
+-- always committed together or not at all. Grading entered only from
+-- `submitted` (the guard), nothing else ever wrote the terminal-fact columns,
+-- and a stuck `grading` row had no re-entry path in that code. Therefore:
 --
--- IDENTIFY the two populations:
---   SELECT id, status, score, passed, grading_result IS NOT NULL AS has_result,
+--   PROVEN crash residue:  status='grading' AND total_score IS NULL AND
+--                          passed IS NULL AND grading_result IS NULL AND
+--                          graded_at IS NULL
+--   (WRITE 1 committed; the process died before WRITE 2.)
+--
+--   CONTRADICTORY data:    status='grading' with ANY terminal fact non-NULL.
+--   No single-writer sequential run can produce this (WRITE 2 is atomic and
+--   no migration touches those columns); the only theoretical producer is
+--   the historical system itself under an unprotected concurrent
+--   double-grade interleaving in the pre-lock async window (two submits of
+--   one attempt both passing the guard; one run's WRITE 1 landing after the
+--   other's WRITE 2 and dying before its own). Whether any deployment ever
+--   hit that race is UNPROVEN. Do NOT disposition such a row with the
+--   recipes below — investigate its actual origin first (audit logs,
+--   backups, the race above, manual edits). #542 provides no scripted
+--   conversion for it, including NO scripted promotion to 'graded'.
+--
+-- IDENTIFY legacy rows (note: the physical score column is total_score):
+--   SELECT id, status, total_score, passed,
+--          grading_result IS NOT NULL AS has_result,
 --          graded_at IS NOT NULL AS has_graded_at, grading_status
 --   FROM exam_attempts WHERE status = 'grading';
 --
--- SAFE CANDIDATE predicate:
---   score IS NOT NULL AND passed IS NOT NULL
---   AND grading_result IS NOT NULL AND graded_at IS NOT NULL
+-- SUPPORTED DISPOSITIONS (proven residue only) — OFFLINE LEGACY DATA REPAIR
+-- EXCEPTION: manual, bounded (WHERE status='grading'), one-time legacy data
+-- repair performed by an operator at migration time. NOT a runtime transition,
+-- NOT callable by any code path, and NOT reusable as a business transition.
+-- The engine transition authority is unchanged; none of these statements is
+-- part of the lifecycle state machine.
 --
--- CRASH RESIDUE predicate:
---   score IS NULL OR passed IS NULL
---   OR grading_result IS NULL OR graded_at IS NULL
+--   Option A — recover as submitted (default):
+--     UPDATE exam_attempts SET status='submitted'
+--     WHERE id='...' AND status='grading';
+--     Restores the row to the state the historical writer's own guard proves
+--     it held ('grading' was entered only from 'submitted'). No terminal
+--     facts are fabricated. Afterward: re-run this migration, then run
+--     `pnpm --filter @exam/api backfill:submitted-answers` (the row is in
+--     scope as submitted-with-submittedAt). The row remains an observable
+--     non-terminal state (with the migration-default grading_status=
+--     'auto_graded', GET /api/system/diagnostics reports it read-only as
+--     submitted_not_terminalized); #542 does NOT auto-terminalize it —
+--     business closure happens through the normal grading surfaces.
+--
+--   Option B — void (only when the business decides the attempt must not
+--   count):
+--     UPDATE exam_attempts SET status='voided'
+--     WHERE id='...' AND status='grading';
+--     `voided` keeps its documented business meaning (attempt invalidation;
+--     SPEC §2.2 planned voidAttempt semantics). Applying it here is the same
+--     offline repair exception — it is NOT a new runtime quarantine label.
+--     Terminal; submitted answers are still frozen by the backfill
+--     (voided-with-submittedAt carries submit semantics), preserving the
+--     candidate's submission record.
+--
+-- ENROLLMENT NOTE: the historical writer's enrollment projection (WRITE 3)
+-- was a separate autocommit, so pre-existing databases may independently hold
+-- `graded` attempts with a stale enrollment — an older anomaly class that
+-- predates #542. It is NOT surfaced by the read-only integrity diagnostics
+-- (GET /api/system/diagnostics detects submitted_not_terminalized and
+-- submitted_workset_mismatch only — not graded-with-stale-enrollment).
+-- Neither disposition above creates or worsens it: 'submitted' and 'voided'
+-- are legal non-fabricated states, and no #542-documented path ever writes
+-- terminal grading facts offline.
 --
 -- After disposition, re-run this migration. The preflight will pass and
 -- the CHECK constraints will be installed.
---
--- KNOWN GAP: dispositioning to 'graded' does NOT fix the enrollment
--- projection (finalScore, finalPassed, finalAttemptId remain NULL). The
--- grading engine's idempotency guard prevents re-entry on an already-
--- graded attempt. This is a follow-up concern, not a migration blocker.
 -- ── END OPERATOR RECOVERY RUNBOOK ──────────────────────────────────────
 -- BEGIN 0043_PREFLIGHT
 DO $$
@@ -99,7 +137,7 @@ BEGIN
   SELECT count(*) INTO bad_attempts FROM "exam_attempts"
     WHERE "status" NOT IN ('not_started', 'queued', 'in_progress', 'disrupted', 'submitted', 'graded', 'voided');
   IF bad_attempts > 0 THEN
-    RAISE EXCEPTION '0043 preflight: exam_attempts.status has % row(s) outside the accepted vocabulary (not_started/queued/in_progress/disrupted/submitted/graded/voided) — includes any legacy status=''grading'' row from pre-#J2 deployments (#542 removed that fossil). Disposition the rows explicitly first (no silent rewrite), then re-run this migration. Safe candidates: rows with completed score/gradedAt fields. Quarantine: rows with absent score fields (incomplete grading — re-grade or void).', bad_attempts;
+    RAISE EXCEPTION '0043 preflight: exam_attempts.status has % row(s) outside the accepted vocabulary (not_started/queued/in_progress/disrupted/submitted/graded/voided) — includes any legacy status=''grading'' crash residue from pre-#J2 deployments (#542 removed that value from the runtime vocabulary). Unknown values are never rewritten here. Disposition the rows explicitly per the operator runbook in this file''s header (manual, migration-time-only repair; no scripted semantic conversion), then re-run this migration.', bad_attempts;
   END IF;
 
   SELECT count(*) INTO bad_grading_status FROM "exam_attempts"

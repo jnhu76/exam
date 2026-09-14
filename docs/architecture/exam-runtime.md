@@ -952,13 +952,14 @@ type TransientEvent =
 - 考生确实没作答 → 生成包含所有题目的 null/empty value 快照（合法空作答）
 - answers 格式异常 → **fail fast 默认**，记录 attemptId + 原因
 - `--allow-quarantine` 模式下，异常 attempt 写入 quarantine 报告
+- **preflight（#542）**：检测到未处置的历史 `status='grading'` 行（旧版 grading crash 残留，用 raw SQL 词汇检测、不经当前 AttemptStatus 枚举）→ **fail closed 拒绝运行**，错误信息指向 0043 runbook；绝不静默跳过。按 runbook 处置（默认 rewind 回 `submitted`）后该行以 submitted 语义重新进入回填范围
 
 **上线顺序**：
 1. schema migration 加列
 2. 代码兼容读取（优先 submitted_answers，fallback answers + warning）
 3. dry-run backfill，输出统计
 4. 正式 backfill
-5. 测试确认 submitted/grading/graded 都有 submitted_answers
+5. 测试确认 submitted/graded 都有 submitted_answers
 6. 后续移除 fallback
 
 ---

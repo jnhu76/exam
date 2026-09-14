@@ -48,8 +48,18 @@ describe("domain enums expose stable string values", () => {
     expect(AttemptStatus.Voided).toBe("voided");
   });
 
-  it("AttemptStatus 不含 grading（#542：旧版生产中间态已从当前词汇移除，提交→批改 在同一事务内落 graded）", () => {
-    expect(Object.values(AttemptStatus)).not.toContain("grading");
+  it("AttemptStatus 恰为 7 个值且不含 grading（#542：旧版生产中间态已从当前词汇移除，提交→批改 在同一事务内落 graded）", () => {
+    // Exact-set oracle: the value set matches the DB CHECK
+    // (exam_attempts_status_check) and the status-contract drift test.
+    expect(Object.values(AttemptStatus)).toEqual([
+      "not_started",
+      "queued",
+      "in_progress",
+      "disrupted",
+      "submitted",
+      "graded",
+      "voided",
+    ]);
   });
 
   it("EnrollmentStatus 覆盖分配/开始/完成/阻断四种资格状态", () => {

@@ -139,18 +139,34 @@ stateDiagram-v2
 | `voided` | Terminal override | No | **NO** — target design |
 
 > **`grading` disposition (#542)**: the `grading` lifecycle state was a
-> historical production intermediate — older code (`gradeAttempt` in commit
-> `795c6c64`, ~13-day window) wrote `status='grading'` as a durable step between
-> `submitted` and `graded` (crash between the two writes could leave a residue
-> row). The J2 lifecycle convergence removed that writer (terminal grading now
-> closes `submitted → graded` in one locked transaction, and the durable
-> grading-pipeline state is `gradingStatus`, P2D-J2). It has been REMOVED from
-> the current runtime vocabulary (domain enum, transition table, wire contract)
-> and the DB CHECK `exam_attempts_status_check` rejects it. Legacy rows from
-> that historical window may still exist; migration 0043's preflight fails
-> closed when it detects them and the operator must disposition them explicitly.
-> Should Phase 2 async/AI grading genuinely need a durable mid-grading lifecycle
-> state, that is a new explicit decision (including a CHECK migration), not a
+> historical production intermediate — older code (`gradeAttempt`, window
+> 2026-06-01 → 2026-06-14, removed at `efeae7ed`) wrote `status='grading'`
+> as a durable step between `submitted` and `graded`. That writer issued
+> three separate autocommits: `grading` → (in-memory scoring) → one ATOMIC
+> `UPDATE` setting `graded` together with all terminal facts → enrollment
+> projection. In any single-writer sequential run the only residue that
+> writer can leave is `grading` + ALL terminal facts NULL. A `grading` row
+> with any terminal fact present is not a shape any single-writer run or
+> migration produces (the sole theoretical producer is the pre-lock async
+> window's unprotected concurrent double-grade interleaving on one attempt;
+> unproven whether any deployment hit it) — it is contradictory data: fail
+> closed, investigate, no scripted conversion and no scripted promotion to
+> `graded`. The J2 lifecycle convergence removed that
+> writer (terminal grading now closes `submitted → graded` in one locked
+> transaction, and the durable grading-pipeline state is `gradingStatus`,
+> P2D-J2). The value has been REMOVED from the current runtime vocabulary
+> (domain enum, transition table, wire contract) and the DB CHECK
+> `exam_attempts_status_check` rejects it. Legacy rows from that historical
+> window may still exist; migration 0043's preflight fails closed when it
+> detects them and the operator must disposition them explicitly — an
+> OFFLINE LEGACY DATA REPAIR EXCEPTION (manual, bounded, migration-time
+> only, never callable by runtime): rewind the proven residue to `submitted`
+> (the state the writer's own guard proves it held; business closure then
+> happens through normal grading surfaces), or apply `voided` in its
+> documented business-invalidation meaning. #542 performs NO automatic
+> semantic recovery. Should Phase 2
+> async/AI grading genuinely need a durable mid-grading lifecycle state,
+> that is a new explicit decision (including a CHECK migration), not a
 > revival of the historical value.
 
 ### State machine diagram

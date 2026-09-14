@@ -141,7 +141,7 @@ not_started → queued → in_progress → submitted → graded
 | `graded` | 批改完成 | **已接线**：终局批改在同一锁定事务内由 `submitted` 直接落 `graded` |
 | `voided` | 已作废（监考员或管理员操作） | **Phase 2+ / planned**：`voidAttempt` command 仅作为目标设计，未提供管控入口 |
 
-> **`grading` 处置裁决（#542）**：旧版本生产代码曾短暂使用 `status='grading'` 作为自动批改的持久中间态（`submitted → grading → graded`，窗口约 13 天）。该值已从当前 `AttemptStatus`、转换表、wire 契约和 API 中移除，DB CHECK（`exam_attempts_status_check`）拒绝该值。历史数据库可能仍含此类行（旧进程在两次 durable writes 中间 crash 的残留）。Migration 0043 的 preflight 检测到该值时 fail closed，操作员必须显式处置后再重新运行。批改流水线的持久状态由 `gradingStatus`（P2D-J2，与 lifecycle 正交）承载，`submitted` 已是带恢复语义的持久中间态。
+> **`grading` 处置裁决（#542）**：旧版本生产代码曾短暂使用 `status='grading'` 作为自动批改的持久中间态（`submitted → grading → graded`，窗口 2026-06-01 → 2026-06-14）。该值已从当前 `AttemptStatus`、转换表、wire 契约和 API 中移除，DB CHECK（`exam_attempts_status_check`）拒绝该值。历史数据库可能仍含此类行：旧 writer 的终局写入是**单条原子 UPDATE**（`graded` 与全部终局事实同语句提交），因此单写者顺序执行下可证明的 crash 残留形状是 `grading` + 终局事实全 NULL；`grading` + 任何终局事实非 NULL 不是任何单写者运行或迁移可产生的形状（唯一理论来源是 pre-lock 异步窗口内同一 attempt 的并发双重批改交错，无证据表明真实发生过），按矛盾数据 fail closed 人工调查，#542 不提供任何脚本化语义转换（包括不脚本化提升为 `graded`）。Migration 0043 的 preflight 检测到该值时 fail closed；操作员按 0043 头部 runbook 显式处置（离线历史数据修复例外：默认 rewind 回 `submitted`，或按业务作废置 `voided`）——#542 不做自动恢复，业务收口经由正常批改路径。批改流水线的持久状态由 `gradingStatus`（P2D-J2，与 lifecycle 正交）承载，`submitted` 已是带恢复语义的持久中间态。
 
 **ExamAttempt 数据结构**：
 
