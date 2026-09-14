@@ -73,10 +73,10 @@
 | 项 | 内容 |
 | --- | --- |
 | original claim | 04 §2 写 89 但 §6 标题写 "74 caps 汇总"（SA 输出残留）；12 写 "74 caps 闭集"——两数并存 |
-| corrected claim | **89**（唯一数字）：`packages/authz/src/catalog.ts` `export const Permission = {…}` 对象体机械计数（正则 `^\s{2}\w+:`）= 89 keys；Admin 预设授予 = 76（同法计数一致）。全报告集与 Issue 摘要统一 89；04 §6 分类矩阵标为 **non-disjoint classification**（SERVER_ENFORCED ≈85 为"89 − 8 DECLARED_ONLY"的上界估计，非逐 key 穷举；任何分类合计不得与 89 直接相减） |
-| reason | 内部计数不一致（RPT-06）；分类统计被当作 partition 求和（规则违反） |
-| evidence | node/awk 机械计数（89；76） |
-| affected reports | 04（§2/§6）、11（统计节）、12（RBAC 行、§1） |
+| corrected claim | **89**（唯一 catalog 总数）：`packages/authz/src/catalog.ts` `export const Permission = {…}` 对象体机械计数（正则 `^\s{2}\w+:`）= 89 keys；Admin 预设授予 = 76（同法计数一致）。04 §6 分类矩阵保留为 **non-disjoint classification**；按“无生产 enforcement consumer”口径机械枚举 `DECLARED_ONLY=9`。由于未对 89 个 key 逐一做 consumer census，**SERVER_ENFORCED 不再报推导总数**，禁止用 `89 − DECLARED_ONLY` 充当 enforcement census |
+| reason | 原报告内部 74/89 不一致（RPT-06）；第一次 corrective 又留下 `≈85 = 89 − 8` 的错误算术/口径混合。本次最终一致性修正把 catalog 总数、declared-only 枚举和 consumer census 三件事彻底分开 |
+| evidence | catalog.ts 机械计数（89）；presets.ts Admin=76；04 §6 对 9 个 declared-only key 逐项枚举；未做完整 89-key consumer census |
+| affected reports | 04（§2/§6）、09（安全证据残句同步）、12（AUTHZ_CORE 行）、13（本条目） |
 
 ## 8. UI 裁决拆分（五维）
 
@@ -153,6 +153,8 @@ test "$(git merge-base b9b0e08c HEAD)" = b9b0e08c… → PASS
 
 ```text
 capability count     89（全报告集；无 74）
+DECLARED_ONLY        9（04 §6 机械枚举）
+SERVER_ENFORCED      no total claimed（未做 89-key consumer census）
 BLOCKER count        0      MAJOR count  0
 MINOR count          12     NOTE count   16
 RPT count            7      REJECTED     2
