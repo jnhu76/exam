@@ -67,13 +67,13 @@ Evidence：`plugins/auth.ts:60-207,128-131`；`assignmentAuthority.ts:145-246,26
 
 | 分类 | 数量 | 代表 |
 | --- | --- | --- |
-| SERVER_ENFORCED | ≈85（89 中除 DECLARED_ONLY 外的余额按“至少有一个消费点”记；不保证每 key 逐一核对） | exam 生命周期、批改、incident、proctor ops、user/role 管理、candidate runtime（own-attempt 链）；含 examProfile 3 key（路由真实消费） |
-| DECLARED_ONLY（无生产消费者） | 8 | system.auto_submit/heartbeat_scan/lifecycle_reconcile（扫描器从不评估 capability）；system.info.view（路由公开）；candidate.delete（Admin 授予但路由不存在）；grading.finalize + grading.identity.view（预留 M11 无消费者）；organization.view/update（授予无路由消费） |
+| SERVER_ENFORCED | **未做 89-key 穷举 consumer census，不报总数** | exam 生命周期、批改、incident、proctor ops、user/role 管理、candidate runtime（own-attempt 链）；含 examProfile 3 key（路由真实消费） |
+| DECLARED_ONLY（无生产 enforcement consumer） | **9（机械枚举）** | system.auto_submit/heartbeat_scan/lifecycle_reconcile（System preset 持有，但扫描器不评估 capability）；system.info.view（路由公开）；candidate.delete（Admin 授予但路由不存在）；grading.finalize + grading.identity.view（预留 M11 无消费者）；organization.view/update（授予无路由消费） |
 | DEAD | 0 | （result.publish alias 已被 P4-C1 移除） |
 | BACKEND_ONLY（有服务端消费、无 UI） | ≈6 | teacher/grader assignment 管理（无 UI）；proctor assignment manage 仅在恢复中心页面出现 |
 | UI_EXPOSED | 37 | apps/web 全仓 `Permission.*` 引用去重 = 37 key（机械 grep，corrective 复核修正原"39"）；`adminRouteCapabilities.ts` deny-by-default + "NOT A SECURITY CONTROL" 契约（capabilities.ts:11-15） |
 
-分类口径：SERVER_ENFORCED 的 ≈85 是"除 8 个 DECLARED_ONLY 外全部"的上界估计，未对 89 个 key 逐一做"至少一个路由消费"的穷举核对（09 报告 routeRegistryConformance 只证明"每受保护路由恰一门"，不证明"每 key 至少一门"）。此表是 non-disjoint 分类，不代表 partition；任何合计都不得与 89 直接相减。
+分类口径：`DECLARED_ONLY=9` 是按上述“无生产 enforcement consumer”口径逐项枚举；`SERVER_ENFORCED` **没有**做 89 个 key 的完整 consumer census，因此不提供推导数字。`routeRegistryConformanceWholeApp` 只证明“每个受保护路由恰一门”，不证明“每个 capability key 至少一个生产消费点”。此表是 non-disjoint 分类，不代表 partition；任何分类合计都不得与 89 直接做补集推导。
 
 ## 7. 攻击模式结果（全部有证据）
 
