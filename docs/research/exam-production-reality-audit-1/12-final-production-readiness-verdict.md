@@ -13,7 +13,7 @@ BASE_SHA `b9b0e08c`（corrective 分支 `audit/exam-production-reality-1-correct
 | 维度 | 裁决 | 依据 |
 | --- | --- | --- |
 | GENERIC_RUNTIME_CORRECTNESS | **PROVEN**（范围限定：generic exam runtime invariants） | 指：状态机转换闭包、answer save 协议、提交冻结屏障、自动批改、崩溃恢复、单时间 kernel（03/07 报告）；owner-unit 测试 + CI 执行证据 + 本审计 130 人实验零错误。**不主张**：全部产品行为 / 全部路由 / 全部浏览器流程都已被穷举证明（见 UNKNOWN 清单） |
-| AUTHZ_CORE | **PROVEN** | 授权链 fail-closed、无 fail-open、攻击模式全负（04 §7）；结构锁 routeRegistryConformanceWholeApp；89 key + 7 角色矩阵机械一致。残留 MINOR：client-events 无所有权（F3-04）、DECLARED_ONLY 8 项（NOTE） |
+| AUTHZ_CORE | **PROVEN** | 授权链 fail-closed、无 fail-open、攻击模式全负（04 §7）；结构锁 routeRegistryConformanceWholeApp；89 key + 7 角色矩阵机械一致。残留 MINOR：client-events 无所有权（F3-04）；按“无生产 enforcement consumer”口径机械枚举的 DECLARED_ONLY 为 9 项（NOTE，04 §6），但 SERVER_ENFORCED 未做 89-key 穷举 census，不报推导总数 |
 | RBAC_RESOURCE_SCOPING | **SUPPORTED_WITH_GAPS** | #286 teacher course-assignment 收窄 + teacherCourseScope 套件 + proctor grader scoped carriers 全部在案（04）；F1-04 已 REJECTED——无确认的 examProfile MAJOR；gap = 无 UI 的 carrier 管理（F1-04b）与 client-events 非 course resource 不开 scope（F3-04，已声明 by design） |
 | PRODUCT_TRUTHFULNESS | **PROVEN** | #516 收口后不支持的字段在 authoring 层拒绝激活，无 fake UI/inert config（05 §3）；可见性投影单一权威（03 §6） |
 | ATTEMPT_STATE_SAFETY | **PROVEN** | 单一 kernel、锁序统一、双提交防护、崩溃恢复真实进程测试（03 §2/§6、07 §2/§4）；状态列裸 text 完整性风险为 MINOR（F1-03） |
