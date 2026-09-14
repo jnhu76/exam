@@ -29,6 +29,53 @@
 -- deleted here. If this migration raises, disposition the offending rows
 -- explicitly first, then re-run. A NULL grading_status is legal and passes
 -- untouched (legacy rows are classified at read time, never rewritten).
+--
+-- ── OPERATOR RECOVERY RUNBOOK (when 0043 preflight raises) ──────────────
+--
+-- If this migration raises with "0043 preflight: exam_attempts.status has N
+-- row(s) outside the accepted vocabulary", the operator must disposition
+-- those rows before re-running. Legacy `grading` rows are crash residues:
+-- the old gradeAttempt wrote status='grading' then crashed before writing
+-- status='graded' with terminal facts (score, passed, gradingResult,
+-- gradedAt). Two populations exist:
+--
+--   SAFE CANDIDATE (rare): the second write succeeded before the crash —
+--   all of score, passed, gradingResult, gradedAt are non-NULL.
+--   Disposition: UPDATE exam_attempts SET status = 'graded' WHERE id = '...';
+--   then run `pnpm --filter @exam/api backfill:submitted-answers` to
+--   populate submitted_answers from draft answers.
+--
+--   CRASH RESIDUE (common): score, passed, gradingResult, or gradedAt is
+--   NULL — grading never completed. Do NOT set status='graded' (this
+--   creates a zombie terminal with no scoring facts and a stale enrollment
+--   projection). Instead:
+--     Option A (recommended): SET status = 'voided' — marks the row as
+--       known-bad without fabricating terminal semantics.
+--     Option B: re-grade through the grading engine by setting status back
+--       to 'submitted' and triggering the grading pipeline (requires the
+--       grading workset to be present or reconstructed).
+--
+-- IDENTIFY the two populations:
+--   SELECT id, status, score, passed, grading_result IS NOT NULL AS has_result,
+--          graded_at IS NOT NULL AS has_graded_at, grading_status
+--   FROM exam_attempts WHERE status = 'grading';
+--
+-- SAFE CANDIDATE predicate:
+--   score IS NOT NULL AND passed IS NOT NULL
+--   AND grading_result IS NOT NULL AND graded_at IS NOT NULL
+--
+-- CRASH RESIDUE predicate:
+--   score IS NULL OR passed IS NULL
+--   OR grading_result IS NULL OR graded_at IS NULL
+--
+-- After disposition, re-run this migration. The preflight will pass and
+-- the CHECK constraints will be installed.
+--
+-- KNOWN GAP: dispositioning to 'graded' does NOT fix the enrollment
+-- projection (finalScore, finalPassed, finalAttemptId remain NULL). The
+-- grading engine's idempotency guard prevents re-entry on an already-
+-- graded attempt. This is a follow-up concern, not a migration blocker.
+-- ── END OPERATOR RECOVERY RUNBOOK ──────────────────────────────────────
 -- BEGIN 0043_PREFLIGHT
 DO $$
 DECLARE

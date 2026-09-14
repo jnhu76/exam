@@ -283,4 +283,36 @@ describe("backfill-submitted-answers (P3-L0-4)", () => {
       .where(eq(schema.examAttempts.id, id));
     expect(row[0]?.submittedAnswers).toBeNull();
   });
+
+  it("backfills a post-disposition grading residue (grading→graded, gradingStatus=auto_graded from 0004)", async () => {
+    // Simulates the recovery chain: a historical crash residue was
+    // dispositioned from 'grading' to 'graded' by the operator. The row
+    // retains grading_status='auto_graded' (backfilled by migration 0004
+    // on ALL historical rows). The backfill must pick it up and populate
+    // submitted_answers from draft answers.
+    const id = crypto.randomUUID();
+    await seedAttempt(db, orgId, {
+      id,
+      status: "graded",
+      answers: [{ questionId: "q1", answer: "b", version: 1, savedAt: now }],
+      submittedAnswers: null,
+    });
+    // Set grading_status to the historical artifact value.
+    await db
+      .update(schema.examAttempts)
+      .set({ gradingStatus: "auto_graded" as never })
+      .where(eq(schema.examAttempts.id, id));
+
+    const stats = await runBackfill(db);
+    expect(stats.backfilled).toBeGreaterThanOrEqual(1);
+
+    const row = await db
+      .select()
+      .from(schema.examAttempts)
+      .where(eq(schema.examAttempts.id, id));
+    expect(row[0]?.submittedAnswers).toEqual({
+      schemaVersion: 1,
+      answers: [{ questionId: "q1", value: "b" }],
+    });
+  });
 });

@@ -452,7 +452,7 @@ export async function startOrRestoreAttempt(
  *
  * ADR-005 Slice 3 §4.4 guard ordering (binding):
  * 1. Idempotent already-submitted path FIRST: if the attempt is already in a
- *    terminal/post-submit state (submitted/grading/graded), validate the
+ *    terminal/post-submit state (submitted/graded), validate the
  *    existing workset for exact consistency and return it as-is. A re-submit
  *    after the deadline scanner already submitted must not be re-rejected by
  *    the early-submit guard.
@@ -725,7 +725,7 @@ export type RestoreLifecycleOutcome =
  *
  * Returns:
  *   - `"already_in_progress"` when the locked attempt is already in_progress;
- *   - `"terminal"` when it is in a terminal (submitted|grading|graded|voided)
+ *   - `"terminal"` when it is in a terminal (submitted|graded|voided)
  *     state;
  *   - `"restored"` after a successful disrupted → in_progress transition.
  *

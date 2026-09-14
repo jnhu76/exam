@@ -558,7 +558,7 @@ export const examAttempts = pgTable(
     // #542: typed against the domain vocabulary; DB value set enforced by
     // `exam_attempts_status_check` (drift caught by the status-contract test).
     // The value set includes the reserved not_started/queued/voided targets;
-    // `grading` is NOT in the set (unreachable fossil, removed in #542).
+    // `grading` is NOT in the set (historical intermediate, removed in #542).
     status: text("status").$type<AttemptStatus>().notNull(),
     questionSnapshot: jsonb("question_snapshot")
       .$type<QuestionSnapshot[]>()

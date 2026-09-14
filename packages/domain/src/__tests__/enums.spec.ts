@@ -48,7 +48,7 @@ describe("domain enums expose stable string values", () => {
     expect(AttemptStatus.Voided).toBe("voided");
   });
 
-  it("AttemptStatus 不含 grading（#542：unreachable fossil 已移除，提交→批改 在同一事务内落 graded）", () => {
+  it("AttemptStatus 不含 grading（#542：旧版生产中间态已从当前词汇移除，提交→批改 在同一事务内落 graded）", () => {
     expect(Object.values(AttemptStatus)).not.toContain("grading");
   });
 

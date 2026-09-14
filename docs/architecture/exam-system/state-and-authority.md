@@ -138,16 +138,20 @@ stateDiagram-v2
 | `graded` | All scoring complete | No | YES |
 | `voided` | Terminal override | No | **NO** — target design |
 
-> **`grading` disposition (#542)**: the `grading` lifecycle state was an
-> unreachable fossil — the transition-table entries `submitted:grade →
-> grading` / `grading:complete_grading → graded` were never persisted by any
-> production path (terminal grading closes `submitted → graded` in one locked
-> transaction, and the durable grading-pipeline state is `gradingStatus`,
-> P2D-J2). It has been REMOVED from the runtime vocabulary (domain enum,
-> transition table, wire contract) and the DB CHECK `exam_attempts_status_check`
-> rejects it. Should Phase 2 async/AI grading genuinely need a durable
-> mid-grading lifecycle state, that is a new explicit decision (including a
-> CHECK migration), not a revival of the fossil.
+> **`grading` disposition (#542)**: the `grading` lifecycle state was a
+> historical production intermediate — older code (`gradeAttempt` in commit
+> `795c6c64`, ~13-day window) wrote `status='grading'` as a durable step between
+> `submitted` and `graded` (crash between the two writes could leave a residue
+> row). The J2 lifecycle convergence removed that writer (terminal grading now
+> closes `submitted → graded` in one locked transaction, and the durable
+> grading-pipeline state is `gradingStatus`, P2D-J2). It has been REMOVED from
+> the current runtime vocabulary (domain enum, transition table, wire contract)
+> and the DB CHECK `exam_attempts_status_check` rejects it. Legacy rows from
+> that historical window may still exist; migration 0043's preflight fails
+> closed when it detects them and the operator must disposition them explicitly.
+> Should Phase 2 async/AI grading genuinely need a durable mid-grading lifecycle
+> state, that is a new explicit decision (including a CHECK migration), not a
+> revival of the historical value.
 
 ### State machine diagram
 

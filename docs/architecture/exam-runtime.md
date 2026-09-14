@@ -260,7 +260,7 @@ type AttemptStatus =
 | graded | 所有评分完成 | terminal |
 | voided | 终态覆盖；`submitted_answers` **可有可无**（取决于 void 前是否提交过） | terminal |
 
-> `grading` 已移除（#542 UNREACHABLE_FOSSIL）：终局批改在同一锁定事务内 `submitted → graded`；批改流水线的持久状态由 `gradingStatus`（P2D-J2）承载。`exam_attempts_status_check`（migration 0043）在 DB 层拒绝该值。
+> `grading` 已从当前运行时词汇移除（#542）：旧版生产代码（`gradeAttempt`，约 13 天窗口）曾将 `status='grading'` 作为 `submitted → graded` 之间的持久中间态写入；J2 生命周期收敛移除了该写入路径。当前终局批改在同一锁定事务内 `submitted → graded`；批改流水线的持久状态由 `gradingStatus`（P2D-J2）承载。`exam_attempts_status_check`（migration 0043）在 DB 层拒绝该值；历史残留行需操作员显式处置。
 
 ### 3.1.1 准入运行时（#292 durable admission，与计时正交）
 
@@ -308,7 +308,7 @@ P3-L0-2E 收口后，`grading` 态不再是人工评分的等待态。含 text_r
   in_progress → submitted (gradingStatus=auto_graded)
               → graded (gradingStatus=auto_graded 或 fully_graded)
   （submit 冻结屏障物化全部 completed_auto 条目；submit 事务后由 finalizeGrading 聚合为终态；
-    持久化真相是 submitted → graded；`grading` 已移除为 UNREACHABLE_FOSSIL #542）
+    持久化真相是 submitted → graded；`grading` 已从当前词汇移除 #542）
 
 纯 text_response：
   in_progress → submitted (gradingStatus=pending_manual)
@@ -327,7 +327,7 @@ Deadline 触发：
   （deadline reconcile 走同一 submit 冻结屏障 + 工作集物化；之后按纯客观 / 纯 text / 混合走对应路径）
 ```
 
-> **`grading` 态已移除（#542 UNREACHABLE_FOSSIL）：** 终局批改在同一锁定事务内 `submitted → graded`；批改流水线的持久状态由 `gradingStatus`（P2D-J2）承载。`exam_attempts_status_check`（migration 0043）在 DB 层拒绝该值。
+> **`grading` 态已从当前词汇移除（#542）：** 旧版生产代码曾将 `status='grading'` 作为 `submitted → graded` 之间的持久中间态；J2 收敛移除了该写入。当前终局批改在同一锁定事务内 `submitted → graded`；批改流水线的持久状态由 `gradingStatus`（P2D-J2）承载。`exam_attempts_status_check`（migration 0043）在 DB 层拒绝该值；历史残留行需操作员显式处置。
 
 > **人工评分完成单向性（P3-L0-2E Slice 3C/4）：** `gradeQuestion` 是"完成一个已存在的 pending_manual 工作项"的单向命令，**不是**改分/重评命令。前置：`attempt.status=submitted && attempt.gradingStatus=pending_manual && entry.gradingMode=manual && entry.status=pending_manual`。允许的迁移：`pending_manual → completed_manual`。某条目一旦变为 `completed_manual`，普通评分命令不得再次修改（同值不视为幂等，异值不视为改分——两者均被拒）。attempt 一旦到达 `graded + fully_graded`，普通人工评分调用不得修改评分条目或终态分数/结果字段。终态后的改分/重评不在当前协议范围内，需另行定义 revision 能力。
 

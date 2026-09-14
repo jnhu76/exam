@@ -482,7 +482,7 @@ not_started → queued → in_progress → submitted → graded
                                      └── disrupted voided
 ```
 
-> 当前实现仅有 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / voided` 保留为目标设计但**当前无写入路径**。`grading` 已按 UNREACHABLE_FOSSIL 移除（#542，裁决见 §2.2）。完整接线表见 §2.2。
+> 当前实现仅有 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / voided` 保留为目标设计但**当前无写入路径**。`grading` 已从当前运行时词汇移除（#542；旧版生产代码曾将其作为持久中间态，J2 收敛后移除，历史残留行需操作员显式处置，裁决见 §2.2）。完整接线表见 §2.2。
 
 **Command functions**（Phase 2 全部已实现）：
 

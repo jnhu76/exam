@@ -337,6 +337,8 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     });
 
     // A legacy row of the kind a pre-#J2-convergence deployment can hold.
+    // This is a crash residue: status='grading' but no terminal facts
+    // (score, passed, gradingResult, gradedAt all NULL).
     const legacyId = await insertAttempt("grading", {
       gradingStatus: "auto_graded",
     });
@@ -361,12 +363,11 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     `) as unknown as Array<{ status: string }>;
     expect(legacyRows[0]?.status).toBe("grading");
 
-    // Forward convergence: the operator classifies and dispositions the row
-    // EXPLICITLY (this test plays that role). Safe candidates — rows with
-    // completed grading facts — can be set to graded; incomplete rows should
-    // be quarantined or re-graded. Here we simulate a safe candidate.
+    // CRASH RESIDUE VOID PATH: for a crash residue with no terminal facts,
+    // the safe disposition is to void it (never fabricate graded semantics).
+    // This avoids creating a zombie terminal with NULL scoring fields.
     await sql.unsafe(
-      `UPDATE exam_attempts SET status = 'graded', graded_at = now() WHERE id = '${legacyId}'`,
+      `UPDATE exam_attempts SET status = 'voided' WHERE id = '${legacyId}'`,
     );
     await sql.begin(async (tx) => {
       for (const stmt of statements) {
@@ -376,11 +377,146 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     for (const conname of STATUS_CHECK_NAMES) {
       expect(await constraintDef(conname), conname).toBeDefined();
     }
-    // Pre-existing allowed rows all survived the upgrade (the legacy row is
-    // included: it was inserted above and explicitly dispositioned to graded).
+    // Pre-existing allowed rows all survived the upgrade.
     const counts = (await sql`
       SELECT count(*)::int AS n FROM exam_attempts
     `) as unknown as Array<{ n: number }>;
     expect(counts[0]?.n).toBe(insertedAttemptIds.length);
+  });
+
+  it("0043 converges after a safe candidate disposition (crash residue with complete grading facts)", async () => {
+    // Drop ALL CHECKs so 0043 can install them fresh.
+    await sql.begin(async (tx) => {
+      await tx.unsafe(
+        `ALTER TABLE exams DROP CONSTRAINT IF EXISTS exams_status_check`,
+      );
+      await tx.unsafe(
+        `ALTER TABLE exam_enrollments DROP CONSTRAINT IF EXISTS exam_enrollments_status_check`,
+      );
+      await tx.unsafe(
+        `ALTER TABLE exam_attempts DROP CONSTRAINT IF EXISTS exam_attempts_status_check`,
+      );
+      await tx.unsafe(
+        `ALTER TABLE exam_attempts DROP CONSTRAINT IF EXISTS exam_attempts_grading_status_check`,
+      );
+    });
+
+    // A crash residue where the second write succeeded before the crash:
+    // status='grading' but ALL terminal facts are present.
+    // This is the "safe candidate" — the grading engine wrote score/passed/
+    // gradingResult/gradedAt before the crash, and only the status transition
+    // to 'graded' was lost.
+    const safeId = await insertAttempt("grading", {
+      gradingStatus: "auto_graded",
+    });
+    await sql.unsafe(`
+      UPDATE exam_attempts
+      SET total_score = 85, passed = true,
+          grading_result = '[{"questionId":"q1","earnedScore":85,"maxScore":100,"passed":true}]'::jsonb,
+          graded_at = now()
+      WHERE id = '${safeId}'
+    `);
+
+    // Verify terminal facts are present before disposition.
+    const before = (await sql`
+      SELECT status, total_score AS score, passed, grading_result IS NOT NULL AS has_result, graded_at IS NOT NULL AS has_graded_at
+      FROM exam_attempts WHERE id = ${safeId}
+    `) as unknown as Array<{
+      status: string;
+      score: number;
+      passed: boolean;
+      has_result: boolean;
+      has_graded_at: boolean;
+    }>;
+    expect(before[0]?.status).toBe("grading");
+    expect(before[0]?.score).toBe(85);
+    expect(before[0]?.passed).toBe(true);
+    expect(before[0]?.has_result).toBe(true);
+    expect(before[0]?.has_graded_at).toBe(true);
+
+    // Safe disposition: set to graded. Terminal facts are already complete —
+    // no fabrication, no enrollment projection (separate follow-up).
+    await sql.unsafe(
+      `UPDATE exam_attempts SET status = 'graded' WHERE id = '${safeId}'`,
+    );
+
+    // 0043 converges.
+    const statements = readMigrationStatements(STATUS_CHECK_TAG);
+    await sql.begin(async (tx) => {
+      for (const stmt of statements) {
+        await tx.unsafe(stmt);
+      }
+    });
+    for (const conname of STATUS_CHECK_NAMES) {
+      expect(await constraintDef(conname), conname).toBeDefined();
+    }
+
+    // Terminal facts preserved.
+    const after = (await sql`
+      SELECT status, total_score AS score, passed, grading_result IS NOT NULL AS has_result, graded_at IS NOT NULL AS has_graded_at
+      FROM exam_attempts WHERE id = ${safeId}
+    `) as unknown as Array<{
+      status: string;
+      score: number;
+      passed: boolean;
+      has_result: boolean;
+      has_graded_at: boolean;
+    }>;
+    expect(after[0]?.status).toBe("graded");
+    expect(after[0]?.score).toBe(85);
+    expect(after[0]?.passed).toBe(true);
+    expect(after[0]?.has_result).toBe(true);
+    expect(after[0]?.has_graded_at).toBe(true);
+  });
+
+  it("crash residue dispositioned to graded produces a zombie terminal (known gap, enrollment unfixed)", async () => {
+    // This test documents the enrollment inconsistency: a crash residue with
+    // no terminal facts that is dispositioned to graded creates a zombie
+    // terminal. The grading engine's idempotency guard (status === 'graded'
+    // → return false) prevents re-entry, so the enrollment projection is
+    // never fixed. This is a known follow-up, not a migration correctness
+    // issue — the 0043 preflight correctly fails closed, and the operator
+    // must choose the void path for crash residues.
+
+    // Drop ALL CHECKs so 0043 can install them fresh.
+    await sql.begin(async (tx) => {
+      await tx.unsafe(
+        `ALTER TABLE exams DROP CONSTRAINT IF EXISTS exams_status_check`,
+      );
+      await tx.unsafe(
+        `ALTER TABLE exam_enrollments DROP CONSTRAINT IF EXISTS exam_enrollments_status_check`,
+      );
+      await tx.unsafe(
+        `ALTER TABLE exam_attempts DROP CONSTRAINT IF EXISTS exam_attempts_status_check`,
+      );
+      await tx.unsafe(
+        `ALTER TABLE exam_attempts DROP CONSTRAINT IF EXISTS exam_attempts_grading_status_check`,
+      );
+    });
+
+    const zombieId = await insertAttempt("grading", {
+      gradingStatus: "auto_graded",
+    });
+    // Intentionally incomplete: no score, passed, gradingResult, gradedAt.
+    await sql.unsafe(
+      `UPDATE exam_attempts SET status = 'graded', graded_at = now() WHERE id = '${zombieId}'`,
+    );
+
+    // The row is now terminal but factually empty.
+    const row = (await sql`
+      SELECT status, total_score AS score, passed, grading_result, graded_at IS NOT NULL AS has_graded_at
+      FROM exam_attempts WHERE id = ${zombieId}
+    `) as unknown as Array<{
+      status: string;
+      score: number | null;
+      passed: boolean | null;
+      grading_result: unknown;
+      has_graded_at: boolean;
+    }>;
+    expect(row[0]?.status).toBe("graded");
+    expect(row[0]?.score).toBeNull();
+    expect(row[0]?.passed).toBeNull();
+    expect(row[0]?.grading_result).toBeNull();
+    expect(row[0]?.has_graded_at).toBe(true);
   });
 });
