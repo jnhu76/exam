@@ -253,6 +253,12 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     await expect(
       insertAttempt("submitted", { gradingStatus: "bogus" }),
     ).rejects.toThrow(/exam_attempts_grading_status_check/);
+    // manual_graded is a historical value that was never in the GradingStatus
+    // enum but could exist in databases that ran pre-P2D-J2 code. The 0043
+    // CHECK must reject it — this is the grading_status poison oracle.
+    await expect(
+      insertAttempt("submitted", { gradingStatus: "manual_graded" }),
+    ).rejects.toThrow(/exam_attempts_grading_status_check/);
   });
 
   it("rejects unknown exam and enrollment status values at the DB layer", async () => {
@@ -355,8 +361,10 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     `) as unknown as Array<{ status: string }>;
     expect(legacyRows[0]?.status).toBe("grading");
 
-    // Forward convergence: the operator dispositions the row EXPLICITLY
-    // (this test plays that role), then the migration applies cleanly.
+    // Forward convergence: the operator classifies and dispositions the row
+    // EXPLICITLY (this test plays that role). Safe candidates — rows with
+    // completed grading facts — can be set to graded; incomplete rows should
+    // be quarantined or re-graded. Here we simulate a safe candidate.
     await sql.unsafe(
       `UPDATE exam_attempts SET status = 'graded', graded_at = now() WHERE id = '${legacyId}'`,
     );

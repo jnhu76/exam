@@ -11,11 +11,13 @@
 -- transition graph. Allowed sets mirror the @exam/domain enums; drift between
 -- the two is caught by the packages/db status-contract test.
 --
--- `grading` is deliberately ABSENT from exam_attempts_status_check: it was an
--- unreachable fossil (no production writer since the #J2 lifecycle converged;
--- terminal grading persists submitted → graded in ONE locked transaction and
--- the durable grading-pipeline state is grading_status, P2D-J2). It was
--- removed from the runtime vocabulary in #542. The reserved targets
+-- `grading` is deliberately ABSENT from exam_attempts_status_check: older
+-- production code briefly persisted `status='grading'` as a durable intermediate
+-- during automatic grading (submitted → grading → graded); the #J2 lifecycle
+-- convergence removed that writer (terminal grading now persists submitted → graded
+-- in ONE locked transaction) and #542 removed the value from the runtime
+-- vocabulary. Legacy rows from that historical window may still exist. The
+-- reserved targets
 -- not_started / queued / voided (attempt) and blocked (enrollment) stay
 -- legal: they are documented target-design vocabulary (docs/SPEC.md §2.2),
 -- not fossils.
@@ -50,7 +52,7 @@ BEGIN
   SELECT count(*) INTO bad_attempts FROM "exam_attempts"
     WHERE "status" NOT IN ('not_started', 'queued', 'in_progress', 'disrupted', 'submitted', 'graded', 'voided');
   IF bad_attempts > 0 THEN
-    RAISE EXCEPTION '0043 preflight: exam_attempts.status has % row(s) outside the accepted vocabulary (not_started/queued/in_progress/disrupted/submitted/graded/voided) — includes any legacy status=''grading'' row (#542 removed that fossil); disposition the rows explicitly first (no silent rewrite)', bad_attempts;
+    RAISE EXCEPTION '0043 preflight: exam_attempts.status has % row(s) outside the accepted vocabulary (not_started/queued/in_progress/disrupted/submitted/graded/voided) — includes any legacy status=''grading'' row from pre-#J2 deployments (#542 removed that fossil). Disposition the rows explicitly first (no silent rewrite), then re-run this migration. Safe candidates: rows with completed score/gradedAt fields. Quarantine: rows with absent score fields (incomplete grading — re-grade or void).', bad_attempts;
   END IF;
 
   SELECT count(*) INTO bad_grading_status FROM "exam_attempts"

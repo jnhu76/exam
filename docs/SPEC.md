@@ -141,7 +141,7 @@ not_started → queued → in_progress → submitted → graded
 | `graded` | 批改完成 | **已接线**：终局批改在同一锁定事务内由 `submitted` 直接落 `graded` |
 | `voided` | 已作废（监考员或管理员操作） | **Phase 2+ / planned**：`voidAttempt` command 仅作为目标设计，未提供管控入口 |
 
-> **`grading` 处置裁决（#542）**：`grading` 曾长期作为 transition vocabulary 中的幻影状态存在（状态机表项 `submitted:grade → grading` 从未被任何生产路径持久化）。已按 UNREACHABLE_FOSSIL 处置：从领域枚举、转换表、wire 契约中移除，DB CHECK（`exam_attempts_status_check`）拒绝该值。理由：批改流水线的持久状态由 `gradingStatus`（P2D-J2，与 lifecycle 正交）承载，`submitted` 已是带恢复语义的持久中间态；引入持久 `grading` 属于为旧枚举值改产品。若 Phase 2 异步/AI 批改确需该状态，应作为显式的新决策重新引入（含 CHECK 迁移），而非复活幻影。
+> **`grading` 处置裁决（#542）**：旧版本生产代码曾短暂使用 `status='grading'` 作为自动批改的持久中间态（`submitted → grading → graded`，窗口约 13 天）。该值已从当前 `AttemptStatus`、转换表、wire 契约和 API 中移除，DB CHECK（`exam_attempts_status_check`）拒绝该值。历史数据库可能仍含此类行（旧进程在两次 durable writes 中间 crash 的残留）。Migration 0043 的 preflight 检测到该值时 fail closed，操作员必须显式处置后再重新运行。批改流水线的持久状态由 `gradingStatus`（P2D-J2，与 lifecycle 正交）承载，`submitted` 已是带恢复语义的持久中间态。
 
 **ExamAttempt 数据结构**：
 
