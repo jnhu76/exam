@@ -243,7 +243,6 @@ export async function restoreInterruptedAttempt(
   // 4. If the attempt is already terminal, reconstruct via idempotency (R10).
   if (
     attempt.status === "submitted" ||
-    attempt.status === "grading" ||
     attempt.status === "graded" ||
     attempt.status === "voided"
   ) {
@@ -442,11 +441,7 @@ export async function restoreInterruptedAttempt(
   );
 
   // 11. If the deadline reconciliation submitted the attempt, return terminal.
-  if (
-    reconciled.status === "submitted" ||
-    reconciled.status === "grading" ||
-    reconciled.status === "graded"
-  ) {
+  if (reconciled.status === "submitted" || reconciled.status === "graded") {
     return reconstructTerminalOutcome(reconciled, eventRepo, adjustmentRepo);
   }
 
@@ -568,7 +563,7 @@ async function reconstructInProgressOutcome(
 
 /**
  * #9: Reconstructs a terminal outcome from the latest terminalized event (R10).
- * Used when the attempt is already submitted/grading/graded/voided on entry.
+ * Used when the attempt is already submitted/graded/voided on entry.
  * Fails closed on adjustment identity mismatch.
  */
 async function reconstructTerminalOutcome(

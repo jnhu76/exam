@@ -22,13 +22,19 @@ export const MisconductFlagSchema = z.object({
 /** DTO for a misconduct flag. */
 export type MisconductFlagDTO = z.infer<typeof MisconductFlagSchema>;
 
+/**
+ * Attempt lifecycle status on the wire (#542): mirrors `@exam/domain`
+ * AttemptStatus. `grading` is not a member — terminal grading closes
+ * `submitted → graded` transactionally and the durable grading-pipeline
+ * state is `gradingStatus`, so no attempt ever persists or carries the
+ * intermediate `grading` lifecycle value.
+ */
 export const AttemptStatusEnum = z.enum([
   "not_started",
   "queued",
   "in_progress",
   "disrupted",
   "submitted",
-  "grading",
   "graded",
   "voided",
 ]);
@@ -1171,7 +1177,6 @@ export const CandidateStatusItemSchema = z.object({
     "in_progress",
     "disrupted",
     "submitted",
-    "grading",
     "graded",
     "voided",
   ]),

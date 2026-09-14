@@ -2,10 +2,16 @@
  * P3-L0-4: backfill `submitted_answers` for historical attempts.
  *
  * Scope (per exam-protocol.md §9.2): all attempts with submit semantics —
- * `submitted` / `grading` / `graded` / `voided` (with non-null `submittedAt`).
+ * `submitted` / `graded` / `voided` (with non-null `submittedAt`).
  * Attempts without a frozen snapshot are filled by normalizing their draft
  * `answers` against the question snapshot via `buildSubmittedAnswersSnapshot`
  * (the same helper the live submit path uses — P3-L0-2).
+ *
+ * Preflight (#542): unresolved legacy `status='grading'` rows (historical
+ * grading crash residue) FAIL CLOSED — the run refuses to start rather than
+ * silently leaving them out of scope. Disposition them per the 0043 runbook
+ * first; after the supported rewind disposition the row re-enters scope as
+ * `submitted`.
  *
  * Modes:
  *   --dry-run        compute the plan + report stats, write nothing
@@ -33,15 +39,29 @@ import type {
   QuestionSnapshot,
   SubmittedAnswersSnapshot,
 } from "@exam/domain";
-import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
 
 /** Statuses that carry submit semantics and are in backfill scope. */
-const SUBMIT_STATUSES = ["submitted", "grading", "graded"] as const;
+const SUBMIT_STATUSES = ["submitted", "graded"] as const;
 
 /** voided is in scope only when it has a submittedAt (was submitted before void). */
 const VOIDED = "voided";
+
+/**
+ * Historical persisted vocabulary, deliberately NOT spelled through the
+ * current AttemptStatus enum (which cannot express it): `grading` was the
+ * durable intermediate the pre-J2 grading writer persisted, and a crash
+ * between its two writes left it behind as a residue row. Such rows ARE
+ * submitted-but-never-graded data, so silently leaving them out of scope
+ * would hide them; the preflight fails closed instead (#542).
+ */
+const LEGACY_GRADING_STATUS = "grading";
+
+/** Runbook the preflight error points operators at. */
+const LEGACY_GRADING_RUNBOOK =
+  "packages/db/migrations/postgres/0043_persisted_state_status_checks.sql (operator runbook in the header)";
 
 export interface BackfillQuarantineItem {
   attemptId: string;
@@ -62,7 +82,7 @@ export interface BackfillOptions {
 }
 
 /**
- * Loads the candidate attempts for backfill: submitted/grading/graded (any
+ * Loads the candidate attempts for backfill: submitted/graded (any
  * submittedAt) + voided-with-submittedAt. Pure DB read; no writes.
  */
 export async function loadBackfillCandidates(
@@ -74,13 +94,9 @@ export async function loadBackfillCandidates(
     .where(
       and(
         isNull(schema.examAttempts.submittedAnswers),
-        // status in submitted/grading/graded, OR (voided AND submittedAt not null)
+        // status in submitted/graded, OR (voided AND submittedAt not null)
         or(
-          inArray(schema.examAttempts.status, [
-            "submitted",
-            "grading",
-            "graded",
-          ]),
+          inArray(schema.examAttempts.status, ["submitted", "graded"]),
           and(
             eq(schema.examAttempts.status, "voided"),
             isNotNull(schema.examAttempts.submittedAt),
@@ -105,8 +121,24 @@ export function buildSnapshotForAttempt(
 }
 
 /**
+ * Counts unresolved legacy `status='grading'` rows using the raw historical
+ * vocabulary (never the current enum). Pure DB read; no writes.
+ */
+export async function countUnresolvedLegacyGrading(
+  db: Database,
+): Promise<number> {
+  const rows = (await db.execute(
+    sql`SELECT count(*)::int AS n FROM exam_attempts WHERE status = ${LEGACY_GRADING_STATUS}`,
+  )) as unknown as Array<{ n: number }>;
+  return Number(rows[0]?.n ?? 0);
+}
+
+/**
  * Runs the backfill against the resolved database.
  *
+ * - Preflight: any unresolved legacy `grading` row FAILS CLOSED before a
+ *   single candidate is read or written — legacy crash residue is never
+ *   silently skipped. Disposition those rows per the 0043 runbook first.
  * - Idempotent: candidates already exclude rows with non-null
  *   submitted_answers; a re-run only processes newly-eligible rows.
  * - Dry-run: computes snapshots + stats but performs no writes.
@@ -118,6 +150,14 @@ export async function runBackfill(
   db: Database,
   options: BackfillOptions = {},
 ): Promise<BackfillStats> {
+  const unresolvedLegacyGrading = await countUnresolvedLegacyGrading(db);
+  if (unresolvedLegacyGrading > 0) {
+    throw new Error(
+      `backfill: ${unresolvedLegacyGrading} attempt(s) still carry the legacy status='grading' (historical grading crash residue). ` +
+        `Refusing to run so the row(s) cannot be silently skipped. Disposition them explicitly first (offline legacy data repair — see the operator runbook in ${LEGACY_GRADING_RUNBOOK}), then re-run.`,
+    );
+  }
+
   const candidates = await loadBackfillCandidates(db);
 
   const stats: BackfillStats = {

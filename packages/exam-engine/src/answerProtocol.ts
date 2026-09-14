@@ -119,11 +119,7 @@ export function processSaveAnswer(
     };
   }
 
-  if (
-    state.attemptStatus === "submitted" ||
-    state.attemptStatus === "grading" ||
-    state.attemptStatus === "graded"
-  ) {
+  if (state.attemptStatus === "submitted" || state.attemptStatus === "graded") {
     return {
       accepted: false,
       serverVersion: 0,

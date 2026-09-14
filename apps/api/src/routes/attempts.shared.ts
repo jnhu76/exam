@@ -165,11 +165,7 @@ export function buildCandidateTakeSnapshot(
   if (!isEditable) {
     if (isDeadlineExpired) {
       lockReason = "deadline";
-    } else if (
-      attemptStatus === "submitted" ||
-      attemptStatus === "grading" ||
-      attemptStatus === "graded"
-    ) {
+    } else if (attemptStatus === "submitted" || attemptStatus === "graded") {
       lockReason = "submitted";
     } else if (attemptStatus === "voided") {
       lockReason = "voided";
@@ -228,11 +224,7 @@ export function buildCandidateTakeSnapshot(
           currentVersion = meta.version;
         }
       }
-    } else if (
-      attemptStatus === "submitted" ||
-      attemptStatus === "grading" ||
-      attemptStatus === "graded"
-    ) {
+    } else if (attemptStatus === "submitted" || attemptStatus === "graded") {
       // Submitted answers — only from submitted_answers column
       if (submittedMap.has(q.originalQuestionId)) {
         answerValue = submittedMap.get(q.originalQuestionId);

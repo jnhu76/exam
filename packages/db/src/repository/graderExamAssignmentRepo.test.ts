@@ -107,7 +107,7 @@ function examRow(
     title: `${title} ${suffix}`,
     description: "",
     courseId,
-    status: "draft",
+    status: "draft" as const,
     timingMode: "timed_window",
     durationMinutes: 60,
     openAt: now,

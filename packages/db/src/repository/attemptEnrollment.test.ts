@@ -517,13 +517,20 @@ describe("attemptRepo custom methods", () => {
       });
       const pastDeadline = new Date(Date.now() - 60_000);
       let nextNo = 2;
-      for (const status of ["submitted", "grading", "graded", "voided"]) {
+      // Non-autosubmittable statuses (#542 vocabulary): `grading` no longer
+      // exists, `queued` is the reserved never-entered state.
+      for (const status of [
+        "submitted",
+        "queued",
+        "graded",
+        "voided",
+      ] as const) {
         await attemptRepo.create(ctxS, {
           examId: idsS.examId,
           enrollmentId: enrS.id,
           candidateId: idsS.candidateId,
           attemptNo: nextNo++,
-          status: status as never,
+          status,
           questionSnapshot: [],
           answers: [],
           startedAt: new Date(Date.now() - 3600_000),
@@ -774,12 +781,13 @@ describe("attemptRepo custom methods", () => {
       await makeAttempt("in_progress", 2);
       await makeAttempt("disrupted", 3);
       await makeAttempt("submitted", 4);
-      await makeAttempt("grading", 5);
       await makeAttempt("graded", 6);
       await makeAttempt("voided", 7);
 
+      // Unresolved = queued/in_progress/disrupted/submitted (#542 removed the
+      // unreachable `grading` from the unresolved set — the DB cannot hold it).
       const count = await attemptRepo.countUnresolvedByExam(ctxU, examId);
-      expect(count).toBe(5);
+      expect(count).toBe(4);
     });
 
     it("returns 0 when only finalized attempts exist", async () => {

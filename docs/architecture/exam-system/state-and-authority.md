@@ -130,14 +130,44 @@ stateDiagram-v2
 
 | State | Meaning | Answers writable? | Reachable? |
 |-------|---------|-------------------|------------|
-| `not_started` | Enrolled but not started | N/A | **NO** — no write path |
-| `queued` | Waiting for batch entry (Phase 2) | N/A | **NO** — Phase 2 planned |
+| `not_started` | Enrolled but not started | N/A | **NO** — no write path (reserved target design) |
+| `queued` | Waiting for batch entry (Phase 2) | N/A | **NO** — Phase 2 planned (reserved target design) |
 | `in_progress` | Actively taking the exam | Yes | YES |
 | `disrupted` | Heartbeat timeout; disconnected | No | YES |
 | `submitted` | Candidate submitted; frozen | No | YES |
-| `grading` | Auto-grading in progress (transient) | No | **NO** — no write path |
 | `graded` | All scoring complete | No | YES |
 | `voided` | Terminal override | No | **NO** — target design |
+
+> **`grading` disposition (#542)**: the `grading` lifecycle state was a
+> historical production intermediate — older code (`gradeAttempt`, window
+> 2026-06-01 → 2026-06-14, removed at `efeae7ed`) wrote `status='grading'`
+> as a durable step between `submitted` and `graded`. That writer issued
+> three separate autocommits: `grading` → (in-memory scoring) → one ATOMIC
+> `UPDATE` setting `graded` together with all terminal facts → enrollment
+> projection. In any single-writer sequential run the only residue that
+> writer can leave is `grading` + ALL terminal facts NULL. A `grading` row
+> with any terminal fact present is not a shape any single-writer run or
+> migration produces (the sole theoretical producer is the pre-lock async
+> window's unprotected concurrent double-grade interleaving on one attempt;
+> unproven whether any deployment hit it) — it is contradictory data: fail
+> closed, investigate, no scripted conversion and no scripted promotion to
+> `graded`. The J2 lifecycle convergence removed that
+> writer (terminal grading now closes `submitted → graded` in one locked
+> transaction, and the durable grading-pipeline state is `gradingStatus`,
+> P2D-J2). The value has been REMOVED from the current runtime vocabulary
+> (domain enum, transition table, wire contract) and the DB CHECK
+> `exam_attempts_status_check` rejects it. Legacy rows from that historical
+> window may still exist; migration 0043's preflight fails closed when it
+> detects them and the operator must disposition them explicitly — an
+> OFFLINE LEGACY DATA REPAIR EXCEPTION (manual, bounded, migration-time
+> only, never callable by runtime): rewind the proven residue to `submitted`
+> (the state the writer's own guard proves it held; business closure then
+> happens through normal grading surfaces), or apply `voided` in its
+> documented business-invalidation meaning. #542 performs NO automatic
+> semantic recovery. Should Phase 2
+> async/AI grading genuinely need a durable mid-grading lifecycle state,
+> that is a new explicit decision (including a CHECK migration), not a
+> revival of the historical value.
 
 ### State machine diagram
 
@@ -154,25 +184,17 @@ stateDiagram-v2
 
     state "not_started (no write path)" as not_started
     state "queued (Phase 2)" as queued
-    state "grading (unreachable)" as grading
     state "voided (target design)" as voided
 
-    note right of grading
-        State machine table has
-        submitted:grade → grading
-        but finalizeTerminalGrading()
-        writes 'graded' directly.
-        This state is unreachable.
-    end note
     note right of voided
         Target design only.
         No admin/proctor entry point.
     end note
 ```
 
-**Authority**: `packages/exam-engine/src/attemptStateMachine.ts` `TRANSITION_TABLE` documents the intended lifecycle graph. It is **not** the only transition enforcement: `submitAttempt()` / terminal grading use the established `transition()` seams, but the REC-I4 disruption/restore transitions (`markDisrupted()`, the lifecycle-only helper `restoreAttemptState()`) enforce their transition **directly** inside the canonical locked commands — explicit status precondition + row lock + direct `attemptRepo.update(...)`, not a `TRANSITION_TABLE.transition()` call.
+**Authority**: `packages/exam-engine/src/attemptStateMachine.ts` `TRANSITION_TABLE` documents the lifecycle graph. It is **not** the only transition enforcement: `submitAttempt()` / terminal grading use the established `transition()` seams, but the REC-I4 disruption/restore transitions (`markDisrupted()`, the lifecycle-only helper `restoreAttemptState()`) enforce their transition **directly** inside the canonical locked commands — explicit status precondition + row lock + direct `attemptRepo.update(...)`, not a `TRANSITION_TABLE.transition()` call.
 **Evidence**: `submitAttempt()` calls `transition()` (`attemptCommands.ts:367`); `markDisrupted()` writes `status: "disrupted"` directly after re-checking `status === "in_progress"` under the row lock (`attemptCommands.ts:531`); `restoreAttemptState()` writes `status: "in_progress"` directly after re-checking `status === "disrupted"` (`attemptCommands.ts:598`). The `TRANSITION_TABLE` is the lifecycle *contract*, not a single chokepoint every command funnels through.
-**Known limitations**: The `grading` state is unreachable — `finalizeTerminalGrading()` writes `status = 'graded'` directly. The state machine table entries `submitted:grade → grading` and `grading:complete_grading → graded` exist but are never invoked.
+**Persistence backstop (#542)**: `exam_attempts_status_check` bounds the stored value set to the accepted vocabulary (mirroring the domain enum; drift is caught by the `@exam/db` status-contract test). The CHECK is a value-set backstop only — the transition graph remains command-owned. The `grading` value is rejected by the DB (fossil removed; migration 0043's preflight fails closed if a legacy row still carries it).
 
 ### Commands owning each transition
 

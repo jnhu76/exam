@@ -131,7 +131,7 @@ async function seedDisruptedAttempt(env: Env, suffix: string): Promise<void> {
       60, now(), now(), 60, 100, 'manual', '[]', '[]', '{}'::jsonb,
       'none', 'latest', 1, now(), now());
     INSERT INTO exam_enrollments (id, organization_id, exam_id, candidate_id, status, attempt_count, created_at, updated_at)
-    VALUES ('enrollment-${suffix}', 'org-${suffix}', 'exam-${suffix}', 'candidate-${suffix}', 'open', 0, now(), now());
+    VALUES ('enrollment-${suffix}', 'org-${suffix}', 'exam-${suffix}', 'candidate-${suffix}', 'started', 0, now(), now());
     INSERT INTO exam_attempts (id, organization_id, exam_id, enrollment_id, candidate_id, attempt_no,
       status, question_snapshot, answers, created_at, updated_at)
     VALUES ('attempt-${suffix}', 'org-${suffix}', 'exam-${suffix}', 'enrollment-${suffix}', 'candidate-${suffix}', 1,
@@ -208,7 +208,13 @@ describe("0027 convergence — B. healthy schema", () => {
     // Seed a minimal organization + user, then a full fixture chain so we can
     // create an exam_attempts row with an EXPLICIT non-default grading_status.
     // This exercises the convergence's "do not overwrite a legit value" path.
+    //
+    // `manual_graded` is a historical grading_status value unknown to the
+    // current GradingStatus enum — the 0043 CHECK would reject it. We
+    // temporarily drop that CHECK to simulate a pre-0043 database state where
+    // such a row could exist, then restore it after seeding.
     await env.conn.sql.unsafe(`
+      ALTER TABLE exam_attempts DROP CONSTRAINT IF EXISTS exam_attempts_grading_status_check;
       INSERT INTO organizations (id, name, display_name, slug, created_at, updated_at)
       VALUES ('org-b', 'OrgB', 'OrgB', 'org-b', now(), now());
       INSERT INTO users (id, organization_id, username, password_hash, name, role, is_active, created_at, updated_at)
@@ -226,10 +232,12 @@ describe("0027 convergence — B. healthy schema", () => {
         60, now(), now(), 60, 100, 'manual', '[]', '[]', '{}'::jsonb,
         'none', 'latest', 1, now(), now());
       INSERT INTO exam_enrollments (id, organization_id, exam_id, candidate_id, status, attempt_count, created_at, updated_at)
-      VALUES ('en-b', 'org-b', 'ex-b', 'cp-b', 'open', 0, now(), now());
+      VALUES ('en-b', 'org-b', 'ex-b', 'cp-b', 'started', 0, now(), now());
       INSERT INTO exam_attempts (id, organization_id, exam_id, enrollment_id, candidate_id, attempt_no,
         status, grading_status, question_snapshot, answers, created_at, updated_at)
       VALUES ('at-b', 'org-b', 'ex-b', 'en-b', 'cp-b', 1, 'graded', 'manual_graded', '[]', '[]', now(), now());
+      ALTER TABLE exam_attempts ADD CONSTRAINT exam_attempts_grading_status_check
+        CHECK ("grading_status" IN ('auto_graded', 'pending_manual', 'fully_graded')) NOT VALID;
     `);
   }, 120_000);
   afterAll(async () => {
@@ -255,8 +263,10 @@ describe("0027 convergence — B. healthy schema", () => {
       `SELECT grading_status AS v FROM exam_attempts WHERE id='at-b'`,
     );
     expect(afterProctor).toBe(beforeProctor);
-    // The convergence backfills only NULL grading_status values; a legit
-    // 'manual_graded' must be untouched, not reset to the 'auto_graded' default.
+    // 0027 convergence backfills only NULL grading_status values; a non-NULL
+    // value — even one unknown to the current GradingStatus enum — must be
+    // untouched, not reset to the 'auto_graded' default. This is the poison
+    // oracle: it proves convergence never silently coerces legacy data.
     expect(beforeGs).toBe("manual_graded");
     expect(afterGs).toBe("manual_graded");
   });
@@ -401,7 +411,7 @@ describe("0027 convergence — D. missing 0022 status/pointer CHECK", () => {
         'none', 'latest', 1, now(), now())
       ON CONFLICT DO NOTHING;
       INSERT INTO exam_enrollments (id, organization_id, exam_id, candidate_id, status, attempt_count, created_at, updated_at)
-      VALUES ('en-d', 'org-d', 'ex-d', 'cp-d', 'open', 0, now(), now()) ON CONFLICT DO NOTHING;
+      VALUES ('en-d', 'org-d', 'ex-d', 'cp-d', 'started', 0, now(), now()) ON CONFLICT DO NOTHING;
     `);
     // Insert a disrupted attempt WITHOUT a pointer (the I1 transitional state).
     await env.conn.sql.unsafe(`

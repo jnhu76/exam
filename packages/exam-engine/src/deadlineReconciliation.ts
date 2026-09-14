@@ -173,13 +173,9 @@ export async function ensureAttemptDeadlineReconciled(
     throw new NotFoundError("Attempt not found");
   }
 
-  // Idempotent already-frozen path: submitted/grading/graded carry a frozen
+  // Idempotent already-frozen path: submitted/graded carry a frozen
   // submitted_answers — return unchanged (do NOT rebuild).
-  if (
-    attempt.status === "submitted" ||
-    attempt.status === "grading" ||
-    attempt.status === "graded"
-  ) {
+  if (attempt.status === "submitted" || attempt.status === "graded") {
     return attempt;
   }
 

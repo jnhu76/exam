@@ -197,7 +197,7 @@ describe("table contract v2 structural guards", () => {
     const rows = statusBadgeFixture();
     // Full coverage: every statusMeta key × every supported locale enters the
     // universe automatically (no hand-copied label list).
-    expect(rows.length).toBeGreaterThanOrEqual(53);
+    expect(rows.length).toBeGreaterThanOrEqual(52);
     // Every label resolves through i18n in its own locale. i18next returns
     // the key itself for a missing translation, so `label !== key` is the
     // loud-fail guard: a new status without catalog copy reds the test.

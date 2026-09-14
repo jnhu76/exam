@@ -320,7 +320,7 @@ async function buildFixture(
     enrollmentId,
     candidateId: profileId,
     attemptNo,
-    status: "submitted",
+    status: "submitted" as const,
     questionSnapshot,
     answers: [
       {

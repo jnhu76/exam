@@ -456,10 +456,12 @@ describe("P1 #324: candidate result visibility projection", () => {
       });
       expect(startResponse.statusCode).toBe(201);
       const attemptId = startResponse.json().id as string;
-      // Hold attempt #1 at the grading boundary: not active, no terminal
-      // projection, enrollment.finalAttemptId still null.
+      // Hold attempt #1 just before terminal grading closure: status=submitted
+      // (frozen, not active), no terminal projection, enrollment.finalAttemptId
+      // still null. #542: there is no durable `grading` status — the pre-close
+      // hold point IS `submitted`.
       await createAttemptRepo(ctx.db).update(candidateCtx(), attemptId, {
-        status: "grading",
+        status: "submitted",
         gradingStatus: "auto_graded",
       });
       const enrollment = await createEnrollmentRepo(

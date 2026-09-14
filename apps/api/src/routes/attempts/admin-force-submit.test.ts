@@ -761,42 +761,6 @@ describe("attempt routes", () => {
       expect(audits).toHaveLength(0);
     });
 
-    it("leaves a grading attempt untouched with a no_change receipt (no audit)", async () => {
-      const t = await createIsolatedTestOrg();
-      const { attemptId } = await createStartedAttempt(
-        t,
-        "Force Submit Idempotent Grading Exam",
-      );
-      await ctx.db
-        .update(schema.examAttempts)
-        .set({ status: "grading" })
-        .where(eq(schema.examAttempts.id, attemptId));
-
-      const operationId = crypto.randomUUID();
-      const res = await forceSubmit(t, attemptId, {
-        operationId,
-        reason: "grading row must stay untouched",
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.disposition).toBe("no_change");
-      expect(body.resultPayload.beforeStatus).toBe("grading");
-      expect(body.resultPayload.afterStatus).toBe("grading");
-
-      const after = await createAttemptRepo(ctx.db).findById(
-        makeAdminCtx(t),
-        attemptId,
-      );
-      expect(after?.status).toBe("grading");
-
-      const receipts = await listReceipts(attemptId);
-      expect(receipts).toHaveLength(1);
-      expect(receipts[0]!.outcome).toBe("no_change");
-      const audits = await countForceSubmitAudits(attemptId);
-      expect(audits).toHaveLength(0);
-    });
-
     it("rejects a voided attempt with 409 INVALID_STATE_TRANSITION (0 receipt, 0 audit, 0 mutation)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(

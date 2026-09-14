@@ -152,7 +152,7 @@ async function buildFixture(schemaName?: string): Promise<Fixture> {
     organizationId: orgId,
     examId,
     candidateId: candidateProfileId,
-    status: "enrolled",
+    status: "started",
     attemptCount: 0,
     createdAt: new Date(),
     updatedAt: new Date(),

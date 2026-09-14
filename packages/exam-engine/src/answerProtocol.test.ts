@@ -631,7 +631,7 @@ describe("processSaveAnswer — canonical rejection precedence matrix (#301 corr
     expect(result.conflict?.reason).toBe("ATTEMPT_CLOSED");
   });
 
-  it.each(["submitted", "grading", "graded"] as AttemptStatus[])(
+  it.each(["submitted", "graded"] as AttemptStatus[])(
     "%s + malformed → ATTEMPT_ALREADY_SUBMITTED (canonicalization never runs)",
     (status) => {
       const result = resultFor(status, {}, rejectingCanonicalize);

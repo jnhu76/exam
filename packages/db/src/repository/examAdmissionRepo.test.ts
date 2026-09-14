@@ -39,7 +39,9 @@ async function seedAttempt(candidateId: string): Promise<string> {
     organizationId: orgId,
     examId,
     candidateId,
-    status: "enrolled",
+    // "started" (not a made-up value): the paired attempt below is in_progress,
+    // so the enrollment must carry the started lifecycle status (#542 CHECK).
+    status: "started",
     attemptCount: 0,
     createdAt: now,
     updatedAt: now,

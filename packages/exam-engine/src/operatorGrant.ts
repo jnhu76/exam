@@ -145,7 +145,7 @@ export interface GrantAttemptTimeResult {
  * transaction-*compatible*, not atomic by itself: the B2 caller MUST execute
  * it inside `executeInTransaction` so the ledger insert and deadline update
  * commit and roll back together. ADR-013 forbids operator grants from
- * resurrecting `submitted | grading | graded | voided`.
+ * resurrecting `submitted | graded | voided`.
  *
  * Frozen order:
  *   1. assert EA capability affinity;
@@ -383,7 +383,6 @@ export async function grantAttemptTime(
   //    of the interruptionId supplied.
   if (
     reconciled.status === "submitted" ||
-    reconciled.status === "grading" ||
     reconciled.status === "graded" ||
     reconciled.status === "voided"
   ) {

@@ -106,11 +106,6 @@ export const statusMeta = {
     tone: "secondary",
     icon: CircleCheck,
   },
-  grading: {
-    labelKey: "status.attempt.grading",
-    tone: "primary",
-    icon: LoaderCircle,
-  },
   graded: { labelKey: "status.attempt.graded", tone: "success", icon: Trophy },
   voided: {
     labelKey: "status.attempt.voided",

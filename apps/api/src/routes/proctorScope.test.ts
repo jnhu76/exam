@@ -100,7 +100,7 @@ describe("J4-I1B Proctor assignment enforcement (assignment_scoped)", () => {
       organizationId: ctx.org.id,
       examId,
       candidateId: candidateProfileId,
-      status: "active",
+      status: "started",
       attemptCount: 1,
       createdAt: now,
       updatedAt: now,

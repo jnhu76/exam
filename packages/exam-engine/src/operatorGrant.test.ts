@@ -388,7 +388,7 @@ describe("grantAttemptTime", () => {
   });
 
   describe("terminal attempts", () => {
-    it.each(["submitted", "grading", "graded", "voided"] as const)(
+    it.each(["submitted", "graded", "voided"] as const)(
       "%s attempt: reconcile returns terminal, no ledger, no deadline update, outcome terminal",
       async (status) => {
         const ctx = setupMocks({
@@ -720,7 +720,7 @@ describe("grantAttemptTime", () => {
 
     it("terminal attempt + foreign interruptionId: outcome terminal, no episode lookup, no grant", async () => {
       const ctx = setupMocks({
-        attempt: makeAttempt({ status: "grading" }),
+        attempt: makeAttempt({ status: "graded" }),
         episode: null, // would fail ownership if lookup ran
       });
       const episodeSpy = vi.spyOn(ctx.episodeRepo, "findByAttemptForUpdate");

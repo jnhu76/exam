@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import type { QuestionSnapshot } from "@exam/domain";
+import type { AttemptStatus, QuestionSnapshot } from "@exam/domain";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp } from "./testHelpers.js";
 import systemRoutes from "./system.js";
@@ -581,7 +581,7 @@ describe("system routes", () => {
 
     async function seedLegacyAttempt(
       overrides: {
-        status?: string;
+        status?: AttemptStatus;
         gradingStatus?:
           | "auto_graded"
           | "pending_manual"

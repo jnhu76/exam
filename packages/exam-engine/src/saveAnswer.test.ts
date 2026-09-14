@@ -186,7 +186,7 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
 
   it("5. submitted/terminal attempt is rejected with no draft mutation", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
-    for (const terminal of ["submitted", "grading", "graded"] as const) {
+    for (const terminal of ["submitted", "graded"] as const) {
       const h = await harness({ status: terminal }, now);
       const beforeAnswers = h.attemptRepo.get("attempt-1").answers;
 

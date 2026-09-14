@@ -2,6 +2,7 @@ import type {
   AnswerRecord,
   Attachment,
   AttemptGradingEntry,
+  AttemptStatus,
   BackupExecutorType,
   BackupRunEventType,
   BackupRunStatus,
@@ -12,6 +13,8 @@ import type {
   ControlFlags,
   EmailOutboxStatus,
   EmailType,
+  EnrollmentStatus,
+  ExamStatus,
   GradingEntryMode,
   GradingEntryStatus,
   GradingRule,
@@ -278,7 +281,10 @@ export const exams = pgTable(
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id),
-    status: text("status").notNull(),
+    // #542: typed against the domain lifecycle vocabulary; the DB-side value
+    // set is enforced by `exams_status_check` (drift between the two is
+    // caught by the status-contract test, not by this marker).
+    status: text("status").$type<ExamStatus>().notNull(),
     timingMode: text("timing_mode").notNull(),
     // #291 Phase A: null duration = deadline/untimed (no personal limit);
     // null closeAt = untimed (open-ended). Per-mode invariants are owned by
@@ -362,6 +368,13 @@ export const exams = pgTable(
     check(
       "exams_interruption_time_policy_check",
       sql`${table.interruptionTimePolicy} IN ('strict', 'bounded_grace', 'operator_incident')`,
+    ),
+    // #542: persistence integrity backstop for the exam lifecycle vocabulary.
+    // The semantic transition authority is EXAM_VALID_TRANSITIONS +
+    // examCommands; this only bounds the stored value set.
+    check(
+      "exams_status_check",
+      sql`${table.status} IN ('draft', 'published', 'open', 'closed', 'canceled', 'archived')`,
     ),
     check(
       "exams_interruption_policy_caps_check",
@@ -500,7 +513,9 @@ export const examEnrollments = pgTable(
     candidateId: text("candidate_id")
       .notNull()
       .references(() => candidateProfiles.id),
-    status: text("status").notNull(),
+    // #542: typed against the domain vocabulary; DB value set enforced by
+    // `exam_enrollments_status_check` (drift caught by the status-contract test).
+    status: text("status").$type<EnrollmentStatus>().notNull(),
     attemptCount: integer("attempt_count").notNull(),
     finalScore: doublePrecision("final_score"),
     finalPassed: boolean("final_passed"),
@@ -513,6 +528,13 @@ export const examEnrollments = pgTable(
       table.organizationId,
       table.examId,
       table.candidateId,
+    ),
+    // #542: persistence integrity backstop for the enrollment vocabulary
+    // (`blocked` is a reserved ENROLLMENT_VALID_TRANSITIONS target with no
+    // current writer — it stays a legal stored value by explicit design).
+    check(
+      "exam_enrollments_status_check",
+      sql`${table.status} IN ('assigned', 'started', 'completed', 'blocked')`,
     ),
   ],
 );
@@ -533,7 +555,11 @@ export const examAttempts = pgTable(
       .notNull()
       .references(() => candidateProfiles.id),
     attemptNo: integer("attempt_no").notNull(),
-    status: text("status").notNull(),
+    // #542: typed against the domain vocabulary; DB value set enforced by
+    // `exam_attempts_status_check` (drift caught by the status-contract test).
+    // The value set includes the reserved not_started/queued/voided targets;
+    // `grading` is NOT in the set (historical intermediate, removed in #542).
+    status: text("status").$type<AttemptStatus>().notNull(),
     questionSnapshot: jsonb("question_snapshot")
       .$type<QuestionSnapshot[]>()
       .notNull(),
@@ -642,6 +668,24 @@ export const examAttempts = pgTable(
         OR
         (${table.status} != 'disrupted' AND ${table.currentInterruptionId} IS NULL AND ${table.interruptedAt} IS NULL)
       `,
+    ),
+    // #542: persistence integrity backstop for the attempt lifecycle
+    // vocabulary. The semantic transition authority is the engine's
+    // TRANSITION_TABLE + locked commands; this only bounds the stored value
+    // set. It is NOT a transition machine. Reserved targets
+    // (not_started/queued/voided) stay legal; `grading` is not (fossil
+    // removed in #542 — a fail-closed preflight in migration 0043 stops the
+    // upgrade if any legacy row still carries it).
+    check(
+      "exam_attempts_status_check",
+      sql`${table.status} IN ('not_started', 'queued', 'in_progress', 'disrupted', 'submitted', 'graded', 'voided')`,
+    ),
+    // #542: scoring-pipeline label (P2D-J2), orthogonal to `status`. Null-safe
+    // by CHECK semantics: legacy rows predating the 0004 backfill may be NULL
+    // and are classified at read time (grading.ts), never rewritten.
+    check(
+      "exam_attempts_grading_status_check",
+      sql`${table.gradingStatus} IN ('auto_graded', 'pending_manual', 'fully_graded')`,
     ),
     // Org+exam status distribution for the Recovery Exam aggregate
     // (contract §6.5 `GROUP BY status`). Covers the org+exam predicate and

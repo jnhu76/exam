@@ -541,11 +541,7 @@ describe("attempt lifecycle deterministic race traces (EXAM-341)", () => {
           buildResolution(repos, currentStatus),
         );
         const reconciledStatus = reconciled.status;
-        if (
-          reconciledStatus === "graded" ||
-          reconciledStatus === "submitted" ||
-          reconciledStatus === "grading"
-        ) {
+        if (reconciledStatus === "graded" || reconciledStatus === "submitted") {
           await args.hold();
           return;
         }

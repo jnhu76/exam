@@ -203,7 +203,7 @@ function groupByStatus(candidates: CandidateStatusItem[]): StatusGroups {
       groups.active.push(c);
     } else if (c.status === "disrupted") {
       groups.disrupted.push(c);
-    } else if (c.status === "submitted" || c.status === "grading") {
+    } else if (c.status === "submitted") {
       groups.submitted.push(c);
     } else if (c.status === "graded") {
       groups.graded.push(c);

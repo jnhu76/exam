@@ -604,7 +604,6 @@ export function createAttemptRepo(db: Database) {
               "in_progress",
               "disrupted",
               "submitted",
-              "grading",
             ]),
           ),
         );

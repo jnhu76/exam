@@ -83,7 +83,7 @@ _Avoid_ (command names): `reopen` (use `open`/`openExam`), `delete` (use `archiv
 
 ## Exam Attempt Lifecycle
 
-**AttemptStatus**: The lifecycle state of a candidate's exam attempt. 8 values; the API also returns derived capability fields.
+**AttemptStatus**: The **current** lifecycle state of a candidate's exam attempt. 7 values; the API also returns derived capability fields.
 _Avoid_: attempt state, attempt phase
 
 - `not_started` — enrolled but not yet started
@@ -91,9 +91,10 @@ _Avoid_: attempt state, attempt phase
 - `in_progress` — candidate is actively taking the exam; `answers` is writable
 - `disrupted` — heartbeat timeout; candidate disconnected
 - `submitted` — candidate submitted; `submitted_answers` frozen; `gradingStatus` may be `pending_manual` if manual grading is needed
-- `grading` — auto-grading in progress (transient machine-only; not used for human grading wait)
 - `graded` — all scoring complete (both auto and manual); result visibility depends on visibility policy
 - `voided` — terminal override; may or may not have `submitted_answers`
+
+> **Historical persisted compatibility boundary (#542)**: older production code briefly used `status='grading'` as a durable intermediate during automatic grading (`submitted → grading → graded`). That value is **not** part of the current `AttemptStatus`, current API/wire vocabulary, or current transition graph. However, an older deployment could have crashed after persisting `grading` and before terminal closure, so a historical database may still contain such a row. Treat it as a legacy persisted state that requires explicit recovery/disposition during upgrade; do not silently coerce it and do not reintroduce it as a current runtime state merely for compatibility.
 
 **GradingStatus**: The scoring lifecycle dimension, independent of AttemptStatus.
 _Avoid_: score status, grading phase
@@ -104,9 +105,9 @@ _Avoid_: score status, grading phase
 
 > The historical `pending_auto` value has been removed; it is not in the current enum (`packages/domain/src/enums.ts`). Pure-objective attempts are set to `auto_graded` at the submit freeze barrier.
 
-**Critical rule**: The manual grading queue's work truth source is the materialized `attempt_grading_entries` (predicate: `grading_mode='manual' AND status='pending_manual'`), NOT `gradingStatus` and NOT an `attemptStatus = 'grading'` query. `gradingStatus` describes the attempt-level scoring lifecycle/display state but cannot manufacture or rebuild queue work items; `gradingStatus = 'pending_manual'` without a matching pending entry does not appear in the queue (ghost-attempt guard). The `grading` attemptStatus is a transient auto-grading indicator only.
+**Critical rule**: The manual grading queue's work truth source is the materialized `attempt_grading_entries` (predicate: `grading_mode='manual' AND status='pending_manual'`), NOT `gradingStatus` and NOT an `attemptStatus = 'grading'` query. `gradingStatus` describes the attempt-level scoring lifecycle/display state but cannot manufacture or rebuild queue work items; `gradingStatus = 'pending_manual'` without a matching pending entry does not appear in the queue (ghost-attempt guard). Historical `status='grading'` rows are upgrade/recovery concerns only and are not current manual- or auto-grading workflow states.
 
-**State machine discipline**: All state changes go through集中 command functions (`submitAttempt`, `resumeAttempt`, `markDisrupted`, `gradeQuestion`, `voidAttempt`). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state.
+**State machine discipline**: All current state changes go through centralized command functions (`submitAttempt`, `resumeAttempt`, `markDisrupted`, `gradeQuestion`, `voidAttempt`). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed current transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state. Historical persisted values are handled by explicit migration/recovery logic rather than by widening the current state machine.
 
 > The historical `completeManualGrading` command does not exist in current production code; the one-way pending-only manual completion command is `gradeQuestion` (`packages/exam-engine/src/manualGrading.ts`).
 

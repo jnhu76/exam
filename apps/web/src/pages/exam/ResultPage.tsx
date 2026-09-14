@@ -298,8 +298,6 @@ export function ResultPage() {
                   return t("candidateResult.status.not_started");
                 if (result.status === "submitted")
                   return t("candidateResult.status.submitted");
-                if (result.status === "grading")
-                  return t("candidateResult.status.grading");
                 if (result.status === "graded")
                   return t("candidateResult.status.graded");
                 if (result.status === "disrupted")

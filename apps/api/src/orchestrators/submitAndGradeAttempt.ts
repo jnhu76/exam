@@ -169,11 +169,7 @@ export async function submitAndGradeAttempt(
         // submit+grade work. This avoids redundant readGradingSnapshot,
         // computeGradingResult, and finalizeGrading calls that would extend
         // the FOR UPDATE lock unnecessarily.
-        if (
-          reconciledStatus === "graded" ||
-          reconciledStatus === "submitted" ||
-          reconciledStatus === "grading"
-        ) {
+        if (reconciledStatus === "graded" || reconciledStatus === "submitted") {
           return true;
         }
         currentStatus = reconciledStatus;
