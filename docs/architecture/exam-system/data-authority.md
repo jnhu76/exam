@@ -4,10 +4,11 @@
 
 ```text
 Last verified against commit:
-cac6b85c425c85ad4077002bc518fca0b50f766f
+aeb9e938d5ddf87103a60607a85170cf87327845
 
 Verification scope:
-Current master implementation after merged P5-0 / PR #210.
+Persisted-state contract hardening (#542): current grading authority,
+7-state attempt vocabulary, and legacy grading-residue recovery boundary.
 ```
 
 ## 1. Definition of Authoritative Data
@@ -70,12 +71,14 @@ Draft answers (`exam_attempts.answers`) are authoritative for the candidate's wo
 
 | Data | Authoritative storage | Who writes | When authoritative |
 |------|----------------------|------------|-------------------|
-| Per-question auto grade | `attempt_grading_entries` (objective rows) | `materializeGradingEntries()` at submit-freeze | At submit-freeze |
+| Per-question auto grade | `attempt_grading_entries` (objective rows) | `materializeGradingWorkset()` at submit-freeze | At submit-freeze |
 | Per-question manual grade | `attempt_grading_entries` (manual rows) | `gradeQuestion()` (manual grading command) | At score entry |
 | Grading queue | `attempt_grading_entries` WHERE `grading_mode='manual' AND status='pending_manual'` | N/A (derived) | At submit-freeze |
 | Attempt total score | `exam_attempts.score` | `finalizeTerminalGrading()` | At terminal closure |
 | Attempt pass/fail | `exam_attempts.passed` | `finalizeTerminalGrading()` | At terminal closure |
 | Per-question results | `exam_attempts.gradingResult` | `finalizeTerminalGrading()` | At terminal closure |
+
+**Invariant**: `materializeGradingWorkset()` (submit-freeze, inside `submitAttempt()`) is the SOLE workset creation site. Every grading surface — terminal closure, manual scoring, submit re-entry — requires an exactly complete, terminal-consistent workset (`aggregateGradingEntries()` / `validateGradingWorksetConsistency()`), and both fail closed on a missing, partial, or mismatched workset.
 
 ### 6.1 Grading workset is the single durable truth
 
@@ -90,6 +93,19 @@ Draft answers (`exam_attempts.answers`) are authoritative for the candidate's wo
 - `attempt_grading_entries` (materialized workset)
 
 It NEVER reads `attempt.gradingResult` (output), draft `attempt.answers`, or live `questions`.
+
+### 6.3 Current grading flow vs. historical grading residue
+
+Current grading is one canonical chain:
+
+```text
+submitted (+ frozen submitted_answers + workset materialized at the freeze barrier)
+  → attempt_grading_entries (single durable grading truth)
+  → canonical terminal grading (finalizeTerminalGrading → aggregateGradingEntries)
+  → graded (+ enrollment projection)
+```
+
+The historical `status='grading'` value is NOT part of the current 7-state attempt vocabulary (`not_started / queued / in_progress / disrupted / submitted / graded / voided`) and has no current writer: the pre-convergence grading writer was removed; terminal grading now persists `submitted → graded` in one locked transaction. A legacy `status='grading'` row can exist only as migration/recovery concern — it is dispositioned by the operator runbook in `packages/db/migrations/postgres/0043_persisted_state_status_checks.sql`, never by runtime code. Its supported recovery path (rewind → 0043 → submitted-answers backfill → legacy workset recovery → normal grading surface) is historical repair authority only: it reconstructs the missing durable grading INPUT from frozen submitted truth and writes no terminal attempt or enrollment facts.
 
 ## 7. Result Projection Authority
 
@@ -186,7 +202,7 @@ The Save Answer protocol is idempotent per `(questionId, clientSeq)` pair:
 
 ### 10.2 Submit idempotency
 
-`submitAttempt()` is idempotent: if the attempt is already `submitted`/`grading`/`graded`, returns the existing frozen snapshot unchanged.
+`submitAttempt()` is idempotent: if the attempt is already `submitted`/`graded` (the current 7-state vocabulary has no `grading` value — see §6.3), re-entry returns the existing frozen snapshot unchanged after validating the existing grading workset for exact consistency. It never rebuilds the snapshot and never re-materializes the workset. The candidate grading orchestrator holds a `submitted` attempt whose `gradingStatus` is `pending_manual` at `submitted` — the manual grading queue owns its closure.
 
 ### 10.3 Email worker concurrency
 
@@ -203,8 +219,10 @@ If the process crashes **during** the submit transaction:
 ### 11.2 Grading crash
 
 If the process crashes **after** submit but **before** grading completes:
-- The attempt is `submitted` (submit committed) but not `graded`.
-- `gradeAttemptIdempotent()` detects `submitted` status and re-runs grading.
+- The attempt is `submitted` (submit committed) but not `graded`, with its workset already materialized at the freeze barrier.
+- Normal surfaces re-close it through the canonical workset authority: the candidate re-submit path invokes `finalizeGrading()` directly and the deadline scanner invokes `gradeAttemptIdempotent()` — both reach `finalizeTerminalGrading()` → `aggregateGradingEntries()`, which requires an exactly complete terminal workset and fails closed otherwise.
+
+If a legacy deployment crashed between the two writes of the removed historical grading writer, the residue row holds `status='grading'` with NULL terminal facts. That value has no current writer and no runtime re-entry path; it exists only as a migration/recovery concern and is dispositioned offline per the 0043 operator runbook (§6.3).
 
 ### 11.3 Email worker crash
 

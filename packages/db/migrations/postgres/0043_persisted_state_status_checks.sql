@@ -82,16 +82,58 @@
 --     WHERE id='...' AND status='grading';
 --     Restores the row to the state the historical writer's own guard proves
 --     it held ('grading' was entered only from 'submitted'). No terminal
---     facts are fabricated. Afterward: re-run this migration, then run
---     `pnpm --filter @exam/api backfill:submitted-answers` (the row is in
---     scope as submitted-with-submittedAt). The row remains an observable
---     non-terminal state (with the migration-default grading_status=
---     'auto_graded', GET /api/system/diagnostics reports it read-only as
---     submitted_not_terminalized); #542 does NOT auto-terminalize it —
---     business closure happens through the normal grading surfaces.
+--     facts are fabricated. Rewinding the status alone is NOT recovery: a
+--     submitted attempt from the historical window has NO current durable
+--     grading workset (attempt_grading_entries), and every current grading
+--     surface requires an exactly complete workset before terminal closure.
+--     After the rewind, run the FULL sequence below; the recovery is a
+--     manual operator procedure, nothing runs automatically.
+--
+--     1. Rewind:      UPDATE ... SET status='submitted' (the statement above).
+--     2. Re-run:      this migration (the preflight passes; CHECKs install).
+--     3. Backfill:    pnpm --filter @exam/api backfill:submitted-answers
+--                     (the row is in scope as submitted-with-submittedAt;
+--                     freezes submitted_answers from the draft answers).
+--     4. Workset:     pnpm --filter @exam/api recover:legacy-grading-workset -- <attemptId>
+--                     LEGACY-ONLY, migration/operator-time repair — NOT a
+--                     runtime transition authority and NOT callable from any
+--                     route. It reconstructs the MISSING current durable
+--                     grading input (attempt_grading_entries) from already-
+--                     frozen submitted truth (submitted_answers +
+--                     questionSnapshot) using the CURRENT canonical
+--                     derivation, and realigns grading_status to the canonical
+--                     freeze-barrier classification. It does NOT score and
+--                     does NOT terminalize the attempt: score / passed /
+--                     grading_result / graded_at / enrollment projections
+--                     stay untouched, still owned by normal terminal grading.
+--                     Zero workset → materialized exactly once; exact complete
+--                     workset → validated no-op; partial or mismatched
+--                     workset → fails closed with no writes. Use --dry-run
+--                     to inspect the plan first.
+--     5. Verify:      GET /api/system/diagnostics no longer reports the
+--                     attempt as submitted_workset_mismatch once the workset
+--                     is complete. submitted_not_terminalized (fired for
+--                     submitted + grading_status='auto_graded') remains for
+--                     an objective-only attempt until step 6 terminalization;
+--                     for a manual exam the step-4 realignment to
+--                     pending_manual clears it instead, and the attempt
+--                     surfaces in the manual grading queue.
+--     6. Terminalize: use the normal current grading surface. Objective-only
+--                     attempt: the candidate grading path closes it
+--                     (submitted → graded, canonical terminal closure writes
+--                     the attempt + enrollment projection). Attempt with
+--                     manual questions: the recovery leaves it submitted +
+--                     grading_status='pending_manual' and the manual grading
+--                     queue owns the final closure. Alternatively the
+--                     business may still choose Option B instead of step 4+.
+--
+--     Option B (void) and Option A are mutually exclusive per row: if the
+--     business voids the attempt, do NOT run the workset recovery — a voided
+--     attempt is intentionally invalidated and must not receive a grading
+--     workset.
 --
 --   Option B — void (only when the business decides the attempt must not
---   count):
+--     count):
 --     UPDATE exam_attempts SET status='voided'
 --     WHERE id='...' AND status='grading';
 --     `voided` keeps its documented business meaning (attempt invalidation;
@@ -99,7 +141,9 @@
 --     offline repair exception — it is NOT a new runtime quarantine label.
 --     Terminal; submitted answers are still frozen by the backfill
 --     (voided-with-submittedAt carries submit semantics), preserving the
---     candidate's submission record.
+--     candidate's submission record. Do NOT run the workset recovery for a
+--     voided row: the attempt is intentionally invalidated, so it must not
+--     receive a grading workset and can never be graded.
 --
 -- ENROLLMENT NOTE: the historical writer's enrollment projection (WRITE 3)
 -- was a separate autocommit, so pre-existing databases may independently hold
