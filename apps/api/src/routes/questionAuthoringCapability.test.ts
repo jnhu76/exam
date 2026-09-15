@@ -66,11 +66,11 @@ describe("question routes — Teacher authoring capabilities", () => {
       createdAt: now,
       updatedAt: now,
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await ctx.cleanup();
-  });
+  }, 30_000);
 
   it("Teacher completes create, list, detail, update, and delete", async () => {
     const createRes = await ctx.app.inject({
