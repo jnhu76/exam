@@ -253,3 +253,29 @@ If the candidate's browser crashes:
 | Admin score export | `attempt.score` + candidate fields | Computed at read time; not stored |
 
 **Golden rule**: If data can be re-derived from authoritative storage, it MUST NOT be stored separately (except for query-performance denormalization like `attempt.gradingResult`).
+
+## 13. Client-Event Trust Boundary (#544)
+
+| Data | Storage | Who writes | Trust level |
+|------|---------|------------|-------------|
+| Client events | `client_events` row | `POST /api/client-events` (any authenticated role) | LOW — client-asserted telemetry; never incident/scoring/state authority |
+
+**Rule (INV-CE-001):** Client events help with debugging, operational observation, and proctor attention. They are never, alone, an incident, violation, punishment, score, attempt-state, deadline, or compliance authority — even when `kind="proctor"`, `level="error"`, or `warningLevel="critical"`. Reference fields (`attemptId`/`examId`/`questionId`) are NULLed unless server-provable; the response is always `{accepted: N}` regardless (anti-enumeration).
+
+### 13.1 Server-owned facts vs. client assertions
+
+| Field | Source | Trust |
+|-------|--------|-------|
+| `organizationId` | Server context | Authority |
+| `userId` | Server context | Authority |
+| `receivedAt` | Server clock | Authority — sole ordering/lifecycle timestamp |
+| `occurredAt` | Client payload | Advisory display only |
+| `kind`, `level`, `name` | Client payload | Client-asserted label; `kind="proctor"` is NOT provenance |
+
+### 13.2 Reference normalization
+
+`attemptId`/`examId`/`questionId` are NULLed by `normalizeClientEventReferences` unless the server can prove the claimed relationship for the actor (ownership chain for attempts, enrollment chain for exam-only, frozen `questionSnapshot` for questions). Anti-enumeration: the response count is never reduced.
+
+### 13.3 Retention
+
+30-day fixed horizon from `receivedAt` (`DELETE WHERE received_at < cutoff`). No durable cleanup evidence; `retention_runs` is reserved for backup/WAL evidence and is NOT reused for client-event GC.

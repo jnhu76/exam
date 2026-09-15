@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql, desc } from "drizzle-orm";
+import { and, eq, inArray, lt, sql, desc } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { clientEvents } from "../schema/pg.js";
@@ -32,10 +32,14 @@ export interface ClientEventInsert {
  * raw `metadata` blob here (the API service applies a per-event-name allowlist
  * projection before it leaves the server, so only non-sensitive fields reach
  * the response). No `userId`/`userAgent`.
+ *
+ * `receivedAt` (server-owned) is the timeline ORDERING authority;
+ * `occurredAt` (client-asserted) is carried for display only.
  */
 export interface ClientEventTimelineRow {
   id: string;
   occurredAt: Date;
+  receivedAt: Date;
   name: string;
   level: string;
   kind: string;
@@ -141,6 +145,12 @@ export function createClientEventRepo(db: Database) {
      * `metadata` blob; the API service applies a per-event-name allowlist
      * projection before responding, so only non-sensitive fields reach the
      * proctor view. Org-scoped via the context.
+     *
+     * INVARIANT (#544): ordering authority is the server-owned `receivedAt`
+     * with `id` as the deterministic tiebreaker — never the client-asserted
+     * `occurredAt`, which a malicious client can set to any instant to
+     * hijack the timeline head/tail or pagination. Backed by
+     * `client_events_org_attempt_received_at_idx`.
      */
     async listRecentByAttempt(
       ctx: TenantContext | RequestContext,
@@ -153,6 +163,7 @@ export function createClientEventRepo(db: Database) {
         .select({
           id: clientEvents.id,
           occurredAt: clientEvents.occurredAt,
+          receivedAt: clientEvents.receivedAt,
           name: clientEvents.name,
           level: clientEvents.level,
           kind: clientEvents.kind,
@@ -166,9 +177,43 @@ export function createClientEventRepo(db: Database) {
             eq(clientEvents.attemptId, attemptId),
           ),
         )
-        .orderBy(desc(clientEvents.occurredAt))
+        .orderBy(desc(clientEvents.receivedAt), desc(clientEvents.id))
         .limit(limit);
       return rows;
+    },
+
+    /**
+     * Deletes client events for the context's organization whose server-owned
+     * `receivedAt` is strictly older than `cutoff`. THE retention primitive
+     * for `client_events` (#544): fixed 30-day horizon owned by the
+     * application-level retention executor, not a per-tenant setting.
+     *
+     * Boundary semantics: `receivedAt < cutoff` deletes; `receivedAt == cutoff`
+     * and newer are kept (strict inequality — a cutoff computed as
+     * `now - 30d` retains exactly the 30-day-old row).
+     *
+     * Idempotent and restart-safe by construction (pure convergence delete).
+     * Backed by `client_events_org_received_at_idx`. Never touches any other
+     * table; authoritative records (audit logs, attempts, retention_runs) have
+     * independent lifecycle.
+     *
+     * @returns The number of rows deleted.
+     */
+    async deleteOlderThan(
+      ctx: TenantContext | RequestContext,
+      cutoff: Date,
+    ): Promise<number> {
+      const organizationId = resolveOrganizationId(ctx);
+      const deleted = await db
+        .delete(clientEvents)
+        .where(
+          and(
+            eq(clientEvents.organizationId, organizationId),
+            lt(clientEvents.receivedAt, cutoff),
+          ),
+        )
+        .returning({ id: clientEvents.id });
+      return deleted.length;
     },
 
     /**

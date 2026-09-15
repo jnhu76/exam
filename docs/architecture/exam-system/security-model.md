@@ -243,3 +243,52 @@ Ownership fencing prevents a stale/lost worker from updating delivery state; it 
 | INV-R-002 | Result visibility is AND of publish-policy and grading-completeness. | Result computation | Route-layer visibility logic |
 | INV-N-001 | SMTP send happens outside the DB transaction. | Email worker | `processDueEmails()` sends after claim tx commits |
 | INV-MAIL-001 | Email worker claim uses `FOR UPDATE SKIP LOCKED`. | Email outbox repo | `claimDue()` atomic CTE |
+| INV-CE-001 | `client_events` rows are advisory telemetry — never incident/violation/scoring authority. | Route + docs | Trust boundary comment; `warningLevel` is advisory only |
+| INV-CE-002 | `attemptId`/`examId`/`questionId` are NULLed unless server-provable for the actor; anti-enumeration: response always `{accepted: N}`. | `clientEventReferenceNormalizer.ts` | Ownership chain + frozen question-set check |
+| INV-CE-003 | Monitoring timeline ordering is server-owned `receivedAt + id`; `occurredAt` is display-only. | `clientEventRepo.ts` + `proctorMonitoringService.ts` | `orderBy(desc(receivedAt), desc(id))` |
+| INV-CE-004 | `client_events` retention is 30 days from `receivedAt`; no durable cleanup evidence; `retention_runs` is NOT reused. | `clientEventRetention.ts` | `deleteOlderThan` + structured operational log |
+
+## 15. Client-Event Trust Boundary
+
+`POST /api/client-events` is an **authenticate-only self-service telemetry** endpoint: every authenticated role may emit events; there is no role gate (the intentional authenticate-only set in `routeRegistryConformanceWholeApp.test.ts`).
+
+### 15.1 What authentication proves
+
+Authentication proves **who** sent the event. It does NOT prove the event is true, that its resource references are valid, or that the sender owns the referenced resources.
+
+### 15.2 Server-owned facts
+
+| Field | Source | Trust |
+|-------|--------|-------|
+| `organizationId` | Server context (`request.ctx`) | Authority |
+| `userId` | Server context (`request.ctx.actorId`) | Authority |
+| `receivedAt` | Server clock (`fastify.now()`) | Authority — sole ordering/lifecycle timestamp |
+| `kind`, `level`, `name` | Client payload | Client-asserted label; `kind="proctor"` is NOT provenance |
+
+### 15.3 Reference normalization (INV-CE-002)
+
+Client-asserted `attemptId`/`examId`/`questionId` are **NOT trusted as-is**. Before persisting, `normalizeClientEventReferences` proves each reference:
+
+- **attemptId**: kept only if the attempt resolves under the actor's organization AND `candidateProfiles.userId === ctx.actorId` (candidate-owned). Staff roles cannot bind candidate attempts.
+- **examId**: derived server-side from the attempt's own `examId` when a valid attempt is present (never taken from the client payload alongside a valid attempt). Without a valid attempt, kept only when the actor's enrollment chain proves access.
+- **questionId**: kept only if it belongs to the anchor exam's frozen `questionSnapshot` (`originalQuestionId`). The mutable question bank is never consulted.
+
+Unprovable references are NULLed. **The event is always accepted** (`{accepted: N}`) regardless of how many references were dropped — no existence oracle.
+
+### 15.4 `warningLevel` is advisory (INV-CE-001)
+
+`warningLevel` is a server-computed display hint. Its inputs (`saveFailedCount`, `visibilityLostCount`, etc.) are derived partly or wholly from client-asserted telemetry. It is never an incident, violation, punishment, scoring, or attempt-state authority. Any future incident/security consumer (#317) MUST server-side revalidate before acting on it.
+
+### 15.5 `occurredAt` is advisory display only (INV-CE-003)
+
+`occurredAt` is the client-asserted instant, stored for display but never used for:
+- Timeline ordering (uses `receivedAt + id`)
+- Pagination membership
+- Warning aggregation windows
+- Retention cutoff
+
+### 15.6 Retention (INV-CE-004)
+
+30-day fixed horizon from server-owned `receivedAt`. No per-tenant configurability, no generic retention framework. The executor is application-owned (plugin following the `deadlineScanner` pattern): startup convergence + daily interval + in-flight guard + `onClose` join. No durable cleanup evidence (no new DB tables); `retention_runs` is reserved for authoritative backup/WAL evidence and is NOT reused.
+
+## 16. Security Invariant Summary (continued)

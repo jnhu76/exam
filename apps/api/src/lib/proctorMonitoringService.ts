@@ -26,6 +26,15 @@ import type { ClientEventTimelineRow } from "@exam/db/src/repository/clientEvent
  * collection and draws NO cheating conclusions. `warningLevel` is a status
  * hint computed server-side; the client only displays it.
  *
+ * TRUST (INVARIANT, #544): `warningLevel` and the per-attempt counts feeding
+ * it are ADVISORY attention signals derived partly or wholly from
+ * client-asserted telemetry (the client chooses what to emit and claims its
+ * own references). They are never an incident/violation/punishment/score
+ * authority; any future incident or security consumer (#317) MUST
+ * server-side revalidate before acting on them. `kind: "proctor"` on a
+ * timeline row is a display label sourced from client events or audit logs —
+ * provenance lives in `source`, not in `kind`.
+ *
  * NAMING: "proctor" here is the monitoring DOMAIN, not a standalone role.
  * Phase 2.1 keeps Admin-only access; a formal Proctor role is Phase 3.
  */
@@ -202,6 +211,12 @@ export function classifyOnlineState(
 /**
  * Computes the status hint. Pure, exported for testing. Never a cheating
  * verdict — only degraded-situation surfacing.
+ *
+ * ADVISORY ONLY (#544): the inputs (save/submit/visibility/browser-offline
+ * counts, heartbeat freshness) come from client-asserted client_events or
+ * coarse activity freshness. This function must stay a display hint; it must
+ * not be promoted into an incident/punishment authority without server-side
+ * revalidation of the underlying facts.
  */
 export function computeWarningLevel(input: {
   onlineState: OnlineState;
@@ -313,6 +328,12 @@ export async function buildProctorAttemptStatuses(
  * Builds the merged event timeline (client_events + audit_logs) for one
  * attempt, newest first. Each row carries ONLY allowlisted metadata — the raw
  * client_events.metadata blob is never returned.
+ *
+ * INVARIANT (#544): ordering authority is the server-owned receive instant
+ * (`client_events.receivedAt` / `audit_logs.createdAt`) with the row id as
+ * the deterministic tiebreaker. The client-asserted `occurredAt` is displayed
+ * but never decides order, pagination membership, or head/tail position — a
+ * malicious client cannot relocate its events with `occurredAt` extremes.
  */
 export async function buildProctorAttemptEventTimeline(
   db: Database,
@@ -326,7 +347,8 @@ export async function buildProctorAttemptEventTimeline(
   const eventRepo = createClientEventRepo(db);
   const auditRepo = createAuditLogRepo(db);
 
-  // Fetch client events (already newest-first) and the most recent audit rows for this attempt
+  // Fetch client events (already newest-first by receivedAt + id) and the most
+  // recent audit rows for this attempt
   const clientRows: ClientEventTimelineRow[] =
     await eventRepo.listRecentByAttempt(ctx, attemptId, { limit });
   // Get all matching audit logs but limit to the same number of items we return to avoid over-fetching
@@ -340,28 +362,41 @@ export async function buildProctorAttemptEventTimeline(
     },
   );
 
-  const merged: ProctorAttemptEvent[] = [];
+  // Server-owned instant per merged row: client events order by receivedAt,
+  // audit rows by their createdAt. Never the client-asserted occurredAt.
+  const merged: Array<{ key: number; id: string; event: ProctorAttemptEvent }> =
+    [];
 
   for (const r of clientRows) {
-    merged.push(toTimelineEventFromClient(r));
+    merged.push({
+      key: r.receivedAt.getTime(),
+      id: r.id,
+      event: toTimelineEventFromClient(r),
+    });
   }
 
   for (const a of auditRows) {
     const name = auditActionToEventName(a.auditLog.action);
     if (!name) continue; // not a timeline-relevant audit action
     merged.push({
+      key: a.auditLog.createdAt.getTime(),
       id: a.auditLog.id,
-      occurredAt: a.auditLog.createdAt.toISOString(),
-      name,
-      level: "warn",
-      kind: "proctor",
-      metadata: projectSafeMetadata(name, a.auditLog.metadata),
-      source: "audit_log",
+      event: {
+        id: a.auditLog.id,
+        occurredAt: a.auditLog.createdAt.toISOString(),
+        name,
+        level: "warn",
+        kind: "proctor",
+        metadata: projectSafeMetadata(name, a.auditLog.metadata),
+        source: "audit_log",
+      },
     });
   }
 
-  // Newest first, then apply pagination.
-  merged.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
-  const items = merged.slice(offset, offset + limit);
+  // Newest first (server instant), then deterministic id tiebreaker; apply pagination.
+  merged.sort(
+    (x, y) => y.key - x.key || (y.id < x.id ? -1 : y.id > x.id ? 1 : 0),
+  );
+  const items = merged.map((m) => m.event).slice(offset, offset + limit);
   return { items, total: merged.length };
 }
