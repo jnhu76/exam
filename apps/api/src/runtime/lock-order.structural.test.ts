@@ -485,6 +485,56 @@ describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
     expect(b).not.toMatch(/lockEnrollmentAndAttempt\b/);
   });
 
+  // EXAM-558 — the deadline reconciliation seam owns its serialization
+  // contract: it proves EA affinity itself, and its Exam-derived deadline
+  // decision reads the authority under the Exam row lock. These guards stop
+  // a regression to caller-owned discipline or a plain authority read.
+  it("ensureAttemptDeadlineReconciled asserts EA affinity before any protected repository work", () => {
+    const body = functionBody(
+      "packages/exam-engine/src/deadlineReconciliation.ts",
+      "ensureAttemptDeadlineReconciled",
+    );
+    expect(
+      body,
+      "ensureAttemptDeadlineReconciled body not found",
+    ).not.toBeNull();
+    const b = body!;
+    const assertIdx = b.indexOf("assertCapabilityFor(");
+    expect(assertIdx).toBeGreaterThanOrEqual(0);
+    const protectedOps = [
+      "attemptRepo.findById(",
+      "examRepo.findByIdForUpdate(",
+      "submitAttempt(",
+      "readGradingSnapshot(",
+      "finalizeGrading(",
+    ];
+    for (const op of protectedOps) {
+      const opIdx = b.indexOf(op);
+      if (opIdx >= 0) {
+        expect(
+          opIdx,
+          `${op} must come AFTER assertCapabilityFor`,
+        ).toBeGreaterThan(assertIdx);
+      }
+    }
+  });
+
+  it("ensureAttemptDeadlineReconciled serializes its Exam authority read (locked read, no plain exam read)", () => {
+    const body = functionBody(
+      "packages/exam-engine/src/deadlineReconciliation.ts",
+      "ensureAttemptDeadlineReconciled",
+    );
+    expect(
+      body,
+      "ensureAttemptDeadlineReconciled body not found",
+    ).not.toBeNull();
+    expect(body!).toMatch(/examRepo\.findByIdForUpdate\(/);
+    // A plain `examRepo.findById(` in the seam body would reintroduce the
+    // #558 stale-authority gap. The regex cannot match inside
+    // `findByIdForUpdate(` (the character after findById is F, not "(").
+    expect(body!).not.toMatch(/examRepo\.findById\(/);
+  });
+
   // REC-I4-I3B2: the single-lock example (extendAttemptTime) was removed with
   // the old /extend-time route. No single-lock Attempt path remains in this
   // module, so this guardrail case is intentionally dropped.
