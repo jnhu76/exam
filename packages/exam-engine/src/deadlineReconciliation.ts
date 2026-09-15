@@ -150,10 +150,15 @@ export { computeEffectiveDeadline, isAttemptDeadlineExpired } from "./timer.js";
  * Idempotent: a submitted/grading/graded attempt is returned unchanged — its
  * existing `submitted_answers` + `submittedAt` are never rebuilt.
  *
- * The caller MUST wrap this in a transaction holding the attempt row lock
- * (`findByIdForUpdate`) so the read-freeze-write is atomic against concurrent
- * candidate save/submit. This mirrors `autoSubmitAndGrade`.
+ * Transactional contract (EXAM-558): the caller must pass an EA capability
+ * minted by `lockEnrollmentAndAttempt` in the CURRENT transaction, using the
+ * SAME repo objects. The seam asserts that affinity itself and then owns the
+ * Exam row lock as the deadline decision's serialization point — callers MUST
+ * NOT rely on having locked the Exam row themselves (double-locking is safe:
+ * a same-tx re-lock of a held row is a no-op). Canonical lock order:
+ * Enrollment → Attempt → Exam.
  *
+ * @throws {Error} EA capability repo-affinity violation.
  * @throws {NotFoundError} attempt or exam not found.
  * @throws {InvalidStateTransitionError} should not occur in normal operation
  *   (defensive against unexpected status mutations).
@@ -167,6 +172,12 @@ export async function ensureAttemptDeadlineReconciled(
   now: Date,
   resolution: SubmitInterruptionResolution,
 ): Promise<ExamAttempt> {
+  // Assert EA capability affinity BEFORE any repository work: the Attempt
+  // read below is only safe because the caller's canonical seam holds the
+  // Attempt row lock with these exact tx-bound repos. Mechanical proof, not
+  // caller convention.
+  assertCapabilityFor(capability, enrollmentRepo, attemptRepo);
+
   const { attemptId } = capability;
   const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
@@ -185,7 +196,17 @@ export async function ensureAttemptDeadlineReconciled(
     return attempt;
   }
 
-  const exam = await examRepo.findById(attempt.examId);
+  // INVARIANT (EXAM-558): this is the deadline decision's serialization
+  // point. The Exam authority must be read under the row lock so an expired/
+  // not-expired decision can never be evaluated from a `closeAt` that a
+  // concurrently committed exam command has already replaced. Under
+  // REPEATABLE READ, a closeAt change committed after this transaction's
+  // snapshot raises 40001 here — BEFORE any freeze write — and
+  // `executeInTransaction` retries the whole transaction onto the new
+  // authority; a writer committing only after this lock queues behind it
+  // (candidate-wins linearization). Correctness must not rest on incidental
+  // FK/RI behavior. Lock order: Enrollment → Attempt → Exam.
+  const exam = await examRepo.findByIdForUpdate(attempt.examId);
   if (!exam) {
     throw new NotFoundError("Exam not found");
   }
@@ -345,6 +366,11 @@ export async function prepareReconciledAttemptMutation(
   // (the request arrived while the pre-change authority was current).
   // A plain read would let an in-flight save commit (or reconcile) against
   // deadline authority that is no longer the committed one.
+  //
+  // This may re-lock the Exam row the reconciliation seam already locked
+  // (EXAM-558); a same-tx re-lock of a held row is a no-op. Kept
+  // intentionally to preserve the #543 preparation-seam contract;
+  // deduplication is out of scope for #558.
   const exam = await examRepo.findByIdForUpdate(attempt.examId);
   if (!exam) {
     throw new NotFoundError("Exam not found");

@@ -169,9 +169,9 @@ The `packages/exam-engine/src/` layer contains **no explicit `db.transaction` ca
 | Exam close/unpublish/extend/cancel/archive | `executeInTransaction` → lock exam → reconcile → command | REPEATABLE READ | Atomic |
 | Exam create/update | Single repo call (no explicit tx) | N/A | Best-effort |
 | Attempt start | `executeInTransaction` → `startOrRestoreAttempt()` | READ COMMITTED | Best-effort |
-| Save answer | `executeInTransaction` → EA lock → reconcile → `saveAnswer()` | REPEATABLE READ | None |
-| Submit + grade | `executeInTransaction` → EA lock → `submitAttempt()` → `finalizeGrading()` | REPEATABLE READ | Atomic |
-| Deadline reconciliation | `executeInTransaction` → EA lock → `ensureAttemptDeadlineReconciled()` | REPEATABLE READ | Atomic |
+| Save answer | `executeInTransaction` → EA lock → reconcile (Exam FOR UPDATE in seam) → `saveAnswer()` | REPEATABLE READ | None |
+| Submit + grade | `executeInTransaction` → EA lock → reconcile (Exam FOR UPDATE in seam) → `submitAttempt()` → `finalizeGrading()` | REPEATABLE READ | Atomic |
+| Deadline reconciliation | `executeInTransaction` → EA lock → `ensureAttemptDeadlineReconciled()` → Exam FOR UPDATE (in-seam serialization point) → deadline decision | REPEATABLE READ | Atomic |
 | Manual grading | `executeInTransaction` → `gradeQuestion()` → `finalizeTerminalGrading()` | REPEATABLE READ | Atomic |
 | Force submit | `executeInTransaction` → EA lock → `submitAttempt()` → grade | REPEATABLE READ | Atomic |
 | Email claim | `executeInTransaction` → `claimDue()` (atomic CTE) | READ COMMITTED | None |
@@ -184,6 +184,8 @@ To avoid deadlocks, all code paths MUST acquire locks in a consistent order:
 ```
 Enrollment → Attempt → Exam
 ```
+
+Deadline reconciliation is self-serializing (#558): `ensureAttemptDeadlineReconciled()` asserts the EA capability affinity (proving the Enrollment → Attempt locks in the same transaction) and then acquires the Exam row lock itself, before any deadline decision. Callers must not rely on having locked the Exam row themselves; a same-transaction re-lock of the already-held Exam row is a safe no-op. No path may acquire the Exam lock before the Attempt lock.
 
 ### 9.4 Row-lock acquisition methods
 
