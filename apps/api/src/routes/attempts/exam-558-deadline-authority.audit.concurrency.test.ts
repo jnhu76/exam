@@ -20,6 +20,26 @@
  *     open, positive-only) which commits through Exam FOR UPDATE inside
  *     executeAdminExamTransition.
  *
+ * MEASURED PRE-FIX REALITY (all schedules below ran green on current master;
+ * each documents what actually happens, not what a fix should do):
+ *
+ *   - R1/R2 (real candidate route vs real extend route, candidate parked past
+ *     the old closeAt): the stale pass DOES freeze under the stale authority,
+ *     but dies with 40001 — the freeze's child write re-runs the exams FK RI
+ *     check against the concurrently committed extend (mechanism pinned by
+ *     R1v, including server-log evidence) — and the whole-tx retry converges
+ *     on the new authority. This protection is INCIDENTAL: the #543 audit
+ *     comment explicitly warns the FK check must not be treated as authority.
+ *   - R1s/R2s (staged, injected now; writer commits after the freeze's last
+ *     exam-touching statement): the stale freeze COMMITS DURABLY — proving
+ *     there is NO designed Exam serialization point on take/submit and the
+ *     incidental RI abort is ordering-dependent.
+ *   - R1c: the take response projects the post-tx exam generation (mixed-
+ *     version snapshot) while the attempt was reconciled under the previous
+ *     generation — display-benign in the extension direction.
+ *   - P1-P3: the REPEATABLE READ mechanism probes (40001-on-lock vs stale
+ *     plain read vs non-authority FK check).
+ *
  * Determinism: T1 is a REAL production surface (real route via app.inject, or
  * the real submitAndGradeAttempt orchestrator). The interleaving is forced by
  * an enrollment row-lock barrier: T3 holds Enrollment FOR UPDATE, so T1 —
@@ -29,14 +49,16 @@
  * plain exam read. T3 observes T1's arrival precisely via pg_locks waiters on
  * T3's own transaction id (a liveness predicate with a hard timeout — not a
  * timing assumption; a miss fails the test loudly). The only wall-clock
- * coordination is the fixture's short deadline window: T1 is released after
- * the wall clock has passed the pre-extension closeAt so the stale snapshot
- * is provably expired at reconciliation time. No sleeps gate correctness.
+ * coordination is the fixture's short deadline window: barrier-based tests
+ * release T1 after the wall clock has passed the pre-extension closeAt so the
+ * stale snapshot is provably expired. No sleeps gate correctness.
  *
- * STOP RULE: this file documents the PRE-FIX reality. It is expected to pass
- * on the audit branch (the bug scenarios assert the STALE outcome current
- * master produces) and is NOT to be merged as a regression suite — the
- * post-fix suite belongs to the #558 implementation.
+ * STOP RULE: this file is an audit-branch artifact, NOT a regression gate.
+ * Post-fix (Design B: the reconciliation seam takes the Exam lock), R2s flips
+ * to the #543-H2 oracle (writer 40001 + retry, no durable stale freeze);
+ * R1s's writer lands after the future seam lock, so its observable outcome
+ * becomes a valid take-wins linearization — the post-fix oracle for the seam
+ * is R2s plus the save suite.
  */
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
@@ -113,6 +135,7 @@ interface AuditFixture {
   candidateCtx: RequestContext;
   adminToken: string;
   candidateToken: string;
+  /** The closeAt the exam row carries after setup (shorten applied). */
   closeAt: Date;
 }
 
@@ -334,6 +357,7 @@ async function setupFixture(
     throw new Error(`start failed: ${startRes.statusCode} ${startRes.body}`);
   }
 
+  let effectiveCloseAt = closeAt;
   if (options.shortenCloseAtTo) {
     const adminCtx: RequestContext = {
       actorId: adminId,
@@ -351,6 +375,7 @@ async function setupFixture(
         closeAt: options.shortenCloseAtTo!,
       });
     });
+    effectiveCloseAt = options.shortenCloseAtTo;
   }
 
   const enrollmentRow = (
@@ -384,7 +409,7 @@ async function setupFixture(
     candidateCtx,
     adminToken,
     candidateToken,
-    closeAt,
+    closeAt: effectiveCloseAt,
   };
 }
 
@@ -451,12 +476,14 @@ async function startEnrollmentBarrier(
   holding: Deferred<void>;
   waiterSeen: Deferred<void>;
   release: Deferred<void>;
+  waiterInfo: { pid?: number; xactStart?: string; query?: string };
   done: Promise<unknown>;
   close: () => Promise<void>;
 }> {
   const holding = createDeferred<void>("barrier holding");
   const waiterSeen = createDeferred<void>("barrier waiter seen");
   const release = createDeferred<void>("barrier release");
+  const waiterInfo: { pid?: number; xactStart?: string; query?: string } = {};
   // The auto-timeout rejections must never become unhandled rejections when a
   // test aborts before awaiting a barrier point.
   holding.promise.catch(() => {});
@@ -469,6 +496,7 @@ async function startEnrollmentBarrier(
   // and deadlock the barrier).
   const connTx = await createPostgresDatabase(databaseUrl, schemaName);
   const connProbe = await createPostgresDatabase(databaseUrl, schemaName);
+  const probeConnCleanup = () => connProbe.sql.end();
   const done = executeInTransaction(connTx.db, async (tx) => {
     const enrollmentRepo = createEnrollmentRepo(tx);
     const enrollment = await enrollmentRepo.findByExamAndCandidateForUpdate(
@@ -497,6 +525,25 @@ async function startEnrollmentBarrier(
           AND transactionid = ${xid}::xid
       `;
       if ((waiters[0] as { n: number }).n > 0) {
+        const detail = await connProbe.sql`
+          SELECT pid, xact_start::text AS xact_start, left(query, 80) AS query
+          FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND pid IN (
+              SELECT pid FROM pg_locks
+              WHERE locktype = 'transactionid' AND NOT granted
+                AND transactionid = ${xid}::xid
+            )
+          LIMIT 1
+        `;
+        const row = detail[0] as
+          | { pid: number; xact_start: string; query: string }
+          | undefined;
+        if (row) {
+          waiterInfo.pid = row.pid;
+          waiterInfo.xactStart = row.xact_start;
+          waiterInfo.query = row.query;
+        }
         waiterSeen.resolve();
         break;
       }
@@ -512,10 +559,11 @@ async function startEnrollmentBarrier(
     holding,
     waiterSeen,
     release,
+    waiterInfo,
     done,
     close: async () => {
       await connTx.sql.end();
-      await connProbe.sql.end();
+      await probeConnCleanup();
     },
   };
 }
@@ -787,18 +835,22 @@ describe("EXAM-558 audit — take/submit vs concurrently committed extend (R1–
     );
   }, 30_000);
 
-  it("R1 take vs in-flight extend (REALITY): the take decision is pinned to request arrival — no stale freeze is producible through the real routes, and the extension commits without waiting", async () => {
+  it("R1 take vs in-flight extend (REALITY): the durable stale freeze does NOT occur — the freeze's incidental FK RI check aborts the stale pass (40001) and the retry converges on the extended authority", async () => {
     // Geometry: the canonical writer moves closeAt to real-now + 2.5s while
     // the exam stays open. T1 (real take route) parks at the enrollment
-    // barrier with its RR snapshot fixed at that closeAt and its `now`
-    // sampled at request arrival (BEFORE closeAt). T2 (real extend route)
-    // commits +30min while T1 is parked. T1 is released only after the wall
-    // clock has passed the pre-extension closeAt. The freeze predicate is
-    // evaluated with the ARRIVAL now against the ARRIVAL snapshot — both
-    // pinned before the extension — so the take cannot and does not freeze:
-    // the route-side extend guard (reconcile-first, refuses once closeAt has
-    // passed) makes the #558 stale-freeze schedule unreachable through real
-    // surfaces. deadline-mode: effectiveDeadline === exam.closeAt exactly.
+    // barrier with its RR snapshot fixed at that closeAt. T2 (real extend
+    // route) commits +30min while T1 is parked. T1 is released only after
+    // the wall clock has passed the pre-extension closeAt — its stale
+    // snapshot is then provably expired. MEASURED OUTCOME (mechanism pinned
+    // down by R1v): pass 1 freezes under the stale authority, but a
+    // freeze-path child write re-runs the exams FK RI check, which raises
+    // 40001 against the concurrently committed extend; executeInTransaction
+    // retries and pass 2 — on the new authority — does not freeze. The
+    // protection is INCIDENTAL (the #543 audit comment explicitly warns the
+    // FK check must not be treated as authority): it only fires while a
+    // freeze-path child write runs after the writer's commit — R1s shows the
+    // durable stale freeze the moment that ordering flips. deadline-mode:
+    // effectiveDeadline === exam.closeAt exactly.
     const closeAt = new Date(Date.now() + 2_500);
     const extendedCloseAt = new Date(closeAt.getTime() + 30 * MINUTE_MS);
     const fixture = await setupFixture(
@@ -839,7 +891,7 @@ describe("EXAM-558 audit — take/submit vs concurrently committed extend (R1–
       expect(extendRes.statusCode).toBe(200);
 
       // Release T1 only after the OLD closeAt is provably in the past.
-      await waitUntilWallClock(closeAt.getTime() + 500);
+      await waitUntilWallClock(closeAt.getTime() + 5_000);
       barrier.release.resolve();
       await barrier.done;
 
@@ -874,8 +926,12 @@ describe("EXAM-558 audit — take/submit vs concurrently committed extend (R1–
     }
   }, 40_000);
 
-  it("R2 submit vs in-flight extend (REALITY): the submit decision is pinned to request arrival — the manual submit is accepted under arrival semantics and the extension commits without waiting", async () => {
-    // Same geometry as R1, through the real candidate submit route.
+  it("R2 submit vs in-flight extend (REALITY): the stale pass aborts via the incidental FK RI-check 40001 and the retry accepts the manual submit under arrival semantics", async () => {
+    // Same geometry as R1, through the real candidate submit route. The
+    // stale first pass (its reconciliation would freeze at the pre-extension
+    // closeAt) aborts via the same incidental FK RI-check 40001 (see R1v);
+    // the retried pass — on the new authority — completes the CANDIDATE
+    // manual submit (its arrival-now precedes closeAt).
     const closeAt = new Date(Date.now() + 2_500);
     const extendedCloseAt = new Date(closeAt.getTime() + 30 * MINUTE_MS);
     const fixture = await setupFixture(
@@ -921,11 +977,9 @@ describe("EXAM-558 audit — take/submit vs concurrently committed extend (R1–
 
       const attemptRow = await readAttemptRow(ctx, fixture.attemptId);
       // ACTUAL current-master outcome: the candidate submit is accepted as a
-      // MANUAL submit under request-arrival semantics. Its `now` was sampled
-      // at arrival (before closeAt), so reconciliation did not freeze; the
-      // manual submit then committed after the extension had already landed.
-      // submittedAt is the arrival-time sample — a valid candidate-wins
-      // linearization, not a stale-authority freeze.
+      // MANUAL submit (reason = manual; submittedAt = the request-arrival
+      // now, which precedes closeAt). The stale deadline freeze did not
+      // become durable.
       expect(["submitted", "graded"]).toContain(attemptRow.status);
       expect(attemptRow.submissionReason).toBe("manual");
       expect((attemptRow.submittedAt as Date).getTime()).toBeLessThan(
@@ -999,6 +1053,224 @@ describe("EXAM-558 audit — take/submit vs concurrently committed extend (R1–
       const attemptRow = await readAttemptRow(ctx, fixture.attemptId);
       expect(attemptRow.status).toBe("in_progress");
       expect(attemptRow.submittedAt).toBeNull();
+    } finally {
+      barrier.release.resolve();
+      await barrier.done;
+      await barrier.close();
+    }
+  }, 40_000);
+
+  it("R1v mechanism probe: the stale pass freezes but is aborted by a 40001 from the freeze's exams FK RI check — the retry converges on the extended authority", async () => {
+    // The take route's transaction body verbatim, instrumented per pass.
+    // Schedule = R1: barrier park -> real extend commits -> release after the
+    // wall clock passed the old closeAt. MEASURED: pass 1 runs on the stale
+    // snapshot, freezes (submitAttempt succeeds), and then dies with 40001
+    // (serialization_failure) inside the finalize UPDATE's exams FK RI check
+    // — the RI check re-runs against the parent version the concurrently
+    // committed extend produced. executeInTransaction retries; pass 2 sees
+    // the extended closeAt and does not freeze. This incidental RI abort —
+    // NOT a designed Exam serialization point — is why R1/R2 observe no
+    // durable stale freeze; R1s shows the freeze is durable the moment the
+    // writer commits after the freeze's last exam-touching statement.
+    const closeAt = new Date(Date.now() + 2_500);
+    const extendedCloseAt = new Date(closeAt.getTime() + 30 * MINUTE_MS);
+    const fixture = await setupFixture(
+      ctx,
+      new Date(Date.now() + 60 * MINUTE_MS),
+      {
+        timingMode: "deadline",
+        shortenCloseAtTo: closeAt,
+      },
+    );
+    const barrier = await startEnrollmentBarrier(
+      fixture,
+      iso.databaseUrl,
+      iso.schemaName,
+    );
+
+    // RAISE LOG probe: a trigger on exam_attempts logs every attempted
+    // UPDATE to the server log (survives pass 1's rollback). Server-side
+    // evidence for the pass-1 freeze + RI-check abort documented above.
+    await ctx.db.execute(drizzleSql`
+      CREATE OR REPLACE FUNCTION r1v_attempt_write_fn() RETURNS trigger AS $$
+        BEGIN
+          RAISE LOG 'R1VWRITE row=% txid=% at=% qry=%',
+            NEW.id, txid_current(), clock_timestamp(), left(current_query(), 200);
+          RETURN NULL;
+        END;
+      $$ LANGUAGE plpgsql
+    `);
+    await ctx.db.execute(drizzleSql`
+      DROP TRIGGER IF EXISTS r1v_attempt_write_trg ON exam_attempts
+    `);
+    await ctx.db.execute(drizzleSql`
+      CREATE TRIGGER r1v_attempt_write_trg AFTER UPDATE ON exam_attempts
+      FOR EACH ROW EXECUTE FUNCTION r1v_attempt_write_fn()
+    `);
+
+    try {
+      await barrier.holding.promise;
+
+      const observed: {
+        examCloseAtSeen?: Date | null;
+        seamProbe2CloseAt?: Date | null;
+        nowUsed?: Date;
+        froze?: boolean;
+      } = {};
+      const passLog: Array<Record<string, unknown>> = [];
+      let passNo = 0;
+
+      const takePromise = executeInTransaction(db1, async (tx) => {
+        passNo += 1;
+        const passMark = passNo;
+        try {
+          const txRepo = createAttemptRepo(tx);
+          const candidateProfile = await createCandidateRepo(tx).findByUserId(
+            fixture.candidateCtx,
+            fixture.candidateCtx.actorId,
+          );
+          if (!candidateProfile) {
+            throw new DomainNotFoundError("candidate profile missing");
+          }
+          const { exams, enrollments, attempts } = createExamEngineRepos(
+            {
+              examRepo: createExamRepo(tx),
+              attemptRepo: txRepo,
+              enrollmentRepo: createEnrollmentRepo(tx),
+            },
+            fixture.candidateCtx,
+          );
+          const cap = await lockEnrollmentAndAttempt(
+            enrollments,
+            attempts,
+            fixture.attemptId,
+          );
+          // Snapshot probes: two plain exam reads at seam-exit. Under RR both
+          // must return the SAME (snapshot) value; which value it is dates the
+          // snapshot relative to the extend commit.
+          const seamProbe1 = await exams.findById(fixture.examId);
+          const seamProbe2 = await exams.findById(fixture.examId);
+          observed.examCloseAtSeen = seamProbe1?.closeAt ?? null;
+          observed.seamProbe2CloseAt = seamProbe2?.closeAt ?? null;
+          const preRead = await attempts.findById(fixture.attemptId);
+          const episodeRepo = createInterruptionEpisodeRepoAdapter(
+            createAttemptInterruptionRepo(tx),
+            fixture.candidateCtx,
+          );
+          const eventRepo = createInterruptionEventRepoAdapter(
+            createAttemptInterruptionEventRepo(tx),
+            fixture.candidateCtx,
+          );
+          const resolution: SubmitInterruptionResolution =
+            preRead?.status === "disrupted"
+              ? {
+                  mode: "active_interruption",
+                  episodeRepo,
+                  eventRepo,
+                  hint: {
+                    policy: "strict",
+                    eligibleSeconds: null,
+                    adjustmentId: null,
+                    reasonCode: "deadline_terminalization",
+                  },
+                }
+              : { mode: "none", episodeRepo, eventRepo };
+          const nowUsed = new Date();
+          observed.nowUsed = nowUsed;
+          const reconciled = await ensureAttemptDeadlineReconciled(
+            exams,
+            enrollments,
+            attempts,
+            createGradingWorksetRepoAdapter(
+              createAttemptGradingEntryRepo(tx),
+              fixture.candidateCtx,
+            ),
+            cap,
+            nowUsed,
+            resolution,
+          );
+          observed.froze =
+            reconciled.status === "submitted" || reconciled.status === "graded";
+          if (reconciled.candidateId !== candidateProfile.id) {
+            throw new DomainNotFoundError("attempt not owned by candidate");
+          }
+          passLog.push({
+            pass: passMark,
+            examCloseAtSeen: observed.examCloseAtSeen?.toISOString() ?? null,
+            nowUsed: observed.nowUsed?.toISOString() ?? null,
+            froze: observed.froze,
+          });
+          return reconciled;
+        } catch (err) {
+          const chain: Array<Record<string, unknown>> = [];
+          let cur: unknown = err;
+          const seen = new Set<unknown>();
+          while (cur && typeof cur === "object" && !seen.has(cur)) {
+            seen.add(cur);
+            const e = cur as {
+              code?: string;
+              detail?: string;
+              constraint?: string;
+              message?: string;
+            };
+            chain.push({
+              code: e.code ?? null,
+              constraint: e.constraint ?? null,
+              detail: e.detail?.slice(0, 120) ?? null,
+              message: e.message?.slice(0, 120) ?? null,
+            });
+            cur = (cur as { cause?: unknown }).cause;
+          }
+          passLog.push({ pass: passMark, failed: true, chain });
+          throw err;
+        }
+      }).catch((err) => err as Error);
+
+      await barrier.waiterSeen.promise;
+
+      const extendRes = await adminApp.app.inject({
+        method: "POST",
+        url: `/api/exams/${fixture.examId}/extend`,
+        payload: { extendMinutes: 30, reason: "EXAM-558 R1v" },
+        cookies: { "auth-token": fixture.adminToken },
+      });
+      expect(extendRes.statusCode).toBe(200);
+
+      await waitUntilWallClock(closeAt.getTime() + 1_000);
+      barrier.release.resolve();
+      await barrier.done;
+
+      const outcome = await takePromise;
+      const writes = await ctx.db.execute(drizzleSql`SELECT 1 AS ok`);
+      const writeRows = writes as unknown as Array<Record<string, unknown>>;
+      console.error(
+        "R1v-DECIDE:",
+        JSON.stringify(
+          {
+            closeAt: closeAt.toISOString(),
+            extendedCloseAt: extendedCloseAt.toISOString(),
+            examCloseAtSeen: observed.examCloseAtSeen?.toISOString() ?? null,
+            seamProbe2CloseAt:
+              observed.seamProbe2CloseAt?.toISOString() ?? null,
+            nowUsed: observed.nowUsed?.toISOString() ?? null,
+            froze: observed.froze,
+            passes: passLog,
+            txError: outcome instanceof Error ? String(outcome) : null,
+            attemptStatus: (await readAttemptRow(ctx, fixture.attemptId))
+              .status,
+            probeMarker: writeRows,
+          },
+          null,
+          1,
+        ),
+      );
+      await ctx.db.execute(drizzleSql`
+        DROP TRIGGER IF EXISTS r1v_attempt_write_trg ON exam_attempts
+      `);
+      await ctx.db.execute(drizzleSql`
+        DROP FUNCTION IF EXISTS r1v_attempt_write_fn()
+      `);
+      expect(outcome).not.toBeInstanceOf(Error);
     } finally {
       barrier.release.resolve();
       await barrier.done;
