@@ -162,7 +162,7 @@ export function createClientEventRepo(db: Database) {
       ctx: TenantContext | RequestContext,
       attemptId: string,
       prefixSize: number,
-    ): Promise<ClientEventTimelineRow[]> {
+    ): Promise<Array<ClientEventTimelineRow & { sortKeyUs: number }>> {
       const organizationId = resolveOrganizationId(ctx);
       const limit = Math.max(0, Math.floor(prefixSize));
       if (limit === 0) return [];
@@ -171,6 +171,13 @@ export function createClientEventRepo(db: Database) {
           id: clientEvents.id,
           occurredAt: clientEvents.occurredAt,
           receivedAt: clientEvents.receivedAt,
+          // WHY sortKeyUs: the merged timeline sorts on this full-precision
+          // epoch-µs key. JS Date (getTime) truncates timestamptz to
+          // milliseconds, fabricating ties between µs-distinct rows; sorting
+          // on the truncated key would let the merge disagree with THIS
+          // query's DB order inside one source and duplicate/drop rows at
+          // page boundaries. Epoch µs < 2^53 → exact as a JS number.
+          sortKeyUs: sql<number>`(extract(epoch from ${clientEvents.receivedAt}) * 1000000)::double precision`,
           name: clientEvents.name,
           level: clientEvents.level,
           kind: clientEvents.kind,

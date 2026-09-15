@@ -266,33 +266,89 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
       .where(eq(schema.clientEvents.examId, examId));
   });
 
-  it("listTimelinePrefixByAttempt returns timeline rows (raw metadata returned; filtering is the service's job)", async () => {
+  it("listTimelinePrefixByAttempt orders by receivedAt (occurredAt never decides) and bounds the prefix", async () => {
     const orgId = await seedOrg("ProctorTimelineOrg");
     const attemptId = randomUUID();
     const examId = randomUUID();
-    await seedEvents(orgId, [
-      { attemptId, examId, name: "visibility_lost", level: "info" },
+    const repo = createClientEventRepo(db);
+    const at = new Date();
+    // receivedAt ascends with index while occurredAt (client-asserted,
+    // display-only) DESCENDS: the returned order must follow receivedAt
+    // alone — a discriminating seed that catches an occurredAt ordering.
+    await repo.createMany(createContext(orgId), [
       {
+        userId: null,
         attemptId,
         examId,
-        name: "answer_autosave_failed",
-        level: "warn",
-        metadata: { answer: "SECRET_ANSWER", token: "abc", errorCode: "NET" },
+        questionId: null,
+        kind: "exam_telemetry",
+        level: "info",
+        name: "visibility_lost",
+        route: null,
+        occurredAt: new Date(at.getTime() + 9000),
+        receivedAt: new Date(at.getTime() + 1000),
+        clientSessionId: null,
+        metadata: {},
+        userAgent: null,
       },
-      { attemptId, examId, name: "browser_online", level: "info" },
+      {
+        userId: null,
+        attemptId,
+        examId,
+        questionId: null,
+        kind: "exam_telemetry",
+        level: "warn",
+        name: "answer_autosave_failed",
+        route: null,
+        occurredAt: new Date(at.getTime() + 8000),
+        receivedAt: new Date(at.getTime() + 2000),
+        clientSessionId: null,
+        metadata: { answer: "SECRET_ANSWER", token: "abc", errorCode: "NET" },
+        userAgent: null,
+      },
+      {
+        userId: null,
+        attemptId,
+        examId,
+        questionId: null,
+        kind: "exam_telemetry",
+        level: "info",
+        name: "browser_online",
+        route: null,
+        occurredAt: new Date(at.getTime() + 7000),
+        receivedAt: new Date(at.getTime() + 3000),
+        clientSessionId: null,
+        metadata: {},
+        userAgent: null,
+      },
     ]);
 
-    const repo = createClientEventRepo(db);
     const rows = await repo.listTimelinePrefixByAttempt(
       createContext(orgId),
       attemptId,
       10,
     );
     expect(rows).toHaveLength(3);
-    // Most recent first (occurredAt desc).
-    expect(rows[0]!.occurredAt.getTime()).toBeGreaterThanOrEqual(
-      rows[2]!.occurredAt.getTime(),
+    // Newest first by the server-owned receivedAt (occurredAt runs the other
+    // way here and must not decide).
+    expect(rows.map((r) => r.name)).toEqual([
+      "browser_online",
+      "answer_autosave_failed",
+      "visibility_lost",
+    ]);
+
+    // Prefix semantics: LIMIT bounds the window to the newest prefixSize
+    // rows of the (receivedAt DESC, id DESC) order.
+    const first2 = await repo.listTimelinePrefixByAttempt(
+      createContext(orgId),
+      attemptId,
+      2,
     );
+    expect(first2.map((r) => r.name)).toEqual([
+      "browser_online",
+      "answer_autosave_failed",
+    ]);
+
     // Safe columns present.
     for (const r of rows) {
       expect(typeof r.id).toBe("string");

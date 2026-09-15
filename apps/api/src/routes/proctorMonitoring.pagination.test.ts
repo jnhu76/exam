@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { eq, like } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
@@ -498,5 +498,43 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     expect(
       page2.items.map((i) => ({ name: i.name, source: i.source })),
     ).toEqual(expected);
+  });
+
+  // P7: same-millisecond audit rows with MICROSECOND-distinct created_at.
+  // audit_logs.created_at is DB-defaulted now() at µs precision while the
+  // driver renders timestamptz as ms JS Dates; a merge keyed on the ms Date
+  // ties these rows in JS, re-orders them by id against the DB's own
+  // per-source order, and duplicates/drops them at page boundaries. The
+  // merge must key on the epoch-µs sortKeyUs returned by the prefix queries.
+  it("P7: µs-distinct same-ms audit rows keep exact page membership", async () => {
+    // Adversarial pair for this attempt: the µs-NEWER row has the SMALLER id
+    // (id order opposite to the true instant order).
+    await ctx.db.execute(sql`
+      INSERT INTO audit_logs
+        (id, organization_id, actor_id, action, target_type, target_id,
+         metadata, created_at)
+      VALUES
+        ('00000000-0000-4000-8000-00000000000a', ${ctx.org.id},
+         ${ctx.candidate.id}, 'attempt.timeGrant', 'attempt', ${attemptId},
+         '{}', TIMESTAMPTZ '2026-09-15 17:00:00.000500+00'),
+        ('00000000-0000-4000-8000-00000000000b', ${ctx.org.id},
+         ${ctx.candidate.id}, 'attempt.timeGrant', 'attempt', ${attemptId},
+         '{}', TIMESTAMPTZ '2026-09-15 17:00:00.000000+00')
+    `);
+
+    // Page 1 must be the µs-NEWER row — it IS the DB prefix for window 1.
+    const page1 = await fetchTimeline(1, 1);
+    expect(page1.total).toBe(2);
+    expect(page1.totalPages).toBe(2);
+    expect(page1.items.map((i) => i.id)).toEqual([
+      "00000000-0000-4000-8000-00000000000a",
+    ]);
+
+    // Page 2 must be the µs-OLDER row — never a repeat of a (the old ms-key
+    // merge returned [b, a] from this prefix, emitting a on BOTH pages).
+    const page2 = await fetchTimeline(1, 2);
+    expect(page2.items.map((i) => i.id)).toEqual([
+      "00000000-0000-4000-8000-00000000000b",
+    ]);
   });
 });

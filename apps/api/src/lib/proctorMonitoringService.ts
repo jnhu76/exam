@@ -378,7 +378,7 @@ export async function buildProctorAttemptEventTimeline(
   // cannot crowd admitted rows out of a window (admission precedes LIMIT in
   // SQL), and no source can hide rows behind the external page-size clamp.
   const prefixSize = Math.min(offset + limit, total);
-  const clientRows: ClientEventTimelineRow[] =
+  const clientRows: Array<ClientEventTimelineRow & { sortKeyUs: number }> =
     await eventRepo.listTimelinePrefixByAttempt(ctx, attemptId, prefixSize);
   const auditRows = await auditRepo.listTimelinePrefixByActions(
     ctx,
@@ -389,12 +389,17 @@ export async function buildProctorAttemptEventTimeline(
 
   // Server-owned instant per merged row: client events order by receivedAt,
   // audit rows by their createdAt. Never the client-asserted occurredAt.
+  // The merge key is the full-precision epoch-µs sortKeyUs returned by the
+  // prefix queries: a JS Date (ms) key would fabricate ties between
+  // µs-distinct DB rows (audit created_at carries a DB-defaulted µs clock) and let
+  // this sort disagree with a source's own DB order — duplicating/dropping
+  // rows at page boundaries.
   const merged: Array<{ key: number; id: string; event: ProctorAttemptEvent }> =
     [];
 
   for (const r of clientRows) {
     merged.push({
-      key: r.receivedAt.getTime(),
+      key: r.sortKeyUs,
       id: r.id,
       event: toTimelineEventFromClient(r),
     });
@@ -404,7 +409,7 @@ export async function buildProctorAttemptEventTimeline(
     const name = auditActionToEventName(a.auditLog.action);
     if (!name) continue; // not a timeline-relevant audit action
     merged.push({
-      key: a.auditLog.createdAt.getTime(),
+      key: a.sortKeyUs,
       id: a.auditLog.id,
       event: {
         id: a.auditLog.id,
@@ -420,7 +425,8 @@ export async function buildProctorAttemptEventTimeline(
 
   // Newest first (server instant), then deterministic id tiebreaker (DESC,
   // matching the DB ORDER BY convention — per-source rows and the merged
-  // order must agree at same-instant ties); apply pagination.
+  // order must agree at same-instant ties, including µs-distinct rows the
+  // driver would render as equal milliseconds); apply pagination.
   merged.sort(
     (x, y) => y.key - x.key || (y.id > x.id ? 1 : y.id < x.id ? -1 : 0),
   );

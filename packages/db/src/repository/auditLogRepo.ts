@@ -10,6 +10,7 @@ import {
   lt,
   lte,
   or,
+  sql,
 } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
@@ -162,7 +163,7 @@ export function createAuditLogQueryRepo(db: Database) {
       filter: AuditLogListFilter = {},
       actions: string[],
       prefixSize: number,
-    ): Promise<AuditLogRowWithActor[]> {
+    ): Promise<Array<AuditLogRowWithActor & { sortKeyUs: number }>> {
       if (actions.length === 0) return [];
       const orgId = resolveOrganizationId(ctx);
       const limit = Math.max(0, Math.floor(prefixSize));
@@ -177,10 +178,17 @@ export function createAuditLogQueryRepo(db: Database) {
       conditions.push(inArray(auditLogs.action, actions));
       const where =
         conditions.length === 1 ? conditions[0] : and(...conditions);
+      // WHY sortKeyUs: full-precision epoch-µs key for the merged timeline.
+      // `created_at` is DB-defaulted (µs clock); a JS Date
+      // (ms) merge key would fabricate ties between µs-distinct rows and
+      // let the merge disagree with THIS query's DB order inside one
+      // source — duplicating/dropping rows at page boundaries. Epoch µs
+      // < 2^53 → exact as a JS number.
       return db
         .select({
           auditLog: auditLogs,
           actorName: users.name,
+          sortKeyUs: sql<number>`(extract(epoch from ${auditLogs.createdAt}) * 1000000)::double precision`,
         })
         .from(auditLogs)
         .leftJoin(users, eq(users.id, auditLogs.actorId))
