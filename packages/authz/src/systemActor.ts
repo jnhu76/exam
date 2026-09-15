@@ -24,6 +24,7 @@ export const SYSTEM_ACTOR_IDS = {
   DeadlineScanner: "system:deadline-scanner",
   Heartbeat: "system:heartbeat",
   IncidentDetector: "system:incident-detector",
+  ClientEventRetention: "system:client-event-retention",
 } as const;
 
 /** Closed union of allowed system actor ids (compile-time enforcement). */

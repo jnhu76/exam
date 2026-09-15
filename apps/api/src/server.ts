@@ -12,6 +12,7 @@ import redisPlugin from "./plugins/redis.js";
 import nowPlugin from "./plugins/now.js";
 import heartbeatPlugin from "./plugins/heartbeat.js";
 import deadlineScannerPlugin from "./plugins/deadlineScanner.js";
+import clientEventRetentionPlugin from "./plugins/clientEventRetention.js";
 import emailPlugin from "./plugins/email.js";
 import emailOutboxLoopPlugin from "./plugins/emailOutboxLoop.js";
 import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
@@ -114,6 +115,7 @@ async function main() {
   await app.register(authzScopedPlugin);
   await app.register(heartbeatPlugin);
   await app.register(deadlineScannerPlugin);
+  await app.register(clientEventRetentionPlugin);
   await app.register(emailPlugin);
   await app.register(emailOutboxLoopPlugin);
 

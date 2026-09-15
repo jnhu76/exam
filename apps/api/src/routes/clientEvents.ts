@@ -7,6 +7,7 @@ import {
   type ClientEventBatchResponse,
 } from "@exam/contracts";
 import { createClientEventRepo } from "@exam/db/src/repository/clientEventRepo.js";
+import { normalizeClientEventReferences } from "../lib/clientEventReferenceNormalizer.js";
 import { getRequestContext } from "./helpers.js";
 
 /** OpenAPI security scheme requiring cookie-based authentication. */
@@ -27,18 +28,28 @@ const clientEventBatchResponseSchema = z.object({
  * Fastify plugin that registers the client-event ingestion route.
  *
  * `POST /client-events` accepts a validated batch of frontend observability
- * events. The route requires an authenticated user (Admin or Candidate) but
- * performs no role gating — both roles may report their own events. The
- * server is the source of truth for tenant identity and receive time:
+ * events. The route is AUTHENTICATE-ONLY (every authenticated role may report
+ * its own events; there is no role gate — see the intentional
+ * authenticate-only set in routeRegistryConformanceWholeApp.test.ts). It is
+ * self-service LOW-TRUST telemetry (#544): authentication proves who sent the
+ * event, never that the event's content or resource references are true.
+ *
+ * Trust semantics:
  *
  * - `organizationId` and `userId` come from the authenticated `request.ctx`,
- *   never from the payload.
- * - `receivedAt` is stamped server-side; `occurredAt` (client-reported) is
- *   preserved as the event instant but never used for receive ordering.
- * - `attemptId` is accepted as opaque telemetry only. Per the spec we do not
- *   treat it as an authorization handle — verifying per-attempt ownership
- *   is out of scope for this infra layer and would require attempt-loading
- *   capability the route does not have. The org/user boundary is the guard.
+ *   never from the payload; `receivedAt` is stamped server-side and is the
+ *   sole ordering/lifecycle authority. `occurredAt` (client-asserted) is
+ *   stored as an advisory display instant and never orders anything.
+ * - `kind` is a client-provided classification label, NOT provenance:
+ *   `kind == "proctor"` carries no extra trust.
+ * - `attemptId` / `examId` / `questionId` are persisted only when
+ *   {@link normalizeClientEventReferences} can prove the claimed relationship
+ *   for the actor (org + candidate ownership, frozen exam question set);
+ *   unprovable references are NULLed silently while the event stays accepted.
+ *   The response is always `{ accepted: <batch size> }` — no existence oracle.
+ * - These events are advisory inputs (debugging, operational observation,
+ *   proctor attention UI). They are never, alone, an incident / violation /
+ *   punishment / score / attempt-state / deadline authority.
  */
 const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -76,13 +87,23 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
           ? rawUserAgent.slice(0, USER_AGENT_MAX_LENGTH)
           : null;
 
+      // Reference trust boundary (#544): prove or NULLIFY the client-asserted
+      // attempt/exam/question references before persisting. Event acceptance
+      // is unconditional for schema-valid events, so the accepted count never
+      // leaks whether a reference existed or was owned.
+      const references = await normalizeClientEventReferences(
+        fastify.db,
+        ctx,
+        events,
+      );
+
       const inserted = await createClientEventRepo(fastify.db).createMany(
         ctx,
-        events.map((event) => ({
+        events.map((event, i) => ({
           userId: ctx.actorId,
-          attemptId: event.attemptId ?? null,
-          examId: event.examId ?? null,
-          questionId: event.questionId ?? null,
+          attemptId: references[i]!.attemptId,
+          examId: references[i]!.examId,
+          questionId: references[i]!.questionId,
           kind: event.kind,
           level: event.level,
           name: event.name,

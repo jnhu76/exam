@@ -188,18 +188,17 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      const { items, total } = await buildProctorAttemptEventTimeline(
-        fastify.db,
-        ctx,
-        attemptId,
-        { limit, page },
-      );
+      const { items, total, totalPages } =
+        await buildProctorAttemptEventTimeline(fastify.db, ctx, attemptId, {
+          limit,
+          page,
+        });
       return {
         items,
         total,
         page,
         pageSize: limit,
-        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+        totalPages,
       };
     },
   );

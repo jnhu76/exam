@@ -56,6 +56,54 @@ export function createAttemptRepo(db: Database) {
   return {
     ...repo,
     findByIds,
+    /**
+     * Batch-loads own-attempt ownership chains for multiple attempt ids.
+     * Returns a Map<attemptId, { ownerUserId, examId }> for attempts where
+     * the actor is the owning candidate. Missing or unowned attempts are
+     * absent from the map (fail closed — same semantics as
+     * findOwnAttemptChain returning null).
+     *
+     * O(1) DB round trips regardless of batch size.
+     */
+    async findOwnAttemptChains(
+      ctx: TenantContext | RequestContext,
+      attemptIds: string[],
+    ): Promise<
+      Map<string, { ownerUserId: string | null; examId: string | null }>
+    > {
+      if (attemptIds.length === 0) return new Map();
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          attemptId: examAttempts.id,
+          ownerUserId: candidateProfiles.userId,
+          linkedExamId: examAttempts.examId,
+          examId: exams.id,
+        })
+        .from(examAttempts)
+        .leftJoin(
+          candidateProfiles,
+          eq(examAttempts.candidateId, candidateProfiles.id),
+        )
+        .leftJoin(exams, eq(examAttempts.examId, exams.id))
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            inArray(examAttempts.id, attemptIds),
+          ),
+        );
+      const result = new Map<
+        string,
+        { ownerUserId: string | null; examId: string | null }
+      >();
+      for (const row of rows) {
+        result.set(row.attemptId, {
+          ownerUserId: row.ownerUserId ?? null,
+          examId: row.examId ?? null,
+        });
+      }
+      return result;
+    },
     async findAuthorizationChain(
       ctx: TenantContext | RequestContext,
       attemptId: string,

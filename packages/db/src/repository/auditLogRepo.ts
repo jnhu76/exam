@@ -1,5 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, desc, eq, gte, lt, lte, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { auditLogs, users } from "../schema/pg.js";
@@ -63,6 +75,176 @@ export function createAuditLogWriter<Action extends string>(
 
 export function createAuditLogQueryRepo(db: Database) {
   return {
+    /**
+     * Counts audit log entries matching a filter, scoped to the tenant.
+     */
+    async countFiltered(
+      ctx: TenantContext | RequestContext,
+      filter: AuditLogListFilter = {},
+    ): Promise<number> {
+      const orgId = resolveOrganizationId(ctx);
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.action) {
+        conditions.push(eq(auditLogs.action, filter.action));
+      }
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      if (filter.actorId) {
+        conditions.push(eq(auditLogs.actorId, filter.actorId));
+      }
+      if (filter.from) {
+        conditions.push(gte(auditLogs.createdAt, filter.from));
+      }
+      if (filter.to) {
+        conditions.push(lte(auditLogs.createdAt, filter.to));
+      }
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      const [countResult] = await db
+        .select({ total: count() })
+        .from(auditLogs)
+        .where(where);
+      return Number(countResult?.total ?? 0);
+    },
+
+    /**
+     * Counts audit log entries matching a filter AND restricted to specific
+     * actions. Used by the merged timeline to get an accurate total of
+     * timeline-relevant audit rows without fetching them all into memory.
+     */
+    async countFilteredByActions(
+      ctx: TenantContext | RequestContext,
+      filter: AuditLogListFilter = {},
+      actions: string[],
+    ): Promise<number> {
+      if (actions.length === 0) return 0;
+      const orgId = resolveOrganizationId(ctx);
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      conditions.push(inArray(auditLogs.action, actions));
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      const [countResult] = await db
+        .select({ total: count() })
+        .from(auditLogs)
+        .where(where);
+      return Number(countResult?.total ?? 0);
+    },
+
+    /**
+     * Lists the newest `prefixSize` audit rows matching the filter AND
+     * restricted to `actions`, newest first. Used by the merged proctor
+     * timeline as the audit PREFIX fetch.
+     *
+     * INVARIANT (#544): the admission predicate here (org scope AND target
+     * filters AND action IN (...)) must stay semantically IDENTICAL to
+     * `countFilteredByActions` — list admission and count admission are one
+     * predicate. The action filter is applied in SQL BEFORE ORDER BY/LIMIT so
+     * the window contains admitted rows only: irrelevant rows can never crowd
+     * admitted rows out of the fetch (an in-memory post-filter after LIMIT
+     * would under-fill pages and break pagination math).
+     *
+     * OWNERSHIP: `prefixSize` is caller-owned (derived from the validated
+     * page/limit contract and the admitted row count). It is deliberately NOT
+     * clamped to the external page-size bound — the route schema owns that
+     * bound; clamping here would truncate the merged timeline's window.
+     */
+    async listTimelinePrefixByActions(
+      ctx: TenantContext | RequestContext,
+      filter: AuditLogListFilter = {},
+      actions: string[],
+      prefixSize: number,
+    ): Promise<Array<AuditLogRowWithActor & { sortKeyUs: number }>> {
+      if (actions.length === 0) return [];
+      const orgId = resolveOrganizationId(ctx);
+      const limit = Math.max(0, Math.floor(prefixSize));
+      if (limit === 0) return [];
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      conditions.push(inArray(auditLogs.action, actions));
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      // WHY sortKeyUs: full-precision epoch-µs key for the merged timeline.
+      // `created_at` is DB-defaulted (µs clock); a JS Date
+      // (ms) merge key would fabricate ties between µs-distinct rows and
+      // let the merge disagree with THIS query's DB order inside one
+      // source — duplicating/dropping rows at page boundaries. Epoch µs
+      // < 2^53 → exact as a JS number.
+      return db
+        .select({
+          auditLog: auditLogs,
+          actorName: users.name,
+          sortKeyUs: sql<number>`(extract(epoch from ${auditLogs.createdAt}) * 1000000)::double precision`,
+        })
+        .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorId))
+        .where(where)
+        .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+        .limit(limit);
+    },
+
+    /**
+     * Lists audit log entries matching a filter, newest first, bounded to the
+     * external page size. Used by the admin audit-log list route — NOT by the
+     * merged proctor timeline (which must admit actions in SQL before LIMIT;
+     * see listTimelinePrefixByActions).
+     */
+    async listFiltered(
+      ctx: TenantContext | RequestContext,
+      filter: AuditLogListFilter = {},
+      opts: { limit: number; offset?: number } = { limit: 20 },
+    ): Promise<AuditLogRowWithActor[]> {
+      const orgId = resolveOrganizationId(ctx);
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.action) {
+        conditions.push(eq(auditLogs.action, filter.action));
+      }
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      if (filter.actorId) {
+        conditions.push(eq(auditLogs.actorId, filter.actorId));
+      }
+      if (filter.from) {
+        conditions.push(gte(auditLogs.createdAt, filter.from));
+      }
+      if (filter.to) {
+        conditions.push(lte(auditLogs.createdAt, filter.to));
+      }
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      const limit = Math.max(1, Math.min(opts.limit, 100));
+      const offset = Math.max(0, opts.offset ?? 0);
+      return db
+        .select({
+          auditLog: auditLogs,
+          actorName: users.name,
+        })
+        .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorId))
+        .where(where)
+        .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+        .limit(limit)
+        .offset(offset);
+    },
+
     /**
      * Lists audit log entries with pagination and optional filters
      * (action, targetType, inclusive createdAt range). Ordered by `createdAt`
