@@ -155,10 +155,11 @@ export function createClientEventRepo(db: Database) {
     async listRecentByAttempt(
       ctx: TenantContext | RequestContext,
       attemptId: string,
-      opts: { limit: number },
+      opts: { limit: number; offset?: number },
     ): Promise<ClientEventTimelineRow[]> {
       const organizationId = resolveOrganizationId(ctx);
       const limit = Math.max(1, Math.min(opts.limit, 100));
+      const offset = Math.max(0, opts.offset ?? 0);
       const rows = await db
         .select({
           id: clientEvents.id,
@@ -178,8 +179,29 @@ export function createClientEventRepo(db: Database) {
           ),
         )
         .orderBy(desc(clientEvents.receivedAt), desc(clientEvents.id))
-        .limit(limit);
+        .limit(limit)
+        .offset(offset);
       return rows;
+    },
+
+    /**
+     * Counts client events for one attempt, scoped to the tenant.
+     */
+    async countByAttempt(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+    ): Promise<number> {
+      const organizationId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(clientEvents)
+        .where(
+          and(
+            eq(clientEvents.organizationId, organizationId),
+            eq(clientEvents.attemptId, attemptId),
+          ),
+        );
+      return Number(rows[0]?.count ?? 0);
     },
 
     /**

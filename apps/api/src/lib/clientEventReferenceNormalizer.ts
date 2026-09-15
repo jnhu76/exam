@@ -123,9 +123,13 @@ function normalizeQuestionId(
 
 /**
  * Loads the server-verified evidence for a batch of claimed references.
- * One indexed lookup per DISTINCT claimed id (batches are ≤ 50 events from a
- * single client session, so this is 1–3 queries in the real producer flow),
- * and one exam load per DISTINCT anchor exam for the frozen question set.
+ * Uses batched repository methods so the DB query count is O(1) with respect
+ * to batch size — exactly 3 round trips regardless of how many distinct ids
+ * appear in the batch:
+ *
+ *   1. Batch attempt ownership (WHERE attempt.id IN (...))
+ *   2. Batch exam eligibility (WHERE exam.id IN (...))
+ *   3. Batch exam snapshots (WHERE exam.id IN (...))
  */
 export async function loadReferenceEvidence(
   db: Database,
@@ -135,12 +139,16 @@ export async function loadReferenceEvidence(
   const attemptRepo = createAttemptRepo(db);
   const examRepo = createExamRepo(db);
 
+  // --- Step 1: Batch attempt ownership (single DB round trip) ---
+  const distinctAttemptIds = distinct(claimed.map((c) => c.attemptId));
+  const attemptChains = await attemptRepo.findOwnAttemptChains(
+    ctx,
+    distinctAttemptIds,
+  );
+
   const ownedAttemptExamIds = new Map<string, string>();
-  for (const attemptId of distinct(claimed.map((c) => c.attemptId))) {
-    const chain = await attemptRepo.findOwnAttemptChain(ctx, attemptId);
-    // Org anchor is enforced inside the repo query; ownership is the
-    // candidateProfile.userId === actorId comparison. A broken exam join
-    // (impossible under the FK today) fails closed as "not owned".
+  for (const attemptId of distinctAttemptIds) {
+    const chain = attemptChains.get(attemptId);
     if (
       chain &&
       chain.ownerUserId !== null &&
@@ -151,13 +159,17 @@ export async function loadReferenceEvidence(
     }
   }
 
+  // --- Step 2: Batch exam eligibility (single DB round trip) ---
+  const distinctExamIds = distinct(claimed.map((c) => c.examId));
+  const examChains = await examRepo.findCandidateEligibilityChains(
+    ctx,
+    distinctExamIds,
+    ctx.actorId,
+  );
+
   const eligibleExamIds = new Set<string>();
-  for (const examId of distinct(claimed.map((c) => c.examId))) {
-    const chain = await examRepo.findCandidateEligibilityChain(
-      ctx,
-      examId,
-      ctx.actorId,
-    );
+  for (const examId of distinctExamIds) {
+    const chain = examChains.get(examId);
     if (
       chain &&
       chain.examId !== null &&
@@ -170,16 +182,20 @@ export async function loadReferenceEvidence(
     }
   }
 
-  const examQuestionIds = new Map<string, ReadonlySet<string>>();
-  for (const examId of distinct([
+  // --- Step 3: Batch exam snapshots (single DB round trip) ---
+  const anchorExamIds = distinct([
     ...ownedAttemptExamIds.values(),
     ...eligibleExamIds,
-  ])) {
-    const exam = await examRepo.findById(ctx, examId);
-    if (!exam) continue; // cannot happen for a proven chain; fail closed → refs drop
+  ]);
+  const examSnapshots = await examRepo.findByIdsForSnapshot(ctx, anchorExamIds);
+
+  const examQuestionIds = new Map<string, ReadonlySet<string>>();
+  for (const examId of anchorExamIds) {
+    const snapshot = examSnapshots.get(examId);
+    if (!snapshot) continue; // fail closed → refs drop
     examQuestionIds.set(
       examId,
-      new Set(exam.questionSnapshot.map((q) => q.originalQuestionId)),
+      new Set(snapshot.map((q) => q.originalQuestionId)),
     );
   }
 

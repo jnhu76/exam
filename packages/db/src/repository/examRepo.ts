@@ -13,7 +13,7 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, asc, count, eq, exists, inArray } from "drizzle-orm";
+import { and, asc, count, eq, exists, inArray, sql } from "drizzle-orm";
 
 type ExamSelect = typeof exams.$inferSelect;
 
@@ -210,6 +210,103 @@ export function createExamRepo(db: Database) {
         .for("update")
         .where(and(eq(exams.organizationId, orgId), eq(exams.id, examId)));
       return (rows[0] as ExamSelect | undefined) ?? null;
+    },
+    /**
+     * Batch-loads candidate eligibility chains for multiple exam ids.
+     * Returns a Map<examId, { examId, candidateProfileId, ownerUserId, enrollmentId }>
+     * for exams where the actor has a valid enrollment. Missing or ineligible
+     * exams are absent from the map (fail closed — same semantics as
+     * findCandidateEligibilityChain returning null).
+     *
+     * O(1) DB round trips regardless of batch size.
+     */
+    async findCandidateEligibilityChains(
+      ctx: TenantContext | RequestContext,
+      examIds: string[],
+      userId: string,
+    ): Promise<
+      Map<
+        string,
+        {
+          examId: string | null;
+          candidateProfileId: string | null;
+          ownerUserId: string | null;
+          enrollmentId: string | null;
+        }
+      >
+    > {
+      if (examIds.length === 0) return new Map();
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          examId: exams.id,
+          candidateProfileId: candidateProfiles.id,
+          ownerUserId: candidateProfiles.userId,
+          enrollmentId: examEnrollments.id,
+        })
+        .from(exams)
+        .leftJoin(
+          candidateProfiles,
+          and(
+            eq(candidateProfiles.organizationId, orgId),
+            eq(candidateProfiles.userId, userId),
+          ),
+        )
+        .leftJoin(
+          examEnrollments,
+          and(
+            eq(examEnrollments.organizationId, orgId),
+            eq(examEnrollments.examId, exams.id),
+            eq(examEnrollments.candidateId, candidateProfiles.id),
+          ),
+        )
+        .where(
+          and(eq(exams.organizationId, orgId), inArray(exams.id, examIds)),
+        );
+      const result = new Map<
+        string,
+        {
+          examId: string | null;
+          candidateProfileId: string | null;
+          ownerUserId: string | null;
+          enrollmentId: string | null;
+        }
+      >();
+      for (const row of rows) {
+        result.set(row.examId, {
+          examId: row.examId,
+          candidateProfileId: row.candidateProfileId ?? null,
+          ownerUserId: row.ownerUserId ?? null,
+          enrollmentId: row.enrollmentId ?? null,
+        });
+      }
+      return result;
+    },
+    /**
+     * Batch-loads exams by id for the frozen question snapshot.
+     * Returns a Map<examId, questionSnapshot> for each found exam.
+     * O(1) DB round trips regardless of batch size.
+     */
+    async findByIdsForSnapshot(
+      ctx: TenantContext | RequestContext,
+      examIds: string[],
+    ): Promise<Map<string, ExamSelect["questionSnapshot"]>> {
+      if (examIds.length === 0) return new Map();
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          id: exams.id,
+          questionSnapshot: exams.questionSnapshot,
+        })
+        .from(exams)
+        .where(
+          and(eq(exams.organizationId, orgId), inArray(exams.id, examIds)),
+        );
+      const result = new Map<string, ExamSelect["questionSnapshot"]>();
+      for (const row of rows) {
+        result.set(row.id, row.questionSnapshot);
+      }
+      return result;
     },
   };
 }

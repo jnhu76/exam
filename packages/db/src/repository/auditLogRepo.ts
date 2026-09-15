@@ -64,6 +64,88 @@ export function createAuditLogWriter<Action extends string>(
 export function createAuditLogQueryRepo(db: Database) {
   return {
     /**
+     * Counts audit log entries matching a filter, scoped to the tenant.
+     */
+    async countFiltered(
+      ctx: TenantContext | RequestContext,
+      filter: AuditLogListFilter = {},
+    ): Promise<number> {
+      const orgId = resolveOrganizationId(ctx);
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.action) {
+        conditions.push(eq(auditLogs.action, filter.action));
+      }
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      if (filter.actorId) {
+        conditions.push(eq(auditLogs.actorId, filter.actorId));
+      }
+      if (filter.from) {
+        conditions.push(gte(auditLogs.createdAt, filter.from));
+      }
+      if (filter.to) {
+        conditions.push(lte(auditLogs.createdAt, filter.to));
+      }
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      const [countResult] = await db
+        .select({ total: count() })
+        .from(auditLogs)
+        .where(where);
+      return Number(countResult?.total ?? 0);
+    },
+
+    /**
+     * Lists audit log entries matching a filter, newest first.
+     * Used by the merged timeline to fetch audit rows for global ordering.
+     */
+    async listFiltered(
+      ctx: TenantContext | RequestContext,
+      filter: AuditLogListFilter = {},
+      opts: { limit: number; offset?: number } = { limit: 20 },
+    ): Promise<AuditLogRowWithActor[]> {
+      const orgId = resolveOrganizationId(ctx);
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.action) {
+        conditions.push(eq(auditLogs.action, filter.action));
+      }
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      if (filter.actorId) {
+        conditions.push(eq(auditLogs.actorId, filter.actorId));
+      }
+      if (filter.from) {
+        conditions.push(gte(auditLogs.createdAt, filter.from));
+      }
+      if (filter.to) {
+        conditions.push(lte(auditLogs.createdAt, filter.to));
+      }
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      const limit = Math.max(1, Math.min(opts.limit, 100));
+      const offset = Math.max(0, opts.offset ?? 0);
+      return db
+        .select({
+          auditLog: auditLogs,
+          actorName: users.name,
+        })
+        .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorId))
+        .where(where)
+        .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+        .limit(limit)
+        .offset(offset);
+    },
+
+    /**
      * Lists audit log entries with pagination and optional filters
      * (action, targetType, inclusive createdAt range). Ordered by `createdAt`
      * descending, scoped to the tenant's organization.
