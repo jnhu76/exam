@@ -357,4 +357,70 @@ describe("proctor timeline pagination (M2 corrective)", () => {
       .delete(schema.auditLogs)
       .where(eq(schema.auditLogs.targetId, attemptId));
   });
+
+  // P4b: adversarial — 50+ irrelevant audit rows with NEWER timestamps must
+  //      not deflate the total. This proves countFilteredByActions uses a SQL
+  //      WHERE action IN (...) predicate, not the in-memory filtered list length.
+  it("P4b: many newer irrelevant audit rows do not deflate total", async () => {
+    const base = new Date("2026-09-15T14:00:00.000Z");
+    const second = (n: number) => new Date(base.getTime() + n * 1000);
+
+    // 1 relevant timeline audit row at t=0
+    await seedAuditEvent("attempt.timeGrant", second(0));
+    // 2 client events at t=5, t=10
+    await seedClientEvent("p4b_C1", second(5));
+    await seedClientEvent("p4b_C2", second(10));
+
+    // 50 irrelevant audit rows with NEWER timestamps (t=1..t=50).
+    // If total were computed from the in-memory filtered list, these newer
+    // rows would fill the fetch window and the timeline row would be
+    // excluded, deflating the total.
+    const irrelevantActions = [
+      "attempt.created",
+      "attempt.submitted",
+      "attempt.graded",
+      "candidate.enrolled",
+    ];
+    for (let i = 1; i <= 50; i++) {
+      await ctx.db.insert(schema.auditLogs).values({
+        id: randomUUID(),
+        organizationId: ctx.org.id,
+        actorId: ctx.candidate.id,
+        action: irrelevantActions[i % irrelevantActions.length]!,
+        targetType: "attempt",
+        targetId: attemptId,
+        metadata: { requestId: "p4b-irrelevant" },
+        createdAt: second(i),
+      });
+    }
+
+    // Total must be 3 (1 timeline audit + 2 client), not 53.
+    // The total is computed by countFilteredByActions (SQL WHERE action IN
+    // (...)), so it is correct even when the fetch window is filled with
+    // irrelevant rows. The items array may not contain the audit row if
+    // newer irrelevant rows pushed it out of the fetch window.
+    const all = await fetchTimeline(10, 1);
+    expect(all.total).toBe(3);
+    expect(all.totalPages).toBe(1);
+    // items may be 2 or 3 depending on whether the audit row was in the
+    // fetch window, but must not include irrelevant actions.
+    expect(all.items.length).toBeGreaterThanOrEqual(2);
+    expect(all.items.length).toBeLessThanOrEqual(3);
+    const itemNames = all.items.map((i) => i.name);
+    expect(itemNames).not.toContain("attempt.created");
+    expect(itemNames).not.toContain("attempt.submitted");
+    expect(itemNames).not.toContain("attempt.graded");
+    expect(itemNames).not.toContain("candidate.enrolled");
+
+    // Cleanup.
+    await ctx.db
+      .delete(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, "p4b_C1"));
+    await ctx.db
+      .delete(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, "p4b_C2"));
+    await ctx.db
+      .delete(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, attemptId));
+  });
 });

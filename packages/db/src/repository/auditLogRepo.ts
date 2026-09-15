@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, desc, eq, gte, lt, lte, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lt,
+  lte,
+  or,
+} from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { auditLogs, users } from "../schema/pg.js";
@@ -90,6 +101,35 @@ export function createAuditLogQueryRepo(db: Database) {
       if (filter.to) {
         conditions.push(lte(auditLogs.createdAt, filter.to));
       }
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      const [countResult] = await db
+        .select({ total: count() })
+        .from(auditLogs)
+        .where(where);
+      return Number(countResult?.total ?? 0);
+    },
+
+    /**
+     * Counts audit log entries matching a filter AND restricted to specific
+     * actions. Used by the merged timeline to get an accurate total of
+     * timeline-relevant audit rows without fetching them all into memory.
+     */
+    async countFilteredByActions(
+      ctx: TenantContext | RequestContext,
+      filter: AuditLogListFilter = {},
+      actions: string[],
+    ): Promise<number> {
+      if (actions.length === 0) return 0;
+      const orgId = resolveOrganizationId(ctx);
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      conditions.push(inArray(auditLogs.action, actions));
       const where =
         conditions.length === 1 ? conditions[0] : and(...conditions);
       const [countResult] = await db

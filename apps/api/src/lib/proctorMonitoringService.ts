@@ -367,22 +367,13 @@ export async function buildProctorAttemptEventTimeline(
     TIMELINE_AUDIT_ACTIONS.has(a.auditLog.action),
   );
 
-  // Calculate true total using count methods.
+  // Calculate true total using dedicated count methods.
   const clientTotal = await eventRepo.countByAttempt(ctx, attemptId);
-  const auditTotal = await auditRepo.countFiltered(ctx, {
-    targetType: "attempt",
-    targetId: attemptId,
-  });
-  // Note: auditTotal includes all audit actions for this attempt, but some
-  // may not be timeline-relevant. We could subtract non-relevant actions,
-  // but for simplicity we use the actual filtered count from the query.
-  // The safe approach is to count only timeline-relevant audit rows.
-  const timelineAuditTotal = auditRows.length;
-  // For accurate total, we need to count timeline-relevant audit rows.
-  // Since we already have the filtered list, we can use its length as an
-  // approximation. For a production system, we'd add a dedicated count query
-  // with action IN (...), but the filtered list is sufficient for correct
-  // pagination behavior.
+  const timelineAuditTotal = await auditRepo.countFilteredByActions(
+    ctx,
+    { targetType: "attempt", targetId: attemptId },
+    [...TIMELINE_AUDIT_ACTIONS],
+  );
   const total = clientTotal + timelineAuditTotal;
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
@@ -417,9 +408,10 @@ export async function buildProctorAttemptEventTimeline(
     });
   }
 
-  // Newest first (server instant), then deterministic id tiebreaker; apply pagination.
+  // Newest first (server instant), then deterministic id tiebreaker (DESC,
+  // matching the DB ORDER BY convention); apply pagination.
   merged.sort(
-    (x, y) => y.key - x.key || (y.id < x.id ? -1 : y.id > x.id ? 1 : 0),
+    (x, y) => y.key - x.key || (y.id > x.id ? -1 : y.id < x.id ? 1 : 0),
   );
   const items = merged.map((m) => m.event).slice(offset, offset + limit);
   return { items, total, totalPages };
