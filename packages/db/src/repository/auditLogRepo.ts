@@ -140,8 +140,60 @@ export function createAuditLogQueryRepo(db: Database) {
     },
 
     /**
-     * Lists audit log entries matching a filter, newest first.
-     * Used by the merged timeline to fetch audit rows for global ordering.
+     * Lists the newest `prefixSize` audit rows matching the filter AND
+     * restricted to `actions`, newest first. Used by the merged proctor
+     * timeline as the audit PREFIX fetch.
+     *
+     * INVARIANT (#544): the admission predicate here (org scope AND target
+     * filters AND action IN (...)) must stay semantically IDENTICAL to
+     * `countFilteredByActions` — list admission and count admission are one
+     * predicate. The action filter is applied in SQL BEFORE ORDER BY/LIMIT so
+     * the window contains admitted rows only: irrelevant rows can never crowd
+     * admitted rows out of the fetch (an in-memory post-filter after LIMIT
+     * would under-fill pages and break pagination math).
+     *
+     * OWNERSHIP: `prefixSize` is caller-owned (derived from the validated
+     * page/limit contract and the admitted row count). It is deliberately NOT
+     * clamped to the external page-size bound — the route schema owns that
+     * bound; clamping here would truncate the merged timeline's window.
+     */
+    async listTimelinePrefixByActions(
+      ctx: TenantContext | RequestContext,
+      filter: AuditLogListFilter = {},
+      actions: string[],
+      prefixSize: number,
+    ): Promise<AuditLogRowWithActor[]> {
+      if (actions.length === 0) return [];
+      const orgId = resolveOrganizationId(ctx);
+      const limit = Math.max(0, Math.floor(prefixSize));
+      if (limit === 0) return [];
+      const conditions = [eq(auditLogs.organizationId, orgId)];
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
+      }
+      conditions.push(inArray(auditLogs.action, actions));
+      const where =
+        conditions.length === 1 ? conditions[0] : and(...conditions);
+      return db
+        .select({
+          auditLog: auditLogs,
+          actorName: users.name,
+        })
+        .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorId))
+        .where(where)
+        .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+        .limit(limit);
+    },
+
+    /**
+     * Lists audit log entries matching a filter, newest first, bounded to the
+     * external page size. Used by the admin audit-log list route — NOT by the
+     * merged proctor timeline (which must admit actions in SQL before LIMIT;
+     * see listTimelinePrefixByActions).
      */
     async listFiltered(
       ctx: TenantContext | RequestContext,

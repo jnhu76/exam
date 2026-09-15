@@ -140,26 +140,32 @@ export function createClientEventRepo(db: Database) {
     },
 
     /**
-     * Lists the most-recent client events for one attempt, newest first. Used
-     * for the proctor event timeline. Returns safe columns PLUS the raw
-     * `metadata` blob; the API service applies a per-event-name allowlist
+     * Lists the newest `prefixSize` client events for one attempt (offset 0),
+     * newest first. Used by the merged proctor timeline as the client-event
+     * PREFIX fetch. Org-scoped via the context. Returns safe columns PLUS the
+     * raw `metadata` blob; the API service applies a per-event-name allowlist
      * projection before responding, so only non-sensitive fields reach the
-     * proctor view. Org-scoped via the context.
+     * proctor view.
      *
      * INVARIANT (#544): ordering authority is the server-owned `receivedAt`
      * with `id` as the deterministic tiebreaker — never the client-asserted
      * `occurredAt`, which a malicious client can set to any instant to
      * hijack the timeline head/tail or pagination. Backed by
      * `client_events_org_attempt_received_at_idx`.
+     *
+     * OWNERSHIP: `prefixSize` is caller-owned (derived from the validated
+     * page/limit contract and the admitted row count). It is deliberately NOT
+     * clamped to the external page-size bound — the route schema owns that
+     * bound; clamping here would truncate the merged timeline's window.
      */
-    async listRecentByAttempt(
+    async listTimelinePrefixByAttempt(
       ctx: TenantContext | RequestContext,
       attemptId: string,
-      opts: { limit: number; offset?: number },
+      prefixSize: number,
     ): Promise<ClientEventTimelineRow[]> {
       const organizationId = resolveOrganizationId(ctx);
-      const limit = Math.max(1, Math.min(opts.limit, 100));
-      const offset = Math.max(0, opts.offset ?? 0);
+      const limit = Math.max(0, Math.floor(prefixSize));
+      if (limit === 0) return [];
       const rows = await db
         .select({
           id: clientEvents.id,
@@ -179,8 +185,7 @@ export function createClientEventRepo(db: Database) {
           ),
         )
         .orderBy(desc(clientEvents.receivedAt), desc(clientEvents.id))
-        .limit(limit)
-        .offset(offset);
+        .limit(limit);
       return rows;
     },
 

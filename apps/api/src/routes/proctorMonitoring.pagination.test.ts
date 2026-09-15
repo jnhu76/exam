@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { eq, like } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
@@ -87,6 +87,17 @@ describe("proctor timeline pagination (M2 corrective)", () => {
       .delete(schema.auditLogs)
       .where(eq(schema.auditLogs.organizationId, ctx.org.id));
     await ctx.cleanup();
+  });
+
+  // Single cleanup authority: a failing test must not leak rows into the
+  // next case's total/membership assertions (P4b/P5/P6 count exactly).
+  afterEach(async () => {
+    await ctx.db
+      .delete(schema.clientEvents)
+      .where(eq(schema.clientEvents.organizationId, ctx.org.id));
+    await ctx.db
+      .delete(schema.auditLogs)
+      .where(eq(schema.auditLogs.organizationId, ctx.org.id));
   });
 
   /** Seeds one client event with a fully controlled receivedAt. */
@@ -184,13 +195,6 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     const page3 = await fetchTimeline(2, 3);
     expect(page3.items).toHaveLength(1);
     expect(page3.items[0]!.name).toBe("p1_client_0");
-
-    // Cleanup.
-    for (let i = 0; i < 5; i++) {
-      await ctx.db
-        .delete(schema.clientEvents)
-        .where(eq(schema.clientEvents.name, `p1_client_${i}`));
-    }
   });
 
   // P2: mixed source interleave — client and audit events interleave by
@@ -226,20 +230,6 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     const page3 = await fetchTimeline(2, 3);
     expect(page3.items).toHaveLength(1);
     expect(page3.items[0]!.name).toBe("p2_C1");
-
-    // Cleanup.
-    await ctx.db
-      .delete(schema.clientEvents)
-      .where(eq(schema.clientEvents.name, "p2_C5"));
-    await ctx.db
-      .delete(schema.clientEvents)
-      .where(eq(schema.clientEvents.name, "p2_C3"));
-    await ctx.db
-      .delete(schema.clientEvents)
-      .where(eq(schema.clientEvents.name, "p2_C1"));
-    await ctx.db
-      .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.targetId, attemptId));
   });
 
   // P3: occurredAt adversarial on page 2 — extreme occurredAt values cannot
@@ -286,19 +276,6 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     // 2099 event is NOT at position 0; 1970 event is NOT at the tail.
     expect(allNames[0]).toBe("p3_Clast"); // NOT Cfuturo
     expect(allNames[allNames.length - 1]).toBe("p3_Cnormal"); // NOT Cpasto
-
-    // Cleanup.
-    for (const n of [
-      "p3_Cnormal",
-      "p3_Cfuturo",
-      "p3_Cpasto",
-      "p3_Clater",
-      "p3_Clast",
-    ]) {
-      await ctx.db
-        .delete(schema.clientEvents)
-        .where(eq(schema.clientEvents.name, n));
-    }
   });
 
   // P4: irrelevant audit actions — audit rows with non-timeline actions must
@@ -345,43 +322,31 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     expect(itemNames).not.toContain("attempt.submitted");
     expect(itemNames).not.toContain("attempt.graded");
     expect(itemNames).not.toContain("candidate.enrolled");
-
-    // Cleanup.
-    await ctx.db
-      .delete(schema.clientEvents)
-      .where(eq(schema.clientEvents.name, "p4_C1"));
-    await ctx.db
-      .delete(schema.clientEvents)
-      .where(eq(schema.clientEvents.name, "p4_C2"));
-    await ctx.db
-      .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.targetId, attemptId));
   });
 
-  // P4b: adversarial — 50+ irrelevant audit rows with NEWER timestamps must
-  //      not deflate the total. This proves countFilteredByActions uses a SQL
-  //      WHERE action IN (...) predicate, not the in-memory filtered list length.
-  it("P4b: many newer irrelevant audit rows do not deflate total", async () => {
+  // P4b: adversarial — 55 irrelevant audit rows, ALL newer than the single
+  // relevant audit row. The timeline admission predicate (action IN ...) must
+  // be applied in SQL BEFORE LIMIT: a newer irrelevant prefix must not crowd
+  // the admitted audit row out of the fetch window. An under-filled page here
+  // is a defect, not an accepted outcome.
+  it("P4b: newer irrelevant audit prefix must not hide admitted rows", async () => {
     const base = new Date("2026-09-15T14:00:00.000Z");
     const second = (n: number) => new Date(base.getTime() + n * 1000);
 
-    // 1 relevant timeline audit row at t=0
-    await seedAuditEvent("attempt.timeGrant", second(0));
-    // 2 client events at t=5, t=10
+    // 1 relevant timeline audit row at t=0 — older than every irrelevant row.
+    await seedAuditEvent("attempt.forceSubmit", second(0));
+    // 2 client events at t=5, t=10.
     await seedClientEvent("p4b_C1", second(5));
     await seedClientEvent("p4b_C2", second(10));
 
-    // 50 irrelevant audit rows with NEWER timestamps (t=1..t=50).
-    // If total were computed from the in-memory filtered list, these newer
-    // rows would fill the fetch window and the timeline row would be
-    // excluded, deflating the total.
+    // 55 irrelevant audit rows with NEWER timestamps (t=1..55).
     const irrelevantActions = [
       "attempt.created",
       "attempt.submitted",
       "attempt.graded",
       "candidate.enrolled",
     ];
-    for (let i = 1; i <= 50; i++) {
+    for (let i = 1; i <= 55; i++) {
       await ctx.db.insert(schema.auditLogs).values({
         id: randomUUID(),
         organizationId: ctx.org.id,
@@ -394,33 +359,144 @@ describe("proctor timeline pagination (M2 corrective)", () => {
       });
     }
 
-    // Total must be 3 (1 timeline audit + 2 client), not 53.
-    // The total is computed by countFilteredByActions (SQL WHERE action IN
-    // (...)), so it is correct even when the fetch window is filled with
-    // irrelevant rows. The items array may not contain the audit row if
-    // newer irrelevant rows pushed it out of the fetch window.
-    const all = await fetchTimeline(10, 1);
-    expect(all.total).toBe(3);
-    expect(all.totalPages).toBe(1);
-    // items may be 2 or 3 depending on whether the audit row was in the
-    // fetch window, but must not include irrelevant actions.
-    expect(all.items.length).toBeGreaterThanOrEqual(2);
-    expect(all.items.length).toBeLessThanOrEqual(3);
-    const itemNames = all.items.map((i) => i.name);
-    expect(itemNames).not.toContain("attempt.created");
-    expect(itemNames).not.toContain("attempt.submitted");
-    expect(itemNames).not.toContain("attempt.graded");
-    expect(itemNames).not.toContain("candidate.enrolled");
+    // limit=10: the irrelevant prefix (55 rows) alone exceeds the fetch window.
+    const res = await fetchTimeline(10, 1);
+    expect(res.total).toBe(3);
+    expect(res.totalPages).toBe(1);
+    expect(res.items).toHaveLength(3);
+    expect(res.items.map((i) => i.name)).toEqual([
+      "p4b_C2",
+      "p4b_C1",
+      "force_submit",
+    ]);
+    expect(res.items.map((i) => i.source)).toEqual([
+      "client_event",
+      "client_event",
+      "audit_log",
+    ]);
+  });
+  it("P5: page 2 reaches past a 150-row client-event source", async () => {
+    const base = new Date("2026-09-15T15:00:00.000Z");
+    const at = (n: number) => new Date(base.getTime() + n * 1000);
 
-    // Cleanup.
-    await ctx.db
-      .delete(schema.clientEvents)
-      .where(eq(schema.clientEvents.name, "p4b_C1"));
-    await ctx.db
-      .delete(schema.clientEvents)
-      .where(eq(schema.clientEvents.name, "p4b_C2"));
-    await ctx.db
-      .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.targetId, attemptId));
+    // 145 events with distinct receivedAt: e_i at base + i seconds.
+    // Newest-first global order: e144 is position 1 ... e0 is position 145.
+    const rows = Array.from({ length: 145 }, (_, i) => ({
+      userId: ctx.candidate.id,
+      attemptId,
+      examId,
+      questionId: null,
+      kind: "exam_telemetry",
+      level: "info",
+      name: `p5_e${i}`,
+      route: null,
+      occurredAt: at(i),
+      receivedAt: at(i),
+      clientSessionId: "p5-sess",
+      metadata: {},
+      userAgent: null,
+    }));
+    await createClientEventRepo(ctx.db).createMany(
+      {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate",
+        permissions: [],
+        sessionId: "p5-sess",
+      },
+      rows,
+    );
+
+    // 5 tied OLDEST events at base-1s sharing one receivedAt, with fixed
+    // ascending ids (01 < ... < 05): they occupy global positions 146..150
+    // and must surface in id DESC order — proves the tiebreaker at the tail.
+    const tiedIds = [1, 2, 3, 4, 5].map(
+      (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    );
+    for (let n = 1; n <= 5; n++) {
+      await ctx.db.insert(schema.clientEvents).values({
+        id: tiedIds[n - 1]!,
+        organizationId: ctx.org.id,
+        userId: ctx.candidate.id,
+        attemptId,
+        examId,
+        questionId: null,
+        kind: "exam_telemetry",
+        level: "info",
+        name: `p5_f${n}`,
+        route: null,
+        occurredAt: at(-1),
+        receivedAt: at(-1),
+        clientSessionId: "p5-sess",
+        metadata: {},
+        userAgent: null,
+      });
+    }
+
+    const eNames = (from: number, to: number) =>
+      Array.from({ length: from - to + 1 }, (_, k) => `p5_e${from - k}`);
+
+    // Page 1 = global positions 1..100 = e144..e45.
+    const page1 = await fetchTimeline(100, 1);
+    expect(page1.total).toBe(150);
+    expect(page1.totalPages).toBe(2);
+    expect(page1.items.map((i) => i.name)).toEqual(eNames(144, 45));
+
+    // Page 2 = global positions 101..150 = e44..e0, then the tied tail in
+    // id DESC order (f5..f1).
+    const page2 = await fetchTimeline(100, 2);
+    expect(page2.total).toBe(150);
+    expect(page2.totalPages).toBe(2);
+    expect(page2.items).toHaveLength(50);
+    expect(page2.items.map((i) => i.name)).toEqual([
+      ...eNames(44, 0),
+      "p5_f5",
+      "p5_f4",
+      "p5_f3",
+      "p5_f2",
+      "p5_f1",
+    ]);
+  });
+
+  // P6: page 2 past a >100-row AUDIT source — the page must be the global
+  // tail across sources, not a per-source window. 30 client events at even
+  // seconds, 110 timeline audit rows at odd seconds: 140 admitted rows on
+  // strictly alternating instants.
+  it("P6: page 2 past a >100-row audit source is globally merged", async () => {
+    const base = new Date("2026-09-15T16:00:00.000Z");
+    const at = (n: number) => new Date(base.getTime() + n * 1000);
+
+    // C_j at s=2j (j=0..29), A_j at s=2j+1 (j=0..109). Newest first: A109
+    // (s=219) ... C0 (s=0). Global positions 101..140 ↔ seconds 39..0.
+    for (let j = 0; j < 30; j++) {
+      await seedClientEvent(`p6_C${j}`, at(2 * j));
+    }
+    for (let j = 0; j < 110; j++) {
+      await seedAuditEvent("attempt.timeGrant", at(2 * j + 1));
+    }
+
+    const page1 = await fetchTimeline(100, 1);
+    expect(page1.total).toBe(140);
+    expect(page1.totalPages).toBe(2);
+    expect(page1.items).toHaveLength(100);
+    expect(page1.items[0]!.name).toBe("grant_time");
+    expect(page1.items[0]!.source).toBe("audit_log");
+
+    const page2 = await fetchTimeline(100, 2);
+    expect(page2.total).toBe(140);
+    expect(page2.totalPages).toBe(2);
+    expect(page2.items).toHaveLength(40);
+
+    // Exact global membership: seconds 39..0 alternate audit/client.
+    const expected: Array<{ name: string; source: string }> = [];
+    for (let s = 39; s >= 0; s--) {
+      expected.push({
+        name: s % 2 === 1 ? "grant_time" : `p6_C${s / 2}`,
+        source: s % 2 === 1 ? "audit_log" : "client_event",
+      });
+    }
+    expect(
+      page2.items.map((i) => ({ name: i.name, source: i.source })),
+    ).toEqual(expected);
   });
 });

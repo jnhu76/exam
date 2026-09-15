@@ -266,7 +266,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
       .where(eq(schema.clientEvents.examId, examId));
   });
 
-  it("listRecentByAttempt returns timeline rows (raw metadata returned; filtering is the service's job)", async () => {
+  it("listTimelinePrefixByAttempt returns timeline rows (raw metadata returned; filtering is the service's job)", async () => {
     const orgId = await seedOrg("ProctorTimelineOrg");
     const attemptId = randomUUID();
     const examId = randomUUID();
@@ -283,12 +283,10 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
     ]);
 
     const repo = createClientEventRepo(db);
-    const rows = await repo.listRecentByAttempt(
+    const rows = await repo.listTimelinePrefixByAttempt(
       createContext(orgId),
       attemptId,
-      {
-        limit: 10,
-      },
+      10,
     );
     expect(rows).toHaveLength(3);
     // Most recent first (occurredAt desc).

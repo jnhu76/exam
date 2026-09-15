@@ -86,7 +86,9 @@ export async function runClientEventRetentionOnce(
 
   let deletedCount = 0;
   for (const organization of organizations) {
-    const startedAt = Date.now();
+    // ADR-006: fastify.now() is the sanctioned plugin-layer clock — the pass
+    // `now` stays fixed for the cutoff, per-org durations use a live read.
+    const startedAt = fastify.now();
     try {
       const deleted = await cleanupOrganizationClientEvents(
         db,
@@ -101,7 +103,7 @@ export async function runClientEventRetentionOnce(
             organizationId: organization.id,
             cutoff: cutoff.toISOString(),
             deletedCount: deleted,
-            durationMs: Date.now() - startedAt,
+            durationMs: fastify.now().getTime() - startedAt.getTime(),
           },
           "Client-event retention deleted expired rows",
         );

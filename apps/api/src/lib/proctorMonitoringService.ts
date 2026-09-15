@@ -345,37 +345,47 @@ export async function buildProctorAttemptEventTimeline(
   total: number;
   totalPages: number;
 }> {
+  // External page-size contract (the route schema bounds limit to 100),
+  // re-clamped here as defense in depth. The INTERNAL prefix fetch below is
+  // a different bound and must not inherit this clamp.
   const limit = Math.max(1, Math.min(opts.limit, 100));
   const page = Math.max(1, opts.page);
   const offset = (page - 1) * limit;
-  const window = offset + limit; // how many rows from each source to fetch
   const eventRepo = createClientEventRepo(db);
   const auditRepo = createAuditLogRepo(db);
 
-  // Fetch enough client events to cover the global prefix.
-  const clientRows: ClientEventTimelineRow[] =
-    await eventRepo.listRecentByAttempt(ctx, attemptId, { limit: window });
-
-  // Fetch audit rows for this attempt, filtered to timeline-relevant actions.
-  const allAuditRows = await auditRepo.listFiltered(
-    ctx,
-    { targetType: "attempt", targetId: attemptId },
-    { limit: window },
-  );
-  // Filter to timeline-relevant actions only (consistent with TIMELINE_AUDIT_ACTIONS).
-  const auditRows = allAuditRows.filter((a) =>
-    TIMELINE_AUDIT_ACTIONS.has(a.auditLog.action),
-  );
-
-  // Calculate true total using dedicated count methods.
+  // True totals via SQL COUNT. Repo invariant: the count admission predicate
+  // and the prefix-list admission predicate are semantically identical — a
+  // row is counted exactly when it can be listed.
   const clientTotal = await eventRepo.countByAttempt(ctx, attemptId);
-  const timelineAuditTotal = await auditRepo.countFilteredByActions(
+  const auditTimelineTotal = await auditRepo.countFilteredByActions(
     ctx,
     { targetType: "attempt", targetId: attemptId },
     [...TIMELINE_AUDIT_ACTIONS],
   );
-  const total = clientTotal + timelineAuditTotal;
+  const total = clientTotal + auditTimelineTotal;
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  // Pages starting past the end hold no rows — skip the prefix queries.
+  if (offset >= total) {
+    return { items: [], total, totalPages };
+  }
+
+  // K-way prefix lemma: a row at global position p sits within the top-p
+  // ADMITTED rows of its own source (admission removes rows, never reorders).
+  // Fetching the top-min(offset+limit, total) admitted rows per source —
+  // exactly one query per source — covers the page fully: irrelevant rows
+  // cannot crowd admitted rows out of a window (admission precedes LIMIT in
+  // SQL), and no source can hide rows behind the external page-size clamp.
+  const prefixSize = Math.min(offset + limit, total);
+  const clientRows: ClientEventTimelineRow[] =
+    await eventRepo.listTimelinePrefixByAttempt(ctx, attemptId, prefixSize);
+  const auditRows = await auditRepo.listTimelinePrefixByActions(
+    ctx,
+    { targetType: "attempt", targetId: attemptId },
+    [...TIMELINE_AUDIT_ACTIONS],
+    prefixSize,
+  );
 
   // Server-owned instant per merged row: client events order by receivedAt,
   // audit rows by their createdAt. Never the client-asserted occurredAt.
@@ -409,9 +419,10 @@ export async function buildProctorAttemptEventTimeline(
   }
 
   // Newest first (server instant), then deterministic id tiebreaker (DESC,
-  // matching the DB ORDER BY convention); apply pagination.
+  // matching the DB ORDER BY convention — per-source rows and the merged
+  // order must agree at same-instant ties); apply pagination.
   merged.sort(
-    (x, y) => y.key - x.key || (y.id > x.id ? -1 : y.id < x.id ? 1 : 0),
+    (x, y) => y.key - x.key || (y.id > x.id ? 1 : y.id < x.id ? -1 : 0),
   );
   const items = merged.map((m) => m.event).slice(offset, offset + limit);
   return { items, total, totalPages };
