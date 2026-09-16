@@ -1,0 +1,13 @@
+{
+  "before": {
+    "discoveryMs": 291.8,
+    "discoveryWarmMs": 263.83,
+    "probeMs": 479.42
+  },
+  "chunkedProbe10kMs": 458.82,
+  "after": {
+    "discoveryWarmMs": 225.22,
+    "discoveryMs": 217.63
+  },
+  "indexBytes": 3407872
+}

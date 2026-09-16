@@ -110,6 +110,17 @@ export interface CommittedIncidentOperation {
   payload: Record<string, unknown>;
 }
 
+/**
+ * Max operation ids bound into ONE probe statement. The bind protocol caps
+ * parameters per statement (postgres.js throws client-side at >= 65534, so a
+ * single unbounded IN list breaks reconciliation outright once an
+ * organization's historical episode count crosses that boundary); chunks are
+ * disjoint and `(organization_id, operation_id)` is unique on the arbiter, so
+ * the chunk union is exactly the single-probe result over the arbiter rows
+ * committed at call time (#545).
+ */
+export const OPERATION_PROBE_BATCH = 10_000;
+
 export function createIncidentRepo(db: Database) {
   // ── Incident CRUD ──
 
@@ -318,29 +329,37 @@ export function createIncidentRepo(db: Database) {
     operationIds: string[],
   ): Promise<Map<string, CommittedIncidentOperation>> {
     if (operationIds.length === 0) return new Map();
-    const rows = await db
-      .select({
-        operationId: examIncidentEvents.operationId,
-        commandType: examIncidentEvents.commandType,
-        payload: examIncidentEvents.payload,
-      })
-      .from(examIncidentEvents)
-      .where(
-        and(
-          eq(examIncidentEvents.organizationId, resolveOrganizationId(ctx)),
-          inArray(examIncidentEvents.operationId, operationIds),
-        ),
-      );
-    return new Map(
-      rows.map((row) => [
-        row.operationId,
-        {
+    const resolved = new Map<string, CommittedIncidentOperation>();
+    for (
+      let start = 0;
+      start < operationIds.length;
+      start += OPERATION_PROBE_BATCH
+    ) {
+      const rows = await db
+        .select({
+          operationId: examIncidentEvents.operationId,
+          commandType: examIncidentEvents.commandType,
+          payload: examIncidentEvents.payload,
+        })
+        .from(examIncidentEvents)
+        .where(
+          and(
+            eq(examIncidentEvents.organizationId, resolveOrganizationId(ctx)),
+            inArray(
+              examIncidentEvents.operationId,
+              operationIds.slice(start, start + OPERATION_PROBE_BATCH),
+            ),
+          ),
+        );
+      for (const row of rows) {
+        resolved.set(row.operationId, {
           operationId: row.operationId,
           commandType: row.commandType,
           payload: row.payload as Record<string, unknown>,
-        },
-      ]),
-    );
+        });
+      }
+    }
+    return resolved;
   }
 
   async function listEventsByIncident(
