@@ -720,6 +720,7 @@ export const SETTINGS = {
     RATE_LIMIT_DISABLED: truthyLeaf(),
     RATE_LIMIT_MAX: lenientIntLeaf(100),
     RATE_LIMIT_WINDOW_MS: lenientIntLeaf(60 * 1000),
+    TRUSTED_PROXY_CIDRS: stringLeaf("", { trim: true }),
     FEATURE_RESTORE_FRONTEND: truthyLeaf(),
     FEATURE_MANUAL_EXAM_OPEN_CLOSE: truthyLeaf(),
     FEATURE_LIVE_SCORE_LIST: truthyLeaf(),
