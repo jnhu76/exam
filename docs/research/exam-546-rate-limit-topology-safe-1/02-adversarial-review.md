@@ -35,3 +35,24 @@ contract check added after, in the corrective); config-contract gate PASS
 (60 leaves); spoof demonstration reproduced against installed dependencies
 via a throwaway script outside the repo. Full @exam/api suite re-run green in
 the authoring environment after the corrective.
+
+## Human review of PR #562 (round 2)
+
+Human review verdict: **NEEDS_SMALL_CORRECTIVE_BEFORE_MERGE** — 1 MAJOR,
+1 MINOR:
+
+```json
+{"severity":"MAJOR","claim":"The validator still accepts trust-all CIDRs (0.0.0.0/0, ::/0), which mathematically trust every address: any untrusted direct client socket matches, the walk trusts its XFF, and request.ip becomes attacker-selected — the same effect as trustProxy: true. That conflicts with the issue's 'bounded trusted-proxy model' and 'spoofed XFF cannot trivially bypass' acceptance criteria; operator documentation alone is not a bounded control for /0 (unlike a client-LAN overlap, which cannot be judged from inside the API and legitimately remains a documented precondition)","recommendation":"Reject prefix /0 in assertCidrEntry with an explicit fail-fast error; add fail-fast tests for 0.0.0.0/0 and ::/0; change design-doc residual unknown #3 from 'accepted; operator responsibility' to 'rejected fail-closed'"}
+{"severity":"MINOR","claim":"PR #562 body contains the literal '@/tmp/pr546-body.md' — the create call used a raw-field flag instead of a file-reading field flag","recommendation":"Re-set the PR body from the authored file"}
+```
+
+Dispositions: MAJOR fixed in the corrective commit — `assertCidrEntry`
+machine-rejects prefix `/0` (`0.0.0.0/0`, `::/0`) with a fail-fast error
+stating the reason, two new fail-fast tests pin it, design-doc residual
+unknown #3 now records "rejected fail-closed", and the runbook /
+.env.deploy.example wording aligned. The client-LAN overlap remains a
+documented deployment precondition (hazard test) by the reviewer's explicit
+distinction: only /0 is mathematically unbounded. MINOR fixed by re-setting
+the PR body via the file-reading API flag. Shared-NAT policy (sizing rule +
+staggered-start note, login budget untouched) explicitly accepted by the
+reviewer; final topology/capacity re-proof deferred to #550.

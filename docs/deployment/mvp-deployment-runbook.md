@@ -175,9 +175,10 @@ covers only the proxy→API link** (pinned by `rateLimit.topology.test.ts`).
 > **Load-bearing precondition:** never include the candidate client network
 > in `TRUSTED_PROXY_CIDRS`. The walk skips EVERY address matching a trusted
 > CIDR — including the genuine client entry the proxy appended — so an
-> over-broad CIDR (trusting 10.0.0.0/8 while candidates sit on 10.x, or
-> blanket `0.0.0.0/0` / `::/0`) lets a candidate choose their rate-limit and
-> audit identity with a forged `X-Forwarded-For`. This hazard is pinned as
+> over-broad CIDR (trusting 10.0.0.0/8 while candidates sit on 10.x) lets a
+> candidate choose their rate-limit and audit identity with a forged
+> `X-Forwarded-For`. Trust-all CIDRs (`0.0.0.0/0`, `::/0`) have no bounded
+> reading and are rejected at startup. The over-broad hazard is pinned as
 > executable knowledge in `rateLimit.topology.test.ts` ("over-broad trusted
 > CIDR hazard").
 

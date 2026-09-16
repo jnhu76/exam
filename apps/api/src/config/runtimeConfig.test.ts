@@ -1504,6 +1504,18 @@ describe("trusted proxy CIDR resolution (#546)", () => {
     ).toThrow(/10\.0\.0\.1\/8/);
   });
 
+  it("fails fast on trust-all IPv4 — 0.0.0.0/0 has no bounded-proxy reading", () => {
+    expect(() =>
+      loadRuntimeConfig({ ...baseEnv, TRUSTED_PROXY_CIDRS: "0.0.0.0/0" }),
+    ).toThrow(/trusts every address/);
+  });
+
+  it("fails fast on trust-all IPv6 — ::/0 has no bounded-proxy reading", () => {
+    expect(() =>
+      loadRuntimeConfig({ ...baseEnv, TRUSTED_PROXY_CIDRS: "::/0" }),
+    ).toThrow(/trusts every address/);
+  });
+
   it("resolveTrustProxyOption: empty list → false; non-empty → the CIDR array", () => {
     expect(resolveTrustProxyOption(loadRuntimeConfig(baseEnv))).toBe(false);
     expect(

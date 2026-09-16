@@ -327,7 +327,10 @@ function resolveDatabaseUrl(env: NodeJS.ProcessEnv, _mode: AppMode): string {
  * - unparseable entries are rejected with the offender named;
  * - entries with host bits set are REJECTED rather than normalized — an
  *   operator writing "10.0.0.1/8" means one host, and silently trusting all
- *   of 10/8 would widen the spoof-relevant trust boundary (INVARIANT).
+ *   of 10/8 would widen the spoof-relevant trust boundary (INVARIANT);
+ * - trust-all entries (`0.0.0.0/0`, `::/0`) are REJECTED: trusting every
+ *   address has no bounded-proxy reading and would let any untrusted direct
+ *   client control the forwarded identity (INVARIANT).
  *
  * Parsing uses the same ipaddr.js semantics as Fastify's `proxy-addr`
  * matcher, so what validates here is exactly what will match at request
@@ -358,6 +361,16 @@ function assertCidrEntry(entry: string): void {
   } catch {
     throw new RuntimeConfigError(
       `TRUSTED_PROXY_CIDRS: "${entry}" is not a valid IP or CIDR entry`,
+    );
+  }
+  // INVARIANT (#546 bounded trusted-proxy model): a /0 entry trusts every
+  // address, so any untrusted direct client could control the forwarded
+  // identity — trustProxy would degenerate to "trust all". There is no
+  // bounded-proxy reading of 0.0.0.0/0 or ::/0, so they are machine-rejected
+  // instead of left to operator discipline.
+  if (prefixLength === 0) {
+    throw new RuntimeConfigError(
+      `TRUSTED_PROXY_CIDRS: "${entry}" trusts every address — trust-all CIDRs (prefix /0) are forbidden because they allow untrusted direct clients to control forwarded identity`,
     );
   }
   const bytes = address.toByteArray();

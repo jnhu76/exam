@@ -28,15 +28,16 @@ Trusted-IP authority stays **singular**: Fastify derives `request.ip` once
   always left of it and skipped by the walk — **provided every configured
   CIDR covers only the proxy→API link**. The walk skips EVERY address
   matching a trusted CIDR, so a CIDR that also covers genuine client
-  addresses (trusting `10.0.0.0/8` on a LAN whose candidates sit on 10.x, or
-  blanket `0.0.0.0/0`/`::/0`) re-enables identity forging: the walk runs past
-  the real client entry and selects the injected one. That precondition is
-  load-bearing in the runbook and pinned by the "over-broad trusted CIDR
-  hazard" test in `rateLimit.topology.test.ts`. **Proxy XFF contract
-  (documented, required)**: the front proxy must append
-  (`$proxy_add_x_forwarded_for`) or overwrite (`$remote_addr`)
-  `X-Forwarded-For` — a misconfigured pass-through proxy would defeat the
-  model and is called out as unsupported in the runbook.
+  addresses (trusting `10.0.0.0/8` on a LAN whose candidates sit on 10.x)
+  re-enables identity forging: the walk runs past the real client entry and
+  selects the injected one. That precondition is load-bearing in the runbook
+  and pinned by the "over-broad trusted CIDR hazard" test in
+  `rateLimit.topology.test.ts`. Trust-all CIDRs (`0.0.0.0/0`, `::/0`) are
+  machine-rejected at load (see below). **Proxy XFF contract (documented,
+  required)**: the front proxy must append (`$proxy_add_x_forwarded_for`) or
+  overwrite (`$remote_addr`) `X-Forwarded-For` — a misconfigured pass-through
+  proxy would defeat the model and is called out as unsupported in the
+  runbook.
 - Socket not matching any CIDR ⇒ headers ignored for that connection
   (DIRECT_LAN hardening is unaffected even when CIDRs are configured).
 - Malformed CIDR entries and entries with host bits set fail fast at config
@@ -91,9 +92,13 @@ start; raising the global max does not lift the login budget.
    by the API process; a pass-through proxy is operator error the runbook
    explicitly names. Detection from inside the API is not possible without a
    proxy-protocol dependency (out of scope).
-3. `0.0.0.0/0` / `::/0` are valid CIDRs and accepted by the validator: trust
-   is an explicit operator act, and the runbook's load-bearing precondition
-   (never cover the client network) plus the hazard test are the guards.
+3. Trust-all CIDRs (`0.0.0.0/0`, `::/0`) are REJECTED fail-closed at load
+   (PR #562 human-review MAJOR): mathematically they trust every address, so
+   no bounded-proxy reading exists and the acceptance criterion "spoofed XFF
+   cannot trivially bypass" would be void. Overlap with a candidate network
+   (e.g. trusting 10/8 on a 10.x LAN) cannot be judged from inside the API
+   and remains a documented deployment precondition backed by the hazard
+   test.
 4. Validator/matcher parity is scoped to CIDR semantics: `proxy-addr`'s
    compile() additionally accepts the named ranges `loopback`/`linklocal`/
    `uniquelocal`, which the validator deliberately rejects (fail-closed
