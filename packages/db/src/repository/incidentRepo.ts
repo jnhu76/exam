@@ -110,6 +110,27 @@ export interface CommittedIncidentOperation {
   payload: Record<string, unknown>;
 }
 
+/**
+ * Max operation ids bound into ONE probe statement. The bind protocol caps
+ * parameters per statement (postgres.js throws client-side at >= 65534, so a
+ * single unbounded IN list breaks reconciliation outright once an
+ * organization's historical episode count crosses that boundary) (#545).
+ *
+ * Chunks are disjoint and `(organization_id, operation_id)` is unique on the
+ * arbiter, so every matching arbiter row enters the map exactly once. Each
+ * chunk executes under its own READ COMMITTED statement snapshot, so the
+ * union is not a single point-in-time snapshot — and reconciliation does not
+ * need one (#304): a match any chunk observed is authoritative durable
+ * completion evidence that safely suppresses delivery; an operation committed
+ * after an earlier chunk's snapshot may be absent from the map, and delivery
+ * re-validates it through the canonical operation-recovery pre-read (replay /
+ * conflict / create) before writing; mismatched operationId occupancy still
+ * surfaces as a conflict. Chunking therefore bounds transport parameters
+ * without introducing a completion authority or a correctness dependency on
+ * snapshot consistency.
+ */
+export const OPERATION_PROBE_BATCH = 10_000;
+
 export function createIncidentRepo(db: Database) {
   // ── Incident CRUD ──
 
@@ -318,29 +339,37 @@ export function createIncidentRepo(db: Database) {
     operationIds: string[],
   ): Promise<Map<string, CommittedIncidentOperation>> {
     if (operationIds.length === 0) return new Map();
-    const rows = await db
-      .select({
-        operationId: examIncidentEvents.operationId,
-        commandType: examIncidentEvents.commandType,
-        payload: examIncidentEvents.payload,
-      })
-      .from(examIncidentEvents)
-      .where(
-        and(
-          eq(examIncidentEvents.organizationId, resolveOrganizationId(ctx)),
-          inArray(examIncidentEvents.operationId, operationIds),
-        ),
-      );
-    return new Map(
-      rows.map((row) => [
-        row.operationId,
-        {
+    const resolved = new Map<string, CommittedIncidentOperation>();
+    for (
+      let start = 0;
+      start < operationIds.length;
+      start += OPERATION_PROBE_BATCH
+    ) {
+      const rows = await db
+        .select({
+          operationId: examIncidentEvents.operationId,
+          commandType: examIncidentEvents.commandType,
+          payload: examIncidentEvents.payload,
+        })
+        .from(examIncidentEvents)
+        .where(
+          and(
+            eq(examIncidentEvents.organizationId, resolveOrganizationId(ctx)),
+            inArray(
+              examIncidentEvents.operationId,
+              operationIds.slice(start, start + OPERATION_PROBE_BATCH),
+            ),
+          ),
+        );
+      for (const row of rows) {
+        resolved.set(row.operationId, {
           operationId: row.operationId,
           commandType: row.commandType,
           payload: row.payload as Record<string, unknown>,
-        },
-      ]),
-    );
+        });
+      }
+    }
+    return resolved;
   }
 
   async function listEventsByIncident(

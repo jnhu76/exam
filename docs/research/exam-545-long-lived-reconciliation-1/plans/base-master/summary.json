@@ -1,0 +1,103 @@
+{
+  "s1000": {
+    "buildMs": 537.21,
+    "episodesFetched": 1000,
+    "operationIdsProbed": 1000,
+    "committedHits": 992,
+    "expectedPending": 8,
+    "discoveryMs": 9.85,
+    "discoveryWarmMs": 8.57,
+    "opIdDeriveMs": 2.37,
+    "probeMs": 12.32,
+    "probeWarmMs": 10.67,
+    "deliveryPass": {
+      "wallMs": 107.21,
+      "createdCount": 8,
+      "replayedCount": 0,
+      "failedCount": 1,
+      "conflictCount": 1
+    },
+    "steadyPass": {
+      "wallMs": 27.88,
+      "createdCount": 0,
+      "replayedCount": 0,
+      "failedCount": 1,
+      "conflictCount": 1
+    },
+    "heapDeltaMb": -13,
+    "incidentCount": 1001,
+    "linkCount": 1000
+  },
+  "s10000": {
+    "buildMs": 4965.21,
+    "episodesFetched": 10000,
+    "operationIdsProbed": 10000,
+    "committedHits": 9974,
+    "expectedPending": 26,
+    "discoveryMs": 49.05,
+    "discoveryWarmMs": 71.06,
+    "opIdDeriveMs": 23.71,
+    "probeMs": 115.13,
+    "probeWarmMs": 93.82,
+    "deliveryPass": {
+      "wallMs": 434.4,
+      "createdCount": 26,
+      "replayedCount": 0,
+      "failedCount": 1,
+      "conflictCount": 1
+    },
+    "steadyPass": {
+      "wallMs": 226.82,
+      "createdCount": 0,
+      "replayedCount": 0,
+      "failedCount": 1,
+      "conflictCount": 1
+    },
+    "heapDeltaMb": 43.5,
+    "incidentCount": 10001,
+    "linkCount": 10000
+  },
+  "s50000": {
+    "buildMs": 25201.25,
+    "episodesFetched": 50000,
+    "operationIdsProbed": 50000,
+    "committedHits": 49894,
+    "expectedPending": 106,
+    "discoveryMs": 303.23,
+    "discoveryWarmMs": 280.42,
+    "opIdDeriveMs": 94.51,
+    "probeMs": 483.83,
+    "probeWarmMs": 450.42,
+    "deliveryPass": {
+      "wallMs": 1856.13,
+      "createdCount": 106,
+      "replayedCount": 0,
+      "failedCount": 1,
+      "conflictCount": 1
+    },
+    "steadyPass": {
+      "wallMs": 1220.03,
+      "createdCount": 0,
+      "replayedCount": 0,
+      "failedCount": 1,
+      "conflictCount": 1
+    },
+    "heapDeltaMb": 37.8,
+    "incidentCount": 50001,
+    "linkCount": 50000
+  },
+  "wholeLoopAcrossOrgs": {
+    "wallMs": 1424.43,
+    "createdCount": 0,
+    "replayedCount": 0,
+    "failedCount": 3,
+    "conflictCount": 3
+  },
+  "wholeLoopSteady": {
+    "wallMs": 1418.07,
+    "createdCount": 0,
+    "replayedCount": 0,
+    "failedCount": 3,
+    "conflictCount": 3
+  }
+}

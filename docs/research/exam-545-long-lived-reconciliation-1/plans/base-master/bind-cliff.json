@@ -1,0 +1,6 @@
+{
+  "ids_65532": "ok",
+  "ids_65533": "MAX_PARAMETERS_EXCEEDED (client-side, 65534 bind limit)",
+  "boundary": "probe binds 1 + N parameters; postgres.js throws when parameters.length >= 65534",
+  "source": "postgres@3.4.9 connection.js toBuffer()"
+}
