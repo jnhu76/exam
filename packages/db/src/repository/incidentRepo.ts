@@ -114,10 +114,20 @@ export interface CommittedIncidentOperation {
  * Max operation ids bound into ONE probe statement. The bind protocol caps
  * parameters per statement (postgres.js throws client-side at >= 65534, so a
  * single unbounded IN list breaks reconciliation outright once an
- * organization's historical episode count crosses that boundary); chunks are
- * disjoint and `(organization_id, operation_id)` is unique on the arbiter, so
- * the chunk union is exactly the single-probe result over the arbiter rows
- * committed at call time (#545).
+ * organization's historical episode count crosses that boundary) (#545).
+ *
+ * Chunks are disjoint and `(organization_id, operation_id)` is unique on the
+ * arbiter, so every matching arbiter row enters the map exactly once. Each
+ * chunk executes under its own READ COMMITTED statement snapshot, so the
+ * union is not a single point-in-time snapshot — and reconciliation does not
+ * need one (#304): a match any chunk observed is authoritative durable
+ * completion evidence that safely suppresses delivery; an operation committed
+ * after an earlier chunk's snapshot may be absent from the map, and delivery
+ * re-validates it through the canonical operation-recovery pre-read (replay /
+ * conflict / create) before writing; mismatched operationId occupancy still
+ * surfaces as a conflict. Chunking therefore bounds transport parameters
+ * without introducing a completion authority or a correctness dependency on
+ * snapshot consistency.
  */
 export const OPERATION_PROBE_BATCH = 10_000;
 

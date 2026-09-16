@@ -69,10 +69,15 @@ exact boundary (65,532 ok / 65,533 `MAX_PARAMETERS_EXCEEDED`).
 
 `listCommittedOperations` (packages/db/src/repository/incidentRepo.ts): loop
 over disjoint `OPERATION_PROBE_BATCH = 10_000`-id chunks, union into the same
-Map. Chunk union ≡ single probe: chunks are disjoint and
-`(organization_id, operation_id)` is unique on the arbiter. Semantics,
-authority, and per-cycle statelessness unchanged. The cliff is now at
-batch-size multiples with wide protocol headroom (10,000 ≪ 65,532).
+Map. Chunks are disjoint and `(organization_id, operation_id)` is unique on
+the arbiter, so every matching arbiter row is returned exactly once; each
+chunk executes under its own READ COMMITTED statement snapshot, so the union
+is not one point-in-time snapshot — reconciliation tolerates that (#304):
+observed matches are authoritative completion evidence, and a commit exposed
+to a later snapshot but missed by an earlier one is revalidated by the
+delivery pre-read. Semantics, authority, and per-cycle statelessness
+unchanged. The cliff is now at batch-size multiples with wide protocol
+headroom (10,000 ≪ 65,532).
 
 ## BEFORE_AFTER
 

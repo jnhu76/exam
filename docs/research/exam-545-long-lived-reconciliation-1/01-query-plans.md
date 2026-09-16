@@ -103,8 +103,11 @@ steady 1,418 ms — dominated by the S3 org (orgs processed sequentially).
 ## Post-fix measurements (chunked probe landed; index REJECTED by plan evidence)
 
 Candidate fix A (LANDED): `listCommittedOperations` probes in disjoint 10,000-id chunks
-(`OPERATION_PROBE_BATCH`); the chunk union is provably identical to a single probe over the
-committed arbiter rows at call time (ids unique per org, chunks disjoint). Removes the hard
+(`OPERATION_PROBE_BATCH`); ids are unique per org and chunks disjoint, so every matching
+committed arbiter row is returned exactly once. Each chunk statement runs under its own READ
+COMMITTED snapshot, so the union is not one point-in-time snapshot; reconciliation tolerates
+that — observed matches are authoritative completion evidence, and a miss caused by an earlier
+chunk's snapshot is revalidated by the canonical delivery pre-read. Removes the hard
 cliff; probe wall time unchanged (chunked 459 ms vs single 479 ms at S3). Verified semantics on
 the full leg: created == pending (8/26/106), conflict surfaces every pass, counts reconcile
 exactly.
