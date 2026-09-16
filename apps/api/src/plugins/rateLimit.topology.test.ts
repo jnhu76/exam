@@ -218,3 +218,44 @@ describe("rate limit — trusted proxy topology (#546)", () => {
     expect(reachedLogin).toBe(3 * LOGIN_MAX + 2);
   });
 });
+
+describe("rate limit — over-broad trusted CIDR hazard (#546)", () => {
+  // INVARIANT documented in the deployment runbook: trusted CIDRs must cover
+  // ONLY the proxy→API link, never the candidate client network. proxy-addr's
+  // walk skips EVERY address matching a trusted CIDR — including the genuine
+  // client entry the proxy appended — so an over-broad CIDR lets a candidate
+  // choose their limiter/audit identity. This pins that behavior so the
+  // precondition stays executable knowledge instead of folklore.
+  const app = Fastify({
+    trustProxy: resolveTrustProxyOption(
+      loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        TRUSTED_PROXY_CIDRS: "10.0.0.0/8",
+      }),
+    ),
+  });
+
+  beforeAll(async () => {
+    setupErrorHandler(app);
+    app.get("/whoami", async (request) => ({ ip: request.ip }));
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("a trusted CIDR covering the client network lets injected XFF entries win — the runbook precondition is load-bearing", async () => {
+    // Candidates sit on 10.x; the proxy (also 10.x) appends their real
+    // address after the injected one. Because 10/8 is trusted, the walk
+    // skips the real client entry too and selects the injected one.
+    const res = await app.inject({
+      method: "GET",
+      url: "/whoami",
+      remoteAddress: "10.1.1.5",
+      headers: { "x-forwarded-for": "9.9.9.9, 10.5.5.5" },
+    });
+    expect(res.json().ip).toBe("9.9.9.9");
+  });
+});

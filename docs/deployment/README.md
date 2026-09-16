@@ -98,10 +98,12 @@ source build, contributor verification).
 
 - The application does **not** terminate TLS
 - Place a reverse proxy (nginx, Caddy) in front for HTTPS
-- Behind a reverse proxy, set `TRUSTED_PROXY_CIDRS` to the proxy's addresses
-  and let the proxy append the real client IP to `X-Forwarded-For` —
-  otherwise all candidates share the proxy IP as one rate-limit identity.
-  See the runbook §2 "Rate-limit identity, trusted proxies, and sizing"
+- Behind a reverse proxy, set `TRUSTED_PROXY_CIDRS` to the proxy's link
+  addresses **only — never the candidate client network** — and let the
+  proxy append the real client IP to `X-Forwarded-For`. Without it, all
+  candidates share the proxy IP as one rate-limit identity; with a CIDR
+  covering clients, candidates could forge their identity. See the runbook
+  §2 "Rate-limit identity, trusted proxies, and sizing"
 - Set `CORS_ORIGIN` and `PUBLIC_WEB_ORIGIN` to the address users will
   access (e.g. `http://192.168.1.5:3000` for LAN)
 

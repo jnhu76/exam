@@ -153,21 +153,33 @@ depends on the deployment topology:
 a reverse proxy is the supported way to add it. To keep per-candidate rate
 limit and audit identity behind a proxy:
 
-1. Set `TRUSTED_PROXY_CIDRS` to the proxy's socket addresses, e.g.
-   `TRUSTED_PROXY_CIDRS=127.0.0.1/32,10.0.0.0/8` (comma-separated CIDRs; a
-   bare IP means that one host; malformed entries or entries with host bits
-   set fail fast at startup).
+1. Set `TRUSTED_PROXY_CIDRS` to the proxy's socket addresses — **and only
+   those** (comma-separated CIDRs; a bare IP means that one host; malformed
+   entries or entries with host bits set fail fast at startup). Typical
+   single-host TLS terminator: `TRUSTED_PROXY_CIDRS=127.0.0.1/32`.
 2. Configure the proxy to **append** the real client address to
    `X-Forwarded-For` (nginx: `proxy_set_header X-Forwarded-For
    $proxy_add_x_forwarded_for;`) or to overwrite it (`$remote_addr`). A
    pass-through proxy that forwards the client's header untouched is NOT
    supported: it would let candidates spoof their limiter identity.
+3. Also overwrite `X-Forwarded-Host` and `X-Forwarded-Proto` on the proxy
+   (nginx: `proxy_set_header Host $host;`, `X-Forwarded-Proto $scheme;`).
+   The API reads neither today, but a trusted socket lets these headers
+   through; overwriting keeps future consumers safe.
 
 With the wiring in place, the client IP is the first address scanning
 `X-Forwarded-For` from the right that is NOT one of the configured proxies —
-entries a candidate injects into the header are always left of the address
-the proxy appends, so they are skipped (spoof-proof by construction, pinned
-by `rateLimit.topology.test.ts`).
+entries a candidate injects are skipped **provided every configured CIDR
+covers only the proxy→API link** (pinned by `rateLimit.topology.test.ts`).
+
+> **Load-bearing precondition:** never include the candidate client network
+> in `TRUSTED_PROXY_CIDRS`. The walk skips EVERY address matching a trusted
+> CIDR — including the genuine client entry the proxy appended — so an
+> over-broad CIDR (trusting 10.0.0.0/8 while candidates sit on 10.x, or
+> blanket `0.0.0.0/0` / `::/0`) lets a candidate choose their rate-limit and
+> audit identity with a forged `X-Forwarded-For`. This hazard is pinned as
+> executable knowledge in `rateLimit.topology.test.ts` ("over-broad trusted
+> CIDR hazard").
 
 **Sizing rule (per candidate ≈ 6.6 requests/min steady, measured in the
 production-reality audit):**

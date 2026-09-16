@@ -25,20 +25,30 @@ Trusted-IP authority stays **singular**: Fastify derives `request.ip` once
 - Spoof analysis: a candidate cannot place an address to the right of the
   genuine client entry, because the genuine client address is appended (or
   overwritten) by the front proxy itself. Entries the client injects are
-  always left of it and skipped by the walk. **Proxy XFF contract (documented,
-  required)**: the front proxy must append (`$proxy_add_x_forwarded_for`) or
-  overwrite (`$remote_addr`) `X-Forwarded-For` — a misconfigured pass-through
-  proxy would defeat the model and is called out as unsupported in the
-  runbook.
+  always left of it and skipped by the walk — **provided every configured
+  CIDR covers only the proxy→API link**. The walk skips EVERY address
+  matching a trusted CIDR, so a CIDR that also covers genuine client
+  addresses (trusting `10.0.0.0/8` on a LAN whose candidates sit on 10.x, or
+  blanket `0.0.0.0/0`/`::/0`) re-enables identity forging: the walk runs past
+  the real client entry and selects the injected one. That precondition is
+  load-bearing in the runbook and pinned by the "over-broad trusted CIDR
+  hazard" test in `rateLimit.topology.test.ts`. **Proxy XFF contract
+  (documented, required)**: the front proxy must append
+  (`$proxy_add_x_forwarded_for`) or overwrite (`$remote_addr`)
+  `X-Forwarded-For` — a misconfigured pass-through proxy would defeat the
+  model and is called out as unsupported in the runbook.
 - Socket not matching any CIDR ⇒ headers ignored for that connection
   (DIRECT_LAN hardening is unaffected even when CIDRs are configured).
-- Malformed CIDR entries fail fast at config load with the offending entry
-  named (validated via `node:net` `BlockList` parsing; matching semantics
-  belong to Fastify's `proxy-addr` alone).
+- Malformed CIDR entries and entries with host bits set fail fast at config
+  load with the offending entry named. Validation uses ipaddr.js — the same
+  library Fastify's `proxy-addr` matcher is built on — so what validates here
+  is exactly what will match at request time.
 - While a socket is trusted, Fastify may also honor `X-Forwarded-Proto` /
   `X-Forwarded-Host` for that request — untrusted (direct) connections are
   unaffected. No production consumer reads `request.protocol`/`request.hostname`
-  for authorization decisions (verified in the audit).
+  for authorization decisions (verified in the audit), and the runbook
+  directs proxies to overwrite both headers so future consumers cannot be
+  fed attacker-controlled values.
 
 ## Options considered
 
@@ -81,3 +91,11 @@ start; raising the global max does not lift the login budget.
    by the API process; a pass-through proxy is operator error the runbook
    explicitly names. Detection from inside the API is not possible without a
    proxy-protocol dependency (out of scope).
+3. `0.0.0.0/0` / `::/0` are valid CIDRs and accepted by the validator: trust
+   is an explicit operator act, and the runbook's load-bearing precondition
+   (never cover the client network) plus the hazard test are the guards.
+4. Validator/matcher parity is scoped to CIDR semantics: `proxy-addr`'s
+   compile() additionally accepts the named ranges `loopback`/`linklocal`/
+   `uniquelocal`, which the validator deliberately rejects (fail-closed
+   direction); IPv4-mapped IPv6 trusted sockets match IPv4 CIDRs correctly
+   (verified against the installed `@fastify/proxy-addr`).

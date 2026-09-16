@@ -2,8 +2,9 @@
 
 Stage A code reality audit + Stage B measured characterization. All facts below
 were re-verified on current master before any design work; F-08-1 numbers are
-freshly reproduced at the HTTP-contract level (committed test
-`apps/api/src/plugins/rateLimit.topology.test.ts`, 5/5 PASS on `7711cd9c`).
+freshly reproduced at the HTTP-contract level (the 5 characterization tests in
+`apps/api/src/plugins/rateLimit.topology.test.ts`, committed in `a701bdd4`,
+were run against a working tree at `7711cd9c` and passed 5/5).
 
 ## As-built wiring
 
