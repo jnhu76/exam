@@ -306,6 +306,8 @@ sequenceDiagram
     Lock-->>Route: LockedEnrollmentAttemptIdentity
 
     Route->>Recon: ensureAttemptDeadlineReconciled(..., capability, now)
+    Recon->>Recon: assertCapabilityFor(capability, repos)
+    Recon->>DB: SELECT exam FOR UPDATE (in-seam serialization point, #558)
     alt attempt past effectiveDeadline
         Recon->>Save: submitAttempt(source: deadline_scanner, reason: deadline)
         Save->>DB: UPDATE attempt (submitted)
@@ -314,6 +316,7 @@ sequenceDiagram
     end
 
     Route->>Prep: prepareReconciledAttemptMutation(..., capability, now)
+    Prep->>DB: SELECT exam FOR UPDATE (#543 — may re-lock the held row)
     Prep->>Prep: computeEffectiveDeadline(exam, attempt)
     Prep-->>Route: {attempt, mutationContext}
 

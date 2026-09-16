@@ -673,6 +673,197 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
   });
 });
 
+// ── EXAM-558: the reconciliation seam owns its serialization contract ──
+// The seam's Exam-derived deadline decision must be serialized by a lock the
+// SEAM itself acquires (Exam FOR UPDATE after the Attempt lock), never by
+// caller convention, and the EA capability affinity must be proven before
+// any repository work.
+
+describe("ensureAttemptDeadlineReconciled (EXAM-558 serialization contract)", () => {
+  it("fails closed on a capability minted against a different repo pair, BEFORE any repository work", async () => {
+    const now = new Date("2025-01-01T11:30:00Z");
+    const attempt = makeAttempt({ status: "in_progress" });
+
+    // The capability is minted via the canonical seam against repo pair A.
+    const pairA = makeRepos([attempt]);
+    const cap = await mintCap(
+      pairA.enrollmentRepo,
+      pairA.attemptRepo,
+      "attempt-1",
+    );
+
+    // The seam is invoked with an unrelated pair B. Every B repo operation
+    // is recorded — the affinity violation must throw before ANY of them
+    // runs (no Attempt read, no Exam lock, no deadline mutation).
+    const pairB = makeRepos([attempt]);
+    const calls: string[] = [];
+    const recordingAttemptRepo: AttemptRepository = {
+      ...pairB.attemptRepo,
+      findById: async (...args) => {
+        calls.push("attempt.findById");
+        return pairB.attemptRepo.findById(...args);
+      },
+      findByIdForUpdate: async (...args) => {
+        calls.push("attempt.findByIdForUpdate");
+        return pairB.attemptRepo.findByIdForUpdate(...args);
+      },
+    };
+    const recordingExamRepo: ExamRepository = {
+      ...pairB.examRepo,
+      findById: (id) => {
+        calls.push("exam.findById");
+        return pairB.examRepo.findById(id);
+      },
+      findByIdForUpdate: (id) => {
+        calls.push("exam.findByIdForUpdate");
+        return pairB.examRepo.findByIdForUpdate(id);
+      },
+    };
+    const recordingEnrollmentRepo: EnrollmentRepository = {
+      ...pairB.enrollmentRepo,
+      findByExamAndCandidateForUpdate: (...args) => {
+        calls.push("enrollment.forUpdate");
+        return pairB.enrollmentRepo.findByExamAndCandidateForUpdate(...args);
+      },
+    };
+    const recordingWorksetRepo: GradingWorksetRepository = {
+      ...pairB.gradingWorksetRepo,
+      findByAttempt: async (id) => {
+        calls.push("workset.findByAttempt");
+        return pairB.gradingWorksetRepo.findByAttempt(id);
+      },
+    };
+
+    await expect(
+      ensureAttemptDeadlineReconciled(
+        recordingExamRepo,
+        recordingEnrollmentRepo,
+        recordingAttemptRepo,
+        recordingWorksetRepo,
+        cap,
+        now,
+        makeResolution(attempt),
+      ),
+    ).rejects.toThrow(/affinity violation/);
+    expect(calls).toEqual([]);
+  });
+
+  it("reads the Exam authority under the row lock first — before any deadline decision or freeze write", async () => {
+    const now = new Date("2025-01-01T11:30:00Z"); // past the 11:00 deadline
+    const attempt = makeAttempt({ status: "in_progress" });
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
+
+    const trace: string[] = [];
+    const tracingExamRepo: ExamRepository = {
+      ...examRepo,
+      findById: (id) => {
+        trace.push("exam.plainRead");
+        return examRepo.findById(id);
+      },
+      findByIdForUpdate: (id) => {
+        trace.push("exam.lock");
+        return examRepo.findByIdForUpdate(id);
+      },
+    };
+    const tracingWorksetRepo: GradingWorksetRepository = {
+      ...gradingWorksetRepo,
+      bulkCreate: async (inputs) => {
+        trace.push("freeze.materialize");
+        return gradingWorksetRepo.bulkCreate(inputs);
+      },
+    };
+
+    const result = await ensureAttemptDeadlineReconciled(
+      tracingExamRepo,
+      enrollmentRepo,
+      attemptRepo,
+      tracingWorksetRepo,
+      cap,
+      now,
+      makeResolution(attempt),
+    );
+
+    expect(result.status).toBe("graded");
+    // The FIRST Exam access is the row lock — the deadline decision is
+    // evaluated from the locked authority. (Later plain exam reads inside
+    // readGradingSnapshot are grading inputs re-reading the same
+    // lock-validated snapshot, not deadline authority.)
+    expect(trace[0]).toBe("exam.lock");
+    // The lock strictly precedes the freeze writes it serializes.
+    expect(trace.indexOf("exam.lock")).toBeLessThan(
+      trace.indexOf("freeze.materialize"),
+    );
+  });
+
+  it("acquires the Exam row lock even when the attempt is not expired (lock precedes the decision)", async () => {
+    const now = new Date("2025-01-01T10:30:00Z"); // before the 11:00 deadline
+    const attempt = makeAttempt({ status: "in_progress" });
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
+
+    const trace: string[] = [];
+    const tracingExamRepo: ExamRepository = {
+      ...examRepo,
+      findByIdForUpdate: (id) => {
+        trace.push("exam.lock");
+        return examRepo.findByIdForUpdate(id);
+      },
+    };
+
+    const result = await ensureAttemptDeadlineReconciled(
+      tracingExamRepo,
+      enrollmentRepo,
+      attemptRepo,
+      gradingWorksetRepo,
+      cap,
+      now,
+      makeResolution(attempt),
+    );
+
+    expect(result.status).toBe("in_progress");
+    expect(trace).toEqual(["exam.lock"]);
+  });
+
+  it("returns an already-frozen attempt before the Exam lock (no deadline decision, no lock needed)", async () => {
+    const now = new Date("2025-01-01T11:30:00Z");
+    const attempt = makeAttempt({
+      status: "submitted",
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q1", value: "frozen" }],
+      },
+      submissionReason: "manual",
+      submittedAt: new Date("2025-01-01T10:50:00Z"),
+    });
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
+
+    const tracingExamRepo: ExamRepository = {
+      ...examRepo,
+      findByIdForUpdate: () => {
+        throw new Error("Exam lock must not be acquired for a frozen attempt");
+      },
+    };
+
+    const result = await ensureAttemptDeadlineReconciled(
+      tracingExamRepo,
+      enrollmentRepo,
+      attemptRepo,
+      gradingWorksetRepo,
+      cap,
+      now,
+      makeResolution(attempt),
+    );
+
+    expect(result.status).toBe("submitted");
+    expect(result.submissionReason).toBe("manual");
+  });
+});
+
 describe("computeEffectiveDeadline", () => {
   it("throws ValidationError when exam.closeAt is null", () => {
     const exam = makeExam({ closeAt: null as unknown as Date });
