@@ -516,6 +516,32 @@ console.log("6. Checking production-guard test env isolation...");
 }
 console.log("   Production-guard test check complete.");
 
+// ── 7. Client-IP trust wiring: server.ts derives trustProxy from config ─────
+// #546: the ONE place client-IP trust is decided is the Fastify constructor
+// in server.ts, and the option must come from resolveTrustProxyOption — the
+// same function the topology tests derive it through. A regression to
+// `trustProxy: true` (trust every hop) or a hand-built array would either
+// make every DIRECT_LAN deployment spoofable or fork the derivation the
+// tests pin. Bounded textual check on the single construction site.
+{
+  const serverPath = join("apps/api/src/server.ts");
+  const content = readFileSync(serverPath, "utf8");
+  if (!content.includes("resolveTrustProxyOption(getRuntimeConfig())")) {
+    fail(
+      `${serverPath}: the Fastify trustProxy option must be derived through ` +
+        "resolveTrustProxyOption(getRuntimeConfig()) — the shared authority " +
+        "the topology tests use (#546)",
+    );
+  }
+  if (/trustProxy:(?!\s*resolveTrustProxyOption\b)/.test(content)) {
+    fail(
+      `${serverPath}: trustProxy must not be hand-built; derive it via ` +
+        "resolveTrustProxyOption (#546)",
+    );
+  }
+}
+console.log("   Client-IP trust wiring check complete.");
+
 // ── Report ───────────────────────────────────────────────────────────────────
 console.log("\n" + "=".repeat(60));
 if (errors.length === 0) {

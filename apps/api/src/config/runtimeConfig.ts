@@ -36,6 +36,7 @@ import {
   type AppMode as AppModeCore,
 } from "@exam/db";
 import { RuntimeConfigError } from "@exam/domain";
+import ipaddr from "ipaddr.js";
 import { resolveSettings, type ResolvedSettings } from "./settings.js";
 import { API_REFERENCE_UI_PATH } from "../openapi/docsPaths.js";
 
@@ -75,6 +76,17 @@ export interface RateLimitConfig {
   enabled: boolean;
   max: number;
   timeWindow: number;
+}
+
+/**
+ * Bounded trusted-proxy model (#546): the CIDRs whose sockets may rewrite
+ * the client identity (`X-Forwarded-For`). Empty list ⇒ `trustProxy: false`
+ * — `request.ip` stays the kernel socket peer and forwarding headers are
+ * ignored. This feeds the single Fastify `request.ip` derivation consumed
+ * by the rate limiter and the audit trail.
+ */
+export interface TrustedProxyConfig {
+  cidrs: string[];
 }
 
 export interface SecurityConfig {
@@ -271,6 +283,7 @@ export interface AppRuntimeConfig {
   tenancy: TenancyConfig;
   auth: AuthConfig;
   rateLimit: RateLimitConfig;
+  trustedProxy: TrustedProxyConfig;
   security: SecurityConfig;
   timezone: TimezoneConfig;
   email: EmailConfig;
@@ -304,6 +317,92 @@ function resolveDatabaseUrl(env: NodeJS.ProcessEnv, _mode: AppMode): string {
   } catch (err) {
     throw new RuntimeConfigError((err as Error).message);
   }
+}
+
+/**
+ * Parse `TRUSTED_PROXY_CIDRS` (#546) into the bounded trusted-proxy CIDR
+ * list. Entries are comma-separated CIDRs or bare IPs (a bare IP means exact
+ * single-host trust). Validation is strict and fails fast:
+ *
+ * - unparseable entries are rejected with the offender named;
+ * - entries with host bits set are REJECTED rather than normalized — an
+ *   operator writing "10.0.0.1/8" means one host, and silently trusting all
+ *   of 10/8 would widen the spoof-relevant trust boundary (INVARIANT);
+ * - trust-all entries (`0.0.0.0/0`, `::/0`) are REJECTED: trusting every
+ *   address has no bounded-proxy reading and would let any untrusted direct
+ *   client control the forwarded identity (INVARIANT).
+ *
+ * Parsing uses the same ipaddr.js semantics as Fastify's `proxy-addr`
+ * matcher, so what validates here is exactly what will match at request
+ * time.
+ */
+export function parseTrustedProxyCidrs(raw: string | undefined): string[] {
+  if (raw === undefined || raw.trim() === "") return [];
+  const entries: string[] = [];
+  for (const part of raw.split(",")) {
+    const entry = part.trim();
+    if (entry === "") continue;
+    assertCidrEntry(entry);
+    entries.push(entry);
+  }
+  return entries;
+}
+
+function assertCidrEntry(entry: string): void {
+  let address: ipaddr.IPv4 | ipaddr.IPv6;
+  let prefixLength: number;
+  try {
+    if (entry.includes("/")) {
+      [address, prefixLength] = ipaddr.parseCIDR(entry);
+    } else {
+      address = ipaddr.parse(entry);
+      prefixLength = address.kind() === "ipv4" ? 32 : 128;
+    }
+  } catch {
+    throw new RuntimeConfigError(
+      `TRUSTED_PROXY_CIDRS: "${entry}" is not a valid IP or CIDR entry`,
+    );
+  }
+  // INVARIANT (#546 bounded trusted-proxy model): a /0 entry trusts every
+  // address, so any untrusted direct client could control the forwarded
+  // identity — trustProxy would degenerate to "trust all". There is no
+  // bounded-proxy reading of 0.0.0.0/0 or ::/0, so they are machine-rejected
+  // instead of left to operator discipline.
+  if (prefixLength === 0) {
+    throw new RuntimeConfigError(
+      `TRUSTED_PROXY_CIDRS: "${entry}" trusts every address — trust-all CIDRs (prefix /0) are forbidden because they allow untrusted direct clients to control forwarded identity`,
+    );
+  }
+  const bytes = address.toByteArray();
+  const totalBits = bytes.length * 8;
+  let value = 0n;
+  for (const byte of bytes) value = (value << 8n) | BigInt(byte);
+  const hostBits = BigInt(totalBits - prefixLength);
+  const masked = (value >> hostBits) << hostBits;
+  if (masked !== value) {
+    const byteCount = totalBits / 8;
+    const baseBytes = Array.from({ length: byteCount }, (_, i) =>
+      Number((masked >> BigInt((byteCount - 1 - i) * 8)) & 0xffn),
+    );
+    throw new RuntimeConfigError(
+      `TRUSTED_PROXY_CIDRS: "${entry}" has host bits set — use the subnet base "${ipaddr.fromByteArray(baseBytes).toString()}/${prefixLength}"`,
+    );
+  }
+}
+
+/**
+ * The `trustProxy` option handed to the Fastify constructor (#546). Empty
+ * CIDR list ⇒ `false` (socket-peer identity — the default DIRECT_LAN model);
+ * a non-empty list enables the bounded trusted-proxy walk over forwarding
+ * headers. server.ts and the topology tests must both derive the option
+ * through this function so the wiring cannot drift.
+ */
+export function resolveTrustProxyOption(
+  config: AppRuntimeConfig,
+): false | string[] {
+  return config.trustedProxy.cidrs.length > 0
+    ? config.trustedProxy.cidrs
+    : false;
 }
 
 /**
@@ -624,6 +723,9 @@ export function loadRuntimeConfig(
       enabled: mode !== "e2e" && !s.app.RATE_LIMIT_DISABLED,
       max: s.app.RATE_LIMIT_MAX,
       timeWindow: s.app.RATE_LIMIT_WINDOW_MS,
+    },
+    trustedProxy: {
+      cidrs: parseTrustedProxyCidrs(s.app.TRUSTED_PROXY_CIDRS),
     },
     security: {
       cspEnabled: true,

@@ -14,6 +14,7 @@ import {
   buildPublicConfig,
   resetRuntimeConfigForTest,
   loadRuntimeConfig,
+  resolveTrustProxyOption,
 } from "./runtimeConfig.js";
 
 const REPO_ROOT = resolve(__dirname, "../../../..");
@@ -1449,5 +1450,78 @@ describe("runtimeConfig", () => {
         ),
       ).toThrow(/REDIS_COMMAND_TIMEOUT_MS must be a positive integer/);
     });
+  });
+});
+
+describe("trusted proxy CIDR resolution (#546)", () => {
+  const baseEnv = {
+    APP_MODE: "test",
+    TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+  };
+
+  it("TRUSTED_PROXY_CIDRS unset or empty resolves to an empty list", () => {
+    expect(loadRuntimeConfig(baseEnv).trustedProxy.cidrs).toEqual([]);
+    expect(
+      loadRuntimeConfig({ ...baseEnv, TRUSTED_PROXY_CIDRS: "" }).trustedProxy
+        .cidrs,
+    ).toEqual([]);
+  });
+
+  it("parses a comma-separated CIDR list, trimming whitespace and dropping empties", () => {
+    const config = loadRuntimeConfig({
+      ...baseEnv,
+      TRUSTED_PROXY_CIDRS: " 10.0.0.0/8 , 192.168.1.0/24,",
+    });
+    expect(config.trustedProxy.cidrs).toEqual(["10.0.0.0/8", "192.168.1.0/24"]);
+  });
+
+  it("accepts bare IPs and IPv6 CIDRs", () => {
+    const config = loadRuntimeConfig({
+      ...baseEnv,
+      TRUSTED_PROXY_CIDRS: "10.1.2.3, 2001:db8::/32",
+    });
+    expect(config.trustedProxy.cidrs).toEqual(["10.1.2.3", "2001:db8::/32"]);
+  });
+
+  it("fails fast on a malformed entry, naming the offender", () => {
+    expect(() =>
+      loadRuntimeConfig({
+        ...baseEnv,
+        TRUSTED_PROXY_CIDRS: "10.0.0.0/8, not-an-address",
+      }),
+    ).toThrow(/not-an-address/);
+  });
+
+  it("fails fast on an out-of-range prefix length", () => {
+    expect(() =>
+      loadRuntimeConfig({ ...baseEnv, TRUSTED_PROXY_CIDRS: "10.0.0.0/33" }),
+    ).toThrow(/10\.0\.0\.0\/33/);
+  });
+
+  it("fails fast on an entry with host bits set — silent subnet broadening is a trust-boundary mistake", () => {
+    expect(() =>
+      loadRuntimeConfig({ ...baseEnv, TRUSTED_PROXY_CIDRS: "10.0.0.1/8" }),
+    ).toThrow(/10\.0\.0\.1\/8/);
+  });
+
+  it("fails fast on trust-all IPv4 — 0.0.0.0/0 has no bounded-proxy reading", () => {
+    expect(() =>
+      loadRuntimeConfig({ ...baseEnv, TRUSTED_PROXY_CIDRS: "0.0.0.0/0" }),
+    ).toThrow(/trusts every address/);
+  });
+
+  it("fails fast on trust-all IPv6 — ::/0 has no bounded-proxy reading", () => {
+    expect(() =>
+      loadRuntimeConfig({ ...baseEnv, TRUSTED_PROXY_CIDRS: "::/0" }),
+    ).toThrow(/trusts every address/);
+  });
+
+  it("resolveTrustProxyOption: empty list → false; non-empty → the CIDR array", () => {
+    expect(resolveTrustProxyOption(loadRuntimeConfig(baseEnv))).toBe(false);
+    expect(
+      resolveTrustProxyOption(
+        loadRuntimeConfig({ ...baseEnv, TRUSTED_PROXY_CIDRS: "10.0.0.0/8" }),
+      ),
+    ).toEqual(["10.0.0.0/8"]);
   });
 });

@@ -22,7 +22,10 @@ import { registerStaticFrontend } from "./plugins/staticFrontend.js";
 import apiSurfacePlugin from "./routes/apiSurface.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
-import { getRuntimeConfig } from "./config/runtimeConfig.js";
+import {
+  getRuntimeConfig,
+  resolveTrustProxyOption,
+} from "./config/runtimeConfig.js";
 import { REDACT_CONFIG } from "./lib/logRedaction.js";
 
 loadRootEnv();
@@ -100,7 +103,14 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
  * serves static assets from `public/`, and starts listening.
  */
 async function main() {
-  const app = Fastify({ logger: { level: "info", redact: REDACT_CONFIG } });
+  const app = Fastify({
+    logger: { level: "info", redact: REDACT_CONFIG },
+    // #546: the ONLY place client-IP trust is decided. Empty TRUSTED_PROXY_CIDRS
+    // keeps request.ip = socket peer (DIRECT_LAN); a non-empty list enables the
+    // bounded trusted-proxy walk. The limiter key and audit ipAddress both read
+    // this single request.ip derivation.
+    trustProxy: resolveTrustProxyOption(getRuntimeConfig()),
+  });
 
   await app.register(fastifyCookie);
   await app.register(cors);

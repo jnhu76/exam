@@ -106,6 +106,7 @@ if any is unset. There is NO default database password in production
 | `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` | 30000 / 60000 | in-process heartbeat scanner |
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed rate limiter; Redis-backed shared state when the `redis` profile is enabled and the runtime is ready — local in-memory fallback only in `optional` mode; `required` mode fails closed with 503 `RATE_LIMIT_UNAVAILABLE` (never falls back to local). See §10 |
+| `TRUSTED_PROXY_CIDRS` | unset (socket-peer identity) | reverse-proxy deployments only: CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). Unset keeps headers ignored. See "Rate-limit identity, trusted proxies, and sizing" above |
 
 ### Email (in-process outbox loop + sender)
 
@@ -134,6 +135,65 @@ settings model is the single source.
 > `env -u EMAIL_ENABLED -u SMTP_HOST ... docker compose --env-file .env.deploy up`
 > to start cleanly
 > when a stale shell env is suspected.
+
+### Rate-limit identity, trusted proxies, and sizing (#546)
+
+The rate limiter keys on `request.ip`, and the audit trail records the same
+value as `ip_address` — one IP authority, two consumers. What `request.ip` is
+depends on the deployment topology:
+
+| Topology | `request.ip` | Verdict |
+| --- | --- | --- |
+| Direct LAN (default compose, `EXAM_PORT` direct, one candidate per device) | each candidate's real IP | Safe by default — no configuration needed |
+| Shared NAT (many candidates behind one egress IP) | the shared IP | Supported with sizing: the whole cohort shares one identity; size `RATE_LIMIT_MAX` by the rule below and stagger logins (the login budget is 10/min/IP) |
+| Reverse proxy WITH trusted client-IP wiring | per-candidate IP | Supported: set `TRUSTED_PROXY_CIDRS` to the proxy's addresses |
+| Reverse proxy WITHOUT trusted client-IP wiring | the proxy IP (all candidates collapse) | Degraded by config — wire `TRUSTED_PROXY_CIDRS` (below) |
+
+**Reverse proxy wiring (HTTPS deployments).** The app does not terminate TLS;
+a reverse proxy is the supported way to add it. To keep per-candidate rate
+limit and audit identity behind a proxy:
+
+1. Set `TRUSTED_PROXY_CIDRS` to the proxy's socket addresses — **and only
+   those** (comma-separated CIDRs; a bare IP means that one host; malformed
+   entries or entries with host bits set fail fast at startup). Typical
+   single-host TLS terminator: `TRUSTED_PROXY_CIDRS=127.0.0.1/32`.
+2. Configure the proxy to **append** the real client address to
+   `X-Forwarded-For` (nginx: `proxy_set_header X-Forwarded-For
+   $proxy_add_x_forwarded_for;`) or to overwrite it (`$remote_addr`). A
+   pass-through proxy that forwards the client's header untouched is NOT
+   supported: it would let candidates spoof their limiter identity.
+3. Also overwrite `X-Forwarded-Host` and `X-Forwarded-Proto` on the proxy
+   (nginx: `proxy_set_header Host $host;`, `X-Forwarded-Proto $scheme;`).
+   The API reads neither today, but a trusted socket lets these headers
+   through; overwriting keeps future consumers safe.
+
+With the wiring in place, the client IP is the first address scanning
+`X-Forwarded-For` from the right that is NOT one of the configured proxies —
+entries a candidate injects are skipped **provided every configured CIDR
+covers only the proxy→API link** (pinned by `rateLimit.topology.test.ts`).
+
+> **Load-bearing precondition:** never include the candidate client network
+> in `TRUSTED_PROXY_CIDRS`. The walk skips EVERY address matching a trusted
+> CIDR — including the genuine client entry the proxy appended — so an
+> over-broad CIDR (trusting 10.0.0.0/8 while candidates sit on 10.x) lets a
+> candidate choose their rate-limit and audit identity with a forged
+> `X-Forwarded-For`. Trust-all CIDRs (`0.0.0.0/0`, `::/0`) have no bounded
+> reading and are rejected at startup. The over-broad hazard is pinned as
+> executable knowledge in `rateLimit.topology.test.ts` ("over-broad trusted
+> CIDR hazard").
+
+**Sizing rule (per candidate ≈ 6.6 requests/min steady, measured in the
+production-reality audit):**
+
+```text
+RATE_LIMIT_MAX ≥ candidates × 7 × 2      # measured steady × headroom ×2
+RATE_LIMIT_WINDOW_MS = 60000
+```
+
+The login route keeps a fixed 10/min/IP budget (independent of
+`RATE_LIMIT_MAX`): exam start must stagger logins per IP, or the deployment
+needs the trusted-proxy wiring so per-candidate IPs restore per-candidate
+budgets.
 
 ---
 
