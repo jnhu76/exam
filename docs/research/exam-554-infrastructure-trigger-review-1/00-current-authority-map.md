@@ -77,13 +77,14 @@ client transport: HTTP polling only
 
 ## PostgreSQL connection pool (production shape — measured in 03)
 
-`packages/db/src/postgres.ts` passes NO options for the runtime pool → postgres.js defaults:
+`packages/db/src/postgres.ts` passes NO options for the runtime pool → postgres.js 3.4.9 defaults:
 
 ```text
 max            = 10
 connect_timeout= 30 s
-idle_timeout   = 0 (never idle-close)
-max_lifetime   = unset
+idle_timeout   = null (no idle close)
+max_lifetime   = randomized ~30–60 min per connection
+                 (default fn `60 × (30 + Math.random() × 30)` seconds)
 prepare        = true
 ```
 
@@ -116,9 +117,11 @@ reconciliation, email loop, retention sweep, readiness probes.
 - **#547** (CLOSED, PR #563): liveness/readiness/diagnostics/alerting layered; PostgreSQL is the
   mandatory readiness dependency; Redis matters only in `required` mode; scanners classified
   OPERABILITY (stall alerts), NOT readiness-blocking. RESIDUAL accepted into this gate: the 2 s
-  readiness budget bounds the CALLER only — postgres.js has no per-query cancellation, so a
-  timed-out ping keeps running and concurrent probes are not single-flighted
-  (`operabilityMonitor.ts:27,93-110`; route runs one probe per request, no dedup).
+  readiness budget bounds the CALLER only — the probe path (`pingDb`: Drizzle select → await)
+  never retains the underlying postgres.js `Query` handle, so the driver's native `Query.cancel()`
+  (present in 3.4.9; best-effort per official docs) is not wired, a timed-out ping keeps running,
+  and concurrent probes are not single-flighted (`operabilityMonitor.ts:27,93-110`,
+  `systemStatsRepo.ts:122-129`; route runs one probe per request, no dedup).
 
 ## Search sweep confirmation (negative facts)
 

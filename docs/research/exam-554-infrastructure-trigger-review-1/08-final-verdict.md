@@ -66,12 +66,12 @@ RESPONSIBILITY DECISIONS:
   incident_reconciliation:     KEEP_CURRENT_RECONCILIATION (28 ms/tick at semester scale; reopen triggers in 06)
   deadline_work:               KEEP_CURRENT (O(active) discovery; under-lock authority recheck)
   email_outbox:                KEEP_PG_AUTHORITY (ADR-011 Class A outbox — already the industry-default mechanism class)
-  general_job_queue:           DEFER_NOT_PROVEN (M1 deferred with concrete reopen triggers; M2/M3 fail loss semantics)
+  general_job_queue:           DEFER_NOT_PROVEN (M1 deferred with concrete reopen triggers; M2/M3 REJECT_CURRENT_SCOPE — correctness designable, no measured property bought)
   external_mq:                 REJECT_CURRENT_SCOPE
   event_bus:                   REJECT_CURRENT_SCOPE
   fanout:                      REJECT_CURRENT_SCOPE
   read_cache:                  REJECT_CURRENT_SCOPE (no measured hotspot)
-  readiness_probe_pool:        KEEP_CURRENT (accept-current outcome; residual bounded + reopen triggers; optional L1/L2 non-infra hardening named)
+  readiness_probe_pool:        KEEP_CURRENT (accept-current outcome; residual bounded + reopen triggers; optional non-infra hardening named in rung order: single-flight/cached result first, native cancellation later — best-effort)
   multi_instance_coordination: DEFER_NOT_PROVEN (future; per-responsibility reviews on adoption)
   durable_exam_truth:          KEEP_PG_AUTHORITY
 
@@ -83,7 +83,8 @@ NEW IMPLEMENTATION ISSUES:
   unchanged; in-process loops unchanged; no MQ/event bus/cache/fanout. #550 is NOT blocked.
   #550 must additionally instrument pool-queue vs execution under load (E28 bound), run the
   supported #546 proxy/NAT modes, include a composition-realistic long-lived dataset
-  (#545 index residual), and exercise readiness/alerting paths (#547).
+  (#545 index residual), exercise readiness/alerting paths (#547), and account for postgres.js'
+  default randomized ~30–60 min connection lifetime in long-running pool observations (E12).
 ```
 
 ## Acceptance criteria check (Issue #554)
