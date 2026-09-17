@@ -53,7 +53,7 @@
     "test:deployment:pitr": "bash tests/deployment/pitr.sh",
     "test:deployment:upgrade": "bash tests/deployment/upgrade-uninstall.sh",
     "test:deployment:cleanup": "bash tests/deployment/cleanup-boundary-regression.sh",
-    "test:deployment": "pnpm test:deployment:compose && pnpm test:deployment:launchpad && pnpm test:deployment:persistence && pnpm test:deployment:cold-backup && pnpm test:deployment:logical && pnpm test:deployment:pitr && pnpm test:deployment:upgrade && pnpm test:deployment:cleanup",
+    "test:deployment": "pnpm test:deployment:compose && pnpm test:deployment:readiness && pnpm test:deployment:launchpad && pnpm test:deployment:persistence && pnpm test:deployment:cold-backup && pnpm test:deployment:logical && pnpm test:deployment:pitr && pnpm test:deployment:upgrade && pnpm test:deployment:cleanup",
     "coverage:db": "pnpm --filter @exam/db coverage",
     "coverage:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage",
     "verify:nodb-tests": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
@@ -80,7 +80,8 @@
     "test:ui-scan-roots": "node --test scripts/lib/ui-scan-roots.test.mjs",
     "test:frontend-primitives-smoke": "node --test scripts/check-frontend-primitives.test.mjs",
     "test:generate-env": "node --test scripts/generate-env.test.mjs",
-    "test:copy-guard": "node --test scripts/check-hardcoded-copy.test.mjs"
+    "test:copy-guard": "node --test scripts/check-hardcoded-copy.test.mjs",
+    "test:deployment:readiness": "bash tests/deployment/readiness-gate.sh"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

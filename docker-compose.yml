@@ -86,13 +86,17 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # Proves the API and the SPA are both reachable, not just the backend.
+      # #547 DEPLOYMENT READINESS GATE: the API leg probes /api/ready (DB-aware
+      # mandatory-dependency gate — 503 => probe exit 1), NOT the
+      # dependency-blind /api/health liveness probe. The SPA leg keeps proving
+      # the web surface is servable. HTTP 503 must fail the probe and the
+      # timeout stays tight — no retry/timeout widening to buy green.
       test:
         [
           "CMD",
           "node",
           "-e",
-          "Promise.all([fetch('http://127.0.0.1:3000/api/health'), fetch('http://127.0.0.1:3000/')]).then(([api, web]) => { const ok = api.ok && (web.headers.get('content-type') || '').includes('text/html'); process.exit(ok ? 0 : 1) }).catch(() => process.exit(1))",
+          "Promise.all([fetch('http://127.0.0.1:3000/api/ready'), fetch('http://127.0.0.1:3000/')]).then(([api, web]) => { const ok = api.ok && (web.headers.get('content-type') || '').includes('text/html'); process.exit(ok ? 0 : 1) }).catch(() => process.exit(1))",
         ]
       interval: 30s
       timeout: 5s

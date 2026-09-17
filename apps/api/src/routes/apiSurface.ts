@@ -1,7 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
 import rateLimitPlugin from "../plugins/rateLimit.js";
+import {
+  buildReadinessProbeDeps,
+  probeApplicationReadiness,
+} from "../plugins/operabilityMonitor.js";
+import { z } from "zod";
+import { ErrorResponseSchema } from "@exam/contracts";
 import { buildErrorResponse } from "../lib/errorResponse.js";
-import { healthResponseSchema } from "./healthSchema.js";
+import { healthResponseSchema, readyResponseSchema } from "./healthSchema.js";
 import { registerApiRouteModules } from "./registerApiRouteModules.js";
 
 /**
@@ -50,6 +56,45 @@ const apiSurfacePlugin: FastifyPluginAsync = async (api) => {
       },
     },
     async () => ({ status: "ok" }),
+  );
+
+  // GET /ready — public DEPLOYMENT READINESS gate (#547). Liveness above
+  // stays dependency-blind; this route answers whether the instance's
+  // MANDATORY serving dependencies (PostgreSQL; Redis only when
+  // REDIS_MODE=required) are currently usable, via the single
+  // probeApplicationReadiness derivation shared with the operability alert
+  // transitions. When the HANDLER runs, the body carries only the gate
+  // answer — no dependency names, latency, or error detail. The route stays
+  // under the default /api rate-limit policy (the anti-amplification bound;
+  // the Compose healthcheck's 2/min cadence can never self-429).
+  //
+  // TWO 503 SHAPES (deliberate; both mean "not ready" to a probe):
+  //   1. handler reached → {status:"not_ready"} (the gate body);
+  //   2. REDIS_MODE=required and the limiter's Redis backend is unusable →
+  //      the limiter fails CLOSED before this handler with the standard API
+  //      error envelope (RATE_LIMIT_UNAVAILABLE). The 503 schema is therefore
+  //      a UNION of both shapes — declaring only the gate body would make
+  //      Fastify serialize-reject the envelope and mask the outage as a 500
+  //      (regression-pinned in readiness.test.ts; scoped in 01-semantics §3).
+  api.get(
+    "/ready",
+    {
+      schema: {
+        response: {
+          200: readyResponseSchema,
+          503: z.union([readyResponseSchema, ErrorResponseSchema]),
+        },
+      },
+    },
+    async (_request, reply) => {
+      const readiness = await probeApplicationReadiness(
+        buildReadinessProbeDeps(api),
+      );
+      if (!readiness.ready) {
+        return reply.code(503).send({ status: "not_ready" });
+      }
+      return { status: "ready" };
+    },
   );
 
   await registerApiRouteModules(api);

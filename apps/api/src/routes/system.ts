@@ -39,6 +39,7 @@ import {
 } from "../config/runtimeConfig.js";
 import { heartbeatMetrics } from "../plugins/heartbeat.js";
 import { deadlineScannerMetrics } from "../plugins/deadlineScanner.js";
+import { classifyLoopStall } from "../plugins/operabilityMonitor.js";
 import { Permission } from "@exam/authz";
 
 /** OpenAPI security definition for cookie-based authentication. */
@@ -931,11 +932,33 @@ async function buildOperationalDiagnostics(
       timeout: config.heartbeat.timeoutMs ?? 60_000,
       lastScanAt: heartbeatMetrics.lastScanAt?.toISOString() ?? null,
       disruptedCount: heartbeatMetrics.disruptedCount,
+      // #547 stall facts + the same pure classification the operability
+      // monitor alerts on (read-only projection; no second authority).
+      startedAt: heartbeatMetrics.startedAt?.toISOString() ?? null,
+      lastStartedAt: heartbeatMetrics.lastStartedAt?.toISOString() ?? null,
+      lastSettledAt: heartbeatMetrics.lastSettledAt?.toISOString() ?? null,
+      activeSince: heartbeatMetrics.activeSince?.toISOString() ?? null,
+      stallState: classifyLoopStall(
+        heartbeatMetrics,
+        config.heartbeat.scanIntervalMs ?? 30_000,
+        fastify.now(),
+      ),
     },
     deadlineScannerStatus: {
       interval: deadlineScannerMetrics.scanIntervalMs,
       lastScanAt: deadlineScannerMetrics.lastScanAt?.toISOString() ?? null,
       autoSubmitCount: deadlineScannerMetrics.autoSubmitCount,
+      startedAt: deadlineScannerMetrics.startedAt?.toISOString() ?? null,
+      lastStartedAt:
+        deadlineScannerMetrics.lastStartedAt?.toISOString() ?? null,
+      lastSettledAt:
+        deadlineScannerMetrics.lastSettledAt?.toISOString() ?? null,
+      activeSince: deadlineScannerMetrics.activeSince?.toISOString() ?? null,
+      stallState: classifyLoopStall(
+        deadlineScannerMetrics,
+        deadlineScannerMetrics.scanIntervalMs,
+        fastify.now(),
+      ),
     },
     emailStatus: await buildEmailStatus(
       config,

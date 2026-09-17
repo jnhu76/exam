@@ -192,11 +192,24 @@ export const DiagnosticsResponseSchema = z.object({
     timeout: z.number().int().min(0),
     lastScanAt: z.string().nullable(),
     disruptedCount: z.number().int().min(0),
+    // #547 stall facts: lastSettledAt is the stall authority (settled =
+    // tick finished, success OR error); stallState is the same pure
+    // classification the operability monitor alerts on.
+    startedAt: z.string().nullable(),
+    lastStartedAt: z.string().nullable(),
+    lastSettledAt: z.string().nullable(),
+    activeSince: z.string().nullable(),
+    stallState: z.enum(["warming", "healthy", "active", "stalled"]),
   }),
   deadlineScannerStatus: z.object({
     interval: z.number().int().min(0),
     lastScanAt: z.string().nullable(),
     autoSubmitCount: z.number().int().min(0),
+    startedAt: z.string().nullable(),
+    lastStartedAt: z.string().nullable(),
+    lastSettledAt: z.string().nullable(),
+    activeSince: z.string().nullable(),
+    stallState: z.enum(["warming", "healthy", "active", "stalled"]),
   }),
   emailStatus: EmailDiagnosticsStatusSchema,
   integrity: z

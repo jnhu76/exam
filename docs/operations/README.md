@@ -60,16 +60,41 @@ procedure.
 
 ## Health and Diagnostics
 
-| Endpoint | Auth | Purpose |
-| --- | --- | --- |
-| `GET /api/health` | none | Liveness probe (Compose healthcheck) |
-| `GET /api/system/health` | admin | Readiness — DB ping, CPU, memory |
-| `GET /api/system/diagnostics` | admin | Operational: DB latency, Redis, scanners, outbox |
-| `GET /api/system/info` | none | Version + uptime |
-| `GET /api/system/public-config` | none | Deployment mode, feature flags |
+Four distinct layers — do not conflate them (#547):
 
-The Compose `app` healthcheck polls `/api/health` every 30s. It checks
-that both the API and the SPA are reachable.
+| Endpoint | Auth | Layer | Purpose |
+| --- | --- | --- | --- |
+| `GET /api/health` | none | Liveness | Process/event-loop responsive. Dependency-blind BY DESIGN: stays 200 through DB loss. |
+| `GET /api/ready` | none | Readiness | Deployment gate: mandatory serving dependencies (PostgreSQL; Redis only when `REDIS_MODE=required`) currently usable. Handler body: `200 {"status":"ready"}` / `503 {"status":"not_ready"}` — nothing else is disclosed. One deliberate exception: with `REDIS_MODE=required` and Redis unusable, the rate limiter fails closed first and the answer is the standard 503 `RATE_LIMIT_UNAVAILABLE` error envelope (same gate direction — 503 = not ready). |
+| `GET /api/system/health` | admin | Diagnostics | DB ping latency, CPU, memory + derived status (CPU/memory thresholds only) |
+| `GET /api/system/diagnostics` | admin | Diagnostics | Operational: DB latency, Redis, scanner state + stall classification, outbox, integrity |
+| `GET /api/system/info` | none | — | Version + uptime |
+| `GET /api/system/public-config` | none | — | Deployment mode, feature flags |
+
+The Compose `app` healthcheck polls `/api/ready` (the readiness gate) and
+the SPA root every 30s. An `unhealthy` app container means the deployment
+readiness state is violated (e.g. PostgreSQL is down); it is an
+orchestration/visibility signal, NOT a traffic block — in the default
+direct-LAN topology nothing routes on Docker health status.
+
+## Active Alerting (operability events)
+
+The app emits BOUNDED structured transition events on critical operational
+conditions, so a machine can page without anyone opening the diagnostics
+page. Stable fields (stdout pino JSON; full contract:
+[`operations/active-alerting.md`](active-alerting.md) — the canonical contract):
+
+```text
+event: "operability.readiness"       component: "database"|"redis"          state: "unavailable"|"recovered"
+event: "operability.background_loop" component: "heartbeat"|"deadline_scanner" state: "stalled"|"recovered"
+```
+
+One log line per state TRANSITION only (no storms; recovery is one `info`
+line). Minimal external hook: alert when `level >= error AND event in
+{operability.readiness, operability.background_loop}` with a failure
+`state`; use `recovered` to clear. Consumable by journald / Docker log
+driver / Loki / a custom watcher — none of which is required or bundled
+(#312 stays separate).
 
 ## Logs and Monitoring
 

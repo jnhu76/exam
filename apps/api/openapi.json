@@ -40,6 +40,82 @@
         }
       }
     },
+    "/api/ready": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["ready", "not_ready"]
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["ready", "not_ready"]
+                        }
+                      },
+                      "required": ["status"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "description": "Stable coarse product-level machine contract (ErrorCode). Clients branch on this, never on message."
+                            },
+                            "message": {
+                              "type": "string",
+                              "description": "Non-authoritative human-readable compatibility text. Clients MUST NOT parse or branch on this value. Wording and fallback language are not stable machine semantics; use code (and details.reason where present) for programmatic handling."
+                            },
+                            "details": {
+                              "description": "Structured context, shape varies by code: reason (open-vocabulary machine contract), fields[] (field violations), params (structured dynamic context — top-level since C1, field-level since C2). Extensibility is inventory-gated; unknown shapes must be tolerated."
+                            },
+                            "requestId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Request id for support correlation"
+                            }
+                          },
+                          "required": ["code", "message", "requestId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["error"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/register": {
       "post": {
         "responses": {
@@ -37491,13 +37567,38 @@
                         "disruptedCount": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "startedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastStartedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastSettledAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "activeSince": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "stallState": {
+                          "type": "string",
+                          "enum": ["warming", "healthy", "active", "stalled"]
                         }
                       },
                       "required": [
                         "interval",
                         "timeout",
                         "lastScanAt",
-                        "disruptedCount"
+                        "disruptedCount",
+                        "startedAt",
+                        "lastStartedAt",
+                        "lastSettledAt",
+                        "activeSince",
+                        "stallState"
                       ],
                       "additionalProperties": false
                     },
@@ -37515,9 +37616,38 @@
                         "autoSubmitCount": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "startedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastStartedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastSettledAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "activeSince": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "stallState": {
+                          "type": "string",
+                          "enum": ["warming", "healthy", "active", "stalled"]
                         }
                       },
-                      "required": ["interval", "lastScanAt", "autoSubmitCount"],
+                      "required": [
+                        "interval",
+                        "lastScanAt",
+                        "autoSubmitCount",
+                        "startedAt",
+                        "lastStartedAt",
+                        "lastSettledAt",
+                        "activeSince",
+                        "stallState"
+                      ],
                       "additionalProperties": false
                     },
                     "emailStatus": {

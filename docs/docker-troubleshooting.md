@@ -72,11 +72,12 @@ curl -i http://localhost:3000/          # expect 200 + text/html
 curl -I http://localhost:3000/assets/   # expect 200 for a built asset
 ```
 
-The app healthcheck already requires both the API (`/api/health`) and the SPA
-(`/` returning HTML) to respond, so `app: healthy` means the web app is being
-served. If the browser still cannot reach it, check that the container's
-published port is reachable from the host (firewall / WSL2 localhost
-forwarding on Windows).
+The app healthcheck requires the readiness gate (`/api/ready` — mandatory
+dependencies usable, e.g. PostgreSQL reachable) and the SPA (`/` returning
+HTML) to respond, so `app: healthy` means the web app is being served and
+the deployment readiness state holds. If the browser still cannot reach it,
+check that the container's published port is reachable from the host
+(firewall / WSL2 localhost forwarding on Windows).
 
 ### Windows / WSL2 notes
 

@@ -58,8 +58,16 @@ export interface ScanResult {
 /**
  * In-memory metrics for the deadline scanner, updated after each scan cycle.
  * These are single-instance counters reset on server restart.
+ *
+ * #547 stall facts: `lastSettledAt` is the STALL AUTHORITY (settled = the
+ * tick body finished, success OR error). `lastScanAt` keeps its existing
+ * contract (stamped after a completed scan) for diagnostics.
  */
 export const deadlineScannerMetrics = {
+  startedAt: null as Date | null,
+  lastStartedAt: null as Date | null,
+  lastSettledAt: null as Date | null,
+  activeSince: null as Date | null,
   lastScanAt: null as Date | null,
   autoSubmitCount: 0,
   failedCount: 0,
@@ -332,12 +340,19 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
   // loader — no direct process.env read at plugin registration.
   const scanIntervalMs = config.heartbeat.deadlineScanIntervalMs;
   deadlineScannerMetrics.scanIntervalMs = scanIntervalMs;
+  // #547: WARMING grace origin — recorded once, at registration.
+  deadlineScannerMetrics.startedAt = fastify.now();
 
   let activeScan: Promise<void> | null = null;
   let closing = false;
   const interval = setInterval(() => {
     if (closing || activeScan) return;
     activeScan = (async () => {
+      // #547 stall facts: in-flight window; settle clears activeSince and
+      // stamps lastSettledAt in .finally (success or error alike).
+      const startedAt = fastify.now();
+      deadlineScannerMetrics.lastStartedAt = startedAt;
+      deadlineScannerMetrics.activeSince = startedAt;
       try {
         const result = await scanDatabaseForExpiredAttempts(fastify);
         deadlineScannerMetrics.lastScanAt = fastify.now();
@@ -357,6 +372,8 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
       }
     })().finally(() => {
       activeScan = null;
+      deadlineScannerMetrics.activeSince = null;
+      deadlineScannerMetrics.lastSettledAt = fastify.now();
     });
   }, scanIntervalMs);
   interval.unref();
