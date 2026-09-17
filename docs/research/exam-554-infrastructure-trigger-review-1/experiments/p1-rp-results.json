@@ -1,0 +1,266 @@
+{
+  "env": {
+    "node": "v24.15.0",
+    "started": "2026-09-17T06:27:33.445Z"
+  },
+  "p1": {
+    "baseline": {
+      "n": 300,
+      "min": 0.27,
+      "p50": 0.36,
+      "p95": 0.53,
+      "max": 20.99
+    },
+    "phases": {
+      "5": {
+        "holdSeconds": 3,
+        "poolAtProbeStart": {
+          "active": 5,
+          "idleInTx": 0,
+          "idle": 0,
+          "total": 5
+        },
+        "firstProbeTotalMs": 10.77,
+        "firstProbeAcquisitionApproxMs": 10.41,
+        "concurrentProbes": [
+          {
+            "issuedAtMs": 1,
+            "totalMs": 0.56
+          },
+          {
+            "issuedAtMs": 151,
+            "totalMs": 1
+          },
+          {
+            "issuedAtMs": 301,
+            "totalMs": 0.95
+          },
+          {
+            "issuedAtMs": 451,
+            "totalMs": 0.9
+          },
+          {
+            "issuedAtMs": 601,
+            "totalMs": 1.02
+          },
+          {
+            "issuedAtMs": 751,
+            "totalMs": 1.17
+          },
+          {
+            "issuedAtMs": 901,
+            "totalMs": 0.82
+          },
+          {
+            "issuedAtMs": 1051,
+            "totalMs": 1
+          },
+          {
+            "issuedAtMs": 1201,
+            "totalMs": 1.04
+          },
+          {
+            "issuedAtMs": 1351,
+            "totalMs": 0.89
+          }
+        ],
+        "concurrentSlowCount": 0,
+        "holdersAllSettled": true
+      },
+      "10": {
+        "holdSeconds": 3,
+        "poolAtProbeStart": {
+          "active": 10,
+          "idleInTx": 0,
+          "idle": 0,
+          "total": 10
+        },
+        "firstProbeTotalMs": 2605.45,
+        "firstProbeAcquisitionApproxMs": 2605.09,
+        "concurrentProbes": [
+          {
+            "issuedAtMs": 1,
+            "totalMs": 0.48
+          },
+          {
+            "issuedAtMs": 150,
+            "totalMs": 0.97
+          },
+          {
+            "issuedAtMs": 301,
+            "totalMs": 1.1
+          },
+          {
+            "issuedAtMs": 450,
+            "totalMs": 1.11
+          },
+          {
+            "issuedAtMs": 601,
+            "totalMs": 1.93
+          },
+          {
+            "issuedAtMs": 751,
+            "totalMs": 1.39
+          },
+          {
+            "issuedAtMs": 901,
+            "totalMs": 1.37
+          },
+          {
+            "issuedAtMs": 1050,
+            "totalMs": 1.12
+          },
+          {
+            "issuedAtMs": 1201,
+            "totalMs": 0.91
+          },
+          {
+            "issuedAtMs": 1350,
+            "totalMs": 0.88
+          }
+        ],
+        "concurrentSlowCount": 0,
+        "holdersAllSettled": true
+      },
+      "15": {
+        "holdSeconds": 3,
+        "poolAtProbeStart": {
+          "active": 10,
+          "idleInTx": 0,
+          "idle": 0,
+          "total": 10
+        },
+        "firstProbeTotalMs": 2602.99,
+        "firstProbeAcquisitionApproxMs": 2602.63,
+        "concurrentProbes": [
+          {
+            "issuedAtMs": 1,
+            "totalMs": 0.38
+          },
+          {
+            "issuedAtMs": 150,
+            "totalMs": 0.88
+          },
+          {
+            "issuedAtMs": 301,
+            "totalMs": 0.84
+          },
+          {
+            "issuedAtMs": 451,
+            "totalMs": 1.06
+          },
+          {
+            "issuedAtMs": 600,
+            "totalMs": 0.9
+          },
+          {
+            "issuedAtMs": 750,
+            "totalMs": 0.81
+          },
+          {
+            "issuedAtMs": 901,
+            "totalMs": 0.85
+          },
+          {
+            "issuedAtMs": 1054,
+            "totalMs": 1.3
+          },
+          {
+            "issuedAtMs": 1201,
+            "totalMs": 1.24
+          },
+          {
+            "issuedAtMs": 1351,
+            "totalMs": 0.92
+          }
+        ],
+        "concurrentSlowCount": 0,
+        "holdersAllSettled": true
+      }
+    }
+  },
+  "rp": {
+    "rp1_single": {
+      "outcome": "ready",
+      "callerMs": 1.1
+    },
+    "rp1_concurrent100": {
+      "ready": 100,
+      "n": 100,
+      "min": 4.6,
+      "p50": 5.1,
+      "p95": 5.7,
+      "max": 5.9,
+      "wallMs": 6
+    },
+    "rp2_blocked": {
+      "holdSeconds": 45,
+      "poolAtBlock": {
+        "active": 10,
+        "idleInTx": 0,
+        "idle": 0,
+        "total": 10
+      },
+      "serverSidePendingPingStatementsAtBlock": 0,
+      "serverSidePendingPingStatementsMid": 1,
+      "businessProbeTotalMs": 44635.8,
+      "poolSamplesDuringHold": [
+        {
+          "active": 10,
+          "idleInTx": 0,
+          "idle": 0,
+          "total": 10
+        },
+        {
+          "active": 10,
+          "idleInTx": 0,
+          "idle": 0,
+          "total": 10
+        },
+        {
+          "active": 10,
+          "idleInTx": 0,
+          "idle": 0,
+          "total": 10
+        }
+      ],
+      "benignProbes": [
+        "timeout@2001.4ms",
+        "timeout@2000.8ms",
+        "timeout@2002.2ms",
+        "timeout@2002.3ms",
+        "timeout@2001.2ms"
+      ],
+      "abusiveBurst25": {
+        "timeouts": 25,
+        "ready": 0,
+        "errors": 0,
+        "callerP95": 2001
+      },
+      "releaseMs": 0,
+      "drainToIdleMs": 1,
+      "firstProbeAfterDrain": "ready@0.5ms"
+    },
+    "rp3_slowDb": {
+      "serverExecSeconds": 2.5,
+      "benign6over60s": [
+        "timeout@2000.3ms",
+        "timeout@2002.3ms",
+        "timeout@2002.5ms",
+        "timeout@2001.6ms",
+        "timeout@2002.5ms",
+        "timeout@2002.3ms"
+      ],
+      "abusive100over60s": {
+        "outcomes": {
+          "timeouts": 100,
+          "ready": 0
+        },
+        "poolActiveMax": 5,
+        "poolActiveSteady": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+        "littlesLawExpectation": 4.2
+      }
+    }
+  },
+  "finished": "2026-09-17T06:30:34.057Z"
+}
