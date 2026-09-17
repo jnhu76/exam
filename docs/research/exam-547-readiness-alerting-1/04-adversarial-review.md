@@ -37,7 +37,31 @@ suite). `pnpm verify:static` PASS (incl. regenerated OpenAPI golden and the
 route-conformance locks). Full API suite: **2739 passed**. Exact-head CI on
 the fix commit: see PR body.
 
-## Round 2
+## Round 2 (on fix commit `b69dfbb1`)
 
-Focused fresh re-review of the delta (F1/F2/F3 fixes only) on the fix commit:
-to be appended below when it returns.
+Focused fresh re-review of the fix delta only. Verdicts:
+
+- **F1 — FIXED_VERIFIED.** The reviewer executed the new suite (32/32) and
+  mutation-attacked it: swapping the heartbeat/deadline tracker wiring fails
+  4 tests; inverting the stalled/redis gates is caught by the healthy-empty
+  and component-isolation assertions. Contract-doc claims audited TRUE field
+  by field against the tests.
+- **F2 — FIXED_VERIFIED.** Runbook §7 and docker-troubleshooting now match
+  the real compose healthcheck; remaining `/api/health` claims live only in
+  archive/ and the historical research docs.
+- **F3 — FIXED_VERIFIED (mutation-proven).** The reviewer reverted the 503
+  schema to the narrow form and the regression test reproduced the exact
+  `expected 500 to be 503` defect; union membership mechanically verified
+  end-to-end (error envelope shape, requestId format, details optionality,
+  zod safeParse serializer); OpenAPI golden correctly became `anyOf`.
+
+No MAJOR findings. Two new MINORs were found and swept in commit
+`swept MINOR round-2` (N1: intermediate-design text claiming the route
+"declares ONLY its 200 body" — false under the shipped union — corrected in
+readiness.test.ts and this task's 01-semantics authority doc; N2: the
+full-catalogue pinning claim made literally true — direct
+redis/deadline_scanner RECOVERED assertions and full state/level on the
+hung-deadline test added — and the pinning comment now names
+`docs/operations/active-alerting.md`).
+
+**Round-2 verdict line: VERDICT: 0_MAJOR.**

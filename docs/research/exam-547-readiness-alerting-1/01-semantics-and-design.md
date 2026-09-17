@@ -85,9 +85,10 @@ GET /api/ready
   tested). One deliberate exception (adversarial-review F3): with
   `REDIS_MODE=required` and Redis unusable, the limiter fails closed BEFORE the
   handler and the answer is the standard 503 `RATE_LIMIT_UNAVAILABLE` envelope —
-  same gate direction (503 = not ready). The route therefore schema-declares
-  ONLY its 200 body: a second 503 schema would serialize-reject that envelope
-  and mask the outage as a 500 (regression-pinned in readiness.test.ts).
+  same gate direction (503 = not ready). The route's 503 schema is therefore a
+  UNION (gate body ∪ `ErrorResponseSchema`): a narrow 503 schema would
+  serialize-reject that envelope and mask the outage as a 500
+  (regression-pinned in readiness.test.ts).
 - Liveness `/api/health` remains untouched.
 
 ### Public endpoint abuse audit (brief §10)

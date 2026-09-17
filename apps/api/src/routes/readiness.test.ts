@@ -158,10 +158,11 @@ describe("readiness gate × REDIS_MODE=required, Redis unusable (limiter fail-cl
 
     try {
       const res = await app.inject({ method: "GET", url: "/api/ready" });
-      // 503, never a 500: the route deliberately declares ONLY its 200 body
-      // schema, so the limiter's fail-closed error envelope passes the error
-      // pipeline untouched (a second 503 schema would serialize-reject the
-      // envelope and mask the outage as FST_ERR_RESPONSE_SERIALIZATION/500).
+      // 503, never a 500: the route's 503 schema is a UNION (gate body ∪
+      // error envelope, apiSurface.ts) so the limiter's fail-closed answer
+      // serializes truthfully. Regression: with the old narrow
+      // `503: readyResponseSchema`, this request came back 500
+      // FST_ERR_RESPONSE_SERIALIZATION — masking the outage class.
       expect(res.statusCode).toBe(503);
       const body = res.json();
       expect(body.status).toBeUndefined();

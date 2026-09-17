@@ -240,7 +240,7 @@ import {
 
 /**
  * F1 (adversarial review): the alert-emission glue itself. The catalogue in
- * 03-alert-contract.md — event / component / state / level per fact, the
+ * docs/operations/active-alerting.md — event / component / state / level per fact, the
  * tracker wiring (no swapped or inverted legs), and the bounded transition
  * behavior — is pinned HERE, not just the classifier inputs.
  */
@@ -393,8 +393,12 @@ describe("evaluateOperabilityTick — the alert catalogue, wired end to end", ()
     });
     const alerts = evaluateOperabilityTick(input, trackers);
     expect(alerts).toHaveLength(1);
-    expect(alerts[0]!.component).toBe("deadline_scanner");
-    expect(alerts[0]!.event).toBe("operability.background_loop");
+    expect(alerts[0]).toMatchObject({
+      event: "operability.background_loop",
+      component: "deadline_scanner",
+      state: "stalled",
+      level: "error",
+    });
   });
 
   it("S4: repeated STALLED evaluations never re-emit (no storm); recovery emits exactly one recovered", () => {
@@ -421,6 +425,47 @@ describe("evaluateOperabilityTick — the alert catalogue, wired end to end", ()
       level: "info",
     });
     expect(evaluateOperabilityTick(healthyInput, trackers)).toEqual([]);
+  });
+
+  it("redis + deadline_scanner recovery legs emit their own recovered events (no shared shortcut)", () => {
+    const trackers = makeTrackers();
+    trackers.redis(true);
+    trackers.deadline_scanner(true);
+
+    // One evaluation over a fully-healthy required-mode snapshot settles
+    // BOTH pending recoveries at once, each with its own
+    // event/component/state/level — and the next is silent. (The snapshot
+    // must carry redis:true: with redis:null the redis tracker is never
+    // consulted, which is exactly the optional-mode contract.)
+    const recoveries = evaluateOperabilityTick(
+      snapshotInput({
+        readiness: {
+          ready: true,
+          database: true,
+          redis: true,
+          failedComponent: null,
+        },
+      }),
+      trackers,
+    );
+    expect(recoveries).toHaveLength(2);
+    expect(recoveries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "operability.readiness",
+          component: "redis",
+          state: "recovered",
+          level: "info",
+        }),
+        expect.objectContaining({
+          event: "operability.background_loop",
+          component: "deadline_scanner",
+          state: "recovered",
+          level: "info",
+        }),
+      ]),
+    );
+    expect(evaluateOperabilityTick(snapshotInput(), trackers)).toEqual([]);
   });
 
   it("both loops stalled at once → two independent alerts (per-fact bounding)", () => {
