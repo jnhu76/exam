@@ -232,6 +232,18 @@ docker compose --env-file .env.deploy logs --tail=50 -f app
 #    the first organization to be bootstrapped (step 7).
 docker compose --env-file .env.deploy ps
 # Expected: app (healthy), db (healthy)
+#
+# Health layers (#547) — read them separately:
+#   /api/health = LIVENESS (process responsive; stays 200 through DB loss).
+#   /api/ready  = READINESS (the app healthcheck's API leg; 503 when a
+#                 mandatory dependency — PostgreSQL, or Redis when
+#                 REDIS_MODE=required — is unusable).
+# `app (unhealthy)` therefore means the deployment readiness state is violated
+# (typically: PostgreSQL down). It is an orchestration/visibility signal, NOT
+# a traffic block — nothing in this topology routes on Docker health status.
+# Recovery is automatic once the dependency returns (same container, no
+# restart required). For machine paging, consume the operability.* transition
+# events from the app logs — see docs/operations/README.md "Active Alerting".
 ```
 
 `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost:3000`; set

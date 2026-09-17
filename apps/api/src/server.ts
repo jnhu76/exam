@@ -15,6 +15,7 @@ import deadlineScannerPlugin from "./plugins/deadlineScanner.js";
 import clientEventRetentionPlugin from "./plugins/clientEventRetention.js";
 import emailPlugin from "./plugins/email.js";
 import emailOutboxLoopPlugin from "./plugins/emailOutboxLoop.js";
+import operabilityMonitorPlugin from "./plugins/operabilityMonitor.js";
 import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
@@ -128,6 +129,10 @@ async function main() {
   await app.register(clientEventRetentionPlugin);
   await app.register(emailPlugin);
   await app.register(emailOutboxLoopPlugin);
+  // #547: after the loops it monitors — readiness alert transitions and
+  // critical background-loop stall classification (bounded operability.* log
+  // events; no durable state, no auto-restart).
+  await app.register(operabilityMonitorPlugin);
 
   await registerOpenApiDocs(app);
 

@@ -300,6 +300,12 @@ if (!servicesBlock) {
       }
       // The app must NOT depend on redis health (Redis is optional).
       assertNoRedisDependency(appBlock, "app");
+      // #547 deployment readiness gate: the app healthcheck's API leg MUST
+      // probe /api/ready (the DB-aware mandatory-dependency gate), and MUST
+      // NOT gate on the dependency-blind /api/health liveness probe. A
+      // regression to liveness-gating recreates audit finding F3-05 (compose
+      // stays healthy through total PostgreSQL loss).
+      assertReadinessHealthcheck(appNoComments);
       // The Launchpad first-install setup token
       // MUST be forwarded to the app container (Compose uses .env for
       // interpolation only; without an environment: entry the token never
@@ -930,6 +936,38 @@ function assertRequiredPostgresPasswordDb(block) {
       "'db' service POSTGRES_PASSWORD must use Compose required-expansion " +
         "'${POSTGRES_PASSWORD:?...}' (P6-007: the production database " +
         "credential must have no functional fallback).",
+    );
+  }
+}
+
+/**
+ * #547: assert that the app healthcheck gates on the DB-aware readiness
+ * endpoint, not on liveness. The probe command must fetch /api/ready and
+ * must NOT fetch /api/health (the dependency-blind liveness probe — gating
+ * on it recreates F3-05: compose reports healthy through total DB loss).
+ * The SPA leg (fetch of '/') is expected and untouched by this check.
+ */
+function assertReadinessHealthcheck(appNoComments) {
+  const healthcheckBlock = extractTopLevelBlock(appNoComments, "healthcheck");
+  if (!healthcheckBlock) {
+    errors.push(
+      "'app' service must declare a healthcheck (#547 readiness gate).",
+    );
+    return;
+  }
+  if (!/\/api\/ready\b/.test(healthcheckBlock)) {
+    errors.push(
+      "'app' healthcheck must probe the DB-aware readiness gate '/api/ready' " +
+        "(#547) — currently it does not reference /api/ready.",
+    );
+  }
+  if (/\/api\/health\b/.test(healthcheckBlock)) {
+    errors.push(
+      "'app' healthcheck must NOT probe '/api/health' (dependency-blind " +
+        "liveness — gating deployment health on it leaves the container " +
+        "healthy through total PostgreSQL loss, audit F3-05). Liveness stays " +
+        "available as a route; it is just not the deployment gate. Use " +
+        "/api/ready (#547).",
     );
   }
 }

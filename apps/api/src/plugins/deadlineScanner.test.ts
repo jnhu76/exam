@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import {
+import Fastify from "fastify";
+import deadlineScannerPlugin, {
+  deadlineScannerMetrics,
   scanDeadlineCandidates,
   type DeadlineCandidate,
 } from "./deadlineScanner.js";
+import { classifyLoopStall } from "./operabilityMonitor.js";
 
 function makeCandidate(
   overrides: Partial<DeadlineCandidate>,
@@ -122,5 +125,94 @@ describe("deadline scanner — scanDeadlineCandidates (iterator)", () => {
 
     expect(result.submittedCount).toBe(2);
     expect(result.failedCount).toBe(0);
+  });
+});
+
+describe("deadline scanner plugin — #547 stall-fact bookkeeping", () => {
+  // Module-level singleton: reset the stall facts to fresh-process state.
+  function resetStallFacts() {
+    deadlineScannerMetrics.startedAt = null;
+    deadlineScannerMetrics.lastStartedAt = null;
+    deadlineScannerMetrics.lastSettledAt = null;
+    deadlineScannerMetrics.activeSince = null;
+  }
+
+  function buildApp(db: unknown) {
+    const clock = { current: new Date("2026-09-17T08:00:00Z") };
+    const app = Fastify({ logger: false });
+    app.decorate<unknown>("db", db as never);
+    app.decorate("now", () => clock.current);
+    return { app, clock };
+  }
+
+  it("records startedAt at registration; a throwing cycle settles (settled != success)", async () => {
+    vi.useFakeTimers();
+    const { app, clock } = buildApp({
+      select: () => {
+        throw new Error("forced scan failure");
+      },
+    });
+    resetStallFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      expect(deadlineScannerMetrics.startedAt).toEqual(clock.current);
+      expect(deadlineScannerMetrics.lastSettledAt).toBeNull();
+
+      clock.current = new Date(clock.current.getTime() + 30_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(deadlineScannerMetrics.lastStartedAt).not.toBeNull();
+      expect(deadlineScannerMetrics.lastSettledAt?.getTime()).toBe(
+        clock.current.getTime(),
+      );
+      expect(deadlineScannerMetrics.activeSince).toBeNull();
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a hung cycle holds activeSince and skips later ticks — classifier reads STALLED (B2)", async () => {
+    vi.useFakeTimers();
+    // Deferred hang: teardown rejects it so the in-flight cycle settles
+    // and the plugin's awaited onClose can complete (no dangling close).
+    let releaseHang: (err: Error) => void = () => {};
+    const hang = new Promise<never>((_, reject) => {
+      releaseHang = reject;
+    });
+    const { app, clock } = buildApp({
+      select: () => ({ from: () => hang }),
+    });
+    resetStallFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      clock.current = new Date(clock.current.getTime() + 30_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const hangStart = deadlineScannerMetrics.lastStartedAt;
+      expect(hangStart).not.toBeNull();
+      expect(deadlineScannerMetrics.activeSince).toEqual(hangStart);
+
+      clock.current = new Date(clock.current.getTime() + 10 * 30_000);
+      await vi.advanceTimersByTimeAsync(10 * 30_000);
+      expect(deadlineScannerMetrics.lastStartedAt).toEqual(hangStart);
+      expect(deadlineScannerMetrics.lastSettledAt).toBeNull();
+
+      expect(
+        classifyLoopStall(
+          deadlineScannerMetrics,
+          30_000,
+          new Date(hangStart!.getTime() + 4 * 30_000),
+        ),
+      ).toBe("stalled");
+    } finally {
+      releaseHang(new Error("test teardown"));
+      await app.close();
+      vi.useRealTimers();
+    }
+    expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
+    expect(deadlineScannerMetrics.activeSince).toBeNull();
   });
 });

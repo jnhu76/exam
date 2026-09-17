@@ -46,8 +46,17 @@ export interface ScanResult {
 /**
  * In-memory metrics for the heartbeat scanner, updated after each scan cycle.
  * These are single-instance counters reset on server restart.
+ *
+ * #547 stall facts: `lastSettledAt` is the STALL AUTHORITY (settled = the
+ * tick body finished, success OR error — a cycle failing loudly every
+ * interval is NOT stalled). `lastScanAt` keeps its existing contract (the
+ * tick's operation `now`, set after the disruption leg) for diagnostics.
  */
 export const heartbeatMetrics = {
+  startedAt: null as Date | null,
+  lastStartedAt: null as Date | null,
+  lastSettledAt: null as Date | null,
+  activeSince: null as Date | null,
   lastScanAt: null as Date | null,
   disruptedCount: 0,
   systemIncidentsCreated: 0,
@@ -291,11 +300,19 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
     config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS;
   const heartbeatTimeoutSeconds = config.heartbeat.heartbeatTimeoutSeconds;
 
+  // #547: WARMING grace origin — recorded once, at registration.
+  heartbeatMetrics.startedAt = fastify.now();
+
   let activeScan: Promise<void> | null = null;
   let closing = false;
   const interval = setInterval(() => {
     if (closing || activeScan) return;
     activeScan = (async () => {
+      // #547 stall facts: record the in-flight window; settle (success or
+      // error) clears activeSince and stamps lastSettledAt in .finally.
+      const startedAt = fastify.now();
+      heartbeatMetrics.lastStartedAt = startedAt;
+      heartbeatMetrics.activeSince = startedAt;
       try {
         // ADR-006: one operation now per tick, from the time authority.
         const tickNow = fastify.now();
@@ -347,6 +364,8 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
       }
     })().finally(() => {
       activeScan = null;
+      heartbeatMetrics.activeSince = null;
+      heartbeatMetrics.lastSettledAt = fastify.now();
     });
   }, scanIntervalMs);
   interval.unref();

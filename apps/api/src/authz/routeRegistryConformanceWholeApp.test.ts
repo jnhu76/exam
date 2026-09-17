@@ -323,6 +323,11 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
       // standalone server.ts registration into the apiSurface composition,
       // so the whole-app composition now captures it like the runtime does.
       ["GET", "/api/health"],
+      // #547: GET /api/ready (deployment readiness gate) — public by design:
+      // the Compose healthcheck cannot hold credentials, and the body
+      // intentionally discloses nothing beyond ready/not_ready. It answers
+      // the MANDATORY-dependency gate only (no capability semantics).
+      ["GET", "/api/ready"],
       ["POST", "/api/auth/login"],
       ["POST", "/api/auth/logout"],
       ["POST", "/api/auth/register"],
@@ -364,7 +369,7 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 146 primary routes (126 protected + 20 non-protected)", () => {
+  it("the full composition reconciles to 147 primary routes (126 protected + 21 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
@@ -414,6 +419,8 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     // /admin/proctor/incidents assignment-filtered worklist + GET
     // /admin/incidents/:incidentId/detail assignment_scoped narrow detail,
     // both IncidentView) → 146 primary = 126 protected + 20 non-protected.
+    // #547 adds the public deployment readiness gate GET /api/ready →
+    // 147 primary = 126 protected + 21 non-protected.
     // This is a regression anchor, not a
     // hard-coded PASS: if a route is added/removed the counts move and the
     // failure message names the delta so the regression is triaged, not
@@ -423,9 +430,9 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
       "protected (capability/ownership-gated) routes",
     ).toBe(126);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
-      20,
+      21,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(146);
+    expect(capturedRoutes.length, "total primary routes").toBe(147);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {
