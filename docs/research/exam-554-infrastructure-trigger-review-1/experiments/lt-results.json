@@ -1,0 +1,54 @@
+{
+  "started": "2026-09-17T06:32:35.722Z",
+  "l1_200": {
+    "concurrency": 200,
+    "wallMs": 144.3,
+    "perTx": {
+      "n": 200,
+      "min": 24.27,
+      "p50": 96.23,
+      "p95": 139.69,
+      "max": 143.18
+    },
+    "lockWaits": "none"
+  },
+  "l2_50": {
+    "n": 50,
+    "wallMs": 1157.1,
+    "perTx": {
+      "n": 50,
+      "min": 25.44,
+      "p50": 606.59,
+      "p95": 1111.49,
+      "max": 1156.79
+    },
+    "lockWaits": "none"
+  },
+  "t1": {
+    "batches": 400,
+    "rowsTotal": 8000,
+    "wallMs": 10297,
+    "effectiveBatchesPerSec": 38.8,
+    "batchLatency": {
+      "n": 400,
+      "min": 1,
+      "p50": 2.23,
+      "p95": 4.65,
+      "max": 8.82
+    },
+    "inserted": 8000
+  },
+  "t2": {
+    "updates": 200,
+    "wallMs": 73,
+    "updatesPerSec": 2732.9,
+    "latency": {
+      "n": 200,
+      "min": 0.44,
+      "p50": 0.6,
+      "p95": 1.99,
+      "max": 2.38
+    }
+  },
+  "finished": "2026-09-17T06:32:47.412Z"
+}
