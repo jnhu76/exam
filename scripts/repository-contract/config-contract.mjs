@@ -30,7 +30,11 @@
  *     browser navigates (E2E_BASE_URL).
  *
  *   Local/WSL — run-wsl.sh binds PUBLIC_WEB_ORIGIN INSIDE launch_api to
- *     each API process's own port (serial AND per-shard; #365).
+ *     each API process's own port (serial AND per-shard; #365), and
+ *     projects that same runner-selected port onto BOTH bind-port
+ *     authorities (APP_PORT + DEV_API_PORT; #565 — e2e mode resolves the
+ *     bind as APP_PORT ?? DEV_API_PORT, so an unprojected APP_PORT lets a
+ *     developer .env / stray shell export own the shard port).
  *
  *   Test discipline — production-guard tests mutate process.env only via
  *     vi.stubEnv (unreliable manual mutation once leaked config states).
@@ -410,14 +414,19 @@ console.log("4b. Checking CI build artifact identity contract...");
 }
 console.log("   CI artifact identity check complete.");
 
-// ── 5. Local/WSL profile: launch_api binds PUBLIC_WEB_ORIGIN per port ───────
-console.log("5. Checking WSL runner public web origin contract...");
+// ── 5. Local/WSL profile: launch_api owns the per-shard port projection ────
+console.log("5. Checking WSL runner port projection contract...");
 {
-  // PUBLIC_WEB_ORIGIN must be bound INSIDE launch_api, derived from that
-  // process's port argument. A missing binding falls back to :5173; a fixed
-  // origin (e.g. :3000) fixes serial mode while parallel shards keep pointing
-  // at the wrong port (#365). Bounded textual extraction of the function
-  // body — not a shell parser.
+  // Every port authority of a WSL E2E API process must be bound INSIDE
+  // launch_api to that process's port argument, so the runner-selected port
+  // is the single source for: bind port, health probe target, and identity
+  // one-time links. A missing PUBLIC_WEB_ORIGIN binding falls back to :5173;
+  // a fixed origin (e.g. :3000) fixes serial mode while parallel shards keep
+  // pointing at the wrong port (#365). An unprojected APP_PORT is worse: e2e
+  // mode resolves the bind as APP_PORT ?? DEV_API_PORT, so a leftover
+  // developer `.env` APP_PORT (or stray shell export) binds every shard to
+  // the same port — EADDRINUSE / health-probe misalignment (#565). Bounded
+  // textual extraction of the function body — not a shell parser.
   const runWslLines = readFileSync(
     join(ROOT, "scripts/e2e/run-wsl.sh"),
     "utf-8",
@@ -428,40 +437,53 @@ console.log("5. Checking WSL runner public web origin contract...");
   if (launchStart === -1) {
     fail(
       "scripts/e2e/run-wsl.sh launch_api() not found — API launch seam " +
-        "changed; re-bind PUBLIC_WEB_ORIGIN to the per-process API port",
+        "changed; re-bind the per-process port to APP_PORT, DEV_API_PORT and " +
+        "PUBLIC_WEB_ORIGIN",
     );
   } else {
     let launchEnd = launchStart;
     while (launchEnd < runWslLines.length && runWslLines[launchEnd] !== "}") {
       launchEnd++;
     }
-    const originBindings = [];
-    for (let i = launchStart; i <= launchEnd && i < runWslLines.length; i++) {
-      if (/PUBLIC_WEB_ORIGIN\s*=/.test(runWslLines[i])) {
-        originBindings.push({ n: i + 1, line: runWslLines[i] });
-      }
-    }
-    if (originBindings.length === 0) {
-      fail(
-        "run-wsl.sh launch_api does not bind PUBLIC_WEB_ORIGIN — identity " +
-          "one-time links fall back to the dev Vite origin (:5173), where " +
-          "no E2E process listens",
-      );
-    }
-    for (const b of originBindings) {
-      if (
-        !/PUBLIC_WEB_ORIGIN\s*=\s*"http:\/\/localhost:\$\{port\}"/.test(b.line)
-      ) {
+    const launchBody = runWslLines.slice(launchStart, launchEnd + 1).join("\n");
+
+    // The runner-selected port must be the ONE port authority for the whole
+    // process: bind (APP_PORT ?? DEV_API_PORT in e2e mode) == health target
+    // == PUBLIC_WEB_ORIGIN.
+    const requiredBindings = [
+      {
+        re: /\bAPP_PORT\s*=\s*"\$\{?port\}?"/,
+        why:
+          "the e2e bind-port owner resolves APP_PORT ?? DEV_API_PORT — an " +
+          "unprojected APP_PORT lets a developer .env / stray shell export " +
+          "own the shard bind (#565)",
+      },
+      {
+        re: /\bDEV_API_PORT\s*=\s*"\$\{?port\}?"/,
+        why:
+          "DEV_API_PORT is the fallback bind authority; leaving it " +
+          "runner-unbound lets inherited values pick the port",
+      },
+      {
+        re: /PUBLIC_WEB_ORIGIN\s*=\s*"http:\/\/localhost:\$\{?port\}?"/,
+        why:
+          "identity one-time links fall back to the dev Vite origin (:5173), " +
+          "where no E2E process listens",
+      },
+    ];
+    for (const { re, why } of requiredBindings) {
+      if (!re.test(launchBody)) {
         fail(
-          `run-wsl.sh:${b.n} launch_api PUBLIC_WEB_ORIGIN must bind this API ` +
-            'process port ("http://localhost:${port}") — a fixed origin ' +
-            "leaves parallel shards pointing at the wrong port",
+          "run-wsl.sh launch_api does not bind the runner-selected shard " +
+            `port to every port authority: ${why} (required inside ` +
+            'launch_api: APP_PORT="$port", DEV_API_PORT="$port", ' +
+            'PUBLIC_WEB_ORIGIN="http://localhost:${port}").',
         );
       }
     }
   }
 }
-console.log("   WSL origin check complete.");
+console.log("   WSL port projection check complete.");
 
 // ── 6. Test discipline: production-guard tests use vi.stubEnv ───────────────
 console.log("6. Checking production-guard test env isolation...");
