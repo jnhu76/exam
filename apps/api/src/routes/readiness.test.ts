@@ -119,3 +119,57 @@ describe("readiness probe × default rate-limit policy (coexistence)", () => {
     }
   });
 });
+
+import { decorateApiRouteStubs } from "../openapi/swagger.js";
+import {
+  serializerCompiler,
+  validatorCompiler,
+} from "fastify-type-provider-zod";
+
+/**
+ * F3 (adversarial review) — REDIS_MODE=required with Redis unusable: the
+ * limiter (the /api scope's anti-abuse bound) fails closed BEFORE the route
+ * handler runs, so the wire answer is the standard 503 API error envelope,
+ * NOT the gate body. The GATE DIRECTION is unchanged (503 = not ready =
+ * unhealthy), and the redis readiness alert still fires from the monitor's
+ * internal probe. This test pins that scoping so the docs cannot overclaim
+ * the body contract.
+ */
+describe("readiness gate × REDIS_MODE=required, Redis unusable (limiter fail-closed)", () => {
+  it("answers 503 via the limiter's fail-closed envelope (handler never runs; gate direction preserved)", async () => {
+    delete process.env.RATE_LIMIT_DISABLED;
+    resetRuntimeConfigForTest();
+
+    const app = Fastify({ logger: false });
+    setupErrorHandler(app);
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    // Minimal required-mode runtime double: no client (never usable), which
+    // is exactly the condition the DelegatingRateLimitStore fail-closes on.
+    app.decorate("redisRuntime", {
+      mode: "required",
+      shouldUseRedis: () => false,
+      noteRedisCommandError: () => {},
+      client: null,
+    } as never);
+    decorateApiRouteStubs(app);
+    await app.register(apiSurfacePlugin, { prefix: "/api" });
+    await app.ready();
+
+    try {
+      const res = await app.inject({ method: "GET", url: "/api/ready" });
+      // 503, never a 500: the route deliberately declares ONLY its 200 body
+      // schema, so the limiter's fail-closed error envelope passes the error
+      // pipeline untouched (a second 503 schema would serialize-reject the
+      // envelope and mask the outage as FST_ERR_RESPONSE_SERIALIZATION/500).
+      expect(res.statusCode).toBe(503);
+      const body = res.json();
+      expect(body.status).toBeUndefined();
+      expect(body.error?.code).toBe("RATE_LIMIT_UNAVAILABLE");
+    } finally {
+      await app.close();
+      process.env.RATE_LIMIT_DISABLED = "true";
+      resetRuntimeConfigForTest();
+    }
+  });
+});

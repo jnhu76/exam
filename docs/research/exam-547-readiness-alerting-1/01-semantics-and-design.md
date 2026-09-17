@@ -1,7 +1,7 @@
 # EXAM-547-READINESS-ALERTING-1 — Semantic freeze and readiness design gate
 
 Authority for every implementation decision in this task. Baseline measurements:
-[`00-baseline.md`](00-baseline.md). Alert contract: [`03-alert-contract.md`](03-alert-contract.md).
+[`00-baseline.md`](00-baseline.md). Alert contract: canonical home [`docs/operations/active-alerting.md`](../../operations/active-alerting.md) (evidence pointer: [`03-alert-contract.md`](03-alert-contract.md)).
 
 ## 1. Frozen four-layer semantic model
 
@@ -80,8 +80,14 @@ GET /api/ready
   The SAME function feeds the readiness route, the readiness alert
   transitions, and (as the DB leg) nothing else — single derivation, no
   per-consumer logic drift.
-- Response privacy: exactly `{status}` — no dependency names beyond ready/not_ready,
-  no DB error text, no latency, no topology, no stack traces (brief §25; tested).
+- Response privacy: when the HANDLER runs, exactly `{status}` — no dependency
+  names, no DB error text, no latency, no topology, no stack traces (brief §25;
+  tested). One deliberate exception (adversarial-review F3): with
+  `REDIS_MODE=required` and Redis unusable, the limiter fails closed BEFORE the
+  handler and the answer is the standard 503 `RATE_LIMIT_UNAVAILABLE` envelope —
+  same gate direction (503 = not ready). The route therefore schema-declares
+  ONLY its 200 body: a second 503 schema would serialize-reject that envelope
+  and mask the outage as a 500 (regression-pinned in readiness.test.ts).
 - Liveness `/api/health` remains untouched.
 
 ### Public endpoint abuse audit (brief §10)

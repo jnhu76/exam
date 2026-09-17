@@ -24,14 +24,13 @@
 #     - SAME app container (no restart required);
 #     - exactly ONE `operability.readiness` recovered transition event.
 #
-#   D4 loop stall alert is wired (bounded observation of the monitor's own
-#      cadence via the structured log — the deterministic classification
-#      itself is unit-tested; this leg only proves the monitor runs and logs
-#      in the real topology): a `operability.background_loop` absence is NOT
-#      a failure here (no stall is injected at deployment level); instead we
-#      assert the operability monitor is alive by the absence of monitor
-#      errors and — positively — that D2/D3 produced readiness transitions,
-#      which are emitted by the same monitor tick.
+#   D4 monitor wiring evidence (readiness leg only): the D2/D3 transition
+#      events are emitted by the operability monitor's OWN tick, so their
+#      presence + zero monitor self-errors prove the monitor runs and logs
+#      in the real topology. Loop-stall ALERTS are deliberately NOT injected
+#      here (no hang is forced on a live deployment); their emission glue is
+#      pinned by unit tests on evaluateOperabilityTick (F1), and the stall
+#      classification by the fake-timer scanner tests.
 #
 # Usage: ./readiness-gate.sh <run-number>
 set -euo pipefail
@@ -216,7 +215,7 @@ fi
 echo "  PASS: exactly one operability.readiness recovered transition."
 
 # ── D4: monitor liveness in the real topology ─────────────────────────────
-echo "--- D4: operability monitor wiring ---"
+echo "--- D4: monitor wiring evidence (readiness transitions) ---"
 # The readiness transitions above were EMITTED by the monitor's own tick —
 # their presence is the positive proof the monitor runs and logs in the real
 # topology. Additionally, the monitor must not be erroring on its own cadence.

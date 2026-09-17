@@ -232,3 +232,237 @@ describe("createOperabilityTransitionTracker — bounded transition alerts", () 
     expect(tracker(true)).toBe("raise_failure");
   });
 });
+
+import {
+  evaluateOperabilityTick,
+  type OperabilitySnapshotInput,
+} from "./operabilityMonitor.js";
+
+/**
+ * F1 (adversarial review): the alert-emission glue itself. The catalogue in
+ * 03-alert-contract.md — event / component / state / level per fact, the
+ * tracker wiring (no swapped or inverted legs), and the bounded transition
+ * behavior — is pinned HERE, not just the classifier inputs.
+ */
+
+function snapshotInput(
+  partial: Partial<OperabilitySnapshotInput> = {},
+): OperabilitySnapshotInput {
+  const healthyActivity = {
+    startedAt: T0,
+    lastStartedAt: ms(-1_000),
+    lastSettledAt: ms(-500),
+    activeSince: null,
+  };
+  return {
+    readiness: {
+      ready: true,
+      database: true,
+      redis: null,
+      failedComponent: null,
+    },
+    heartbeat: { ...healthyActivity },
+    heartbeatIntervalMs: 30_000,
+    deadline: { ...healthyActivity },
+    deadlineIntervalMs: 30_000,
+    now: ms(0),
+    ...partial,
+  };
+}
+
+function makeTrackers() {
+  return {
+    database: createOperabilityTransitionTracker(),
+    redis: createOperabilityTransitionTracker(),
+    heartbeat: createOperabilityTransitionTracker(),
+    deadline_scanner: createOperabilityTransitionTracker(),
+  };
+}
+
+describe("evaluateOperabilityTick — the alert catalogue, wired end to end", () => {
+  it("healthy everything → no alerts at all", () => {
+    const trackers = makeTrackers();
+    const alerts = evaluateOperabilityTick(snapshotInput(), trackers);
+    expect(alerts).toEqual([]);
+  });
+
+  it("database loss → exactly one operability.readiness unavailable ERROR with the documented fields", () => {
+    const trackers = makeTrackers();
+    const input = snapshotInput({
+      readiness: {
+        ready: false,
+        database: false,
+        redis: null,
+        failedComponent: "database",
+      },
+    });
+    const alerts = evaluateOperabilityTick(input, trackers);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      event: "operability.readiness",
+      component: "database",
+      state: "unavailable",
+      level: "error",
+    });
+  });
+
+  it("database recovery → exactly one operability.readiness recovered INFO", () => {
+    const trackers = makeTrackers();
+    trackers.database(true); // outage already raised
+    const input = snapshotInput({
+      readiness: {
+        ready: true,
+        database: true,
+        redis: null,
+        failedComponent: null,
+      },
+    });
+    const alerts = evaluateOperabilityTick(input, trackers);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      event: "operability.readiness",
+      component: "database",
+      state: "recovered",
+      level: "info",
+    });
+  });
+
+  it("required-mode Redis loss emits its OWN component — not folded into database", () => {
+    const trackers = makeTrackers();
+    const input = snapshotInput({
+      readiness: {
+        ready: false,
+        database: true,
+        redis: false,
+        failedComponent: "redis",
+      },
+    });
+    const alerts = evaluateOperabilityTick(input, trackers);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      event: "operability.readiness",
+      component: "redis",
+      state: "unavailable",
+      level: "error",
+    });
+  });
+
+  it("redis optional (redis: null) never emits a redis alert", () => {
+    const trackers = makeTrackers();
+    const input = snapshotInput({
+      readiness: {
+        ready: false,
+        database: false,
+        redis: null,
+        failedComponent: "database",
+      },
+    });
+    const alerts = evaluateOperabilityTick(input, trackers);
+    expect(alerts.map((a) => a.component)).toEqual(["database"]);
+  });
+
+  it("hung heartbeat (S3) → operability.background_loop heartbeat STALLED error; wiring is not swapped", () => {
+    const trackers = makeTrackers();
+    const input = snapshotInput({
+      heartbeat: {
+        startedAt: T0,
+        lastStartedAt: ms(-300_000),
+        lastSettledAt: ms(-310_000),
+        activeSince: ms(-300_000), // hung for 10 intervals
+      },
+    });
+    const alerts = evaluateOperabilityTick(input, trackers);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      event: "operability.background_loop",
+      component: "heartbeat",
+      state: "stalled",
+      level: "error",
+    });
+  });
+
+  it("hung deadline scanner → component deadline_scanner (not heartbeat)", () => {
+    const trackers = makeTrackers();
+    const input = snapshotInput({
+      deadline: {
+        startedAt: T0,
+        lastStartedAt: ms(-300_000),
+        lastSettledAt: ms(-310_000),
+        activeSince: ms(-300_000),
+      },
+    });
+    const alerts = evaluateOperabilityTick(input, trackers);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.component).toBe("deadline_scanner");
+    expect(alerts[0]!.event).toBe("operability.background_loop");
+  });
+
+  it("S4: repeated STALLED evaluations never re-emit (no storm); recovery emits exactly one recovered", () => {
+    const trackers = makeTrackers();
+    const stalledInput = snapshotInput({
+      heartbeat: {
+        startedAt: T0,
+        lastStartedAt: ms(-300_000),
+        lastSettledAt: ms(-310_000),
+        activeSince: ms(-300_000),
+      },
+    });
+    expect(evaluateOperabilityTick(stalledInput, trackers)).toHaveLength(1);
+    expect(evaluateOperabilityTick(stalledInput, trackers)).toEqual([]);
+    expect(evaluateOperabilityTick(stalledInput, trackers)).toEqual([]);
+
+    const healthyInput = snapshotInput();
+    const recovery = evaluateOperabilityTick(healthyInput, trackers);
+    expect(recovery).toHaveLength(1);
+    expect(recovery[0]).toMatchObject({
+      event: "operability.background_loop",
+      component: "heartbeat",
+      state: "recovered",
+      level: "info",
+    });
+    expect(evaluateOperabilityTick(healthyInput, trackers)).toEqual([]);
+  });
+
+  it("both loops stalled at once → two independent alerts (per-fact bounding)", () => {
+    const trackers = makeTrackers();
+    const stalled = {
+      startedAt: T0,
+      lastStartedAt: ms(-300_000),
+      lastSettledAt: ms(-310_000),
+      activeSince: ms(-300_000),
+    };
+    const alerts = evaluateOperabilityTick(
+      snapshotInput({ heartbeat: { ...stalled }, deadline: { ...stalled } }),
+      trackers,
+    );
+    expect(alerts.map((a) => a.component).sort()).toEqual([
+      "deadline_scanner",
+      "heartbeat",
+    ]);
+  });
+
+  it("DB loss AND a stalled loop at once → readiness + loop alerts together (independent facts)", () => {
+    const trackers = makeTrackers();
+    const input = snapshotInput({
+      readiness: {
+        ready: false,
+        database: false,
+        redis: null,
+        failedComponent: "database",
+      },
+      heartbeat: {
+        startedAt: T0,
+        lastStartedAt: ms(-300_000),
+        lastSettledAt: ms(-310_000),
+        activeSince: ms(-300_000),
+      },
+    });
+    const alerts = evaluateOperabilityTick(input, trackers);
+    expect(
+      alerts.map((a) => `${a.event}/${a.component}/${a.state}`).sort(),
+    ).toEqual([
+      "operability.background_loop/heartbeat/stalled",
+      "operability.readiness/database/unavailable",
+    ]);
+  });
+});

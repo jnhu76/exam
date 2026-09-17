@@ -65,7 +65,7 @@ Four distinct layers — do not conflate them (#547):
 | Endpoint | Auth | Layer | Purpose |
 | --- | --- | --- | --- |
 | `GET /api/health` | none | Liveness | Process/event-loop responsive. Dependency-blind BY DESIGN: stays 200 through DB loss. |
-| `GET /api/ready` | none | Readiness | Deployment gate: mandatory serving dependencies (PostgreSQL; Redis only when `REDIS_MODE=required`) currently usable. `200 {"status":"ready"}` / `503 {"status":"not_ready"}` — nothing else is disclosed. |
+| `GET /api/ready` | none | Readiness | Deployment gate: mandatory serving dependencies (PostgreSQL; Redis only when `REDIS_MODE=required`) currently usable. Handler body: `200 {"status":"ready"}` / `503 {"status":"not_ready"}` — nothing else is disclosed. One deliberate exception: with `REDIS_MODE=required` and Redis unusable, the rate limiter fails closed first and the answer is the standard 503 `RATE_LIMIT_UNAVAILABLE` error envelope (same gate direction — 503 = not ready). |
 | `GET /api/system/health` | admin | Diagnostics | DB ping latency, CPU, memory + derived status (CPU/memory thresholds only) |
 | `GET /api/system/diagnostics` | admin | Diagnostics | Operational: DB latency, Redis, scanner state + stall classification, outbox, integrity |
 | `GET /api/system/info` | none | — | Version + uptime |
@@ -82,7 +82,7 @@ direct-LAN topology nothing routes on Docker health status.
 The app emits BOUNDED structured transition events on critical operational
 conditions, so a machine can page without anyone opening the diagnostics
 page. Stable fields (stdout pino JSON; full contract:
-[`research/exam-547-readiness-alerting-1/03-alert-contract.md`](../research/exam-547-readiness-alerting-1/03-alert-contract.md)):
+[`operations/active-alerting.md`](active-alerting.md) — the canonical contract):
 
 ```text
 event: "operability.readiness"       component: "database"|"redis"          state: "unavailable"|"recovered"

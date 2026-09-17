@@ -516,18 +516,22 @@ in `/api/system/diagnostics`.
 
 ## 7. Verify health
 
-The implemented MVP separates **liveness** from **readiness**:
+The implemented MVP separates **liveness**, **readiness**, and
+**diagnostics** (#547 — the same table lives in
+[`docs/operations/README.md`](../operations/README.md)):
 
-| Endpoint | Auth | Purpose | What it checks |
+| Endpoint | Auth | Layer | What it checks |
 |---|---|---|---|
-| `GET /api/health` | none | Liveness probe (Compose healthcheck, dependency ordering) | process alive only |
-| `GET /api/system/health` | admin (`SystemHealthView`) | Readiness / DB availability | DB ping latency + CPU/memory |
-| `GET /api/system/diagnostics` | admin (`SystemDiagnosticsView`) | Operational diagnostics | DB latency, Redis (if configured), scanner metrics, outbox loop heartbeat, outbox backlog, oldest pending age, dead rows |
-| `GET /api/system/info` | none | Version + uptime | n/a |
-| `GET /api/system/public-config` | none | Public config (deployment mode, feature flags) | n/a |
+| `GET /api/health` | none | Liveness | process alive only — dependency-blind BY DESIGN |
+| `GET /api/ready` | none | Readiness (the Compose gate) | mandatory serving dependencies (PostgreSQL; Redis when `REDIS_MODE=required`) — `200 ready` / `503 not_ready` |
+| `GET /api/system/health` | admin (`SystemHealthView`) | Diagnostics | DB ping latency + CPU/memory |
+| `GET /api/system/diagnostics` | admin (`SystemDiagnosticsView`) | Diagnostics | DB latency, Redis (if configured), scanner metrics + stall state, outbox loop heartbeat, outbox backlog, oldest pending age, dead rows |
+| `GET /api/system/info` | none | — | Version + uptime |
+| `GET /api/system/public-config` | none | — | Public config (deployment mode, feature flags) |
 
-The Compose `app` healthcheck polls `GET /api/health` every 30s (5s timeout,
-3 retries, 30s start period). The healthcheck has two roles:
+The Compose `app` healthcheck polls `GET /api/ready` (plus the SPA root)
+every 30s (5s timeout, 3 retries, 30s start period). The healthcheck has
+two roles:
 
 ```text
 healthcheck:

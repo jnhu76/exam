@@ -229,7 +229,7 @@ export interface OperabilitySnapshotInput {
   now: Date;
 }
 
-/** Emitted alert fields — the external hook contract (03-alert-contract.md). */
+/** Emitted alert fields — the external hook contract (docs/operations/active-alerting.md). */
 export interface OperabilityAlert {
   event: "operability.readiness" | "operability.background_loop";
   component: "database" | "redis" | "heartbeat" | "deadline_scanner";
