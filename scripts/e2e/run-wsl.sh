@@ -187,7 +187,11 @@ launch_api() {
   # 身份一次性链接由本 API 进程按 PUBLIC_WEB_ORIGIN 生成绝对 URL，浏览器
   # 随后直接 goto 该 URL；origin 必须是本进程端口（SPA 由 API 进程自己服务），
   # 缺省时 runtime config 会回退到 Vite dev origin(:5173)，那里无进程监听。
-  DEV_API_PORT="$port" TEST_DATABASE_URL="$db_url" \
+  # APP_PORT 必须显式跟随 shard 端口：e2e 模式的 bind-port owner 是
+  # APP_PORT ?? DEV_API_PORT（runtimeConfig.resolveApiBindPort），而 dotenv
+  # 加载的根 .env 不覆盖已存在的 process.env——deploy 风格 .env 遗留的
+  # APP_PORT=3000 会让所有 shard 绑同一端口（EADDRINUSE / 健康检查错位）。
+  DEV_API_PORT="$port" APP_PORT="$port" TEST_DATABASE_URL="$db_url" \
     PUBLIC_WEB_ORIGIN="http://localhost:${port}" \
     APP_MODE=e2e RATE_LIMIT_DISABLED=1 \
     HEARTBEAT_TIMEOUT_MS=15000 HEARTBEAT_SCAN_INTERVAL_MS=5000 DEADLINE_SCAN_INTERVAL_MS=5000 \
