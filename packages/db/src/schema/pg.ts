@@ -2500,6 +2500,12 @@ export const attemptCommandReceipts = pgTable(
  *   admitted  = admitted_at NOT NULL AND consumed_at IS NULL
  *   consumed  = consumed_at NOT NULL (attempt started; consumed_attempt_id set)
  *
+ * admitted_at is the MATERIALIZED admission fact — written once by the CAS in
+ * reconcileAdmission on the candidate's first authoritative interaction after
+ * their eligibility boundary, NOT the theoretical release instant (#549:
+ * disconnected candidates legitimately keep admitted_at NULL until they poll
+ * or start; nothing may interpret it as an SLA/ordering/deadline authority).
+ *
  * INVARIANT: at most one ACTIVE membership per (organization, exam,
  * candidate) — the partial unique index carries it at the DB, not in
  * application code. Re-joining after consumption (retake flow) inserts a

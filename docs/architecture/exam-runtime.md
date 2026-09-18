@@ -278,7 +278,7 @@ type AttemptStatus =
 
 - **唯一活跃成员**：partial unique index 保证（org, exam, candidate) 至多一条活跃行；重考重新 join 插入新行。
 - **批次策略**：anchor = 全部 membership 行最早 `joined_at`（已消费行保留 epoch，不随活跃集合收缩而前移）。候选人的 schedule ordinal 由 `(joined_at, id)` 在**全部行**上推导，release batch = `ceil(ordinal/batchSize)`；UI position 由**活跃行**上推导，可以因他人 start 而提前，但 release entitlement 不变。`releasedBatches = floor(elapsed/interval)+1`，`releasedCount = releasedBatches × batchSize`。interval 单位为秒；首批在 anchor 时刻即放行；批不满也按时放行。策略源=已发布考试的冻结 `controlFlags`（draft-only 编辑权威，发布后不可变）。
-- **需求驱动**：join/status/start 三条 canonical 路径上按需 reconcile（CAS 写 `admitted_at`，幂等），**无后台 scheduler/worker**。
+- **需求驱动**：join/status/start 三条 canonical 路径上按需 reconcile（CAS 写 `admitted_at`，幂等），**无后台 scheduler/worker**。批次时刻是**资格边界**（eligibility boundary），不是服务器自主物化的承诺：已断线考生的 `admitted_at` 可以保持 NULL，直到该考生的下一次权威交互（queue 轮询或 start）按 durable 事实重算资格并补物化。`admitted_at` 记录的是物化/对账时间（≈ 首次权威交互时刻），不是理论放行时刻，也不是 SLA/排序/截止权威。停轮询期间积压的资格会在恢复轮询时一次性收敛（需求触发的 resume burst）——这是准入容量契约的组成部分，由 #550 的 admission workload 以真实 HTTP 栈复验。
 - **原子边界**：start gate 在 `startOrRestoreAttempt` 事务内、Enrollment 锁之后执行；`admitted → consume + attempt create` 同事务提交，无 crash window、无双 start 路径。resume/restore 不查准入（准入只管 START，不管重入）。
 - **懒 join 已废除**：start 不再隐式入队（旧 gate 的 guard 副作用）；join 是显式 command（`POST /attempts/:examId/queue`）。
 - **运维面**：`GET /admin/exams/:examId/admissions`（ExamView, exam scope, admin_only）只读可见；无 manual admit 产品语义，准入由冻结策略自动执行（无需 audit action；行本身即 domain history）。
