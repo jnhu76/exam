@@ -720,7 +720,10 @@ export function loadRuntimeConfig(
       exposeSuperAdmin: false,
     },
     rateLimit: {
-      enabled: mode !== "e2e" && !s.app.RATE_LIMIT_DISABLED,
+      // Production rate limiting cannot be globally disabled by env.
+      // RATE_LIMIT_DISABLED is a non-production dev/test control only.
+      enabled:
+        mode === "production" || (mode !== "e2e" && !s.app.RATE_LIMIT_DISABLED),
       max: s.app.RATE_LIMIT_MAX,
       timeWindow: s.app.RATE_LIMIT_WINDOW_MS,
     },

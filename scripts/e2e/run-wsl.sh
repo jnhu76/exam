@@ -11,7 +11,6 @@
 #
 # 关键：dev server 必须带 E2E 专用 env，与 docker-compose.test.yml 对齐：
 #   - APP_MODE=e2e              选择测试数据库路径 + 自动关闭限流（与 CI 一致）
-#   - RATE_LIMIT_DISABLED=1     E2E 连续登录/请求不能被限流（双保险，同 CI）
 #   - HEARTBEAT_TIMEOUT_MS=15000    disconnect-restore spec 依赖 15s 超时
 #   - HEARTBEAT_SCAN_INTERVAL_MS=5000 / DEADLINE_SCAN_INTERVAL_MS=5000
 # 缺这些 env，disconnect/restore 类 spec 会因 scanner 时序不符而 timeout。
@@ -153,7 +152,6 @@ export COMPOSE_DISABLE_ENV_FILE=1
 E2E_DB_NAME="exam_e2e"
 export APP_MODE=e2e
 export TEST_DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT}/${E2E_DB_NAME}"
-export RATE_LIMIT_DISABLED=1
 export HEARTBEAT_TIMEOUT_MS=15000
 export HEARTBEAT_SCAN_INTERVAL_MS=5000
 export DEADLINE_SCAN_INTERVAL_MS=5000
@@ -230,7 +228,7 @@ launch_api() {
   # APP_PORT=3000 会让所有 shard 绑同一端口（EADDRINUSE / 健康检查错位）。
   DEV_API_PORT="$port" APP_PORT="$port" TEST_DATABASE_URL="$db_url" \
     PUBLIC_WEB_ORIGIN="http://localhost:${port}" \
-    APP_MODE=e2e RATE_LIMIT_DISABLED=1 \
+    APP_MODE=e2e \
     HEARTBEAT_TIMEOUT_MS=15000 HEARTBEAT_SCAN_INTERVAL_MS=5000 DEADLINE_SCAN_INTERVAL_MS=5000 \
     setsid "${cmd[@]}" >"$logfile" 2>&1 &
   LAUNCHED_PID=$!

@@ -508,14 +508,43 @@ test("run-wsl.sh: pins APP_MODE=e2e and removes dev DB URL branches before launc
   );
   assert.match(
     src,
-    /launch_api\(\) \{\n(?:[^\n]*\n)*?\s*APP_MODE=e2e RATE_LIMIT_DISABLED=1/,
-    "launch_api must re-assert APP_MODE=e2e (+ RATE_LIMIT_DISABLED=1) on every server process",
+    /launch_api\(\) \{\n(?:[^\n]*\n)*?\s*APP_MODE=e2e/,
+    "launch_api must re-assert APP_MODE=e2e on every server process",
+  );
+  // #567: RATE_LIMIT_DISABLED is a non-production dev/test control; APP_MODE=e2e
+  // is the sole E2E rate-limit bypass authority — no redundant disable flag.
+  assert.doesNotMatch(
+    launchApiBody(src),
+    /RATE_LIMIT_DISABLED/,
+    "launch_api must NOT contain a redundant RATE_LIMIT_DISABLED projection (#567)",
   );
 });
 
 // Position of `launch_api() {` within src, shared by the assertions above.
 function launchApiDefIdx(src) {
   return src.indexOf("launch_api() {");
+}
+
+// Extract the body of launch_api() for textual assertions (#567).
+function launchApiBody(src) {
+  const start = launchApiDefIdx(src);
+  if (start === -1) return "";
+  const lines = src.split("\n");
+  let i = 0;
+  // Find the opening line
+  for (; i < lines.length; i++) {
+    if (lines[i].includes("launch_api() {")) break;
+  }
+  // Collect until closing brace at column 0
+  let depth = 0;
+  const body = [];
+  for (; i < lines.length; i++) {
+    body.push(lines[i]);
+    depth += (lines[i].match(/{/g) || []).length;
+    depth -= (lines[i].match(/}/g) || []).length;
+    if (depth <= 0) break;
+  }
+  return body.join("\n");
 }
 
 // ── #571: WSL runner must own dev-compose interpolation ──────────────────────

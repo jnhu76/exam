@@ -35,9 +35,7 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       # E2E uses the canonical seed (baseline + demo: candidate1..4).
       RUN_SEED: "e2e"
-      # APP_MODE=e2e disables the rate-limit plugin in runtimeConfig, but we
-      # also keep these env vars for parity with CI E2E.
-      RATE_LIMIT_DISABLED: "1"
+      # APP_MODE=e2e disables the rate-limit plugin in runtimeConfig.
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
       # Fast background scanners for E2E only (P2A-J6 abnormal-path specs).
