@@ -517,3 +517,234 @@ test("run-wsl.sh: pins APP_MODE=e2e and removes dev DB URL branches before launc
 function launchApiDefIdx(src) {
   return src.indexOf("launch_api() {");
 }
+
+// ── #571: WSL runner must own dev-compose interpolation ──────────────────────
+// The managed WSL runner and docker-compose.dev.yml must derive topology from
+// the SAME authority. Without this, Docker Compose reads the root `.env` and
+// interpolates different DB_HOST_PORT/REDIS_HOST_PORT/TZ/APP_TIMEZONE values
+// than the runner uses for TEST_DATABASE_URL — a split-authority bug.
+
+// A. COMPOSE_DISABLE_ENV_FILE=1 must be exported before the first compose call.
+// This prevents Docker Compose from importing the developer root `.env`.
+test("run-wsl.sh: COMPOSE_DISABLE_ENV_FILE=1 exported before first compose call", () => {
+  const src = readFileSync(RUN_WSL_SH, "utf8");
+  const lines = src.split("\n");
+
+  // Find the COMPOSE_DISABLE_ENV_FILE export
+  const disableIdx = lines.findIndex((l) =>
+    l.includes("export COMPOSE_DISABLE_ENV_FILE=1"),
+  );
+  assert.ok(disableIdx >= 0, "COMPOSE_DISABLE_ENV_FILE=1 must be exported");
+
+  // Find the first docker compose invocation (startup)
+  const firstComposeIdx = lines.findIndex((l) =>
+    l.includes('docker compose -f "$DEV_COMPOSE"'),
+  );
+  assert.ok(firstComposeIdx >= 0, "docker compose invocation must exist");
+
+  assert.ok(
+    disableIdx < firstComposeIdx,
+    "COMPOSE_DISABLE_ENV_FILE=1 must be exported before the first compose call; " +
+      "otherwise Compose reads the root .env and produces split authority",
+  );
+});
+
+// B. DB_HOST_PORT must be frozen once before TEST_DATABASE_URL and
+// DB_BASE_URL_NO_NAME derive from it. The freeze must use the single-frozen
+// value, not re-derive with `${DB_HOST_PORT:-5432}`.
+test("run-wsl.sh: DB_HOST_PORT frozen before TEST_DATABASE_URL and DB_BASE_URL_NO_NAME", () => {
+  const src = readFileSync(RUN_WSL_SH, "utf8");
+  const lines = src.split("\n");
+
+  // Freeze: DB_HOST_PORT="${DB_HOST_PORT:-5432}"
+  const freezeIdx = lines.findIndex((l) =>
+    l.includes('DB_HOST_PORT="${DB_HOST_PORT:-5432}"'),
+  );
+  assert.ok(freezeIdx >= 0, "DB_HOST_PORT freeze must exist");
+
+  // TEST_DATABASE_URL uses ${DB_HOST_PORT} (frozen), not ${DB_HOST_PORT:-5432}
+  const testUrlIdx = lines.findIndex(
+    (l) => l.includes("TEST_DATABASE_URL=") && l.includes("${DB_HOST_PORT}"),
+  );
+  assert.ok(testUrlIdx >= 0, "TEST_DATABASE_URL must reference DB_HOST_PORT");
+  assert.ok(
+    freezeIdx < testUrlIdx,
+    "DB_HOST_PORT freeze must precede TEST_DATABASE_URL derivation",
+  );
+  // Must NOT contain a second default fallback (would bypass the freeze)
+  assert.ok(
+    !lines[testUrlIdx].includes("${DB_HOST_PORT:-"),
+    "TEST_DATABASE_URL must not re-derive DB_HOST_PORT with a default; " +
+      "it must use the frozen value from the freeze block",
+  );
+
+  // DB_BASE_URL_NO_NAME uses ${DB_HOST_PORT} (frozen)
+  const baseUrlIdx = lines.findIndex(
+    (l) => l.includes("DB_BASE_URL_NO_NAME=") && l.includes("${DB_HOST_PORT}"),
+  );
+  assert.ok(baseUrlIdx >= 0, "DB_BASE_URL_NO_NAME must reference DB_HOST_PORT");
+  assert.ok(
+    freezeIdx < baseUrlIdx,
+    "DB_HOST_PORT freeze must precede DB_BASE_URL_NO_NAME derivation",
+  );
+  assert.ok(
+    !lines[baseUrlIdx].includes("${DB_HOST_PORT:-"),
+    "DB_BASE_URL_NO_NAME must not re-derive DB_HOST_PORT with a default",
+  );
+});
+
+// C. REDIS_HOST_PORT and timezone variables must be frozen and exported so
+// Compose interpolation and all downstream consumers see the same topology.
+test("run-wsl.sh: REDIS_HOST_PORT, TZ, APP_TIMEZONE frozen and exported before compose", () => {
+  const src = readFileSync(RUN_WSL_SH, "utf8");
+  const lines = src.split("\n");
+
+  const freezeIdx = lines.findIndex((l) =>
+    l.includes('REDIS_HOST_PORT="${REDIS_HOST_PORT:-6379}"'),
+  );
+  assert.ok(freezeIdx >= 0, "REDIS_HOST_PORT freeze must exist");
+
+  const tzFreezeIdx = lines.findIndex((l) =>
+    l.includes('TZ="${TZ:-Asia/Shanghai}"'),
+  );
+  assert.ok(tzFreezeIdx >= 0, "TZ freeze must exist");
+
+  const appTzFreezeIdx = lines.findIndex((l) =>
+    l.includes('APP_TIMEZONE="${APP_TIMEZONE:-Asia/Shanghai}"'),
+  );
+  assert.ok(appTzFreezeIdx >= 0, "APP_TIMEZONE freeze must exist");
+
+  // All freeze before export
+  const exportIdx = lines.findIndex((l) =>
+    l.includes("export DB_HOST_PORT REDIS_HOST_PORT TZ APP_TIMEZONE"),
+  );
+  assert.ok(exportIdx >= 0, "export of all frozen topology vars must exist");
+  assert.ok(
+    freezeIdx < exportIdx &&
+      tzFreezeIdx < exportIdx &&
+      appTzFreezeIdx < exportIdx,
+    "all topology freezes must precede the export",
+  );
+
+  // Export before first compose call
+  const firstComposeIdx = lines.findIndex((l) =>
+    l.includes('docker compose -f "$DEV_COMPOSE"'),
+  );
+  assert.ok(
+    exportIdx < firstComposeIdx,
+    "frozen topology export must precede the first compose invocation",
+  );
+});
+
+// D. docker-compose.dev.yml must remain unchanged — ordinary developers running
+// `docker compose -f docker-compose.dev.yml ...` must still read root `.env`.
+test("docker-compose.dev.yml: interpolation defaults unchanged", () => {
+  const composeSrc = readFileSync(
+    join(__dirname, "..", "..", "docker-compose.dev.yml"),
+    "utf8",
+  );
+  // DB port mapping still has the default fallback
+  assert.match(
+    composeSrc,
+    /\$\{DB_HOST_PORT:-5432\}/,
+    "docker-compose.dev.yml must retain DB_HOST_PORT default (5432)",
+  );
+  assert.match(
+    composeSrc,
+    /\$\{REDIS_HOST_PORT:-6379\}/,
+    "docker-compose.dev.yml must retain REDIS_HOST_PORT default (6379)",
+  );
+  assert.match(
+    composeSrc,
+    /\$\{TZ:-Asia\/Shanghai\}/,
+    "docker-compose.dev.yml must retain TZ default (Asia/Shanghai)",
+  );
+  assert.match(
+    composeSrc,
+    /\$\{APP_TIMEZONE:-Asia\/Shanghai\}/,
+    "docker-compose.dev.yml must retain APP_TIMEZONE default (Asia/Shanghai)",
+  );
+});
+
+// E. Behavioral: a compose invocation launched through the managed path must
+// inherit COMPOSE_DISABLE_ENV_FILE=1 and the frozen topology values via the
+// shell environment. A fake `docker` that captures its own env vars proves
+// the exports are inherited, not just written to a file.
+test("compose-topology-inherits: managed compose sees COMPOSE_DISABLE_ENV_FILE and frozen ports", () => {
+  const envCapturePath = join(
+    mkdtempSync(join(tmpdir(), "e2e-topo-")),
+    "env.log",
+  );
+  const tmp = mkdtempSync(join(tmpdir(), "e2e-topo-bin-"));
+  writeFileSync(
+    join(tmp, "docker"),
+    `#!/usr/bin/env bash
+# Capture inherited env vars on compose calls, then behave like the standard
+# fake docker (ps → cid, down → ok).
+printf 'COMPOSE_DISABLE_ENV_FILE=%s\\n' "\${COMPOSE_DISABLE_ENV_FILE:-<unset>}" >> "${envCapturePath}"
+printf 'DB_HOST_PORT=%s\\n' "\${DB_HOST_PORT:-<unset>}" >> "${envCapturePath}"
+printf 'REDIS_HOST_PORT=%s\\n' "\${REDIS_HOST_PORT:-<unset>}" >> "${envCapturePath}"
+printf 'TZ=%s\\n' "\${TZ:-<unset>}" >> "${envCapturePath}"
+printf 'APP_TIMEZONE=%s\\n' "\${APP_TIMEZONE:-<unset>}" >> "${envCapturePath}"
+# Dispatch compose subcommands
+if [[ "$1" == "compose" ]]; then
+  for _a in "\${@:2}"; do
+    case "$_a" in
+      ps) echo "fake-db-cid"; exit 0 ;;
+      down) exit 0 ;;
+    esac
+  done
+fi
+exit 0
+`,
+    { mode: 0o755 },
+  );
+
+  try {
+    const composeFile = join(__dirname, "..", "..", "docker-compose.dev.yml");
+    const res = child_process.spawnSync(
+      "bash",
+      [
+        "-c",
+        `export PATH="${tmp}:$PATH"
+         export COMPOSE_DISABLE_ENV_FILE=1
+         export DB_HOST_PORT=25432
+         export REDIS_HOST_PORT=26379
+         export TZ=Pacific/Honolulu
+         export APP_TIMEZONE=UTC
+         docker compose -f "${composeFile}" ps -q db`,
+      ],
+      { env: { ...process.env }, encoding: "utf8", timeout: 10000 },
+    );
+    assert.equal(res.status, 0, `compose invocation failed: ${res.stderr}`);
+    const captured = readFileSync(envCapturePath, "utf8");
+    assert.match(
+      captured,
+      /COMPOSE_DISABLE_ENV_FILE=1/,
+      "compose must inherit COMPOSE_DISABLE_ENV_FILE=1",
+    );
+    assert.match(
+      captured,
+      /DB_HOST_PORT=25432/,
+      "compose must inherit frozen DB_HOST_PORT",
+    );
+    assert.match(
+      captured,
+      /REDIS_HOST_PORT=26379/,
+      "compose must inherit frozen REDIS_HOST_PORT",
+    );
+    assert.match(
+      captured,
+      /TZ=Pacific\/Honolulu/,
+      "compose must inherit frozen TZ",
+    );
+    assert.match(
+      captured,
+      /APP_TIMEZONE=UTC/,
+      "compose must inherit frozen APP_TIMEZONE",
+    );
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+    rmSync(envCapturePath, { force: true });
+  }
+});

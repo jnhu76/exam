@@ -106,6 +106,44 @@ while (( "$#" )); do
   esac
 done
 
+# ── 冻结拓扑输入（#571）───────────────────────────────────────────────
+# MANAGED E2E TOPOLOGY OWNERSHIP:
+#   runner/test invocation owns topology; root developer .env is intentionally
+#   ignored by Compose. Shell explicit values remain legitimate inputs.
+#
+# Why: Docker Compose automatically reads the project root `.env` when no
+# explicit mechanism disables it. The runner derives TEST_DATABASE_URL from
+# shell defaults, while Compose interpolates DB_HOST_PORT/REDIS_HOST_PORT/TZ/
+# APP_TIMEZONE from the root `.env` — producing split authority (runner URL
+# on port 5432, Compose publishes on a different port from .env).
+#
+# Fix: COMPOSE_DISABLE_ENV_FILE=1 prevents Compose from reading the root
+# `.env`. The runner freezes each topology input once from shell/tester
+# input (or the managed default), then every consumer — URL derivation,
+# Compose interpolation, cleanup — derives from that frozen fact.
+#
+# Normal developer behavior is unchanged: `docker compose -f
+# docker-compose.dev.yml ...` without the managed runner still reads root
+# `.env` as before.
+
+# Explicit shell/tester input → honor it; otherwise use managed defaults.
+DB_HOST_PORT="${DB_HOST_PORT:-5432}"
+REDIS_HOST_PORT="${REDIS_HOST_PORT:-6379}"
+TZ="${TZ:-Asia/Shanghai}"
+APP_TIMEZONE="${APP_TIMEZONE:-Asia/Shanghai}"
+
+# Export frozen values so Compose interpolation and all downstream consumers
+# see the same managed topology. Export TZ and APP_TIMEZONE so the db/redis
+# containers receive the runner-selected timezone, not whatever the root
+# `.env` contained (before #571, Compose would read TZ from `.env` and
+# the runner had no way to know or control it).
+export DB_HOST_PORT REDIS_HOST_PORT TZ APP_TIMEZONE
+
+# Prevent Docker Compose from importing the developer root `.env` file.
+# This is runner-owned profile policy, not a tester-selectable topology knob:
+# even an inherited COMPOSE_DISABLE_ENV_FILE=0 must be overwritten.
+export COMPOSE_DISABLE_ENV_FILE=1
+
 # E2E 专用 env（与 docker-compose.test.yml 对齐）。导出给 dev server + migrate +
 # seed 进程。WSL 快速 E2E 走独立的 exam_e2e 库（不是 dev 的 exam，也不是 vitest 的
 # exam_test），这样 reseed 只覆盖 e2e 数据，绝不污染 dev/vitest 库（AGENTS.md
@@ -114,7 +152,7 @@ done
 # DATABASE_URL 显式 unset，防止残留的 dev URL 干扰（e2e 模式下 resolver 本来也不会读它）。
 E2E_DB_NAME="exam_e2e"
 export APP_MODE=e2e
-export TEST_DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT:-5432}/${E2E_DB_NAME}"
+export TEST_DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT}/${E2E_DB_NAME}"
 export RATE_LIMIT_DISABLED=1
 export HEARTBEAT_TIMEOUT_MS=15000
 export HEARTBEAT_SCAN_INTERVAL_MS=5000
@@ -124,8 +162,7 @@ export DEADLINE_SCAN_INTERVAL_MS=5000
 unset DATABASE_URL TEST_DB_URL
 
 # ── 共享 helper（串行 / 并行 shard 路径复用）──────────────────────────
-DB_HOST_PORT_VAL="${DB_HOST_PORT:-5432}"
-DB_BASE_URL_NO_NAME="postgresql://exam:exam@localhost:${DB_HOST_PORT_VAL}"
+DB_BASE_URL_NO_NAME="postgresql://exam:exam@localhost:${DB_HOST_PORT}"
 
 # 每个库的唯一名前缀，便于失败时按前缀定位 worker 库。
 WORKER_DB_PREFIX="exam_e2e_w"

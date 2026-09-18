@@ -452,6 +452,8 @@ durability boundary.
 | **Database** | `exam_e2e` (serial) or per-shard `exam_e2e_w{N}` | `exam_e2e` (`POSTGRES_DB` default inside container) |
 | **APP_MODE** | `e2e` (exported by the runner; the managed profile never imports the developer `.env`) | `e2e` |
 | **TEST_DATABASE_URL** | Explicit per-DB URL (`…/exam_e2e[_w{N}]`); `DATABASE_URL`/`TEST_DB_URL` unset | `db:5432/exam_e2e` |
+| **Compose topology** | Runner-owned: `COMPOSE_DISABLE_ENV_FILE=1` prevents Compose from reading root `.env`; `DB_HOST_PORT`/`REDIS_HOST_PORT`/`TZ`/`APP_TIMEZONE` are frozen once from shell input (or managed defaults) and exported. Developer root `.env` has ZERO authority over managed E2E Compose interpolation. | Standard Compose behavior (reads `.env` if present) |
+| **Topology overrides** | Shell env vars only: `DB_HOST_PORT=25432 bash scripts/e2e/run-wsl.sh` | `.env` or shell env |
 | **Sharding** | Supported (`E2E_WORKERS`, default 2) | Not supported (single process) |
 | **Blob reports** | Merged locally after run | Not used (list reporter only) |
 | **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs | `docker compose down -v` |
@@ -590,6 +592,27 @@ E2E_WORKERS=4 bash scripts/e2e/run-wsl.sh
 
 - **DB required**: Yes (`exam_e2e` on `DB_HOST_PORT`, default 5432).
 - **Env**: `APP_MODE=development`, `DATABASE_URL` pointing to `exam_e2e`, `TEST_DATABASE_URL` unset.
+- **Topology ownership** (issue #571): The managed WSL runner owns all Compose
+  topology. `COMPOSE_DISABLE_ENV_FILE=1` prevents Docker Compose from reading
+  the developer root `.env`; `DB_HOST_PORT`, `REDIS_HOST_PORT`, `TZ`, and
+  `APP_TIMEZONE` are frozen once from shell input (or managed defaults) and
+  exported so every consumer — URL derivation, Compose interpolation, cleanup —
+  sees the same values. The developer root `.env` has zero authority over
+  managed E2E Compose interpolation.
+
+  Normal development (`docker compose -f docker-compose.dev.yml ...` without
+  the runner) is unchanged — it still reads root `.env` as before.
+
+  To override ports intentionally for managed E2E:
+
+  ```bash
+  DB_HOST_PORT=25432 \
+  REDIS_HOST_PORT=26379 \
+  bash scripts/e2e/run-wsl.sh
+  ```
+
+  Do **not** edit the root `.env` to configure managed E2E — it is ignored by
+  the runner's Compose invocations.
 
 ---
 

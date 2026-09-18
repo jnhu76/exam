@@ -27,6 +27,16 @@ Notes:
   deployment — host shell exports still override individual values). Dev
   tooling never reads `.env.deploy`. Tests keep their own `.env.test.local`
   (from `.env.test.example`).
+- **Managed WSL E2E topology** (issue #571): The runner
+  (`scripts/e2e/run-wsl.sh`) sets `COMPOSE_DISABLE_ENV_FILE=1` before any
+  Compose invocation, so the developer root `.env` is intentionally ignored by
+  managed E2E Compose. The runner freezes `DB_HOST_PORT`, `REDIS_HOST_PORT`,
+  `TZ`, and `APP_TIMEZONE` once from shell input (or managed defaults) and
+  exports them. Both the runner's URL derivation and Compose interpolation see
+  the same values. Normal development (`docker compose -f docker-compose.dev.yml
+  ...` without the runner) still reads root `.env` as before. To override ports
+  for managed E2E, pass them as shell env vars:
+  `DB_HOST_PORT=25432 bash scripts/e2e/run-wsl.sh`.
 - `APP_PORT` is container-internal only ("current API process bind port",
   fixed at 3000 in every Compose file and the Dockerfile). It is never a host
   publish port; host publishing is `EXAM_PORT`.
