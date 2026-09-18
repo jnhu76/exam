@@ -596,6 +596,127 @@ describe("runtimeConfig", () => {
     });
   });
 
+  describe("cookie secure authority matrix (#568)", () => {
+    const PROD = {
+      APP_MODE: "production",
+      DATABASE_URL: "postgresql://p:p@h:5432/proddb",
+      JWT_SECRET: "production-secret",
+      CORS_ORIGIN: "https://example.com",
+      PUBLIC_WEB_ORIGIN: "https://example.com",
+    };
+
+    // ── Production invariant: cookieSecure is ALWAYS true ──
+    it("production + COOKIE_SECURE unset → true", () => {
+      const config = loadRuntimeConfig(PROD);
+      expect(config.authSecret.cookieSecure).toBe(true);
+    });
+
+    it("production + COOKIE_SECURE=false → true (critical regression)", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        COOKIE_SECURE: "false",
+      });
+      expect(config.authSecret.cookieSecure).toBe(true);
+    });
+
+    it("production + COOKIE_SECURE=true → true", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        COOKIE_SECURE: "true",
+      });
+      expect(config.authSecret.cookieSecure).toBe(true);
+    });
+
+    it("production + COOKIE_SECURE=1 → true", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        COOKIE_SECURE: "1",
+      });
+      expect(config.authSecret.cookieSecure).toBe(true);
+    });
+
+    // ── Development: COOKIE_SECURE controls the flag ──
+    it("development + unset → false", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+      });
+      expect(config.authSecret.cookieSecure).toBe(false);
+    });
+
+    it("development + false → false", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        COOKIE_SECURE: "false",
+      });
+      expect(config.authSecret.cookieSecure).toBe(false);
+    });
+
+    it("development + true → true", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        COOKIE_SECURE: "true",
+      });
+      expect(config.authSecret.cookieSecure).toBe(true);
+    });
+
+    it("development + 1 → true", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        COOKIE_SECURE: "1",
+      });
+      expect(config.authSecret.cookieSecure).toBe(true);
+    });
+
+    // ── Test: COOKIE_SECURE controls the flag ──
+    it("test + unset → false", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+      });
+      expect(config.authSecret.cookieSecure).toBe(false);
+    });
+
+    it("test + true → true", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        COOKIE_SECURE: "true",
+      });
+      expect(config.authSecret.cookieSecure).toBe(true);
+    });
+
+    it("test + false → false", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        COOKIE_SECURE: "false",
+      });
+      expect(config.authSecret.cookieSecure).toBe(false);
+    });
+
+    // ── E2E: COOKIE_SECURE controls the flag ──
+    it("e2e + unset → false", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
+      });
+      expect(config.authSecret.cookieSecure).toBe(false);
+    });
+
+    it("e2e + true → true", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
+        COOKIE_SECURE: "true",
+      });
+      expect(config.authSecret.cookieSecure).toBe(true);
+    });
+  });
+
   describe("feature flags default false", () => {
     it("all features default to false", () => {
       delete process.env.FEATURE_RESTORE_FRONTEND;
