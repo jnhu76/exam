@@ -28,7 +28,14 @@
 [data-slot="input"],
 [data-slot="select-trigger"],
 [data-slot="textarea"] {
-  border-color: var(--border-control);
+  /* border-color is deliberately NOT owned here (issue 577 review-fix-1):
+   * the primitives' `border-input` utility resolves to the SAME value
+   * (--border-strong aliases --border-control), and an unlayered
+   * border-color on this rule defeats the layered state utilities
+   * (aria-invalid:border-destructive, focus-visible:border-ring) — the same
+   * authority-defeat class as BLOCKER-1. Cascade contract: base default <
+   * state utility < recipe. The scoped quiet-toolbar tier below still owns
+   * its own border-color deliberately. */
   background: var(--surface);
   border-radius: 0.375rem;
 }

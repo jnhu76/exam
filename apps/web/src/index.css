@@ -224,8 +224,20 @@
   --radius: 0.5rem;
 }
 
-* {
-  @apply border-border;
+/*
+ * Default border authority — MUST stay inside @layer base. As an unlayered
+ * author rule this beat every layered border-color utility app-wide
+ * (border-primary, aria-invalid:border-destructive, slash-opacity tones, …),
+ * so declared state colors silently rendered grey (issue 577 review-fix-1
+ * BLOCKER-1, same authority-defeat class as the B1 stroke rule). Cascade
+ * contract: base default border < component/state utility < intentionally
+ * unlayered semantic recipe (surface/feedback/badge/control recipes).
+ * INVARIANT: pinning this rule's layer is gated by indexCascade.test.ts.
+ */
+@layer base {
+  * {
+    @apply border-border;
+  }
 }
 
 html,
@@ -272,7 +284,7 @@ h3 {
  * class/element selector (the former `svg.lucide` prefix) also defeated
  * AppIcon's per-role absoluteStrokeWidth contract for EVERY Lucide icon,
  * because unlayered author CSS beats SVG presentation attributes.
- * AppIconStrokeCascade.test.ts gates this selector shape.
+ * AppIconStrokeCascade.test.tsx gates this selector shape across the whole author-CSS surface.
  */
 [data-slot="select-trigger"] svg,
 [data-slot="select-content"] svg,

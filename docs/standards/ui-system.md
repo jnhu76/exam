@@ -397,7 +397,7 @@ beats it — so `index.css` keeps a primitive-internal optical thinning rule
 whose internal icons the primitive owns (select/checkbox/dropdown/dialog/
 sheet/pagination). A broad selector (e.g. bare `svg.lucide`) defeats
 AppIcon's per-role stroke contract for every Lucide icon and is gated by
-`AppIconStrokeCascade.test.ts`.
+`AppIconStrokeCascade.test.tsx` (whole author-CSS surface).
 
 ## Tables
 

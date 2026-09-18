@@ -15,6 +15,15 @@ import { SaveIndicator } from "@/components/exam/SaveIndicator";
  * a derivation guard: business UI may not re-derive the border-X/N +
  * bg-X/N soft-feedback pair outside the audited allowlist (issue 577 residue
  * awaiting its own migration pass).
+ *
+ * Cascade + appearance (review-fix-1): the tone rules stay deliberately
+ * UNLAYERED as an authority claim (a layered tone could be silently defeated
+ * by a future layered color utility), not as a workaround for the default
+ * border rule — that rule now lives in @layer base (indexCascade.test.ts).
+ * The appearance axis preserves established surface shapes: soft (default)
+ * full triple for SaveIndicator/InlineErrorBanner; outline (border-only,
+ * transparent surface, component-owned text) for ErrorState — its pre-#577
+ * unfilled placeholder shape.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -120,13 +129,23 @@ describe("InlineErrorBanner / ErrorState consume the feedback owner", () => {
     expect(source).not.toMatch(/border-destructive\/\d+/);
   });
 
-  it("error placeholder border is tone-owned", () => {
+  it("error placeholder keeps its outline shape: tone owns the border only", () => {
     const source = readFileSync(
       join(WEB_SRC, "components", "shared", "ErrorState.tsx"),
       "utf8",
     );
     expect(source).toContain('data-feedback-tone="destructive"');
+    expect(source).toContain('data-feedback-appearance="outline"');
     expect(source).not.toMatch(/border-destructive\/\d+/);
+    // The outline override releases background/color; border-color stays tone-owned.
+    const outlineRule =
+      /\[data-feedback-tone\]\[data-feedback-appearance="outline"\]\s*\{([\s\S]*?)\}/.exec(
+        RECIPES_CSS,
+      );
+    expect(outlineRule).not.toBeNull();
+    expect(outlineRule![1]).toContain("background: transparent");
+    expect(outlineRule![1]).toContain("color: inherit");
+    expect(outlineRule![1]).not.toContain("border-color");
   });
 });
 

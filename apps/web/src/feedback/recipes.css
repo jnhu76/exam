@@ -16,9 +16,20 @@
  *
  * Color source: the SAME structured status triples StatusBadge consumes
  * (--status-{neutral,info,positive,caution,destructive}-{bg,text,border}). No
- * new colors, no second token taxonomy. Unlayered + attribute specificity
- * also beats the global `* { border-color }` base rule, which silently
- * greyed out the former opacity-derived border tints (they never rendered).
+ * new colors, no second token taxonomy.
+ *
+ * Cascade placement (issue 577 review-fix-1): these rules are deliberately
+ * UNLAYERED — not as a workaround for the (now @layer base) default border
+ * rule, but because "feedback tone owns semantic feedback color" is an
+ * authority claim: a layered tone could be silently defeated by any layered
+ * border-color/text utility a future consumer adds, recreating the
+ * declared-but-defeated defect class this layer exists to close.
+ *
+ * Appearance axis (review-fix-1 MAJOR-1): soft (default) = the full triple,
+ * for surfaces whose established shape IS a soft fill (SaveIndicator,
+ * InlineErrorBanner). outline = the tone owns the BORDER only; the surface
+ * stays transparent and text stays component-owned — for placeholders whose
+ * established shape is a bordered, unfilled region (ErrorState).
  */
 [data-feedback-tone="neutral"] {
   background: var(--status-neutral-bg);
@@ -48,4 +59,11 @@
   background: var(--status-destructive-bg);
   border-color: var(--status-destructive-border);
   color: var(--status-destructive-text);
+}
+
+/* outline appearance: (0,2,0) beats any single-attribute soft triple above;
+ * only background/color are released — border-color stays tone-owned. */
+[data-feedback-tone][data-feedback-appearance="outline"] {
+  background: transparent;
+  color: inherit;
 }
