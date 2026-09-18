@@ -160,7 +160,7 @@ deployment fresh-install acceptance moved to the `release` workflow
 - Must point to a database whose name contains `test`, `e2e`, or `ci`.
 - The name-safety guard in `resolveTestBranchUrl()` enforces this unless `ALLOW_UNSAFE_TEST_DATABASE_URL=1`.
 - In CI, `DATABASE_URL` and `TEST_DATABASE_URL` often point to the same test database. This is allowed because both are test databases.
-- WSL E2E deliberately unsets `TEST_DATABASE_URL` and uses `DATABASE_URL` with `APP_MODE=development` to avoid the name-safety guard.
+- WSL E2E sets `APP_MODE=e2e` and an explicit `TEST_DATABASE_URL` (the serial `exam_e2e` or per-shard `exam_e2e_w{N}` URL) and explicitly unsets `DATABASE_URL` / `TEST_DB_URL`, so the resolver always takes the explicit test-URL branch — the name-safety guard passes on the e2e names, and the dev DB is unreachable by construction.
 
 ### 2.3 `JWT_SECRET`
 
@@ -449,9 +449,9 @@ durability boundary.
 | Aspect | WSL E2E (`scripts/e2e/run-wsl.sh`) | Docker E2E (`scripts/e2e/run.sh`) |
 |--------|--------------------------------------|-----------------------------------|
 | **Execution** | Native on host (no app container) | Full Docker Compose (app + db + e2e containers) |
-| **Database** | `exam_e2e` (or per-shard `exam_e2e_w{N}`) | `exam_test` (inside container) |
-| **APP_MODE** | `development` (deliberately, to avoid name-safety guard) | `e2e` |
-| **TEST_DATABASE_URL** | Explicitly unset | `db:5432/exam_test` |
+| **Database** | `exam_e2e` (serial) or per-shard `exam_e2e_w{N}` | `exam_e2e` (`POSTGRES_DB` default inside container) |
+| **APP_MODE** | `e2e` (exported by the runner; the managed profile never imports the developer `.env`) | `e2e` |
+| **TEST_DATABASE_URL** | Explicit per-DB URL (`…/exam_e2e[_w{N}]`); `DATABASE_URL`/`TEST_DB_URL` unset | `db:5432/exam_e2e` |
 | **Sharding** | Supported (`E2E_WORKERS`, default 2) | Not supported (single process) |
 | **Blob reports** | Merged locally after run | Not used (list reporter only) |
 | **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs | `docker compose down -v` |

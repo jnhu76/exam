@@ -440,3 +440,80 @@ test("run-wsl.sh: flag validation runs before compose up", () => {
   assert.ok(guardIdx >= 0, "validate_run_flags call must exist");
   assert.ok(upIdx > guardIdx, "flag validation must run before compose up");
 });
+
+// ── #565: launch_api projects the runner-owned shard port onto EVERY port
+// authority. e2e mode resolves the API bind as APP_PORT ?? DEV_API_PORT
+// (runtimeConfig.resolveApiBindPort), so if launch_api left APP_PORT
+// unprojected, a developer root `.env` APP_PORT (or any stray inherited
+// value) owned the shard bind while DEV_API_PORT / PUBLIC_WEB_ORIGIN / the
+// health probe used the runner-selected port — every shard on one port
+// (EADDRINUSE) with misaligned health checks. The profile boundary lives in
+// loadRootEnv (managed profiles skip the developer .env); this projection is
+// the runner-side half of the same ownership law and covers shell-inherited
+// values that no loader can filter.
+test("run-wsl.sh: launch_api binds APP_PORT, DEV_API_PORT and PUBLIC_WEB_ORIGIN to the shard port", () => {
+  const lines = readFileSync(RUN_WSL_SH, "utf8").split("\n");
+  const launchStart = lines.findIndex((l) => /^launch_api\(\) \{/.test(l));
+  assert.ok(launchStart >= 0, "launch_api() must exist in run-wsl.sh");
+  let launchEnd = launchStart;
+  while (launchEnd < lines.length && lines[launchEnd] !== "}") launchEnd++;
+  const body = lines.slice(launchStart, launchEnd + 1).join("\n");
+
+  assert.match(
+    body,
+    /\bAPP_PORT="\$port"/,
+    "launch_api must project APP_PORT onto the runner-selected shard port " +
+      "(the e2e bind owner resolves APP_PORT ?? DEV_API_PORT)",
+  );
+  assert.match(
+    body,
+    /\bDEV_API_PORT="\$port"/,
+    "launch_api must project DEV_API_PORT onto the runner-selected shard port",
+  );
+  assert.match(
+    body,
+    /PUBLIC_WEB_ORIGIN="http:\/\/localhost:\$\{port\}"/,
+    "launch_api must derive PUBLIC_WEB_ORIGIN from the shard port (#365)",
+  );
+  // The projected values must reach the server process, not just shell
+  // locals: the bindings sit in the command prefix of the same invocation.
+  assert.match(
+    body,
+    /\bAPP_PORT="\$port"[\s\S]*?\n\s+setsid /,
+    "port projections must be part of the launched command environment " +
+      "(the backslash-continued prefix of the setsid invocation)",
+  );
+});
+
+// ── #565: the runner pins the managed E2E profile itself. The runner owns
+// the profile identity (APP_MODE=e2e) and the DB-branch inputs
+// (TEST_DATABASE_URL set, dev DATABASE_URL / TEST_DB_URL removed), so a
+// managed E2E process can never resolve into the dev profile (whose
+// configuration authority is the developer .env).
+test("run-wsl.sh: pins APP_MODE=e2e and removes dev DB URL branches before launch", () => {
+  const src = readFileSync(RUN_WSL_SH, "utf8");
+  const exportIdx = src.search(/^export APP_MODE=e2e$/m);
+  const unsetIdx = src.search(/^unset DATABASE_URL TEST_DB_URL$/m);
+  assert.ok(
+    exportIdx >= 0,
+    "run-wsl.sh must export APP_MODE=e2e at script level",
+  );
+  assert.ok(
+    unsetIdx >= 0,
+    "run-wsl.sh must unset DATABASE_URL / TEST_DB_URL so the resolver cannot take a dev branch",
+  );
+  assert.ok(
+    unsetIdx < launchApiDefIdx(src),
+    "profile pinning must happen before launch_api is defined/called",
+  );
+  assert.match(
+    src,
+    /launch_api\(\) \{\n(?:[^\n]*\n)*?\s*APP_MODE=e2e RATE_LIMIT_DISABLED=1/,
+    "launch_api must re-assert APP_MODE=e2e (+ RATE_LIMIT_DISABLED=1) on every server process",
+  );
+});
+
+// Position of `launch_api() {` within src, shared by the assertions above.
+function launchApiDefIdx(src) {
+  return src.indexOf("launch_api() {");
+}
