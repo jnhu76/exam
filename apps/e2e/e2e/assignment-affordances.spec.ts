@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { loginAsAdmin, loginAsTeacher } from "../lib/login";
 import {
   adminApiToken,
@@ -15,11 +15,16 @@ import { seedExam } from "../lib/seed";
  * proven in the REAL browser against the canonical APIs.
  *
  * Story A: an Admin manages a Teacher's course assignment through the
- * UsersPage dialog (open → assign → observe → revoke → observe removal).
- * Story A2: the same lifecycle for a Grader's exam assignment.
+ * UsersPage dialog (open → search → assign → observe → revoke → removal).
+ * Story A2: the same lifecycle for a Grader's exam assignment; the exam
+ * catalog has no server-side search, so the target is reached through the
+ * REAL catalog pagination.
  * Story B: the F2-04 distinction — a Teacher with a course-scoped
  * ScoreAllView grant reaches the score page but sees NO export action; the
  * Admin sees it and the download returns 200 text/csv.
+ * Story C (corrective): a course positioned beyond the first 100 — beyond
+ * the old fixed-first-page truncation — is reachable through the catalog's
+ * server-side search and assignable.
  *
  * Server authority is untouched: the UI gates are UX truthfulness only, and
  * the direct-API fail-closed proofs live in the vitest route suites.
@@ -29,6 +34,31 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 function stampFor(key: string) {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${key}`;
+}
+
+/**
+ * Locates a staff row on the real-paginated UsersPage (issue 548
+ * corrective): the staff list pages at 20/page ordered oldest-first, so a
+ * freshly created staff member can sit on a later page.
+ */
+async function findStaffRow(page: Page, name: string) {
+  for (let i = 0; i < 15; i++) {
+    const row = page.getByRole("row").filter({ hasText: name }).first();
+    if (
+      await row.waitFor({ state: "visible", timeout: 3_000 }).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      return row;
+    }
+    const next = page.getByRole("button", { name: "下一页" });
+    if (!(await next.isEnabled())) break;
+    await next.click();
+  }
+  throw new Error(
+    `staff row not reachable through UsersPage pagination: ${name}`,
+  );
 }
 
 test.describe("issue 548 assignment affordances (C1)", () => {
@@ -52,9 +82,7 @@ test.describe("issue 548 assignment affordances (C1)", () => {
 
     await loginAsAdmin(page);
     await page.goto("/admin/users");
-    const row = page.getByRole("row").filter({ hasText: teacher.name }).first();
-    await expect(row).toBeVisible({ timeout: 15_000 });
-
+    const row = await findStaffRow(page, teacher.name);
     await row.getByRole("button", { name: "更多操作" }).click();
     await page.getByRole("menuitem", { name: "授课课程" }).click();
 
@@ -63,13 +91,15 @@ test.describe("issue 548 assignment affordances (C1)", () => {
     await expect(dialog).toContainText(`管理「${teacher.name}」的授课课程`);
     await expect(dialog.getByText("尚未分配任何课程。")).toBeVisible();
 
-    // Assign the seeded course through the real Select + 分配 control.
-    await dialog.getByRole("combobox").click();
-    const courseLabel = new RegExp(courseName);
-    await page.getByRole("option", { name: courseLabel }).click();
+    // The course catalog is server-side searched (issue 548 corrective): the
+    // freshly created course sorts after the seeded catalog, so the debounced
+    // search — not any fixed first page — is what makes it selectable.
+    await dialog.getByRole("searchbox").fill(courseName);
+    const courseRadio = dialog.getByRole("radio", { name: courseName });
+    await courseRadio.click({ timeout: 10_000 });
     await dialog.getByRole("button", { name: "分配" }).click();
     // The post-mutation refresh renders the active assignment in-product.
-    await expect(dialog.getByText(courseLabel)).toBeVisible({
+    await expect(dialog.getByRole("button", { name: "撤销" })).toBeVisible({
       timeout: 15_000,
     });
 
@@ -99,9 +129,7 @@ test.describe("issue 548 assignment affordances (C1)", () => {
 
     await loginAsAdmin(page);
     await page.goto("/admin/users");
-    const row = page.getByRole("row").filter({ hasText: graderName }).first();
-    await expect(row).toBeVisible({ timeout: 15_000 });
-
+    const row = await findStaffRow(page, graderName);
     await row.getByRole("button", { name: "更多操作" }).click();
     await page.getByRole("menuitem", { name: "评卷考试" }).click();
 
@@ -110,11 +138,37 @@ test.describe("issue 548 assignment affordances (C1)", () => {
     await expect(dialog).toContainText(`管理「${graderName}」的评卷考试`);
     await expect(dialog.getByText("尚未分配任何考试。")).toBeVisible();
 
-    await dialog.getByRole("combobox").click();
-    const examLabel = new RegExp(seeded.examTitle);
-    await page.getByRole("option", { name: examLabel }).click();
+    // The exam catalog offers no search (the route has no search parameter);
+    // reachability is REAL pagination — page until the seeded exam is
+    // selectable. Each 下一页 click resolves against the canonical
+    // /api/exams list response.
+    const examRadio = dialog.getByRole("radio", { name: seeded.examTitle });
+    for (let guard = 0; guard < 12; guard++) {
+      if (
+        await examRadio.waitFor({ state: "visible", timeout: 1_000 }).then(
+          () => true,
+          () => false,
+        )
+      ) {
+        break;
+      }
+      const next = dialog.getByRole("button", { name: "下一页" });
+      expect(
+        next.isEnabled(),
+        "target exam must stay reachable by paging",
+      ).toBeTruthy();
+      const [examListResponse] = await Promise.all([
+        page.waitForResponse(
+          (r) =>
+            r.url().includes("/api/exams?") && r.request().method() === "GET",
+        ),
+        next.click(),
+      ]);
+      expect(examListResponse.ok()).toBeTruthy();
+    }
+    await examRadio.click();
     await dialog.getByRole("button", { name: "分配" }).click();
-    await expect(dialog.getByText(examLabel)).toBeVisible({
+    await expect(dialog.getByRole("button", { name: "撤销" })).toBeVisible({
       timeout: 15_000,
     });
 
@@ -123,6 +177,55 @@ test.describe("issue 548 assignment affordances (C1)", () => {
       timeout: 15_000,
     });
     await expect(dialog.getByRole("button", { name: "撤销" })).toHaveCount(0);
+  });
+
+  test("Story C: a course beyond the first 100 is reachable via catalog search and assignable (issue 548 corrective)", async ({
+    page,
+    request,
+  }) => {
+    const stamp = stampFor("c");
+    const teacher = await createTeacherViaApi(request, {
+      name: `E2E548教师${stamp}`,
+      usernamePrefix: "e2e-548-teacher-c",
+    });
+    const token = await adminApiToken(request);
+    // 101 new courses on top of the seeded catalog: the LAST created course
+    // sorts after position 100 — invisible to the old fixed-first-100
+    // truncation, reachable only through search/pagination.
+    const courseCount = 101;
+    for (let i = 1; i <= courseCount; i++) {
+      const res = await adminPost(request, token, "/api/courses", {
+        name: `E2E548C课程${stamp}-${i}`,
+        code: `E2E548C-${stamp}-${i}`,
+        description: "",
+      });
+      expect(res.ok(), `course ${i} created`).toBeTruthy();
+    }
+    const targetName = `E2E548C课程${stamp}-${courseCount}`;
+
+    await loginAsAdmin(page);
+    await page.goto("/admin/users");
+    const row = await findStaffRow(page, teacher.name);
+    await row.getByRole("button", { name: "更多操作" }).click();
+    await page.getByRole("menuitem", { name: "授课课程" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText(`管理「${teacher.name}」的授课课程`);
+    // The first catalog page (20 oldest courses) cannot contain the newest
+    // course, and real pagination controls are present.
+    await expect(dialog.getByRole("radio", { name: targetName })).toHaveCount(
+      0,
+    );
+    await expect(dialog.getByText(/共 \d+ 条/)).toBeVisible();
+    // Server-side search reaches beyond the first page AND the old 100 cap.
+    await dialog.getByRole("searchbox").fill(targetName);
+    await dialog.getByRole("radio", { name: targetName }).click({
+      timeout: 10_000,
+    });
+    await dialog.getByRole("button", { name: "分配" }).click();
+    await expect(dialog.getByRole("button", { name: "撤销" })).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test("Story B: Teacher (course-scoped ScoreAllView) sees scores without export; Admin exports 200 text/csv", async ({
