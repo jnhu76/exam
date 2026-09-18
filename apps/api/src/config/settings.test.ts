@@ -62,6 +62,7 @@ describe("settings model shape", () => {
     expect(binding("DATABASE_URL")).toBe("composed");
     expect(binding("APP_MODE")).toBe("fixed");
     expect(binding("COOKIE_SECURE")).toBe("dev-only");
+    expect(binding("API_DOCS_ENABLED")).toBe("dev-only");
   });
 
   it("documents raw defaults for the leaves that have one", () => {

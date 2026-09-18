@@ -689,7 +689,7 @@ export const SETTINGS = {
     // VITE_PORT owns the dev web port; string-valued (used to build origins).
     VITE_PORT: stringLeaf("5173", { trim: true, binding: "dev-only" }),
     COOKIE_SECURE: truthyLeaf({ binding: "dev-only" }),
-    API_DOCS_ENABLED: truthyLeaf(),
+    API_DOCS_ENABLED: truthyLeaf({ binding: "dev-only" }),
     RATE_LIMIT_DISABLED: truthyLeaf({ binding: "dev-only" }),
     RATE_LIMIT_MAX: posIntLeaf(100),
     RATE_LIMIT_WINDOW_MS: posIntLeaf(60 * 1000),
