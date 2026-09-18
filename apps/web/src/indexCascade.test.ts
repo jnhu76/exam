@@ -102,6 +102,36 @@ describe("default border rule stays in @layer base (issue 577 BLOCKER-1)", () =>
     }
   });
 
+  it("the control recipe splits background ownership: input/select released, textarea kept", () => {
+    // review-fix-2: an unlayered `background` on the bare input/select-trigger
+    // rule defeated the layered `disabled:bg-muted` state — disabled controls
+    // rendered white while the primitives declared muted. `bg-card` aliases
+    // --surface, so releasing background is value-neutral at rest and restores
+    // the declared state authority. Textarea is the deliberate exception: its
+    // component declares bg-transparent, so the recipe-owned surface IS the
+    // current appearance — this gate pins both sides of the split.
+    const controlCss = readFileSync(
+      join(SRC_ROOT, "control", "recipes.css"),
+      "utf8",
+    );
+    const rules = parseCssRules("control/recipes.css", controlCss);
+    const bareRuleFor = (slot: string) =>
+      rules.filter((r) => r.selectors.includes(`[data-slot="${slot}"]`));
+    for (const slot of ["input", "select-trigger"]) {
+      for (const rule of bareRuleFor(slot)) {
+        expect(
+          rule.body,
+          `bare [data-slot=${slot}] recipe must not own background: ${rule.selectors.join(",")}`,
+        ).not.toMatch(/(?:^|;)\s*background\s*:/);
+      }
+    }
+    const textareaRules = bareRuleFor("textarea").filter((r) =>
+      /background\s*:/.test(r.body),
+    );
+    expect(textareaRules).toHaveLength(1);
+    expect(textareaRules[0]!.body).toContain("var(--surface)");
+  });
+
   it("reds when the control recipe re-takes border-color (mutation)", () => {
     const controlCss = readFileSync(
       join(SRC_ROOT, "control", "recipes.css"),
@@ -116,6 +146,24 @@ describe("default border rule stays in @layer base (issue 577 BLOCKER-1)", () =>
       (r) =>
         r.selectors.includes('[data-slot="input"]') &&
         /border-color\s*:/.test(r.body),
+    );
+    expect(offending).toHaveLength(1);
+  });
+
+  it("reds when the input/select recipe re-takes background (mutation)", () => {
+    const controlCss = readFileSync(
+      join(SRC_ROOT, "control", "recipes.css"),
+      "utf8",
+    );
+    const mutated = controlCss.replace(
+      '[data-slot="input"],\n[data-slot="select-trigger"],\n[data-slot="textarea"] {',
+      '[data-slot="input"],\n[data-slot="select-trigger"],\n[data-slot="textarea"] {\n  background: var(--surface);',
+    );
+    expect(mutated).not.toBe(controlCss);
+    const offending = parseCssRules("control/recipes.css", mutated).filter(
+      (r) =>
+        r.selectors.includes('[data-slot="input"]') &&
+        /(?:^|;)\s*background\s*:/.test(r.body),
     );
     expect(offending).toHaveLength(1);
   });
