@@ -36,9 +36,6 @@ const ENV_KEYS = [
   "CORS_ORIGIN",
   "HEARTBEAT_SCAN_INTERVAL_MS",
   "HEARTBEAT_TIMEOUT_MS",
-  "FEATURE_RESTORE_FRONTEND",
-  "FEATURE_MANUAL_EXAM_OPEN_CLOSE",
-  "FEATURE_LIVE_SCORE_LIST",
   "RATE_LIMIT_MAX",
   "RATE_LIMIT_WINDOW_MS",
   "RATE_LIMIT_DISABLED",
@@ -826,19 +823,6 @@ describe("runtimeConfig", () => {
         COOKIE_SECURE: "true",
       });
       expect(config.authSecret.cookieSecure).toBe(true);
-    });
-  });
-
-  describe("feature flags default false", () => {
-    it("all features default to false", () => {
-      delete process.env.FEATURE_RESTORE_FRONTEND;
-      delete process.env.FEATURE_MANUAL_EXAM_OPEN_CLOSE;
-      delete process.env.FEATURE_LIVE_SCORE_LIST;
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.features.restoreFrontend).toBe(false);
-      expect(config.features.manualExamOpenClose).toBe(false);
-      expect(config.features.liveScoreList).toBe(false);
     });
   });
 
