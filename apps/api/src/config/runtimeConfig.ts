@@ -659,6 +659,8 @@ export function loadRuntimeConfig(
     throw err;
   }
 
+  // API_DOCS_ENABLED is a non-production dev/docs control only (dev-only
+  // binding); production ignores it regardless of any ambient env value.
   const apiReferenceEnabled = s.app.API_DOCS_ENABLED && !isProduction;
 
   const scanIntervalMs = s.app.HEARTBEAT_SCAN_INTERVAL_MS;
