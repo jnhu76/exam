@@ -96,10 +96,9 @@ if any is unset. There is NO default database password in production
 | `PUBLIC_WEB_ORIGIN` | `http://localhost:<EXAM_PORT>` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). The Compose default follows the host port; override for LAN/hostname access; HTTPS recommended in production |
 | `EXAM_PORT` | 3000 | Host published port (`${EXAM_PORT:-3000}:3000`); the container API stays on 3000 (`APP_PORT` is container-internal only). Local dev uses `DEV_API_PORT` instead — see docs/development/ports.md |
 | `HOST` | 0.0.0.0 | API bind host |
-| `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookie, fail-fast required env |
+| `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookies, and fail-fast required env |
 | `NODE_ENV` | development | maps to production/test/development |
 | `DEPLOYMENT_MODE` | singleTenant | `multiTenant` is rejected at boot (Phase 4 only) |
-| `COOKIE_SECURE` | false (auto-true in production) | cookie Secure flag |
 | `APP_TIMEZONE` / `TZ` | Asia/Shanghai | display/log/diagnostics only; does not change business-time comparison semantics |
 | `REDIS_URL` | unset (disabled) | optional; see §10 (enable with `--profile redis`; authenticated URL required) |
 | `REDIS_PASSWORD` | unset (redis profile disabled) | optional at Compose parse time — a bare `docker compose up` needs no Redis config (P7 review P1); REQUIRED when the `redis` profile is enabled: the redis container refuses to start without it and runs with `requirepass` (P7 review P1-1) |

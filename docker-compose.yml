@@ -28,7 +28,6 @@ services:
       APP_MODE: production
       APP_PORT: 3000
       HOST: 0.0.0.0
-      COOKIE_SECURE: ${COOKIE_SECURE:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
       PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
