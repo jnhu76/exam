@@ -153,9 +153,10 @@ describe("resolveSettings primitives", () => {
     expect(s.app.LAUNCHPAD_SETUP_TOKEN).toBe("tok");
   });
 
-  it("lenient ints fall back on garbage; strict ints throw", () => {
-    const lenient = resolveSettings({ RATE_LIMIT_MAX: "abc" }, DEV);
-    expect(lenient.app.RATE_LIMIT_MAX).toBe(100);
+  it("strict positive ints throw on garbage (RATE_LIMIT_MAX, SMTP_PORT, etc.)", () => {
+    expect(() => resolveSettings({ RATE_LIMIT_MAX: "abc" }, DEV)).toThrow(
+      SettingsError,
+    );
     expect(() => resolveSettings({ SMTP_PORT: "abc" }, DEV)).toThrow(
       SettingsError,
     );
@@ -242,7 +243,7 @@ describe("resolveSettings primitives", () => {
     ).toThrow(/PUBLIC_WEB_ORIGIN is required in production/);
   });
 
-  it("resolves optional ports to undefined so policy owns the fallback chain", () => {
+  it("resolves optional TCP ports to undefined so policy owns the fallback chain", () => {
     const unset = resolveSettings({}, false);
     expect(unset.app.APP_PORT).toBeUndefined();
     expect(unset.app.DEV_API_PORT).toBeUndefined();
@@ -252,11 +253,40 @@ describe("resolveSettings primitives", () => {
     expect(
       resolveSettings({ DEV_API_PORT: "3100" }, false).app.DEV_API_PORT,
     ).toBe(3100);
-    // Invalid port input is lenient (undefined → policy fallback), never a
-    // startup failure.
+    // Empty/whitespace is treated as unset → undefined (not a parse error).
     expect(
-      resolveSettings({ APP_PORT: "not-a-port" }, false).app.APP_PORT,
+      resolveSettings({ APP_PORT: "" }, false).app.APP_PORT,
     ).toBeUndefined();
+    expect(
+      resolveSettings({ APP_PORT: "  " }, false).app.APP_PORT,
+    ).toBeUndefined();
+    // Invalid port input MUST fail fast (#566) — it must never masquerade
+    // as absent and fall through to the policy default.
+    expect(() => resolveSettings({ APP_PORT: "not-a-port" }, false)).toThrow(
+      SettingsError,
+    );
+    expect(() => resolveSettings({ APP_PORT: "0" }, false)).toThrow(
+      SettingsError,
+    );
+    expect(() => resolveSettings({ APP_PORT: "65536" }, false)).toThrow(
+      SettingsError,
+    );
+    expect(() => resolveSettings({ APP_PORT: "1.5" }, false)).toThrow(
+      SettingsError,
+    );
+    expect(() => resolveSettings({ DEV_API_PORT: "abc" }, false)).toThrow(
+      SettingsError,
+    );
+    expect(() => resolveSettings({ DEV_API_PORT: "0" }, false)).toThrow(
+      SettingsError,
+    );
+    expect(() => resolveSettings({ DEV_API_PORT: "65536" }, false)).toThrow(
+      SettingsError,
+    );
+    // Counterfactual: invalid APP_PORT must not let DEV_API_PORT win.
+    expect(() =>
+      resolveSettings({ APP_PORT: "abc", DEV_API_PORT: "3101" }, false),
+    ).toThrow(SettingsError);
   });
 
   it("NODE_ENV maps leniently to the narrow env union", () => {

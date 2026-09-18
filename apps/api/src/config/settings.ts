@@ -236,14 +236,15 @@ function strictBoolLeaf(
 }
 
 /**
- * Lenient positive integer with NO leaf-level default: unset → `undefined`,
- * invalid input → `undefined` (never throws). The semantic fallback lives
- * in runtime policy, where mode-dependent chains
- * (APP_PORT ?? DEV_API_PORT ?? 3000) need the distinction between "unset"
- * and "set"; `defaultRaw` still documents the semantic fallback for
- * contracts.
+ * Strict TCP/UDP port number (1–65535). Unset/empty resolves to `undefined`
+ * so runtime policy can apply a dependent default (APP_PORT ?? DEV_API_PORT ??
+ * 3000); `defaultRaw` documents the semantic fallback for contracts.
+ *
+ * INVARIANT: an explicit but invalid value (non-numeric, 0, out-of-range)
+ * must fail fast at startup — it must never masquerade as absent and fall
+ * through to the policy default (the forbidden transition #566).
  */
-function optionalLenientIntLeaf(
+function tcpPortLeaf(
   fallback: number,
   opts: LeafOptions = {},
 ): SettingLeaf<number | undefined> {
@@ -253,7 +254,7 @@ function optionalLenientIntLeaf(
     binding = "operator",
   } = opts;
   return {
-    kind: "optional-lenient-positive-int",
+    kind: "tcp-port",
     resolve: (raw, ctx) => {
       if (isEmpty(raw)) {
         if (requiredInProduction && ctx.isProduction) {
@@ -262,48 +263,20 @@ function optionalLenientIntLeaf(
         return undefined;
       }
       const trimmed = (raw as string).trim();
-      if (!/^\d+$/.test(trimmed)) return undefined;
+      if (!/^\d+$/.test(trimmed)) {
+        throw new SettingsError(
+          `${ctx.envName} must be a TCP port (1–65535); got: ${raw}`,
+        );
+      }
       const n = Number(trimmed);
-      if (!Number.isFinite(n) || n <= 0) return undefined;
+      if (!Number.isFinite(n) || n < 1 || n > 65535) {
+        throw new SettingsError(
+          `${ctx.envName} must be a TCP port (1–65535); got: ${raw}`,
+        );
+      }
       return n;
     },
     defaultRaw: String(fallback),
-
-    requiredInProduction,
-    secret,
-    binding,
-  };
-}
-
-/**
- * Lenient positive integer: invalid input silently falls back to the
- * default (legacy port/limit semantics — see runtimeConfig history).
- */
-function lenientIntLeaf(
-  defaultValue: number,
-  opts: LeafOptions = {},
-): SettingLeaf<number> {
-  const {
-    requiredInProduction = false,
-    secret = false,
-    binding = "operator",
-  } = opts;
-  return {
-    kind: "lenient-positive-int",
-    resolve: (raw, ctx) => {
-      if (isEmpty(raw)) {
-        if (requiredInProduction && ctx.isProduction) {
-          throw new SettingsError(requiredMessage(ctx.envName));
-        }
-        return defaultValue;
-      }
-      const trimmed = (raw as string).trim();
-      if (!/^\d+$/.test(trimmed)) return defaultValue;
-      const n = Number(trimmed);
-      if (!Number.isFinite(n) || n <= 0) return defaultValue;
-      return n;
-    },
-    defaultRaw: String(defaultValue),
 
     requiredInProduction,
     secret,
@@ -711,15 +684,15 @@ export const SETTINGS = {
     HOST: stringLeaf("0.0.0.0", { binding: "fixed" }),
     // No leaf-level default: the bind-port owner switch (APP_PORT vs
     // DEV_API_PORT by mode, fallback 3000) is runtime policy.
-    APP_PORT: optionalLenientIntLeaf(3000, { binding: "fixed" }),
-    DEV_API_PORT: optionalLenientIntLeaf(3000, { binding: "dev-only" }),
+    APP_PORT: tcpPortLeaf(3000, { binding: "fixed" }),
+    DEV_API_PORT: tcpPortLeaf(3000, { binding: "dev-only" }),
     // VITE_PORT owns the dev web port; string-valued (used to build origins).
     VITE_PORT: stringLeaf("5173", { trim: true, binding: "dev-only" }),
     COOKIE_SECURE: truthyLeaf(),
     API_DOCS_ENABLED: truthyLeaf(),
     RATE_LIMIT_DISABLED: truthyLeaf(),
-    RATE_LIMIT_MAX: lenientIntLeaf(100),
-    RATE_LIMIT_WINDOW_MS: lenientIntLeaf(60 * 1000),
+    RATE_LIMIT_MAX: posIntLeaf(100),
+    RATE_LIMIT_WINDOW_MS: posIntLeaf(60 * 1000),
     TRUSTED_PROXY_CIDRS: stringLeaf("", { trim: true }),
     FEATURE_RESTORE_FRONTEND: truthyLeaf(),
     FEATURE_MANUAL_EXAM_OPEN_CLOSE: truthyLeaf(),
