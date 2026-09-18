@@ -14,15 +14,11 @@ describe("InlineErrorBanner", () => {
   it("applies the canonical destructive banner class contract", () => {
     render(<InlineErrorBanner>失败</InlineErrorBanner>);
     const banner = screen.getByRole("alert");
-    // Canonical authority-owned recipe: attention surface + destructive
-    // border + soft destructive fill + destructive text.
-    expect(banner).toHaveClass(
-      "surface-attention",
-      "border",
-      "border-destructive/30",
-      "bg-destructive-soft",
-      "text-destructive",
-    );
+    // Canonical authority-owned recipe: attention surface (radius) + border
+    // geometry + the semantic feedback tone layer owning the destructive
+    // color triple (feedback/recipes.css, issue 577 M4).
+    expect(banner).toHaveClass("surface-attention", "border");
+    expect(banner).toHaveAttribute("data-feedback-tone", "destructive");
   });
 
   it("owns role=alert and does not accept a caller role override", () => {
@@ -35,8 +31,9 @@ describe("InlineErrorBanner", () => {
     render(<InlineErrorBanner className="mt-4">x</InlineErrorBanner>);
     const banner = screen.getByRole("alert");
     // Caller className is appended (tailwind-merge semantics via cn), so the
-    // canonical destructive classes remain and the caller utility is present.
-    expect(banner).toHaveClass("surface-attention", "text-destructive", "mt-4");
+    // canonical classes remain and the caller utility is present.
+    expect(banner).toHaveClass("surface-attention", "mt-4");
+    expect(banner).toHaveAttribute("data-feedback-tone", "destructive");
   });
 
   it("renders structured children, not just a string message", () => {

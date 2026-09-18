@@ -24,8 +24,9 @@ export function ErrorState({
   return (
     <div
       role="alert"
+      data-feedback-tone="destructive"
       className={cn(
-        "flex flex-col items-center gap-3 rounded-lg border border-dashed border-destructive/30 p-8 text-center",
+        "flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center",
         className,
       )}
     >
