@@ -898,6 +898,15 @@ export function UsersPage() {
                             setCourseQuery(term);
                             setCoursePage(1);
                           }}
+                          // The default clear only empties the input value;
+                          // the committed server query and page must reset
+                          // with it, or the visible unfiltered list would
+                          // still be filtered and paged server-side.
+                          onClear={() => {
+                            setCourseSearch("");
+                            setCourseQuery("");
+                            setCoursePage(1);
+                          }}
                           loading={courseStatus === "loading"}
                         />
                         {courseStatus === "ready" &&

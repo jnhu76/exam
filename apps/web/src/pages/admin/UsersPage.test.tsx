@@ -1144,6 +1144,85 @@ describe("UsersPage", () => {
       );
     });
 
+    it("course picker: clearing the search field atomically resets the input, the committed query, and the page (issue 548 corrective)", async () => {
+      // 120 courses; searching "课程1" matches 32 of them (2 pages), so the
+      // clear can be exercised from page 2 — the state where a clear that
+      // only emptied the input would leave a stale filtered server query.
+      const allCourses = Array.from({ length: 120 }, (_, i) => ({
+        id: `c${i + 1}`,
+        name: `课程${i + 1}`,
+        code: `CODE-${i + 1}`,
+      }));
+      mockAssignmentApi({ users: [mockUsers[0], teacherTarget] });
+      const origImpl = apiGet.getMockImplementation()!;
+      const courseCalls: string[] = [];
+      apiGet.mockImplementation(async (url: string) => {
+        if (url.startsWith("/api/courses")) {
+          courseCalls.push(url);
+          const params = queryParams(url);
+          const page = Number(params.get("page") ?? "1");
+          const search = params.get("search") ?? "";
+          const filtered = search
+            ? allCourses.filter((c) => c.name.includes(search.trim()))
+            : allCourses;
+          const start = (page - 1) * 20;
+          return paged(
+            filtered.slice(start, start + 20),
+            filtered.length,
+            page,
+          );
+        }
+        return origImpl(url);
+      });
+      const user = userEvent.setup();
+      renderPage();
+      const menu = await openRowMenu(user);
+      await user.click(
+        within(menu).getByRole("menuitem", { name: "授课课程" }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      const searchbox = within(dialog).getByRole("searchbox");
+      expect(
+        await within(dialog).findByRole("radio", { name: "课程1 (CODE-1)" }),
+      ).toBeInTheDocument();
+
+      // Search commits a filtered server query...
+      await user.type(searchbox, "课程1");
+      await waitFor(
+        () => {
+          expect(queryParams(courseCalls.at(-1)!).get("search")).toBe("课程1");
+        },
+        { timeout: 3000 },
+      );
+      // ...then page forward, so the clear must also reset the page.
+      await user.click(within(dialog).getByRole("button", { name: "下一页" }));
+      await waitFor(() => {
+        expect(queryParams(courseCalls.at(-1)!).get("page")).toBe("2");
+      });
+
+      const callsBeforeClear = courseCalls.length;
+      await user.click(
+        within(dialog).getByRole("button", { name: "清除搜索" }),
+      );
+      // The input empties immediately...
+      expect(searchbox).toHaveValue("");
+      // ...and every follow-up course request is page 1 with no stale term.
+      await waitFor(() => {
+        expect(courseCalls.length).toBeGreaterThan(callsBeforeClear);
+      });
+      for (const url of courseCalls.slice(callsBeforeClear)) {
+        expect(queryParams(url).get("search")).toBeNull();
+        expect(queryParams(url).get("page")).toBe("1");
+      }
+      // The unfiltered first page is restored in the picker.
+      expect(
+        await within(dialog).findByRole("radio", { name: "课程3 (CODE-3)" }),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).queryByRole("radio", { name: "课程110 (CODE-110)" }),
+      ).not.toBeInTheDocument();
+    });
+
     it("assign and revoke failures surface dedicated mutation copy, not the load copy (issue 548 corrective)", async () => {
       const { toast } = await import("sonner");
       mockAssignmentApi({
