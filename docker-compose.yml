@@ -70,7 +70,6 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       # Tunable runtime knobs (defaults live in settings.ts). Forwarded so
       # operators can override them via .env.deploy without editing Compose.
-      RATE_LIMIT_DISABLED: ${RATE_LIMIT_DISABLED:-}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-}
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}

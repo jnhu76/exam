@@ -690,7 +690,7 @@ export const SETTINGS = {
     VITE_PORT: stringLeaf("5173", { trim: true, binding: "dev-only" }),
     COOKIE_SECURE: truthyLeaf(),
     API_DOCS_ENABLED: truthyLeaf(),
-    RATE_LIMIT_DISABLED: truthyLeaf(),
+    RATE_LIMIT_DISABLED: truthyLeaf({ binding: "dev-only" }),
     RATE_LIMIT_MAX: posIntLeaf(100),
     RATE_LIMIT_WINDOW_MS: posIntLeaf(60 * 1000),
     TRUSTED_PROXY_CIDRS: stringLeaf("", { trim: true }),

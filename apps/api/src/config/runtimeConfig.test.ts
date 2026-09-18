@@ -1145,6 +1145,157 @@ describe("runtimeConfig", () => {
     });
   });
 
+  describe("rate limit authority matrix (#567)", () => {
+    const PROD = {
+      APP_MODE: "production",
+      DATABASE_URL: "postgresql://p:p@h:5432/proddb",
+      JWT_SECRET: "production-secret",
+      CORS_ORIGIN: "https://example.com",
+      PUBLIC_WEB_ORIGIN: "https://example.com",
+    };
+
+    // ── Production invariant: rate limiting CANNOT be disabled by env ──
+    it("production + RATE_LIMIT_DISABLED unset → enabled", () => {
+      const config = loadRuntimeConfig(PROD);
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
+    it("production + RATE_LIMIT_DISABLED=false → enabled", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        RATE_LIMIT_DISABLED: "false",
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
+    it("production + RATE_LIMIT_DISABLED=true → enabled (critical regression)", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        RATE_LIMIT_DISABLED: "true",
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
+    it("production + RATE_LIMIT_DISABLED=1 → enabled (critical regression)", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        RATE_LIMIT_DISABLED: "1",
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
+    // ── Development: RATE_LIMIT_DISABLED still controls the limiter ──
+    it("development + unset → enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
+    it("development + false → enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        RATE_LIMIT_DISABLED: "false",
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
+    it("development + true → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        RATE_LIMIT_DISABLED: "true",
+      });
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+
+    it("development + 1 → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        RATE_LIMIT_DISABLED: "1",
+      });
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+
+    // ── Test: RATE_LIMIT_DISABLED still controls the limiter ──
+    it("test + unset → enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
+    it("test + false → enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        RATE_LIMIT_DISABLED: "false",
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
+    it("test + true → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        RATE_LIMIT_DISABLED: "true",
+      });
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+
+    it("test + 1 → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        RATE_LIMIT_DISABLED: "1",
+      });
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+
+    // ── E2E: always disabled, regardless of RATE_LIMIT_DISABLED ──
+    it("e2e + unset → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
+      });
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+
+    it("e2e + false → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
+        RATE_LIMIT_DISABLED: "false",
+      });
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+
+    it("e2e + true → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
+        RATE_LIMIT_DISABLED: "true",
+      });
+      expect(config.rateLimit.enabled).toBe(false);
+    });
+
+    // ── Production tuning controls survive (#567 scope boundary) ──
+    it("production RATE_LIMIT_MAX / RATE_LIMIT_WINDOW_MS are forwarded", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        RATE_LIMIT_MAX: "200",
+        RATE_LIMIT_WINDOW_MS: "120000",
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+      expect(config.rateLimit.max).toBe(200);
+      expect(config.rateLimit.timeWindow).toBe(120000);
+    });
+  });
+
   describe("resolveDatabaseUrlFromEnv (migration helper)", () => {
     it("returns TEST_DATABASE_URL in test mode", async () => {
       const { resolveDatabaseUrlFromEnv } = await import("./runtimeConfig.js");

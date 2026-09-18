@@ -35,8 +35,8 @@ describe("rate limit plugin", () => {
 
   it("enforces the limit in test mode (first request OK, second request 429 with RATE_LIMITED ErrorResponse)", async () => {
     vi.stubEnv("APP_MODE", "test");
-    // Explicitly enable the limiter: `enabled` is `mode !== "e2e" &&
-    // !isTruthy(RATE_LIMIT_DISABLED)`, and there is no shared setup forcing
+    // Explicitly enable the limiter: `enabled` is `mode === "production" ||
+    // (mode !== "e2e" && !isTruthy(RATE_LIMIT_DISABLED))`, and there is no shared setup forcing
     // this env, so an inherited RATE_LIMIT_DISABLED=true would otherwise make
     // both requests 200. Keeps this test fully hermetic.
     vi.stubEnv("RATE_LIMIT_DISABLED", "false");
@@ -79,6 +79,24 @@ describe("rate limit plugin", () => {
       expect(first.statusCode).toBe(200);
       // Still 200: in e2e mode the plugin skips registration, so the route's
       // max=1 is never enforced.
+      expect(second.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("APP_MODE=test + RATE_LIMIT_DISABLED=true bypasses the limiter (tester authority)", async () => {
+    vi.stubEnv("APP_MODE", "test");
+    vi.stubEnv("RATE_LIMIT_DISABLED", "true");
+    resetRuntimeConfigForTest();
+
+    const app = await buildRateLimitProbeApp();
+    try {
+      const first = await app.inject({ method: "GET", url: "/limited" });
+      const second = await app.inject({ method: "GET", url: "/limited" });
+
+      expect(first.statusCode).toBe(200);
+      // RATE_LIMIT_DISABLED=true in test mode disables the limiter.
       expect(second.statusCode).toBe(200);
     } finally {
       await app.close();
