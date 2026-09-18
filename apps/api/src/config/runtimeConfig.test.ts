@@ -689,6 +689,150 @@ describe("runtimeConfig", () => {
       });
       expect(config.port).toBe(3100);
     });
+
+    it("fails fast on invalid APP_PORT=abc (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          APP_PORT: "abc",
+        }),
+      ).toThrow(/APP_PORT must be a TCP port/);
+    });
+
+    it("fails fast on APP_PORT=0 (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          APP_PORT: "0",
+        }),
+      ).toThrow(/APP_PORT must be a TCP port/);
+    });
+
+    it("fails fast on APP_PORT=65536 (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          APP_PORT: "65536",
+        }),
+      ).toThrow(/APP_PORT must be a TCP port/);
+    });
+
+    it("fails fast on APP_PORT=-1 (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          APP_PORT: "-1",
+        }),
+      ).toThrow(/APP_PORT must be a TCP port/);
+    });
+
+    it("fails fast on APP_PORT=1.5 (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          APP_PORT: "1.5",
+        }),
+      ).toThrow(/APP_PORT must be a TCP port/);
+    });
+
+    it("fails fast on invalid DEV_API_PORT=abc (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          DEV_API_PORT: "abc",
+        }),
+      ).toThrow(/DEV_API_PORT must be a TCP port/);
+    });
+
+    it("fails fast on DEV_API_PORT=0 (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          DEV_API_PORT: "0",
+        }),
+      ).toThrow(/DEV_API_PORT must be a TCP port/);
+    });
+
+    it("fails fast on DEV_API_PORT=65536 (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          DEV_API_PORT: "65536",
+        }),
+      ).toThrow(/DEV_API_PORT must be a TCP port/);
+    });
+
+    it("counterfactual: invalid APP_PORT must not let DEV_API_PORT win (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          APP_PORT: "abc",
+          DEV_API_PORT: "3101",
+        }),
+      ).toThrow(/APP_PORT must be a TCP port/);
+    });
+
+    it("counterfactual: invalid APP_PORT=0 must not fall back to 3000 (#566)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          APP_PORT: "0",
+        }),
+      ).toThrow(/APP_PORT must be a TCP port/);
+    });
+
+    it("valid explicit port values are still honored (#566)", () => {
+      // Development: DEV_API_PORT drives the bind port.
+      expect(
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          DEV_API_PORT: "3101",
+        }).port,
+      ).toBe(3101);
+      // Production: APP_PORT drives the bind port.
+      expect(
+        loadRuntimeConfig({
+          APP_MODE: "production",
+          ...PROD,
+          APP_PORT: "3100",
+        }).port,
+      ).toBe(3100);
+      // Boundary: port 1 and 65535 are valid.
+      expect(
+        loadRuntimeConfig({
+          APP_MODE: "production",
+          ...PROD,
+          APP_PORT: "1",
+        }).port,
+      ).toBe(1);
+      expect(
+        loadRuntimeConfig({
+          APP_MODE: "production",
+          ...PROD,
+          APP_PORT: "65535",
+        }).port,
+      ).toBe(65535);
+    });
+
+    it("empty APP_PORT is treated as unset → policy fallback (#566)", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        APP_PORT: "",
+      });
+      expect(config.port).toBe(3000);
+    });
   });
 
   describe("PUBLIC_WEB_ORIGIN ownership", () => {
@@ -932,48 +1076,72 @@ describe("runtimeConfig", () => {
       expect(config.rateLimit.timeWindow).toBe(60000);
     });
 
-    it("negative number falls back", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "development",
-        ...DEV_DB,
-        RATE_LIMIT_MAX: "-5",
-        RATE_LIMIT_WINDOW_MS: "-1000",
-      });
-      expect(config.rateLimit.max).toBe(100);
-      expect(config.rateLimit.timeWindow).toBe(60000);
+    it("negative number fails fast", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          RATE_LIMIT_MAX: "-5",
+        }),
+      ).toThrow(/RATE_LIMIT_MAX must be a positive integer/);
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          RATE_LIMIT_WINDOW_MS: "-1000",
+        }),
+      ).toThrow(/RATE_LIMIT_WINDOW_MS must be a positive integer/);
     });
 
-    it("zero falls back", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "development",
-        ...DEV_DB,
-        RATE_LIMIT_MAX: "0",
-        RATE_LIMIT_WINDOW_MS: "0",
-      });
-      expect(config.rateLimit.max).toBe(100);
-      expect(config.rateLimit.timeWindow).toBe(60000);
+    it("zero fails fast", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          RATE_LIMIT_MAX: "0",
+        }),
+      ).toThrow(/RATE_LIMIT_MAX must be a positive integer/);
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          RATE_LIMIT_WINDOW_MS: "0",
+        }),
+      ).toThrow(/RATE_LIMIT_WINDOW_MS must be a positive integer/);
     });
 
-    it("decimal falls back", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "development",
-        ...DEV_DB,
-        RATE_LIMIT_MAX: "10.5",
-        RATE_LIMIT_WINDOW_MS: "1000.7",
-      });
-      expect(config.rateLimit.max).toBe(100);
-      expect(config.rateLimit.timeWindow).toBe(60000);
+    it("decimal fails fast", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          RATE_LIMIT_MAX: "10.5",
+        }),
+      ).toThrow(/RATE_LIMIT_MAX must be a positive integer/);
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          RATE_LIMIT_WINDOW_MS: "1000.7",
+        }),
+      ).toThrow(/RATE_LIMIT_WINDOW_MS must be a positive integer/);
     });
 
-    it("non-numeric falls back", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "development",
-        ...DEV_DB,
-        RATE_LIMIT_MAX: "abc",
-        RATE_LIMIT_WINDOW_MS: "fast",
-      });
-      expect(config.rateLimit.max).toBe(100);
-      expect(config.rateLimit.timeWindow).toBe(60000);
+    it("non-numeric fails fast", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          RATE_LIMIT_MAX: "abc",
+        }),
+      ).toThrow(/RATE_LIMIT_MAX must be a positive integer/);
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          ...DEV_DB,
+          RATE_LIMIT_WINDOW_MS: "fast",
+        }),
+      ).toThrow(/RATE_LIMIT_WINDOW_MS must be a positive integer/);
     });
   });
 
