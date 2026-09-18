@@ -5,7 +5,12 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** Displays an error message with an icon, optional retry button, and extra action slot. */
+/**
+ * Error placeholder. Appearance is OUTLINE feedback (issue 577 review-fix-1):
+ * the destructive tone owns only the dashed border color; the surface stays
+ * transparent and text stays component-owned (secondary message, destructive
+ * icon) — matching its pre-corrective unfilled placeholder shape.
+ */
 export function ErrorState({
   message,
   onRetry,
@@ -24,8 +29,10 @@ export function ErrorState({
   return (
     <div
       role="alert"
+      data-feedback-tone="destructive"
+      data-feedback-appearance="outline"
       className={cn(
-        "flex flex-col items-center gap-3 rounded-lg border border-dashed border-destructive/30 p-8 text-center",
+        "flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center",
         className,
       )}
     >

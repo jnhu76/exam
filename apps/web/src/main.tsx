@@ -9,6 +9,7 @@ import "./table/recipes.css";
 import "./table/workbench.css";
 import "./badge/recipes.css";
 import "./control/recipes.css";
+import "./feedback/recipes.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

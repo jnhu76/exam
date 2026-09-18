@@ -7,7 +7,7 @@ type InlineErrorBannerProps = {
   className?: string;
 };
 
-/** Styled inline error message banner with a destructive border and background. */
+/** Styled inline error message banner with a destructive feedback tone. */
 export function InlineErrorBanner({
   children,
   className,
@@ -15,10 +15,8 @@ export function InlineErrorBanner({
   return (
     <div
       role="alert"
-      className={cn(
-        "surface-attention border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive",
-        className,
-      )}
+      data-feedback-tone="destructive"
+      className={cn("surface-attention border px-4 py-3 text-sm", className)}
     >
       {children}
     </div>

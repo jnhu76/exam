@@ -27,8 +27,8 @@ lint rule.
 
 The live token source is `apps/web/src/index.css` `:root`. Token domains:
 
-- **Font roles:** `--font-ui` (self-hosted "Noto Sans CJK SC", first in stack),
-  `--font-reading-stack`, `--font-serif-stack` ("Noto Serif SC"),
+- **Font roles:** `--font-ui` (self-hosted "HarmonyOS Sans SC", first in
+  stack), `--font-reading-stack`, `--font-serif-stack` ("Noto Serif SC"),
   `--font-mono-stack`; exposed via `@theme inline` as `--font-sans`,
   `--font-reading`, `--font-serif`, `--font-mono`.
 - **Text (foreground) roles:** `--text`, `--text-secondary`, `--text-muted`,
@@ -40,13 +40,14 @@ The live token source is `apps/web/src/index.css` `:root`. Token domains:
   `--border-raised`, `--border-divider`/`--border-row`, `--border-grid`,
   `--border` (= shell), `--border-strong` (= control).
 - **Primary / accent:** `--primary`, `--primary-hover`, `--primary-active`,
-  `--primary-soft`, `--primary-focus`.
+  `--primary-soft`, `--primary-soft-strong`, `--primary-focus`.
 - **Sidebar (navigation) roles:** `--sidebar-bg`, `--sidebar-active`,
-  `--sidebar-active-soft`, `--sidebar-hover`, `--sidebar-text`, `--sidebar-muted`,
-  `--sidebar-border`.
+  `--sidebar-hover`, `--sidebar-text`, `--sidebar-muted`, `--sidebar-border`.
 - **Status / feedback color:** `--danger`, `--success`, `--warning`, `--info`
-  (+ `-hover`/`-soft`/`-border` variants); structured status triples
-  `--status-{neutral,info,positive,caution,destructive}-*` (bg/text/border).
+  (+ `-hover`/`-soft` variants); structured status triples
+  `--status-{neutral,info,positive,caution,destructive}-*` (bg/text/border) —
+  consumed by BOTH `StatusBadge` tones and the generic feedback layer
+  (`data-feedback-tone`).
 - **Geometry:** `--radius` (`0.5rem`).
 
 Business pages must not depend on physical token identity where a semantic role
@@ -54,19 +55,29 @@ exists.
 
 ## Fonts
 
-- **Self-hosted CJK sans:** "Noto Sans CJK SC" (regular/medium/bold woff2
-  subsets, preloaded). It is **first** in `--font-ui` so the same typeface
-  renders across Windows/macOS/Linux; OS CJK fonts are resilient fallbacks only.
-- **Self-hosted serif:** "Noto Serif SC" (weights 400, 700 only) for sustained
-  Chinese reading only — never applied to UI controls, status, scores, timers, or
-  metadata. Consumers opt in via a reading recipe; serif is never applied by HTML
-  tag alone.
+- **Primary UI sans:** self-hosted "HarmonyOS Sans SC" (Regular/Medium/Bold
+  woff2, linked in `index.html` = weights 400/500/700). It is **first** in
+  `--font-ui` so the same typeface renders across Windows/macOS/Linux.
+  "Noto Sans CJK SC" and OS CJK fonts sit later in the stack as resilient
+  name-in-stack fallbacks ONLY — no Noto sans webfont is loaded, and the
+  `/fonts/noto-sans-cjk-sc` asset directory is currently unreferenced
+  (deferred asset cleanup, #577 M1).
+- **Serif:** the self-hosted "Noto Serif SC" family is intended for sustained
+  Chinese reading only — never applied to UI controls, status, scores, timers,
+  or metadata. Wiring truth (#577 m6): `--font-reading-stack` currently
+  resolves to `--font-ui`, so `type-reading` / `type-long-response` render the
+  UI sans and the noto-serif-sc links are dormant; switching the reading stack
+  to the serif family is a visible change, not a cleanup.
 - **Allowed weights:** only **400 (regular), 500 (medium), 700 (bold)** for the
   UI sans. **No 600 (semibold) face exists.** `font-synthesis: none` is set so
   missing weights never produce fuzzy synthetic bold. Base `h1/h2/h3` anchor at
   **500** (CJK 700 reads heavy at UI sizes); 700 is reserved for large numeric
   metrics. `font-light`/300 is unused.
-- **Base:** `body { font-family: var(--font-ui); font-size: 14px; font-weight: 400 }`.
+- **Base:** `body { font-family: var(--font-ui); font-size: var(--text-sm) }` —
+  the Tailwind `text-sm` token currently resolves to **15px/1.5 line-height**
+  (22.5px line boxes) while the `type-body`/`type-secondary` recipes stay
+  14/22. This split is PENDING_VISUAL_A_B (decision D2: 14 vs 15); the two
+  layers follow their own owners until it lands.
 
 ## Typography recipes
 
@@ -109,15 +120,27 @@ Confirmed surface roles:
 | `surface-content` | background + border + radius; **NO shadow** | PageSection, DataTableShell, DataToolbar, StatsCard, exam question area |
 | `surface-subtle` | background only; inherits border/radius | Table header/hover, read-only wells |
 | `surface-navigation` | background + border + text | AppSidebar |
-| `surface-overlay` | background + border + radius + **box-shadow** | Dialog/AlertDialog/Popover/DropdownMenu/Sheet/Select, ConfirmDialog |
-| `surface-attention` | radius only; **NO shadow** — color owned by component | InlineErrorBanner, ErrorState, EmptyState |
+| `surface-overlay` (+ variants) | background + border + radius + **box-shadow** | Dialog/AlertDialog/Popover/DropdownMenu(+SubContent)/SelectContent/Sheet, ConfirmDialog (via ui/dialog) |
+| `surface-attention` | radius only; **NO shadow** — color owned by component/feedback tone | InlineErrorBanner, ErrorState, EmptyState |
+
+**Overlay family (#577 M5):** the shadcn overlay primitives consume
+`surface-overlay` — they never compose their own background/radius/shadow.
+The variants materialize the current runtime population and do NOT decide it
+(grey-vs-white modal surface and the 6/8 radius split are deferred #577
+D3/D7): base = white/6px/shadow-md (popover, dropdown);
+`data-overlay-radius="lg"` = 8px (SelectContent);
+`data-overlay-elevation="lg"` = shadow-lg (dropdown sub-content);
+`data-overlay-variant="modal"` = grey/8px/shadow-lg (dialog, alert dialog);
+`data-overlay-variant="panel"` (+ `data-overlay-panel-edge`) = grey/shadow-lg,
+no radius, single-edge border (sheet). Consumer binding is gated by
+`surface/overlayAuthority.test.ts`.
 
 **Elevation vocabulary (three roles):**
 
 | Role | Resolves to | Owner |
 | --- | --- | --- |
 | `elevation.none` | no shadow | ordinary content (`surface-content`/`subtle`/`navigation`/`attention`) |
-| `elevation.overlay` | `shadow-md`/`shadow-lg` | `surface-overlay` (dialogs, popovers, dropdowns, sheets) |
+| `elevation.overlay` | `shadow-md`/`shadow-lg` | `surface-overlay` family (dialogs, popovers, dropdowns, sheets) |
 | `elevation.sticky` | `shadow-xs` | the sticky topbar (the only non-overlay elevation owner) |
 
 **Ordinary business content has NO shadow.** Enforced by `exam-ui/no-business-shadow`
@@ -138,6 +161,8 @@ Per-component role ownership (from the component-authority record):
 | full-area loading placeholder | `LoadingState` |
 | empty-data placeholder | `EmptyState` |
 | full-area error placeholder | `ErrorState` |
+| answer save-state feedback chip | `SaveIndicator` (geometry; tone via `data-feedback-tone`) |
+| metadata tag chip | `TagBadge` (`default` / `compact-table` variants, badge/recipes.css single owner) |
 | generic confirmation dialog | `ConfirmDialog` |
 | metric / KPI presentation | `StatsCard` (+ `type-metric`) |
 | content container (arbitrary body) | `PageSection` |
@@ -334,6 +359,26 @@ The boundary: **structure is yours; governed appearance is not.**
   `className`) and collide with categorical `<Badge>` — not statically
   enforceable; enforced by review + migration.
 
+### Feedback color (generic feedback semantics)
+
+Distinct from domain status (#577 M4): the REPEATED generic feedback meaning
+— saving / saved / warning / error / destructive / informational chips,
+banners, and timer wells — is owned by the semantic feedback layer
+`apps/web/src/feedback/recipes.css`: an element declares
+`data-feedback-tone="neutral|info|positive|caution|destructive"` and the
+unlayered rule resolves the soft color triple (background/border-color/text)
+through the SAME status-triple tokens StatusBadge consumes. No new colors, no
+second taxonomy; geometry stays with the consumer component.
+
+- Consumers: `SaveIndicator` (idle/saving/saved/error → neutral/info/positive/
+  destructive), `InlineErrorBanner`, `ErrorState`.
+- Component-local interaction derivations (selected answer, hover, pressed,
+  active row — e.g. `bg-primary/5` option cards, navigator states) stay legal
+  component property; they are NOT feedback semantics.
+- Derivation guard: the co-occurring `border-X/<alpha>` + `bg-X/<alpha>`
+  soft-feedback pair may not appear in governed business roots outside the
+  audited M4 residue allowlist (`feedback/recipes.test.ts`, R6).
+
 ## Icons
 
 `AppIcon` (`apps/web/src/components/shared/AppIcon.tsx`) is the single governed
@@ -344,6 +389,15 @@ config: `badge`/`inline` = 16px stroke 1.5; `nav`/`metric` = 20px stroke 2;
 `large` = 24px; `state` = 32px; `hero` = 40px. `absoluteStrokeWidth` always on.
 `AppIcon` is decorative (`aria-hidden="true"`) or semantic (`decorative: false`
 with `label` → `role="img"`).
+
+Stroke ownership vs the cascade (#577 B1): Lucide renders `strokeWidth` as an
+SVG presentation attribute, and ANY author CSS rule that matches the icon
+beats it — so `index.css` keeps a primitive-internal optical thinning rule
+(`stroke-width: 1.5` for 16px icons) scoped strictly to primitive data-slots
+whose internal icons the primitive owns (select/checkbox/dropdown/dialog/
+sheet/pagination). A broad selector (e.g. bare `svg.lucide`) defeats
+AppIcon's per-role stroke contract for every Lucide icon and is gated by
+`AppIconStrokeCascade.test.tsx` (whole author-CSS surface).
 
 ## Tables
 
@@ -425,6 +479,12 @@ anchors: status column **8.5rem** (vocabulary-bound, derived from the
 statusMeta × supported-locale fixture), actions column **6rem** fine /
 **7.5rem** coarse pointer.
 
+Table typography (#577 M7): header cells render **13/20/500** via the
+unlayered recipe (PENDING_VISUAL_A_B, decision D4 — 13 vs 14); body cells
+render 14/22. The Question Management workbench carries an explicit compact
+density in `table/workbench.css` — 42px header height, 44px minimum body rows
+— distinct from the standard 44/48 geometry.
+
 ### Row actions
 
 `RowActions` owns representation; the page declares action intent (typed
@@ -473,6 +533,22 @@ breakpoints.
 frozen: `narrow` **9rem** (short closed enums), `wide` **11.25rem** (entity
 selectors and free text), both full-width below `sm`; the search input is
 toolbar-owned. Do not introduce new filter widths.
+
+## Disabled states
+
+The control family sanctions exactly TWO disabled patterns (#577 m3):
+
+1. **Explicit semantic disabled colors** — `disabled:bg-muted
+   disabled:text-muted-foreground disabled:cursor-not-allowed` — used by
+   Button, Input, SelectTrigger. DESIGN.md mandates this pattern only for
+   Button and Input/Select.
+2. **`disabled:opacity-50`** (+ `disabled:cursor-not-allowed`) — used by
+   Textarea, Checkbox, Switch.
+
+Unifying the family onto one pattern is the deferred
+**VISUAL-DECISION-DISABLED-STATE** choice (it materially changes appearance);
+until it lands, no control may introduce a THIRD pattern. Gated by
+`components/ui/primitiveContracts.test.ts`.
 
 ## Accessibility
 

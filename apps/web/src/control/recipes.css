@@ -28,9 +28,26 @@
 [data-slot="input"],
 [data-slot="select-trigger"],
 [data-slot="textarea"] {
-  border-color: var(--border-control);
-  background: var(--surface);
+  /* border-color is deliberately NOT owned here (issue 577 review-fix-1):
+   * the primitives' `border-input` utility resolves to the SAME value
+   * (--border-strong aliases --border-control), and an unlayered
+   * border-color on this rule defeats the layered state utilities
+   * (aria-invalid:border-destructive, focus-visible:border-ring) — the same
+   * authority-defeat class as BLOCKER-1. Cascade contract: base default <
+   * state utility < recipe. The scoped quiet-toolbar tier below still owns
+   * its own border-color deliberately. */
+  /* background is likewise NOT owned for input/select-trigger (issue 577
+   * review-fix-2): `bg-card` aliases --surface (identical value), and an
+   * unlayered background defeats the layered `disabled:bg-muted` state —
+   * disabled controls stayed white while claiming muted. Only textarea
+   * keeps the recipe-owned surface: its component declares bg-transparent,
+   * so releasing would CHANGE its resting appearance (not an authority
+   * restoration). */
   border-radius: 0.375rem;
+}
+
+[data-slot="textarea"] {
+  background: var(--surface);
 }
 
 [data-toolbar-appearance="quiet"] {

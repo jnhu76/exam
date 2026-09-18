@@ -296,7 +296,9 @@ export function QuestionPage() {
             title={tags.length > 0 ? tags.join(", ") : undefined}
           >
             {visible.map((tag) => (
-              <TagBadge key={tag}>{tag}</TagBadge>
+              <TagBadge key={tag} variant="compact-table">
+                {tag}
+              </TagBadge>
             ))}
             {overflow > 0 && (
               <span

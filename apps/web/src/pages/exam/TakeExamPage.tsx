@@ -1301,7 +1301,8 @@ export function TakeExamPage() {
                   <Button variant="outline" size="sm" onClick={toggleFlag}>
                     {/* Deliberate raw Lucide render: AppIcon does not support the
                         fill toggle needed for flagged/unflagged visual state.
-                        Governed to match inline role (16px/1.75px). */}
+                        Governed to match inline role (16px/1.5px physical
+                        stroke; attr 2.25 = 1.5 × 24/16). */}
                     <Flag
                       size={16}
                       strokeWidth={1.5}
@@ -1367,7 +1368,8 @@ export function TakeExamPage() {
               <Button variant="outline" size="sm" onClick={toggleFlag}>
                 {/* Deliberate raw Lucide render: AppIcon does not support the
                     fill toggle needed for flagged/unflagged visual state.
-                    Governed to match inline role (16px/1.75px). */}
+                    Governed to match inline role (16px/1.5px physical
+                    stroke; attr 2.25 = 1.5 × 24/16). */}
                 <Flag
                   size={16}
                   strokeWidth={1.5}

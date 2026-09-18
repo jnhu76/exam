@@ -53,42 +53,66 @@ color-contrast baseline).
 | text-subtle | `rgba(0,0,0,0.25)` | non-essential decoration only |
 | border (shell) | `#dfe3e8` | ordinary content boundary |
 | border-strong (control) | `#d1d5db` | interactive boundary |
+| border-header | `#e1e5ea` | table header bottom edge |
+| border-divider / row | `#edf0f3` | internal separators |
+| border-grid | `#f0f2f5` | weakest table per-cell grid line |
 | primary | `#2563eb` | primary action and focus |
 | primary-hover | `#1d4ed8` | primary hover |
 | primary-active | `#1e40af` | primary pressed |
 | primary-soft | `#eff6ff` | selected/info anchor |
-| danger | `#dc2f45` | error feedback, destructive action |
-| success | `#12936a` | correct/positive |
-| warning | `#c4770a` | caution |
+| primary-soft-strong | `#dbeafe` | selected-row inset accent |
+| primary-focus | `#93c5fd` | focus ring / outlines |
+| danger | `#c8263c` | error feedback, destructive action (≥4.5:1 on canvas) |
+| danger-hover | `#c41e33` | destructive hover |
+| danger-soft | `#fdecef` | destructive soft surface |
+| success | `#0e7a56` | correct/positive (≥4.5:1 on soft tints) |
+| success-soft | `#e9f8f1` | positive soft surface |
+| warning | `#8f560a` | caution (≥4.5:1 on soft tints) |
+| warning-soft | `#fdf3e3` | caution soft surface |
 | info | `#0e6dd9` | distinct from primary blue |
+| info-soft | `#e8f1fd` | informational soft surface |
+| table-header | `#f8fafc` | Koi header band fill |
+| table-row-hover | `#f8fafc` | hovered row fill |
+| table-row-focus | `#edf4ff` | focus-within row fill |
+| table-row-selected | `#eff6ff` | selected row fill |
+| action-hover | `#f8fafc` | row-action icon hover |
+| table-action-rail | `#fbfcfd` | sticky right action rail surface |
+| table-footer | `#fafbfc` | pagination band fill |
+| status triples | neutral `#f4f6fa/#475467/#e4e8ee`, info `#e8f1fd/#0d64c4/#cfe0fa`, positive `#e9f8f1/#0e7a56/#bbe9d6`, caution `#fdf3e3/#8f560a/#f0dab2`, destructive `#fdecef/#c41e33/#f4c8cf` (bg/text/border) | StatusBadge tones AND the generic feedback tones (`data-feedback-tone`) |
 | sidebar | `#fbfbfc` | light navigation chrome (`#181b21`-era dark rail is retired) |
 | sidebar-hover | `#f4f5f7` | navigation hover |
 | sidebar-active | `primary-soft` (`#eff6ff`) | navigation active (soft fill + primary accent) |
 | sidebar-text | `text` | navigation text |
 | sidebar-muted | `text-secondary` | inactive navigation text |
 
+The danger/success/warning values above are the WCAG-driven runtime values
+(the older `#dc2f45`/`#12936a`/`#c4770a` in earlier revisions failed the
+documented contrast floors; see the index.css comments).
+
 The canvas must be visibly distinct from business surfaces. Ordinary business
 surfaces are white. A card must never look dirtier than the page behind it.
 
 ## Typography
 
-The UI family is self-hosted `Noto Sans CJK SC`. Only intentional weights 400,
-500, and 700 are allowed. Weight 600 is forbidden because no 600 face is loaded;
-`font-synthesis: none` is set on `body` so missing weights never produce fuzzy
-synthetic bold. CJK 700 reads heavy/clunky at UI sizes, so titles use 500
-(medium); 700 is reserved for large numeric metrics only.
+The UI family is self-hosted `HarmonyOS Sans SC` (Regular/Medium/Bold faces =
+weights 400/500/700, linked in `index.html`). `Noto Sans CJK SC` and the
+OS-specific CJK families appear in the stack as resilient fallbacks only —
+no Noto sans webfont is loaded. Weight 600 is forbidden because no 600 face
+is loaded; `font-synthesis: none` is set on `body` so missing weights never
+produce fuzzy synthetic bold. CJK 700 reads heavy/clunky at UI sizes, so
+titles use 500 (medium); 700 is reserved for large numeric metrics only.
 
 | Role | Contract |
 | --- | --- |
 | page title | 24/32, 500 |
 | page description | 14/22, 400, muted |
 | section title | 16/24, 500 |
-| body | 14/22, 400 |
+| body | PENDING_VISUAL_A_B: `type-body`/`type-secondary` recipes are 14/22; the Tailwind `text-sm` token used by inputs/buttons currently renders 15/22.5 (current runtime, decision D2 open) |
 | emphasized cell | 14/22, 500 |
-| table header | 14/20, 500, muted |
+| table header | PENDING_VISUAL_A_B: recipe renders 13/20/500 today (decision D4 open) |
 | metadata | 12/18, 400, muted |
 | metric | 28/34, 700, tabular numbers |
-| button/label | 14/20, 500 |
+| button/label | follows `text-sm` → current runtime 15/22.5, 500 (bound to D2) |
 
 Business pages select `type-*` recipes. They do not invent page-local font
 families, arbitrary sizes, fractional typography, or opacity-weakened text.
@@ -96,15 +120,20 @@ Numeric scores, counts, durations, dates, and percentages use tabular numbers.
 
 ## Geometry and elevation
 
-- Base radius: 8px.
+- Base radius: 8px. PENDING_VISUAL_A_B: the control family currently renders
+  Buttons at 8px and Input/Select/Textarea at 6px (decision D3 open).
 - Status radius: 6px.
 - Spacing scale: 4, 8, 12, 16, 24, 32.
 - Standard desktop control: 36px.
 - Mobile direct-touch control: 44px.
-- Table header: 44px.
+- Table header: 44px (Question Management workbench uses an explicit compact
+  density: 42px header, 44px minimum rows).
 - Standard table row: 48px.
 - Ordinary content has no shadow.
-- Only overlays and the sticky topbar may own elevation.
+- Only overlays and the sticky topbar may own elevation. The floating-layer
+  appearance (background/border/radius/elevation) is owned by the
+  `surface-overlay` recipe family in `apps/web/src/surface/recipes.css`
+  (see ui-system.md §Surface and elevation).
 
 ## Page containers
 
@@ -144,11 +173,21 @@ aligns title left and actions right. Mobile stacks and gives direct actions
 One obvious primary action is expected where a page has a principal action.
 Disabled state uses explicit surface/text colors, not opacity alone.
 
+### Control disabled states
+
+Two sanctioned patterns exist in the control family (policy in
+ui-system.md §Disabled states): explicit semantic disabled colors
+(Button, Input, SelectTrigger) and `disabled:opacity-50`
+(Textarea, Checkbox, Switch). DESIGN explicitly mandates the first only for
+Button and Input/Select; unifying the family is the deferred
+VISUAL-DECISION-DISABLED-STATE choice. No third pattern may be introduced.
+
 ### Input and Select
 
-White surface, strong border, 8px radius, 36px standard height, visible indigo
+White surface, strong border, 36px standard height, visible indigo
 focus ring, readable placeholder, and explicit disabled state. Grey-on-grey
-field composition is forbidden.
+field composition is forbidden. Radius currently renders 6px via the control
+recipe (PENDING_VISUAL_A_B, decision D3 — 6 vs 8).
 
 ### Card and content surface
 
@@ -170,11 +209,20 @@ table area, and footer. Headers use `surface-subtle`, body rows use `surface`,
 and row separators remain visible. Action columns are stable, right-aligned,
 and use `RowActions` with accessible button targets.
 
-### Status
+### Status and feedback
 
-`statusMeta.ts` owns domain status to tone. `StatusBadge` owns rendering. Status
-badges are 24px-high compact rectangles with 6px radius, 12/16 text, and soft
-fills. Ordinary statuses are text-first; urgency/live statuses may show an icon.
+`statusMeta.ts` owns domain status to tone. `StatusBadge` owns rendering.
+Status badges are compact rectangles with 6px radius, 12/16 text, and soft
+fills; height currently renders 22px (PENDING_VISUAL_A_B, decision D5 —
+22 vs 24). Ordinary statuses are text-first; urgency/live statuses may show
+an icon.
+
+Generic repeated feedback meaning (saving / saved / warning / error /
+destructive / informational chips, banners, timer wells) is NOT domain
+status: it flows through the semantic feedback layer
+(`data-feedback-tone`, `apps/web/src/feedback/recipes.css`), which reuses the
+status-triple tokens — no page re-derives soft feedback colors from opacity
+utilities.
 
 ### Statistics
 
@@ -183,10 +231,15 @@ fills. Ordinary statuses are text-first; urgency/live statuses may show an icon.
 
 ### Icons
 
-`AppIcon` is the single project entry point. Governed small roles use integer
-16px or 20px dimensions, integer layout coordinates where practical, 2px
-absolute strokes, no weak opacity, and no scaled wrappers. A different icon
-source may be introduced only when unscaled DPR 1 crops prove a material gain.
+`AppIcon` is the single project entry point and owns the final size/stroke of
+every icon it renders: badge/inline = 16px @ 1.5px physical stroke,
+nav/metric = 20px @ 2px, large = 24px @ 2px, state = 32px @ 2px,
+hero = 40px @ 2px (`absoluteStrokeWidth` always on). Integer dimensions and
+layout coordinates where practical; no weak opacity; no scaled wrappers.
+shadcn/Radix primitive-internal 16px icons carry a dedicated optical thinning
+rule scoped to the primitive's own data-slots (`index.css`) — no broad global
+selector may also catch AppIcon output. A different icon source may be
+introduced only when unscaled DPR 1 crops prove a material gain.
 
 ## Responsive shell
 

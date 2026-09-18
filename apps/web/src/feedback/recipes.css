@@ -1,0 +1,69 @@
+/*
+ * Semantic feedback tone recipes — the repeated soft-feedback appearance
+ * authority (issue 577 M4).
+ *
+ * Public authority: the data-feedback-tone attribute values. A feedback
+ * surface is a REPEATED domain feedback meaning — saving / saved / warning /
+ * error / destructive / informational feedback rendered as a chip, banner, or
+ * timer well (SaveIndicator, InlineErrorBanner, ErrorState). The consumer
+ * component owns geometry (padding, radius, layout); this layer owns the
+ * soft-feedback COLOR triple (background + border-color + text color).
+ *
+ * NOT owned here (deliberate boundary, mirroring the statusMeta boundary):
+ *   - domain STATUS (lifecycle/grading/...) → statusMeta + StatusBadge;
+ *   - component-local interaction derivations (selected answer, hover,
+ *     pressed, active row) → the component, using opacity utilities legally.
+ *
+ * Color source: the SAME structured status triples StatusBadge consumes
+ * (--status-{neutral,info,positive,caution,destructive}-{bg,text,border}). No
+ * new colors, no second token taxonomy.
+ *
+ * Cascade placement (issue 577 review-fix-1): these rules are deliberately
+ * UNLAYERED — not as a workaround for the (now @layer base) default border
+ * rule, but because "feedback tone owns semantic feedback color" is an
+ * authority claim: a layered tone could be silently defeated by any layered
+ * border-color/text utility a future consumer adds, recreating the
+ * declared-but-defeated defect class this layer exists to close.
+ *
+ * Appearance axis (review-fix-1 MAJOR-1): soft (default) = the full triple,
+ * for surfaces whose established shape IS a soft fill (SaveIndicator,
+ * InlineErrorBanner). outline = the tone owns the BORDER only; the surface
+ * stays transparent and text stays component-owned — for placeholders whose
+ * established shape is a bordered, unfilled region (ErrorState).
+ */
+[data-feedback-tone="neutral"] {
+  background: var(--status-neutral-bg);
+  border-color: var(--status-neutral-border);
+  color: var(--status-neutral-text);
+}
+
+[data-feedback-tone="info"] {
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+  color: var(--status-info-text);
+}
+
+[data-feedback-tone="positive"] {
+  background: var(--status-positive-bg);
+  border-color: var(--status-positive-border);
+  color: var(--status-positive-text);
+}
+
+[data-feedback-tone="caution"] {
+  background: var(--status-caution-bg);
+  border-color: var(--status-caution-border);
+  color: var(--status-caution-text);
+}
+
+[data-feedback-tone="destructive"] {
+  background: var(--status-destructive-bg);
+  border-color: var(--status-destructive-border);
+  color: var(--status-destructive-text);
+}
+
+/* outline appearance: (0,2,0) beats any single-attribute soft triple above;
+ * only background/color are released — border-color stays tone-owned. */
+[data-feedback-tone][data-feedback-appearance="outline"] {
+  background: transparent;
+  color: inherit;
+}

@@ -19,12 +19,16 @@ const stateKeyMap: Record<SaveState, string> = {
   error: "candidateRuntime.save.error",
 };
 
-/** CSS class mapping for each save state. */
-const stateClassMap: Record<SaveState, string> = {
-  idle: "border-border bg-card text-muted-foreground",
-  saving: "border-primary/30 bg-primary/10 text-primary",
-  saved: "border-success/30 bg-success/10 text-success",
-  error: "border-destructive/30 bg-destructive/10 text-destructive",
+/**
+ * Feedback tone per save state. The soft color triple (bg/border/text) is
+ * owned by the semantic feedback layer (feedback/recipes.css,
+ * data-feedback-tone); this component owns only the chip geometry.
+ */
+const stateToneMap: Record<SaveState, string> = {
+  idle: "neutral",
+  saving: "info",
+  saved: "positive",
+  error: "destructive",
 };
 
 /** Icon mapping for each save state. */
@@ -53,7 +57,8 @@ export function SaveIndicator({
 
   return (
     <span
-      className={`inline-flex min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium ${stateClassMap[resolved]}`}
+      data-feedback-tone={stateToneMap[resolved]}
+      className="inline-flex min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium"
     >
       <AppIcon
         icon={Icon}

@@ -272,7 +272,13 @@ describe("TagBadge", () => {
       "data-tag-geometry",
       "compact",
     );
-    expect(screen.getByText("safety")).toHaveClass("font-normal");
+    // Weight is owned by the [data-slot=tag-badge] recipe (400), not by a
+    // component utility (issue 577 m2 single-owner model).
+    expect(screen.getByText("safety")).toHaveAttribute(
+      "data-tag-variant",
+      "default",
+    );
+    expect(screen.getByText("safety")).not.toHaveClass("font-normal");
   });
 });
 

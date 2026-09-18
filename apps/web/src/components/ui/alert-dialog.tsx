@@ -65,8 +65,9 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         data-size={size}
+        data-overlay-variant="modal"
         className={cn(
-          "group/alert-dialog-content fixed top-[50%] left-[50%] z-[51] flex max-h-[85dvh] min-w-0 flex-col break-words w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          "surface-overlay group/alert-dialog-content fixed top-[50%] left-[50%] z-[51] flex max-h-[85dvh] min-w-0 flex-col break-words w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 p-6 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           ALERT_DIALOG_SIZE_CLASSES[size],
           className
         )}
