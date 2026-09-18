@@ -4,6 +4,9 @@ import { Link, useParams } from "react-router";
 import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api, ApiError } from "@/lib/api";
+import { Permission } from "@exam/authz";
+import { useAuth } from "@/hooks/useAuth";
+import { can } from "@/lib/capabilities";
 import type { ExamRecoveryContext as RecoveryExamContextResponse } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
 import { recoveryErrorMessageKey } from "@/lib/recoveryErrors";
@@ -221,7 +224,17 @@ function RevokeProctorCommand({
 export function RecoveryExamDetailPage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
+  const { user: actor } = useAuth();
   const { examId } = useParams<{ examId: string }>();
+
+  // issue 548: proctor assign/revoke are MUTATION affordances gated on the actor's
+  // ExamProctorAssignmentManage capability (the same permission the server
+  // enforces on both command routes). The active-proctor read section stays
+  // visible per the page's existing IncidentRecoveryView authority. UX
+  // truthfulness only — recovery semantics (operationId, idempotency,
+  // useRecoveryOperation) are untouched.
+  const canManageProctors =
+    actor !== null && can(actor, Permission.ExamProctorAssignmentManage);
 
   const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
     useRecoveryProjection<RecoveryExamContextResponse>({
@@ -423,9 +436,11 @@ export function RecoveryExamDetailPage() {
           )}
         </PageSection>
 
-        {/* Active proctors (J5-I1C1) — assign + per-proctor revoke commands.
-            The wire has no allowedActions for this surface; server-side
-            capability gating (ExamProctorAssignmentManage) is the authority. */}
+        {/* Active proctors (J5-I1C1) — read section per the page authority;
+            the assign/revoke commands are additionally gated on the actor's
+            ExamProctorAssignmentManage capability (issue 548). The wire has no
+            allowedActions for this surface; server-side capability gating
+            remains the authority. */}
         <PageSection title={t("admin.recoveryExam.sections.proctors")}>
           {data.activeProctors.length === 0 ? (
             <p className="type-secondary">
@@ -439,24 +454,28 @@ export function RecoveryExamDetailPage() {
                   className="flex flex-wrap items-center justify-between gap-2"
                 >
                   <span className="text-sm">{p.displayName}</span>
-                  <RevokeProctorCommand
-                    examId={data.examSummary.id}
-                    examTitle={data.examSummary.title}
-                    userId={p.userId}
-                    displayName={p.displayName}
-                    refresh={refresh}
-                  />
+                  {canManageProctors && (
+                    <RevokeProctorCommand
+                      examId={data.examSummary.id}
+                      examTitle={data.examSummary.title}
+                      userId={p.userId}
+                      displayName={p.displayName}
+                      refresh={refresh}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
           )}
-          <div className="mt-3 border-t pt-3">
-            <AssignProctorCommand
-              examId={data.examSummary.id}
-              examTitle={data.examSummary.title}
-              refresh={refresh}
-            />
-          </div>
+          {canManageProctors && (
+            <div className="mt-3 border-t pt-3">
+              <AssignProctorCommand
+                examId={data.examSummary.id}
+                examTitle={data.examSummary.title}
+                refresh={refresh}
+              />
+            </div>
+          )}
         </PageSection>
 
         {/* Attempt status distribution — all attempts of the exam */}

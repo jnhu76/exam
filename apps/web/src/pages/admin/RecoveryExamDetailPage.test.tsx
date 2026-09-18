@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { permissionsForRole } from "@exam/authz";
+import { Permission, permissionsForRole } from "@exam/authz";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ApiError, api } from "@/lib/api";
@@ -57,7 +57,7 @@ const mockExamContext: RecoveryExamContextResponse = {
   snapshotAt: "2025-01-15T10:05:00Z",
 };
 
-function renderPage(examId = "exam-1") {
+function renderPage(examId = "exam-1", capabilities?: string[]) {
   return render(
     <MemoryRouter initialEntries={[`/admin/recovery/exams/${examId}`]}>
       <AuthProvider
@@ -67,7 +67,9 @@ function renderPage(examId = "exam-1") {
           name: "Admin",
           role: "Admin",
           organizationId: "org1",
-          capabilities: [...permissionsForRole("Admin")],
+          // Explicit capability sets model the Manage split (issue 548); the
+          // default is the full Admin preset.
+          capabilities: capabilities ?? [...permissionsForRole("Admin")],
         }}
       >
         <BrandProvider>
@@ -126,6 +128,36 @@ describe("RecoveryExamDetailPage", () => {
   it("renders active proctors", async () => {
     renderPage();
     expect(await screen.findByText("监考李四")).toBeInTheDocument();
+  });
+
+  it("ExamProctorAssignmentManage absent → assign/revoke affordances absent, projection still renders (issue 548)", async () => {
+    // Preset truth made explicit: the Manage capability is Admin-only.
+    expect([...permissionsForRole("Admin")]).toContain(
+      Permission.ExamProctorAssignmentManage,
+    );
+    expect([...permissionsForRole("Proctor")]).not.toContain(
+      Permission.ExamProctorAssignmentManage,
+    );
+    renderPage(
+      "exam-1",
+      [...permissionsForRole("Admin")].filter(
+        (p) => p !== Permission.ExamProctorAssignmentManage,
+      ),
+    );
+    // The read projection renders per the page's existing authority…
+    expect(
+      (await screen.findAllByText("网络恢复考试")).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText("监考李四")).toBeInTheDocument();
+    expect(await screen.findByText("网络中断")).toBeInTheDocument();
+    // …but the mutation affordances are gone and nothing fires.
+    expect(
+      screen.queryByRole("button", { name: "指派监考" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "撤销监考" }),
+    ).not.toBeInTheDocument();
+    expect(postMock).not.toHaveBeenCalled();
   });
 
   it("assigns a proctor with operationId + userId and reloads (J5-I1C1)", async () => {

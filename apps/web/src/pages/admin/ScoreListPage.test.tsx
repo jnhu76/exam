@@ -7,7 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import * as downloadModule from "@/lib/download";
 import { ScoreListPage } from "./ScoreListPage";
-import { permissionsForRole } from "@exam/authz";
+import { Permission, permissionsForRole } from "@exam/authz";
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
@@ -73,7 +73,7 @@ const mockScoreData = {
   pageSize: 20,
 };
 
-function renderPage() {
+function renderPage(capabilities?: string[]) {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/exam-1/scores"]}>
       <AuthProvider
@@ -83,7 +83,9 @@ function renderPage() {
           name: "Admin",
           role: "Admin",
           organizationId: "org1",
-          capabilities: [...permissionsForRole("Admin")],
+          // Explicit capability sets model the ScoreAllView/ScoreExport
+          // split (issue 548); the default is the full Admin preset.
+          capabilities: capabilities ?? [...permissionsForRole("Admin")],
         }}
       >
         <BrandProvider>
@@ -137,6 +139,44 @@ describe("ScoreListPage", () => {
     const [path, filename] = downloadFileSpy.mock.calls[0]!;
     expect(path).toContain("/api/exams/exam-1/export/scores");
     expect(filename).toMatch(/\.csv$/);
+  });
+
+  it("Teacher preset: page access (ScoreAllView) renders, export affordance (ScoreExport) stays absent (issue 548 F2-04)", async () => {
+    // Preset-level asymmetry made explicit: Teacher legitimately reaches the
+    // score surface but must never be offered an export the server 403s.
+    expect([...permissionsForRole("Teacher")]).toContain(
+      Permission.ScoreAllView,
+    );
+    expect([...permissionsForRole("Teacher")]).not.toContain(
+      Permission.ScoreExport,
+    );
+    renderPage([...permissionsForRole("Teacher")]);
+    // The page itself loads through the course-scoped ScoreAllView grant…
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("张三")).toBeInTheDocument();
+    expect(screen.getByText("及格率")).toBeInTheDocument();
+    // …but the export action is not rendered and never fires.
+    expect(
+      screen.queryByRole("button", { name: "导出CSV" }),
+    ).not.toBeInTheDocument();
+    expect(downloadFileSpy).not.toHaveBeenCalled();
+  });
+
+  it("capability set without ScoreExport (any role) hides the export action", async () => {
+    renderPage(
+      [...permissionsForRole("Admin")].filter(
+        (p) => p !== Permission.ScoreExport,
+      ),
+    );
+    await screen.findByRole("table");
+    expect(
+      screen.queryByRole("button", { name: "导出CSV" }),
+    ).not.toBeInTheDocument();
+    // The neighboring Back action stays unaffected.
+    expect(
+      screen.getByRole("button", { name: "返回考试详情" }),
+    ).toBeInTheDocument();
+    expect(downloadFileSpy).not.toHaveBeenCalled();
   });
 
   it("export failure shows an error toast (no silent swallow)", async () => {

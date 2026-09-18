@@ -46,6 +46,9 @@ import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
+import { Permission } from "@exam/authz";
+import { useAuth } from "@/hooks/useAuth";
+import { can } from "@/lib/capabilities";
 import { InvitationsCard } from "@/pages/admin/InvitationsCard";
 
 /** User row shape as returned by the users list API. */
@@ -55,6 +58,12 @@ interface UserRow {
   name: string;
   /** Primary role; the API returns the full assignable set (RBAC-M8). */
   role: AssignableRole;
+  /**
+   * The target's ACTIVE role set from user_role_assignments (issue 548) — the
+   * truth for assignment affordances. `role` above is only the primary-role
+   * compatibility cache and must not gate assignment management.
+   */
+  activeRoles: AssignableRole[];
   isActive: boolean;
 }
 
@@ -113,6 +122,7 @@ interface AssignableRoleItem {
 /** Admin page for managing platform users (create, edit, enable/disable). */
 export function UsersPage() {
   const { t } = useTranslation();
+  const { user: actor } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +166,21 @@ export function UsersPage() {
   /** Staff roles selectable in the create/edit dialog (Candidate excluded). */
   const selectableRoles = assignableRoles.filter((r) => r.key !== "Candidate");
 
+  // Actor capability gates (issue 548): affordances are derived from the actor's
+  // capability set — never from a role label. View decides whether the
+  // assignment surface is offered at all; Manage decides whether the
+  // assign/revoke controls inside it are mutable (View-without-Manage renders
+  // the dialog read-only). UX truthfulness only; the server stays the
+  // authority on every route.
+  const canViewTeacherAssignments =
+    actor !== null && can(actor, Permission.CourseTeacherAssignmentView);
+  const canManageTeacherAssignments =
+    actor !== null && can(actor, Permission.CourseTeacherAssignmentManage);
+  const canViewGraderAssignments =
+    actor !== null && can(actor, Permission.ExamGraderAssignmentView);
+  const canManageGraderAssignments =
+    actor !== null && can(actor, Permission.ExamGraderAssignmentManage);
+
   /**
    * Resolves a role display label: local i18n `roleLabels` wins; a missing
    * key falls back to the generic `unknown` label so an unlocalized backend
@@ -176,7 +201,11 @@ export function UsersPage() {
     try {
       const [rolesRes, usersRes] = await Promise.all([
         api.get<{ items: AssignableRoleItem[] }>("/api/roles/assignable"),
-        api.get<Page<UserRow>>("/api/users"),
+        // Same bounded-first-page contract as the course/exam option lists:
+        // the default pageSize (20) silently hid staff beyond it (issue 548
+        // operability completion; full pagination is future work, not a
+        // second list implementation here).
+        api.get<Page<UserRow>>("/api/users?page=1&pageSize=100"),
       ]);
       setAssignableRoles(rolesRes.items);
       // The server already restricts the list to staff members
@@ -456,7 +485,11 @@ export function UsersPage() {
                 icon: Pencil,
                 onSelect: () => open(user),
               },
-              ...(user.role === "Teacher"
+              // issue 548: the target's ACTIVE role membership (assignment truth,
+              // not the primary-role cache) decides eligibility; the ACTOR's
+              // capability decides whether the surface is offered.
+              ...(canViewTeacherAssignments &&
+              user.activeRoles.includes("Teacher")
                 ? [
                     {
                       id: "teacher-courses",
@@ -466,7 +499,8 @@ export function UsersPage() {
                     },
                   ]
                 : []),
-              ...(user.role === "Grader"
+              ...(canViewGraderAssignments &&
+              user.activeRoles.includes("Grader")
                 ? [
                     {
                       id: "grader-exams",
@@ -652,36 +686,38 @@ export function UsersPage() {
             <p className="py-4 type-secondary">{t("admin.common.loading")}</p>
           ) : (
             <FieldGroup className="py-4">
-              <Field>
-                <Label>{t("admin.users.teacherCourses.pickLabel")}</Label>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={selectedCourseId}
-                    onValueChange={setSelectedCourseId}
-                  >
-                    <SelectTrigger className="min-w-0 flex-1">
-                      <SelectValue
-                        placeholder={t(
-                          "admin.users.teacherCourses.pickPlaceholder",
-                        )}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {courseOptions.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name} ({c.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    onClick={() => void assignCourse()}
-                    disabled={!selectedCourseId || assignmentsBusy}
-                  >
-                    {t("admin.users.teacherCourses.assignBtn")}
-                  </Button>
-                </div>
-              </Field>
+              {canManageTeacherAssignments && (
+                <Field>
+                  <Label>{t("admin.users.teacherCourses.pickLabel")}</Label>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={selectedCourseId}
+                      onValueChange={setSelectedCourseId}
+                    >
+                      <SelectTrigger className="min-w-0 flex-1">
+                        <SelectValue
+                          placeholder={t(
+                            "admin.users.teacherCourses.pickPlaceholder",
+                          )}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courseOptions.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name} ({c.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={() => void assignCourse()}
+                      disabled={!selectedCourseId || assignmentsBusy}
+                    >
+                      {t("admin.users.teacherCourses.assignBtn")}
+                    </Button>
+                  </div>
+                </Field>
+              )}
               <Field>
                 <Label>{t("admin.users.teacherCourses.currentLabel")}</Label>
                 {assignments.filter((a) => a.status === "active").length ===
@@ -707,14 +743,16 @@ export function UsersPage() {
                                 ? `${course.name} (${course.code})`
                                 : a.courseId}
                             </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={assignmentsBusy}
-                              onClick={() => void revokeCourse(a)}
-                            >
-                              {t("admin.users.teacherCourses.revokeBtn")}
-                            </Button>
+                            {canManageTeacherAssignments && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={assignmentsBusy}
+                                onClick={() => void revokeCourse(a)}
+                              >
+                                {t("admin.users.teacherCourses.revokeBtn")}
+                              </Button>
+                            )}
                           </li>
                         );
                       })}
@@ -752,36 +790,38 @@ export function UsersPage() {
             <p className="py-4 type-secondary">{t("admin.common.loading")}</p>
           ) : (
             <FieldGroup className="py-4">
-              <Field>
-                <Label>{t("admin.users.graderExams.pickLabel")}</Label>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={selectedExamId}
-                    onValueChange={setSelectedExamId}
-                  >
-                    <SelectTrigger className="min-w-0 flex-1">
-                      <SelectValue
-                        placeholder={t(
-                          "admin.users.graderExams.pickPlaceholder",
-                        )}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {examOptions.map((e) => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    onClick={() => void assignExam()}
-                    disabled={!selectedExamId || examAssignmentsBusy}
-                  >
-                    {t("admin.users.graderExams.assignBtn")}
-                  </Button>
-                </div>
-              </Field>
+              {canManageGraderAssignments && (
+                <Field>
+                  <Label>{t("admin.users.graderExams.pickLabel")}</Label>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={selectedExamId}
+                      onValueChange={setSelectedExamId}
+                    >
+                      <SelectTrigger className="min-w-0 flex-1">
+                        <SelectValue
+                          placeholder={t(
+                            "admin.users.graderExams.pickPlaceholder",
+                          )}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {examOptions.map((e) => (
+                          <SelectItem key={e.id} value={e.id}>
+                            {e.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={() => void assignExam()}
+                      disabled={!selectedExamId || examAssignmentsBusy}
+                    >
+                      {t("admin.users.graderExams.assignBtn")}
+                    </Button>
+                  </div>
+                </Field>
+              )}
               <Field>
                 <Label>{t("admin.users.graderExams.currentLabel")}</Label>
                 {examAssignments.filter((a) => a.status === "active").length ===
@@ -803,14 +843,16 @@ export function UsersPage() {
                             <span className="min-w-0 truncate">
                               {exam ? exam.title : a.examId}
                             </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={examAssignmentsBusy}
-                              onClick={() => void revokeExam(a)}
-                            >
-                              {t("admin.users.graderExams.revokeBtn")}
-                            </Button>
+                            {canManageGraderAssignments && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={examAssignmentsBusy}
+                                onClick={() => void revokeExam(a)}
+                              >
+                                {t("admin.users.graderExams.revokeBtn")}
+                              </Button>
+                            )}
                           </li>
                         );
                       })}

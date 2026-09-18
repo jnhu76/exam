@@ -72,6 +72,23 @@ const ROLE_ORDER: ReadonlyMap<string, number> = new Map(
   ASSIGNABLE_ROLE_KEYS.map((r, i) => [r, i]),
 );
 
+/**
+ * Dedupes and canonically orders role keys by {@link ROLE_ORDER} (unknown
+ * roles fall back to lexical order so the comparator stays total). Shared by
+ * the authority kernel and read projections (e.g. the staff-list
+ * `activeRoles` field, issue 548) so multi-role output order has ONE authority.
+ */
+export function sortRolesCanonical<T extends string>(roles: Iterable<T>): T[] {
+  return [...new Set(roles)].sort((a, b) => {
+    const ai = ROLE_ORDER.get(a);
+    const bi = ROLE_ORDER.get(b);
+    if (ai === undefined || bi === undefined) {
+      return a < b ? -1 : a > b ? 1 : 0;
+    }
+    return ai - bi;
+  });
+}
+
 /** Stable comparator for {@link PermissionKey} union output. */
 function comparePermissionKey(a: PermissionKey, b: PermissionKey): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -196,16 +213,7 @@ export function deriveAssignmentAuthority(
   for (const r of active) {
     roleSet.add(r.role as RoleKey);
   }
-  const activeRoles = [...roleSet].sort((a, b) => {
-    const ai = ROLE_ORDER.get(a);
-    const bi = ROLE_ORDER.get(b);
-    if (ai === undefined || bi === undefined) {
-      // Defensive: unknown roles were already rejected above; fall back to
-      // lexical so the comparator is total.
-      return a < b ? -1 : a > b ? 1 : 0;
-    }
-    return ai - bi;
-  });
+  const activeRoles = sortRolesCanonical(roleSet);
 
   // P7-RBAC-REMEDIATION F-05 / ADR-017 D14 (read-side defense-in-depth): the
   // Admin↔Maintainer mutual-exclusion invariant is enforced on the write side

@@ -6,6 +6,7 @@ import {
   ResetPasswordRequestSchema,
   ErrorResponseSchema,
   AssignableRoleSchema,
+  type AssignableRole,
 } from "@exam/contracts";
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -22,6 +23,7 @@ import {
   recordBestEffortAudit,
 } from "../audit/auditWriter.js";
 import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
+import { sortRolesCanonical } from "../authz/assignmentAuthority.js";
 import { mutateWithEffectiveAdminPostcondition } from "../authz/adminInvariant.js";
 import { mutateWithAuthorityInvariants } from "../authz/adminMaintainerExclusion.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
@@ -45,9 +47,19 @@ const userItemSchema = z.object({
   updatedAt: z.string(),
 });
 
+/**
+ * Zod schema for a user item in the STAFF LIST response. Extends the base
+ * item with the target's ACTIVE role set from user_role_assignments (issue 548) —
+ * the truth for assignment-management affordances. `role` remains the
+ * primary-role compatibility cache and must NEVER be used as its surrogate.
+ */
+const userListItemSchema = userItemSchema.extend({
+  activeRoles: z.array(AssignableRoleSchema),
+});
+
 /** Zod schema for a paginated user list response. */
 const userListResponseSchema = z.object({
-  items: z.array(userItemSchema),
+  items: z.array(userListItemSchema),
   total: z.number().int(),
   page: z.number().int(),
   pageSize: z.number().int(),
@@ -112,6 +124,22 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         pageSize,
       );
 
+      // issue 548: ONE bounded batch query attaches each listed target's active
+      // role set (tenant-scoped, active rows only, canonically ordered). A
+      // stale staff-valued `users.role` cache yields an empty set — the cache
+      // is never the projection's fallback.
+      const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
+      const activeAssignments = await assignmentRepo.listActiveForUsers(
+        ctx,
+        items.map((u) => u.id),
+      );
+      const activeRolesByUser = new Map<string, AssignableRole[]>();
+      for (const row of activeAssignments) {
+        const roles = activeRolesByUser.get(row.userId) ?? [];
+        roles.push(row.role);
+        activeRolesByUser.set(row.userId, roles);
+      }
+
       return {
         items: items.map((u) => ({
           id: u.id,
@@ -120,6 +148,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           name: u.name,
           role: u.role,
           isActive: u.isActive,
+          activeRoles: sortRolesCanonical(activeRolesByUser.get(u.id) ?? []),
           email: u.email ?? null,
           createdAt: u.createdAt.toISOString(),
           updatedAt: u.updatedAt.toISOString(),

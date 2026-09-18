@@ -291,6 +291,127 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
     });
   });
 
+  describe("listActiveForUsers (batch projection, issue 548)", () => {
+    /** Seeds a second user into an existing org (multi-user, single tenant). */
+    async function seedSecondUserInOrg(
+      db: Database,
+      orgId: string,
+      username: string,
+    ) {
+      const userId = randomUUID();
+      const now = new Date();
+      await db.insert(schema.users).values({
+        id: userId,
+        organizationId: orgId,
+        username,
+        passwordHash: "x",
+        name: username,
+        role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { userId, ctx: createContext(orgId) };
+    }
+
+    it("returns ACTIVE rows for every requested user in ONE bounded set", async () => {
+      const a = await seedOrgAndUser(db, "batch-petra");
+      const b = await seedSecondUserInOrg(db, a.orgId, "batch-quentin");
+      const repo = createUserRoleAssignmentRepo(db);
+      await repo.assign(a.ctx, {
+        userId: a.userId,
+        role: "Candidate",
+        isPrimary: true,
+      });
+      await repo.assign(a.ctx, {
+        userId: a.userId,
+        role: "Teacher",
+        isPrimary: false,
+      });
+      const inactive = await repo.assign(a.ctx, {
+        userId: b.userId,
+        role: "Grader",
+        isPrimary: true,
+        isActive: false,
+      });
+      await repo.assign(a.ctx, {
+        userId: b.userId,
+        role: "Admin",
+        isPrimary: true,
+      });
+      const rows = await repo.listActiveForUsers(a.ctx, [a.userId, b.userId]);
+      expect(rows).toHaveLength(3);
+      expect(rows.every((r) => r.isActive)).toBe(true);
+      expect(rows.map((r) => r.id)).not.toContain(inactive.id);
+      const rolesForA = rows
+        .filter((r) => r.userId === a.userId)
+        .map((r) => r.role);
+      expect(rolesForA).toEqual(["Candidate", "Teacher"]);
+      const rolesForB = rows
+        .filter((r) => r.userId === b.userId)
+        .map((r) => r.role);
+      expect(rolesForB).toEqual(["Admin"]);
+    });
+
+    it("is scoped to ctx's organization (no cross-org leak, no duplicates)", async () => {
+      const a = await seedOrgAndUser(db, "batch-riley");
+      const b = await seedOrgAndUser(db, "batch-sam");
+      const repo = createUserRoleAssignmentRepo(db);
+      await repo.assign(a.ctx, {
+        userId: a.userId,
+        role: "Teacher",
+        isPrimary: true,
+      });
+      await repo.assign(b.ctx, {
+        userId: b.userId,
+        role: "Teacher",
+        isPrimary: true,
+      });
+      // Same userId queried under org A's ctx: only org A's row comes back.
+      const rows = await repo.listActiveForUsers(a.ctx, [a.userId, b.userId]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.userId).toBe(a.userId);
+      expect(rows[0]!.organizationId).toBe(a.orgId);
+    });
+
+    it("returns [] for empty input without touching the database", async () => {
+      const { ctx } = await seedOrgAndUser(db, "batch-tessa");
+      const repo = createUserRoleAssignmentRepo(db);
+      expect(await repo.listActiveForUsers(ctx, [])).toEqual([]);
+    });
+
+    it("returns a deterministic order (userId, createdAt)", async () => {
+      const { userId, orgId, ctx } = await seedOrgAndUser(db, "batch-uma");
+      const other = await seedSecondUserInOrg(db, orgId, "batch-victor");
+      const repo = createUserRoleAssignmentRepo(db);
+      await repo.assign(ctx, {
+        userId: other.userId,
+        role: "Teacher",
+        isPrimary: true,
+      });
+      await repo.assign(ctx, { userId, role: "Candidate", isPrimary: true });
+      await new Promise((r) => setTimeout(r, 5));
+      await repo.assign(ctx, { userId, role: "Teacher", isPrimary: false });
+      const rows = await repo.listActiveForUsers(ctx, [userId, other.userId]);
+      // UUIDs sort unpredictably; derive the expected sequence from the same
+      // (userId, createdAt) order the query promises.
+      const umaFirst = userId < other.userId;
+      expect(rows.map((r) => `${r.userId}:${r.role}`)).toEqual(
+        umaFirst
+          ? [
+              `${userId}:Candidate`,
+              `${userId}:Teacher`,
+              `${other.userId}:Teacher`,
+            ]
+          : [
+              `${other.userId}:Teacher`,
+              `${userId}:Candidate`,
+              `${userId}:Teacher`,
+            ],
+      );
+    });
+  });
+
   describe("RBAC-M10-E migration 0015 + invariant primitives", () => {
     /**
      * The isolated test DB has ALL migrations applied (0000..0015), so the

@@ -332,6 +332,15 @@ describe("Admin grader-to-exam assignment API (issue #296)", () => {
       cookies: { "auth-token": graderToken },
     });
     expect(viewed.statusCode).toBe(403);
+
+    // issue 548: revoke is a Manage mutation too — it must fail closed the same
+    // way now that the UI offers it as an affordance.
+    const revoked = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/users/${graderUserId}/exam-assignments/${examId}/revoke`,
+      cookies: { "auth-token": graderToken },
+    });
+    expect(revoked.statusCode).toBe(403);
   });
 
   it("unauthenticated request → 401", async () => {

@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { UsersPage } from "./UsersPage";
-import { permissionsForRole } from "@exam/authz";
+import { Permission, permissionsForRole } from "@exam/authz";
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -48,7 +48,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
 
 const mockUsers = [
@@ -57,9 +57,59 @@ const mockUsers = [
     username: "admin1",
     name: "Admin One",
     role: "Admin",
+    activeRoles: ["Admin"],
     isActive: true,
   },
 ];
+
+// issue 548 assignment-affordance fixtures: target eligibility is derived from
+// activeRoles (assignment truth), never from the primary-role cache.
+const teacherTarget = {
+  id: "u-t",
+  username: "teacher1",
+  name: "Teacher One",
+  role: "Teacher",
+  activeRoles: ["Teacher"],
+  isActive: true,
+};
+const candidateTeacherTarget = {
+  id: "u-ct",
+  username: "cand-teacher",
+  name: "Cand+Teach",
+  role: "Candidate",
+  activeRoles: ["Teacher", "Candidate"],
+  isActive: true,
+};
+const staleTeacherTarget = {
+  id: "u-st",
+  username: "stale-teacher",
+  name: "Stale Teacher",
+  role: "Teacher",
+  activeRoles: [],
+  isActive: true,
+};
+const graderTarget = {
+  id: "u-g",
+  username: "grader1",
+  name: "Grader One",
+  role: "Grader",
+  activeRoles: ["Grader"],
+  isActive: true,
+};
+const candidateGraderTarget = {
+  id: "u-cg",
+  username: "cand-grader",
+  name: "Cand+Grader",
+  role: "Candidate",
+  activeRoles: ["Grader", "Candidate"],
+  isActive: true,
+};
+
+const mockCourseOptions = [
+  { id: "c1", name: "数学", code: "MATH-101" },
+  { id: "c2", name: "物理", code: "PHYS-101" },
+];
+const mockExamOptions = [{ id: "e1", title: "期末考试" }];
 
 /**
  * Assignable-role authority returned by GET /roles/assignable (F-01: the
@@ -102,7 +152,7 @@ function mockApiGet(usersOverride?: {
   });
 }
 
-function renderPage() {
+function renderPage(capabilities?: string[]) {
   return render(
     <MemoryRouter initialEntries={["/admin/users"]}>
       <AuthProvider
@@ -113,7 +163,9 @@ function renderPage() {
           name: "Admin",
           role: "Admin",
           organizationId: "org1",
-          capabilities: [...permissionsForRole("Admin")],
+          // Explicit capability sets model View/Manage splits (issue 548); the
+          // default is the full Admin preset.
+          capabilities: capabilities ?? [...permissionsForRole("Admin")],
         }}
       >
         <BrandProvider>
@@ -124,6 +176,55 @@ function renderPage() {
       </AuthProvider>
     </MemoryRouter>,
   );
+}
+
+/**
+ * Routes the assignment-management GET endpoints (issue 548): the users list plus
+ * the per-user assignment lists and the course/exam option lists, so
+ * lifecycle tests can drive the dialogs against canonical routes.
+ */
+function mockAssignmentApi(options?: {
+  users?: unknown[];
+  courseAssignments?: unknown[];
+  examAssignments?: unknown[];
+  courses?: unknown[];
+  exams?: unknown[];
+}) {
+  apiGet.mockImplementation(async (url: string) => {
+    if (url === "/api/roles/assignable") return { items: mockAssignableRoles };
+    if (url.startsWith("/api/invitations")) {
+      return { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
+    }
+    if (url.includes("/course-assignments")) {
+      return { items: options?.courseAssignments ?? [] };
+    }
+    if (url.includes("/exam-assignments")) {
+      return { items: options?.examAssignments ?? [] };
+    }
+    if (url.startsWith("/api/courses")) {
+      return { items: options?.courses ?? mockCourseOptions };
+    }
+    if (url.startsWith("/api/exams")) {
+      return { items: options?.exams ?? mockExamOptions };
+    }
+    return {
+      items: options?.users ?? [mockUsers[0], teacherTarget],
+      total: 2,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    };
+  });
+}
+
+/** Opens a row's kebab overflow menu and returns its scoped menu element. */
+async function openRowMenu(user: ReturnType<typeof userEvent.setup>) {
+  const table = await screen.findByRole("table");
+  const kebab = within(table).getAllByRole("button", {
+    name: "更多操作",
+  })[0]!;
+  await user.click(kebab);
+  return screen.getByRole("menu");
 }
 
 function getDialogInputs(dialog: HTMLElement) {
@@ -368,6 +469,7 @@ describe("UsersPage", () => {
           username: "cand-teacher",
           name: "Candidate+Teacher",
           role: "Candidate",
+          activeRoles: ["Teacher", "Candidate"],
           isActive: true,
         },
       ],
@@ -402,6 +504,7 @@ describe("UsersPage", () => {
                 username: "maint1",
                 name: "Maint One",
                 role: "Maintainer",
+                activeRoles: ["Maintainer"],
                 isActive: true,
               },
             ],
@@ -447,6 +550,7 @@ describe("UsersPage", () => {
           username: "cand-teacher2",
           name: "Cand+Teacher",
           role: "Candidate",
+          activeRoles: ["Teacher", "Candidate"],
           isActive: true,
         },
       ],
@@ -503,6 +607,7 @@ describe("UsersPage", () => {
                   username: "aud1",
                   name: "Aud One",
                   role: "Auditor",
+                  activeRoles: ["Admin"],
                   isActive: true,
                 },
               ],
@@ -534,6 +639,7 @@ describe("UsersPage", () => {
           username: "cand1",
           name: "Candidate",
           role: "Candidate",
+          activeRoles: ["Candidate"],
           isActive: true,
         },
       ],
@@ -547,5 +653,392 @@ describe("UsersPage", () => {
     const table = tables.find((t) => within(t).queryByText("admin1"))!;
     expect(within(table).getByText("admin1")).toBeInTheDocument();
     expect(within(table).getByText("cand1")).toBeInTheDocument();
+  });
+
+  describe("Teacher course-assignment affordance (issue 548)", () => {
+    it("offers the action for a Candidate-primary + Teacher-secondary target (active-role truth, not users.role)", async () => {
+      mockAssignmentApi({ users: [mockUsers[0], candidateTeacherTarget] });
+      const user = userEvent.setup();
+      renderPage();
+      const menu = await openRowMenu(user);
+      expect(
+        within(menu).getByRole("menuitem", { name: "授课课程" }),
+      ).toBeInTheDocument();
+    });
+
+    it("does NOT offer the action when the cached primary role is Teacher but no Teacher assignment is active", async () => {
+      // The stale-cache shape (F-06): users.role keeps "Teacher" while the
+      // active set is empty. The compatibility cache must never substitute
+      // for assignment truth. With the assignment action gated off the row
+      // keeps only edit + toggle (≤2 actions) — no overflow kebab exists and
+      // the affordance is unreachable in any representation.
+      mockAssignmentApi({ users: [mockUsers[0], staleTeacherTarget] });
+      renderPage();
+      const table = await screen.findByRole("table");
+      expect(
+        within(table).queryByRole("button", { name: "授课课程" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(table).queryAllByRole("button", { name: "更多操作" }),
+      ).toHaveLength(0);
+    });
+
+    it("full lifecycle: open → GET assignments + courses → POST assign → refresh → revoke → refresh → removal", async () => {
+      // Mutable server-side state: assign/revoke mutate the fixture so the
+      // dialog's post-mutation refresh renders the new truth.
+      const courseAssignments: {
+        id: string;
+        courseId: string;
+        status: "active" | "revoked";
+        assignedAt: string;
+        revokedAt: string | null;
+      }[] = [];
+      mockAssignmentApi({
+        users: [mockUsers[0], teacherTarget],
+        courseAssignments: [],
+        courses: mockCourseOptions,
+      });
+      const origImpl = apiGet.getMockImplementation()!;
+      apiGet.mockImplementation(async (url: string) => {
+        if (url.includes("/course-assignments")) {
+          return { items: [...courseAssignments] };
+        }
+        return origImpl(url);
+      });
+      apiPost.mockImplementation(async (url: string, body?: unknown) => {
+        if (
+          url === "/api/admin/users/u-t/course-assignments" &&
+          typeof body === "object"
+        ) {
+          courseAssignments.push({
+            id: "a1",
+            courseId: (body as { courseId: string }).courseId,
+            status: "active",
+            assignedAt: "2026-09-18T00:00:00Z",
+            revokedAt: null,
+          });
+          return { outcome: "applied" };
+        }
+        if (url === "/api/admin/users/u-t/course-assignments/c1/revoke") {
+          const idx = courseAssignments.findIndex((a) => a.courseId === "c1");
+          if (idx >= 0) {
+            courseAssignments[idx]!.status = "revoked";
+            courseAssignments[idx]!.revokedAt = "2026-09-18T01:00:00Z";
+          }
+          return { outcome: "applied" };
+        }
+        return { ok: true };
+      });
+      const user = userEvent.setup();
+      renderPage();
+
+      // Open the dialog from the row's kebab menu.
+      const menu = await openRowMenu(user);
+      await user.click(
+        within(menu).getByRole("menuitem", { name: "授课课程" }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      expect(
+        within(dialog).getByText("管理「Teacher One」的授课课程"),
+      ).toBeInTheDocument();
+      // Both canonical GETs fired.
+      await waitFor(() => {
+        expect(apiGet).toHaveBeenCalledWith(
+          "/api/admin/users/u-t/course-assignments?status=all",
+        );
+      });
+      expect(apiGet).toHaveBeenCalledWith("/api/courses?page=1&pageSize=100");
+      // Empty start.
+      expect(
+        await within(dialog).findByText("尚未分配任何课程。"),
+      ).toBeInTheDocument();
+
+      // Select the course and assign.
+      await user.click(within(dialog).getByRole("combobox"));
+      await user.click(
+        await screen.findByRole("option", { name: "数学 (MATH-101)" }),
+      );
+      await user.click(within(dialog).getByRole("button", { name: "分配" }));
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/admin/users/u-t/course-assignments",
+        { courseId: "c1" },
+      );
+      // Post-mutation refresh rendered the active assignment.
+      expect(
+        await within(dialog).findByText("数学 (MATH-101)"),
+      ).toBeInTheDocument();
+
+      // Revoke it and observe removal.
+      await user.click(within(dialog).getByRole("button", { name: "撤销" }));
+      await waitFor(() => {
+        expect(apiPost).toHaveBeenCalledWith(
+          "/api/admin/users/u-t/course-assignments/c1/revoke",
+        );
+      });
+      await waitFor(() => {
+        expect(
+          within(dialog).queryByRole("button", { name: "撤销" }),
+        ).not.toBeInTheDocument();
+      });
+      expect(
+        await within(dialog).findByText("尚未分配任何课程。"),
+      ).toBeInTheDocument();
+    });
+
+    it("surfaces the no_change outcome from a duplicate assignment", async () => {
+      const { toast } = await import("sonner");
+      mockAssignmentApi({ users: [mockUsers[0], teacherTarget] });
+      apiPost.mockResolvedValue({ outcome: "no_change" });
+      const user = userEvent.setup();
+      renderPage();
+      const menu = await openRowMenu(user);
+      await user.click(
+        within(menu).getByRole("menuitem", { name: "授课课程" }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("combobox"));
+      await user.click(
+        await screen.findByRole("option", { name: "数学 (MATH-101)" }),
+      );
+      await user.click(within(dialog).getByRole("button", { name: "分配" }));
+      await waitFor(() => {
+        expect(toast.info).toHaveBeenCalledWith("该课程已在授课列表中");
+      });
+    });
+
+    it("busy protection: a double click issues exactly one assign POST", async () => {
+      let resolveAssign: (value: unknown) => void;
+      apiPost.mockReturnValue(
+        new Promise((resolve) => {
+          resolveAssign = resolve;
+        }),
+      );
+      mockAssignmentApi({ users: [mockUsers[0], teacherTarget] });
+      const user = userEvent.setup();
+      renderPage();
+      const menu = await openRowMenu(user);
+      await user.click(
+        within(menu).getByRole("menuitem", { name: "授课课程" }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("combobox"));
+      await user.click(
+        await screen.findByRole("option", { name: "数学 (MATH-101)" }),
+      );
+      const assignBtn = within(dialog).getByRole("button", { name: "分配" });
+      await user.dblClick(assignBtn);
+      const assignCalls = apiPost.mock.calls.filter(
+        (c) => c[0] === "/api/admin/users/u-t/course-assignments",
+      );
+      expect(assignCalls).toHaveLength(1);
+      resolveAssign!({ outcome: "applied" });
+      await act(async () => {});
+    });
+
+    it("actor without CourseTeacherAssignmentView sees no action (capability, not role label)", async () => {
+      mockAssignmentApi({ users: [mockUsers[0], teacherTarget] });
+      renderPage(
+        [...permissionsForRole("Admin")].filter(
+          (p) => p !== Permission.CourseTeacherAssignmentView,
+        ),
+      );
+      const table = await screen.findByRole("table");
+      expect(
+        within(table).queryByRole("button", { name: "授课课程" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(table).queryAllByRole("button", { name: "更多操作" }),
+      ).toHaveLength(0);
+    });
+
+    it("View without Manage renders the dialog read-only (no assign/revoke affordances)", async () => {
+      mockAssignmentApi({
+        users: [mockUsers[0], teacherTarget],
+        courseAssignments: [
+          {
+            id: "a1",
+            courseId: "c1",
+            status: "active",
+            assignedAt: "2026-09-18T00:00:00Z",
+            revokedAt: null,
+          },
+        ],
+      });
+      const user = userEvent.setup();
+      renderPage(
+        [...permissionsForRole("Admin")].filter(
+          (p) => p !== Permission.CourseTeacherAssignmentManage,
+        ),
+      );
+      const menu = await openRowMenu(user);
+      await user.click(
+        within(menu).getByRole("menuitem", { name: "授课课程" }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      // The read-only projection still lists the active assignment…
+      expect(
+        await within(dialog).findByText("数学 (MATH-101)"),
+      ).toBeInTheDocument();
+      // …but exposes no mutation affordances.
+      expect(within(dialog).queryByRole("combobox")).not.toBeInTheDocument();
+      expect(
+        within(dialog).queryByRole("button", { name: "分配" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(dialog).queryByRole("button", { name: "撤销" }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Grader exam-assignment affordance (issue 548)", () => {
+    it("offers the action for a Candidate-primary + Grader-secondary target", async () => {
+      mockAssignmentApi({ users: [mockUsers[0], candidateGraderTarget] });
+      const user = userEvent.setup();
+      renderPage();
+      const menu = await openRowMenu(user);
+      expect(
+        within(menu).getByRole("menuitem", { name: "评卷考试" }),
+      ).toBeInTheDocument();
+    });
+
+    it("full lifecycle: open → GET assignments + exams → POST assign → refresh → revoke → refresh → removal", async () => {
+      const examAssignments: {
+        id: string;
+        examId: string;
+        status: "active" | "revoked";
+        assignedAt: string;
+        revokedAt: string | null;
+      }[] = [];
+      mockAssignmentApi({
+        users: [mockUsers[0], graderTarget],
+        examAssignments: [],
+        exams: mockExamOptions,
+      });
+      const origImpl = apiGet.getMockImplementation()!;
+      apiGet.mockImplementation(async (url: string) => {
+        if (url.includes("/exam-assignments")) {
+          return { items: [...examAssignments] };
+        }
+        return origImpl(url);
+      });
+      apiPost.mockImplementation(async (url: string, body?: unknown) => {
+        if (
+          url === "/api/admin/users/u-g/exam-assignments" &&
+          typeof body === "object"
+        ) {
+          examAssignments.push({
+            id: "ea1",
+            examId: (body as { examId: string }).examId,
+            status: "active",
+            assignedAt: "2026-09-18T00:00:00Z",
+            revokedAt: null,
+          });
+          return { outcome: "applied" };
+        }
+        if (url === "/api/admin/users/u-g/exam-assignments/e1/revoke") {
+          const idx = examAssignments.findIndex((a) => a.examId === "e1");
+          if (idx >= 0) {
+            examAssignments[idx]!.status = "revoked";
+            examAssignments[idx]!.revokedAt = "2026-09-18T01:00:00Z";
+          }
+          return { outcome: "applied" };
+        }
+        return { ok: true };
+      });
+      const user = userEvent.setup();
+      renderPage();
+
+      const menu = await openRowMenu(user);
+      await user.click(
+        within(menu).getByRole("menuitem", { name: "评卷考试" }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      expect(
+        within(dialog).getByText("管理「Grader One」的评卷考试"),
+      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(apiGet).toHaveBeenCalledWith(
+          "/api/admin/users/u-g/exam-assignments?status=all",
+        );
+      });
+      expect(apiGet).toHaveBeenCalledWith("/api/exams?page=1&pageSize=100");
+      expect(
+        await within(dialog).findByText("尚未分配任何考试。"),
+      ).toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole("combobox"));
+      await user.click(await screen.findByRole("option", { name: "期末考试" }));
+      await user.click(within(dialog).getByRole("button", { name: "分配" }));
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/admin/users/u-g/exam-assignments",
+        { examId: "e1" },
+      );
+      expect(await within(dialog).findByText("期末考试")).toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole("button", { name: "撤销" }));
+      await waitFor(() => {
+        expect(apiPost).toHaveBeenCalledWith(
+          "/api/admin/users/u-g/exam-assignments/e1/revoke",
+        );
+      });
+      await waitFor(() => {
+        expect(
+          within(dialog).queryByRole("button", { name: "撤销" }),
+        ).not.toBeInTheDocument();
+      });
+      expect(
+        await within(dialog).findByText("尚未分配任何考试。"),
+      ).toBeInTheDocument();
+    });
+
+    it("actor without ExamGraderAssignmentView sees no action", async () => {
+      mockAssignmentApi({ users: [mockUsers[0], graderTarget] });
+      renderPage(
+        [...permissionsForRole("Admin")].filter(
+          (p) => p !== Permission.ExamGraderAssignmentView,
+        ),
+      );
+      const table = await screen.findByRole("table");
+      expect(
+        within(table).queryByRole("button", { name: "评卷考试" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(table).queryAllByRole("button", { name: "更多操作" }),
+      ).toHaveLength(0);
+    });
+
+    it("View without Manage renders the dialog read-only (no assign/revoke affordances)", async () => {
+      mockAssignmentApi({
+        users: [mockUsers[0], graderTarget],
+        examAssignments: [
+          {
+            id: "ea1",
+            examId: "e1",
+            status: "active",
+            assignedAt: "2026-09-18T00:00:00Z",
+            revokedAt: null,
+          },
+        ],
+      });
+      const user = userEvent.setup();
+      renderPage(
+        [...permissionsForRole("Admin")].filter(
+          (p) => p !== Permission.ExamGraderAssignmentManage,
+        ),
+      );
+      const menu = await openRowMenu(user);
+      await user.click(
+        within(menu).getByRole("menuitem", { name: "评卷考试" }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      expect(await within(dialog).findByText("期末考试")).toBeInTheDocument();
+      expect(within(dialog).queryByRole("combobox")).not.toBeInTheDocument();
+      expect(
+        within(dialog).queryByRole("button", { name: "分配" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(dialog).queryByRole("button", { name: "撤销" }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

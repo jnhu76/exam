@@ -11,7 +11,7 @@ import {
   createAsyncTenantCrudRepo,
   now,
 } from "./baseRepo.js";
-import { and, eq, ne, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { executeInTransaction } from "../types.js";
 
 /** A user-role-assignment row shape returned by the repo. */
@@ -128,6 +128,34 @@ export function createUserRoleAssignmentRepo(db: Database) {
       )
       .limit(1);
     return rows[0] ? row(rows[0]) : null;
+  }
+
+  /**
+   * Lists every ACTIVE assignment for a BOUNDED set of users in one query
+   * (issue 548): the staff-list read projection consumes this to attach each
+   * target's active role set without a per-row lookup (no N+1). Tenant
+   * scoped; inactive rows excluded by the WHERE clause; deterministic
+   * (userId, createdAt) order so grouping into per-user role sets is stable.
+   * Empty input returns [] without touching the database.
+   */
+  async function listActiveForUsers(
+    ctx: TenantContext | RequestContext,
+    userIds: string[],
+  ): Promise<UserRoleAssignmentRow[]> {
+    if (userIds.length === 0) return [];
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select()
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          inArray(userRoleAssignments.userId, userIds),
+          eq(userRoleAssignments.isActive, true),
+        ),
+      )
+      .orderBy(userRoleAssignments.userId, userRoleAssignments.createdAt);
+    return rows.map(row);
   }
 
   /**
@@ -690,6 +718,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
     ...repo,
     listForUser,
     listActiveForUser,
+    listActiveForUsers,
     findPrimaryActiveForUser,
     findAdminMaintainerExclusionViolations,
     assign,

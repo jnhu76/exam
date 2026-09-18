@@ -283,6 +283,15 @@ describe("Admin teacher-to-course assignment API (issue #286)", () => {
       cookies: { "auth-token": teacherToken },
     });
     expect(viewed.statusCode).toBe(403);
+
+    // issue 548: revoke is a Manage mutation too — it must fail closed the same
+    // way now that the UI offers it as an affordance.
+    const revoked = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/users/${teacherUserId}/course-assignments/${courseId}/revoke`,
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(revoked.statusCode).toBe(403);
   });
 
   it("unauthenticated request → 401", async () => {
