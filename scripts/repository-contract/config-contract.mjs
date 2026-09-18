@@ -250,6 +250,22 @@ console.log("2. Checking docker-compose.yml app environment bindings...");
           fail(`settings leaf ${name} has unknown binding '${leaf.binding}'.`);
       }
     }
+
+    // Reverse closure: every key the production container receives must be
+    // owned by a semantic leaf. A key with no owner is unaccounted config
+    // surface — the runtime can never read it, so forwarding it is either a
+    // ghost of a deleted setting or a typo (#570). TZ is the container
+    // timezone (not an application setting) and is the sole allowed extra.
+    const NON_SEMANTIC_ENV = new Set(["TZ"]);
+    for (const name of appEnv.keys()) {
+      if (!LEAVES.has(name) && !NON_SEMANTIC_ENV.has(name)) {
+        fail(
+          `docker-compose.yml 'app' sets ${name}, but no semantic setting ` +
+            "owns it — the runtime can never read it. Remove the forward, or " +
+            "define the leaf in settings.ts first if this is a new setting.",
+        );
+      }
+    }
   }
 }
 console.log("   Docker production binding check complete.");

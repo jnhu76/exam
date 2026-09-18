@@ -161,12 +161,6 @@ export interface PublicWebOriginConfig {
   origin: string;
 }
 
-export interface FeaturesConfig {
-  restoreFrontend: boolean;
-  manualExamOpenClose: boolean;
-  liveScoreList: boolean;
-}
-
 export interface HeartbeatConfig {
   scanIntervalMs: number;
   timeoutMs: number;
@@ -277,7 +271,6 @@ export interface AppRuntimeConfig {
   redis: RedisConfig;
   authSecret: AuthSecretConfig;
   cors: CorsConfig;
-  features: FeaturesConfig;
   heartbeat: HeartbeatConfig;
   apiReference: ApiReferenceConfig;
   tenancy: TenancyConfig;
@@ -659,6 +652,8 @@ export function loadRuntimeConfig(
     throw err;
   }
 
+  // API_DOCS_ENABLED is a non-production dev/docs control only (dev-only
+  // binding); production ignores it regardless of any ambient env value.
   const apiReferenceEnabled = s.app.API_DOCS_ENABLED && !isProduction;
 
   const scanIntervalMs = s.app.HEARTBEAT_SCAN_INTERVAL_MS;
@@ -687,11 +682,6 @@ export function loadRuntimeConfig(
       cookieSecure: isProduction || s.app.COOKIE_SECURE,
     },
     cors: { origin: resolveCorsOrigin(s) },
-    features: {
-      restoreFrontend: s.app.FEATURE_RESTORE_FRONTEND,
-      manualExamOpenClose: s.app.FEATURE_MANUAL_EXAM_OPEN_CLOSE,
-      liveScoreList: s.app.FEATURE_LIVE_SCORE_LIST,
-    },
     heartbeat: {
       scanIntervalMs,
       timeoutMs,

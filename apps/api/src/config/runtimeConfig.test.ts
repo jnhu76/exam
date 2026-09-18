@@ -36,9 +36,6 @@ const ENV_KEYS = [
   "CORS_ORIGIN",
   "HEARTBEAT_SCAN_INTERVAL_MS",
   "HEARTBEAT_TIMEOUT_MS",
-  "FEATURE_RESTORE_FRONTEND",
-  "FEATURE_MANUAL_EXAM_OPEN_CLOSE",
-  "FEATURE_LIVE_SCORE_LIST",
   "RATE_LIMIT_MAX",
   "RATE_LIMIT_WINDOW_MS",
   "RATE_LIMIT_DISABLED",
@@ -227,6 +224,118 @@ describe("runtimeConfig", () => {
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.apiReference.enabled).toBe(false);
+    });
+  });
+
+  describe("api-reference authority matrix (#569)", () => {
+    const PROD = {
+      APP_MODE: "production",
+      DATABASE_URL: "postgresql://p:p@h:5432/proddb",
+      JWT_SECRET: "production-secret",
+      CORS_ORIGIN: "https://example.com",
+      PUBLIC_WEB_ORIGIN: "https://example.com",
+    };
+
+    // ── Production invariant: docs CANNOT be enabled by env ──
+    it("production + API_DOCS_ENABLED unset → disabled", () => {
+      const config = loadRuntimeConfig(PROD);
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    it("production + API_DOCS_ENABLED=false → disabled", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        API_DOCS_ENABLED: "false",
+      });
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    it("production + API_DOCS_ENABLED=true → disabled (critical regression)", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        API_DOCS_ENABLED: "true",
+      });
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    it("production + API_DOCS_ENABLED=1 → disabled (critical regression)", () => {
+      const config = loadRuntimeConfig({
+        ...PROD,
+        API_DOCS_ENABLED: "1",
+      });
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    // ── Development: the knob keeps its real consumer ──
+    it("development + unset → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+      });
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    it("development + false → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        API_DOCS_ENABLED: "false",
+      });
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    it("development + true → enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        API_DOCS_ENABLED: "true",
+      });
+      expect(config.apiReference.enabled).toBe(true);
+    });
+
+    it("development + 1 → enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        ...DEV_DB,
+        API_DOCS_ENABLED: "1",
+      });
+      expect(config.apiReference.enabled).toBe(true);
+    });
+
+    // ── Test: the knob keeps its real consumer ──
+    it("test + unset → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+      });
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    it("test + false → disabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        API_DOCS_ENABLED: "false",
+      });
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    it("test + true → enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        API_DOCS_ENABLED: "true",
+      });
+      expect(config.apiReference.enabled).toBe(true);
+    });
+
+    it("test + 1 → enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+        API_DOCS_ENABLED: "1",
+      });
+      expect(config.apiReference.enabled).toBe(true);
     });
   });
 
@@ -714,19 +823,6 @@ describe("runtimeConfig", () => {
         COOKIE_SECURE: "true",
       });
       expect(config.authSecret.cookieSecure).toBe(true);
-    });
-  });
-
-  describe("feature flags default false", () => {
-    it("all features default to false", () => {
-      delete process.env.FEATURE_RESTORE_FRONTEND;
-      delete process.env.FEATURE_MANUAL_EXAM_OPEN_CLOSE;
-      delete process.env.FEATURE_LIVE_SCORE_LIST;
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.features.restoreFrontend).toBe(false);
-      expect(config.features.manualExamOpenClose).toBe(false);
-      expect(config.features.liveScoreList).toBe(false);
     });
   });
 
