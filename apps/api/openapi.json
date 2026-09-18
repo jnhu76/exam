@@ -3140,6 +3140,20 @@
                           },
                           "updatedAt": {
                             "type": "string"
+                          },
+                          "activeRoles": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "Admin",
+                                "Teacher",
+                                "Proctor",
+                                "Grader",
+                                "Candidate",
+                                "Maintainer"
+                              ]
+                            }
                           }
                         },
                         "required": [
@@ -3151,7 +3165,8 @@
                           "isActive",
                           "email",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "activeRoles"
                         ],
                         "additionalProperties": false
                       }
