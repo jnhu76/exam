@@ -1,0 +1,50 @@
+{
+  "runId": "topo-proxy-S20-2026-09-19T05-31-24-787Z",
+  "state": "proxy",
+  "n": 20,
+  "loginSuccess": 20,
+  "login429": 0,
+  "loginP": {
+    "p50": 711.9,
+    "p95": 893.9,
+    "p99": 896.9,
+    "max": 896.9313729999994
+  },
+  "steady": null,
+  "distinctAuditIps": 21,
+  "auditIpsSample": [
+    "127.0.0.1 x1",
+    "127.0.0.10 x1",
+    "127.0.0.11 x1",
+    "127.0.0.12 x1",
+    "127.0.0.13 x1",
+    "127.0.0.14 x1",
+    "127.0.0.15 x1",
+    "127.0.0.16 x1",
+    "127.0.0.17 x1",
+    "127.0.0.18 x1",
+    "127.0.0.19 x1",
+    "127.0.0.2 x1"
+  ],
+  "probe": {
+    "directXff": {
+      "spoofedHeader": "9.9.9.9 from two distinct untrusted sockets",
+      "socketA_130req_statusTally": {
+        "401": 10,
+        "429": 120
+      },
+      "socketB_same_spoofed_header_status": 401,
+      "keyIsSocketPeerNotXff": true
+    },
+    "throughProxyInjectedXff": {
+      "injectedHeader": "6.6.6.6 (candidate-injected, left of genuine entry)",
+      "socketA_130req_statusTally": {
+        "401": 10,
+        "429": 120
+      },
+      "socketB_same_injected_header_status": 401,
+      "genuineEntrySelectedNotInjected": true
+    }
+  },
+  "note": "per-request raw in samples.jsonl"
+}

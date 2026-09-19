@@ -1,0 +1,11 @@
+{
+  "users": 223,
+  "exams": 3,
+  "attempts": 120,
+  "admissions": 120,
+  "episodesTotal": 1200,
+  "detectedEvents": 1200,
+  "clientEvents": 10000,
+  "systemIncidents": 0,
+  "pendingEpisodes": 300
+}

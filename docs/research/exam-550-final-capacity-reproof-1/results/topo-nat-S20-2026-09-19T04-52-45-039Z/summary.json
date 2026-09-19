@@ -1,0 +1,17 @@
+{
+  "runId": "topo-nat-S20-2026-09-19T04-52-45-039Z",
+  "state": "nat",
+  "n": 20,
+  "loginSuccess": 10,
+  "login429": 10,
+  "loginP": {
+    "p50": 21.2,
+    "p95": 266.8,
+    "p99": 269,
+    "max": 268.9980649999925
+  },
+  "steady": null,
+  "distinctAuditIps": 1,
+  "auditIpsSample": ["127.0.0.1 x11"],
+  "note": "per-request raw in samples.jsonl"
+}

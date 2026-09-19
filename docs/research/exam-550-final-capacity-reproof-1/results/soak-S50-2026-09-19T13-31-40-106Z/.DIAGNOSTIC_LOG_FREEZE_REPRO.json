@@ -1,0 +1,6 @@
+{
+  "purpose": "bounded reproduction attempt for the pino-stdout outage observed in soak-S50-2026-09-19T11-41-07-352Z (12-corrective-1.md Server-log outage). NOT part of the canonical evidence set.",
+  "configuration": "identical to the canonical corrective soak: run-soak.ts, --minutes=20 --n=50, APP_MODE=production, DIRECT_LAN distinct source IPs, pool max=10",
+  "result": "no freeze: pino stdout continuous for the full 20 min, crossed the 12.7-min elapsed point where the canonical run froze; fd 1 unchanged throughout (2 s readlink watch)",
+  "outcome_classification": "one-off environmental event; serving unaffected in both runs"
+}

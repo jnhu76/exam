@@ -1,0 +1,452 @@
+{
+  "run_dir": "../results/soak-S50-2026-09-19T06-13-04-398Z",
+  "soakWindow": {
+    "first": "2026-09-19T06:13:06.462Z",
+    "last": "2026-09-19T07:48:07.536Z"
+  },
+  "connectionRecords": 571,
+  "distinctPids": 21,
+  "poolSizeHistogram": {
+    "3": 3,
+    "4": 25,
+    "5": 235,
+    "6": 60,
+    "7": 10,
+    "8": 8,
+    "9": 15,
+    "10": 18,
+    "11": 15,
+    "12": 182
+  },
+  "pids": [
+    {
+      "pid": 846727,
+      "backendStart": "2026-09-19 14:13:04.514074+08",
+      "firstSeen": "2026-09-19T06:13:06.462Z",
+      "lastSeen": "2026-09-19T06:52:46.886Z",
+      "samples": 239
+    },
+    {
+      "pid": 846735,
+      "backendStart": "2026-09-19 14:13:05.957723+08",
+      "firstSeen": "2026-09-19T06:13:06.462Z",
+      "lastSeen": "2026-09-19T06:48:56.838Z",
+      "samples": 216
+    },
+    {
+      "pid": 846736,
+      "backendStart": "2026-09-19 14:13:05.958219+08",
+      "firstSeen": "2026-09-19T06:13:06.462Z",
+      "lastSeen": "2026-09-19T06:45:56.811Z",
+      "samples": 198
+    },
+    {
+      "pid": 846738,
+      "backendStart": "2026-09-19 14:13:06.452993+08",
+      "firstSeen": "2026-09-19T06:13:06.462Z",
+      "lastSeen": "2026-09-19T06:45:06.801Z",
+      "samples": 193
+    },
+    {
+      "pid": 846740,
+      "backendStart": "2026-09-19 14:13:06.478567+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T07:08:47.088Z",
+      "samples": 334
+    },
+    {
+      "pid": 846741,
+      "backendStart": "2026-09-19 14:13:06.478908+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T07:01:16.997Z",
+      "samples": 289
+    },
+    {
+      "pid": 846742,
+      "backendStart": "2026-09-19 14:13:06.479179+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T06:51:26.866Z",
+      "samples": 230
+    },
+    {
+      "pid": 846743,
+      "backendStart": "2026-09-19 14:13:06.479505+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T06:59:56.981Z",
+      "samples": 281
+    },
+    {
+      "pid": 846744,
+      "backendStart": "2026-09-19 14:13:06.479806+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T06:54:26.902Z",
+      "samples": 248
+    },
+    {
+      "pid": 846745,
+      "backendStart": "2026-09-19 14:13:06.480081+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T06:43:26.784Z",
+      "samples": 182
+    },
+    {
+      "pid": 846746,
+      "backendStart": "2026-09-19 14:13:06.480528+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T07:00:46.991Z",
+      "samples": 286
+    },
+    {
+      "pid": 846747,
+      "backendStart": "2026-09-19 14:13:06.480867+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T07:07:37.073Z",
+      "samples": 327
+    },
+    {
+      "pid": 853581,
+      "backendStart": "2026-09-19 14:45:11.852224+08",
+      "firstSeen": "2026-09-19T06:45:16.803Z",
+      "lastSeen": "2026-09-19T07:39:37.436Z",
+      "samples": 327
+    },
+    {
+      "pid": 857058,
+      "backendStart": "2026-09-19 15:01:29.033401+08",
+      "firstSeen": "2026-09-19T07:01:37.001Z",
+      "lastSeen": "2026-09-19T07:31:47.343Z",
+      "samples": 182
+    },
+    {
+      "pid": 857126,
+      "backendStart": "2026-09-19 15:01:47.763684+08",
+      "firstSeen": "2026-09-19T07:01:57.004Z",
+      "lastSeen": "2026-09-19T07:34:37.380Z",
+      "samples": 197
+    },
+    {
+      "pid": 858718,
+      "backendStart": "2026-09-19 15:09:15.93789+08",
+      "firstSeen": "2026-09-19T07:09:17.094Z",
+      "lastSeen": "2026-09-19T07:45:07.496Z",
+      "samples": 216
+    },
+    {
+      "pid": 858785,
+      "backendStart": "2026-09-19 15:09:34.474899+08",
+      "firstSeen": "2026-09-19T07:09:37.098Z",
+      "lastSeen": "2026-09-19T07:47:57.535Z",
+      "samples": 231
+    },
+    {
+      "pid": 862581,
+      "backendStart": "2026-09-19 15:27:19.42178+08",
+      "firstSeen": "2026-09-19T07:27:27.297Z",
+      "lastSeen": "2026-09-19T07:48:07.536Z",
+      "samples": 125
+    },
+    {
+      "pid": 864148,
+      "backendStart": "2026-09-19 15:34:41.874052+08",
+      "firstSeen": "2026-09-19T07:34:47.382Z",
+      "lastSeen": "2026-09-19T07:48:07.536Z",
+      "samples": 81
+    },
+    {
+      "pid": 865224,
+      "backendStart": "2026-09-19 15:39:45.15015+08",
+      "firstSeen": "2026-09-19T07:39:47.438Z",
+      "lastSeen": "2026-09-19T07:48:07.536Z",
+      "samples": 51
+    },
+    {
+      "pid": 866698,
+      "backendStart": "2026-09-19 15:46:41.550179+08",
+      "firstSeen": "2026-09-19T07:46:47.515Z",
+      "lastSeen": "2026-09-19T07:48:07.536Z",
+      "samples": 9
+    }
+  ],
+  "retiredPids": [
+    {
+      "pid": 846727,
+      "backendStart": "2026-09-19 14:13:04.514074+08",
+      "firstSeen": "2026-09-19T06:13:06.462Z",
+      "lastSeen": "2026-09-19T06:52:46.886Z",
+      "samples": 239
+    },
+    {
+      "pid": 846735,
+      "backendStart": "2026-09-19 14:13:05.957723+08",
+      "firstSeen": "2026-09-19T06:13:06.462Z",
+      "lastSeen": "2026-09-19T06:48:56.838Z",
+      "samples": 216
+    },
+    {
+      "pid": 846736,
+      "backendStart": "2026-09-19 14:13:05.958219+08",
+      "firstSeen": "2026-09-19T06:13:06.462Z",
+      "lastSeen": "2026-09-19T06:45:56.811Z",
+      "samples": 198
+    },
+    {
+      "pid": 846738,
+      "backendStart": "2026-09-19 14:13:06.452993+08",
+      "firstSeen": "2026-09-19T06:13:06.462Z",
+      "lastSeen": "2026-09-19T06:45:06.801Z",
+      "samples": 193
+    },
+    {
+      "pid": 846740,
+      "backendStart": "2026-09-19 14:13:06.478567+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T07:08:47.088Z",
+      "samples": 334
+    },
+    {
+      "pid": 846741,
+      "backendStart": "2026-09-19 14:13:06.478908+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T07:01:16.997Z",
+      "samples": 289
+    },
+    {
+      "pid": 846742,
+      "backendStart": "2026-09-19 14:13:06.479179+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T06:51:26.866Z",
+      "samples": 230
+    },
+    {
+      "pid": 846743,
+      "backendStart": "2026-09-19 14:13:06.479505+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T06:59:56.981Z",
+      "samples": 281
+    },
+    {
+      "pid": 846744,
+      "backendStart": "2026-09-19 14:13:06.479806+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T06:54:26.902Z",
+      "samples": 248
+    },
+    {
+      "pid": 846745,
+      "backendStart": "2026-09-19 14:13:06.480081+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T06:43:26.784Z",
+      "samples": 182
+    },
+    {
+      "pid": 846746,
+      "backendStart": "2026-09-19 14:13:06.480528+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T07:00:46.991Z",
+      "samples": 286
+    },
+    {
+      "pid": 846747,
+      "backendStart": "2026-09-19 14:13:06.480867+08",
+      "firstSeen": "2026-09-19T06:13:16.464Z",
+      "lastSeen": "2026-09-19T07:07:37.073Z",
+      "samples": 327
+    },
+    {
+      "pid": 853581,
+      "backendStart": "2026-09-19 14:45:11.852224+08",
+      "firstSeen": "2026-09-19T06:45:16.803Z",
+      "lastSeen": "2026-09-19T07:39:37.436Z",
+      "samples": 327
+    },
+    {
+      "pid": 857058,
+      "backendStart": "2026-09-19 15:01:29.033401+08",
+      "firstSeen": "2026-09-19T07:01:37.001Z",
+      "lastSeen": "2026-09-19T07:31:47.343Z",
+      "samples": 182
+    },
+    {
+      "pid": 857126,
+      "backendStart": "2026-09-19 15:01:47.763684+08",
+      "firstSeen": "2026-09-19T07:01:57.004Z",
+      "lastSeen": "2026-09-19T07:34:37.380Z",
+      "samples": 197
+    },
+    {
+      "pid": 858718,
+      "backendStart": "2026-09-19 15:09:15.93789+08",
+      "firstSeen": "2026-09-19T07:09:17.094Z",
+      "lastSeen": "2026-09-19T07:45:07.496Z",
+      "samples": 216
+    },
+    {
+      "pid": 858785,
+      "backendStart": "2026-09-19 15:09:34.474899+08",
+      "firstSeen": "2026-09-19T07:09:37.098Z",
+      "lastSeen": "2026-09-19T07:47:57.535Z",
+      "samples": 231
+    }
+  ],
+  "bornLatePids": [
+    {
+      "pid": 862581,
+      "backendStart": "2026-09-19 15:27:19.42178+08",
+      "firstSeen": "2026-09-19T07:27:27.297Z",
+      "lastSeen": "2026-09-19T07:48:07.536Z",
+      "samples": 125
+    },
+    {
+      "pid": 864148,
+      "backendStart": "2026-09-19 15:34:41.874052+08",
+      "firstSeen": "2026-09-19T07:34:47.382Z",
+      "lastSeen": "2026-09-19T07:48:07.536Z",
+      "samples": 81
+    },
+    {
+      "pid": 865224,
+      "backendStart": "2026-09-19 15:39:45.15015+08",
+      "firstSeen": "2026-09-19T07:39:47.438Z",
+      "lastSeen": "2026-09-19T07:48:07.536Z",
+      "samples": 51
+    },
+    {
+      "pid": 866698,
+      "backendStart": "2026-09-19 15:46:41.550179+08",
+      "firstSeen": "2026-09-19T07:46:47.515Z",
+      "lastSeen": "2026-09-19T07:48:07.536Z",
+      "samples": 9
+    }
+  ],
+  "rotationWindows": [
+    {
+      "retiredPid": 846727,
+      "backendStart": "2026-09-19 14:13:04.514074+08",
+      "lastSeen": "2026-09-19T06:52:46.886Z",
+      "windowRequests": 787,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846735,
+      "backendStart": "2026-09-19 14:13:05.957723+08",
+      "lastSeen": "2026-09-19T06:48:56.838Z",
+      "windowRequests": 800,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846736,
+      "backendStart": "2026-09-19 14:13:05.958219+08",
+      "lastSeen": "2026-09-19T06:45:56.811Z",
+      "windowRequests": 798,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846738,
+      "backendStart": "2026-09-19 14:13:06.452993+08",
+      "lastSeen": "2026-09-19T06:45:06.801Z",
+      "windowRequests": 796,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846740,
+      "backendStart": "2026-09-19 14:13:06.478567+08",
+      "lastSeen": "2026-09-19T07:08:47.088Z",
+      "windowRequests": 799,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846741,
+      "backendStart": "2026-09-19 14:13:06.478908+08",
+      "lastSeen": "2026-09-19T07:01:16.997Z",
+      "windowRequests": 789,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846742,
+      "backendStart": "2026-09-19 14:13:06.479179+08",
+      "lastSeen": "2026-09-19T06:51:26.866Z",
+      "windowRequests": 805,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846743,
+      "backendStart": "2026-09-19 14:13:06.479505+08",
+      "lastSeen": "2026-09-19T06:59:56.981Z",
+      "windowRequests": 784,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846744,
+      "backendStart": "2026-09-19 14:13:06.479806+08",
+      "lastSeen": "2026-09-19T06:54:26.902Z",
+      "windowRequests": 807,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846745,
+      "backendStart": "2026-09-19 14:13:06.480081+08",
+      "lastSeen": "2026-09-19T06:43:26.784Z",
+      "windowRequests": 798,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846746,
+      "backendStart": "2026-09-19 14:13:06.480528+08",
+      "lastSeen": "2026-09-19T07:00:46.991Z",
+      "windowRequests": 789,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 846747,
+      "backendStart": "2026-09-19 14:13:06.480867+08",
+      "lastSeen": "2026-09-19T07:07:37.073Z",
+      "windowRequests": 800,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 853581,
+      "backendStart": "2026-09-19 14:45:11.852224+08",
+      "lastSeen": "2026-09-19T07:39:37.436Z",
+      "windowRequests": 793,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 857058,
+      "backendStart": "2026-09-19 15:01:29.033401+08",
+      "lastSeen": "2026-09-19T07:31:47.343Z",
+      "windowRequests": 790,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 857126,
+      "backendStart": "2026-09-19 15:01:47.763684+08",
+      "lastSeen": "2026-09-19T07:34:37.380Z",
+      "windowRequests": 798,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 858718,
+      "backendStart": "2026-09-19 15:09:15.93789+08",
+      "lastSeen": "2026-09-19T07:45:07.496Z",
+      "windowRequests": 795,
+      "windowErrors": 0
+    },
+    {
+      "retiredPid": 858785,
+      "backendStart": "2026-09-19 15:09:34.474899+08",
+      "lastSeen": "2026-09-19T07:47:57.535Z",
+      "windowRequests": 467,
+      "windowErrors": 0
+    }
+  ],
+  "soakTotals": {
+    "requests": 37877,
+    "errors5xx": 0,
+    "timeouts": 0,
+    "networkErrors": 0,
+    "p50": 23.5,
+    "p99": 46.2,
+    "max": 214
+  },
+  "errorsNearRotation": 0
+}

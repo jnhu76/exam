@@ -1,0 +1,5 @@
+8973eb9c4c835b76b87bd9e73d499d908176c1a14464ed73aacfb72a0d999a3a
+Error: nginx did not become ready
+    at nginx (/home/hoo/Source/exam/docs/research/exam-550-final-capacity-reproof-1/harness/run-topology.ts:115:9)
+    at main (/home/hoo/Source/exam/docs/research/exam-550-final-capacity-reproof-1/harness/run-topology.ts:620:20)
+    at <anonymous> (/home/hoo/Source/exam/docs/research/exam-550-final-capacity-reproof-1/harness/run-topology.ts:685:1)

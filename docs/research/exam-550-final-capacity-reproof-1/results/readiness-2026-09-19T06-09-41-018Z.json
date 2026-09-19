@@ -1,0 +1,76 @@
+{
+  "run_id": "readiness-2026-09-19T06-09-41-018Z",
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "started_at": "2026-09-19T06:09:41.018Z",
+  "faultInjection": {
+    "db": "exam550-readiness-pg (dedicated throwaway, port 3393)",
+    "redis": "exam550-readiness-redis (dedicated throwaway, port 3394)",
+    "note": "shared dev stack (exam-db-1/exam-redis-1) never stopped"
+  },
+  "baseline": {
+    "health": {
+      "status": 200,
+      "body": "{\"status\":\"ok\"}",
+      "atMs": 3
+    },
+    "ready": {
+      "status": 200,
+      "body": "{\"status\":\"ready\"}",
+      "atMs": 4
+    }
+  },
+  "dbDown": {
+    "readyFlipped503": true,
+    "flipLatencyMs": 7,
+    "healthDuringDown": {
+      "status": 200,
+      "body": "{\"status\":\"ok\"}",
+      "atMs": 3
+    },
+    "readySamples": [
+      {
+        "t": 7,
+        "status": 503
+      }
+    ],
+    "readyBody": "{\"status\":\"not_ready\"}",
+    "steadyReadyStatusesDuringOutage": [503, 503, 503, 503, 503, 503]
+  },
+  "dbRecovery": {
+    "readyBackTo200": true,
+    "recoveryLatencyMs": 14,
+    "samples": [
+      {
+        "t": 14,
+        "status": 200
+      }
+    ]
+  },
+  "redisRequiredBaseline": {
+    "ready": {
+      "status": 200,
+      "body": "{\"status\":\"ready\"}",
+      "atMs": 5
+    }
+  },
+  "redisRequiredDown": {
+    "readyFlipped503": true,
+    "flipLatencyMs": 4,
+    "body": "{\"error\":{\"code\":\"RATE_LIMIT_UNAVAILABLE\",\"message\":\"限流服务暂不可用，请稍后重试\",\"requestId\":\"req-4\"}}",
+    "samples": [
+      {
+        "t": 4,
+        "status": 503
+      }
+    ]
+  },
+  "redisRequiredRecovery": {
+    "readyBackTo200": true,
+    "recoveryLatencyMs": 1011
+  },
+  "alertLogLines": [
+    "{\"level\":50,\"time\":1789798199092,\"pid\":1628355,\"hostname\":\"WuJie\",\"event\":\"operability.readiness\",\"component\":\"database\",\"state\":\"unavailable\",\"msg\":\"Mandatory dependency unavailable: database — instance not ready for exam traffic\"}"
+  ],
+  "alertEvidenceFound": true,
+  "finished_at": "2026-09-19T06:10:21.113Z"
+}

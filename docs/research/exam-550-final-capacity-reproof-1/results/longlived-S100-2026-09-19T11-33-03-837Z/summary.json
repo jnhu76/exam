@@ -1,0 +1,61 @@
+{
+  "run_id": "longlived-S100-2026-09-19T11-33-03-837Z",
+  "n": 100,
+  "episodes": 1200,
+  "cardinalityBefore": {
+    "users": 223,
+    "exams": 3,
+    "attempts": 120,
+    "admissions": 120,
+    "episodesTotal": 1200,
+    "detectedEvents": 1200,
+    "clientEvents": 10000,
+    "systemIncidents": 0,
+    "pendingEpisodes": 300
+  },
+  "cardinalityAfter": {
+    "users": 223,
+    "exams": 3,
+    "attempts": 220,
+    "admissions": 120,
+    "episodesTotal": 1200,
+    "detectedEvents": 1200,
+    "clientEvents": 10000,
+    "systemIncidents": 1200,
+    "pendingEpisodes": 0
+  },
+  "BASELINE_STEADY": {
+    "requests": 0,
+    "success": 0,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 0,
+    "p90": 0,
+    "p95": 0,
+    "p99": 0,
+    "max": 0,
+    "wallMs": 1789817862905,
+    "errorClasses": {}
+  },
+  "MEASURE_STEADY": {
+    "requests": 0,
+    "success": 0,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 0,
+    "p90": 0,
+    "p95": 0,
+    "p99": 0,
+    "max": 0,
+    "wallMs": 1789817862905,
+    "errorClasses": {}
+  },
+  "note": "tick wall times live in pool.jsonl research snapshots (heartbeat metrics); interference analysis regenerates from raw",
+  "finished_at": "2026-09-19T11:37:42.905Z"
+}

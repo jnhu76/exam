@@ -1,0 +1,17 @@
+{"scenario":"N20-dt15","oraclePass":true,"resumeWallMs":100,"startWallMs":189,"admitted":20,"expected":20}
+{"scenario":"N20-dt90","oraclePass":true,"resumeWallMs":109,"startWallMs":220,"admitted":20,"expected":20}
+{"scenario":"N20-dt15","oraclePass":true,"resumeWallMs":105,"startWallMs":222,"admitted":20,"expected":20}
+{"scenario":"N50-dt15","oraclePass":true,"resumeWallMs":287,"startWallMs":478,"admitted":40,"expected":40}
+{"scenario":"N50-dt90","oraclePass":true,"resumeWallMs":335,"startWallMs":469,"admitted":50,"expected":50}
+{"scenario":"N50-dt45","oraclePass":true,"resumeWallMs":295,"startWallMs":457,"admitted":50,"expected":50}
+{"scenario":"N100-dt15","oraclePass":true,"resumeWallMs":541,"startWallMs":803,"admitted":40,"expected":40}
+{"scenario":"N100-dt90","oraclePass":true,"resumeWallMs":587,"startWallMs":832,"admitted":100,"expected":100}
+{"scenario":"N100-dt75","oraclePass":true,"resumeWallMs":581,"startWallMs":874,"admitted":100,"expected":100}
+{"scenario":"N130-dt15","oraclePass":true,"resumeWallMs":685,"startWallMs":1018,"admitted":40,"expected":40}
+{"scenario":"N130-dt90","oraclePass":true,"resumeWallMs":766,"startWallMs":1233,"admitted":130,"expected":130}
+{"scenario":"N130-dt105","oraclePass":true,"resumeWallMs":720,"startWallMs":1082,"admitted":130,"expected":130}
+{"scenario":"N200-dt15","oraclePass":true,"resumeWallMs":984,"startWallMs":1505,"admitted":40,"expected":40}
+{"scenario":"N200-dt90","oraclePass":true,"resumeWallMs":1049,"startWallMs":1589,"admitted":140,"expected":140}
+{"scenario":"N200-dt150","oraclePass":true,"resumeWallMs":1133,"startWallMs":1648,"admitted":200,"expected":200}
+
+Wrote 15 scenario results → /home/hoo/Source/exam/docs/research/exam-550-final-capacity-reproof-1/results/admission-matrix-2026-09-19T03-33-15-408Z.json

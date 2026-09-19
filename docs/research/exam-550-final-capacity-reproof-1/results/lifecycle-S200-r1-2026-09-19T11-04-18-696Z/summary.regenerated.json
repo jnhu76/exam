@@ -1,0 +1,101 @@
+{
+  "run_id": "lifecycle-S200-r1-2026-09-19T11-04-18-696Z",
+  "scenario_id": "lifecycle",
+  "topology": "DIRECT_LAN",
+  "n": 200,
+  "totalRequests": 6237,
+  "phases": {
+    "LOGIN_BURST": {
+      "requests": 200,
+      "success": 200,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 6769.4,
+      "p90": 8719.7,
+      "p95": 8942.7,
+      "p99": 9134.8,
+      "max": 9174.3,
+      "errorClasses": {}
+    },
+    "START_BURST": {
+      "requests": 200,
+      "success": 200,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 1092.1,
+      "p90": 1299.7,
+      "p95": 1325.8,
+      "p99": 1344.8,
+      "max": 1346.2,
+      "errorClasses": {}
+    },
+    "STEADY": {
+      "requests": 5037,
+      "success": 5037,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 23.1,
+      "p90": 49.2,
+      "p95": 492.4,
+      "p99": 876.6,
+      "max": 1075,
+      "errorClasses": {}
+    },
+    "RECONNECT_RESTORE": {
+      "requests": 200,
+      "success": 200,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 917.1,
+      "p90": 1068,
+      "p95": 1086.3,
+      "p99": 1089.4,
+      "max": 1096.3,
+      "errorClasses": {}
+    },
+    "RECONNECT_TAKE": {
+      "requests": 200,
+      "success": 200,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 711.5,
+      "p90": 747.7,
+      "p95": 752,
+      "p99": 754.6,
+      "max": 755.3,
+      "errorClasses": {}
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "requests": 200,
+      "success": 200,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 919.6,
+      "p90": 1491.1,
+      "p95": 1562.5,
+      "p99": 1628.8,
+      "max": 1641.5,
+      "errorClasses": {}
+    },
+    "SUBMIT_BURST": {
+      "requests": 200,
+      "success": 200,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 5090,
+      "p90": 5139.5,
+      "p95": 5145.3,
+      "p99": 5177.3,
+      "max": 5225.6,
+      "errorClasses": {}
+    }
+  },
+  "regenerated_at": "2026-09-19T11:15:09.862Z"
+}

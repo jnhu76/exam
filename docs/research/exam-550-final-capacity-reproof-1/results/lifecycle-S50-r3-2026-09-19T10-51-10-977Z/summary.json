@@ -1,0 +1,148 @@
+{
+  "run_id": "lifecycle-S50-r3-2026-09-19T10-51-10-977Z",
+  "scenario": "lifecycle",
+  "n": 50,
+  "rep": 3,
+  "topology": "DIRECT_LAN",
+  "LOGIN_BURST": {
+    "requests": 50,
+    "success": 50,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 1829,
+    "p90": 2362.3,
+    "p95": 2390.6,
+    "p99": 2443,
+    "max": 2443.0303599999997,
+    "wallMs": 2386.429811,
+    "errorClasses": {}
+  },
+  "START_BURST": {
+    "requests": 50,
+    "success": 50,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 365.8,
+    "p90": 426.1,
+    "p95": 427.2,
+    "p99": 429.5,
+    "max": 429.52528299999994,
+    "wallMs": 400.79104299999926,
+    "errorClasses": {}
+  },
+  "RECONNECT_RESTORE": {
+    "requests": 50,
+    "success": 50,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 272.7,
+    "p90": 309,
+    "p95": 318.6,
+    "p99": 319.5,
+    "max": 319.4612880000059,
+    "wallMs": 308.4210410000087,
+    "errorClasses": {}
+  },
+  "RECONNECT_TAKE": {
+    "requests": 50,
+    "success": 50,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 215,
+    "p90": 224.3,
+    "p95": 225.8,
+    "p99": 227.6,
+    "max": 227.6253640000068,
+    "wallMs": 223.85880599998927,
+    "errorClasses": {}
+  },
+  "RECONNECT_FIRST_SAVE": {
+    "requests": 50,
+    "success": 50,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 267.1,
+    "p90": 428.6,
+    "p95": 452.6,
+    "p99": 472.7,
+    "max": 472.7009770000004,
+    "wallMs": 231.11582500000077,
+    "errorClasses": {}
+  },
+  "SUBMIT_BURST": {
+    "requests": 50,
+    "success": 50,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 1252.5,
+    "p90": 1315.5,
+    "p95": 1397.2,
+    "p99": 1448.3,
+    "max": 1448.3245619999943,
+    "wallMs": 1242.8821319999988,
+    "errorClasses": {}
+  },
+  "submitWallMs": 1449,
+  "loginWallMs": 2446,
+  "oracles": {
+    "loginSuccess": 50,
+    "submitSuccess": 50,
+    "expectedCandidates": 50,
+    "attemptStatusCounts": {
+      "graded": 50
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T09:51:13.157Z",
+      "closeAt": "2026-09-20T10:51:13.157Z",
+      "status": "open"
+    },
+    "auditDistinctIps": 51,
+    "auditIpsSample": [
+      {
+        "ip": "127.0.0.1",
+        "n": 4
+      },
+      {
+        "ip": "127.0.0.36",
+        "n": 1
+      },
+      {
+        "ip": "127.0.0.48",
+        "n": 1
+      },
+      {
+        "ip": "127.0.0.22",
+        "n": 1
+      },
+      {
+        "ip": "127.0.0.11",
+        "n": 1
+      }
+    ],
+    "answersChecked": 50,
+    "answerMismatches": [],
+    "pass": true
+  },
+  "steadySeconds": 90,
+  "finished_at": "2026-09-19T10:53:04.816Z"
+}

@@ -1,0 +1,75 @@
+{
+  "run_id": "admission-N20-dt15-2026-09-19T03-17-34-803Z",
+  "scenario_id": "N20-dt15",
+  "topology": "DIRECT_LAN",
+  "n": 20,
+  "totalRequests": 100,
+  "phases": {
+    "setup": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 376.3,
+      "p90": 597.4,
+      "p95": 603.5,
+      "p99": 621.1,
+      "max": 621.1,
+      "errorClasses": {}
+    },
+    "QUEUE_JOIN": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 194.7,
+      "p90": 199.6,
+      "p95": 199.8,
+      "p99": 200.3,
+      "max": 200.3,
+      "errorClasses": {}
+    },
+    "QUEUE_RESUME": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 101.7,
+      "p90": 104.5,
+      "p95": 104.6,
+      "p99": 104.7,
+      "max": 104.7,
+      "errorClasses": {}
+    },
+    "START_BURST": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 188.7,
+      "p90": 220.3,
+      "p95": 220.9,
+      "p99": 221.3,
+      "max": 221.3,
+      "errorClasses": {}
+    },
+    "WRITEONCE_POLL": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 70.8,
+      "p90": 75.8,
+      "p95": 75.9,
+      "p99": 76.4,
+      "max": 76.4,
+      "errorClasses": {}
+    }
+  },
+  "regenerated_at": "2026-09-19T08:46:13.981Z"
+}

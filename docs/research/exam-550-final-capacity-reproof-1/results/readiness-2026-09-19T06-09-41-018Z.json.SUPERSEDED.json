@@ -1,0 +1,8 @@
+{
+  "disposition": "SUPERSEDED_PRE_CORRECTIVE_EVIDENCE",
+  "campaign": "EXAM-550-CORRECTIVE-1",
+  "recorded_at": "2026-09-19T10:41:53.153384+00:00",
+  "superseded_file": "readiness-2026-09-19T06-09-41-018Z.json",
+  "reason": "Superseded by the EXAM-550-CORRECTIVE-1 re-run: mechanism evidence (flip/no-false-ready/recovery) was sound but the run predates the neutral-instrumentation gate; re-run uniformly post-corrective.",
+  "authoritative_replacement": "results/readiness-2026-09-19T11-40-14-675Z.json"
+}

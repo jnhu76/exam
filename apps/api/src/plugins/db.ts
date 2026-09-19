@@ -4,6 +4,10 @@ import { createDatabase } from "@exam/db/src/database.js";
 import type { Database } from "@exam/db/src/types.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { AUDIT_DRAIN_TIMEOUT_MS } from "./auditLifecycle.js";
+import {
+  installCapacityResearchInstrumentation,
+  isCapacityResearchEnabled,
+} from "../lib/capacityResearch.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -19,6 +23,10 @@ declare module "fastify" {
 const dbPlugin: FastifyPluginAsync = async (fastify) => {
   const { database } = getRuntimeConfig();
   const conn = await createDatabase(database.url);
+  // RESEARCH ONLY (#550): observation wrapper, inert unless CAPACITY_RESEARCH=1.
+  if (isCapacityResearchEnabled()) {
+    installCapacityResearchInstrumentation(conn.sql);
+  }
   fastify.decorate<Database>("db", conn.db);
   fastify.addHook("onClose", async () => {
     await conn.sql.end({ timeout: Math.ceil(AUDIT_DRAIN_TIMEOUT_MS / 1000) });

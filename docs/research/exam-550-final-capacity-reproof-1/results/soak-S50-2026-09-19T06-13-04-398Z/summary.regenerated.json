@@ -1,0 +1,49 @@
+{
+  "run_id": "soak-S50-2026-09-19T06-13-04-398Z",
+  "scenario_id": "soak",
+  "topology": "DIRECT_LAN",
+  "n": 50,
+  "totalRequests": 37977,
+  "phases": {
+    "setup": {
+      "requests": 50,
+      "success": 50,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 769.8,
+      "p90": 1202.6,
+      "p95": 1249,
+      "p99": 1295.9,
+      "max": 1295.9,
+      "errorClasses": {}
+    },
+    "START": {
+      "requests": 50,
+      "success": 50,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 324.3,
+      "p90": 371.2,
+      "p95": 384.4,
+      "p99": 387.1,
+      "max": 387.1,
+      "errorClasses": {}
+    },
+    "SOAK": {
+      "requests": 37877,
+      "success": 37877,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 23.5,
+      "p90": 31.7,
+      "p95": 36.3,
+      "p99": 46.2,
+      "max": 214,
+      "errorClasses": {}
+    }
+  },
+  "regenerated_at": "2026-09-19T08:46:14.200Z"
+}

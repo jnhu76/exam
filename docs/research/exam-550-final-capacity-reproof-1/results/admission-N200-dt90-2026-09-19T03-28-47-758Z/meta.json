@@ -1,0 +1,14 @@
+{
+  "run_id": "admission-N200-dt90-2026-09-19T03-28-47-758Z",
+  "group": "admission",
+  "scenario": "N200-dt90",
+  "n": 200,
+  "pause_seconds": 90,
+  "batch_size": 20,
+  "batch_interval_s": 15,
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "api_mode": "e2e (limiter off per #549 admission workload contract)",
+  "db_pool_max": 10,
+  "exam_id": "610c5679-32fa-4c2e-97e9-b021c671ddd8",
+  "started_at": "2026-09-19T03:28:49.906Z"
+}

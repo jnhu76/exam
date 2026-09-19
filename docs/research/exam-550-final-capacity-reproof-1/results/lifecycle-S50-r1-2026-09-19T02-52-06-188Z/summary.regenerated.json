@@ -1,0 +1,88 @@
+{
+  "run_id": "lifecycle-S50-r1-2026-09-19T02-52-06-188Z",
+  "scenario_id": "lifecycle",
+  "topology": "DIRECT_LAN",
+  "n": 50,
+  "totalRequests": 1605,
+  "phases": {
+    "LOGIN_BURST": {
+      "requests": 50,
+      "success": 50,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 1738.8,
+      "p90": 2180.4,
+      "p95": 2239.7,
+      "p99": 2280.2,
+      "max": 2280.2,
+      "errorClasses": {}
+    },
+    "START_BURST": {
+      "requests": 50,
+      "success": 50,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 311.9,
+      "p90": 367.2,
+      "p95": 385.9,
+      "p99": 387,
+      "max": 387,
+      "errorClasses": {}
+    },
+    "STEADY": {
+      "requests": 1305,
+      "success": 1305,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 19.5,
+      "p90": 26.8,
+      "p95": 32.1,
+      "p99": 54.3,
+      "max": 69.3,
+      "errorClasses": {}
+    },
+    "RECONNECT_RESTORE": {
+      "requests": 100,
+      "success": 100,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 241.6,
+      "p90": 310.9,
+      "p95": 320.9,
+      "p99": 328,
+      "max": 328.5,
+      "errorClasses": {}
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "requests": 50,
+      "success": 50,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 260,
+      "p90": 415.5,
+      "p95": 436.8,
+      "p99": 450.9,
+      "max": 450.9,
+      "errorClasses": {}
+    },
+    "SUBMIT_BURST": {
+      "requests": 50,
+      "success": 50,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 1201,
+      "p90": 1256.1,
+      "p95": 1331.3,
+      "p99": 1377.5,
+      "max": 1377.5,
+      "errorClasses": {}
+    }
+  },
+  "regenerated_at": "2026-09-19T08:46:14.079Z"
+}

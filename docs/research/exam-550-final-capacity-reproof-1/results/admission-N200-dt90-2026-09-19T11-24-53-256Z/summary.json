@@ -1,0 +1,78 @@
+{
+  "run_id": "admission-N200-dt90-2026-09-19T11-24-53-256Z",
+  "scenario": "N200-dt90",
+  "n": 200,
+  "pauseSeconds": 90,
+  "batchSize": 20,
+  "batchIntervalS": 15,
+  "QUEUE_JOIN": {
+    "requests": 200,
+    "success": 200,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 876.1,
+    "p90": 899.9,
+    "p95": 905.5,
+    "p99": 908.3,
+    "max": 908.7740970000159,
+    "wallMs": 896.5531409999821,
+    "errorClasses": {}
+  },
+  "QUEUE_RESUME": {
+    "requests": 200,
+    "success": 200,
+    "semanticErrors": 0,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 5001.6,
+    "p90": 5021.9,
+    "p95": 5024.6,
+    "p99": 5027,
+    "max": 5027.907149000093,
+    "wallMs": 4992.316053000046,
+    "errorClasses": {}
+  },
+  "START_BURST": {
+    "requests": 200,
+    "success": 140,
+    "semanticErrors": 60,
+    "rateLimited429": 0,
+    "server5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0,
+    "p50": 1066.2,
+    "p90": 1266.3,
+    "p95": 1294.5,
+    "p99": 1309.9,
+    "max": 1312.4642130000284,
+    "wallMs": 1214.0186640000902,
+    "errorClasses": {
+      "http_409": 60
+    }
+  },
+  "joinWallMs": 909,
+  "resumeWallMs": 5031,
+  "startWallMs": 1316,
+  "oracle": {
+    "expectedEligibleAtResume": 140,
+    "readyByView": 140,
+    "admittedBefore": 20,
+    "admittedAfterResume": 140,
+    "admittedAfterExtraPolls": 140,
+    "waitingAfterRun": 60,
+    "startOk": 140,
+    "startFailClosed": 60,
+    "duplicateActiveAttempts": 0,
+    "attemptStatusCounts": {
+      "in_progress": 140
+    },
+    "resumeDtxSec": 90.2,
+    "pass": true
+  },
+  "finished_at": "2026-09-19T11:26:42.184Z"
+}

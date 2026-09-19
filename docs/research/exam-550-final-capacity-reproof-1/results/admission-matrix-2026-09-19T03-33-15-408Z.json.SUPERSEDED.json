@@ -1,0 +1,8 @@
+{
+  "disposition": "SUPERSEDED_PRE_CORRECTIVE_EVIDENCE",
+  "campaign": "EXAM-550-CORRECTIVE-1",
+  "recorded_at": "2026-09-19T10:41:53.153161+00:00",
+  "superseded_file": "admission-matrix-2026-09-19T03-33-15-408Z.json",
+  "reason": "Superseded by the EXAM-550-CORRECTIVE-1 re-run: APP_MODE=e2e (limiter off) and the eager pre-corrective wrapper. The #549 KEEP_LAZY durable-oracle semantics demonstrated here are unchanged in the corrective runs.",
+  "authoritative_replacement": "results/admission-matrix-<corrective-1>.json"
+}

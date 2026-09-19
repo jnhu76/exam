@@ -1,0 +1,13 @@
+{
+  "run_id": "soak-S50-2026-09-19T13-31-40-106Z",
+  "group": "soak",
+  "campaign": "corrective-1",
+  "head_sha": "b773668eb925982a6852e415130609348f8e4c68",
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "n": 50,
+  "minutes": 20,
+  "topology": "DIRECT_LAN (distinct loopback source IP per candidate)",
+  "api_mode": "production (limiter ON, default budgets; Redis-backed store — the accepted #554 topology)",
+  "pool": "postgres.js default max=10; max_lifetime default 30–90 min randomized",
+  "started_at": "2026-09-19T13:31:42.761Z"
+}

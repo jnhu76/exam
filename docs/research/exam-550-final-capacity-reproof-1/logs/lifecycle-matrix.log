@@ -1,0 +1,352 @@
+=== lifecycle S20 r1 start 2026-09-19T10:45:55+08:00 ===
+    "p95": 551.9,
+    "p99": 576.2,
+    "max": 576.212062000006,
+    "wallMs": 424.08083000000624,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 20,
+    "submitSuccess": 20,
+    "expectedCandidates": 20,
+    "attemptStatusCounts": {
+      "graded": 20
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T01:45:58.803Z",
+      "closeAt": "2026-09-20T02:45:58.803Z",
+      "status": "open"
+    },
+    "answersChecked": 20,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S20 r1 exit=0 end 2026-09-19T10:47:59+08:00 ===
+=== lifecycle S20 r2 start 2026-09-19T10:47:59+08:00 ===
+    "p95": 523.6,
+    "p99": 546.8,
+    "max": 546.8325670000049,
+    "wallMs": 452.67277900000045,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 20,
+    "submitSuccess": 20,
+    "expectedCandidates": 20,
+    "attemptStatusCounts": {
+      "graded": 20
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T01:48:02.076Z",
+      "closeAt": "2026-09-20T02:48:02.076Z",
+      "status": "open"
+    },
+    "answersChecked": 20,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S20 r2 exit=0 end 2026-09-19T10:50:02+08:00 ===
+=== lifecycle S20 r3 start 2026-09-19T10:50:02+08:00 ===
+    "p95": 564.3,
+    "p99": 587.6,
+    "max": 587.5784520000016,
+    "wallMs": 460.6776600000012,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 20,
+    "submitSuccess": 20,
+    "expectedCandidates": 20,
+    "attemptStatusCounts": {
+      "graded": 20
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T01:50:05.120Z",
+      "closeAt": "2026-09-20T02:50:05.120Z",
+      "status": "open"
+    },
+    "answersChecked": 20,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S20 r3 exit=0 end 2026-09-19T10:52:05+08:00 ===
+=== lifecycle S50 r1 start 2026-09-19T10:52:05+08:00 ===
+    "p95": 1331.3,
+    "p99": 1377.5,
+    "max": 1377.502370000002,
+    "wallMs": 1281.7590400000045,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 50,
+    "submitSuccess": 50,
+    "expectedCandidates": 50,
+    "attemptStatusCounts": {
+      "graded": 50
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T01:52:08.259Z",
+      "closeAt": "2026-09-20T02:52:08.259Z",
+      "status": "open"
+    },
+    "answersChecked": 50,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S50 r1 exit=0 end 2026-09-19T10:54:11+08:00 ===
+=== lifecycle S50 r2 start 2026-09-19T10:54:11+08:00 ===
+    "p95": 1271.6,
+    "p99": 1317.6,
+    "max": 1317.5632179999957,
+    "wallMs": 1174.8265110000066,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 50,
+    "submitSuccess": 50,
+    "expectedCandidates": 50,
+    "attemptStatusCounts": {
+      "graded": 50
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T01:54:14.594Z",
+      "closeAt": "2026-09-20T02:54:14.594Z",
+      "status": "open"
+    },
+    "answersChecked": 50,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S50 r2 exit=0 end 2026-09-19T10:56:17+08:00 ===
+=== lifecycle S50 r3 start 2026-09-19T10:56:17+08:00 ===
+    "p95": 1308.8,
+    "p99": 1353.5,
+    "max": 1353.4874179999897,
+    "wallMs": 1259.9596299999976,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 50,
+    "submitSuccess": 50,
+    "expectedCandidates": 50,
+    "attemptStatusCounts": {
+      "graded": 50
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T01:56:20.697Z",
+      "closeAt": "2026-09-20T02:56:20.697Z",
+      "status": "open"
+    },
+    "answersChecked": 50,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S50 r3 exit=0 end 2026-09-19T10:58:23+08:00 ===
+=== lifecycle S100 r1 start 2026-09-19T10:58:23+08:00 ===
+    "p95": 2939.8,
+    "p99": 3062.1,
+    "max": 3093.873384999999,
+    "wallMs": 3062.135685000001,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 100,
+    "submitSuccess": 100,
+    "expectedCandidates": 100,
+    "attemptStatusCounts": {
+      "graded": 100
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T01:58:26.657Z",
+      "closeAt": "2026-09-20T02:58:26.657Z",
+      "status": "open"
+    },
+    "answersChecked": 100,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S100 r1 exit=0 end 2026-09-19T11:00:35+08:00 ===
+=== lifecycle S100 r2 start 2026-09-19T11:00:35+08:00 ===
+    "p95": 2870.3,
+    "p99": 2968.8,
+    "max": 2992.857793999996,
+    "wallMs": 2843.346338999996,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 100,
+    "submitSuccess": 100,
+    "expectedCandidates": 100,
+    "attemptStatusCounts": {
+      "graded": 100
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T02:00:39.581Z",
+      "closeAt": "2026-09-20T03:00:39.581Z",
+      "status": "open"
+    },
+    "answersChecked": 100,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S100 r2 exit=0 end 2026-09-19T11:02:51+08:00 ===
+=== lifecycle S100 r3 start 2026-09-19T11:02:51+08:00 ===
+    "p95": 2599,
+    "p99": 2710.9,
+    "max": 2741.1923709999974,
+    "wallMs": 2622.801223000002,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 100,
+    "submitSuccess": 100,
+    "expectedCandidates": 100,
+    "attemptStatusCounts": {
+      "graded": 100
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T02:02:56.910Z",
+      "closeAt": "2026-09-20T03:02:56.910Z",
+      "status": "open"
+    },
+    "answersChecked": 100,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S100 r3 exit=0 end 2026-09-19T11:05:05+08:00 ===
+=== lifecycle S130 r1 start 2026-09-19T11:05:05+08:00 ===
+    "p95": 3311.8,
+    "p99": 3415.9,
+    "max": 3440.7434150000045,
+    "wallMs": 3301.0749560000113,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 130,
+    "submitSuccess": 130,
+    "expectedCandidates": 130,
+    "attemptStatusCounts": {
+      "graded": 130
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T02:05:08.454Z",
+      "closeAt": "2026-09-20T03:05:08.454Z",
+      "status": "open"
+    },
+    "answersChecked": 130,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S130 r1 exit=0 end 2026-09-19T11:07:19+08:00 ===
+=== lifecycle S130 r2 start 2026-09-19T11:07:19+08:00 ===
+    "p95": 3310,
+    "p99": 3391.3,
+    "max": 3412.518359000009,
+    "wallMs": 3309.5154099999927,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 130,
+    "submitSuccess": 130,
+    "expectedCandidates": 130,
+    "attemptStatusCounts": {
+      "graded": 130
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T02:07:22.662Z",
+      "closeAt": "2026-09-20T03:07:22.662Z",
+      "status": "open"
+    },
+    "answersChecked": 130,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S130 r2 exit=0 end 2026-09-19T11:09:33+08:00 ===
+=== lifecycle S200 r1 start 2026-09-19T11:09:33+08:00 ===
+    "p95": 4999.9,
+    "p99": 5034.8,
+    "max": 5078.809395999997,
+    "wallMs": 5002.827111999999,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 200,
+    "submitSuccess": 200,
+    "expectedCandidates": 200,
+    "attemptStatusCounts": {
+      "graded": 200
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T02:09:36.715Z",
+      "closeAt": "2026-09-20T03:09:36.715Z",
+      "status": "open"
+    },
+    "answersChecked": 200,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S200 r1 exit=0 end 2026-09-19T11:11:54+08:00 ===
+=== lifecycle S200 r2 start 2026-09-19T11:11:54+08:00 ===
+    "p95": 6459.5,
+    "p99": 6508.2,
+    "max": 6564.154485999999,
+    "wallMs": 6463.119621999998,
+    "errorClasses": {}
+  },
+  "oracles": {
+    "loginSuccess": 200,
+    "submitSuccess": 200,
+    "expectedCandidates": 200,
+    "attemptStatusCounts": {
+      "graded": 200
+    },
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0,
+    "examTiming": {
+      "openAt": "2026-09-19T02:11:57.648Z",
+      "closeAt": "2026-09-20T03:11:57.648Z",
+      "status": "open"
+    },
+    "answersChecked": 200,
+    "answerMismatches": [],
+    "pass": true
+  }
+}
+=== lifecycle S200 r2 exit=0 end 2026-09-19T11:14:17+08:00 ===
+ALL LIFECYCLE RUNS DONE

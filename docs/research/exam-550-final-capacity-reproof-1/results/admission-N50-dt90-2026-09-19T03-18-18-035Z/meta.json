@@ -1,0 +1,14 @@
+{
+  "run_id": "admission-N50-dt90-2026-09-19T03-18-18-035Z",
+  "group": "admission",
+  "scenario": "N50-dt90",
+  "n": 50,
+  "pause_seconds": 90,
+  "batch_size": 20,
+  "batch_interval_s": 15,
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "api_mode": "e2e (limiter off per #549 admission workload contract)",
+  "db_pool_max": 10,
+  "exam_id": "2e796788-fae2-4819-8dfc-1fcec84dada6",
+  "started_at": "2026-09-19T03:18:21.250Z"
+}

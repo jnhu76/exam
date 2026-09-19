@@ -1,0 +1,11 @@
+{
+  "run_id": "longlived-S100-2026-09-19T05-52-20-834Z",
+  "group": "longlived",
+  "n": 100,
+  "episodes": 1200,
+  "steady_seconds": 240,
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "exam_id": "594bdfa8-ed71-42d0-9533-e94f634456c6",
+  "org_id": "4da75655-8e66-4793-b802-218b3a896aa4",
+  "started_at": "2026-09-19T05:52:22.982Z"
+}

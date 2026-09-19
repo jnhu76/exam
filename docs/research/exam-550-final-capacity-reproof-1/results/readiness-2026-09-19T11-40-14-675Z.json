@@ -1,0 +1,78 @@
+{
+  "run_id": "readiness-2026-09-19T11-40-14-675Z",
+  "campaign": "corrective-1",
+  "head_sha": "66c850e6348bc352bfc30a22117075ae79a38e19",
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "started_at": "2026-09-19T11:40:14.679Z",
+  "faultInjection": {
+    "db": "exam550-readiness-pg (dedicated throwaway, port 3393)",
+    "redis": "exam550-readiness-redis (dedicated throwaway, port 3394)",
+    "note": "shared dev stack (exam-db-1/exam-redis-1) never stopped"
+  },
+  "baseline": {
+    "health": {
+      "status": 200,
+      "body": "{\"status\":\"ok\"}",
+      "atMs": 4
+    },
+    "ready": {
+      "status": 200,
+      "body": "{\"status\":\"ready\"}",
+      "atMs": 4
+    }
+  },
+  "dbDown": {
+    "readyFlipped503": true,
+    "flipLatencyMs": 6,
+    "healthDuringDown": {
+      "status": 200,
+      "body": "{\"status\":\"ok\"}",
+      "atMs": 3
+    },
+    "readySamples": [
+      {
+        "t": 6,
+        "status": 503
+      }
+    ],
+    "readyBody": "{\"status\":\"not_ready\"}",
+    "steadyReadyStatusesDuringOutage": [503, 503, 503, 503, 503, 503]
+  },
+  "dbRecovery": {
+    "readyBackTo200": true,
+    "recoveryLatencyMs": 15,
+    "samples": [
+      {
+        "t": 15,
+        "status": 200
+      }
+    ]
+  },
+  "redisRequiredBaseline": {
+    "ready": {
+      "status": 200,
+      "body": "{\"status\":\"ready\"}",
+      "atMs": 4
+    }
+  },
+  "redisRequiredDown": {
+    "readyFlipped503": true,
+    "flipLatencyMs": 4,
+    "body": "{\"error\":{\"code\":\"RATE_LIMIT_UNAVAILABLE\",\"message\":\"限流服务暂不可用，请稍后重试\",\"requestId\":\"req-4\"}}",
+    "samples": [
+      {
+        "t": 4,
+        "status": 503
+      }
+    ]
+  },
+  "redisRequiredRecovery": {
+    "readyBackTo200": true,
+    "recoveryLatencyMs": 1010
+  },
+  "alertLogLines": [
+    "{\"level\":50,\"time\":1789818032584,\"pid\":2081729,\"hostname\":\"WuJie\",\"event\":\"operability.readiness\",\"component\":\"database\",\"state\":\"unavailable\",\"msg\":\"Mandatory dependency unavailable: database — instance not ready for exam traffic\"}"
+  ],
+  "alertEvidenceFound": true,
+  "finished_at": "2026-09-19T11:40:54.493Z"
+}

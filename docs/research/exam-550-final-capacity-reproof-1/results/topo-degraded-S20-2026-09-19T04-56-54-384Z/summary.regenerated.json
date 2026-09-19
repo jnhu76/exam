@@ -1,0 +1,54 @@
+{
+  "run_id": "topo-degraded-S20-2026-09-19T04-56-54-384Z",
+  "scenario_id": "topo-degraded",
+  "topology": "degraded",
+  "n": 20,
+  "totalRequests": 151,
+  "phases": {
+    "LOGIN_BURST": {
+      "requests": 20,
+      "success": 10,
+      "http429": 10,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 436.5,
+      "p90": 641.4,
+      "p95": 692.1,
+      "p99": 693.2,
+      "max": 693.2,
+      "errorClasses": {
+        "rate_limited": 10
+      }
+    },
+    "STEADY_STARTS": {
+      "requests": 10,
+      "success": 10,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 24.8,
+      "p90": 27.2,
+      "p95": 37.3,
+      "p99": 37.3,
+      "max": 37.3,
+      "errorClasses": {}
+    },
+    "STEADY": {
+      "requests": 121,
+      "success": 90,
+      "http429": 31,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 22.6,
+      "p90": 28.1,
+      "p95": 31.6,
+      "p99": 38.8,
+      "max": 48.5,
+      "errorClasses": {
+        "http_429": 23,
+        "rate_limited": 8
+      }
+    }
+  },
+  "regenerated_at": "2026-09-19T08:46:14.201Z"
+}
