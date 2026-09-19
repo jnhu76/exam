@@ -1,0 +1,54 @@
+{
+  "run_id": "topo-nat-S20-2026-09-19T04-52-45-039Z",
+  "scenario_id": "topo-nat",
+  "topology": "nat",
+  "n": 20,
+  "totalRequests": 150,
+  "phases": {
+    "LOGIN_BURST": {
+      "requests": 20,
+      "success": 10,
+      "http429": 10,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 21.2,
+      "p90": 234.3,
+      "p95": 266.8,
+      "p99": 269,
+      "max": 269,
+      "errorClasses": {
+        "rate_limited": 10
+      }
+    },
+    "STEADY_STARTS": {
+      "requests": 10,
+      "success": 10,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 21.8,
+      "p90": 24.6,
+      "p95": 34.1,
+      "p99": 34.1,
+      "max": 34.1,
+      "errorClasses": {}
+    },
+    "STEADY": {
+      "requests": 120,
+      "success": 90,
+      "http429": 30,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 19.2,
+      "p90": 26.3,
+      "p95": 28.5,
+      "p99": 34.5,
+      "max": 43.6,
+      "errorClasses": {
+        "http_429": 23,
+        "rate_limited": 7
+      }
+    }
+  },
+  "regenerated_at": "2026-09-19T08:46:14.211Z"
+}

@@ -1,0 +1,62 @@
+{
+  "run_id": "longlived-S100-2026-09-19T05-52-20-834Z",
+  "scenario_id": "longlived",
+  "topology": "DIRECT_LAN",
+  "n": 100,
+  "totalRequests": 7151,
+  "phases": {
+    "setup": {
+      "requests": 100,
+      "success": 100,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 1317.1,
+      "p90": 2227.7,
+      "p95": 2331.5,
+      "p99": 2401.2,
+      "max": 2407.3,
+      "errorClasses": {}
+    },
+    "START": {
+      "requests": 100,
+      "success": 100,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 606.2,
+      "p90": 718.6,
+      "p95": 722.6,
+      "p99": 737.7,
+      "max": 737.8,
+      "errorClasses": {}
+    },
+    "BASELINE_STEADY": {
+      "requests": 809,
+      "success": 809,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 21.9,
+      "p90": 55.9,
+      "p95": 82.3,
+      "p99": 107.6,
+      "max": 117.1,
+      "errorClasses": {}
+    },
+    "MEASURE_STEADY": {
+      "requests": 6142,
+      "success": 6142,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 22.1,
+      "p90": 31.2,
+      "p95": 36.5,
+      "p99": 65,
+      "max": 114.7,
+      "errorClasses": {}
+    }
+  },
+  "regenerated_at": "2026-09-19T08:46:14.102Z"
+}

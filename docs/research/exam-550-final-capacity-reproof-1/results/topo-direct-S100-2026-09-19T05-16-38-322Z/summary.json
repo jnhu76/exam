@@ -1,0 +1,40 @@
+{
+  "runId": "topo-direct-S100-2026-09-19T05-16-38-322Z",
+  "state": "direct",
+  "n": 100,
+  "loginSuccess": 100,
+  "login429": 0,
+  "loginP": {
+    "p50": 3430.2,
+    "p95": 4445.9,
+    "p99": 4529,
+    "max": 4547.060217999999
+  },
+  "steady": null,
+  "distinctAuditIps": 101,
+  "auditIpsSample": [
+    "127.0.0.25 x1",
+    "127.0.0.101 x1",
+    "127.0.0.64 x1",
+    "127.0.0.94 x1",
+    "127.0.0.76 x1",
+    "127.0.0.26 x1",
+    "127.0.0.85 x1",
+    "127.0.0.14 x1",
+    "127.0.0.43 x1",
+    "127.0.0.53 x1",
+    "127.0.0.99 x1",
+    "127.0.0.58 x1"
+  ],
+  "probe": {
+    "label": "NON_CANONICAL diagnostic — per-IP budget isolation (POST /api/auth/login, 10/min/IP)",
+    "ipA_requests": 130,
+    "ipA_statusTally": {
+      "401": 10,
+      "429": 120
+    },
+    "ipB_status_same_moment": 401,
+    "independent": true
+  },
+  "note": "per-request raw in samples.jsonl"
+}

@@ -1,0 +1,14 @@
+{
+  "run_id": "admission-N130-dt105-2026-09-19T03-26-22-759Z",
+  "group": "admission",
+  "scenario": "N130-dt105",
+  "n": 130,
+  "pause_seconds": 105,
+  "batch_size": 20,
+  "batch_interval_s": 15,
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "api_mode": "e2e (limiter off per #549 admission workload contract)",
+  "db_pool_max": 10,
+  "exam_id": "d5178cad-0b53-4a51-a40e-f923c3c7272b",
+  "started_at": "2026-09-19T03:26:24.873Z"
+}

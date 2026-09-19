@@ -1,0 +1,17 @@
+{
+  "runId": "topo-proxy-S20-2026-09-19T04-58-59-541Z",
+  "state": "proxy",
+  "n": 20,
+  "loginSuccess": 10,
+  "login429": 10,
+  "loginP": {
+    "p50": 424.1,
+    "p95": 665.1,
+    "p99": 670.8,
+    "max": 670.7853889999678
+  },
+  "steady": null,
+  "distinctAuditIps": 2,
+  "auditIpsSample": ["172.17.0.1 x10", "127.0.0.1 x1"],
+  "note": "per-request raw in samples.jsonl"
+}

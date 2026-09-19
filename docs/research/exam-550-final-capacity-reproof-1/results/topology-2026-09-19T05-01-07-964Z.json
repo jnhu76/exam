@@ -1,0 +1,207 @@
+[
+  {
+    "state": "direct",
+    "n": 20,
+    "run": {
+      "runId": "topo-direct-S20-2026-09-19T04-46-17-703Z",
+      "state": "direct",
+      "n": 20,
+      "loginSuccess": 20,
+      "login429": 0,
+      "loginP": {
+        "p50": 749.2,
+        "p95": 945.9,
+        "p99": 955.7,
+        "max": 955.7121040000056
+      },
+      "steady": null,
+      "distinctAuditIps": 21,
+      "auditIpsSample": [
+        "127.0.0.1 x1",
+        "127.0.0.10 x1",
+        "127.0.0.11 x1",
+        "127.0.0.12 x1",
+        "127.0.0.13 x1",
+        "127.0.0.14 x1",
+        "127.0.0.15 x1",
+        "127.0.0.16 x1",
+        "127.0.0.17 x1",
+        "127.0.0.18 x1",
+        "127.0.0.19 x1",
+        "127.0.0.2 x1"
+      ]
+    }
+  },
+  {
+    "state": "direct",
+    "n": 50,
+    "run": {
+      "runId": "topo-direct-S50-2026-09-19T04-48-23-472Z",
+      "state": "direct",
+      "n": 50,
+      "loginSuccess": 50,
+      "login429": 0,
+      "loginP": {
+        "p50": 1719.3,
+        "p95": 2236.8,
+        "p99": 2276.3,
+        "max": 2276.2952040000237
+      },
+      "steady": null,
+      "distinctAuditIps": 51,
+      "auditIpsSample": [
+        "127.0.0.26 x1",
+        "127.0.0.47 x1",
+        "127.0.0.14 x1",
+        "127.0.0.43 x1",
+        "127.0.0.15 x1",
+        "127.0.0.45 x1",
+        "127.0.0.5 x1",
+        "127.0.0.40 x1",
+        "127.0.0.42 x1",
+        "127.0.0.20 x1",
+        "127.0.0.10 x1",
+        "127.0.0.27 x1"
+      ]
+    }
+  },
+  {
+    "state": "direct",
+    "n": 100,
+    "run": {
+      "runId": "topo-direct-S100-2026-09-19T04-50-31-083Z",
+      "state": "direct",
+      "n": 100,
+      "loginSuccess": 100,
+      "login429": 0,
+      "loginP": {
+        "p50": 3530.9,
+        "p95": 4605.3,
+        "p99": 4683.6,
+        "max": 4702.279960000014
+      },
+      "steady": null,
+      "distinctAuditIps": 101,
+      "auditIpsSample": [
+        "127.0.0.25 x1",
+        "127.0.0.101 x1",
+        "127.0.0.64 x1",
+        "127.0.0.94 x1",
+        "127.0.0.76 x1",
+        "127.0.0.26 x1",
+        "127.0.0.85 x1",
+        "127.0.0.14 x1",
+        "127.0.0.43 x1",
+        "127.0.0.53 x1",
+        "127.0.0.99 x1",
+        "127.0.0.58 x1"
+      ]
+    }
+  },
+  {
+    "state": "direct",
+    "n": 100,
+    "probe": {
+      "label": "NON_CANONICAL diagnostic — per-IP budget isolation (GET /api/health)",
+      "ipA_requests": 130,
+      "ipA_429": 0,
+      "ipB_status_same_moment": 0,
+      "independent": false
+    }
+  },
+  {
+    "state": "nat",
+    "n": 20,
+    "run": {
+      "runId": "topo-nat-S20-2026-09-19T04-52-45-039Z",
+      "state": "nat",
+      "n": 20,
+      "loginSuccess": 10,
+      "login429": 10,
+      "loginP": {
+        "p50": 21.2,
+        "p95": 266.8,
+        "p99": 269,
+        "max": 268.9980649999925
+      },
+      "steady": null,
+      "distinctAuditIps": 1,
+      "auditIpsSample": ["127.0.0.1 x11"]
+    }
+  },
+  {
+    "state": "nat",
+    "n": 50,
+    "run": {
+      "runId": "topo-nat-S50-2026-09-19T04-54-49-633Z",
+      "state": "nat",
+      "n": 50,
+      "loginSuccess": 10,
+      "login429": 40,
+      "loginP": {
+        "p50": 34.1,
+        "p95": 267.8,
+        "p99": 289.4,
+        "max": 289.3507100000279
+      },
+      "steady": null,
+      "distinctAuditIps": 1,
+      "auditIpsSample": ["127.0.0.1 x11"]
+    }
+  },
+  {
+    "state": "degraded",
+    "n": 20,
+    "run": {
+      "runId": "topo-degraded-S20-2026-09-19T04-56-54-384Z",
+      "state": "degraded",
+      "n": 20,
+      "loginSuccess": 10,
+      "login429": 10,
+      "loginP": {
+        "p50": 436.5,
+        "p95": 692.1,
+        "p99": 693.2,
+        "max": 693.2170160000678
+      },
+      "steady": null,
+      "distinctAuditIps": 1,
+      "auditIpsSample": ["127.0.0.1 x11"]
+    }
+  },
+  {
+    "state": "proxy",
+    "n": 20,
+    "run": {
+      "runId": "topo-proxy-S20-2026-09-19T04-58-59-541Z",
+      "state": "proxy",
+      "n": 20,
+      "loginSuccess": 10,
+      "login429": 10,
+      "loginP": {
+        "p50": 424.1,
+        "p95": 665.1,
+        "p99": 670.8,
+        "max": 670.7853889999678
+      },
+      "steady": null,
+      "distinctAuditIps": 2,
+      "auditIpsSample": ["172.17.0.1 x10", "127.0.0.1 x1"]
+    },
+    "spoof": {
+      "directXff": {
+        "spoofedHeader": "9.9.9.9 from two distinct untrusted sockets",
+        "socketA_130req_429": 0,
+        "socketB_same_spoofed_header_status": 0,
+        "keyIsSocketPeerNotXff": false
+      },
+      "throughProxyInjectedXff": {
+        "injectedHeader": "6.6.6.6 (candidate-injected, left of genuine entry)",
+        "socketA_130req_429": 0,
+        "socketB_same_injected_header_status": 502,
+        "genuineEntrySelectedNotInjected": false
+      }
+    },
+    "proxyIp": "127.0.0.1"
+  }
+]

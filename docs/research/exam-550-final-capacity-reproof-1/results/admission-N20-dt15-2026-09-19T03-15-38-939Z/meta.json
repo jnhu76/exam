@@ -1,0 +1,14 @@
+{
+  "run_id": "admission-N20-dt15-2026-09-19T03-15-38-939Z",
+  "group": "admission",
+  "scenario": "N20-dt15",
+  "n": 20,
+  "pause_seconds": 15,
+  "batch_size": 20,
+  "batch_interval_s": 15,
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "api_mode": "e2e (limiter off per #549 admission workload contract)",
+  "db_pool_max": 10,
+  "exam_id": "e3d806aa-5f04-4a41-85b3-aa3e7267f7b7",
+  "started_at": "2026-09-19T03:15:41.131Z"
+}

@@ -1,0 +1,116 @@
+# #550 Final capacity re-proof — 05 Long-lived composition dataset (#545 residual)
+
+Status: FROZEN. Run: `results/longlived-S100-2026-09-19T05-52-20-834Z/` — `cardinality.json`
+(dataset shape), `explain.json` (EXPLAIN ANALYZE at that cardinality), `samples.jsonl`
+(7,151 live requests), `pool.jsonl` (research snapshots incl. heartbeat-loop facts),
+`summary.json` + `summary.regenerated.json`; plus the 95 min connection-lifetime soak
+`results/soak-S50-2026-09-19T06-13-04-398Z/` (§ soak below). This is the as-built answer to
+the #545 residual "prove the heartbeat-episode discovery path stays correct at semester-scale
+history", under the KEEP_CURRENT_ARCHITECTURE decision (#554): no new index shipped, no query
+rewrite.
+
+## Dataset composition (composition-realistic semester history)
+
+Built in one fresh organization alongside a LIVE S100 exam:
+
+| entity | rows |
+| --- | ---: |
+| users (100 live candidates + 120 history candidates + staff) | 223 |
+| exams (1 live + 2 archived, 90–120 days old) | 3 |
+| exam_attempts (100 live `in_progress` + 120 `graded` old; snapshot at seed — the live exam's 100 rows materialize during the run, see `cardinality.json` before/after) | 120 → 220 |
+| exam_admissions (all consumed — semester admission history) | 120 |
+| attempt_interruptions (episodes across the old attempts) | 1,200 |
+| attempt_interruption_events (`detected` 1,200 + `restored` 900) | 2,100 |
+| client_events (30-day window) | 10,000 |
+
+Episode mix: 75% completed (detected + restored pairs), 25% pending with historical dates
+(1–88 days old) — deliberately violating any "recent only" assumption.
+
+## The two questions this run answers
+
+### 1. Does the discovery/reconcile path converge at this cardinality? — YES, exactly
+
+After ~4.5 minutes of live S100 traffic with the API's own 30 s heartbeat scanner running:
+
+- `pendingEpisodes`: **300 → 0** (durable count, fresh connection).
+- `systemIncidentsCreated`: **1,200** (all episodes materialized), `systemIncidentConflicts`: 0
+  (write-once operation-id CAS held across every tick).
+- No horizon shortcut was available: the pending episodes carry 1–88-day-old timestamps, so
+  convergence required scanning the full O(history) episode set — and it still converged.
+
+Reconcile tick wall time at 1,200-episode cardinality: the scanner's `lastStartedAt →
+lastSettledAt` delta on the settled tick is **48 ms** (30 s cadence maintained; 541 research
+snapshots cover the window with `disruptedCount=0` — correct, since no live candidate was
+actually disrupted).
+
+### 2. Is the discovery query still fast at this cardinality — and is an index warranted? — Fast without one
+
+`EXPLAIN (ANALYZE, BUFFERS)` of the discovery query (the `listHeartbeatDetectedEpisodes`
+derivation: `event_type='detected' AND detection_source='heartbeat_timeout'` joined through
+interruptions→attempts, ordered by `occurred_at, interruption_id`):
+
+- Without candidate index: **2.4 ms** — Hash Join + quicksort over 1,200 rows, 93 buffer hits,
+  no seq-scan problem, no spills.
+- With the candidate index created (`ll_discovery_idx`): **2.5 ms** — the planner does not
+  change to an index scan; identical join/sort shape. The index is dropped after the measurement
+  (A/B inside `explain.json`; the shipped schema is untouched).
+
+Verdict: at the composition-realistic cardinality the current structure is O(rows) and
+single-digit milliseconds; the #545 index re-check residual closes with **keep current
+structure** (the measured planner choice), not with a new index.
+
+## Live S100 workload under this history (interference check)
+
+The 100 live candidates ran uninterrupted (logins + starts + 270 s of save/heartbeat) while the
+reconciliation loop churned through the 300 pending episodes:
+
+| phase | requests | success | 5xx | 429 | timeouts | p50 (ms) | p99 (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| setup logins | 100 | 100 | 0 | 0 | 0 | 1,317 | 2,401 |
+| start burst | 100 | 100 | 0 | 0 | 0 | 606 | 738 |
+| BASELINE_STEADY (30 s, before convergence) | 809 | 809 | 0 | 0 | 0 | 21.9 | 107.6 |
+| MEASURE_STEADY (240 s, reconcile active) | 6,142 | 6,142 | 0 | 0 | 0 | 22.1 | 65 |
+
+(The runner's own `summary.json` carries empty phase arrays by design — all stats regenerate
+from raw `samples.jsonl` via `harness/summarize.ts`; `summary.regenerated.json` is committed
+next to it. This matches the "no hand-copied numbers" rule.)
+
+Steady p50/p99 are indistinguishable from the main-matrix S100 steady numbers
+([04](04-results.md)): semester-scale history in the same org does NOT measurably interfere
+with the live exam workload — the discovery path stays off the hot path, as the #545 fix
+intended.
+
+## Connection-lifetime soak (95 min, postgres.js max_lifetime rotation) — exercised, transparent
+
+Run: `results/soak-S50-2026-09-19T06-13-04-398Z/` — 50 live candidates, DIRECT_LAN, production
+defaults (pool `max=10`, `max_lifetime` randomized 30–90 min), 06:13:06→07:48:07 UTC (95 min).
+Rotation evidence generated by `harness/analyze-rotation.ts` → `rotation-analysis.json` from the
+10 s `pg_stat_activity` backend watcher in `pool.jsonl`; no number below is hand-copied.
+
+- **Rotation actually happened** (the #554 E12 concern is not hypothetical): 21 distinct backend
+  PIDs served the pool over the window; 17 connections reached their lifetime and were replaced
+  by fresh PIDs (first retirement 06:43, then continuously through 07:47 — consistent with the
+  randomized 30–90 min lifetime across ~10 pool connections).
+- **Rotations are transparent to the workload**: 37,877 SOAK-phase save/heartbeat requests —
+  **zero 5xx, zero timeouts, zero network errors**; every request 200. In the ±60 s window around
+  each of the 17 retirement events (467–807 requests per window; the final window is truncated by
+  run end): **0 errors**.
+- **Latency does not degrade over the soak**: SOAK-phase p50 = 23.5 ms, p95 = 36.3 ms,
+  p99 = 46.2 ms, max = 214 ms — flat versus (and slightly better than) the S50 lifecycle steady
+  numbers, with no drift trend between the first and final hour (`rotation-analysis.json`
+  `soakTotals`).
+- **Server log is clean**: zero `level≥40` lines in the API's pino stdout across the whole 95 min
+  (archived losslessly as `logs/soak-S50-2026-09-19T06-13-04-398Z.api.log.gz`; `zcat` restores
+  the exact stream).
+
+Verdict: connection-lifetime rotation is PROVEN_FOR_MEASURED_TOPOLOGY at S50 steady shape —
+`CONNECTION_LIFETIME_ROTATION_NOT_EXERCISED` does NOT apply; the rotation path was exercised 17
+times with no client-visible effect. The soak also re-confirms the steady-state envelope at 95×
+the steady measurement window (no leak, no drift, no accumulated pool damage).
+
+## Scope note
+
+This run re-proves the RESILIENCE residual at one composition point (1,200 episodes, 120
+attempts, 10k client events, ~223 users). It is not an unbounded-growth proof: cardinality is
+semester-realistic per the #545 contract, not a stress ceiling. Behavior at 10–100× episode
+counts is outside this campaign's envelope and remains future work if history retention grows.

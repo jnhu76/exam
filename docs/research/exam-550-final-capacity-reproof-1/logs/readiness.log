@@ -1,0 +1,10 @@
+▶ stopping exam550-readiness-pg …
+▶ starting exam550-readiness-pg …
+▶ stopping exam550-readiness-redis (REDIS_MODE=required) …
+{
+  "dbDownFlip": true,
+  "noFalseReady": true,
+  "dbRecovery": true,
+  "redisRequiredFailClosed": true,
+  "alertsFound": true
+}

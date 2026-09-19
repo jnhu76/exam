@@ -27,6 +27,7 @@ import { adminIncidentRoutes } from "./incidents.admin.js";
 import { adminProctorAssignmentRoutes } from "./proctorAssignments.admin.js";
 import { adminTeacherAssignmentRoutes } from "./teacherAssignments.admin.js";
 import { adminGraderAssignmentRoutes } from "./graderAssignments.admin.js";
+import { registerCapacityResearchRoutes } from "./capacityResearch.js";
 
 /**
  * Registers every API route module inside an existing /api scope.
@@ -71,4 +72,7 @@ export async function registerApiRouteModules(
   await api.register(adminProctorAssignmentRoutes);
   await api.register(adminTeacherAssignmentRoutes);
   await api.register(adminGraderAssignmentRoutes);
+
+  // RESEARCH ONLY (#550): mounts nothing unless CAPACITY_RESEARCH=1.
+  registerCapacityResearchRoutes(api);
 }

@@ -1,0 +1,14 @@
+{
+  "run_id": "admission-N100-dt75-2026-09-19T03-22-51-543Z",
+  "group": "admission",
+  "scenario": "N100-dt75",
+  "n": 100,
+  "pause_seconds": 75,
+  "batch_size": 20,
+  "batch_interval_s": 15,
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "api_mode": "e2e (limiter off per #549 admission workload contract)",
+  "db_pool_max": 10,
+  "exam_id": "4d627f0f-6cc2-4bd8-892d-c9ce5f226d98",
+  "started_at": "2026-09-19T03:22:53.725Z"
+}

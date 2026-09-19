@@ -1,0 +1,49 @@
+{
+  "run_id": "topo-direct-S100-2026-09-19T05-16-38-322Z",
+  "scenario_id": "topo-direct",
+  "topology": "direct",
+  "n": 100,
+  "totalRequests": 1400,
+  "phases": {
+    "LOGIN_BURST": {
+      "requests": 100,
+      "success": 100,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 3430.2,
+      "p90": 4331.5,
+      "p95": 4445.9,
+      "p99": 4529,
+      "max": 4547.1,
+      "errorClasses": {}
+    },
+    "STEADY_STARTS": {
+      "requests": 100,
+      "success": 100,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 23.5,
+      "p90": 27.4,
+      "p95": 28.8,
+      "p99": 35.9,
+      "max": 37.1,
+      "errorClasses": {}
+    },
+    "STEADY": {
+      "requests": 1200,
+      "success": 1200,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 21.5,
+      "p90": 36.3,
+      "p95": 69.8,
+      "p99": 110.8,
+      "max": 152.3,
+      "errorClasses": {}
+    }
+  },
+  "regenerated_at": "2026-09-19T08:46:14.208Z"
+}

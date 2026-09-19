@@ -1,0 +1,53 @@
+{
+  "run_id": "topo-proxy-S20-2026-09-19T05-18-56-020Z",
+  "scenario_id": "topo-proxy",
+  "topology": "proxy",
+  "n": 20,
+  "totalRequests": 124,
+  "phases": {
+    "LOGIN_BURST": {
+      "requests": 20,
+      "success": 8,
+      "http429": 0,
+      "http5xx": 12,
+      "timeouts": 0,
+      "p50": 410.1,
+      "p90": 618.2,
+      "p95": 625,
+      "p99": 629.4,
+      "max": 629.4,
+      "errorClasses": {
+        "server_5xx": 12
+      }
+    },
+    "STEADY_STARTS": {
+      "requests": 8,
+      "success": 8,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 27.5,
+      "p90": 40.2,
+      "p95": 40.2,
+      "p99": 40.2,
+      "max": 40.2,
+      "errorClasses": {}
+    },
+    "STEADY": {
+      "requests": 96,
+      "success": 93,
+      "http429": 3,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 24.8,
+      "p90": 30.1,
+      "p95": 33.7,
+      "p99": 45.3,
+      "max": 45.3,
+      "errorClasses": {
+        "http_429": 3
+      }
+    }
+  },
+  "regenerated_at": "2026-09-19T08:46:14.212Z"
+}

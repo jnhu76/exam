@@ -1,0 +1,20 @@
+{
+  "run_id": "lifecycle-S100-r1-2026-09-19T02-58-24-565Z",
+  "scenario": "lifecycle",
+  "group": "lifecycle",
+  "n": 100,
+  "rep": 1,
+  "steady_seconds": 90,
+  "topology": "DIRECT_LAN",
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "api_mode": "e2e (limiter off — sanctioned by the #549 contract; limiter dimension is separate)",
+  "api_port": 3300,
+  "db_pool_max": 10,
+  "redis_mode": "optional (limiter inert in e2e mode)",
+  "exam_id": "1e7d7f1f-192b-4541-ba1f-67953cd43bd9",
+  "org_id": "8df19797-49b3-4907-887d-d46ac589afea",
+  "question_count": 12,
+  "candidate_count": 100,
+  "batch_size": 20,
+  "started_at": "2026-09-19T02:58:27.040Z"
+}

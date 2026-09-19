@@ -1,0 +1,193 @@
+{
+  "run_dir": "/home/hoo/Source/exam/docs/research/exam-550-final-capacity-reproof-1/results/lifecycle-S100-r3-2026-09-19T03-02-52-118Z",
+  "phases": [
+    "setup",
+    "LOGIN_BURST",
+    "START_BURST",
+    "STEADY",
+    "RECONNECT_SILENCE",
+    "RECONNECT_RESTORE",
+    "RECONNECT_FIRST_SAVE",
+    "SUBMIT_BURST",
+    "ORACLE",
+    "done"
+  ],
+  "phases_detail": {
+    "setup": {
+      "observations": 3,
+      "researchSamples": 1,
+      "sqlQueriesInPhase": 195,
+      "sqlDurationMsInPhase": 871,
+      "maxInFlight": 0,
+      "saturatedFraction": 0,
+      "apiCpuPctMax": 64.2,
+      "pgActiveMax": 0,
+      "lockWaitsMax": 0,
+      "poolWaitProxyMean": 0,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    },
+    "LOGIN_BURST": {
+      "observations": 23,
+      "researchSamples": 6,
+      "sqlQueriesInPhase": 37,
+      "sqlDurationMsInPhase": 767,
+      "maxInFlight": 93,
+      "saturatedFraction": 0.167,
+      "apiCpuPctMax": 887,
+      "pgActiveMax": 3,
+      "lockWaitsMax": 0,
+      "poolWaitProxyMean": 15.5,
+      "hostLoad1Max": 5.06,
+      "memAvailableMinKb": 10015852,
+      "dbCpuPctMax": 5.35
+    },
+    "START_BURST": {
+      "observations": 7,
+      "researchSamples": 2,
+      "sqlQueriesInPhase": 110,
+      "sqlDurationMsInPhase": 40595,
+      "maxInFlight": 82,
+      "saturatedFraction": 0.5,
+      "apiCpuPctMax": 83.1,
+      "pgActiveMax": 10,
+      "lockWaitsMax": 8,
+      "poolWaitProxyMean": 39,
+      "hostLoad1Max": 5.77,
+      "memAvailableMinKb": 9967108,
+      "dbCpuPctMax": 6.83
+    },
+    "STEADY": {
+      "observations": 677,
+      "researchSamples": 178,
+      "sqlQueriesInPhase": 68,
+      "sqlDurationMsInPhase": 78,
+      "maxInFlight": 3,
+      "saturatedFraction": 0,
+      "apiCpuPctMax": 80.4,
+      "pgActiveMax": 9,
+      "lockWaitsMax": 8,
+      "poolWaitProxyMean": 0.11,
+      "hostLoad1Max": 5.77,
+      "memAvailableMinKb": 10127064,
+      "dbCpuPctMax": 20.29
+    },
+    "RECONNECT_SILENCE": {
+      "observations": 113,
+      "researchSamples": 30,
+      "sqlQueriesInPhase": 2,
+      "sqlDurationMsInPhase": 2,
+      "maxInFlight": 0,
+      "saturatedFraction": 0,
+      "apiCpuPctMax": 10.1,
+      "pgActiveMax": 0,
+      "lockWaitsMax": 0,
+      "poolWaitProxyMean": 0,
+      "hostLoad1Max": 1.81,
+      "memAvailableMinKb": 10250324,
+      "dbCpuPctMax": 4.83
+    },
+    "RECONNECT_RESTORE": {
+      "observations": 6,
+      "researchSamples": 1,
+      "sqlQueriesInPhase": 602,
+      "sqlDurationMsInPhase": 43726,
+      "maxInFlight": 0,
+      "saturatedFraction": 0,
+      "apiCpuPctMax": 70.5,
+      "pgActiveMax": 9,
+      "lockWaitsMax": 9,
+      "poolWaitProxyMean": 0,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "observations": 5,
+      "researchSamples": 1,
+      "sqlQueriesInPhase": 1002,
+      "sqlDurationMsInPhase": 74430,
+      "maxInFlight": 0,
+      "saturatedFraction": 0,
+      "apiCpuPctMax": 72.1,
+      "pgActiveMax": 10,
+      "lockWaitsMax": 8,
+      "poolWaitProxyMean": 0,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    },
+    "SUBMIT_BURST": {
+      "observations": 17,
+      "researchSamples": 1,
+      "sqlQueriesInPhase": 688,
+      "sqlDurationMsInPhase": 228942,
+      "maxInFlight": 82,
+      "saturatedFraction": 1,
+      "apiCpuPctMax": 40.8,
+      "pgActiveMax": 10,
+      "lockWaitsMax": 9,
+      "poolWaitProxyMean": 73,
+      "hostLoad1Max": 1.41,
+      "memAvailableMinKb": 10405904,
+      "dbCpuPctMax": 46.44
+    }
+  },
+  "client_latency": {
+    "LOGIN_BURST": {
+      "requests": 100,
+      "p50": 3414.7,
+      "p95": 4494.4,
+      "p99": 4584.6,
+      "max": 4587.9,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "START_BURST": {
+      "requests": 100,
+      "p50": 612.6,
+      "p95": 733.4,
+      "p99": 746.5,
+      "max": 746.9,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "STEADY": {
+      "requests": 2556,
+      "p50": 19.8,
+      "p95": 38.6,
+      "p99": 95.2,
+      "max": 138.2,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "RECONNECT_RESTORE": {
+      "requests": 200,
+      "p50": 400.2,
+      "p95": 564.5,
+      "p99": 580.4,
+      "max": 580.9,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "requests": 100,
+      "p50": 472.9,
+      "p95": 783.3,
+      "p99": 812.8,
+      "max": 820.3,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "SUBMIT_BURST": {
+      "requests": 100,
+      "p50": 2559.3,
+      "p95": 2599,
+      "p99": 2710.9,
+      "max": 2741.2,
+      "err5xx": 0,
+      "timeouts": 0
+    }
+  }
+}

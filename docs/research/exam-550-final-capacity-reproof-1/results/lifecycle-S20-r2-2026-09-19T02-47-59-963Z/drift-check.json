@@ -1,0 +1,5 @@
+{
+  "ok": true,
+  "drift": [],
+  "partitionNote": "committed RECONNECT_TAKE merged back into RECONNECT_RESTORE for comparison (raw JSONL lumps take under RECONNECT_RESTORE); split percentiles are recorded in the committed summary but are not byte-regenerable from the JSONL"
+}

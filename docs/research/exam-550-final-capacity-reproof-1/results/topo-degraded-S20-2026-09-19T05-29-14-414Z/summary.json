@@ -1,0 +1,17 @@
+{
+  "runId": "topo-degraded-S20-2026-09-19T05-29-14-414Z",
+  "state": "degraded",
+  "n": 20,
+  "loginSuccess": 10,
+  "login429": 10,
+  "loginP": {
+    "p50": 478.2,
+    "p95": 685.9,
+    "p99": 694.6,
+    "max": 694.6222340000022
+  },
+  "steady": null,
+  "distinctAuditIps": 1,
+  "auditIpsSample": ["127.0.0.1 x11"],
+  "note": "per-request raw in samples.jsonl"
+}

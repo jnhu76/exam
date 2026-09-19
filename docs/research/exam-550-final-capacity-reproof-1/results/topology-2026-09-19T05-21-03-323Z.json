@@ -1,0 +1,118 @@
+[
+  {
+    "state": "direct",
+    "n": 100,
+    "run": {
+      "runId": "topo-direct-S100-2026-09-19T05-16-38-322Z",
+      "state": "direct",
+      "n": 100,
+      "loginSuccess": 100,
+      "login429": 0,
+      "loginP": {
+        "p50": 3430.2,
+        "p95": 4445.9,
+        "p99": 4529,
+        "max": 4547.060217999999
+      },
+      "steady": null,
+      "distinctAuditIps": 101,
+      "auditIpsSample": [
+        "127.0.0.25 x1",
+        "127.0.0.101 x1",
+        "127.0.0.64 x1",
+        "127.0.0.94 x1",
+        "127.0.0.76 x1",
+        "127.0.0.26 x1",
+        "127.0.0.85 x1",
+        "127.0.0.14 x1",
+        "127.0.0.43 x1",
+        "127.0.0.53 x1",
+        "127.0.0.99 x1",
+        "127.0.0.58 x1"
+      ],
+      "probe": {
+        "label": "NON_CANONICAL diagnostic — per-IP budget isolation (POST /api/auth/login, 10/min/IP)",
+        "ipA_requests": 130,
+        "ipA_statusTally": {
+          "401": 10,
+          "429": 120
+        },
+        "ipB_status_same_moment": 401,
+        "independent": true
+      }
+    },
+    "probe": {
+      "label": "NON_CANONICAL diagnostic — per-IP budget isolation (POST /api/auth/login, 10/min/IP)",
+      "ipA_requests": 130,
+      "ipA_statusTally": {
+        "401": 10,
+        "429": 120
+      },
+      "ipB_status_same_moment": 401,
+      "independent": true
+    }
+  },
+  {
+    "state": "proxy",
+    "n": 20,
+    "run": {
+      "runId": "topo-proxy-S20-2026-09-19T05-18-56-020Z",
+      "state": "proxy",
+      "n": 20,
+      "loginSuccess": 8,
+      "login429": 0,
+      "loginP": {
+        "p50": 410.1,
+        "p95": 625,
+        "p99": 629.4,
+        "max": 629.4337699999742
+      },
+      "steady": null,
+      "distinctAuditIps": 2,
+      "auditIpsSample": ["172.17.0.1 x8", "127.0.0.1 x1"],
+      "probe": {
+        "directXff": {
+          "spoofedHeader": "9.9.9.9 from two distinct untrusted sockets",
+          "socketA_130req_statusTally": {
+            "401": 10,
+            "429": 120
+          },
+          "socketB_same_spoofed_header_status": 401,
+          "keyIsSocketPeerNotXff": true
+        },
+        "throughProxyInjectedXff": {
+          "injectedHeader": "6.6.6.6 (candidate-injected, left of genuine entry)",
+          "socketA_130req_statusTally": {
+            "401": 10,
+            "429": 120
+          },
+          "socketB_same_injected_header_status": 429,
+          "genuineEntrySelectedNotInjected": false
+        }
+      }
+    },
+    "spoof": {
+      "directXff": {
+        "spoofedHeader": "9.9.9.9 from two distinct untrusted sockets",
+        "socketA_130req_statusTally": {
+          "401": 10,
+          "429": 120
+        },
+        "socketB_same_spoofed_header_status": 401,
+        "keyIsSocketPeerNotXff": true
+      },
+      "throughProxyInjectedXff": {
+        "injectedHeader": "6.6.6.6 (candidate-injected, left of genuine entry)",
+        "socketA_130req_statusTally": {
+          "401": 10,
+          "429": 120
+        },
+        "socketB_same_injected_header_status": 429,
+        "genuineEntrySelectedNotInjected": false
+      }
+    },
+    "trustedCidrs": "127.0.0.1/32,172.17.0.1/32",
+    "calibrationPeers": ["127.0.0.1"],
+    "trustedCidrsBasis": "reverse-proxy egress peers observed by live calibration probes, unioned with this rig's known Docker NAT egress paths (vpnkit loopback + bridge gateway); every /32 is a proxy-owned address, candidate aliases stay untrusted"
+  }
+]
