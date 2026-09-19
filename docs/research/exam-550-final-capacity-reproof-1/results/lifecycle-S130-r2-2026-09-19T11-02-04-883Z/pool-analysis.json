@@ -1,0 +1,223 @@
+{
+  "run_dir": "/home/hoo/Source/exam/docs/research/exam-550-final-capacity-reproof-1/results/lifecycle-S130-r2-2026-09-19T11-02-04-883Z",
+  "phases": [
+    "setup",
+    "LOGIN_BURST",
+    "START_BURST",
+    "STEADY",
+    "RECONNECT_SILENCE",
+    "RECONNECT_RESTORE",
+    "RECONNECT_TAKE",
+    "RECONNECT_FIRST_SAVE",
+    "SUBMIT_BURST",
+    "ORACLE",
+    "done"
+  ],
+  "measured_topology": {
+    "appMode": "production",
+    "rateLimitEnabled": true,
+    "redisConfigMode": "optional",
+    "redisRuntimeState": "ready",
+    "poolMax": 10
+  },
+  "phases_detail": {
+    "setup": {
+      "observations": 3,
+      "researchSamples": 1,
+      "sqlArrivalsInPhase": 0,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 1,
+      "pgActiveSatFrac": 0,
+      "lockWaitsMax": 0,
+      "apiCpuPctMax": 78,
+      "eventLoopP90MaxMs": 1.52,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    },
+    "LOGIN_BURST": {
+      "observations": 28,
+      "researchSamples": 7,
+      "sqlArrivalsInPhase": 564,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 2,
+      "pgActiveSatFrac": 0,
+      "lockWaitsMax": 0,
+      "apiCpuPctMax": 868.8,
+      "eventLoopP90MaxMs": 1.65,
+      "hostLoad1Max": 1.64,
+      "memAvailableMinKb": 10992640,
+      "dbCpuPctMax": 16.88
+    },
+    "START_BURST": {
+      "observations": 7,
+      "researchSamples": 2,
+      "sqlArrivalsInPhase": 793,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.75,
+      "lockWaitsMax": 8,
+      "apiCpuPctMax": 79.8,
+      "eventLoopP90MaxMs": 1.62,
+      "hostLoad1Max": 1.64,
+      "memAvailableMinKb": 11041388,
+      "dbCpuPctMax": 16.88
+    },
+    "STEADY": {
+      "observations": 676,
+      "researchSamples": 178,
+      "sqlArrivalsInPhase": 15490,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.009,
+      "lockWaitsMax": 8,
+      "apiCpuPctMax": 93.5,
+      "eventLoopP90MaxMs": 1.45,
+      "hostLoad1Max": 1.84,
+      "memAvailableMinKb": 10926704,
+      "dbCpuPctMax": 29.43
+    },
+    "RECONNECT_SILENCE": {
+      "observations": 112,
+      "researchSamples": 30,
+      "sqlArrivalsInPhase": 98,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 1,
+      "pgActiveSatFrac": 0,
+      "lockWaitsMax": 0,
+      "apiCpuPctMax": 14.2,
+      "eventLoopP90MaxMs": 1.44,
+      "hostLoad1Max": 1.1,
+      "memAvailableMinKb": 11198840,
+      "dbCpuPctMax": 4.85
+    },
+    "RECONNECT_RESTORE": {
+      "observations": 9,
+      "researchSamples": 1,
+      "sqlArrivalsInPhase": 782,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.667,
+      "lockWaitsMax": 8,
+      "apiCpuPctMax": 68.9,
+      "eventLoopP90MaxMs": 1.66,
+      "hostLoad1Max": 0.85,
+      "memAvailableMinKb": 11333212,
+      "dbCpuPctMax": 6.06
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "observations": 7,
+      "researchSamples": 2,
+      "sqlArrivalsInPhase": 1307,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.8,
+      "lockWaitsMax": 8,
+      "apiCpuPctMax": 90.1,
+      "eventLoopP90MaxMs": 1.46,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    },
+    "SUBMIT_BURST": {
+      "observations": 20,
+      "researchSamples": 1,
+      "sqlArrivalsInPhase": 897,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.882,
+      "lockWaitsMax": 9,
+      "apiCpuPctMax": 41.5,
+      "eventLoopP90MaxMs": 1.35,
+      "hostLoad1Max": 0.78,
+      "memAvailableMinKb": 11337420,
+      "dbCpuPctMax": 49.05
+    },
+    "ORACLE": {
+      "observations": 1,
+      "researchSamples": 0,
+      "sqlArrivalsInPhase": 0,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 1,
+      "pgActiveSatFrac": 0,
+      "lockWaitsMax": 0,
+      "apiCpuPctMax": 0,
+      "eventLoopP90MaxMs": 0,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    }
+  },
+  "client_latency": {
+    "LOGIN_BURST": {
+      "requests": 130,
+      "p50": 4386.1,
+      "p95": 5797.3,
+      "p99": 5897.3,
+      "max": 5903.2,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "START_BURST": {
+      "requests": 130,
+      "p50": 732.2,
+      "p95": 902.1,
+      "p99": 916.5,
+      "max": 917,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "STEADY": {
+      "requests": 3294,
+      "p50": 21.8,
+      "p95": 157,
+      "p99": 223.3,
+      "max": 272,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "RECONNECT_RESTORE": {
+      "requests": 130,
+      "p50": 620.7,
+      "p95": 727.4,
+      "p99": 733.6,
+      "max": 736.3,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "RECONNECT_TAKE": {
+      "requests": 130,
+      "p50": 477.1,
+      "p95": 502.8,
+      "p99": 504.5,
+      "max": 504.8,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "requests": 130,
+      "p50": 612,
+      "p95": 1028.3,
+      "p99": 1061.7,
+      "max": 1069.7,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "SUBMIT_BURST": {
+      "requests": 130,
+      "p50": 3306.2,
+      "p95": 3348.5,
+      "p99": 3430,
+      "max": 3452.3,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    }
+  }
+}

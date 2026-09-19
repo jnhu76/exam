@@ -1,0 +1,101 @@
+{
+  "run_id": "lifecycle-S20-r1-2026-09-19T10-40-45-682Z",
+  "scenario_id": "lifecycle",
+  "topology": "DIRECT_LAN",
+  "n": 20,
+  "totalRequests": 697,
+  "phases": {
+    "LOGIN_BURST": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 754.5,
+      "p90": 955.7,
+      "p95": 958.7,
+      "p99": 961.5,
+      "max": 961.5,
+      "errorClasses": {}
+    },
+    "START_BURST": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 178,
+      "p90": 217.2,
+      "p95": 217.9,
+      "p99": 219.8,
+      "max": 219.8,
+      "errorClasses": {}
+    },
+    "STEADY": {
+      "requests": 577,
+      "success": 577,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 23.4,
+      "p90": 28.8,
+      "p95": 31.5,
+      "p99": 41.2,
+      "max": 51.6,
+      "errorClasses": {}
+    },
+    "RECONNECT_RESTORE": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 100.6,
+      "p90": 118.4,
+      "p95": 121.3,
+      "p99": 123.9,
+      "max": 123.9,
+      "errorClasses": {}
+    },
+    "RECONNECT_TAKE": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 80.8,
+      "p90": 91.8,
+      "p95": 93.4,
+      "p99": 95.1,
+      "max": 95.1,
+      "errorClasses": {}
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 117.1,
+      "p90": 178.5,
+      "p95": 184.5,
+      "p99": 192.1,
+      "max": 192.1,
+      "errorClasses": {}
+    },
+    "SUBMIT_BURST": {
+      "requests": 20,
+      "success": 20,
+      "http429": 0,
+      "http5xx": 0,
+      "timeouts": 0,
+      "p50": 391.5,
+      "p90": 561.9,
+      "p95": 589.9,
+      "p99": 616.8,
+      "max": 616.8,
+      "errorClasses": {}
+    }
+  },
+  "regenerated_at": "2026-09-19T11:15:09.848Z"
+}

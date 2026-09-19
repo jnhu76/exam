@@ -1,0 +1,7 @@
+{
+  "disposition": "SUPERSEDED_PRE_CORRECTIVE_EVIDENCE",
+  "campaign": "EXAM-550-CORRECTIVE-1",
+  "recorded_at": "2026-09-19T10:41:33.082632+00:00",
+  "reason": "Superseded by the EXAM-550-CORRECTIVE-1 re-run: this run used APP_MODE=e2e (production rate limiter OFF \u2014 a #554-topology violation for final capacity authority) and the eager pre-corrective CAPACITY_RESEARCH wrapper that executed every lazy Query at creation.",
+  "authoritative_replacement": "results/lifecycle-<same scale/rep> with meta.campaign=corrective-1 (APP_MODE=production, neutral instrumentation)"
+}

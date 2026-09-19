@@ -11,6 +11,9 @@ extrapolation to production hardware.
 BASE_SHA:  fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e   (== origin/master, PR #581 / #548 merge)
 HEAD_SHA:  evidence commit e745ca7a (all of this doc set + harness + raw artifacts; the
            immediately following commit only records this SHA — see 11-final-verdict.md)
+           CORRECTIVE-1: the corrective evidence (neutral instrumentation + production-mode
+           re-runs) starts at commit 66c850e6 on the same branch — see 12-corrective-1.md
+           for the exact corrective HEAD recorded at closeout.
 BRANCH:    research/550-final-capacity-reproof-1
 WORKTREE:  clean at branch creation; BASE GATE verified HEAD == origin/master == expected SHA
 ```
@@ -48,9 +51,11 @@ drizzle-orm: 0.45.2
 ```text
 API:       native Node process on the host (tsx), NOT containerized — same shape as the repo's
            own WSL E2E runner (scripts/e2e/run-wsl.sh). One API instance per run group.
-           Lifecycle/admission groups: APP_MODE=e2e (limiter off — sanctioned by the #549
-           admission workload contract; the limiter dimension is measured separately, §12/07).
-           Rate-limit topology groups: APP_MODE=production (limiter ON, production defaults).
+           CORRECTIVE-1 (EXAM-550-CORRECTIVE-1): ALL canonical groups (lifecycle, admission,
+           long-lived, soak, readiness, topology) run APP_MODE=production — production limiter
+           ON at default budgets with the Redis-backed limiter store. The pre-corrective
+           lifecycle/admission/longlived/soak runs used APP_MODE=e2e (limiter off) and are
+           marked SUPERSEDED_PRE_CORRECTIVE_EVIDENCE (see 12-corrective-1.md).
 DB/Redis:  Docker (docker-compose.dev.yml: db 5432, redis 6379), already-running containers.
 Load driver: native Node process on the same host (single-machine rig — see caveats).
 ```

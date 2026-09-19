@@ -1,11 +1,20 @@
 # #550 Final capacity re-proof — 07 Rate-limit / deployment topologies (#546)
 
-Status: FROZEN. Raw records: `results/topo-<state>-S<n>-<ts>/samples.jsonl` +
+Status: FROZEN, RETAINED VALID by EXAM-550-CORRECTIVE-1. Raw records: `results/topo-<state>-S<n>-<ts>/samples.jsonl` +
 `results/topology-<ts>.json` (campaign summary; the fix-rerun summaries are
 `topology-2026-09-19T05-21-03-323Z.json` and `topology-2026-09-19T05-33-31-736Z.json` — see
 § rig deviations for why there are three summary files). API mode: production (limiter ON,
 default budgets: login route 10/min/IP, global 100/min/IP), CSRF Origin enforcement active
 (the harness sends the allowed Origin, like the real web client).
+
+Retention justification (corrective-1): these runs already measured the production topology,
+and their load-bearing claims are limiter-identity and 429-onset MECHANISM facts — audit-trail
+`request.ip` evidence, per-IP budget isolation, XFF trust handling — not query-timing or
+pool-queueing claims. The superseded pre-corrective CAPACITY_RESEARCH wrapper observed only
+the drizzle→postgres.js funnel and cannot alter limiter keying, proxy-addr walking, or 429
+decisions. The DIRECT_LAN limiter claim at S130/S200 — not measured in this group (direct was
+measured at 20/50/100 here) — is provided by the corrective production-mode lifecycle runs
+(auditDistinctIps = 131 at S130 and 201 at S200, zero 429; [04](04-results.md)).
 
 The limiter key is a digest of `request.ip`; `request.ip` honors `TRUSTED_PROXY_CIDRS` via the
 right-to-left proxy-addr walk (trusted hops are skipped; the first untrusted address is the
@@ -65,8 +74,11 @@ nginx-the-product. The trusted set is self-calibrated from live probes and recor
 
 ## Consequences for the deployment guidance
 
-- DIRECT_LAN (the primary on-prem topology): per-IP limiting works as designed up to S200 —
-  zero false positives measured.
+- DIRECT_LAN (the primary on-prem topology): per-IP limiting works as designed with zero
+  false positives measured — S20/S50/S100 in this group (21/51/101 distinct audit IPs,
+  0×429), and S130/S200 through the corrective production-mode lifecycle runs
+  (131/201 distinct audit IPs, 0×429 — [04](04-results.md), [03](03-workload-matrix.md)).
+  The DIRECT_LAN limiter claim is therefore evidenced through S200 under production.
 - Behind SHARED_NAT: simultaneous logins contend for the 10/min shared budget. This is
   correct-by-design (the alternative — disabling per-IP limits — removes the abuse bound);
   the honest operational note is "clients behind one NAT address should expect login bursting

@@ -1,0 +1,18 @@
+{
+  "run_id": "admission-N20-dt90-2026-09-19T11-11-42-806Z",
+  "group": "admission",
+  "campaign": "corrective-1",
+  "head_sha": "66c850e6348bc352bfc30a22117075ae79a38e19",
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "scenario": "N20-dt90",
+  "n": 20,
+  "pause_seconds": 90,
+  "batch_size": 20,
+  "batch_interval_s": 15,
+  "topology": "DIRECT_LAN (distinct loopback source IP per candidate)",
+  "api_mode": "production (limiter ON, default budgets; Redis-backed store — the accepted #554 topology)",
+  "db_pool_max": 10,
+  "redis_mode": "optional (rate-limit coordination only — #554)",
+  "exam_id": "3fea053d-612e-4ed8-9741-9c45d9af973f",
+  "started_at": "2026-09-19T11:11:44.768Z"
+}

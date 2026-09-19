@@ -58,22 +58,53 @@ deadline/openAt/closeAt semantics untouched by the run
 no silent partial success: every HTTP success maps to durable truth (mismatch ⇒ FAIL)
 ```
 
-## DB pool decomposition (#10 — mandatory)
+## DB pool decomposition (#10 — mandatory; CORRECTED in EXAM-550-CORRECTIVE-1)
 
-Distinguish pool acquisition/queueing from DB execution:
+Distinguish pool acquisition/queueing from DB execution — with measurement
+neutrality as the hard law: the instrumentation must never trigger a query,
+change query ordering, change execution timing, alter the returned Query,
+swallow/change errors, or change transaction semantics:
 
 ```text
 in-process (env-gated research instrumentation, default OFF):
-  query duration (client-side, includes postgres.js acquire+queue+exec) per statement,
-  in-flight / max in-flight, postgres.js reserved/available counts sampled at 250 ms
+  statement ARRIVAL counts per snapshot window (neutral funnel counter —
+  sql.unsafe call count only; the returned lazy Query is never touched);
+  postgres.js pool CONFIG facts (max, idle_timeout, max_lifetime);
+  NOT_DIRECTLY_OBSERVABLE in-process: per-statement in-flight / duration /
+  errors — postgres.js v3 Query is a lazy thenable whose then/catch/finally
+  (and Promise.resolve(thenable)) SUBMIT execution, so observing completion
+  would change the phenomenon. The superseded pre-corrective wrapper did
+  exactly that and all artifacts it produced are marked
+  SUPERSEDED_PRE_CORRECTIVE_EVIDENCE.
 server-side (driver sampler, separate connection):
-  pg_stat_activity state counts (active/idle) for the run database at 100–250 ms
-derivation:
-  pool wait proxy = client in-flight queries − server-side active sessions;
-  saturation = in-flight ≥ 10 (pool max) sustained;
-  request latency = queue-at-socket + app work + pool wait + DB exec (+ serialization)
-  — the dominant term is REPORTED per phase (09-bottleneck-analysis.md), never guessed.
+  pg_stat_activity state counts (active / idle in transaction) for the run
+  database at ~200 ms; lock-wait counts; backend PID/backend_start churn
+  (soak) for connection-lifetime rotation.
+derivation (server-side truth only):
+  DB saturation = pg_stat_activity active+idle-in-transaction ≥ pool max (10)
+  sustained in the sampling window (the harness sampler can add +1);
+  queue-wait proxy = NOT_DIRECTLY_OBSERVABLE client-side; pool queueing is
+  instead evidenced by request latency tails + saturated pg_stat_activity
+  windows (the queue exists between the two and is never measured directly);
+  request latency = queue-at-socket + app work + pool wait + DB exec
+  (+ serialization) — the dominant term is REPORTED per phase
+  (09-bottleneck-analysis.md), never guessed.
 ```
+
+## Measurement neutrality gate (#10a — added by EXAM-550-CORRECTIVE-1)
+
+Before any capacity measurement may be authoritative:
+`apps/api/src/lib/capacityResearch.neutrality.test.ts` (real PostgreSQL,
+deterministic, single-connection FIFO — no sleeps) must pass. It proves:
+baseline driver laziness; that `Promise.resolve(query)` executes a lazy
+query (the observation trap); that the superseded wrapper eagerly executed
+statements (defect characterization); that the corrective wrapper preserves
+laziness; and the OFF-vs-ON gate — identical server-side journal and
+ordering, identical returned values, identical transaction behavior
+(commit + rollback), identical error propagation (same PostgresError code),
+and the wrapper counting exactly the outer-funnel arrivals with no extra DB
+operation. Any future change to the instrumentation must keep this gate
+green before new measurements are accepted.
 
 ## Admission KEEP_LAZY HTTP contract (#11)
 
@@ -136,12 +167,25 @@ pg_stat_activity+host snapshots), `summary.json` (phase stats + durable `oracles
 regenerates all summaries from raw JSONL. API pino stdout retained under `logs/<run_id>.api.log.gz`
 (lossless gzip of the runner's exact output; `zcat` restores it).
 
-## Repeatability (#24)
+## Repeatability (#24 — reps strengthened by the human corrective review)
 
-S20/S50/S100: ≥3 canonical lifecycle repetitions. S130/S200: ≥1 canonical run; ambiguous
-or boundary-adjacent outcomes are repeated. Run-to-run variance is reported. Soak (#19):
-one bounded ≥75 min run crossing at least one postgres.js connection-lifetime rotation
-window; if it were skipped, CONNECTION_LIFETIME_ROTATION_NOT_EXERCISED would be stated.
+S20/S50/S100: ≥3 canonical lifecycle repetitions. S130/S200: ≥2 canonical
+repetitions (both scales are boundary-relevant; the corrective review raised
+this from ≥1). Run-to-run variance is reported. Soak (#19): one bounded ≥75 min
+run crossing at least one postgres.js connection-lifetime rotation window; if
+it were skipped, CONNECTION_LIFETIME_ROTATION_NOT_EXERCISED would be stated.
+
+## Canonical mode law (EXAM-550-CORRECTIVE-1)
+
+Every canonical run in every group starts the API with APP_MODE=production:
+the production rate limiter is ON at default budgets (global 100/min/IP;
+login route 10/min/IP) with the Redis-backed store (REDIS_MODE=optional,
+Redis reachable — the #554 rate-limit responsibility). DIRECT_LAN candidates
+bind distinct real loopback source IPs. No timeout widening, no rate-limit
+budget inflation, no pool change, no background-loop change. If the production
+limiter legitimately produces 429 anywhere, the 429s are retained, classified
+per phase, and the limiter is NOT weakened. Any run that cannot satisfy this
+law is not canonical, whatever else it shows.
 
 ## Proven "PROVEN" bar (#26)
 

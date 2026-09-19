@@ -1,0 +1,223 @@
+{
+  "run_dir": "/home/hoo/Source/exam/docs/research/exam-550-final-capacity-reproof-1/results/lifecycle-S200-r2-2026-09-19T11-06-39-159Z",
+  "phases": [
+    "setup",
+    "LOGIN_BURST",
+    "START_BURST",
+    "STEADY",
+    "RECONNECT_SILENCE",
+    "RECONNECT_RESTORE",
+    "RECONNECT_TAKE",
+    "RECONNECT_FIRST_SAVE",
+    "SUBMIT_BURST",
+    "ORACLE",
+    "done"
+  ],
+  "measured_topology": {
+    "appMode": "production",
+    "rateLimitEnabled": true,
+    "redisConfigMode": "optional",
+    "redisRuntimeState": "ready",
+    "poolMax": 10
+  },
+  "phases_detail": {
+    "setup": {
+      "observations": 2,
+      "researchSamples": 1,
+      "sqlArrivalsInPhase": 0,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 0,
+      "pgActiveSatFrac": 0,
+      "lockWaitsMax": 0,
+      "apiCpuPctMax": 79.9,
+      "eventLoopP90MaxMs": 1.45,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    },
+    "LOGIN_BURST": {
+      "observations": 42,
+      "researchSamples": 11,
+      "sqlArrivalsInPhase": 855,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 2,
+      "pgActiveSatFrac": 0,
+      "lockWaitsMax": 0,
+      "apiCpuPctMax": 890.8,
+      "eventLoopP90MaxMs": 1.69,
+      "hostLoad1Max": 1.78,
+      "memAvailableMinKb": 10841700,
+      "dbCpuPctMax": 18.08
+    },
+    "START_BURST": {
+      "observations": 10,
+      "researchSamples": 2,
+      "sqlArrivalsInPhase": 1213,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.714,
+      "lockWaitsMax": 9,
+      "apiCpuPctMax": 86.3,
+      "eventLoopP90MaxMs": 1.58,
+      "hostLoad1Max": 1.78,
+      "memAvailableMinKb": 10897652,
+      "dbCpuPctMax": 39.57
+    },
+    "STEADY": {
+      "observations": 678,
+      "researchSamples": 177,
+      "sqlArrivalsInPhase": 23256,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.016,
+      "lockWaitsMax": 8,
+      "apiCpuPctMax": 87.5,
+      "eventLoopP90MaxMs": 1.5,
+      "hostLoad1Max": 1.74,
+      "memAvailableMinKb": 10982736,
+      "dbCpuPctMax": 39.57
+    },
+    "RECONNECT_SILENCE": {
+      "observations": 111,
+      "researchSamples": 29,
+      "sqlArrivalsInPhase": 68,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 0,
+      "pgActiveSatFrac": 0,
+      "lockWaitsMax": 0,
+      "apiCpuPctMax": 3.2,
+      "eventLoopP90MaxMs": 1.46,
+      "hostLoad1Max": 1.02,
+      "memAvailableMinKb": 11181624,
+      "dbCpuPctMax": 23.11
+    },
+    "RECONNECT_RESTORE": {
+      "observations": 12,
+      "researchSamples": 2,
+      "sqlArrivalsInPhase": 1204,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.2,
+      "lockWaitsMax": 8,
+      "apiCpuPctMax": 66.5,
+      "eventLoopP90MaxMs": 1.62,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "observations": 12,
+      "researchSamples": 2,
+      "sqlArrivalsInPhase": 2011,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.5,
+      "lockWaitsMax": 8,
+      "apiCpuPctMax": 91.2,
+      "eventLoopP90MaxMs": 1.5,
+      "hostLoad1Max": 0.86,
+      "memAvailableMinKb": 11195240,
+      "dbCpuPctMax": 89.23
+    },
+    "SUBMIT_BURST": {
+      "observations": 28,
+      "researchSamples": 1,
+      "sqlArrivalsInPhase": 1391,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 10,
+      "pgActiveSatFrac": 0.88,
+      "lockWaitsMax": 9,
+      "apiCpuPctMax": 41.8,
+      "eventLoopP90MaxMs": 1.34,
+      "hostLoad1Max": 0.96,
+      "memAvailableMinKb": 11201376,
+      "dbCpuPctMax": 32.57
+    },
+    "ORACLE": {
+      "observations": 1,
+      "researchSamples": 0,
+      "sqlArrivalsInPhase": 0,
+      "perStatementInFlight": "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      "pgActiveMax": 0,
+      "pgActiveSatFrac": 0,
+      "lockWaitsMax": 0,
+      "apiCpuPctMax": 0,
+      "eventLoopP90MaxMs": 0,
+      "hostLoad1Max": null,
+      "memAvailableMinKb": null,
+      "dbCpuPctMax": null
+    }
+  },
+  "client_latency": {
+    "LOGIN_BURST": {
+      "requests": 200,
+      "p50": 6721.6,
+      "p95": 8988.2,
+      "p99": 9196.4,
+      "max": 9232.3,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "START_BURST": {
+      "requests": 200,
+      "p50": 1245.1,
+      "p95": 1500.6,
+      "p99": 1524,
+      "max": 1524.8,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "STEADY": {
+      "requests": 5006,
+      "p50": 23,
+      "p95": 538.9,
+      "p99": 942,
+      "max": 1110.4,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "RECONNECT_RESTORE": {
+      "requests": 200,
+      "p50": 948.9,
+      "p95": 1099.8,
+      "p99": 1111,
+      "max": 1115.8,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "RECONNECT_TAKE": {
+      "requests": 200,
+      "p50": 718.5,
+      "p95": 760.8,
+      "p99": 763.4,
+      "max": 764,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "RECONNECT_FIRST_SAVE": {
+      "requests": 200,
+      "p50": 927.7,
+      "p95": 1548,
+      "p99": 1607.9,
+      "max": 1619.8,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    },
+    "SUBMIT_BURST": {
+      "requests": 200,
+      "p50": 5013.9,
+      "p95": 5076.7,
+      "p99": 5117.2,
+      "max": 5165.8,
+      "err429": 0,
+      "err5xx": 0,
+      "timeouts": 0
+    }
+  }
+}

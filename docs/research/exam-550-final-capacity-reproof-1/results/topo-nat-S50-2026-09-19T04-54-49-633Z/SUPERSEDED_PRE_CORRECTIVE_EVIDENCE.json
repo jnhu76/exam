@@ -1,0 +1,7 @@
+{
+  "disposition": "RETAINED_VALID",
+  "campaign": "EXAM-550-CORRECTIVE-1",
+  "recorded_at": "2026-09-19T10:41:33.846124+00:00",
+  "reason": "RETAINED VALID for its original claims: this run already used APP_MODE=production (limiter ON) and its load-bearing claims are limiter-identity/429-onset mechanism facts (audit-trail request.ip evidence, per-IP budgets, spoof handling) \u2014 not query-timing or pool-queueing claims. The pre-corrective eager CAPACITY_RESEARCH wrapper observed only the drizzle\u2192postgres.js funnel and cannot alter limiter keying, XFF handling, or 429 decisions. Query-timing-dependent facets, had any been claimed from these runs, would NOT be retained.",
+  "authoritative_replacement": "n/a \u2014 mechanism claims; DIRECT_LAN S130/S200 limiter evidence comes from the corrective-1 lifecycle runs"
+}

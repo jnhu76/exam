@@ -1,0 +1,22 @@
+{
+  "run_id": "lifecycle-S50-r1-2026-09-19T10-46-57-523Z",
+  "scenario": "lifecycle",
+  "group": "lifecycle",
+  "campaign": "corrective-1",
+  "head_sha": "66c850e6348bc352bfc30a22117075ae79a38e19",
+  "base_sha": "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e",
+  "n": 50,
+  "rep": 1,
+  "steady_seconds": 90,
+  "topology": "DIRECT_LAN",
+  "api_mode": "production (limiter ON, default budgets: global 100/min/IP, login 10/min/IP; Redis-backed store — the accepted #554 topology)",
+  "api_port": 3300,
+  "db_pool_max": 10,
+  "redis_mode": "optional (rate-limit coordination only — #554)",
+  "exam_id": "9be4ae61-12d7-44b4-b5ca-b198263b46e6",
+  "org_id": "bd37468a-d2ee-447d-9d07-fa5fba0aa871",
+  "question_count": 12,
+  "candidate_count": 50,
+  "batch_size": 20,
+  "started_at": "2026-09-19T10:47:00.247Z"
+}

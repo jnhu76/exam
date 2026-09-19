@@ -59,7 +59,7 @@ function shTry(cmd: string, args: string[]): boolean {
   }
 }
 
-function startDeps(): void {
+async function startDeps(): Promise<void> {
   shTry("docker", ["rm", "-f", PG_NAME]);
   shTry("docker", ["rm", "-f", REDIS_NAME]);
   sh("docker", [
@@ -97,6 +97,22 @@ function startDeps(): void {
     sh("sleep", ["0.5"]);
   }
   if (!pg) throw new Error("readiness-pg did not become ready");
+  // pg_isready can answer during the initdb temporary-server phase, before
+  // the real server accepts queries (measured: ECONNRESET on the first
+  // migration statement). Only proceed once a real SQL round-trip works.
+  const sqlDeadline = Date.now() + 60_000;
+  for (;;) {
+    try {
+      const probe = await createDatabase(RUN_DB_URL);
+      await probe.sql`SELECT 1`;
+      await probe.sql.end({ timeout: 1 });
+      break;
+    } catch (err) {
+      if (Date.now() > sqlDeadline)
+        throw new Error(`readiness-pg not SQL-ready: ${String(err)}`);
+      sh("sleep", ["1"]);
+    }
+  }
 }
 
 function stopDeps(): void {
@@ -179,7 +195,7 @@ async function main(): Promise<void> {
   let depsUp = false;
 
   try {
-    startDeps();
+    await startDeps();
     depsUp = true;
 
     // The readiness gate pings `SELECT … FROM organizations` — the throwaway

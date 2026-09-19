@@ -19,8 +19,8 @@ MQ / EVENT BUS / CACHE / FANOUT: none (introducing any is forbidden by #550 §2)
 ```text
                     ┌────────────────────────── host (WSL2) ──────────────────────────┐
                     │                                                                 │
- load driver ───────┼──► :APP_PORT  API (node, APP_MODE=e2e|production, 1 instance)   │
- (node:http,        │        │ pool max=10                                            │
+ load driver ───────┼──► :APP_PORT  API (node, APP_MODE=production, 1 instance)       │
+ (node:http,        │        │ pool max=10, production limiter ON (Redis store)       │
   keepAlive,        │        ▼                                                        │
   per-candidate     │──► :5432  postgres:18.4 container (docker-compose.dev.yml)      │
   loopback source   │                                                                 │
@@ -31,6 +31,18 @@ MQ / EVENT BUS / CACHE / FANOUT: none (introducing any is forbidden by #550 §2)
                     │                semantics) ──► API                                │
                     └─────────────────────────────────────────────────────────────────┘
 ```
+
+CORRECTIVE-1 (EXAM-550-CORRECTIVE-1): ALL canonical groups — lifecycle,
+admission, long-lived, soak, readiness, topology — now run the API in
+APP_MODE=production with the production limiter enabled (default budgets:
+global 100/min/IP, login route 10/min/IP) and the Redis-backed limiter store
+(REDIS_MODE=optional + REDIS_URL, Redis container running). The pre-corrective
+lifecycle/admission/longlived/soak runs used APP_MODE=e2e (limiter off) — a
+#554-topology violation for final-capacity authority — and are marked
+SUPERSEDED_PRE_CORRECTIVE_EVIDENCE. DIRECT_LAN candidate identity = a real
+distinct kernel loopback source socket per candidate (127.0.0.x, Linux
+treats all of 127/8 as local) in EVERY corrective group (lifecycle,
+admission, longlived, soak).
 
 The proxy box in the diagram is AS-BUILT, not the planned nginx container: published-port
 Docker NAT erases client source IPs BEFORE the proxy and Docker Desktop host networking is
@@ -68,16 +80,40 @@ labelled DEGRADED_BY_CONFIG and excluded from supported classifications.
 the auth route from the single `request.ip` authority) is read back after login bursts and
 retained per topology state.
 
-## Research instrumentation surface (default OFF)
+## Research instrumentation surface (default OFF) — CORRECTED in EXAM-550-CORRECTIVE-1
 
 ```text
 CAPACITY_RESEARCH=1 (API env):
-  - wraps the single drizzle→postgres.js statement funnel (sql.unsafe) with counters:
-    total, in-flight, max in-flight, cumulative duration (client-side acquire+exec);
-  - samples postgres.js pool internals (reserved/available counts) defensively;
+  - wraps the single drizzle→postgres.js statement funnel (sql.unsafe) with a
+    NEUTRAL arrival counter: counts the call synchronously and forwards the
+    ORIGINAL postgres.js Query untouched — no then/catch/finally, no
+    Promise.resolve, no await of the returned Query anywhere in the wrapper;
+  - samples postgres.js pool CONFIG facts (max / idle_timeout / max_lifetime)
+    passively;
   - exposes process RSS, CPU-usage deltas, event-loop-delay histogram,
-    heartbeatMetrics and deadlineScannerMetrics via GET /api/research/capacity
-    (capability-gated like other system diagnostics; route exists ONLY when env set).
+    heartbeatMetrics, deadlineScannerMetrics, and the measured topology facts
+    (appMode, rateLimit.enabled, Redis config mode + runtime state) via
+    GET /api/research/capacity (capability-gated like other system diagnostics;
+    route exists ONLY when env set).
+  - NOT observed in-process (NOT_DIRECTLY_OBSERVABLE): per-statement
+    in-flight/max-in-flight, per-statement duration, per-statement errors.
+    postgres.js v3 Query is a LAZY thenable — the first then/catch/finally
+    call submits execution (postgres 3.4.9 query.js), and
+    Promise.resolve(thenable) attaches .then — so ANY completion observation
+    triggers the query and changes submission timing/ordering. Execution-side
+    evidence comes from the external pg_stat_activity sampler (200 ms),
+    request-latency samples, and process/host sampling instead.
+
 PRODUCTION BEHAVIOR WHEN ENV UNSET: none (no wrap, no route). This is the smallest
 research-only instrumentation sanctioned by #550 §10; it never alters query flow.
+NEUTRALITY GATE (corrective-1): apps/api/src/lib/capacityResearch.neutrality.test.ts
+proves against real PostgreSQL that (a) the baseline driver is lazy,
+(b) Promise.resolve(query) DOES execute a lazy query, (c) the superseded
+pre-corrective wrapper eagerly executed statements (defect characterized),
+(d) the corrective wrapper preserves laziness, and (e) instrumentation OFF vs ON
+produce identical server-side journals, returned values, transaction semantics,
+and error propagation. The pre-corrective eager wrapper
+(`void Promise.resolve(result).catch(...).finally(...)`) is SUPERSEDED — every
+artifact produced while it was installed is marked
+SUPERSEDED_PRE_CORRECTIVE_EVIDENCE (disposition files in results/).
 ```

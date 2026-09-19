@@ -100,12 +100,23 @@ function processRunDir(dir: string): void {
       // summary split them into RECONNECT_RESTORE / RECONNECT_TAKE (a runtime
       // partition not re-derivable from the JSONL). Merge the split back so
       // requests/max compare exactly and the non-regenerable percentiles are
-      // recorded instead of fake-compared. Newer runs record RECONNECT_TAKE in
-      // the JSONL directly and compare byte-exact.
+      // recorded instead of fake-compared. Corrective-1 runs record
+      // RECONNECT_TAKE in the JSONL directly and compare byte-exact.
+      const phaseRegen = summary.phases as Record<
+        string,
+        Record<string, number>
+      >;
+      // Corrective-1 runners record take-view requests under RECONNECT_TAKE in
+      // the raw JSONL directly, so those runs compare byte-exact with no
+      // merge-back. Only pre-corrective runs (JSONL lumps take under
+      // RECONNECT_RESTORE) need the split merged for comparison.
+      const jsonlHasTake = "RECONNECT_TAKE" in phaseRegen;
+      const takeSplit = "RECONNECT_TAKE" in committed && !jsonlHasTake;
       const merged: Record<string, Record<string, number>> = {};
       for (const [phase, stats] of Object.entries(committed)) {
         if (!stats || typeof stats !== "object") continue;
-        const target = phase === "RECONNECT_TAKE" ? "RECONNECT_RESTORE" : phase;
+        const target =
+          takeSplit && phase === "RECONNECT_TAKE" ? "RECONNECT_RESTORE" : phase;
         const out = merged[target] ?? {};
         for (const [k, v] of Object.entries(stats as Record<string, number>)) {
           if (typeof v !== "number") continue;
@@ -114,15 +125,10 @@ function processRunDir(dir: string): void {
         }
         merged[target] = out;
       }
-      const takeSplit = "RECONNECT_TAKE" in committed;
       const partitionNote = takeSplit
         ? "committed RECONNECT_TAKE merged back into RECONNECT_RESTORE for comparison (raw JSONL lumps take under RECONNECT_RESTORE); split percentiles are recorded in the committed summary but are not byte-regenerable from the JSONL"
         : null;
       const drift: string[] = [];
-      const phaseRegen = summary.phases as Record<
-        string,
-        Record<string, number>
-      >;
       for (const [phase, c] of Object.entries(merged)) {
         const r = phaseRegen[phase];
         if (!r || !("p99" in c)) continue;

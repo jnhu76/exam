@@ -10,14 +10,26 @@ routes + postgres.js pool max=10). The rig: driver + API + PostgreSQL 18.4 +
 Redis 7 (docker-compose.dev.yml) on one WSL2 machine — evidence is bounded to
 this topology (00-environment.md).
 
-## Canonical configuration (frozen before the first run)
+## Canonical configuration (re-frozen by EXAM-550-CORRECTIVE-1)
 
 - DB pool: postgres.js default `max=10` — never overridden.
-- Lifecycle/admission groups: `APP_MODE=e2e` (limiter off) — sanctioned by the
-  #549 admission workload contract; the limiter dimension is measured
-  separately in the topology group (`APP_MODE=production`, default budgets).
-- Heartbeat/deadline: production defaults (60s timeout / 30s scan).
-- All background loops + readiness/alerting enabled.
+- ALL canonical groups: `APP_MODE=production` — production limiter ON at
+  default budgets (global 100/min/IP, login route 10/min/IP), Redis-backed
+  limiter store (`REDIS_MODE=optional` + Redis reachable — the #554
+  rate-limit responsibility). If the limiter legitimately produces 429, the
+  429s are retained and classified; the limiter is never weakened.
+- DIRECT_LAN identity: every candidate binds a DISTINCT loopback source IP
+  (real kernel socket peer) in every group (lifecycle, admission, longlived,
+  soak, topology).
+- Heartbeat/deadline: production defaults (60s timeout / 30s scan). All
+  background loops + readiness/alerting enabled. No timeout widening, no
+  budget inflation.
+- Measurement neutrality: the instrumentation counts statement arrivals only
+  (never touches the lazy postgres.js Query). Gate:
+  `apps/api/src/lib/capacityResearch.neutrality.test.ts`. Pre-corrective
+  e2e-mode artifacts are marked SUPERSEDED_PRE_CORRECTIVE_EVIDENCE.
+- Runners stamp `meta.campaign = "corrective-1"` + `head_sha`; aggregate.ts
+  includes only campaign runs.
 
 ## Run
 
@@ -74,8 +86,9 @@ pnpm --filter @exam/db exec tsx \
   retry_count, topology, N). Raw truth; every reported percentile regenerates
   from this via `summarize.ts`.
 - `results/<run_id>/pool.jsonl` — observations: `pgstat` (pg_stat_activity
-  state counts + lock waits), `research` (in-process statement funnel
-  counters, pool facts, RSS/CPU/event-loop, heartbeat/deadline loop metrics),
+  state counts + lock waits), `research` (in-process NEUTRAL statement-arrival
+  counter, pool config facts, measured topology facts — appMode/rateLimit/
+  Redis state, RSS/CPU/event-loop, heartbeat/deadline loop metrics),
   `host` (loadavg, MemAvailable, PG container CPU), `phase` markers,
   `connections` (soak: backend PID/start churn for lifetime rotation).
 - `results/<run_id>/summary.json` + `summary.regenerated.json` +

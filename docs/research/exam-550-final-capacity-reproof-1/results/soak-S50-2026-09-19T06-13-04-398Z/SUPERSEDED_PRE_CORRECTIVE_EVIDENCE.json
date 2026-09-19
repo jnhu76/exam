@@ -1,0 +1,7 @@
+{
+  "disposition": "SUPERSEDED_PRE_CORRECTIVE_EVIDENCE",
+  "campaign": "EXAM-550-CORRECTIVE-1",
+  "recorded_at": "2026-09-19T10:41:33.628430+00:00",
+  "reason": "Superseded by the EXAM-550-CORRECTIVE-1 re-run: APP_MODE=e2e (limiter off) and the eager pre-corrective wrapper whose client-side timing perturbation feeds the latency claims. Connection-lifetime retirement semantics observed here are server-side and unaffected (justified in 12-corrective-1.md), but the run is superseded for authority.",
+  "authoritative_replacement": "results/soak-S50 with meta.campaign=corrective-1 (production mode, neutral instrumentation)"
+}

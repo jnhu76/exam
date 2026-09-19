@@ -1,119 +1,148 @@
 # #550 Final capacity re-proof — 04 Results (lifecycle matrix + admission)
 
-Status: FROZEN results of the executed matrix ([03](03-workload-matrix.md)). Every number below
-is generated from raw artifacts (`results/<run_id>/samples.jsonl`) by
-`harness/aggregate.ts` → `results/aggregate-lifecycle.{json,md}` and `harness/analyze-pool.ts`
-→ `results/pool-decomposition.md`; regeneration commands are in the harness README. Nothing here
+Status: FROZEN results of the executed matrix ([03](03-workload-matrix.md)), **re-frozen by
+EXAM-550-CORRECTIVE-1**: every number in this document derives from the POST-CORRECTIVE
+production-mode runs (meta.campaign = `corrective-1`, APP_MODE=production, limiter ON,
+Redis-backed store, neutral instrumentation, head ≥ `66c850e6`). The pre-corrective e2e-mode
+artifacts are retained in `results/` marked `SUPERSEDED_PRE_CORRECTIVE_EVIDENCE` and are not
+the authority for anything here (their headline values are summarized at the bottom for
+comparison only). Every number is generated from raw artifacts
+(`results/<run_id>/samples.jsonl`) by `harness/aggregate.ts` →
+`results/aggregate-lifecycle.{json,md}` and `harness/analyze-pool.ts` →
+`results/pool-decomposition.md`; regeneration commands are in the harness README. Nothing here
 is hand-copied. Machine caveats: single WSL2 host, swap already full before the campaign
 (00-environment.md) — this bounds what the envelope claim may say.
 
 ## Headline
 
-13/13 canonical lifecycle runs pass ALL durable oracles at every scale up to S200:
-zero 5xx, zero timeouts, zero 429, zero duplicate attempts/transitions, zero answer mismatches,
-100% login and 100% submit through the domain submit path, all attempts `graded`.
-Admission matrix: 15/15 scenarios match the KEEP_LAZY durable eligibility oracle exactly.
-S200 is therefore PROVEN_FOR_MEASURED_TOPOLOGY for correctness with the latency envelope below;
-the binding constraints at S200 are login-hash CPU and submit-burst pool queueing (§ decomposition).
+13/13 corrective canonical lifecycle runs pass ALL durable oracles at every scale up to S200 —
+now with the ACCEPTED FINAL TOPOLOGY actually exercised (production limiter ON at default
+budgets, Redis-backed store, DISTINCT real loopback source identities): zero 5xx, zero
+timeouts, **zero 429 at any scale with the production limiter enabled**, zero duplicate
+attempts/transitions, zero answer mismatches, 100% login and 100% submit through the domain
+submit path, all attempts `graded`. Per-run audit-trail evidence: `auditDistinctIps == N+1`
+(N candidates + the shared admin/proctor identity) at EVERY scale — including S130 (131) and
+S200 (201) — proving per-candidate limiter identities are real distinct socket peers under
+production. Admission matrix: 15/15 scenarios match the KEEP_LAZY durable eligibility oracle
+exactly, also under production. S200 is therefore PROVEN_FOR_MEASURED_TOPOLOGY for
+correctness with the latency envelope below; the binding constraints at S200 are login-hash
+CPU and submit-burst pool queueing (§ decomposition).
 
 ## Burst phases (aggregated across canonical reps; latency ms)
 
 | scale | phase | requests | p50 | p90 | p95 | p99 | max | errors | timeouts | 429 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| S20 | LOGIN_BURST | 60 | 719.5 | 899.5 | 909.7 | 926.2 | 926 | 0 | 0 | 0 |
-| S20 | RECONNECT_FIRST_SAVE | 60 | 120.9 | 173.8 | 180.8 | 188.8 | 189 | 0 | 0 | 0 |
-| S20 | RECONNECT_RESTORE | 120 | 85.7 | 103.9 | 107.3 | 110.8 | 111 | 0 | 0 | 0 |
-| S20 | START_BURST | 60 | 140.7 | 172 | 194.8 | 196.4 | 196 | 0 | 0 | 0 |
-| S20 | SUBMIT_BURST | 60 | 378.3 | 528.2 | 551.9 | 587.6 | 588 | 0 | 0 | 0 |
-| S50 | LOGIN_BURST | 150 | 1737.5 | 2206 | 2265.9 | 2343.7 | 2359 | 0 | 0 | 0 |
-| S50 | RECONNECT_FIRST_SAVE | 150 | 253.6 | 394.5 | 410.6 | 443.9 | 451 | 0 | 0 | 0 |
-| S50 | RECONNECT_RESTORE | 300 | 224.7 | 282.7 | 297.7 | 325.7 | 329 | 0 | 0 | 0 |
-| S50 | START_BURST | 150 | 321.8 | 379.3 | 386.1 | 401.4 | 402 | 0 | 0 | 0 |
-| S50 | SUBMIT_BURST | 150 | 1178.9 | 1231.2 | 1306 | 1355.7 | 1378 | 0 | 0 | 0 |
-| S100 | LOGIN_BURST | 300 | 3388.9 | 4315 | 4435.7 | 4537.9 | 4588 | 0 | 0 | 0 |
-| S100 | RECONNECT_FIRST_SAVE | 300 | 572.1 | 953.7 | 1076.9 | 1194.6 | 1227 | 0 | 0 | 0 |
-| S100 | RECONNECT_RESTORE | 600 | 511.5 | 848 | 931.5 | 965.5 | 992 | 0 | 0 | 0 |
-| S100 | START_BURST | 300 | 673.3 | 2520.1 | 2575 | 2644.3 | 2646 | 0 | 0 | 0 |
-| S100 | SUBMIT_BURST | 300 | 2818.9 | 2913.8 | 2927.7 | 3007.1 | 3094 | 0 | 0 | 0 |
-| S130 | LOGIN_BURST | 260 | 4464.5 | 5707.7 | 5882.6 | 5992.8 | 6032 | 0 | 0 | 0 |
-| S130 | RECONNECT_FIRST_SAVE | 260 | 645.8 | 1016.2 | 1060 | 1122.3 | 1134 | 0 | 0 | 0 |
-| S130 | RECONNECT_RESTORE | 520 | 567.7 | 721.7 | 743.8 | 760.9 | 766 | 0 | 0 | 0 |
-| S130 | START_BURST | 260 | 879.8 | 1102.1 | 1142.7 | 1165.8 | 1168 | 0 | 0 | 0 |
-| S130 | SUBMIT_BURST | 260 | 3260.8 | 3301.8 | 3311.3 | 3412.5 | 3441 | 0 | 0 | 0 |
-| S200 | LOGIN_BURST | 400 | 6751.7 | 8794.7 | 9054.6 | 9341.8 | 9419 | 0 | 0 | 0 |
-| S200 | RECONNECT_FIRST_SAVE | 400 | 955 | 1544.5 | 1624.6 | 1757.4 | 1787 | 0 | 0 | 0 |
-| S200 | RECONNECT_RESTORE | 800 | 824.4 | 1142.3 | 1182.4 | 1207.6 | 1221 | 0 | 0 | 0 |
-| S200 | START_BURST | 400 | 1171.4 | 1406.8 | 1435.1 | 1469.9 | 1478 | 0 | 0 | 0 |
-| S200 | SUBMIT_BURST | 400 | 5078.8 | 6432.3 | 6451.7 | 6466.2 | 6564 | 0 | 0 | 0 |
+| S20 | LOGIN_BURST | 60 | 746.8 | 940.1 | 951 | 961.5 | 962 | 0 | 0 | 0 |
+| S20 | RECONNECT_FIRST_SAVE | 60 | 138.6 | 271.2 | 293.8 | 338.8 | 339 | 0 | 0 | 0 |
+| S20 | RECONNECT_RESTORE | 60 | 112.5 | 282.7 | 283.9 | 284.9 | 285 | 0 | 0 | 0 |
+| S20 | RECONNECT_TAKE | 60 | 86.6 | 214.4 | 220.6 | 255.3 | 255 | 0 | 0 | 0 |
+| S20 | START_BURST | 60 | 154 | 204.9 | 217 | 219.8 | 220 | 0 | 0 | 0 |
+| S20 | SUBMIT_BURST | 60 | 427.4 | 588.9 | 616.8 | 669.9 | 670 | 0 | 0 | 0 |
+| S50 | LOGIN_BURST | 150 | 1820.9 | 2308.9 | 2362.3 | 2432.3 | 2443 | 0 | 0 | 0 |
+| S50 | RECONNECT_FIRST_SAVE | 150 | 277.3 | 446.7 | 467.8 | 496.8 | 504 | 0 | 0 | 0 |
+| S50 | RECONNECT_RESTORE | 150 | 260 | 300.4 | 306.3 | 319 | 320 | 0 | 0 | 0 |
+| S50 | RECONNECT_TAKE | 150 | 206.4 | 220 | 223.6 | 226.2 | 228 | 0 | 0 | 0 |
+| S50 | START_BURST | 150 | 351.2 | 404.4 | 415.5 | 427.9 | 430 | 0 | 0 | 0 |
+| S50 | SUBMIT_BURST | 150 | 1249.2 | 1315.5 | 1392.5 | 1444.9 | 1448 | 0 | 0 | 0 |
+| S100 | LOGIN_BURST | 300 | 3420 | 4403.4 | 4519.5 | 4712.2 | 4736 | 0 | 0 | 0 |
+| S100 | RECONNECT_FIRST_SAVE | 300 | 477.1 | 765.9 | 800.4 | 826.6 | 844 | 0 | 0 | 0 |
+| S100 | RECONNECT_RESTORE | 300 | 486.8 | 564.6 | 580 | 598.1 | 601 | 0 | 0 | 0 |
+| S100 | RECONNECT_TAKE | 300 | 365.3 | 385.9 | 388.4 | 392.7 | 394 | 0 | 0 | 0 |
+| S100 | START_BURST | 300 | 642.9 | 798.5 | 846.9 | 884.2 | 900 | 0 | 0 | 0 |
+| S100 | SUBMIT_BURST | 300 | 2438.2 | 2495.5 | 2504.3 | 2593.4 | 2649 | 0 | 0 | 0 |
+| S130 | LOGIN_BURST | 260 | 4396.8 | 5614.3 | 5794.1 | 5892.8 | 5903 | 0 | 0 | 0 |
+| S130 | RECONNECT_FIRST_SAVE | 260 | 620 | 1000.3 | 1047.4 | 1102.5 | 1116 | 0 | 0 | 0 |
+| S130 | RECONNECT_RESTORE | 260 | 637.9 | 731.3 | 747.6 | 764.2 | 766 | 0 | 0 | 0 |
+| S130 | RECONNECT_TAKE | 260 | 480.4 | 504.1 | 509.4 | 513.8 | 514 | 0 | 0 | 0 |
+| S130 | START_BURST | 260 | 755.6 | 897.8 | 904.9 | 924.1 | 925 | 0 | 0 | 0 |
+| S130 | SUBMIT_BURST | 260 | 3303.6 | 3340.7 | 3346.3 | 3430 | 3453 | 0 | 0 | 0 |
+| S200 | LOGIN_BURST | 400 | 6763.5 | 8722 | 8988.2 | 9174.3 | 9232 | 0 | 0 | 0 |
+| S200 | RECONNECT_FIRST_SAVE | 400 | 926.8 | 1484.3 | 1555.1 | 1619.8 | 1642 | 0 | 0 | 0 |
+| S200 | RECONNECT_RESTORE | 400 | 931.6 | 1069.9 | 1088.3 | 1107 | 1116 | 0 | 0 | 0 |
+| S200 | RECONNECT_TAKE | 400 | 715.7 | 752.1 | 756.1 | 763 | 764 | 0 | 0 | 0 |
+| S200 | START_BURST | 400 | 1162.4 | 1427.2 | 1477.1 | 1522.6 | 1525 | 0 | 0 | 0 |
+| S200 | SUBMIT_BURST | 400 | 5054.1 | 5129.8 | 5140.4 | 5155.1 | 5226 | 0 | 0 | 0 |
 
-(Summary table generated by `aggregate.ts` from the raw JSONL; the take-view requests of the
-reconnect storm are lumped under `RECONNECT_RESTORE` in the raw JSONL (pre-merge runner), so the
-aggregate labels `RECONNECT_RESTORE` = restore + take (N×2 requests); the committed per-run
-`summary.json` files carry the runtime RESTORE/TAKE split, recorded there — see
-`harness/summarize.ts` drift note.)
+(Generated by `aggregate.ts` from the raw JSONL of the 13 corrective runs. Corrective-1
+runners record the reconnect take-view under `RECONNECT_TAKE` in the raw JSONL directly, so
+the take/restore split is byte-regenerable — the pre-corrective `partitionNote` caveat no
+longer applies to corrective runs.)
 
 ## Steady phase by endpoint (aggregated across canonical reps; latency ms)
 
 | scale | endpoint | requests | p50 | p90 | p95 | p99 | max | errors | timeouts | 429 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| S20 | `GET /api/admin/attempts/:id/proctor-events` | 54 | 10.4 | 15.4 | 17.3 | 18.2 | 18 | 0 | 0 | 0 |
-| S20 | `GET /api/admin/exams/:examId/proctor/attempts` | 180 | 13 | 17.8 | 19 | 23.8 | 40 | 0 | 0 | 0 |
-| S20 | `POST /api/attempts/:id/answers/:qid` | 1093 | 20.7 | 28.3 | 32 | 39.2 | 46 | 0 | 0 | 0 |
-| S20 | `POST /api/attempts/:id/heartbeat` | 383 | 10.6 | 13.3 | 14.7 | 20.8 | 37 | 0 | 0 | 0 |
-| S50 | `GET /api/admin/attempts/:id/proctor-events` | 54 | 10.3 | 12.3 | 15.5 | 15.9 | 16 | 0 | 0 | 0 |
-| S50 | `GET /api/admin/exams/:examId/proctor/attempts` | 180 | 15.7 | 21.4 | 23.6 | 25.7 | 26 | 0 | 0 | 0 |
-| S50 | `POST /api/attempts/:id/answers/:qid` | 2756 | 21.4 | 37.5 | 48.4 | 78.1 | 870 | 0 | 0 | 0 |
-| S50 | `POST /api/attempts/:id/heartbeat` | 961 | 10.7 | 19.1 | 25.4 | 38 | 379 | 0 | 0 | 0 |
-| S100 | `GET /api/admin/attempts/:id/proctor-events` | 54 | 10.5 | 14.7 | 20 | 1142 | 1142 | 0 | 0 | 0 |
-| S100 | `GET /api/admin/exams/:examId/proctor/attempts` | 180 | 19.7 | 26 | 29.7 | 804.1 | 868 | 0 | 0 | 0 |
-| S100 | `POST /api/attempts/:id/answers/:qid` | 5483 | 22.8 | 85.9 | 229.8 | 937.6 | 1747 | 0 | 0 | 0 |
-| S100 | `POST /api/attempts/:id/heartbeat` | 1922 | 10.9 | 51.7 | 289.4 | 605.9 | 1847 | 0 | 0 | 0 |
-| S130 | `GET /api/admin/attempts/:id/proctor-events` | 36 | 10.5 | 14.2 | 69.2 | 117.8 | 118 | 0 | 0 | 0 |
-| S130 | `GET /api/admin/exams/:examId/proctor/attempts` | 120 | 22.7 | 26.8 | 28.6 | 100.2 | 112 | 0 | 0 | 0 |
-| S130 | `POST /api/attempts/:id/answers/:qid` | 4754 | 22 | 37.3 | 101.6 | 252 | 373 | 0 | 0 | 0 |
-| S130 | `POST /api/attempts/:id/heartbeat` | 1667 | 10.8 | 158.6 | 216.9 | 339.3 | 379 | 0 | 0 | 0 |
-| S200 | `GET /api/admin/attempts/:id/proctor-events` | 36 | 13.2 | 33.7 | 628.7 | 667.3 | 667 | 0 | 0 | 0 |
-| S200 | `GET /api/admin/exams/:examId/proctor/attempts` | 120 | 29.5 | 39.6 | 67.1 | 602.3 | 662 | 0 | 0 | 0 |
-| S200 | `POST /api/attempts/:id/answers/:qid` | 7323 | 26 | 59.5 | 244.4 | 781.6 | 994 | 0 | 0 | 0 |
-| S200 | `POST /api/attempts/:id/heartbeat` | 2585 | 12 | 533.3 | 877 | 1027.9 | 1110 | 0 | 0 | 0 |
+| S20 | `GET /api/admin/attempts/:id/proctor-events` | 54 | 13.7 | 17.9 | 18.2 | 30 | 30 | 0 | 0 | 0 |
+| S20 | `GET /api/admin/exams/:examId/proctor/attempts` | 180 | 15.7 | 18.6 | 19.6 | 27.3 | 29 | 0 | 0 | 0 |
+| S20 | `POST /api/attempts/:id/answers/:qid` | 1098 | 25.5 | 35.7 | 40.6 | 61.3 | 410 | 0 | 0 | 0 |
+| S20 | `POST /api/attempts/:id/heartbeat` | 390 | 13.3 | 17.7 | 25.4 | 33.2 | 456 | 0 | 0 | 0 |
+| S50 | `GET /api/admin/attempts/:id/proctor-events` | 54 | 13.1 | 16.3 | 16.9 | 18.4 | 18 | 0 | 0 | 0 |
+| S50 | `GET /api/admin/exams/:examId/proctor/attempts` | 180 | 18.4 | 21.7 | 25.8 | 31.8 | 35 | 0 | 0 | 0 |
+| S50 | `POST /api/attempts/:id/answers/:qid` | 2738 | 24.7 | 32.9 | 41.5 | 64.1 | 83 | 0 | 0 | 0 |
+| S50 | `POST /api/attempts/:id/heartbeat` | 972 | 12.9 | 15.3 | 16.2 | 20.9 | 27 | 0 | 0 | 0 |
+| S100 | `GET /api/admin/attempts/:id/proctor-events` | 54 | 11.1 | 18.7 | 20.4 | 32 | 32 | 0 | 0 | 0 |
+| S100 | `GET /api/admin/exams/:examId/proctor/attempts` | 180 | 20.6 | 24.7 | 27.2 | 65.8 | 90 | 0 | 0 | 0 |
+| S100 | `POST /api/attempts/:id/answers/:qid` | 5473 | 22.6 | 33.9 | 52.5 | 114.8 | 187 | 0 | 0 | 0 |
+| S100 | `POST /api/attempts/:id/heartbeat` | 1930 | 11.4 | 15.9 | 20.8 | 56.9 | 80 | 0 | 0 | 0 |
+| S130 | `GET /api/admin/attempts/:id/proctor-events` | 36 | 11.7 | 20.2 | 30.6 | 41.8 | 42 | 0 | 0 | 0 |
+| S130 | `GET /api/admin/exams/:examId/proctor/attempts` | 120 | 23.6 | 29.1 | 31.2 | 89.2 | 101 | 0 | 0 | 0 |
+| S130 | `POST /api/attempts/:id/answers/:qid` | 4757 | 23.1 | 37 | 93.9 | 219.2 | 272 | 0 | 0 | 0 |
+| S130 | `POST /api/attempts/:id/heartbeat` | 1675 | 11.5 | 158.5 | 189.1 | 225.3 | 239 | 0 | 0 | 0 |
+| S200 | `GET /api/admin/attempts/:id/proctor-events` | 36 | 11.5 | 33.9 | 611.9 | 636.1 | 636 | 0 | 0 | 0 |
+| S200 | `GET /api/admin/exams/:examId/proctor/attempts` | 120 | 29.1 | 36.6 | 39.2 | 595.1 | 654 | 0 | 0 | 0 |
+| S200 | `POST /api/attempts/:id/answers/:qid` | 7315 | 24.6 | 43 | 181.3 | 775.7 | 988 | 0 | 0 | 0 |
+| S200 | `POST /api/attempts/:id/heartbeat` | 2572 | 11.9 | 534.3 | 861.5 | 1029.1 | 1110 | 0 | 0 | 0 |
 
-Honest reading of the tails: at S100+ the steady-state p50 stays ≤ 30 ms for every endpoint while
-p95–p99 reach hundreds of ms in some reps (S100-r1 contributes the worst patch; S100-r2/r3 are
-materially cleaner — per-run splits in `aggregate-lifecycle.md`). The tail is bimodal, not
-uniformly degraded, and even the tail never produces an error, timeout, or durable-state
-violation. Median steady-state behavior at every measured scale is healthy.
+Honest reading of the tails: at every scale the steady-state p50 stays ≤ 29 ms for every
+endpoint, and the corrective (neutral-instrumentation) tails are MATERIALLY TIGHTER than the
+pre-corrective ones — e.g. S100 answer-save p99 drops from ≈ 938 ms (superseded) to ≈ 115 ms
+corrective, and S100 heartbeat p99 from ≈ 606 ms to ≈ 57 ms. This is the expected signature of
+removing the pre-corrective eager-execution perturbation: the old wrapper submitted every lazy
+Query at creation, changing pool-acquisition timing and inflating request tails. What remains
+at S200 is a bimodal tail on proctor reads and heartbeats (p95–p99 reaching ≈ 0.6–1.0 s in
+some windows), never producing an error, timeout, or durable-state violation. Median
+steady-state behavior at every measured scale is healthy.
 
 ## Durable oracle verdicts (per run)
 
-All 13 runs: `pass=true`. Login = N/N, submit = N/N, `graded` = N, duplicate active attempts = 0,
-duplicate terminal transitions = 0, answer mismatches = [] (full table:
-`results/aggregate-lifecycle.md` § Oracle verdicts).
+All 13 corrective runs: `pass=true`. Login = N/N, submit = N/N, `graded` = N, duplicate active
+attempts = 0, duplicate terminal transitions = 0, answer mismatches = [], auditDistinctIps =
+N+1 (full table: `results/aggregate-lifecycle.md` § Oracle verdicts; per-run
+`oracles.auditDistinctIps` + `auditIpsSample` in each `summary.json`).
 
-## Pool decomposition (why the tails look the way they do)
+## Pool decomposition (why the tails look the way they do) — corrective mechanism
 
-Generated: `results/pool-decomposition.md` (one row per run × phase). Key pattern:
+Generated: `results/pool-decomposition.md` (one row per run × phase; corrective-1 neutral
+mechanism). Per-statement client-side in-flight/duration are NOT_DIRECTLY_OBSERVABLE
+(EXAM-550-CORRECTIVE-1); decomposition therefore uses server-side evidence — pg_stat_activity
+(active + idle-in-transaction, 200 ms sampling), lock waits, statement ARRIVAL counts at the
+drizzle→postgres.js funnel, API process CPU/event-loop, host and DB container CPU. Every
+run's `pool-analysis.json` carries a `measured_topology` stamp read from the API process
+itself: `appMode: production`, `rateLimit.enabled: true`, `redis.configMode: optional`,
+`redis.runtimeState: ready` — all 13 lifecycle runs + all 15 admission scenarios.
 
-- **LOGIN_BURST is CPU-bound at the app, not DB-bound**: API process CPU peaks at 745–935%
-  (≈ 7–9 cores — the argon2id threadpool) while the pool is essentially idle
-  (satFrac 0–0.5 with poolWait ≤ 16 ms, pg_active ≤ 10, DB CPU ≤ 19%). Login latency scales with
-  N because argon2id is deliberately memory-hard; this is the security parameter, not a defect.
-- **SUBMIT_BURST is pool-queue-bound**: satFrac = 1.0 from S50 up; mean pool-queue depth grows
-  with N (S50 ≈ 33 → S100 ≈ 73 → S130 ≈ 109 → S200 ≈ 185 statements), pg_active pinned at the
-  pool ceiling, DB CPU only ~34–56%. Grading latency at S200 (p99 ≈ 6.5 s) is the cost of N
-  concurrent grading transactions through pool max=10 — a policy choice (#554
-  KEEP_CURRENT_ARCHITECTURE), measured here, not changed.
-- **STEADY is uncongested at every scale**: satFrac ≤ 0.029, poolWait ≤ 2 ms. The steady tails
-  above are per-request execution variance (checkpoint contention windows), not pool queueing.
-- **RECONNECT_RESTORE** at S130/S200: satFrac 0.33–0.5, poolWait ≈ 63–66 ms — a bounded,
-  sub-second burst (p99 ≤ 1.3 s), consistent with the #549 finding that restore bursts are
-  absorbed without admission control.
-- Row-lock waits (EA update) appear in write phases (lockWaits 7–9 samples) but never dominate:
-  poolWait and CPU decompose the latency fully.
+- **LOGIN_BURST is CPU-bound at the app, not DB-bound**: API process CPU peaks at ≈ 862–949%
+  (≈ 8.5–9.5 cores — the argon2id threadpool) at every scale while the DB is essentially idle
+  (pgActive ≤ 2 of 10, DB CPU ≤ 19%). Login latency scales with N because argon2id is
+  deliberately memory-hard; this is the security parameter, not a defect. Event-loop p90
+  stays ≤ 1.7 ms — the process is not event-loop-starved.
+- **SUBMIT_BURST is pool-queue-bound**: pgActive pinned at the pool ceiling (10) with satFrac
+  ≈ 0.85–0.92 from S50 up; row-lock waits visible but bounded (≤ 9 of ~200 samples); DB CPU
+  ≤ 77%. Grading latency at S200 (p99 ≈ 5.2 s) is the cost of N concurrent grading
+  transactions through pool max=10 — a policy choice (#554 KEEP_CURRENT_ARCHITECTURE),
+  measured here, not changed.
+- **STEADY is uncongested at every scale**: satFrac ≤ 0.016 (S200), pgActive briefly touching
+  the ceiling in only the busiest sampling windows. The steady tails above are per-request
+  execution variance, not sustained pool queueing.
+- **RECONNECT_RESTORE**: bounded sub-second bursts (p99 ≤ 1.2 s at S200) with transient
+  saturation (satFrac 0.2–0.67), absorbed without admission control.
+- **Host**: load1 peaks ≤ 2.0 of 20 cores; MemAvailable never below ≈ 10.3 GB; PG container
+  CPU ≤ 89% in the worst submit window.
 
 `pgActive` counts include the harness's own pg_stat sampler connection (pool max + 1 rows is
 possible); this is stated in the generated table header.
 
-## Admission matrix (#549 KEEP_LAZY HTTP contract) — 15/15
+## Admission matrix (#549 KEEP_LAZY HTTP contract) — 15/15 under production
 
 | N | Δt candidates | scenarios | durable oracle |
 | --- | --- | ---: | --- |
@@ -123,18 +152,52 @@ possible); this is stated in the generated table header.
 | 130 | 15 s / 90 s / 105 s | 3 | same, exact |
 | 200 | 15 s / 90 s / 150 s | 3 | same, exact |
 
-Per scenario the evidence records: resume-burst wall time (worst observed: N=200 full-eligibility
-Δt=150 s resume ≈ 1.13 s wall for the admission poll wave — same order as the engine's own
-417 ms baseline at 20 admissions), fail-closed 409 counts on early start attempts, CAS
-write-once (extra polls write nothing), `started == admitted`, and the ready-by-view count ==
-durable count. Raw per-request records: `results/admission-N<...>-<...>/samples.jsonl`,
-verdicts: `results/admission-matrix-2026-09-19T03-33-15-408Z.json`.
+All 15 scenarios ran APP_MODE=production (limiter ON, Redis-backed store) with every candidate
+on a DISTINCT loopback source identity; KEEP_LAZY semantics unchanged. Zero 429, zero 5xx,
+zero timeouts anywhere in the matrix; fail-closed 409 counts exactly equal waiting−admitted;
+CAS write-once held (extra polls write nothing); `started == admitted`.
+
+Server-side service time (pino request logs, joined arrival→completion per reqId; saved as
+`results/admission-server-sojourn-corrective-1.json`): the queue-poll service time stays
+sub-second at every scale — N200 resume/poll waves complete server-side in p50 ≈ 0.67–0.70 s,
+max ≤ 0.85 s, with the DB mostly idle (pgActive max 7 of 10 during the resume wave) and zero
+lock waits.
+
+**Honest caveat on client-side resume walls at Δt > 72 s** (e.g. N200-dt150 client-side
+p50 ≈ 5.1 s): Fastify's server keep-alive timeout (72 s) closes every driver socket during a
+pause longer than 72 s — exactly what a real browser after 150 s of silence experiences — so
+the resume burst includes N simultaneous reconnections, which the DRIVER serializes
+(≈ 21 ms/connect on this rig; both driver-side observer loops stall for the same window, and
+the server-side sojourn above shows the API itself completed the whole wave sub-second).
+Client-side walls at Δt > 72 s therefore measure "reconnect storm + service time" and are
+recorded as such; the server-side sojourn is the admission service-time authority. At
+Δt ≤ 72 s (sockets still alive) the driver and server views agree (N200-dt15 resume ≈ 0.79 s
+client / ≈ 0.67 s server p50).
+
+Raw per-request records: `results/admission-N<...>-<...>/samples.jsonl` (campaign
+corrective-1), verdicts:
+`results/admission-matrix-2026-09-19T11-29-35-150Z.json`.
 
 ## What S200 does and does not prove
 
-- Proven: correctness (durable oracles), bounded reconnect storms, admission contract exactness,
-  steady-state health, and an explicit latency envelope for bursts on THIS machine.
+- Proven on the accepted final topology (production limiter ON, Redis coordination, pool
+  max=10, single instance): correctness (durable oracles) at S200 with per-candidate distinct
+  identities; bounded reconnect storms; admission contract exactness; steady-state health; and
+  an explicit latency envelope for bursts on THIS machine.
 - Not proven (and not claimed): production hardware performance; multi-instance horizontal
-  behavior (single instance is the #554 decision); behavior beyond 200 candidates
-  (S200 NOT_PROVEN beyond the measured envelope per the issue's classification rules);
-  GitHub CI green (UNAVAILABLE_BILLING — see 11-final-verdict.md).
+  behavior (single instance is the #554 decision); behavior beyond 200 candidates (S200
+  NOT_PROVEN beyond the measured envelope per the issue's classification rules); GitHub CI
+  green (UNAVAILABLE_BILLING — see 11-final-verdict.md).
+
+## Superseded pre-corrective headline (comparison only)
+
+The pre-corrective campaign (commit `e745ca7a`) reported the same 13/13 + 15/15 oracle
+results, but its lifecycle/admission/longlived/soak runs used APP_MODE=e2e (production limiter
+OFF — not the accepted final topology) and its eager SQL wrapper perturbed statement
+submission timing (inflated steady tails: e.g. S100 save p99 ≈ 938 ms vs 115 ms corrective).
+Those artifacts remain in `results/` under `SUPERSEDED_PRE_CORRECTIVE_EVIDENCE.json`
+disposition markers with the reason and their authoritative replacement; the pre-corrective
+aggregate values are preserved in git history at `e745ca7a`. The topology and readiness groups
+ran production-mode already and are retained (their claims are limiter-identity/mechanism
+facts, not query-timing facts — justification in each marker and in
+[12-corrective-1.md](12-corrective-1.md)).
