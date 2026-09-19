@@ -28,9 +28,11 @@ import {
   ADMISSION_BATCH_SIZE,
   API_ORIGIN,
   BASE_SHA,
+  CAMPAIGN,
   RESULTS_DIR,
   RUN_DB_URL,
   args,
+  headSha,
 } from "./lib/config.js";
 import {
   admittedCount,
@@ -94,7 +96,11 @@ async function runScenario(sc: Scenario): Promise<Record<string, unknown>> {
   );
   const orgId = orgRow[0].id as string;
 
-  const api = startApi({ mode: "e2e", dbUrl: RUN_DB_URL, runId: RUN_ID });
+  const api = startApi({
+    mode: "production",
+    dbUrl: RUN_DB_URL,
+    runId: RUN_ID,
+  });
   await waitReady(api.baseUrl);
   const admin = await loginAdmin(api);
 
@@ -160,14 +166,19 @@ async function runScenario(sc: Scenario): Promise<Record<string, unknown>> {
       {
         run_id: RUN_ID,
         group: "admission",
+        campaign: CAMPAIGN,
+        head_sha: headSha(),
+        base_sha: BASE_SHA,
         scenario: sc.id,
         n: sc.n,
         pause_seconds: sc.pauseSeconds,
         batch_size: ADMISSION_BATCH_SIZE,
         batch_interval_s: ADMISSION_BATCH_INTERVAL_S,
-        base_sha: BASE_SHA,
-        api_mode: "e2e (limiter off per #549 admission workload contract)",
+        topology: "DIRECT_LAN (distinct loopback source IP per candidate)",
+        api_mode:
+          "production (limiter ON, default budgets; Redis-backed store — the accepted #554 topology)",
         db_pool_max: 10,
+        redis_mode: "optional (rate-limit coordination only — #554)",
         exam_id: examId,
         started_at: new Date().toISOString(),
       },
@@ -202,10 +213,18 @@ async function runScenario(sc: Scenario): Promise<Record<string, unknown>> {
     );
   };
 
-  // Setup: login everyone (limiter off; not part of the admission metrics).
+  // Setup: login everyone. Production limiter is ON, so every candidate binds
+  // a DISTINCT loopback source IP (DIRECT_LAN identity) — one login per
+  // per-IP budget, no artificial headroom, nothing weakened. Setup logins are
+  // not part of the admission metrics (recorded for completeness).
   const clients = seeded.usernames.map(
     (u, i) =>
-      new Client({ baseUrl: api.baseUrl, id: `c${i}`, origin: API_ORIGIN }),
+      new Client({
+        baseUrl: api.baseUrl,
+        id: `c${i}`,
+        localAddress: `127.0.0.${(i % 250) + 2}`,
+        origin: API_ORIGIN,
+      }),
   );
   const logins = await Promise.all(
     clients.map((c, i) => c.login(seeded.usernames[i], "pass-550-cap")),

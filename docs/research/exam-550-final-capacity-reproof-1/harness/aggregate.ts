@@ -6,13 +6,19 @@
  * endpoint) latency percentiles across canonical repetitions, plus the oracle
  * verdict table. Docs embed this output; numbers are never hand-copied.
  *
+ * Campaign selection (EXAM-550-CORRECTIVE-1): only runs whose meta.json stamps
+ * the current CAMPAIGN (post-corrective, APP_MODE=production, neutral
+ * instrumentation) are aggregated — pre-corrective e2e-mode runs stay in the
+ * results tree as SUPERSEDED_PRE_CORRECTIVE_EVIDENCE and must never feed the
+ * authoritative aggregate.
+ *
  * Run from anywhere in the repo (paths derive from this file's location):
  *   HARNESS=$(git rev-parse --show-toplevel)/docs/research/exam-550-final-capacity-reproof-1/harness
  *   pnpm --filter @exam/db exec tsx "$HARNESS/aggregate.ts"
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { RESULTS_DIR } from "./lib/config.js";
+import { CAMPAIGN, RESULTS_DIR } from "./lib/config.js";
 import { percentile } from "./lib/summary.js";
 
 interface Sample {
@@ -62,6 +68,18 @@ function stats(lat: number[]): Record<string, number> {
 function main(): void {
   const dirs = readdirSync(RESULTS_DIR)
     .filter((d) => d.startsWith("lifecycle-"))
+    .filter((d) => {
+      const metaPath = join(RESULTS_DIR, d, "meta.json");
+      if (!existsSync(metaPath)) return false;
+      try {
+        const meta = JSON.parse(readFileSync(metaPath, "utf8")) as {
+          campaign?: string;
+        };
+        return meta.campaign === CAMPAIGN;
+      } catch {
+        return false;
+      }
+    })
     .sort();
   const samples: Sample[] = [];
   const oracles: OracleSummary[] = [];

@@ -17,9 +17,11 @@ import { performance } from "node:perf_hooks";
 import {
   API_ORIGIN,
   BASE_SHA,
+  CAMPAIGN,
   RESULTS_DIR,
   RUN_DB_URL,
   args,
+  headSha,
 } from "./lib/config.js";
 import { freshRunDatabase, seedCandidates } from "./lib/db.js";
 import { Client, JsonlWriter, sleep } from "./lib/http.js";
@@ -87,7 +89,11 @@ async function main(): Promise<void> {
   );
   const orgId = orgRow[0].id as string;
 
-  const api = startApi({ mode: "e2e", dbUrl: RUN_DB_URL, runId: RUN_ID });
+  const api = startApi({
+    mode: "production",
+    dbUrl: RUN_DB_URL,
+    runId: RUN_ID,
+  });
   await waitReady(api.baseUrl);
   const admin = await loginAdmin(api);
 
@@ -139,9 +145,14 @@ async function main(): Promise<void> {
       {
         run_id: RUN_ID,
         group: "soak",
+        campaign: CAMPAIGN,
+        head_sha: headSha(),
+        base_sha: BASE_SHA,
         n: N,
         minutes: MINUTES,
-        base_sha: BASE_SHA,
+        topology: "DIRECT_LAN (distinct loopback source IP per candidate)",
+        api_mode:
+          "production (limiter ON, default budgets; Redis-backed store — the accepted #554 topology)",
         pool: "postgres.js default max=10; max_lifetime default 30–90 min randomized",
         started_at: new Date().toISOString(),
       },
@@ -187,7 +198,12 @@ async function main(): Promise<void> {
 
   const clients = seeded.usernames.map(
     (u, i) =>
-      new Client({ baseUrl: api.baseUrl, id: `c${i}`, origin: API_ORIGIN }),
+      new Client({
+        baseUrl: api.baseUrl,
+        id: `c${i}`,
+        localAddress: `127.0.0.${(i % 250) + 2}`,
+        origin: API_ORIGIN,
+      }),
   );
   const logins = await Promise.all(
     clients.map((c, i) => c.login(seeded.usernames[i], "pass-550-cap")),

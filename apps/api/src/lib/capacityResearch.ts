@@ -2,6 +2,8 @@ import { monitorEventLoopDelay } from "node:perf_hooks";
 import { heartbeatMetrics } from "../plugins/heartbeat.js";
 import { deadlineScannerMetrics } from "../plugins/deadlineScanner.js";
 import type postgres from "postgres";
+import type { RedisRuntime } from "../redis/redisRuntime.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 /**
  * RESEARCH-ONLY capacity instrumentation for the #550 evidence campaign.
@@ -13,6 +15,16 @@ import type postgres from "postgres";
  * drizzle→postgres.js statement funnel (`sql.unsafe`) — it forwards arguments
  * and results untouched and never alters error flow, so measured query
  * behavior is the production path's.
+ *
+ * MEASUREMENT NEUTRALITY (#550 corrective 1): postgres.js v3 Query objects are
+ * LAZY thenables — calling then/catch/finally (including the implicit `.then`
+ * that `Promise.resolve(thenable)` attaches) submits the query for execution.
+ * The wrapper therefore MUST NOT touch the returned Query in any way: it only
+ * counts statement arrivals synchronously and forwards the original Query.
+ * Per-statement in-flight/duration/error observation is
+ * NOT_DIRECTLY_OBSERVABLE without triggering execution and is reported as
+ * such; execution-side evidence comes from the external pg_stat_activity
+ * sampler and pool-config facts instead.
  */
 export function isCapacityResearchEnabled(): boolean {
   return process.env.CAPACITY_RESEARCH === "1";
@@ -21,10 +33,6 @@ export function isCapacityResearchEnabled(): boolean {
 const state = {
   enabledAt: null as Date | null,
   sqlTotal: 0,
-  sqlErrors: 0,
-  sqlInFlight: 0,
-  sqlMaxInFlight: 0,
-  sqlDurationMsTotal: 0,
   sql: null as postgres.Sql | null,
   eventLoop: null as ReturnType<typeof monitorEventLoopDelay> | null,
   lastCpu: process.cpuUsage(),
@@ -43,19 +51,11 @@ export function installCapacityResearchInstrumentation(
   const orig = sql.unsafe.bind(sql);
   const instrumented = (...args: Parameters<typeof orig>) => {
     state.sqlTotal += 1;
-    state.sqlInFlight += 1;
-    state.sqlMaxInFlight = Math.max(state.sqlMaxInFlight, state.sqlInFlight);
-    const started = performance.now();
-    const result = orig(...args);
-    void Promise.resolve(result)
-      .catch(() => {
-        state.sqlErrors += 1;
-      })
-      .finally(() => {
-        state.sqlInFlight -= 1;
-        state.sqlDurationMsTotal += performance.now() - started;
-      });
-    return result;
+    // Return the ORIGINAL Query untouched. Attaching then/catch/finally —
+    // directly or via Promise.resolve/await of the returned value here —
+    // would eagerly submit the lazy Query for execution and change statement
+    // ordering and pool-acquisition timing.
+    return orig(...args);
   };
   sql.unsafe = instrumented as typeof sql.unsafe;
 }
@@ -71,11 +71,15 @@ function percentileFromHistogram(
 }
 
 /**
- * Counters are cumulative since process start; pool internals are read
- * defensively because postgres.js does not commit to a public introspection
- * API. CPU deltas cover the interval since the previous snapshot call.
+ * `sql.total` counts statement arrivals at the drizzle→postgres.js funnel
+ * since process start. Pool internals are read defensively because postgres.js
+ * does not commit to a public introspection API. CPU deltas cover the interval
+ * since the previous snapshot call. Redis/runtime facts make every research
+ * snapshot self-describing about the topology it measured.
  */
-export function getCapacityResearchSnapshot(): Record<string, unknown> {
+export function getCapacityResearchSnapshot(
+  redisRuntime?: RedisRuntime,
+): Record<string, unknown> {
   const sql = state.sql;
   const pool: Record<string, unknown> = { observedFields: [] };
   if (sql) {
@@ -133,17 +137,28 @@ export function getCapacityResearchSnapshot(): Record<string, unknown> {
     return out;
   })();
 
+  const config = getRuntimeConfig();
   return {
     enabledAt: state.enabledAt?.toISOString() ?? null,
     uptimeSec: state.enabledAt
       ? Math.round((Date.now() - state.enabledAt.getTime()) / 1000)
       : 0,
+    appMode: config.app.mode,
+    rateLimit: { enabled: config.rateLimit.enabled },
+    redis: {
+      configMode: config.redis.mode,
+      runtimeState: redisRuntime ? redisRuntime.state : null,
+    },
     sql: {
       total: state.sqlTotal,
-      errors: state.sqlErrors,
-      inFlight: state.sqlInFlight,
-      maxInFlight: state.sqlMaxInFlight,
-      durationMsTotal: Math.round(state.sqlDurationMsTotal * 10) / 10,
+      // Measurement-neutrality law (#550 corrective 1): observing a lazy
+      // Query's completion requires attaching handlers, which submits it for
+      // execution. These facets are therefore not observed in-process; the
+      // server-side pg_stat_activity sampler is the execution-side evidence.
+      inFlight: "NOT_DIRECTLY_OBSERVABLE",
+      maxInFlight: "NOT_DIRECTLY_OBSERVABLE",
+      errors: "NOT_DIRECTLY_OBSERVABLE",
+      durationMsTotal: "NOT_DIRECTLY_OBSERVABLE",
     },
     pool,
     process: {

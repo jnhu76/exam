@@ -25,7 +25,13 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { BASE_SHA, LOGS_DIR, RESULTS_DIR } from "./lib/config.js";
+import {
+  BASE_SHA,
+  CAMPAIGN,
+  LOGS_DIR,
+  RESULTS_DIR,
+  headSha,
+} from "./lib/config.js";
 import { Client, sleep } from "./lib/http.js";
 import { startApi, stopActiveApi, waitReady } from "./lib/runtime.js";
 import { createDatabase } from "../../../../packages/db/src/database.js";
@@ -160,6 +166,8 @@ async function main(): Promise<void> {
   mkdirSync(RESULTS_DIR, { recursive: true });
   const evidence: Record<string, unknown> = {
     run_id: RUN_ID,
+    campaign: CAMPAIGN,
+    head_sha: headSha(),
     base_sha: BASE_SHA,
     started_at: new Date().toISOString(),
     faultInjection: {

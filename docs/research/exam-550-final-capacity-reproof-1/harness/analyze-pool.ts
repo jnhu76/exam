@@ -1,13 +1,19 @@
 /**
- * #550 pool decomposition analysis (RESEARCH ONLY).
+ * #550 pool decomposition analysis (RESEARCH ONLY) — corrective-1 shape.
  *
  * Consumes results/<run_id>/pool.jsonl + samples.jsonl and produces the
- * per-phase bottleneck decomposition used by 09-bottleneck-analysis.md:
- *   - in-process statement funnel: total queries, duration, max in-flight
- *   - pool saturation: fraction of research snapshots with in-flight >= 10
- *   - pool wait proxy: in-flight − server-side active (pgstat)
- *   - host: load1 / MemAvailable / PG container CPU peaks per phase
- *   - client latency p95 per phase (from samples.jsonl)
+ * per-phase bottleneck decomposition used by 09-bottleneck-analysis.md.
+ *
+ * MEASUREMENT NEUTRALITY (EXAM-550-CORRECTIVE-1): the in-process research
+ * instrumentation is arrival-count-only — per-statement in-flight/duration
+ * are NOT_DIRECTLY_OBSERVABLE without triggering the lazy postgres.js Query.
+ * Pool/queue evidence therefore comes from the SERVER side:
+ *   - pg_stat_activity state counts (active + idle-in-transaction) at 200 ms
+ *     — the DB execution-side truth; active ≥ pool max marks saturation;
+ *   - lock-wait counts;
+ *   - statement ARRIVAL counts from the funnel (sql.total deltas);
+ *   - API process CPU/RSS/event-loop, host load/mem, PG container CPU.
+ * Client request latency per phase comes from samples.jsonl (raw truth).
  *
  * Run from anywhere in the repo (paths derive from this file's location):
  *   pnpm --filter @exam/db exec tsx \
@@ -22,16 +28,16 @@ interface PoolRec {
   ts: string;
   source: string;
   byState?: Record<string, number>;
+  lockWaits?: number;
   phase?: string;
   snapshot?: {
-    sql: {
-      total: number;
-      inFlight: number;
-      maxInFlight: number;
-      durationMsTotal: number;
-    };
+    appMode?: string;
+    rateLimit?: { enabled?: boolean };
+    redis?: { configMode?: string | null; runtimeState?: string | null };
+    sql: { total: number };
     pool: { max?: number | null };
     process: {
+      rssBytes?: number;
       cpu: { userMs: number; systemMs: number; wallMs: number };
       eventLoop: { p50Ms: number; p90Ms: number } | null;
     };
@@ -74,90 +80,76 @@ function analyze(dir: string): void {
   }
 
   const out: Record<string, unknown> = { run_dir: dir, phases };
-  let prevSql = { total: 0, durationMsTotal: 0 };
+
+  // Run-level topology facts as measured (first research snapshot): these make
+  // every pool-analysis.json self-describing about mode/limiter/Redis.
+  const firstSnap = pool.find(
+    (r) => r.source === "research" && r.snapshot,
+  )?.snapshot;
+  if (firstSnap) {
+    out.measured_topology = {
+      appMode: firstSnap.appMode ?? null,
+      rateLimitEnabled: firstSnap.rateLimit?.enabled ?? null,
+      redisConfigMode: firstSnap.redis?.configMode ?? null,
+      redisRuntimeState: firstSnap.redis?.runtimeState ?? null,
+      poolMax: firstSnap.pool?.max ?? null,
+    };
+  }
+
   const phaseStats: Record<string, unknown> = {};
+  let prevSqlTotal: number | null = null;
   for (const [phase, recs] of segments) {
     const research = recs.filter((r) => r.source === "research" && r.snapshot);
     const pgstat = recs.filter((r) => r.source === "pgstat");
     const host = recs.filter((r) => r.source === "host");
-    let sqlTotal = 0;
-    let sqlMs = 0;
-    let maxInFlight = 0;
-    let saturated = 0;
-    let waitProxySum = 0;
-    let waitProxyN = 0;
+
+    // Statement ARRIVALS in phase (neutral funnel counter deltas).
+    let arrivals = 0;
     let cpuPct = 0;
+    let eventLoopP90Max = 0;
     for (const r of research) {
       const s = r.snapshot!;
-      sqlTotal = s.sql.total - prevSql.total;
-      sqlMs = s.sql.durationMsTotal - prevSql.durationMsTotal;
-      prevSql = { total: s.sql.total, durationMsTotal: s.sql.durationMsTotal };
-      maxInFlight = Math.max(maxInFlight, s.sql.inFlight);
-      const max = s.pool.max ?? 10;
-      if (s.sql.inFlight >= max) saturated += 1;
-      // Snapshot cpu values are per-poll-interval deltas — use directly.
-      // 100% == one core; the process is multi-threaded (libuv threadpool),
-      // so burst phases legitimately exceed 100%.
+      const total = s.sql.total;
+      if (prevSqlTotal !== null && total >= prevSqlTotal) {
+        arrivals += total - prevSqlTotal;
+      }
+      prevSqlTotal = total;
       const c = s.process.cpu;
       if (c.wallMs > 0) {
         const pct = ((c.userMs + c.systemMs) / c.wallMs) * 100;
         cpuPct = Math.max(cpuPct, pct);
       }
-    }
-    for (const r of research) {
-      const s = r.snapshot!;
-      // pool wait proxy: match in-flight with the nearest pgstat sample
-      void s;
-    }
-    const activeByTs = new Map<string, number>();
-    for (const r of pgstat) {
-      activeByTs.set(
-        r.ts,
-        (r.byState?.["active"] ?? 0) +
-          (r.byState?.["idle in transaction"] ?? 0),
-      );
-    }
-    for (const r of research) {
-      const s = r.snapshot!;
-      const nearest = pgstat.reduce(
-        (best, p) => {
-          const d = Math.abs(Date.parse(p.ts) - Date.parse(r.ts));
-          const bd = best
-            ? Math.abs(Date.parse(best.ts) - Date.parse(r.ts))
-            : Infinity;
-          return d < bd ? p : best;
-        },
-        null as PoolRec | null,
-      );
-      if (nearest) {
-        const active =
-          (nearest.byState?.["active"] ?? 0) +
-          (nearest.byState?.["idle in transaction"] ?? 0);
-        const wait = Math.max(0, s.sql.inFlight - active);
-        waitProxySum += wait;
-        waitProxyN += 1;
+      if (s.process.eventLoop) {
+        eventLoopP90Max = Math.max(eventLoopP90Max, s.process.eventLoop.p90Ms);
       }
-      void activeByTs;
     }
+
+    // Server-side DB execution evidence (pool max from the process config).
+    const poolMax = firstSnap?.pool?.max ?? 10;
+    const activeOf = (r: PoolRec): number =>
+      (r.byState?.["active"] ?? 0) + (r.byState?.["idle in transaction"] ?? 0);
+    const activeSamples = pgstat.map(activeOf);
+    const pgActiveMax = activeSamples.length
+      ? Math.max(...activeSamples)
+      : null;
+    // NOTE: the harness's own pg_stat sampler connection can add +1.
+    const saturated = pgstat.filter((r) => activeOf(r) >= poolMax).length;
+
     phaseStats[phase] = {
       observations: recs.length,
       researchSamples: research.length,
-      sqlQueriesInPhase: sqlTotal,
-      sqlDurationMsInPhase: Math.round(sqlMs),
-      maxInFlight,
-      saturatedFraction: research.length
-        ? Math.round((saturated / research.length) * 1000) / 1000
+      sqlArrivalsInPhase: arrivals,
+      perStatementInFlight:
+        "NOT_DIRECTLY_OBSERVABLE (neutral instrumentation; see pgActive*)",
+      pgActiveMax,
+      pgActiveSatFrac: pgstat.length
+        ? Math.round((saturated / pgstat.length) * 1000) / 1000
         : 0,
-      apiCpuPctMax: Math.round(cpuPct * 10) / 10,
-      pgActiveMax: pgstat.length
-        ? Math.max(...pgstat.map((r) => r.byState?.["active"] ?? 0))
-        : null,
       lockWaitsMax: pgstat.length
         ? Math.max(...pgstat.map((r) => r.lockWaits ?? 0))
         : null,
-      poolWaitProxyMean: waitProxyN
-        ? Math.round((waitProxySum / waitProxyN) * 100) / 100
-        : null,
+      apiCpuPctMax: Math.round(cpuPct * 10) / 10,
+      eventLoopP90MaxMs: Math.round(eventLoopP90Max * 100) / 100,
       hostLoad1Max: host.length
         ? Math.max(...host.map((r) => Number(r.load1 ?? 0)))
         : null,
@@ -191,6 +183,7 @@ function analyze(dir: string): void {
         p95: percentile(lat, 95),
         p99: percentile(lat, 99),
         max: lat.at(-1) ?? 0,
+        err429: arr.filter((s) => s.status === 429).length,
         err5xx: arr.filter((s) => s.status >= 500).length,
         timeouts: arr.filter((s) => s.timeout).length,
       };
@@ -205,8 +198,6 @@ function analyze(dir: string): void {
   console.log(`✓ ${dir}/pool-analysis.json`);
 }
 
-const mdFile = join(RESULTS_DIR, "pool-decomposition.md");
-
 /**
  * Cross-run markdown table (docs embed this; numbers are never hand-copied).
  * Reads the pool-analysis.json files written by the analyze() pass above.
@@ -215,14 +206,18 @@ function crossRunTable(dirs: string[]): void {
   const rows: string[] = [
     "# Generated by harness/analyze-pool.ts — do not edit by hand",
     "",
-    "Pool decomposition per run × phase. `satFrac` = fraction of research",
-    "snapshots with funnel in-flight ≥ pool max (10); `poolWaitMean` = mean",
-    "(funnel in-flight − pg_active) in statements — pool-queue depth proxy;",
+    "Pool decomposition per run × phase (corrective-1 neutral mechanism).",
+    "`arrivals` = statement arrivals at the drizzle→postgres.js funnel (neutral",
+    "counter); `pgActiveMax` = max server-side active + idle-in-transaction",
+    "sessions (pg_stat_activity, 200 ms sampling; includes the harness's own",
+    "sampler connection, so pool_max+1 is possible); `satFrac` = fraction of",
+    "pgstat samples with pgActive ≥ pool max (10) — server-side saturation;",
     "`apiCpu%` = API process CPU peak over poll intervals (100% = 1 core;",
-    "multi-thread argon2 bursts legitimately reach ~900%); `pgActive` includes",
-    "the harness's own pg_stat sampler connection (so N_pool+1 is possible).",
+    "multi-thread argon2 bursts legitimately reach ~900%); `elP90` = API",
+    "event-loop-delay p90 within the phase. Per-statement in-flight and",
+    "client-side duration are NOT_DIRECTLY_OBSERVABLE (EXAM-550-CORRECTIVE-1).",
     "",
-    "| run | phase | satFrac | maxInFlight | poolWaitMean | apiCpu% | pgActiveMax | lockWaits | dbCpu% |",
+    "| run | phase | arrivals | pgActiveMax | satFrac | lockWaits | apiCpu% | elP90 | dbCpu% |",
     "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
   for (const dir of dirs) {
@@ -244,7 +239,7 @@ function crossRunTable(dirs: string[]): void {
       )
         continue;
       rows.push(
-        `| ${label} | ${phase} | ${v.saturatedFraction} | ${v.maxInFlight} | ${v.poolWaitProxyMean} | ${v.apiCpuPctMax} | ${v.pgActiveMax} | ${v.lockWaitsMax} | ${v.dbCpuPctMax ?? "—"} |`,
+        `| ${label} | ${phase} | ${v.sqlArrivalsInPhase} | ${v.pgActiveMax} | ${v.pgActiveSatFrac} | ${v.lockWaitsMax} | ${v.apiCpuPctMax} | ${v.eventLoopP90MaxMs} | ${v.dbCpuPctMax ?? "—"} |`,
       );
     }
   }

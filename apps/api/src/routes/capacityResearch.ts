@@ -25,6 +25,6 @@ export function registerCapacityResearchRoutes(api: FastifyInstance): void {
     // The snapshot shape is a research diagnostic bag (arbitrary JSON); the
     // zod type-provider rejects raw JSON-Schema response declarations, so no
     // response schema is declared.
-    handler: async () => getCapacityResearchSnapshot(),
+    handler: async () => getCapacityResearchSnapshot(api.redisRuntime),
   });
 }

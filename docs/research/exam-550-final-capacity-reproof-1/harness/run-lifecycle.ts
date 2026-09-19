@@ -19,13 +19,16 @@ import {
   ADMISSION_BATCH_SIZE,
   API_ORIGIN,
   BASE_SHA,
+  CAMPAIGN,
   RESULTS_DIR,
   RUN_DB_URL,
   args,
+  headSha,
 } from "./lib/config.js";
 import {
   attemptStatusCounts,
   answersMatchDurable,
+  auditIps,
   countDuplicates,
   duplicateTerminalTransitions,
   examTiming,
@@ -81,7 +84,7 @@ async function main(): Promise<void> {
   const orgId = orgRow[0].id as string;
 
   const api = startApi({
-    mode: "e2e",
+    mode: "production",
     dbUrl: RUN_DB_URL,
     runId: RUN_ID,
   });
@@ -201,16 +204,18 @@ async function main(): Promise<void> {
         run_id: RUN_ID,
         scenario: SCENARIO,
         group: "lifecycle",
+        campaign: CAMPAIGN,
+        head_sha: headSha(),
+        base_sha: BASE_SHA,
         n: N,
         rep: REP,
         steady_seconds: STEADY_S,
         topology: TOPOLOGY,
-        base_sha: BASE_SHA,
         api_mode:
-          "e2e (limiter off — sanctioned by the #549 contract; limiter dimension is separate)",
+          "production (limiter ON, default budgets: global 100/min/IP, login 10/min/IP; Redis-backed store — the accepted #554 topology)",
         api_port: api.port,
         db_pool_max: 10,
-        redis_mode: "optional (limiter inert in e2e mode)",
+        redis_mode: "optional (rate-limit coordination only — #554)",
         exam_id: examId,
         org_id: orgId,
         question_count: questionIds.length,
@@ -480,6 +485,12 @@ async function main(): Promise<void> {
   const dupActive = await countDuplicates(conn, examId);
   const dupTerminal = await duplicateTerminalTransitions(conn, examId);
   const timing = await examTiming(conn, examId);
+  // DIRECT_LAN identity evidence (#546): the auth audit trail records the
+  // request.ip the limiter keyed on. N candidates bind distinct loopback
+  // source IPs; the admin/proctor/warmup identities share 127.0.0.1, so
+  // distinct IPs must be ≥ N.
+  const ipEvidence = await auditIps(conn, orgId);
+  const auditDistinctIps = ipEvidence.length;
   const expectedAnswers = new Map(
     states
       .filter((s) => s.lastSaved && s.attemptId)
@@ -521,6 +532,8 @@ async function main(): Promise<void> {
       duplicateActiveAttempts: dupActive,
       duplicateTerminalTransitions: dupTerminal,
       examTiming: timing,
+      auditDistinctIps,
+      auditIpsSample: ipEvidence.slice(0, 5),
       answersChecked: answerCheck.checked,
       answerMismatches: answerCheck.mismatches,
       pass:

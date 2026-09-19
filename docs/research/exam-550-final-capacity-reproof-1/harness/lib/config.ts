@@ -4,6 +4,7 @@
  * Every value here is the FROZEN canonical configuration from
  * 02-methodology.md unless a runner documents a NON_CANONICAL override.
  */
+import { execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,19 @@ export const LOGS_DIR = join(RESEARCH_DIR, "logs");
 export const REPO_ROOT = join(RESEARCH_DIR, "..", "..", "..");
 
 export const BASE_SHA = "fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e";
+
+/**
+ * Evidence campaign marker (EXAM-550-CORRECTIVE-1). Corrective runs stamp
+ * this into meta.json so aggregate.ts and the docs select ONLY post-corrective
+ * production-mode runs as authoritative; pre-corrective artifacts stay in
+ * place marked SUPERSEDED_PRE_CORRECTIVE_EVIDENCE.
+ */
+export const CAMPAIGN = "corrective-1";
+
+/** Repo HEAD at run time — provenance stamp for every meta.json. */
+export function headSha(): string {
+  return execSync("git rev-parse HEAD", { cwd: REPO_ROOT }).toString().trim();
+}
 
 /**
  * Dedicated run database. NAME-GUARDED: the harness refuses to touch anything
