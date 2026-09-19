@@ -67,3 +67,20 @@ changed, no raw artifact was altered**.
 Bottom line recorded for [11](11-final-verdict.md): after the fixes, every MAJOR/MINOR is
 resolved; the load-bearing evidence is unchanged and the deliverable is closeout-ready for the
 human capacity review.
+
+## Corrective round (EXAM-550-CORRECTIVE-1) — fresh adversarial review
+
+After the BLOCKED_BY_CORRECTIVE human verdict on `ed37e0ce` (MAJOR-1 e2e-mode canonical runs;
+MAJOR-2 eager instrumentation executing lazy queries), a NEW fresh-context reviewer audited the
+corrective pass with active verification: per-run meta/`pool-analysis.json` topology stamps
+cross-checked against in-process research snapshots, the neutrality test file re-executed live
+(5/5), regeneration tools re-run on sampled corrective runs (timestamp-only diffs), the
+admission eligibility formula and rotation retirement ages re-derived from raw artifacts, 429
+greps across all canonical raw JSONL, marker/deletion audits, and doc-vs-aggregate byte
+comparisons. The 12 falsification questions and full evidence trail are in the review
+transcript; [12](12-corrective-1.md) § Fresh adversarial review carries the verdict table.
+
+Result: **all 12 questions HOLDS; MAJOR-1 and MAJOR-2 both RESOLVED; two MINOR findings**
+(uncommitted-by-design final sections, resolved by the finalization commit; a template-string
+`authoritative_replacement` pointer in the pre-corrective readiness sidecar, corrected).
+Reviewer verdict line: `VERDICT: READY_FOR_HUMAN_CAPACITY_REVIEW`.

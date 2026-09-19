@@ -197,12 +197,75 @@ as the trigger, not APP_MODE=production, the neutral instrumentation, or pino it
 
 ## Local validation (L)
 
-<!-- LOCAL-VALIDATION-FILL -->
+All gates executed at HEAD `39e6d91d` (the corrective evidence commit) with the exact
+package.json commands. GitHub CI = UNAVAILABLE_BILLING (billing-blocked on this repo) — never
+reported as PASS or FAIL on its own.
+
+| gate | command (package.json source) | exit | outcome |
+| --- | --- | ---: | --- |
+| format | `pnpm format:check` | 0 | prettier-clean |
+| code-quality lint | `pnpm lint` | 0 | passed |
+| eslint | `pnpm lint:eslint` | 0 | `eslint . --max-warnings=0` clean |
+| architecture | `pnpm lint:arch` | 0 | clean |
+| typecheck | `pnpm typecheck` | 0 | all package tasks pass |
+| unit + component (1st run) | `pnpm test` | **1** | 1 failure: `apps/api/tests/concurrency/ea-lock-order.test.ts:292` 5 s timeout — the **documented BUG-FLAKE-001-family flake** (test-flakes.md 2026-07-25 entry; recurrence logged). Standalone rerun immediately 3/3 PASS (1.8 s); all other 2,812 tests passed |
+| unit + component (rerun) | `pnpm test` | 0 | **2,813 passed / 12 skipped** (includes the 5 new neutrality tests) |
+| static bundle | `pnpm verify:static` | 0 | passed |
+| full verify | `pnpm verify` | 0 | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage` + build: API coverage executed live at this HEAD (2,813 passed / 12 skipped under v8 coverage; its sources changed since the last cached run); the other packages' coverage tasks were turbo cache hits keyed on unchanged source+env hashes, and the build completed |
+| full Playwright E2E (WSL topology) | `bash scripts/e2e/run-wsl.sh` | 0 | 2/2 shards passed (per-shard isolated DBs `exam_e2e_w0/w1`, ports 3100/3101) |
+
+No gate was reported PASS without being executed; no safety control was disabled to buy green;
+the one flake recurrence is disclosed and logged per the repo's flakes protocol rather than
+masked with a timeout or skip.
 
 ## Fresh adversarial review (M)
 
-<!-- ADVERSARIAL-FILL -->
+A fresh-context adversarial reviewer (no prior campaign exposure, agent session distinct from
+the author's) audited the corrective record with active verification — reading every meta/
+oracle/artifact file named below, re-running the regeneration tools on sampled runs, re-running
+the neutrality test file live, re-deriving the admission formula and rotation ages from raw
+artifacts, and grepping the canonical raw JSONL for 429s. Verdicts per the 12 falsification
+questions (full trail in the review transcript):
+
+| # | question | verdict |
+| --- | --- | --- |
+| 1 | production mode in every canonical run (meta + measured in-process topology stamp) | HOLDS — 13 lifecycle + 15 admission + longlived + readiness + both soaks all `production`, limiter ON, Redis `ready`, pool 10; cross-checked against in-process research snapshots, not just harness-written meta |
+| 2 | instrumentation never touches the returned Query; honest NOT_DIRECTLY_OBSERVABLE | HOLDS — wrapper counted + returned untouched (`git diff ed37e0ce 66c850e6` shows the eager block deleted); gating verified inert without CAPACITY_RESEARCH=1 |
+| 3 | repro-before-replacement (laziness / Promise.resolve executes / old mechanism eager / OFF-vs-ON gate) | HOLDS — all four proof layers in the test file; 5/5 passed live under the reviewer's own run (2.43 s) |
+| 4 | doc tables match aggregates byte-for-byte; regeneration drift ok; pre-corrective numbers quarantined | HOLDS — headline rows match exactly (S200 login p99 9174.3, submit 5155.1); summarize re-run on 4 corrective runs → timestamp-only diff; 36,954 samples recounted |
+| 5 | disposition markers correct; nothing deleted | HOLDS — 30 superseded + 11 retained + diagnostic marker; `git log --diff-filter=D` shows exactly one deletion (a stray marker fix); 477 files added, none removed |
+| 6 | reps, phase families, oracles, auditDistinctIps = N+1 | HOLDS — 3/3/3/2/2 reps re-derived from meta; all oracles pass; 21/51/101/131/201 confirmed per run |
+| 7 | limiter integrity (zero 429, product budgets, no weakening) | HOLDS — 0×429 grepped across all raw samples; login 10/min hard-coded in `auth.ts:120`, global 100/min in settings, production mode forces the limiter on; no RATE_LIMIT_* in runner env |
+| 8 | DIRECT_LAN-through-S200 sourced from the new runs' own audit evidence | HOLDS — `auditDistinctIps` 201 with distinct 127.0.0.x sample verified in `lifecycle-S200-r2`; retained topology group explicitly subordinated in 07/11 |
+| 9 | admission exactness (`min(waiting,(⌊Δt/15⌋+1)·20)`, fail-closed == waiting−admitted, doc table == matrix) | HOLDS — all 15 rows re-derived; sojourn p50 max 703.9 / max 853.8 ms match the doc claims |
+| 10 | soak honesty (rotation re-derived; outage root-caused; uncovered window stated) | HOLDS — 22 PIDs / 17 retirements (ages 34.5–59.3 min recomputed) / 0 errors in windows; frozen log bounds verified in the archived gz; no "clean across 95 min" claim anywhere |
+| 11 | gate commands match package.json; flake disclosed; CI never green | HOLDS — commands match scripts; first `pnpm test` failure + standalone pass + rerun recorded with the test-flakes.md 2026-09-19 recurrence entry; CI = UNAVAILABLE_BILLING throughout |
+| 12 | classification follows the new evidence; no merge/close/#582 language | HOLDS — 11 §1 built on production-mode numbers; OLD_HEAD/BASE recorded; only negative statements about merging/closing |
+
+RESOLVED_MAJORS: MAJOR-1 resolved (every canonical run re-executed in production mode with
+product-default budgets, measured in-process, zero 429, superseded e2e artifacts retained);
+MAJOR-2 resolved (eager observation deleted, replacement proven neutral by source + live
+OFF-vs-ON gate, honest NOT_DIRECTLY_OBSERVABLE facets, server-side evidence authority).
+
+NEW findings from the review, both MINOR, both resolved in the finalization commit:
+1. the gate table / flakes-recurrence entry / final sections were uncommitted working-tree
+   edits at review time — by design (the review gates the final commit), resolved by this
+   finalization commit;
+2. the pre-corrective readiness sidecar's `authoritative_replacement` held a template string
+   instead of the actual replacement filename — corrected to
+   `results/readiness-2026-09-19T11-40-14-675Z.json`.
+
+Reviewer's final line: **VERDICT: READY_FOR_HUMAN_CAPACITY_REVIEW** — no unresolved MAJOR.
 
 ## Verdict (K/N)
 
-<!-- VERDICT-FILL -->
+**READY_FOR_HUMAN_CAPACITY_REVIEW.** Both BLOCKED_BY_CORRECTIVE MAJORs are root-caused,
+fixed at the mechanism level, and re-proven on the accepted #554 production topology; the
+final classification (11-final-verdict.md) is derived strictly from the corrective-1
+artifacts and does not preserve the pre-corrective verdict. Per the corrective contract:
+PR #583 is updated in place (no new PR, no merge, #550 not closed, #582 not started); the
+campaign stops here for human capacity review.
+
+- OLD_HEAD: `ed37e0ce` · BASE: `fbf5bd41` · corrective code HEAD: `66c850e6` · evidence
+  commits: `e6d48bce`, `39e6d91d` · NEW_HEAD: <!-- NEW-HEAD-FILL --> (the finalization commit
+  containing this record; recorded by the immediately following commit)
