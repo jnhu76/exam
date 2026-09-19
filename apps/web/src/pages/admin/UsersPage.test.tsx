@@ -1100,6 +1100,8 @@ describe("UsersPage", () => {
       );
     });
 
+    // 15s budget: five pagination round-trips exceed the 5s default under
+    // coverage instrumentation; the assertions themselves are deterministic.
     it("course picker: catalog pagination reaches page 6 without search (issue 548 corrective)", async () => {
       const allCourses = Array.from({ length: 120 }, (_, i) => ({
         id: `c${i + 1}`,
@@ -1142,7 +1144,7 @@ describe("UsersPage", () => {
         "/api/admin/users/u-t/course-assignments",
         { courseId: "c101" },
       );
-    });
+    }, 15_000);
 
     it("course picker: clearing the search field atomically resets the input, the committed query, and the page (issue 548 corrective)", async () => {
       // 120 courses; searching "课程1" matches 32 of them (2 pages), so the
@@ -1536,6 +1538,8 @@ describe("UsersPage", () => {
       });
     });
 
+    // 15s budget: five pagination round-trips exceed the 5s default under
+    // coverage instrumentation; the assertions themselves are deterministic.
     it("exam picker: catalog pagination reaches page 6 — an exam beyond the first 100 is assignable (issue 548 corrective)", async () => {
       const allExams = Array.from({ length: 120 }, (_, i) => ({
         id: `e${i + 1}`,
@@ -1575,10 +1579,13 @@ describe("UsersPage", () => {
         "/api/admin/users/u-g/exam-assignments",
         { examId: "e101" },
       );
-    });
+    }, 15_000);
   });
 
   describe("Staff-list reachability (issue 548 corrective)", () => {
+    // 15s budget: five pagination round-trips exceed the 5s default under
+    // coverage instrumentation (observed timeout in `pnpm coverage`); the
+    // assertions themselves are deterministic.
     it("a staff target beyond the first 100 is reachable through real pagination", async () => {
       // 103 staff (6 pages at pageSize 20): admin + 101 stale-Teacher
       // fillers + the active-Teacher target at position 103 — beyond the
@@ -1625,6 +1632,6 @@ describe("UsersPage", () => {
       expect(
         within(menu).getByRole("menuitem", { name: "授课课程" }),
       ).toBeInTheDocument();
-    });
+    }, 15_000);
   });
 });
