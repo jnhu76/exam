@@ -9,7 +9,8 @@ extrapolation to production hardware.
 
 ```text
 BASE_SHA:  fbf5bd41bfa6e12ef9fbe4a271c458cbf37d416e   (== origin/master, PR #581 / #548 merge)
-HEAD_SHA:  8c2a93de (research branch tip at closeout — docs commit, see 11-final-verdict.md)
+HEAD_SHA:  evidence commit e745ca7a (all of this doc set + harness + raw artifacts; the
+           immediately following commit only records this SHA — see 11-final-verdict.md)
 BRANCH:    research/550-final-capacity-reproof-1
 WORKTREE:  clean at branch creation; BASE GATE verified HEAD == origin/master == expected SHA
 ```

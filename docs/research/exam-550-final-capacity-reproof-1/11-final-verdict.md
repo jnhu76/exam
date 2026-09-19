@@ -107,7 +107,7 @@ No gate was reported PASS without being executed; no safety control was disabled
 ## 6. Status for Issue #550
 
 READY_FOR_HUMAN_CAPACITY_REVIEW — evidence complete, adversarially reviewed (findings fixed,
-[10](10-adversarial-review.md)), gates green locally. Research branch tip at closeout:
-`8c2a93de` (over base `fbf5bd41`). Per the issue contract: this PR does NOT close #550 (human
-capacity review decides the roadmap disposition); #582 (visual values) and #315
-(high-assurance) are NOT started by this campaign.
+[10](10-adversarial-review.md)), gates green locally. Evidence commit: `e745ca7a` over base
+`fbf5bd41` (the immediately following commit only records this SHA). Per the issue contract:
+this PR does NOT close #550 (human capacity review decides the roadmap disposition); #582
+(visual values) and #315 (high-assurance) are NOT started by this campaign.
