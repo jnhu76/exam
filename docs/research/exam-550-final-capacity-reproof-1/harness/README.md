@@ -30,6 +30,12 @@ this topology (00-environment.md).
   e2e-mode artifacts are marked SUPERSEDED_PRE_CORRECTIVE_EVIDENCE.
 - Runners stamp `meta.campaign = "corrective-1"` + `head_sha`; aggregate.ts
   includes only campaign runs.
+- ARTIFACT SAFETY: never `git add`/commit a run's artifacts while that run is
+  still writing them. The pre-commit lint-staged hook stash/restores
+  partially-staged files and git's restore replaces the path — a long-lived
+  writer fd (the API's pino stdout) then appends to an orphaned inode and the
+  visible log freezes silently (root cause of the soak stdout outage,
+  12-corrective-1.md). Commit only completed runs.
 
 ## Run
 

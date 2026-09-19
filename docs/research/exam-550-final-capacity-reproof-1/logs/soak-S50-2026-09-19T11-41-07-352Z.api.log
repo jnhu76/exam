@@ -13458,3 +13458,11 @@
 {"level":30,"time":1789818831282,"pid":2082212,"hostname":"WuJie","reqId":"req-564","res":{"statusCode":200},"responseTime":21.03940498828888,"msg":"request completed"}
 {"level":30,"time":1789818831285,"pid":2082212,"hostname":"WuJie","reqId":"req-565","req":{"method":"GET","url":"/api/research/capacity","host":"127.0.0.1:3300","remoteAddress":"127.0.0.1","remotePort":47742},"msg":"incoming request"}
 {"level":30,"time":1789818831288,"pid":2082212,"hostname":"WuJie","reqId":"req-565","res":{"statusCode":200},"responseTime":3.3680999875068665,"msg":"request completed"}
+{"level":30,"time":1789818831412,"pid":2082212,"hostname":"WuJie","reqId":"req-566","req":{"method":"POST","url":"/api/attempts/99558d1e-3f9c-4b4b-8956-c3c75869b955/heartbeat","host":"127.0.0.1:3300","remoteAddress":"127.0.0.47","remotePort":46129},"msg":"incoming request"}
+{"level":30,"time":1789818831424,"pid":2082212,"hostname":"WuJie","reqId":"req-566","res":{"statusCode":200},"responseTime":11.810387015342712,"msg":"request completed"}
+{"level":30,"time":1789818831749,"pid":2082212,"hostname":"WuJie","reqId":"req-567","req":{"method":"POST","url":"/api/attempts/a56226e5-f237-447d-beed-a81af2cac060/answers/27a8c872-3c86-4da1-958e-b270fd17ccb9","host":"127.0.0.1:3300","remoteAddress":"127.0.0.27","remotePort":46157},"msg":"incoming request"}
+{"level":30,"time":1789818831771,"pid":2082212,"hostname":"WuJie","reqId":"req-567","res":{"statusCode":200},"responseTime":21.941793024539948,"msg":"request completed"}
+{"level":30,"time":1789818831789,"pid":2082212,"hostname":"WuJie","reqId":"req-568","req":{"method":"GET","url":"/api/research/capacity","host":"127.0.0.1:3300","remoteAddress":"127.0.0.1","remotePort":47742},"msg":"incoming request"}
+{"level":30,"time":1789818831793,"pid":2082212,"hostname":"WuJie","reqId":"req-568","res":{"statusCode":200},"responseTime":3.5850080251693726,"msg":"request completed"}
+{"level":30,"time":1789818831831,"pid":2082212,"hostname":"WuJie","reqId":"req-569","req":{"method":"POST","url":"/api/attempts/c739fdd7-ffb4-4276-9913-e421b5f6e315/heartbeat","host":"127.0.0.1:3300","remoteAddress":"127.0.0.44","remotePort":44729},"msg":"incoming request"}
+{"level":30,"time":1789818831842,"pid":2082212,"hostname":"WuJie","reqId":"req-569","res":{"statusCode":200},"responseTime":10.518054962158203,"msg":"request completed"}
