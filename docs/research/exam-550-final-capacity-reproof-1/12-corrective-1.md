@@ -267,5 +267,5 @@ PR #583 is updated in place (no new PR, no merge, #550 not closed, #582 not star
 campaign stops here for human capacity review.
 
 - OLD_HEAD: `ed37e0ce` · BASE: `fbf5bd41` · corrective code HEAD: `66c850e6` · evidence
-  commits: `e6d48bce`, `39e6d91d` · NEW_HEAD: <!-- NEW-HEAD-FILL --> (the finalization commit
-  containing this record; recorded by the immediately following commit)
+  commits: `e6d48bce`, `39e6d91d` · NEW_HEAD: `3d1a0075` (the finalization commit containing
+  this record; recorded by the immediately following commit)
