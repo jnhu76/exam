@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { AppIcon } from "@/components/shared/AppIcon";
+import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -20,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -46,6 +49,9 @@ import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
+import { Permission } from "@exam/authz";
+import { useAuth } from "@/hooks/useAuth";
+import { can } from "@/lib/capabilities";
 import { InvitationsCard } from "@/pages/admin/InvitationsCard";
 
 /** User row shape as returned by the users list API. */
@@ -55,13 +61,31 @@ interface UserRow {
   name: string;
   /** Primary role; the API returns the full assignable set (RBAC-M8). */
   role: AssignableRole;
+  /**
+   * The target's ACTIVE role set from user_role_assignments (issue 548) — the
+   * truth for assignment affordances. `role` above is only the primary-role
+   * compatibility cache and must not gate assignment management.
+   */
+  activeRoles: AssignableRole[];
   isActive: boolean;
 }
 
 /** Generic paginated response containing a list of items. */
 interface Page<T> {
   items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
+
+/** Staff-list page size — real pagination reaches every staff target. */
+const USERS_PAGE_SIZE = 20;
+/** Option-catalog page size inside the assignment pickers. */
+const CATALOG_PAGE_SIZE = 20;
+
+/** Lifecycle of a mutation-support option catalog inside an assignment dialog. */
+type CatalogStatus = "idle" | "loading" | "ready" | "unavailable";
 
 /** Course item (subset) as returned by GET /courses. */
 interface CourseOption {
@@ -113,9 +137,16 @@ interface AssignableRoleItem {
 /** Admin page for managing platform users (create, edit, enable/disable). */
 export function UsersPage() {
   const { t } = useTranslation();
+  const { user: actor } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersTotal, setUsersTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Latest-request guard: rapid page flips fire overlapping staff-list
+  // requests; a stale response resolving last must not overwrite the table
+  // (same contract as QuestionPage).
+  const usersGenRef = useRef(0);
   // Selectable staff roles, sourced from the backend assignable-role authority
   // (GET /roles/assignable). Candidate is filtered out for the staff selector.
   const [assignableRoles, setAssignableRoles] = useState<AssignableRoleItem[]>(
@@ -139,22 +170,71 @@ export function UsersPage() {
   // Teacher course-assignment dialog state (issue 286).
   const [assignmentsUser, setAssignmentsUser] = useState<UserRow | null>(null);
   const [assignments, setAssignments] = useState<CourseAssignment[]>([]);
-  const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentsBusy, setAssignmentsBusy] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+  // Course option catalog — MUTATION-SUPPORT data only (issue 548
+  // corrective): fetched solely while the assign-new affordance applies, so
+  // the assignment read projection never depends on CourseView/ExamView
+  // surrogate routes. Search is server-side (debounced DataViewSearch) and
+  // pagination is real, so every eligible course is eventually selectable.
+  const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
+  const [courseTotal, setCourseTotal] = useState(0);
+  const [coursePage, setCoursePage] = useState(1);
+  const [courseSearch, setCourseSearch] = useState("");
+  const [courseQuery, setCourseQuery] = useState("");
+  const [courseStatus, setCourseStatus] = useState<CatalogStatus>("idle");
+  const courseGenRef = useRef(0);
+  // Read-projection generation guards: a slow assignment GET for a previous
+  // dialog target must not land in a dialog opened for another user.
+  const assignmentsGenRef = useRef(0);
 
   // Grader exam-assignment dialog state (issue 296).
   const [examAssignmentsUser, setExamAssignmentsUser] =
     useState<UserRow | null>(null);
   const [examAssignments, setExamAssignments] = useState<ExamAssignment[]>([]);
-  const [examOptions, setExamOptions] = useState<ExamOption[]>([]);
-  const [selectedExamId, setSelectedExamId] = useState<string>("");
   const [examAssignmentsLoading, setExamAssignmentsLoading] = useState(false);
   const [examAssignmentsBusy, setExamAssignmentsBusy] = useState(false);
+  const [selectedExamId, setSelectedExamId] = useState<string>("");
+  // Exam option catalog — same mutation-support contract as courses. The exam
+  // list route has no search parameter, so reachability is pagination-only.
+  const [examOptions, setExamOptions] = useState<ExamOption[]>([]);
+  const [examTotal, setExamTotal] = useState(0);
+  const [examPage, setExamPage] = useState(1);
+  const [examStatus, setExamStatus] = useState<CatalogStatus>("idle");
+  const examGenRef = useRef(0);
+  const examAssignmentsGenRef = useRef(0);
 
   /** Staff roles selectable in the create/edit dialog (Candidate excluded). */
   const selectableRoles = assignableRoles.filter((r) => r.key !== "Candidate");
+
+  // Actor capability gates (issue 548): affordances are derived from the actor's
+  // capability set — never from a role label. View decides whether the
+  // assignment surface is offered at all; Manage decides whether the
+  // assign/revoke controls inside it are mutable (View-without-Manage renders
+  // the dialog read-only). UX truthfulness only; the server stays the
+  // authority on every route.
+  const canViewTeacherAssignments =
+    actor !== null && can(actor, Permission.CourseTeacherAssignmentView);
+  const canManageTeacherAssignments =
+    actor !== null && can(actor, Permission.CourseTeacherAssignmentManage);
+  const canViewGraderAssignments =
+    actor !== null && can(actor, Permission.ExamGraderAssignmentView);
+  const canManageGraderAssignments =
+    actor !== null && can(actor, Permission.ExamGraderAssignmentManage);
+
+  // The option catalogs load only while the assign-new affordance applies:
+  // actor Manage capability × target active role × target account active
+  // (issue 548 corrective — the canonical write endpoints reject inactive
+  // targets, so the UI must not offer a guaranteed-to-fail mutation).
+  const courseCatalogApplicable =
+    assignmentsUser !== null &&
+    canManageTeacherAssignments &&
+    assignmentsUser.isActive;
+  const examCatalogApplicable =
+    examAssignmentsUser !== null &&
+    canManageGraderAssignments &&
+    examAssignmentsUser.isActive;
 
   /**
    * Resolves a role display label: local i18n `roleLabels` wins; a missing
@@ -169,15 +249,23 @@ export function UsersPage() {
     });
   }
 
-  /** Fetches the assignable-role authority and the staff user list. */
+  /** Fetches the assignable-role authority and the current staff page. */
   const loadUsers = useCallback(async () => {
+    const generation = ++usersGenRef.current;
+    const isStale = () => generation !== usersGenRef.current;
     setIsLoading(true);
     setError(null);
     try {
       const [rolesRes, usersRes] = await Promise.all([
         api.get<{ items: AssignableRoleItem[] }>("/api/roles/assignable"),
-        api.get<Page<UserRow>>("/api/users"),
+        // Real pagination (issue 548 corrective): every staff target in the
+        // canonical staff-management domain is reachable by paging — no fixed
+        // first-page truncation.
+        api.get<Page<UserRow>>(
+          `/api/users?page=${usersPage}&pageSize=${USERS_PAGE_SIZE}`,
+        ),
       ]);
+      if (isStale()) return;
       setAssignableRoles(rolesRes.items);
       // The server already restricts the list to staff members
       // (assignment-aware, before pagination — F-03). No client-side role
@@ -185,12 +273,14 @@ export function UsersPage() {
       // assignment must stay visible, and Candidate-only users can never
       // crowd staff off the page.
       setUsers(usersRes.items);
+      setUsersTotal(usersRes.total);
     } catch {
+      if (isStale()) return;
       setError(t("admin.users.loadFailed"));
     } finally {
-      setIsLoading(false);
+      if (!isStale()) setIsLoading(false);
     }
-  }, []);
+  }, [usersPage, t]);
   useEffect(() => void loadUsers(), [loadUsers]);
 
   /** Opens the create/edit dialog, optionally pre-filling with an existing user. */
@@ -275,30 +365,83 @@ export function UsersPage() {
     }
   }
 
-  /** Opens the Teacher course-assignment dialog for a Teacher user. */
-  async function openAssignments(user: UserRow) {
-    setAssignmentsUser(user);
-    setAssignments([]);
-    setSelectedCourseId("");
+  /**
+   * Loads the assignment read projection for the dialog user. This GET is
+   * the dialog's only required request: it succeeds or fails independently
+   * of the option catalog (issue 548 corrective). The generation guard
+   * keeps a slow response for a previous target from landing in a dialog
+   * opened for another user.
+   */
+  async function refreshAssignments(user: UserRow) {
+    const generation = ++assignmentsGenRef.current;
+    const isStale = () => generation !== assignmentsGenRef.current;
     setAssignmentsLoading(true);
     try {
-      const [assignmentRes, courseRes] = await Promise.all([
-        api.get<{ items: CourseAssignment[] }>(
-          `/api/admin/users/${user.id}/course-assignments?status=all`,
-        ),
-        api.get<Page<CourseOption>>("/api/courses?page=1&pageSize=100"),
-      ]);
+      const assignmentRes = await api.get<{ items: CourseAssignment[] }>(
+        `/api/admin/users/${user.id}/course-assignments?status=all`,
+      );
+      if (isStale()) return;
       setAssignments(assignmentRes.items);
-      setCourseOptions(courseRes.items);
     } catch (err) {
+      if (isStale()) return;
       toast.error(
         getApiErrorMessage(err, t, t("admin.users.teacherCourses.loadFailed")),
       );
+      // The read itself failed — the dialog has no projection to show.
       setAssignmentsUser(null);
     } finally {
-      setAssignmentsLoading(false);
+      if (!isStale()) setAssignmentsLoading(false);
     }
   }
+
+  /** Opens the Teacher course-assignment dialog for a Teacher user. */
+  function openAssignments(user: UserRow) {
+    courseGenRef.current++; // cancel any in-flight catalog request
+    setAssignmentsUser(user);
+    setAssignments([]);
+    setSelectedCourseId("");
+    setCourseOptions([]);
+    setCourseTotal(0);
+    setCoursePage(1);
+    setCourseSearch("");
+    setCourseQuery("");
+    setCourseStatus("idle");
+    void refreshAssignments(user);
+  }
+
+  /**
+   * Loads one page of the course option catalog. The catalog is
+   * mutation-support data: a failure downgrades only the picker (status
+   * "unavailable" + retry) and never discards the assignment read.
+   */
+  const loadCourseCatalog = useCallback(async () => {
+    const generation = ++courseGenRef.current;
+    const isStale = () => generation !== courseGenRef.current;
+    setCourseStatus("loading");
+    try {
+      const params = new URLSearchParams({
+        page: String(coursePage),
+        pageSize: String(CATALOG_PAGE_SIZE),
+      });
+      if (courseQuery.trim()) params.set("search", courseQuery.trim());
+      const courseRes = await api.get<Page<CourseOption>>(
+        `/api/courses?${params.toString()}`,
+      );
+      if (isStale()) return;
+      setCourseOptions(courseRes.items);
+      setCourseTotal(courseRes.total);
+      setCourseStatus("ready");
+    } catch {
+      if (isStale()) return;
+      setCourseOptions([]);
+      setCourseTotal(0);
+      setCourseStatus("unavailable");
+    }
+  }, [coursePage, courseQuery]);
+  useEffect(() => {
+    if (!courseCatalogApplicable) return;
+    void loadCourseCatalog();
+  }, [courseCatalogApplicable, loadCourseCatalog]);
 
   /** Assigns the selected course to the dialog user and refreshes the list. */
   async function assignCourse() {
@@ -313,10 +456,14 @@ export function UsersPage() {
         toast.info(t("admin.users.teacherCourses.noChange"));
       }
       setSelectedCourseId("");
-      await openAssignments(assignmentsUser);
+      await refreshAssignments(assignmentsUser);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t, t("admin.users.teacherCourses.loadFailed")),
+        getApiErrorMessage(
+          err,
+          t,
+          t("admin.users.teacherCourses.assignFailed"),
+        ),
       );
     } finally {
       setAssignmentsBusy(false);
@@ -331,40 +478,86 @@ export function UsersPage() {
       await api.post(
         `/api/admin/users/${assignmentsUser.id}/course-assignments/${assignment.courseId}/revoke`,
       );
-      await openAssignments(assignmentsUser);
+      await refreshAssignments(assignmentsUser);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t, t("admin.users.teacherCourses.loadFailed")),
+        getApiErrorMessage(
+          err,
+          t,
+          t("admin.users.teacherCourses.revokeFailed"),
+        ),
       );
     } finally {
       setAssignmentsBusy(false);
     }
   }
 
-  /** Opens the Grader exam-assignment dialog for a Grader user. */
-  async function openExamAssignments(user: UserRow) {
-    setExamAssignmentsUser(user);
-    setExamAssignments([]);
-    setSelectedExamId("");
+  /**
+   * Loads the grader assignment read projection — independent of the exam
+   * option catalog (issue 548 corrective), with the same stale-response
+   * guard as the teacher dialog.
+   */
+  async function refreshExamAssignments(user: UserRow) {
+    const generation = ++examAssignmentsGenRef.current;
+    const isStale = () => generation !== examAssignmentsGenRef.current;
     setExamAssignmentsLoading(true);
     try {
-      const [assignmentRes, examRes] = await Promise.all([
-        api.get<{ items: ExamAssignment[] }>(
-          `/api/admin/users/${user.id}/exam-assignments?status=all`,
-        ),
-        api.get<Page<ExamOption>>("/api/exams?page=1&pageSize=100"),
-      ]);
+      const assignmentRes = await api.get<{ items: ExamAssignment[] }>(
+        `/api/admin/users/${user.id}/exam-assignments?status=all`,
+      );
+      if (isStale()) return;
       setExamAssignments(assignmentRes.items);
-      setExamOptions(examRes.items);
     } catch (err) {
+      if (isStale()) return;
       toast.error(
         getApiErrorMessage(err, t, t("admin.users.graderExams.loadFailed")),
       );
       setExamAssignmentsUser(null);
     } finally {
-      setExamAssignmentsLoading(false);
+      if (!isStale()) setExamAssignmentsLoading(false);
     }
   }
+
+  /** Opens the Grader exam-assignment dialog for a Grader user. */
+  function openExamAssignments(user: UserRow) {
+    examGenRef.current++;
+    setExamAssignmentsUser(user);
+    setExamAssignments([]);
+    setSelectedExamId("");
+    setExamOptions([]);
+    setExamTotal(0);
+    setExamPage(1);
+    setExamStatus("idle");
+    void refreshExamAssignments(user);
+  }
+
+  /**
+   * Loads one page of the exam option catalog (mutation-support data; a
+   * failure downgrades only the picker, never the assignment read).
+   */
+  const loadExamCatalog = useCallback(async () => {
+    const generation = ++examGenRef.current;
+    const isStale = () => generation !== examGenRef.current;
+    setExamStatus("loading");
+    try {
+      const examRes = await api.get<Page<ExamOption>>(
+        `/api/exams?page=${examPage}&pageSize=${CATALOG_PAGE_SIZE}`,
+      );
+      if (isStale()) return;
+      setExamOptions(examRes.items);
+      setExamTotal(examRes.total);
+      setExamStatus("ready");
+    } catch {
+      if (isStale()) return;
+      setExamOptions([]);
+      setExamTotal(0);
+      setExamStatus("unavailable");
+    }
+  }, [examPage]);
+  useEffect(() => {
+    if (!examCatalogApplicable) return;
+    void loadExamCatalog();
+  }, [examCatalogApplicable, loadExamCatalog]);
 
   /** Assigns the selected exam to the dialog user and refreshes the list. */
   async function assignExam() {
@@ -379,10 +572,10 @@ export function UsersPage() {
         toast.info(t("admin.users.graderExams.noChange"));
       }
       setSelectedExamId("");
-      await openExamAssignments(examAssignmentsUser);
+      await refreshExamAssignments(examAssignmentsUser);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t, t("admin.users.graderExams.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.graderExams.assignFailed")),
       );
     } finally {
       setExamAssignmentsBusy(false);
@@ -397,10 +590,10 @@ export function UsersPage() {
       await api.post(
         `/api/admin/users/${examAssignmentsUser.id}/exam-assignments/${assignment.examId}/revoke`,
       );
-      await openExamAssignments(examAssignmentsUser);
+      await refreshExamAssignments(examAssignmentsUser);
     } catch (err) {
       toast.error(
-        getApiErrorMessage(err, t, t("admin.users.graderExams.loadFailed")),
+        getApiErrorMessage(err, t, t("admin.users.graderExams.revokeFailed")),
       );
     } finally {
       setExamAssignmentsBusy(false);
@@ -456,7 +649,11 @@ export function UsersPage() {
                 icon: Pencil,
                 onSelect: () => open(user),
               },
-              ...(user.role === "Teacher"
+              // issue 548: the target's ACTIVE role membership (assignment truth,
+              // not the primary-role cache) decides eligibility; the ACTOR's
+              // capability decides whether the surface is offered.
+              ...(canViewTeacherAssignments &&
+              user.activeRoles.includes("Teacher")
                 ? [
                     {
                       id: "teacher-courses",
@@ -466,7 +663,8 @@ export function UsersPage() {
                     },
                   ]
                 : []),
-              ...(user.role === "Grader"
+              ...(canViewGraderAssignments &&
+              user.activeRoles.includes("Grader")
                 ? [
                     {
                       id: "grader-exams",
@@ -505,7 +703,9 @@ export function UsersPage() {
     },
   ];
 
-  if (isLoading) return <LoadingState />;
+  // Full-page loader only for the initial load: page flips keep the table
+  // (and its pagination controls) mounted while the next page is in flight.
+  if (isLoading && users.length === 0) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadUsers} />;
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
@@ -542,7 +742,23 @@ export function UsersPage() {
           />
         </DataTableShell>
       )}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {usersTotal > USERS_PAGE_SIZE && (
+        <DataTablePagination
+          page={usersPage}
+          pageSize={USERS_PAGE_SIZE}
+          total={usersTotal}
+          onPageChange={setUsersPage}
+        />
+      )}
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(next) => {
+          // Busy close contract: Esc/overlay/X must not change open state
+          // while a save is in flight (issue 548 corrective).
+          if (!next && saving) return;
+          setDialogOpen(next);
+        }}
+      >
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
@@ -637,6 +853,9 @@ export function UsersPage() {
       <Dialog
         open={assignmentsUser !== null}
         onOpenChange={(next) => {
+          // Busy close contract: no close via Esc/overlay/X while an
+          // assign/revoke request is in flight (issue 548 corrective).
+          if (!next && assignmentsBusy) return;
           if (!next) setAssignmentsUser(null);
         }}
       >
@@ -652,36 +871,104 @@ export function UsersPage() {
             <p className="py-4 type-secondary">{t("admin.common.loading")}</p>
           ) : (
             <FieldGroup className="py-4">
-              <Field>
-                <Label>{t("admin.users.teacherCourses.pickLabel")}</Label>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={selectedCourseId}
-                    onValueChange={setSelectedCourseId}
-                  >
-                    <SelectTrigger className="min-w-0 flex-1">
-                      <SelectValue
-                        placeholder={t(
-                          "admin.users.teacherCourses.pickPlaceholder",
+              {canManageTeacherAssignments &&
+                (assignmentsUser?.isActive ? (
+                  <Field>
+                    <Label>{t("admin.users.teacherCourses.pickLabel")}</Label>
+                    {courseStatus === "unavailable" ? (
+                      <div className="flex items-center gap-2">
+                        <p className="type-secondary">
+                          {t("admin.users.teacherCourses.optionsUnavailable")}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void loadCourseCatalog()}
+                        >
+                          {t("common.retry")}
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <DataViewSearch
+                          value={courseSearch}
+                          onChange={setCourseSearch}
+                          onSearch={(term) => {
+                            setCourseQuery(term);
+                            setCoursePage(1);
+                          }}
+                          // The default clear only empties the input value;
+                          // the committed server query and page must reset
+                          // with it, or the visible unfiltered list would
+                          // still be filtered and paged server-side.
+                          onClear={() => {
+                            setCourseSearch("");
+                            setCourseQuery("");
+                            setCoursePage(1);
+                          }}
+                          loading={courseStatus === "loading"}
+                        />
+                        {courseStatus === "ready" &&
+                        courseOptions.length === 0 ? (
+                          <p className="type-secondary py-2">
+                            {t("admin.users.teacherCourses.optionsEmpty")}
+                          </p>
+                        ) : (
+                          <RadioGroup
+                            value={selectedCourseId}
+                            onValueChange={setSelectedCourseId}
+                            aria-label={t(
+                              "admin.users.teacherCourses.pickPlaceholder",
+                            )}
+                            className="max-h-64 gap-2 overflow-y-auto"
+                          >
+                            {courseOptions.map((c) => (
+                              <div
+                                key={c.id}
+                                className="flex items-center gap-2"
+                              >
+                                <RadioGroupItem
+                                  value={c.id}
+                                  id={`course-option-${c.id}`}
+                                />
+                                <Label
+                                  htmlFor={`course-option-${c.id}`}
+                                  className="min-w-0 truncate font-normal"
+                                >
+                                  {c.name} ({c.code})
+                                </Label>
+                              </div>
+                            ))}
+                          </RadioGroup>
                         )}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {courseOptions.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name} ({c.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    onClick={() => void assignCourse()}
-                    disabled={!selectedCourseId || assignmentsBusy}
+                        {courseTotal > CATALOG_PAGE_SIZE && (
+                          <DataTablePagination
+                            page={coursePage}
+                            pageSize={CATALOG_PAGE_SIZE}
+                            total={courseTotal}
+                            onPageChange={setCoursePage}
+                          />
+                        )}
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={() => void assignCourse()}
+                            disabled={!selectedCourseId || assignmentsBusy}
+                          >
+                            {t("admin.users.teacherCourses.assignBtn")}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </Field>
+                ) : (
+                  <p
+                    className="type-secondary"
+                    data-testid="teacher-assign-inactive"
                   >
-                    {t("admin.users.teacherCourses.assignBtn")}
-                  </Button>
-                </div>
-              </Field>
+                    {t("admin.users.teacherCourses.inactiveTarget")}
+                  </p>
+                ))}
               <Field>
                 <Label>{t("admin.users.teacherCourses.currentLabel")}</Label>
                 {assignments.filter((a) => a.status === "active").length ===
@@ -707,14 +994,16 @@ export function UsersPage() {
                                 ? `${course.name} (${course.code})`
                                 : a.courseId}
                             </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={assignmentsBusy}
-                              onClick={() => void revokeCourse(a)}
-                            >
-                              {t("admin.users.teacherCourses.revokeBtn")}
-                            </Button>
+                            {canManageTeacherAssignments && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={assignmentsBusy}
+                                onClick={() => void revokeCourse(a)}
+                              >
+                                {t("admin.users.teacherCourses.revokeBtn")}
+                              </Button>
+                            )}
                           </li>
                         );
                       })}
@@ -737,6 +1026,8 @@ export function UsersPage() {
       <Dialog
         open={examAssignmentsUser !== null}
         onOpenChange={(next) => {
+          // Busy close contract (issue 548 corrective).
+          if (!next && examAssignmentsBusy) return;
           if (!next) setExamAssignmentsUser(null);
         }}
       >
@@ -752,36 +1043,85 @@ export function UsersPage() {
             <p className="py-4 type-secondary">{t("admin.common.loading")}</p>
           ) : (
             <FieldGroup className="py-4">
-              <Field>
-                <Label>{t("admin.users.graderExams.pickLabel")}</Label>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={selectedExamId}
-                    onValueChange={setSelectedExamId}
-                  >
-                    <SelectTrigger className="min-w-0 flex-1">
-                      <SelectValue
-                        placeholder={t(
-                          "admin.users.graderExams.pickPlaceholder",
+              {canManageGraderAssignments &&
+                (examAssignmentsUser?.isActive ? (
+                  <Field>
+                    <Label>{t("admin.users.graderExams.pickLabel")}</Label>
+                    {examStatus === "unavailable" ? (
+                      <div className="flex items-center gap-2">
+                        <p className="type-secondary">
+                          {t("admin.users.graderExams.optionsUnavailable")}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void loadExamCatalog()}
+                        >
+                          {t("common.retry")}
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        {examStatus === "ready" && examOptions.length === 0 ? (
+                          <p className="type-secondary py-2">
+                            {t("admin.users.graderExams.optionsEmpty")}
+                          </p>
+                        ) : (
+                          <RadioGroup
+                            value={selectedExamId}
+                            onValueChange={setSelectedExamId}
+                            aria-label={t(
+                              "admin.users.graderExams.pickPlaceholder",
+                            )}
+                            className="max-h-64 gap-2 overflow-y-auto"
+                          >
+                            {examOptions.map((e) => (
+                              <div
+                                key={e.id}
+                                className="flex items-center gap-2"
+                              >
+                                <RadioGroupItem
+                                  value={e.id}
+                                  id={`exam-option-${e.id}`}
+                                />
+                                <Label
+                                  htmlFor={`exam-option-${e.id}`}
+                                  className="min-w-0 truncate font-normal"
+                                >
+                                  {e.title}
+                                </Label>
+                              </div>
+                            ))}
+                          </RadioGroup>
                         )}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {examOptions.map((e) => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    onClick={() => void assignExam()}
-                    disabled={!selectedExamId || examAssignmentsBusy}
+                        {examTotal > CATALOG_PAGE_SIZE && (
+                          <DataTablePagination
+                            page={examPage}
+                            pageSize={CATALOG_PAGE_SIZE}
+                            total={examTotal}
+                            onPageChange={setExamPage}
+                          />
+                        )}
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={() => void assignExam()}
+                            disabled={!selectedExamId || examAssignmentsBusy}
+                          >
+                            {t("admin.users.graderExams.assignBtn")}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </Field>
+                ) : (
+                  <p
+                    className="type-secondary"
+                    data-testid="grader-assign-inactive"
                   >
-                    {t("admin.users.graderExams.assignBtn")}
-                  </Button>
-                </div>
-              </Field>
+                    {t("admin.users.graderExams.inactiveTarget")}
+                  </p>
+                ))}
               <Field>
                 <Label>{t("admin.users.graderExams.currentLabel")}</Label>
                 {examAssignments.filter((a) => a.status === "active").length ===
@@ -803,14 +1143,16 @@ export function UsersPage() {
                             <span className="min-w-0 truncate">
                               {exam ? exam.title : a.examId}
                             </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={examAssignmentsBusy}
-                              onClick={() => void revokeExam(a)}
-                            >
-                              {t("admin.users.graderExams.revokeBtn")}
-                            </Button>
+                            {canManageGraderAssignments && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={examAssignmentsBusy}
+                                onClick={() => void revokeExam(a)}
+                              >
+                                {t("admin.users.graderExams.revokeBtn")}
+                              </Button>
+                            )}
                           </li>
                         );
                       })}

@@ -525,6 +525,154 @@ describe("user routes", () => {
     });
   });
 
+  describe("staff-list activeRoles projection (issue 548)", () => {
+    /** GET /api/users as org Admin, typed for the activeRoles projection. */
+    async function fetchStaffWithRoles(
+      appCtx: Awaited<ReturnType<typeof buildTestApp>>,
+    ) {
+      const res = await appCtx.app.inject({
+        method: "GET",
+        url: `/api/users?page=1&pageSize=50`,
+        cookies: { "auth-token": appCtx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json() as {
+        items: Array<{
+          id: string;
+          username: string;
+          role: string;
+          activeRoles: string[];
+        }>;
+      };
+    }
+
+    /** Inserts one more ACTIVE secondary assignment row for an existing user. */
+    async function addActiveAssignment(
+      db: Database,
+      orgId: string,
+      userId: string,
+      role: AssignableRole,
+    ) {
+      const now = new Date();
+      await db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: orgId,
+        userId,
+        role,
+        isPrimary: false,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    it("exposes the target's ACTIVE role set — Candidate-primary + Teacher-secondary carries Teacher (issue 548 surrogate bug)", async () => {
+      const legacyCtx = await buildTestApp(userRoutes);
+      try {
+        const target = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Candidate",
+          "aroles-cand-teacher",
+        );
+        await addActiveAssignment(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          target.user.id,
+          "Teacher",
+        );
+        const res = await fetchStaffWithRoles(legacyCtx);
+        const item = res.items.find((u) => u.username === target.user.username);
+        expect(item).toBeDefined();
+        // `role` stays the compatibility projection of the primary;
+        // `activeRoles` carries the assignment truth in canonical order.
+        expect(item!.role).toBe("Candidate");
+        expect(item!.activeRoles).toEqual(["Teacher", "Candidate"]);
+      } finally {
+        await legacyCtx.cleanup();
+      }
+    });
+
+    it("Candidate-primary + Grader-secondary carries Grader in activeRoles", async () => {
+      const legacyCtx = await buildTestApp(userRoutes);
+      try {
+        const target = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Candidate",
+          "aroles-cand-grader",
+        );
+        await addActiveAssignment(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          target.user.id,
+          "Grader",
+        );
+        const res = await fetchStaffWithRoles(legacyCtx);
+        const item = res.items.find((u) => u.username === target.user.username);
+        expect(item).toBeDefined();
+        expect(item!.activeRoles).toEqual(["Grader", "Candidate"]);
+      } finally {
+        await legacyCtx.cleanup();
+      }
+    });
+
+    it("a stale staff-valued users.role cache does NOT leak into activeRoles", async () => {
+      const legacyCtx = await buildTestApp(userRoutes);
+      try {
+        // F-06 stale-cache shape: users.role keeps "Teacher" while the only
+        // assignment is inactive. The account stays listed, but activeRoles
+        // must reflect the (empty) active set — never `[users.role]`.
+        const stale = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Teacher",
+          "aroles-stale-teacher",
+          { isActive: false },
+        );
+        const res = await fetchStaffWithRoles(legacyCtx);
+        const item = res.items.find((u) => u.username === stale.user.username);
+        expect(item).toBeDefined();
+        expect(item!.role).toBe("Teacher");
+        expect(item!.activeRoles).toEqual([]);
+      } finally {
+        await legacyCtx.cleanup();
+      }
+    });
+
+    it("activeRoles is canonically ordered and duplicate-free for multi-role targets", async () => {
+      const legacyCtx = await buildTestApp(userRoutes);
+      try {
+        const target = await createAssignedUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          "Grader",
+          "aroles-multi",
+        );
+        await addActiveAssignment(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          target.user.id,
+          "Teacher",
+        );
+        await addActiveAssignment(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          target.user.id,
+          "Proctor",
+        );
+        const res = await fetchStaffWithRoles(legacyCtx);
+        const item = res.items.find((u) => u.username === target.user.username);
+        expect(item).toBeDefined();
+        // Canonical order Admin,Teacher,Proctor,Grader,Candidate,Maintainer.
+        expect(item!.activeRoles).toEqual(["Teacher", "Proctor", "Grader"]);
+        expect(new Set(item!.activeRoles).size).toBe(item!.activeRoles.length);
+      } finally {
+        await legacyCtx.cleanup();
+      }
+    });
+  });
+
   it("PATCH /api/users/:id rejects self-disable with VALIDATION_ERROR + reason CANNOT_DISABLE_SELF", async () => {
     const res = await ctx.app.inject({
       method: "PATCH",

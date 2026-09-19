@@ -33,6 +33,9 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Eye, FileText } from "lucide-react";
+import { Permission } from "@exam/authz";
+import { useAuth } from "@/hooks/useAuth";
+import { can } from "@/lib/capabilities";
 
 /** Aggregate score statistics for an exam. */
 interface ScoreListStats {
@@ -70,6 +73,7 @@ interface ScoreListResponse {
 export function ScoreListPage() {
   const { t } = useTranslation();
   const { formatDateTime } = useProductDateTime();
+  const { user: actor } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -77,6 +81,13 @@ export function ScoreListPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  // issue 548 (F2-04): page access (ScoreAllView, course-scoped for Teacher) and
+  // export access (ScoreExport, Admin preset) are DIFFERENT capabilities.
+  // Rendering an export action the server would 403 is a false affordance;
+  // hide it instead. UX truthfulness only — the export route stays the
+  // security authority.
+  const canExportScores = actor !== null && can(actor, Permission.ScoreExport);
 
   const page = parseInt(searchParams.get("page") || "1", 10);
   const passFilter = (searchParams.get("passFilter") || "all") as
@@ -108,7 +119,9 @@ export function ScoreListPage() {
 
   /** Downloads the scores CSV via the authenticated blob helper (cookie auth). */
   const exportScores = useCallback(async () => {
-    if (!id || exporting) return;
+    // Capability guard on the callback itself: a render regression that
+    // re-shows the button must not be able to invoke the helper.
+    if (!id || exporting || !canExportScores) return;
     setExporting(true);
     try {
       await downloadFile(
@@ -122,7 +135,7 @@ export function ScoreListPage() {
     } finally {
       setExporting(false);
     }
-  }, [id, exporting, t]);
+  }, [id, exporting, t, canExportScores]);
 
   useEffect(() => {
     loadScores();
@@ -224,15 +237,17 @@ export function ScoreListPage() {
         title={`${scores.items[0]?.examTitle || t("admin.scoreList.fallbackExamTitle")} - ${t("admin.scoreList.titleSuffix")}`}
         actions={
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void exportScores()}
-              disabled={exporting}
-            >
-              {exporting
-                ? t("admin.scoreList.actions.exporting")
-                : t("admin.scoreList.actions.export")}
-            </Button>
+            {canExportScores && (
+              <Button
+                variant="outline"
+                onClick={() => void exportScores()}
+                disabled={exporting}
+              >
+                {exporting
+                  ? t("admin.scoreList.actions.exporting")
+                  : t("admin.scoreList.actions.export")}
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => void navigate(`/admin/exams/${id}`)}

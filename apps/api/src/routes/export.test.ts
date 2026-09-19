@@ -4,6 +4,7 @@ import {
   buildTestApp,
   createCandidateViaApi,
   createExamViaApi,
+  createAssignedUserForTest,
   publishExamViaApi,
   submitExamAsCandidate,
   exportResultsCsvAsAdmin,
@@ -123,6 +124,27 @@ describe("CSV export integration", () => {
     const body = res.json();
     expect(body.error.code).toBe("PERMISSION_DENIED");
     expect(body.error.message).toEqual(expect.any(String));
+    expect(body.error.requestId).toEqual(expect.any(String));
+  });
+
+  it("returns 403 PERMISSION_DENIED for a Teacher — ScoreAllView is not ScoreExport (issue 548 F2-04)", async () => {
+    // Teacher legitimately holds the course-scoped ScoreAllView grant and
+    // reaches score surfaces, but ScoreExport stays Admin-only: the direct
+    // API call must fail closed independent of any UI gating.
+    const teacher = await createAssignedUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Teacher",
+      `export-teacher-${uniquePrefix()}`,
+    );
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/export/scores`,
+      cookies: { "auth-token": teacher.token },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json();
+    expect(body.error.code).toBe("PERMISSION_DENIED");
     expect(body.error.requestId).toEqual(expect.any(String));
   });
 
