@@ -1,0 +1,245 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "gates": [
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1440x900",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1440x900",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1100x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1100x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1023x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1023x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "X",
+      "viewport": "1440x900",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1440x900",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "X",
+      "viewport": "1100x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1100x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "X",
+      "viewport": "1023x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1023x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "bodyFontFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif",
+      "harmonyInStack": true,
+      "check400": true,
+      "check500": true,
+      "pass": true
+    }
+  ]
+}
