@@ -8,7 +8,7 @@ EXAM-582-VISUAL-CORRECTNESS-FONT-1 · prerequisite audit for issue #582 (D2–D7
 | --- | --- |
 | Repository | jnhu76/exam |
 | PRODUCT_UNDER_TEST_SHA | `3f5bd9c4c757daec2554de98ed06e4d4e2784c8b` — the origin/master commit whose rendered UI was actually audited (audit spec + probe are additive; no production file changed) |
-| EVIDENCE_HEAD_SHA | `PENDING_SEAL_STAMP` — the `research/582-visual-correctness-font-1` commit holding the audit harness + retained evidence + reports |
+| EVIDENCE_HEAD_SHA | `90367652cd47d9c7be5aa1e441950f52e73dc324` — the `research/582-visual-correctness-font-1` commit holding the audit harness + retained evidence + reports |
 | Branch | `research/582-visual-correctness-font-1` |
 | Issue authority | #582 (created against `fbf5bd41`; reality-audited against current master per AGENTS.md §4) |
 

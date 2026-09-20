@@ -6,7 +6,7 @@ EXAM-582-VISUAL-CORRECTNESS-FONT-1
 PRODUCT_UNDER_TEST_SHA:  3f5bd9c4c757daec2554de98ed06e4d4e2784c8b
                          (origin/master; the rendered product audited —
                           harness files are additive, no production change)
-EVIDENCE_HEAD_SHA:       PENDING_SEAL_STAMP
+EVIDENCE_HEAD_SHA:       90367652cd47d9c7be5aa1e441950f52e73dc324
                          (research/582-visual-correctness-font-1 commit holding
                           audit harness + retained evidence + reports; the
                           branch-tip seal commit's exact SHA is published as
