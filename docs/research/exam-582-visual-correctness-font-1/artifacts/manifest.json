@@ -1,0 +1,219 @@
+{
+  "runId": "3f5bd9c4-1789863570806",
+  "baseSha": "3f5bd9c4c757daec2554de98ed06e4d4e2784c8b",
+  "baseUrl": "http://localhost:3001",
+  "completedAt": "2026-09-20T00:20:33.827Z",
+  "captures": 30,
+  "entries": [
+    {
+      "surface": "S1-dashboard",
+      "route": "/admin/dashboard",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S1-dashboard--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S2-exams",
+      "route": "/admin/exams",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S2-exams--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S3-questions",
+      "route": "/admin/questions",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S3-questions--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S4-users",
+      "route": "/admin/users",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S4-users--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S5-settings",
+      "route": "/admin/settings",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S5-settings--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S8-audit-logs",
+      "route": "/admin/audit-logs",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S8-audit-logs--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S1-dashboard",
+      "route": "/admin/dashboard",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S1-dashboard--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S2-exams",
+      "route": "/admin/exams",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S2-exams--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S3-questions",
+      "route": "/admin/questions",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S3-questions--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S4-users",
+      "route": "/admin/users",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S4-users--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S5-settings",
+      "route": "/admin/settings",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S5-settings--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S8-audit-logs",
+      "route": "/admin/audit-logs",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S8-audit-logs--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S1-dashboard",
+      "route": "/admin/dashboard",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S1-dashboard--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S2-exams",
+      "route": "/admin/exams",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S2-exams--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S3-questions",
+      "route": "/admin/questions",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S3-questions--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S4-users",
+      "route": "/admin/users",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S4-users--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S5-settings",
+      "route": "/admin/settings",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S5-settings--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S8-audit-logs",
+      "route": "/admin/audit-logs",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S8-audit-logs--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S7-assignment-dialog",
+      "route": "/admin/users (teacher course-assignment dialog open)",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S7-assignment-dialog--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S7-assignment-dialog",
+      "route": "/admin/users (teacher course-assignment dialog open)",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S7-assignment-dialog--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S7-assignment-dialog",
+      "route": "/admin/users (teacher course-assignment dialog open)",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S7-assignment-dialog--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S6-exam-list",
+      "route": "/exam/list",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S6-exam-list--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S6-exam-take",
+      "route": "/exam/3be32f3f-2a1d-4bac-a02d-cb6292400abe/take",
+      "viewport": "1440x900",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S6-exam-take--1440x900.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S6-exam-list",
+      "route": "/exam/list",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S6-exam-list--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S6-exam-take",
+      "route": "/exam/3be32f3f-2a1d-4bac-a02d-cb6292400abe/take",
+      "viewport": "1100x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S6-exam-take--1100x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S6-exam-list",
+      "route": "/exam/list",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S6-exam-list--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S6-exam-take",
+      "route": "/exam/3be32f3f-2a1d-4bac-a02d-cb6292400abe/take",
+      "viewport": "1023x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S6-exam-take--1023x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S8-audit-logs",
+      "route": "/admin/audit-logs",
+      "viewport": "700x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S8-audit-logs--700x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S2-exams",
+      "route": "/admin/exams",
+      "viewport": "700x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S2-exams--700x800.png",
+      "dpr": 1
+    },
+    {
+      "surface": "S3-questions",
+      "route": "/admin/questions",
+      "viewport": "700x800",
+      "screenshot": "/home/hoo/Source/exam/.tmp/ui-patrol/visual-correctness/3f5bd9c4-1789863570806/artifacts/screenshots/S3-questions--700x800.png",
+      "dpr": 1
+    }
+  ]
+}

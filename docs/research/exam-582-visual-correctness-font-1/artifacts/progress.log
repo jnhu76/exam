@@ -1,0 +1,35 @@
+2026-09-20T00:19:31.607Z [582] seeded take-exam 554e280d-2bfa-48c9-b25a-6af0229343e4
+2026-09-20T00:19:31.838Z [582] seeded 12 questions
+2026-09-20T00:19:34.419Z [582] captured S1-dashboard @1440x900 tables=1
+2026-09-20T00:19:36.179Z [582] captured S2-exams @1440x900 tables=1
+2026-09-20T00:19:38.373Z [582] captured S3-questions @1440x900 tables=1
+2026-09-20T00:19:40.056Z [582] captured S4-users @1440x900 tables=1
+2026-09-20T00:19:41.762Z [582] captured S5-settings @1440x900 tables=0
+2026-09-20T00:19:43.796Z [582] captured S8-audit-logs @1440x900 tables=1
+2026-09-20T00:19:45.919Z [582] captured S1-dashboard @1100x800 tables=1
+2026-09-20T00:19:47.639Z [582] captured S2-exams @1100x800 tables=1
+2026-09-20T00:19:49.790Z [582] captured S3-questions @1100x800 tables=1
+2026-09-20T00:19:51.836Z [582] captured S4-users @1100x800 tables=1
+2026-09-20T00:19:53.378Z [582] captured S5-settings @1100x800 tables=0
+2026-09-20T00:19:55.370Z [582] captured S8-audit-logs @1100x800 tables=1
+2026-09-20T00:19:57.441Z [582] captured S1-dashboard @1023x800 tables=1
+2026-09-20T00:19:59.532Z [582] captured S2-exams @1023x800 tables=1
+2026-09-20T00:20:01.613Z [582] captured S3-questions @1023x800 tables=1
+2026-09-20T00:20:03.647Z [582] captured S4-users @1023x800 tables=1
+2026-09-20T00:20:05.239Z [582] captured S5-settings @1023x800 tables=0
+2026-09-20T00:20:07.288Z [582] captured S8-audit-logs @1023x800 tables=1
+2026-09-20T00:20:09.940Z [582] captured S7-assignment-dialog @1440x900 tables=1
+2026-09-20T00:20:13.521Z [582] captured S7-assignment-dialog @1100x800 tables=1
+2026-09-20T00:20:16.931Z [582] captured S7-assignment-dialog @1023x800 tables=1
+2026-09-20T00:20:17.535Z [582] started attempt 3be32f3f-2a1d-4bac-a02d-cb6292400abe
+2026-09-20T00:20:19.195Z [582] captured S6-exam-list @1440x900 tables=0
+2026-09-20T00:20:20.756Z [582] captured S6-exam-take @1440x900 tables=0
+2026-09-20T00:20:21.911Z [582] captured S6-exam-list @1100x800 tables=0
+2026-09-20T00:20:23.425Z [582] captured S6-exam-take @1100x800 tables=0
+2026-09-20T00:20:24.595Z [582] captured S6-exam-list @1023x800 tables=0
+2026-09-20T00:20:26.137Z [582] captured S6-exam-take @1023x800 tables=0
+2026-09-20T00:20:28.690Z [582] captured S8-audit-logs @700x800 tables=1
+2026-09-20T00:20:30.769Z [582] captured S2-exams @700x800 tables=1
+2026-09-20T00:20:32.855Z [582] captured S3-questions @700x800 tables=1
+2026-09-20T00:20:33.791Z [582] font probe: 8 woff2 requests, 8 loaded faces
+2026-09-20T00:20:33.830Z [582] DONE: 30 captures
