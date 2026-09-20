@@ -1,0 +1,10 @@
+{
+  "_warning": "VALIDITY ONLY — MAPPING REVEALING. DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "experiment": "EXAM-582-D3-VISUAL-AB-1",
+  "decision": "D3 primary control family radius (Input, SelectTrigger, Textarea, standalone Button)",
+  "candidates": ["6px", "8px"],
+  "algorithm": "node:crypto randomBytes(1) coin flip, parity of first byte; generated at pack creation with no forward assumption from D2/D4/D5/D6 assignments",
+  "frozenAt": "2026-09-20T15:26:37.408Z",
+  "X": "8px",
+  "Y": "6px"
+}

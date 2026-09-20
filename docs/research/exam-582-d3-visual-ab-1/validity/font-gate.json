@@ -1,0 +1,5 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "note": "Per-capture production font-stack gate (HarmonyOS Sans SC, 400/500 faces). Gate failures throw during capture, so a completed run implies PASS on every capture.",
+  "captureGate": "harmonyInStack && check400 && check500 (throws EXPERIMENT_INVALID_FONT_STACK)"
+}

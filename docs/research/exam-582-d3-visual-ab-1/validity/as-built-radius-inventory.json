@@ -1,0 +1,764 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T17:51:44.712Z",
+  "authority": "browser computed styles on the clean product (no injection), 1440×900, DPR=1",
+  "asBuiltSplit": {
+    "standaloneInput": "6px",
+    "standaloneSelectTrigger": "6px",
+    "standaloneTextarea": "6px",
+    "standaloneButton": "8px",
+    "verified": true
+  },
+  "compositeSeamFacts": {
+    "note": "task §4 assumed joined quiet-toolbar filters with 0px internal seams; as-built no component renders [data-slot=toolbar-filters] — the seam rules in control/recipes.css are dead CSS. Quiet-toolbar controls are standalone family members.",
+    "seamProbe": [
+      {
+        "route": "/admin/exams/new",
+        "target": "seam-select-trigger",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/exams/new",
+        "target": "seam-input",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/courses",
+        "target": "seam-select-trigger",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/courses",
+        "target": "seam-input",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/users",
+        "target": "seam-select-trigger",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/users",
+        "target": "seam-input",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009",
+        "target": "seam-select-trigger",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009",
+        "target": "seam-input",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/questions",
+        "target": "seam-select-trigger",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/questions",
+        "target": "seam-input",
+        "found": false,
+        "computedRadius": null
+      }
+    ],
+    "paginationProbe": [
+      {
+        "route": "/admin/courses",
+        "target": "pagination-button",
+        "found": false,
+        "computedRadius": null
+      },
+      {
+        "route": "/admin/users",
+        "target": "pagination-button",
+        "found": false,
+        "computedRadius": null
+      }
+    ]
+  },
+  "rows": [
+    {
+      "route": "/admin/exams/new",
+      "component": "seam-select-trigger",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"select-trigger\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "seam-input",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"input\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "body",
+      "selector": "body",
+      "context": "page",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "product as-built",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "untouched context"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "sidebar-link",
+      "selector": "[data-slot=\"sidebar-nav-item\"]",
+      "context": "sidebar",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "typography/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D2 decision (15px injected) — upstream baseline"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "title-input",
+      "selector": "#wiz-title",
+      "context": "wizard step-1 basic-info form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "course-select-trigger",
+      "selector": "#wiz-course",
+      "context": "wizard step-1 basic-info form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "description-input",
+      "selector": "#wiz-description",
+      "context": "wizard step-1 basic-info form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "profile-select-trigger",
+      "selector": "main [data-slot=\"select-trigger\"]",
+      "context": "wizard step-1 policy profile form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "footer-cancel-button",
+      "selector": "main [data-slot=\"button\"][data-variant=\"outline\"]",
+      "context": "wizard navigation footer",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "footer-next-button",
+      "selector": "main [data-slot=\"button\"][data-variant=\"default\"]",
+      "context": "wizard navigation footer",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/new",
+      "component": "stepper-future-button",
+      "selector": "main nav ol li [data-slot='button']",
+      "context": "wizard stepper, future step (product-disabled at step 1)",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "seam-select-trigger",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"select-trigger\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "seam-input",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"input\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "body",
+      "selector": "body",
+      "context": "page",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "product as-built",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "untouched context"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "sidebar-link",
+      "selector": "[data-slot=\"sidebar-nav-item\"]",
+      "context": "sidebar",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "typography/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D2 decision (15px injected) — upstream baseline"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "toolbar-search-input",
+      "selector": "[data-slot=\"toolbar-search\"] input",
+      "context": "quiet toolbar (standalone as-built)",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "table-th",
+      "selector": "[data-slot=\"table-head\"]",
+      "context": "course table",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "data-table header typography recipes",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D4 decision — upstream baseline"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "table-td",
+      "selector": "[data-slot=\"table-cell\"]",
+      "context": "course table",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "typography/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D2 decision (15px injected) — upstream baseline"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "create-button",
+      "selector": "main [data-slot=\"button\"][data-variant=\"default\"]",
+      "context": "page header action",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/courses",
+      "component": "pagination-button",
+      "selector": "[data-slot=\"pagination\"] [data-slot=\"button\"]",
+      "context": "table pagination (excluded from D3, must not move)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "components/ui/pagination.tsx + button.tsx",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "pagination pills — task §3 exclusion"
+    },
+    {
+      "route": "/admin/courses (dialog)",
+      "component": "dialog-content",
+      "selector": "[data-slot=\"dialog-content\"]",
+      "context": "create-course dialog surface (D7 owns)",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "components/ui/dialog.tsx / alert-dialog.tsx surface",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "dialog/sheet surface is D7 scope (task §3/§12)"
+    },
+    {
+      "route": "/admin/courses (dialog)",
+      "component": "name-input",
+      "selector": "#course-name",
+      "context": "create-course dialog form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/courses (dialog)",
+      "component": "code-input",
+      "selector": "#course-code",
+      "context": "create-course dialog form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/courses (dialog)",
+      "component": "description-textarea",
+      "selector": "#course-desc",
+      "context": "create-course dialog form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/courses (dialog)",
+      "component": "footer-cancel-button",
+      "selector": "[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"outline\"]",
+      "context": "create-course dialog footer",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/courses (dialog)",
+      "component": "footer-save-button",
+      "selector": "[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"default\"]",
+      "context": "create-course dialog footer",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/users",
+      "component": "seam-select-trigger",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"select-trigger\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/users",
+      "component": "seam-input",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"input\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/users",
+      "component": "body",
+      "selector": "body",
+      "context": "page",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "product as-built",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "untouched context"
+    },
+    {
+      "route": "/admin/users",
+      "component": "sidebar-link",
+      "selector": "[data-slot=\"sidebar-nav-item\"]",
+      "context": "sidebar",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "typography/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D2 decision (15px injected) — upstream baseline"
+    },
+    {
+      "route": "/admin/users",
+      "component": "table-th",
+      "selector": "[data-slot=\"table-head\"]",
+      "context": "users table",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "data-table header typography recipes",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D4 decision — upstream baseline"
+    },
+    {
+      "route": "/admin/users",
+      "component": "table-td",
+      "selector": "[data-slot=\"table-cell\"]",
+      "context": "users table",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "typography/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D2 decision (15px injected) — upstream baseline"
+    },
+    {
+      "route": "/admin/users",
+      "component": "role-badge",
+      "selector": "[data-slot=\"badge\"]",
+      "context": "users table role pill (excluded from D3, must not move)",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "components/ui/badge.tsx (generic Badge)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "generic Badge/chip/pill — task §3 exclusion"
+    },
+    {
+      "route": "/admin/users",
+      "component": "status-badge",
+      "selector": "[data-slot=\"status-badge\"]",
+      "context": "users table account status (frozen D5, must not move)",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "components/shared/StatusBadge.tsx + badge/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D5 decision — non-contamination guard"
+    },
+    {
+      "route": "/admin/users",
+      "component": "create-button",
+      "selector": "main [data-slot=\"button\"][data-variant=\"default\"]",
+      "context": "page header action",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/users",
+      "component": "pagination-button",
+      "selector": "[data-slot=\"pagination\"] [data-slot=\"button\"]",
+      "context": "table pagination (excluded from D3, must not move)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "components/ui/pagination.tsx + button.tsx",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "pagination pills — task §3 exclusion"
+    },
+    {
+      "route": "/admin/users (dialog)",
+      "component": "dialog-content",
+      "selector": "[data-slot=\"dialog-content\"]",
+      "context": "create-user dialog surface (D7 owns)",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "components/ui/dialog.tsx / alert-dialog.tsx surface",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "dialog/sheet surface is D7 scope (task §3/§12)"
+    },
+    {
+      "route": "/admin/users (dialog)",
+      "component": "username-input",
+      "selector": "[data-slot=\"dialog-content\"] [data-slot=\"input\"]",
+      "context": "create-user dialog form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/users (dialog)",
+      "component": "password-input",
+      "selector": "[data-slot=\"dialog-content\"] [data-slot=\"input\"]",
+      "context": "create-user dialog form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/users (dialog)",
+      "component": "name-input",
+      "selector": "[data-slot=\"dialog-content\"] [data-slot=\"input\"]",
+      "context": "create-user dialog form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/users (dialog)",
+      "component": "role-select-trigger",
+      "selector": "[data-slot=\"dialog-content\"] [data-slot=\"select-trigger\"]",
+      "context": "create-user dialog form",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/users (dialog)",
+      "component": "footer-cancel-button",
+      "selector": "[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"outline\"]",
+      "context": "create-user dialog footer",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/users (dialog)",
+      "component": "footer-save-button",
+      "selector": "[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"default\"]",
+      "context": "create-user dialog footer",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009",
+      "component": "seam-select-trigger",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"select-trigger\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009",
+      "component": "seam-input",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"input\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009",
+      "component": "body",
+      "selector": "body",
+      "context": "page",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "product as-built",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "untouched context"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009",
+      "component": "sidebar-link",
+      "selector": "[data-slot=\"sidebar-nav-item\"]",
+      "context": "sidebar",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "typography/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D2 decision (15px injected) — upstream baseline"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009",
+      "component": "status-badge",
+      "selector": "[data-slot=\"status-badge\"]",
+      "context": "exam status (frozen D5, must not move)",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "components/shared/StatusBadge.tsx + badge/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D5 decision — non-contamination guard"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009",
+      "component": "unpublish-trigger-button",
+      "selector": "[data-testid=\"exam-detail-unpublish-btn\"]",
+      "context": "exam-detail header actions (outline)",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009 (confirm)",
+      "component": "alert-dialog-content",
+      "selector": "[data-slot=\"alert-dialog-content\"]",
+      "context": "unpublish confirm surface (D7 owns)",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "components/ui/dialog.tsx / alert-dialog.tsx surface",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "dialog/sheet surface is D7 scope (task §3/§12)"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009 (confirm)",
+      "component": "confirm-cancel-button",
+      "selector": "[data-slot=\"alert-dialog-content\"] [data-slot=\"alert-dialog-cancel\"]",
+      "context": "unpublish confirm footer",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/exams/9c772647-237c-4a6f-963a-045488050009 (confirm)",
+      "component": "confirm-destructive-button",
+      "selector": "[data-slot=\"alert-dialog-content\"] [data-slot=\"alert-dialog-action\"]",
+      "context": "unpublish confirm footer",
+      "computedRadius": "8px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "seam-select-trigger",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"select-trigger\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "seam-input",
+      "selector": "[data-toolbar-appearance=\"quiet\"] [data-slot=\"toolbar-filters\"] > [data-slot=\"input\"]",
+      "context": "quiet-toolbar joined filters (as-built: absent)",
+      "computedRadius": null,
+      "found": false,
+      "sourceOwner": "control/recipes.css @media block (dead CSS at runtime)",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "COMPOSITE_INTERNAL_SEAM selector — as-built absent; if it ever renders it must stay 0px in both arms"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "body",
+      "selector": "body",
+      "context": "page",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "product as-built",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "untouched context"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "sidebar-link",
+      "selector": "[data-slot=\"sidebar-nav-item\"]",
+      "context": "sidebar",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "typography/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D2 decision (15px injected) — upstream baseline"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "toolbar-search-input",
+      "selector": "[data-slot=\"toolbar-search\"] input",
+      "context": "quiet toolbar (standalone as-built)",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "toolbar-filter-trigger",
+      "selector": "[data-slot=\"toolbar-filter\"] [data-slot=\"select-trigger\"]",
+      "context": "quiet toolbar (standalone as-built)",
+      "computedRadius": "6px",
+      "found": true,
+      "sourceOwner": "control/recipes.css 0.375rem (input/select-trigger/textarea) + components/ui/button.tsx rounded-lg (button)",
+      "inclusion": "D3_INCLUDED",
+      "reason": "primary interactive form/control family, standalone context"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "table-th",
+      "selector": "[data-slot=\"table-head\"]",
+      "context": "questions table",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "data-table header typography recipes",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D4 decision — upstream baseline"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "table-td",
+      "selector": "[data-slot=\"table-cell\"]",
+      "context": "questions table",
+      "computedRadius": "0px",
+      "found": true,
+      "sourceOwner": "typography/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D2 decision (15px injected) — upstream baseline"
+    },
+    {
+      "route": "/admin/questions",
+      "component": "tag-badge",
+      "selector": "[data-slot=\"tag-badge\"]",
+      "context": "questions tags column (frozen D6 = 500, radius must not move)",
+      "computedRadius": "3px",
+      "found": true,
+      "sourceOwner": "components/shared/TagBadge.tsx + badge/recipes.css",
+      "inclusion": "D3_EXCLUDED",
+      "reason": "frozen D6 decision (weight 500 injected) — radius guard"
+    }
+  ]
+}

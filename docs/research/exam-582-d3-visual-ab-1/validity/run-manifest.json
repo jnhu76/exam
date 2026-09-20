@@ -1,0 +1,62 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE. Mapping: validity/variant-map.json.",
+  "runId": "d3-1789926694489",
+  "issue": 582,
+  "variable": "D3",
+  "question": "Primary control family radius — Input, SelectTrigger, Textarea and standalone Button judged as ONE family (family convergence decision), against the frozen upstream D2 (15px body/control), D4 (13px/20px/500 table header), D5 (22px StatusBadge) and D6 (500 TagBadge weight) baselines",
+  "variants": ["X", "Y"],
+  "mapFileRef": "docs/research/exam-582-d3-visual-ab-1/validity/variant-map.json",
+  "asBuiltExpectations": {
+    "standaloneInput": "6px",
+    "standaloneSelectTrigger": "6px",
+    "standaloneTextarea": "6px",
+    "standaloneButton": "8px",
+    "authority": "browser computed style; recipes.css 0.375rem vs button.tsx rounded-lg",
+    "mismatchProtocol": "AUTHORITY_MISMATCH stop"
+  },
+  "frozenConstants": {
+    "bodyControlBaseline": "15px (common D2 block injected in BOTH arms)",
+    "tableHeaderBaseline": "13px/20px/500 (upstream D4 as-built, verified per capture)",
+    "statusBadgeBaseline": "22px height (upstream D5 as-built, probed per arm)",
+    "tagBadgeBaseline": "weight 500 (common D6 block injected in BOTH arms), radius as-built unchanged",
+    "dialogSurface": "dialog-content / alert-dialog-content radius and shadow frozen (D7 owns), probed per arm",
+    "compositeInternalSeam": "quiet-toolbar joined-filter geometry is dead CSS at runtime (no [data-slot=toolbar-filters] renderer); seam-preservation rule kept in BOTH arms; oracle proves absence per capture",
+    "paginationExclusion": "pagination pills excluded (task §3); no surface renders pagination (fixtures below page size); guard rule pins as-built 8px in both arms"
+  },
+  "baseUrl": "http://localhost:3001",
+  "startedAt": "2026-09-20T17:51:34.983Z",
+  "viewports": [
+    {
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "name": "1100x800",
+      "width": 1100,
+      "height": 800
+    }
+  ],
+  "surfaces": [
+    "exam-create",
+    "course",
+    "course-dialog",
+    "users",
+    "users-dialog",
+    "users-dialog-select",
+    "exam-detail",
+    "exam-detail-confirm",
+    "question-list-probe"
+  ],
+  "judgedSurfaces": [
+    "exam-create",
+    "course",
+    "course-dialog",
+    "users",
+    "users-dialog",
+    "exam-detail",
+    "exam-detail-confirm"
+  ],
+  "validityOnlySurfaces": ["question-list-probe", "users-dialog-select"],
+  "injection": "addInitScript <style> — D2+D6 common baseline blocks (both arms) + D3 family border-radius candidate (the only cross-arm difference) + invariant seam/pagination exception rules (identical both arms)"
+}

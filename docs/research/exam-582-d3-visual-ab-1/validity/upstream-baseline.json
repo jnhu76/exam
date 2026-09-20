@@ -1,0 +1,28 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T17:52:31.625Z",
+  "d2CommonBaseline": {
+    "declared": "15px body/control tier in BOTH arms (upstream D2 freeze, injected)",
+    "pass": true,
+    "completePairs": 14,
+    "violations": []
+  },
+  "d4FrozenUpstream": {
+    "declared": "13px/20px/500 governed table header in BOTH arms (upstream D4 freeze, as-built)",
+    "pass": true,
+    "completePairs": 5,
+    "violations": []
+  },
+  "d5FrozenUpstream": {
+    "declared": "22px StatusBadge identical across arms (upstream D5 freeze, as-built)",
+    "pass": true,
+    "completePairs": 4,
+    "violations": []
+  },
+  "d6FrozenUpstream": {
+    "declared": "TagBadge weight 500 in BOTH arms (upstream D6 freeze, injected); TagBadge radius as-built and unchanged across arms",
+    "pass": true,
+    "completePairs": 1,
+    "violations": []
+  }
+}

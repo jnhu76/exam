@@ -1,0 +1,769 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T17:52:31.624Z",
+  "note": "Pairwise bounding-box deltas across arms. Radius cannot change layout: expected Δ=0 (≤0.5px float tolerance).",
+  "pairs": [
+    {
+      "key": "exam-create@1440x900:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1440x900:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1440x900:#wiz-title|title-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1440x900:#wiz-course|course-select-trigger|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1440x900:#wiz-description|description-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1440x900:main [data-slot=\"select-trigger\"]|profile-select-trigger|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1440x900:main [data-slot=\"button\"][data-variant=\"outline\"]|footer-cancel-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1440x900:main [data-slot=\"button\"][data-variant=\"default\"]|footer-next-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1440x900:main nav ol li [data-slot='button']|stepper-future-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1440x900:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1440x900:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1440x900:[data-slot=\"toolbar-search\"] input|toolbar-search-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1440x900:[data-slot=\"table-head\"]|table-th|d4frozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1440x900:[data-slot=\"table-cell\"]|table-td|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1440x900:main [data-slot=\"button\"][data-variant=\"default\"]|create-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1440x900:[data-slot=\"dialog-content\"]|dialog-content|dialogfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1440x900:#course-name|name-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1440x900:#course-code|code-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1440x900:#course-desc|description-textarea|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1440x900:[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"outline\"]|footer-cancel-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1440x900:[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"default\"]|footer-save-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1440x900:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1440x900:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1440x900:[data-slot=\"table-head\"]|table-th|d4frozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1440x900:[data-slot=\"table-cell\"]|table-td|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1440x900:[data-slot=\"badge\"]|role-badge|badgeexcl",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1440x900:[data-slot=\"status-badge\"]|status-badge|statusprobe",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1440x900:main [data-slot=\"button\"][data-variant=\"default\"]|create-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1440x900:[data-slot=\"dialog-content\"]|dialog-content|dialogfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1440x900:[data-slot=\"dialog-content\"] [data-slot=\"input\"]|username-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1440x900:[data-slot=\"dialog-content\"] [data-slot=\"input\"]|password-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1440x900:[data-slot=\"dialog-content\"] [data-slot=\"input\"]|name-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1440x900:[data-slot=\"dialog-content\"] [data-slot=\"select-trigger\"]|role-select-trigger|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1440x900:[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"outline\"]|footer-cancel-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1440x900:[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"default\"]|footer-save-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog-select@1440x900:[data-slot=\"select-content\"]|select-content|overlayfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog-select@1440x900:[data-slot=\"select-item\"]|select-item|overlayfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail@1440x900:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail@1440x900:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail@1440x900:[data-slot=\"status-badge\"]|status-badge|statusprobe",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail@1440x900:[data-testid=\"exam-detail-unpublish-btn\"]|unpublish-trigger-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:[data-slot=\"alert-dialog-content\"]|alert-dialog-content|dialogfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:[data-slot=\"alert-dialog-content\"] [data-slot=\"alert-dialog-cancel\"]|confirm-cancel-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:[data-slot=\"alert-dialog-content\"] [data-slot=\"alert-dialog-action\"]|confirm-destructive-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:#wiz-title|title-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:#wiz-course|course-select-trigger|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:#wiz-description|description-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:main [data-slot=\"select-trigger\"]|profile-select-trigger|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:main [data-slot=\"button\"][data-variant=\"outline\"]|footer-cancel-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:main [data-slot=\"button\"][data-variant=\"default\"]|footer-next-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-create@1100x800:main nav ol li [data-slot='button']|stepper-future-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1100x800:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1100x800:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1100x800:[data-slot=\"toolbar-search\"] input|toolbar-search-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1100x800:[data-slot=\"table-head\"]|table-th|d4frozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1100x800:[data-slot=\"table-cell\"]|table-td|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course@1100x800:main [data-slot=\"button\"][data-variant=\"default\"]|create-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1100x800:[data-slot=\"dialog-content\"]|dialog-content|dialogfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1100x800:#course-name|name-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1100x800:#course-code|code-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1100x800:#course-desc|description-textarea|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1100x800:[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"outline\"]|footer-cancel-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "course-dialog@1100x800:[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"default\"]|footer-save-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1100x800:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1100x800:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1100x800:[data-slot=\"table-head\"]|table-th|d4frozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1100x800:[data-slot=\"table-cell\"]|table-td|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1100x800:[data-slot=\"badge\"]|role-badge|badgeexcl",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1100x800:[data-slot=\"status-badge\"]|status-badge|statusprobe",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users@1100x800:main [data-slot=\"button\"][data-variant=\"default\"]|create-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1100x800:[data-slot=\"dialog-content\"]|dialog-content|dialogfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1100x800:[data-slot=\"dialog-content\"] [data-slot=\"input\"]|username-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1100x800:[data-slot=\"dialog-content\"] [data-slot=\"input\"]|password-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1100x800:[data-slot=\"dialog-content\"] [data-slot=\"input\"]|name-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1100x800:[data-slot=\"dialog-content\"] [data-slot=\"select-trigger\"]|role-select-trigger|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1100x800:[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"outline\"]|footer-cancel-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog@1100x800:[data-slot=\"dialog-content\"] [data-slot=\"button\"][data-variant=\"default\"]|footer-save-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog-select@1100x800:[data-slot=\"select-content\"]|select-content|overlayfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "users-dialog-select@1100x800:[data-slot=\"select-item\"]|select-item|overlayfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail@1100x800:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail@1100x800:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail@1100x800:[data-slot=\"status-badge\"]|status-badge|statusprobe",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail@1100x800:[data-testid=\"exam-detail-unpublish-btn\"]|unpublish-trigger-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:[data-slot=\"alert-dialog-content\"]|alert-dialog-content|dialogfrozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:[data-slot=\"alert-dialog-content\"] [data-slot=\"alert-dialog-cancel\"]|confirm-cancel-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:[data-slot=\"alert-dialog-content\"] [data-slot=\"alert-dialog-action\"]|confirm-destructive-button|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "question-list-probe@1440x900:body|body|external",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "question-list-probe@1440x900:[data-slot=\"sidebar-nav-item\"]|sidebar-link|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "question-list-probe@1440x900:[data-slot=\"toolbar-search\"] input|toolbar-search-input|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "question-list-probe@1440x900:[data-slot=\"toolbar-filter\"] [data-slot=\"select-trigger\"]|toolbar-filter-trigger|d3",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "question-list-probe@1440x900:[data-slot=\"table-head\"]|table-th|d4frozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "question-list-probe@1440x900:[data-slot=\"table-cell\"]|table-td|d2baseline",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    },
+    {
+      "key": "question-list-probe@1440x900:[data-slot=\"tag-badge\"]|tag-badge|d6frozen",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "pass": true
+    }
+  ],
+  "pass": true,
+  "violations": []
+}
