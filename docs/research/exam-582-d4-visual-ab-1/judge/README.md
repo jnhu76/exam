@@ -38,8 +38,10 @@ Chinese-language exam/LMS/admin UI; dense enterprise tables.
 
 - 1440 × 900 — primary adjudication
 - 1100 × 800 — density-sensitive repeat
-- 1023 × 800 — boundary condition (admin sidebar leaves the flow; governed
-  tables verified intact)
+- 1023 × 800 — boundary condition:
+  - audit-logs retains the governed table and is included as D4 evidence
+  - exam-list / questions / users switch to responsive card representation
+    and are excluded from D4 table adjudication at this viewport
 
 ## Evidence
 
