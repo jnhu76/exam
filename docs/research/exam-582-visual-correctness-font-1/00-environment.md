@@ -7,10 +7,12 @@ EXAM-582-VISUAL-CORRECTNESS-FONT-1 · prerequisite audit for issue #582 (D2–D7
 | Field | Value |
 | --- | --- |
 | Repository | jnhu76/exam |
-| BASE_SHA (origin/master at audit start) | `3f5bd9c4c757daec2554de98ed06e4d4e2784c8b` |
-| HEAD_SHA | `3f5bd9c4c757daec2554de98ed06e4d4e2784c8b` (audit spec + probe are additive; no production file changed) |
+| PRODUCT_UNDER_TEST_SHA | `3f5bd9c4c757daec2554de98ed06e4d4e2784c8b` — the origin/master commit whose rendered UI was actually audited (audit spec + probe are additive; no production file changed) |
+| EVIDENCE_HEAD_SHA | `PENDING_SEAL_STAMP` — the `research/582-visual-correctness-font-1` commit holding the audit harness + retained evidence + reports |
 | Branch | `research/582-visual-correctness-font-1` |
 | Issue authority | #582 (created against `fbf5bd41`; reality-audited against current master per AGENTS.md §4) |
+
+The branch tip is the Phase-1 seal commit carrying this stamp; a commit cannot contain its own SHA, so the exact tip SHA is published as `PHASE1_EVIDENCE_SHA` in the PR #588 seal comment and recorded in `docs/research/exam-582-d2-visual-ab-1/00-environment.md` (whose parent commit is this tip).
 
 Note: `#582` says "refresh current master before branching"; current master `3f5bd9c4` additionally contains PR #583 (capacity reproof). No #579 authority repair was reverted; `apps/web/src/index.css` still declares HarmonyOS Sans SC as primary UI family truth.
 

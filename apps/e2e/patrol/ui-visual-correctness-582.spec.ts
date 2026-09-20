@@ -1026,11 +1026,13 @@ test.describe.serial("UI-VISUAL-CORRECTNESS-582", () => {
 
     const woff2 = requests.filter((r) => r.kind === "woff2");
     const css = requests.filter((r) => r.kind === "css");
-    const statusCounts: Record<string, number> = {};
-    for (const r of requests) {
-      statusCounts[String(r.status)] =
-        (statusCounts[String(r.status)] ?? 0) + 1;
-    }
+    const countByStatus = (rows: typeof requests) => {
+      const counts: Record<string, number> = {};
+      for (const r of rows) {
+        counts[String(r.status)] = (counts[String(r.status)] ?? 0) + 1;
+      }
+      return counts;
+    };
     const loadedByFamilyWeight: Record<string, number> = {};
     for (const f of loadedFaces) {
       const key = `${f.family} @${f.weight}`;
@@ -1045,8 +1047,10 @@ test.describe.serial("UI-VISUAL-CORRECTNESS-582", () => {
           note: "Fresh browser context (no HTTP cache). Proves font resources are served by this deployment and which faces the font system reports loaded.",
           route: "/login",
           cssRequests: css,
+          fontRequestCount: requests.length,
+          fontRequestStatusCounts: countByStatus(requests),
           woff2RequestCount: woff2.length,
-          woff2StatusCounts: statusCounts,
+          woff2StatusCounts: countByStatus(woff2),
           woff2SampleUrls: woff2.slice(0, 12),
           loadedFaceCount: loadedFaces.length,
           loadedByFamilyWeight,

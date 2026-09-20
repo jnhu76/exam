@@ -3,8 +3,14 @@
 ```text
 EXAM-582-VISUAL-CORRECTNESS-FONT-1
 
-BASE_SHA:  3f5bd9c4c757daec2554de98ed06e4d4e2784c8b (origin/master)
-HEAD_SHA:  3f5bd9c4c757daec2554de98ed06e4d4e2784c8b + additive audit-only files
+PRODUCT_UNDER_TEST_SHA:  3f5bd9c4c757daec2554de98ed06e4d4e2784c8b
+                         (origin/master; the rendered product audited —
+                          harness files are additive, no production change)
+EVIDENCE_HEAD_SHA:       PENDING_SEAL_STAMP
+                         (research/582-visual-correctness-font-1 commit holding
+                          audit harness + retained evidence + reports; the
+                          branch-tip seal commit's exact SHA is published as
+                          PHASE1_EVIDENCE_SHA on PR #588)
 BRANCH:    research/582-visual-correctness-font-1
 
 ENVIRONMENT:
