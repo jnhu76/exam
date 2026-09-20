@@ -1,0 +1,10 @@
+{
+  "_warning": "VALIDITY ONLY — MAPPING REVEALING. DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "variable": "D4",
+  "authority": "issue #582 D4 (table-header typography); upstream D2 freeze at 42ef848fb3feb78a7fdfc60bec01a0f7932c5afc",
+  "generatedAt": "2026-09-20T06:14:59.542Z",
+  "generator": "node:crypto randomInt(2) — independent of the D2 assignment",
+  "unit": "px (font-size of [data-slot=\"table-head\"])",
+  "X": "14",
+  "Y": "13"
+}

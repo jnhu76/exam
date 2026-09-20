@@ -1,0 +1,2129 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T06:51:25.242Z",
+  "note": "Letters only; no px mapping. Header geometry is recorded evidence, never repaired mid-experiment.",
+  "perVariant": [
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 42,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 42,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 42,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 42,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 42,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 0,
+          "scrollWidth": 0,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 0,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [0, 0, 0, 0, 0],
+          "lastCellRight": 0
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 0,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [0, 0, 0, 0, 0],
+          "lastCellRight": 0
+        }
+      ]
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 0,
+          "scrollWidth": 0,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 0,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [0, 0, 0, 0, 0],
+          "lastCellRight": 0
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 0,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [0, 0, 0, 0, 0],
+          "lastCellRight": 0
+        }
+      ]
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "X",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "standard",
+          "clientWidth": 989,
+          "scrollWidth": 989,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1006
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 0,
+          "scrollWidth": 0,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 0,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [0, 0, 0, 0, 0],
+          "lastCellRight": 0
+        }
+      ]
+    },
+    {
+      "surface": "audit-logs",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "standard",
+          "clientWidth": 989,
+          "scrollWidth": 989,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "lastCellRight": 1006
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 0,
+          "scrollWidth": 0,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 0,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 0,
+              "textLines": 0,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "firstRowsHeight": [0, 0, 0, 0, 0],
+          "lastCellRight": 0
+        }
+      ]
+    }
+  ],
+  "pairwise": [
+    {
+      "key": "exam-list@1440x900",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "questions@1440x900",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 42,
+      "headerRowHeightY": 42,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": null,
+      "tableOverflowY": null,
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": null,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "exam-list@1100x800",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "questions@1100x800",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 42,
+      "headerRowHeightY": 42,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": null,
+      "tableOverflowY": null,
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": null,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "exam-list@1023x800",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 0,
+      "headerRowHeightY": 0,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 0,
+      "maxHeaderTextLinesY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "questions@1023x800",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 0,
+      "headerRowHeightY": 0,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 0,
+      "maxHeaderTextLinesY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": null,
+      "tableOverflowY": null,
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": null,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "audit-logs@1440x900",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "users@1440x900",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "audit-logs@1100x800",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "users@1100x800",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "audit-logs@1023x800",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 1,
+      "maxHeaderTextLinesY": 1,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    },
+    {
+      "key": "users@1023x800",
+      "rowHeightsIdentical": true,
+      "headerRowHeightX": 0,
+      "headerRowHeightY": 0,
+      "headerRowHeightDelta": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "maxHeaderTextLinesX": 0,
+      "maxHeaderTextLinesY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0
+    }
+  ],
+  "representationChanges": [
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "governedShellCount": 1
+    },
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "governedShellCount": 1
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "governedShellCount": 1
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "governedShellCount": 1
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "governedShellCount": 1
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "governedShellCount": 1
+    }
+  ]
+}
