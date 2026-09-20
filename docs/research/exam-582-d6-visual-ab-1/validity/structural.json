@@ -1,0 +1,261 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T14:36:32.436Z",
+  "note": "Letters only; no weight mapping. Cluster wrap or row growth from the weight is recorded evidence, never repaired.",
+  "perVariant": [
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 42,
+          "headerWrapped": 0,
+          "headerClipped": 0,
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "rowHeights": [48, 48, 48, 48, 48, 48, 48, 48],
+          "visibleRowCount": 8,
+          "renderedTagBadgeCount": 18,
+          "renderedOverflowChipCount": 3
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 42,
+          "headerWrapped": 0,
+          "headerClipped": 0,
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "rowHeights": [48, 48, 48, 48, 48, 48, 48, 48],
+          "visibleRowCount": 8,
+          "renderedTagBadgeCount": 18,
+          "renderedOverflowChipCount": 3
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 42,
+          "headerWrapped": 0,
+          "headerClipped": 0,
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "rowHeights": [48, 48, 48, 48, 48, 49, 49, 49],
+          "visibleRowCount": 8,
+          "renderedTagBadgeCount": 18,
+          "renderedOverflowChipCount": 3
+        }
+      ]
+    },
+    {
+      "surface": "questions",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 42,
+          "headerWrapped": 0,
+          "headerClipped": 0,
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "rowHeights": [48, 48, 48, 48, 48, 49, 49, 49],
+          "visibleRowCount": 8,
+          "renderedTagBadgeCount": 18,
+          "renderedOverflowChipCount": 3
+        }
+      ]
+    },
+    {
+      "surface": "questions-card",
+      "variant": "X",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 0,
+          "headerWrapped": 0,
+          "headerClipped": 0,
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "rowHeights": [],
+          "visibleRowCount": 0,
+          "renderedTagBadgeCount": 0,
+          "renderedOverflowChipCount": 0
+        }
+      ]
+    },
+    {
+      "surface": "questions-card",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": null,
+          "scrollWidth": null,
+          "overflowing": null,
+          "scrollEnd": null,
+          "headerRowHeight": 0,
+          "headerWrapped": 0,
+          "headerClipped": 0,
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": null,
+          "rowHeights": [],
+          "visibleRowCount": 0,
+          "renderedTagBadgeCount": 0,
+          "renderedOverflowChipCount": 0
+        }
+      ]
+    }
+  ],
+  "pairwise": [
+    {
+      "key": "questions@1440x900",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0, 0, 0, 0],
+      "headerRowHeightX": 42,
+      "headerRowHeightY": 42,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "tableOverflowX": null,
+      "tableOverflowY": null,
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": null,
+      "visibleRowCountX": 8,
+      "visibleRowCountY": 8,
+      "renderedTagBadgeCountX": 18,
+      "renderedTagBadgeCountY": 18,
+      "renderedOverflowChipCountX": 3,
+      "renderedOverflowChipCountY": 3
+    },
+    {
+      "key": "questions@1100x800",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0, 0, 0, 0],
+      "headerRowHeightX": 42,
+      "headerRowHeightY": 42,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "tableOverflowX": null,
+      "tableOverflowY": null,
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": null,
+      "visibleRowCountX": 8,
+      "visibleRowCountY": 8,
+      "renderedTagBadgeCountX": 18,
+      "renderedTagBadgeCountY": 18,
+      "renderedOverflowChipCountX": 3,
+      "renderedOverflowChipCountY": 3
+    },
+    {
+      "key": "questions-card@1023x800",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [],
+      "headerRowHeightX": 0,
+      "headerRowHeightY": 0,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "tableOverflowX": null,
+      "tableOverflowY": null,
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": null,
+      "visibleRowCountX": 0,
+      "visibleRowCountY": 0,
+      "renderedTagBadgeCountX": 0,
+      "renderedTagBadgeCountY": 0,
+      "renderedOverflowChipCountX": 0,
+      "renderedOverflowChipCountY": 0
+    }
+  ],
+  "representationChanges": [
+    {
+      "surface": "questions-card",
+      "variant": "X",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "tagbadgeContinues": false,
+      "governedShellCount": 1
+    },
+    {
+      "surface": "questions-card",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "tagbadgeContinues": false,
+      "governedShellCount": 1
+    }
+  ]
+}

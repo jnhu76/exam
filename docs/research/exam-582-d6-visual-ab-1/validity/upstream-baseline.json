@@ -1,0 +1,22 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T14:36:32.436Z",
+  "d2CommonBaseline": {
+    "declared": "15px body/control tier in BOTH arms (upstream D2 freeze)",
+    "pass": true,
+    "completePairs": 11,
+    "violations": []
+  },
+  "d4FrozenUpstream": {
+    "declared": "13px/20px/500 governed table header in BOTH arms (upstream D4 freeze, as-built)",
+    "pass": true,
+    "completePairs": 3,
+    "violations": []
+  },
+  "d5FrozenUpstream": {
+    "declared": "22px/500/12px StatusBadge identical across arms (upstream D5 freeze, as-built)",
+    "pass": true,
+    "completePairs": 1,
+    "violations": []
+  }
+}

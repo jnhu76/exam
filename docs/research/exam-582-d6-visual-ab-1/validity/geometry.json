@@ -1,0 +1,125 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T14:36:32.436Z",
+  "note": "Per-badge geometry pairs (letters only, no weight mapping). Width/wrap deltas are causal geometry effects of the weight, not contamination.",
+  "pairs": [
+    {
+      "key": "questions@1440x900",
+      "domIdentity": true,
+      "badgeCountX": 18,
+      "badgeCountY": 18,
+      "badgeWidthsX": [
+        38, 62, 38, 38, 62, 62, 62, 62, 47, 38, 38, 73, 62, 38, 62, 62, 38, 62
+      ],
+      "badgeWidthsY": [
+        38, 62, 38, 38, 62, 62, 62, 62, 49, 38, 38, 74, 62, 38, 62, 62, 38, 62
+      ],
+      "badgeWidthDeltas": [
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0
+      ],
+      "textWidthsX": [
+        24, 48, 24, 24, 48, 48, 48, 48, 33, 24, 24, 59, 48, 24, 48, 48, 24, 48
+      ],
+      "textWidthsY": [
+        24, 48, 24, 24, 48, 48, 48, 48, 35, 24, 24, 60, 48, 24, 48, 48, 24, 48
+      ],
+      "clusterHeightsX": [
+        22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22
+      ],
+      "clusterHeightsY": [
+        22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22
+      ],
+      "clusterLinesX": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+      "clusterLinesY": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+      "rowHeightsX": [
+        48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48
+      ],
+      "rowHeightsY": [
+        48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48
+      ],
+      "chipTextsX": ["+1", "+2", "+3"],
+      "chipTextsY": ["+1", "+2", "+3"],
+      "chipWidthsX": [26, 26, 26],
+      "chipWidthsY": [26, 26, 26],
+      "chipPositionDeltas": [0, 0, 0],
+      "cellWidthsX": [
+        268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7,
+        268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7
+      ],
+      "cellWidthsY": [
+        268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7,
+        268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7, 268.7
+      ]
+    },
+    {
+      "key": "questions@1100x800",
+      "domIdentity": true,
+      "badgeCountX": 18,
+      "badgeCountY": 18,
+      "badgeWidthsX": [
+        38, 62, 38, 38, 62, 62, 62, 62, 47, 38, 38, 73, 62, 38, 62, 62, 38, 62
+      ],
+      "badgeWidthsY": [
+        38, 62, 38, 38, 62, 62, 62, 62, 49, 38, 38, 74, 62, 38, 62, 62, 38, 62
+      ],
+      "badgeWidthDeltas": [
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0
+      ],
+      "textWidthsX": [
+        24, 48, 24, 24, 48, 48, 48, 48, 33, 24, 24, 59, 48, 24, 48, 48, 24, 48
+      ],
+      "textWidthsY": [
+        24, 48, 24, 24, 48, 48, 48, 48, 35, 24, 24, 60, 48, 24, 48, 48, 24, 48
+      ],
+      "clusterHeightsX": [
+        22, 22, 22, 22, 22, 22, 22, 22, 22, 48, 48, 48, 48, 48, 48, 48, 48, 48
+      ],
+      "clusterHeightsY": [
+        22, 22, 22, 22, 22, 22, 22, 22, 22, 48, 48, 48, 48, 48, 48, 48, 48, 48
+      ],
+      "clusterLinesX": [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2
+      ],
+      "clusterLinesY": [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2
+      ],
+      "rowHeightsX": [
+        48, 48, 48, 48, 48, 48, 48, 48, 48, 49, 49, 49, 49, 49, 49, 49, 49, 49
+      ],
+      "rowHeightsY": [
+        48, 48, 48, 48, 48, 48, 48, 48, 48, 49, 49, 49, 49, 49, 49, 49, 49, 49
+      ],
+      "chipTextsX": ["+1", "+2", "+3"],
+      "chipTextsY": ["+1", "+2", "+3"],
+      "chipWidthsX": [26, 26, 26],
+      "chipWidthsY": [26, 26, 26],
+      "chipPositionDeltas": [-1, 0, 0],
+      "cellWidthsX": [
+        214, 214, 214, 214, 214, 214, 214, 214, 214, 214, 214, 214, 214, 214,
+        214, 214, 214, 214
+      ],
+      "cellWidthsY": [
+        214, 214, 214, 214, 214, 214, 214, 214, 214, 214, 214, 214, 214, 214,
+        214, 214, 214, 214
+      ]
+    }
+  ],
+  "representationChanges": [
+    {
+      "surface": "questions-card",
+      "variant": "X",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "tagbadgeContinues": false,
+      "governedShellCount": 1
+    },
+    {
+      "surface": "questions-card",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "change": "RESPONSIVE_REPRESENTATION_CHANGE",
+      "tagbadgeContinues": false,
+      "governedShellCount": 1
+    }
+  ]
+}

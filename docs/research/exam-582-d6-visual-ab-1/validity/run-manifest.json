@@ -1,0 +1,74 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE. Mapping: validity/variant-map.json.",
+  "runId": "d6-1789914972522",
+  "issue": 582,
+  "variable": "D6",
+  "question": "TagBadge font weight (400 vs 500) for 12px metadata tags, judged against the frozen upstream D2 (15px body/control), D4 (13px/20px/500 table header) and D5 (22px StatusBadge) baselines",
+  "variants": ["X", "Y"],
+  "mapFileRef": "docs/research/exam-582-d6-visual-ab-1/validity/variant-map.json",
+  "frozenConstants": {
+    "tagBadgeGeometry": "22px height / 12px size / 6px inline padding / 4px radius (3px compact-table) — product values, not injected",
+    "compactTableVariant": "18px line-height, text-muted color — product values, not injected",
+    "tagOverflowChip": "22px / 12px / 400 weight / 18px line-height / 3px radius (workbench.css) — NOT a TagBadge, must not move",
+    "bodyControlBaseline": "15px (common D2 block injected in BOTH arms)",
+    "tableHeaderBaseline": "13px/20px/500 (upstream D4 as-built, verified per capture)",
+    "statusBadgeBaseline": "22px height (upstream D5 as-built, probed per arm)"
+  },
+  "baseUrl": "http://localhost:3001",
+  "startedAt": "2026-09-20T14:36:13.062Z",
+  "viewports": [
+    {
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "name": "1100x800",
+      "width": 1100,
+      "height": 800
+    },
+    {
+      "name": "1023x800",
+      "width": 1023,
+      "height": 800
+    }
+  ],
+  "surfaces": ["questions", "exam-list-probe"],
+  "judgedSurfaces": ["questions"],
+  "fixtureRows": [
+    {
+      "content": "判断题-D6-灭火器压力表指针处于绿区",
+      "tags": ["安全"]
+    },
+    {
+      "content": "判断题-D6-消防报警联动测试每季度一次",
+      "tags": ["消防安全"]
+    },
+    {
+      "content": "判断题-D6-配电箱月度巡检记录完整",
+      "tags": ["设备", "电气"]
+    },
+    {
+      "content": "判断题-D6-应急演练评估报告已归档",
+      "tags": ["设备维护", "应急处置"]
+    },
+    {
+      "content": "判断题-D6-新员工安全培训考核已通过",
+      "tags": ["消防安全", "安全培训", "safety"]
+    },
+    {
+      "content": "判断题-D6-高处作业审批手续齐全",
+      "tags": ["应急", "基础", "equipment", "PPE"]
+    },
+    {
+      "content": "判断题-D6-设备维护保养计划已批准",
+      "tags": ["设备维护", "电气", "应急处置", "安全", "safety"]
+    },
+    {
+      "content": "判断题-D6-综合安全大检查结果合格",
+      "tags": ["消防安全", "设备", "安全培训", "PPE", "equipment", "应急"]
+    }
+  ],
+  "fixtureSearchTerm": "D6",
+  "injection": "addInitScript <style> — D2 baseline block (both arms) + tag-badge font-weight on both owner blocks (the only cross-arm difference)"
+}
