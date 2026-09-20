@@ -24,6 +24,12 @@ Both sheets label pairs only as **Variant X / Variant Y**. The X↔px assignment
 | `artifacts/run-manifest.json` | Run id, surfaces, viewports, injection method (no px values). |
 | `artifacts/progress.log` | Harness progress lines (letters only). |
 
+## Post-adjudication
+
+| Artifact | Content |
+| --- | --- |
+| `06-d2-unblind-freeze.md` | Reviewer verdicts (PASS-1 X HIGH, PASS-2 UPHOLD X HIGH), unblinding (`X = 15px`, `Y = 14px`), `D2 FINAL = 15px`, blinding-discipline note. `variant-map.json` is unblinded by definition from this point. |
+
 ## Capture matrix (24 contexts)
 
 | Surface | 1440×900 | 1100×800 | Micro (1440) |
