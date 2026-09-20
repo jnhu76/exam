@@ -1,0 +1,16 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T12:21:53.564Z",
+  "d2CommonBaseline": {
+    "declared": "15px body/control tier in BOTH arms (upstream D2 freeze)",
+    "pass": true,
+    "completePairs": 48,
+    "violations": []
+  },
+  "d4FrozenUpstream": {
+    "declared": "13px/20px/500 governed table header in BOTH arms (upstream D4 freeze, as-built)",
+    "pass": true,
+    "completePairs": 13,
+    "violations": []
+  }
+}

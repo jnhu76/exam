@@ -1,0 +1,2031 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-20T12:21:53.564Z",
+  "note": "Letters only; no px mapping. Row growth from the badge height is recorded evidence, never repaired.",
+  "perVariant": [
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 9,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 9,
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "grading-queue",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 3,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48],
+          "visibleRowCount": 3,
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 9,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 9,
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "grading-queue",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 3,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48],
+          "visibleRowCount": 3,
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "exam-list",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 9,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 9,
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "grading-queue",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 3,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48],
+          "visibleRowCount": 3,
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "exam-list",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 9,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 9,
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "grading-queue",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 3,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48],
+          "visibleRowCount": 3,
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "recovery-queue",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 7,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1193,
+          "overflowing": "true",
+          "scrollEnd": "false",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": false,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1457
+        }
+      ]
+    },
+    {
+      "surface": "recovery-queue",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 7,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 1193,
+          "overflowing": "true",
+          "scrollEnd": "false",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": false,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1281
+        }
+      ]
+    },
+    {
+      "surface": "recovery-queue",
+      "variant": "X",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 7,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "standard",
+          "clientWidth": 989,
+          "scrollWidth": 1193,
+          "overflowing": "true",
+          "scrollEnd": "false",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": false,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1209
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 5,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 5,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "scores",
+      "variant": "X",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 3,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48],
+          "visibleRowCount": 3,
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "scores",
+      "variant": "X",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 3,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48],
+          "visibleRowCount": 3,
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "recovery-queue",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 7,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1193,
+          "overflowing": "true",
+          "scrollEnd": "false",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": false,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1457
+        }
+      ]
+    },
+    {
+      "surface": "recovery-queue",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 7,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 1193,
+          "overflowing": "true",
+          "scrollEnd": "false",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": false,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1281
+        }
+      ]
+    },
+    {
+      "surface": "recovery-queue",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1023,
+      "docClientWidth": 1023,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 7,
+      "tables": [
+        {
+          "archetype": "log-diagnostic",
+          "tier": "standard",
+          "clientWidth": 989,
+          "scrollWidth": 1193,
+          "overflowing": "true",
+          "scrollEnd": "false",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 6,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 7,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": false,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1209
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 5,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "users",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 5,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48, 48, 48],
+          "visibleRowCount": 5,
+          "lastCellRight": 1067
+        }
+      ]
+    },
+    {
+      "surface": "scores",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1440,
+      "docClientWidth": 1440,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 3,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "standard",
+          "clientWidth": 1142,
+          "scrollWidth": 1142,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48],
+          "visibleRowCount": 3,
+          "lastCellRight": 1407
+        }
+      ]
+    },
+    {
+      "surface": "scores",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "docHorizontalOverflow": false,
+      "docScrollWidth": 1100,
+      "docClientWidth": 1100,
+      "governedShellCount": 1,
+      "renderedBadgeCount": 3,
+      "tables": [
+        {
+          "archetype": "management-list",
+          "tier": "compact",
+          "clientWidth": 978,
+          "scrollWidth": 978,
+          "overflowing": "false",
+          "scrollEnd": "true",
+          "headerRowHeight": 44,
+          "headerCells": [
+            {
+              "index": 0,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 1,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 2,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 3,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 4,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            },
+            {
+              "index": 5,
+              "clientHeight": 44,
+              "textLines": 1,
+              "wrapped": false,
+              "clipped": false,
+              "textOverflow": "clip"
+            }
+          ],
+          "columnAlignmentMaxDeltaPx": 0,
+          "actionColumnReachable": true,
+          "firstRowsHeight": [48, 48, 48],
+          "visibleRowCount": 3,
+          "lastCellRight": 1067
+        }
+      ]
+    }
+  ],
+  "pairwise": [
+    {
+      "key": "exam-list@1440x900",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 9,
+      "visibleRowCountY": 9,
+      "renderedBadgeCountX": 9,
+      "renderedBadgeCountY": 9
+    },
+    {
+      "key": "grading-queue@1440x900",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 3,
+      "visibleRowCountY": 3,
+      "renderedBadgeCountX": 3,
+      "renderedBadgeCountY": 3
+    },
+    {
+      "key": "exam-list@1100x800",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 9,
+      "visibleRowCountY": 9,
+      "renderedBadgeCountX": 9,
+      "renderedBadgeCountY": 9
+    },
+    {
+      "key": "grading-queue@1100x800",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 3,
+      "visibleRowCountY": 3,
+      "renderedBadgeCountX": 3,
+      "renderedBadgeCountY": 3
+    },
+    {
+      "key": "recovery-queue@1440x900",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "true",
+      "tableOverflowY": "true",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 5,
+      "visibleRowCountY": 5,
+      "renderedBadgeCountX": 7,
+      "renderedBadgeCountY": 7
+    },
+    {
+      "key": "recovery-queue@1100x800",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "true",
+      "tableOverflowY": "true",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 5,
+      "visibleRowCountY": 5,
+      "renderedBadgeCountX": 7,
+      "renderedBadgeCountY": 7
+    },
+    {
+      "key": "recovery-queue@1023x800",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "true",
+      "tableOverflowY": "true",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 5,
+      "visibleRowCountY": 5,
+      "renderedBadgeCountX": 7,
+      "renderedBadgeCountY": 7
+    },
+    {
+      "key": "users@1440x900",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 5,
+      "visibleRowCountY": 5,
+      "renderedBadgeCountX": 5,
+      "renderedBadgeCountY": 5
+    },
+    {
+      "key": "users@1100x800",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 5,
+      "visibleRowCountY": 5,
+      "renderedBadgeCountX": 5,
+      "renderedBadgeCountY": 5
+    },
+    {
+      "key": "scores@1440x900",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 3,
+      "visibleRowCountY": 3,
+      "renderedBadgeCountX": 3,
+      "renderedBadgeCountY": 3
+    },
+    {
+      "key": "scores@1100x800",
+      "rowHeightsIdentical": true,
+      "rowHeightDeltas": [0, 0, 0],
+      "headerRowHeightX": 44,
+      "headerRowHeightY": 44,
+      "wrappedHeadersX": 0,
+      "wrappedHeadersY": 0,
+      "clippedHeadersX": 0,
+      "clippedHeadersY": 0,
+      "alignmentMaxDeltaX": 0,
+      "alignmentMaxDeltaY": 0,
+      "tableOverflowX": "false",
+      "tableOverflowY": "false",
+      "docOverflowX": false,
+      "docOverflowY": false,
+      "clientWidthDelta": 0,
+      "lastCellRightDelta": 0,
+      "visibleRowCountX": 3,
+      "visibleRowCountY": 3,
+      "renderedBadgeCountX": 3,
+      "renderedBadgeCountY": 3
+    }
+  ],
+  "representationChanges": []
+}
