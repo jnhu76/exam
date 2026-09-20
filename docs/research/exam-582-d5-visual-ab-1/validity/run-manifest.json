@@ -1,0 +1,51 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE. Mapping: validity/variant-map.json.",
+  "runId": "d5-1789906820604",
+  "issue": 582,
+  "variable": "D5",
+  "question": "StatusBadge physical height, judged against the frozen upstream D2 (15px body/control) and D4 (13px/20px/500 table header) baselines",
+  "variants": ["X", "Y"],
+  "mapFileRef": "docs/research/exam-582-d5-visual-ab-1/validity/variant-map.json",
+  "frozenConstants": {
+    "badgeTypography": "12px / 500 / 16px line-height (product values, not injected)",
+    "badgePaddingGap": "8px inline padding, 6px gap (product values, not injected)",
+    "badgeRadiusBorder": "6px radius, 1px border (product values, not injected)",
+    "bodyControlBaseline": "15px (common D2 block injected in BOTH arms)",
+    "tableHeaderBaseline": "13px/20px/500 (upstream D4 as-built, verified per capture)"
+  },
+  "baseUrl": "http://localhost:3001",
+  "startedAt": "2026-09-20T12:21:11.409Z",
+  "viewports": [
+    {
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "name": "1100x800",
+      "width": 1100,
+      "height": 800
+    },
+    {
+      "name": "1023x800",
+      "width": 1023,
+      "height": 800
+    }
+  ],
+  "surfaces": [
+    "exam-list",
+    "grading-queue",
+    "recovery-queue",
+    "users",
+    "scores",
+    "questions"
+  ],
+  "judgedSurfaces": [
+    "exam-list",
+    "grading-queue",
+    "recovery-queue",
+    "users",
+    "scores"
+  ],
+  "injection": "addInitScript <style> — D2 baseline block (both arms) + status-badge height (the only cross-arm difference)"
+}
