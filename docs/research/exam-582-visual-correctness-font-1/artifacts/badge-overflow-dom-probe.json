@@ -1,0 +1,44 @@
+{
+  "probedAt": "2026-09-20T00:26:59.415Z",
+  "viewport": "1440x900",
+  "results": [
+    {
+      "route": "/admin/users",
+      "probe": {
+        "found": true,
+        "selector": "[data-slot=\"admin-table-shell\"] [data-slot=\"badge\"]",
+        "text": "考试管理员",
+        "badge": {
+          "x": 1103,
+          "right": 1181,
+          "width": 78
+        },
+        "cellRight": 1174.5,
+        "cellWidth": 88,
+        "badgeOverflowsCell": true,
+        "overflowPx": 6.5,
+        "gapToAdjacentCellStart": -6.5,
+        "adjacentCellText": "已启用"
+      }
+    },
+    {
+      "route": "/admin/audit-logs",
+      "probe": {
+        "found": true,
+        "selector": "[data-slot=\"admin-table-shell\"] span.bg-primary-soft",
+        "text": "分配课程教师",
+        "badge": {
+          "x": 1127,
+          "right": 1215,
+          "width": 88
+        },
+        "cellRight": 1198.5,
+        "cellWidth": 88,
+        "badgeOverflowsCell": true,
+        "overflowPx": 16.5,
+        "gapToAdjacentCellStart": -16.5,
+        "adjacentCellText": "course"
+      }
+    }
+  ]
+}
