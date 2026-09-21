@@ -141,15 +141,8 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).toMatch(
       /\[data-column-role="number"\]\s+\{[^}]*width:\s*4\.5rem/,
     );
-    // type/date-range are vocabulary-bound tokens derived by typeFixture and
-    // the date-range grammar measurement (issue #590); the guards pin the
-    // recipes values to those derivations.
-    expect(tableCss).toMatch(
-      /\[data-column-role="type"\]\s+\{[^}]*width:\s*7\.25rem/,
-    );
-    expect(tableCss).toMatch(
-      /\[data-column-role="date-range"\]\s+\{[^}]*width:\s*14\.5rem/,
-    );
+    // type/date-range are vocabulary-bound tokens; their derived values are
+    // pinned once, by table-contract-guards.test.ts (issue #590 owner).
   });
 
   it("defines restrained row hover, focus, and selected states", () => {

@@ -6,7 +6,9 @@ the #582 visual freeze. Task `EXAM-590-DENSE-TABLE-CELL-FITTING-1`.
 ```text
 BASE_SHA            df5d1ad5beb6b6cfd7df2fdfa9a749ca16afca64 (authoritative starting master)
 IMPLEMENTATION      fix/590-dense-table-cell-fitting-1 (recipes tokens + derivation fixture + guards)
-E2E REGRESSION      apps/e2e/e2e/dense-table-cell-fitting.spec.ts (8 tests, permanent)
+E2E REGRESSION      apps/e2e/e2e/dense-table-cell-fitting.spec.ts (2 tests, permanent:
+                    the two historical defects only; the width derivations are
+                    owned by typeFixture.ts + table-contract-guards.test.ts)
 BEFORE ARTIFACT     users-before*.png / exams-before*.png (native-pixel captures from a
                     fresh production web build of pre-fix master df5d1ad5, re-verified
                     2026-09-22 at head 271da5b1 — see corrective section below)
@@ -28,8 +30,9 @@ CROWDED_BUT_CONTAINED recovery relation 1 条关联 (/admin/recovery)
 CROWDED_BUT_CONTAINED long datetime (/admin/audit-logs)
 NO_DEFECT             2-tag cluster (/admin/questions)
 COVERAGE GAP          3+ tag cluster / +N chip (no canonical-seed instance; the
-                      new spec closes the 2-tag case deterministically via the
-                      question PATCH API)
+                      2-tag case was exercised deterministically during the
+                      task via the question PATCH API — recorded evidence
+                      only, no permanent test; see test-slim round)
 ```
 
 Only the two CROSS_CELL_BOUNDARY cases are production defects under #590. The
@@ -78,8 +81,8 @@ which the negative-control test pins.
   slack = 232px. Exactly one consumer app-wide (ExamPage timeWindow); exams
   Σmin 928 → 960 stays under the 978px container at 1100 → no new local scroll
   at the pinned widths.
-- **relation / datetime / 2-tag cluster — no production change**; permanent
-  containment tests only.
+- **relation / datetime / 2-tag cluster — no production change**; recorded as
+  one-off negative-control evidence (this directory), no permanent tests.
 
 Rejected alternatives: page-local width overrides (second allocation truth),
 presenter truncation (contract-illegal for nowrap roles; identity-critical
@@ -106,7 +109,9 @@ document          documentElement.scrollWidth == clientWidth on all tested
 header/body       column edges aligned (drift ≤ 1px) on all tested surfaces
 RowActions        reachable, not clipped
 frozen #582       D2 cell 15px, D4 head 13px/20px/500, D5 StatusBadge 22px,
-                  D6 TagBadge weight 500 — asserted at runtime by the spec
+                  D6 TagBadge weight 500 — owned by their #582 canonical tests
+                  (visual-finish.test.ts D2/D4, StatusBadge.test.tsx D5,
+                  badge/tagBadgeOwnership.test.tsx D6)
 ```
 
 ## Known narrow local-scroll bands (accepted, disclosed)
@@ -115,8 +120,12 @@ The +28px/+32px locked-column growth raises content minima: /admin/questions
 enters the shell's designed local-scroll band for viewports ≈1024–1045 and
 /admin/exams for ≈1050–1081 (both previously fit). Inside the band the local
 scroll region + fade/hint affordance own the overflow exactly as designed;
-document-level overflow stays clean. The spec now includes an in-band guard
-(exams @1065) asserting containment + clean document + the owned affordance.
+document-level overflow stays clean. That in-band behavior is NOT issue-
+specific: overflow ownership, the scroll affordance, and document-level
+cleanliness are the shell's generic contract, permanently owned by
+shared.test.tsx and useOverflowObservation.test.tsx. An issue-specific
+@1065 guard existed briefly and was removed in the test-slim round —
+1065 is arithmetic fallout of the +32px token, not a product contract.
 
 ## Follow-ups (outside #590's proven scope, recorded not fixed)
 
@@ -131,15 +140,18 @@ document-level overflow stays clean. The spec now includes an in-band guard
   border-subtracting arithmetic (statusFixture, guards) uses 103px —
   pre-existing comment inconsistency, recorded here only.
 - recovery relation containment has zero margin; any future widening pressure
-  on the `number` role must re-derive it (the negative-control test will red).
+  on the `number` role must re-derive it; re-run the recorded runtime probe
+  (no permanent test after the slim round — see test-slim section).
 
 ## Verification
 
 ```text
-structural      visual-finish.test.ts + table-contract-guards.test.ts  26/26
-e2e geometry    dense-table-cell-fitting.spec.ts                       8/8
-                (pre-fix on master: 5 failed / 2 passed — red reproduced;
-                 re-run 8/8 twice at 271da5b1 during the corrective round)
+structural      visual-finish.test.ts + table-contract-guards.test.ts  PASS
+e2e geometry    dense-table-cell-fitting.spec.ts                       2/2
+                (permanent shape since the test-slim round; history: the
+                 implementation ran 8 tests — pre-fix on master 5 failed /
+                 2 passed red, 8/8 at implementation, 8/8 twice more at
+                 271da5b1 during the corrective round)
 static          pnpm verify:static                                     PASS
 full gate       pnpm verify                                            PASS
 adversarial     SUBAGENT_D_ADVERSARIAL_VERDICT: MINOR (no blockers)
@@ -177,6 +189,32 @@ geometry, no stacking/paint defect exists.
 ```text
 ROOT_CAUSE            ALLOCATION (confirmed; PAINT ruled out)
 PRODUCTION DIFF since 271da5b1   NONE (evidence + docs only)
+```
+
+## Test-slim round (EXAM-590-TEST-SLIM-1)
+
+The permanent regression surface was reduced to the load-bearing minimum
+(one invariant → one owner). The permanent E2E contract is now exactly the
+two historical defects, at one desktop viewport (1440x900, the evidence-
+anchored representative; locked columns never reflow under fixed layout, so
+the mechanism is viewport-independent). Everything else moved to its
+existing owner or stays as recorded evidence here:
+
+```text
+KEPT   users pill + exams date-range containment (runtime defect owner)
+KEPT   typeFixture + table-contract-guards (derivation owner; also the
+       single owner of the recipes token values — the value pins in
+       visual-finish.test.ts's locked-tier roster were removed as a
+       duplicate)
+MOVED  D2/D4 → visual-finish.test.ts; D5 → StatusBadge.test.tsx;
+       D6 → badge/tagBadgeOwnership.test.tsx (all pre-existing #582 owners)
+MOVED  overflow ownership, scroll affordance, document cleanliness →
+       shared.test.tsx + useOverflowObservation.test.tsx (generic shell
+       contract; the @1065 guard was removed — 1065 is not a contract)
+MOVED  header/body alignment → structural owner visual-finish.test.ts
+       (fixed layout + border-collapse pins)
+EVIDENCE ONLY  relation 1 条关联, long datetime, 2-tag cluster, RowActions
+       reachability, single-line row rhythm (probe results recorded above)
 ```
 
 ## Artifact
