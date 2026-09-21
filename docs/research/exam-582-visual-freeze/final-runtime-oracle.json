@@ -1,0 +1,221 @@
+{
+  "task": "EXAM-582-FINAL-RUNTIME-VISUAL-BASELINE-1",
+  "masterSha": "144d212fb5dec77d10acea5170b6362d90e7762a",
+  "campaignStatus": "FINAL_RUNTIME_BASELINE_PENDING_REVIEW",
+  "environment": {
+    "browser": "chromium 149.0.7827.55 (Playwright 1.61.0)",
+    "viewports": ["1440x900", "1100x800", "1023x800"],
+    "dpr": 1,
+    "zoom": "100%",
+    "theme": "light",
+    "locale": "zh-CN",
+    "font": "production HarmonyOS Sans SC path (/fonts/harmonyos-sans-sc/)",
+    "seed": "canonical E2E seed (apps/api e2e-seed.ts, reset:true) on exam_e2e @ localhost:5432, APP_MODE=e2e, API dev server :3000 serving built web dist"
+  },
+  "D2": {
+    "type-page-description": {
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "fontWeight": "400"
+    },
+    "type-body": {
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "fontWeight": "400"
+    },
+    "type-secondary": {
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "fontWeight": "400"
+    },
+    "type-long-response": {
+      "staticOwner": "apps/web/src/typography/recipes.css 0.9375rem = 15px",
+      "runtime": "GAP — grading queue empty under canonical seed; no product surface renders the recipe in this run"
+    },
+    "table-cell": {
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "fontWeight": "400"
+    }
+  },
+  "D3": {
+    "input": { "borderRadius": "6px" },
+    "selectTrigger": { "borderRadius": "6px" },
+    "textarea": { "borderRadius": "6px" },
+    "buttonFamily": {
+      "borderRadius": "6px",
+      "sampledVariants": [
+        "default",
+        "primary",
+        "outline",
+        "secondary",
+        "ghost"
+      ],
+      "sampledSurfaces": [
+        "login",
+        "exams toolbar",
+        "question form",
+        "users create dialog",
+        "alert dialog footer"
+      ]
+    },
+    "alertDialogSlots": {
+      "trigger": {
+        "borderRadius": "6px",
+        "note": "row-action trigger keeps data-slot=button (Radix Slot), 6px"
+      },
+      "cancel": { "borderRadius": "6px" },
+      "action": { "borderRadius": "6px" },
+      "note": "rendered via Button asChild Slot composition; family is 6px, not 8px"
+    }
+  },
+  "D4": {
+    "fontSize": "13px",
+    "lineHeight": "20px",
+    "fontWeight": "500",
+    "verdict": "FROZEN_AS_BUILT",
+    "ownerDiffVsPre595": "UNCHANGED ([data-slot=table-head] block untouched by #595)"
+  },
+  "D5": {
+    "height": "22px",
+    "borderRadius": "6px",
+    "fontSize": "12px",
+    "verdict": "FROZEN_AS_BUILT",
+    "ownerDiffVsPre595": "UNCHANGED (status-badge blocks untouched by #595)"
+  },
+  "D6": {
+    "compactTable": {
+      "instanceCount": 20,
+      "fontWeight": "500",
+      "fontSize": "12px",
+      "lineHeight": "18px",
+      "minRenderedWidthPx": 35,
+      "maxRenderedWidthPx": 81
+    },
+    "defaultVariant": "GAP (carried forward) — no real product consumer of the default variant exists on master; none fabricated"
+  },
+  "D7": {
+    "dialogContent": {
+      "background": "rgb(255, 255, 255)",
+      "resolvedToken": "var(--surface)",
+      "borderRadius": "8px",
+      "border": "1px solid rgb(223, 227, 232)"
+    },
+    "alertDialogContent": {
+      "background": "rgb(255, 255, 255)",
+      "resolvedToken": "var(--surface)",
+      "borderRadius": "8px"
+    },
+    "sheetContent": {
+      "background": "rgb(255, 255, 255)",
+      "resolvedToken": "var(--surface)",
+      "borderRadius": "0px",
+      "panelEdge": "left, 1px border"
+    },
+    "smallOverlays": {
+      "dropdownMenuContent": {
+        "background": "rgb(255, 255, 255)",
+        "borderRadius": "6px"
+      },
+      "selectContent": {
+        "background": "rgb(255, 255, 255)",
+        "borderRadius": "8px"
+      },
+      "note": "base-overlay contract retained; family single-tier on background, differentiated by radius/shadow/edge as-built"
+    }
+  },
+  "overlayDimmer": {
+    "dialog": "oklab(0 0 0 / 0.5)",
+    "alertDialog": "oklab(0 0 0 / 0.5)",
+    "sheet": "oklab(0 0 0 / 0.5)",
+    "verdict": "black/50% equivalent, UNCHANGED"
+  },
+  "font": {
+    "loaded": "YES",
+    "expectedFaces": { "400": true, "500": true },
+    "bodyFamily": "\"HarmonyOS Sans SC\", \"Noto Sans CJK SC\", \"Noto Sans SC\", …",
+    "runtimeFallbackAnomaly": "NONE"
+  },
+  "issue590Observations": [
+    {
+      "id": "role-pill",
+      "route": "/admin/users",
+      "viewport": "1440x900",
+      "cell": "[data-column-role=type] (locked 5.5rem)",
+      "content": "考试管理员 (Admin role pill)",
+      "cellClientWidth": 88,
+      "contentWidth": 78,
+      "cellPaddingInline": "16px",
+      "wrapCount": 1,
+      "neighborIntersection": true,
+      "spillIntoNextCellPx": 6.5,
+      "classification": "CROSS_CELL_BOUNDARY",
+      "note": "pill crosses the 角色/状态 shared border into the neighbor cell's padding zone; no glyph collision (已启用 badge starts further in). 4 of 4 exam rows on /admin/exams show the analogous date-range crossing below."
+    },
+    {
+      "id": "date-range",
+      "route": "/admin/exams",
+      "viewport": "1440x900 and 1100x800 (identical)",
+      "cell": "[data-column-role=date-range] (locked 12.5rem, white-space:nowrap)",
+      "content": "2026-09-14 — 2026-09-20 (and 3 more rows)",
+      "cellClientWidth": 199,
+      "contentWidth": 195,
+      "wrapCount": 1,
+      "neighborIntersection": true,
+      "spillIntoNextCellPx": 11.5,
+      "classification": "CROSS_CELL_BOUNDARY",
+      "note": "all 4 exam rows spill 11.5px into the 时长 column padding; no glyph collision with 时长 text"
+    },
+    {
+      "id": "relation-count",
+      "route": "/admin/recovery",
+      "viewport": "1440x900",
+      "cell": "[data-column-role=number] (locked 4.5rem)",
+      "content": "1 条关联",
+      "cellClientWidth": 71,
+      "contentWidth": 72,
+      "wrapCount": 1,
+      "neighborIntersection": false,
+      "classification": "CROWDED_BUT_CONTAINED"
+    },
+    {
+      "id": "long-datetime",
+      "route": "/admin/recovery + /admin/audit-logs",
+      "viewport": "1440x900",
+      "cell": "[data-column-role=date] (locked 10.5rem)",
+      "content": "2026-09-21 19:58:03 / 19:45:43",
+      "cellClientWidth": 168,
+      "contentWidth": 168,
+      "wrapCount": 1,
+      "neighborIntersection": false,
+      "classification": "CROWDED_BUT_CONTAINED"
+    },
+    {
+      "id": "tag-cluster",
+      "route": "/admin/questions",
+      "viewport": "1440x900",
+      "cell": "[data-column-role=tag-list] (flexible, min 10rem)",
+      "content": "2-tag clusters (safety+equipment, skill+procedure, …)",
+      "cellClientWidth": 268,
+      "contentWidth": 235.7,
+      "wrapCount": 1,
+      "neighborIntersection": false,
+      "classification": "NO_DEFECT",
+      "coverageGap": "canonical seed contains no 3+ tag cluster and no +N overflow chip instance; not fabricated"
+    }
+  ],
+  "newRegressions": "NONE",
+  "knownPreexisting": [
+    {
+      "id": "destructive-confirm-palette",
+      "surface": "/admin/courses row delete → AlertDialog action",
+      "observation": "confirm button renders bg-primary (default variant blue) at runtime despite confirm.destructive=true; caused by Button-asChild Slot variant composition in ConfirmDialog/AlertDialogAction, predates #595 (#595 changed radius classes only)",
+      "classification": "KNOWN_PREEXISTING",
+      "disposition": "recorded separately per baseline contract §B8; not fixed"
+    }
+  ],
+  "evidence": {
+    "contactSheet": "final-baseline-contact-sheet.png",
+    "microSheet": "final-baseline-table-micro.png"
+  }
+}
