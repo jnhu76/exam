@@ -13,8 +13,8 @@ import { TagBadge } from "@/components/shared/TagBadge";
  * a SECOND conflicting block in table/workbench.css that won by specificity
  * inside the Question Management tag columns. After: one recipe file owns
  * both variants; the component declares the variant explicitly; the
- * workbench.css override is gone. The 400-vs-500 weight is a deferred visual
- * decision — the recipe records the current 400 without judging it.
+ * workbench.css override is gone. The weight was adjudicated as 500 by the
+ * frozen issue 582 visual decisions (D6) — both variants pinned together.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -43,12 +43,12 @@ function extractRule(css: string, selector: string): string {
 }
 
 describe("TagBadge variant ownership is explicit and singular (R5)", () => {
-  it("badge/recipes.css owns the base contract including weight 400", () => {
+  it("badge/recipes.css owns the base contract including weight 500", () => {
     const rule = extractRule(BADGE_RECIPES, '[data-slot="tag-badge"]');
     expect(rule).toContain("height: 1.375rem");
     expect(rule).toContain("border-radius: 0.25rem");
     expect(rule).toContain("font-size: 0.75rem");
-    expect(rule).toContain("font-weight: 400");
+    expect(rule).toContain("font-weight: 500");
     expect(rule).toContain("line-height: 1rem");
   });
 
@@ -60,7 +60,7 @@ describe("TagBadge variant ownership is explicit and singular (R5)", () => {
     expect(rule).toContain("border-radius: 0.1875rem");
     expect(rule).toContain("line-height: 1.125rem");
     expect(rule).toContain("color: var(--text-muted)");
-    expect(rule).toContain("font-weight: 400");
+    expect(rule).toContain("font-weight: 500");
   });
 
   it("workbench.css no longer carries a second tag-badge authority", () => {

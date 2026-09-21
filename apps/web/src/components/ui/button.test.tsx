@@ -44,6 +44,29 @@ describe("Button", () => {
     );
   });
 
+  it("renders the 6px primary-control radius across the whole size family (issue 582 D3)", () => {
+    // rounded-md resolves to --radius-md (0.375rem = 6px) in the Tailwind
+    // build. D3 froze the entire Button family — base plus every size that
+    // declares its own radius — at 6px, matching Input/SelectTrigger/Textarea.
+    const { rerender } = render(<Button>默认</Button>);
+    expect(screen.getByRole("button", { name: "默认" })).toHaveClass(
+      "rounded-md",
+    );
+    expect(screen.getByRole("button", { name: "默认" })).not.toHaveClass(
+      "rounded-lg",
+    );
+
+    for (const size of ["xs", "sm", "lg", "icon", "icon-xs"] as const) {
+      rerender(<Button size={size}>按钮</Button>);
+      expect(screen.getByRole("button", { name: "按钮" })).toHaveClass(
+        "rounded-md",
+      );
+      expect(screen.getByRole("button", { name: "按钮" })).not.toHaveClass(
+        "rounded-lg",
+      );
+    }
+  });
+
   it("defaults to type button to avoid accidental form submit", async () => {
     const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();

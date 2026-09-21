@@ -9,10 +9,10 @@ import { describe, expect, it } from "vitest";
  * surface-overlay (+ its variants) is the single owner of the floating-layer
  * appearance (background / border / radius / elevation). The shadcn overlay
  * primitives must CONSUME it, not compose their own bg-popover/bg-background
- * + rounded-* + shadow-* stacks. The variant values preserve the current
- * runtime population byte-for-byte — the grey-vs-white modal surface and the
- * 6/8 radius split stay deferred visual decisions (issue 577 D3/D7); a unification
- * must edit the variants here, not re-scatter utilities into the primitives.
+ * + rounded-* + shadow-* stacks. Modal/panel render the content-tier
+ * var(--surface) background per the frozen issue 582 visual decisions (D7); the
+ * 6/8 overlay radius split stays as-built. A change to the family must edit
+ * the variants here, not re-scatter utilities into the primitives.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -76,22 +76,24 @@ describe("surface-overlay family owns the floating-layer appearance", () => {
     expect(rule).toContain(SHADOW_LG);
   });
 
-  it("modal variant keeps dialogs grey + 8px + lg (deferred D7 choice)", () => {
+  it("modal variant renders the content-tier surface + 8px + lg (issue 582 D7)", () => {
     const rule = extractRule(
       RECIPES_CSS,
       '.surface-overlay[data-overlay-variant="modal"]',
     );
-    expect(rule).toContain("background: var(--bg)");
+    expect(rule).toContain("background: var(--surface)");
+    expect(rule).not.toContain("background: var(--bg)");
     expect(rule).toContain("border-radius: var(--radius)");
     expect(rule).toContain(SHADOW_LG);
   });
 
-  it("panel variant zeroes radius/border and owns exactly one edge per side", () => {
+  it("panel variant renders the content-tier surface, zeroed radius/border, one edge per side (issue 582 D7)", () => {
     const rule = extractRule(
       RECIPES_CSS,
       '.surface-overlay[data-overlay-variant="panel"]',
     );
-    expect(rule).toContain("background: var(--bg)");
+    expect(rule).toContain("background: var(--surface)");
+    expect(rule).not.toContain("background: var(--bg)");
     expect(rule).toContain("border: 0");
     expect(rule).toContain("border-radius: 0");
     for (const edge of ["left", "right", "top", "bottom"]) {

@@ -69,6 +69,26 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
+  it("pins the governed table typography (issue 582 D2 + D4)", () => {
+    // D2: governed cells converge UP to the 15px body/control tier.
+    // D4 (frozen, KEEP AS-BUILT): the header stays 13px / 20px / weight 500.
+    expect(tableCss).toMatch(
+      /\[data-slot="table-head"\]\s*\{[^}]*font-size:\s*0\.8125rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-slot="table-head"\]\s*\{[^}]*line-height:\s*1\.25rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-slot="table-head"\]\s*\{[^}]*font-weight:\s*500/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-slot="table-cell"\]\s*\{[^}]*font-size:\s*0\.9375rem/,
+    );
+    expect(tableCss).not.toMatch(
+      /\[data-slot="table-cell"\]\s*\{[^}]*font-size:\s*0\.875rem/,
+    );
+  });
+
   it("enforces fixed layout + collapsed borders in tier-governed shells only", () => {
     // Fixed layout makes <col> widths authoritative (root cause fix for
     // candidate-fields horizontal scroll + users header/body misalign).

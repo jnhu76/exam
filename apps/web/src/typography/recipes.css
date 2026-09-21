@@ -46,7 +46,7 @@
 /* page-description: subtitle/lede directly under a page or section title. */
 .type-page-description {
   font-family: var(--font-ui);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   line-height: 1.375rem;
   font-weight: 400;
   color: var(--text-muted);
@@ -61,19 +61,20 @@
   color: var(--text);
 }
 
-/* body: 14px / 400. Default running UI text. */
+/* body: 15px / 400. Default running UI text (issue-582 D2: converged up to the
+ * 15px text-sm control tier; metadata/badges keep their own smaller tiers). */
 .type-body {
   font-family: var(--font-ui);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   line-height: 1.375rem;
   font-weight: 400;
   color: var(--text);
 }
 
-/* secondary: 14px / 400. De-emphasized running text (descriptive, not factual). */
+/* secondary: 15px / 400. De-emphasized running text (descriptive, not factual). */
 .type-secondary {
   font-family: var(--font-ui);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   line-height: 1.375rem;
   font-weight: 400;
   color: var(--text-muted);
@@ -100,7 +101,7 @@
 /* long-response: read-only long candidate/source text, may wrap many lines. */
 .type-long-response {
   font-family: var(--font-reading);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   line-height: 1.625rem;
   font-weight: 400;
   color: var(--text);

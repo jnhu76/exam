@@ -1,4 +1,7 @@
 import { render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { StatusBadge } from "./StatusBadge";
 
@@ -57,5 +60,18 @@ describe("StatusBadge", () => {
     expect(badge).toHaveAttribute("data-status-geometry", "compact");
     expect(badge).toHaveClass("border");
     expect(badge).not.toHaveClass("rounded-full");
+  });
+
+  it("keeps the frozen 22px badge height in its recipe owner (issue 582 D5)", () => {
+    // D5 is a KEEP-AS-BUILT decision: badge/recipes.css owns the governed
+    // height (1.375rem = 22px) and the component must not re-declare it.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const badgeRecipes = readFileSync(
+      join(here, "..", "..", "badge", "recipes.css"),
+      "utf8",
+    );
+    expect(badgeRecipes).toMatch(
+      /\[data-slot="status-badge"\]\s*\{[^}]*height:\s*1\.375rem/,
+    );
   });
 });

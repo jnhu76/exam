@@ -105,14 +105,14 @@ titles use 500 (medium); 700 is reserved for large numeric metrics only.
 | Role | Contract |
 | --- | --- |
 | page title | 24/32, 500 |
-| page description | 14/22, 400, muted |
+| page description | 15/22, 400, muted |
 | section title | 16/24, 500 |
-| body | PENDING_VISUAL_A_B: `type-body`/`type-secondary` recipes are 14/22; the Tailwind `text-sm` token used by inputs/buttons currently renders 15/22.5 (current runtime, decision D2 open) |
-| emphasized cell | 14/22, 500 |
-| table header | PENDING_VISUAL_A_B: recipe renders 13/20/500 today (decision D4 open) |
+| body | 15/22, 400 (issue 582 D2: `type-body`/`type-secondary` render the same 15px as the Tailwind `text-sm` control tier) |
+| emphasized cell | 15/22, 500 |
+| table header | 13/20, 500 (issue 582 D4: frozen as-built) |
 | metadata | 12/18, 400, muted |
 | metric | 28/34, 700, tabular numbers |
-| button/label | follows `text-sm` → current runtime 15/22.5, 500 (bound to D2) |
+| button/label | follows `text-sm` → 15/22.5, 500 |
 
 Business pages select `type-*` recipes. They do not invent page-local font
 families, arbitrary sizes, fractional typography, or opacity-weakened text.
@@ -120,8 +120,8 @@ Numeric scores, counts, durations, dates, and percentages use tabular numbers.
 
 ## Geometry and elevation
 
-- Base radius: 8px. PENDING_VISUAL_A_B: the control family currently renders
-  Buttons at 8px and Input/Select/Textarea at 6px (decision D3 open).
+- Base radius: 8px. The primary control family (Button, Input, SelectTrigger,
+  Textarea, AlertDialog trigger/cancel/action) renders 6px (issue 582 D3).
 - Status radius: 6px.
 - Spacing scale: 4, 8, 12, 16, 24, 32.
 - Standard desktop control: 36px.
@@ -186,8 +186,8 @@ VISUAL-DECISION-DISABLED-STATE choice. No third pattern may be introduced.
 
 White surface, strong border, 36px standard height, visible indigo
 focus ring, readable placeholder, and explicit disabled state. Grey-on-grey
-field composition is forbidden. Radius currently renders 6px via the control
-recipe (PENDING_VISUAL_A_B, decision D3 — 6 vs 8).
+field composition is forbidden. Radius renders 6px via the control recipe
+(issue 582 D3: the whole control family is converged at 6px).
 
 ### Card and content surface
 
@@ -213,9 +213,8 @@ and use `RowActions` with accessible button targets.
 
 `statusMeta.ts` owns domain status to tone. `StatusBadge` owns rendering.
 Status badges are compact rectangles with 6px radius, 12/16 text, and soft
-fills; height currently renders 22px (PENDING_VISUAL_A_B, decision D5 —
-22 vs 24). Ordinary statuses are text-first; urgency/live statuses may show
-an icon.
+fills; height is 22px (issue 582 D5: frozen as-built). Ordinary statuses are
+text-first; urgency/live statuses may show an icon.
 
 Generic repeated feedback meaning (saving / saved / warning / error /
 destructive / informational chips, banners, timer wells) is NOT domain
