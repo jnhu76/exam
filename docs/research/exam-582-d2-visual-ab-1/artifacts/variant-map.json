@@ -1,9 +1,0 @@
-{
-  "variable": "D2",
-  "question": "body / control text size (px)",
-  "X": "15",
-  "Y": "14",
-  "generatedBy": "crypto.randomInt(2)",
-  "generatedAt": "2026-09-20T01:23:53.751Z",
-  "note": "Blind A/B mapping for EXAM-582 D2 adjudication. Values are font sizes in px for the body/control text tier. Reviewer-facing artifacts carry only Variant X / Variant Y labels."
-}
