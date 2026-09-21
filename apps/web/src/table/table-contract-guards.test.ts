@@ -35,6 +35,13 @@ import {
   statusColumnContentBoxPx,
   STATUS_COLUMN_TOKEN,
 } from "@/table/statusFixture";
+import {
+  maxTypeBadgeWidth,
+  typeBadgeFixture,
+  TYPE_COLUMN_TOKEN,
+  TYPE_LABEL_NAMESPACES,
+  typeColumnContentBoxPx,
+} from "@/table/typeFixture";
 import i18n, { SUPPORTED_LOCALES } from "@/i18n";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -266,6 +273,61 @@ describe("table contract v2 structural guards", () => {
     // The old 5.5rem magic number is gone.
     expect(tableCss).not.toMatch(
       /\[data-column-role="status"\]\s*\{[^}]*width:\s*5\.5rem/,
+    );
+  });
+
+  it("binds the type column token to the auto-deriving fixture (issue #590)", () => {
+    const rows = typeBadgeFixture();
+    // Full coverage: every enumerated-label family × every supported locale
+    // enters the universe automatically (no hand-copied label list).
+    for (const family of TYPE_LABEL_NAMESPACES) {
+      const familyRows = rows.filter((row) => row.family === family);
+      expect(
+        familyRows.length,
+        `label family ${family} must resolve to a non-empty namespace`,
+      ).toBeGreaterThan(0);
+    }
+    // Every label resolves through i18n in its own locale; a missing copy
+    // resolves to the key path and fails loudly here.
+    for (const row of rows) {
+      expect(
+        row.label.includes(`${row.family}.${row.key}`),
+        `label for ${row.family}.${row.key}@${row.locale} must be resolved copy`,
+      ).toBe(false);
+      expect(
+        row.label,
+        `label for ${row.family}.${row.key}@${row.locale}`,
+      ).not.toBe("");
+    }
+    const max = maxTypeBadgeWidth();
+    const contentBox = typeColumnContentBoxPx();
+    // Frozen invariant (#590): content box ≥ widest badge estimate.
+    expect(max).toBeLessThanOrEqual(contentBox);
+  });
+
+  it("keeps the type token at the derived 7.25rem and the date-range token at the derived 14.5rem in recipes.css", () => {
+    const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
+    expect(TYPE_COLUMN_TOKEN).toBe("7.25rem");
+    expect(tableCss).toMatch(
+      /\[data-column-role="type"\]\s*\{[^}]*width:\s*7\.25rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-column-role="type"\]\s*\{[^}]*min-width:\s*7\.25rem/,
+    );
+    // The pre-#590 magic numbers are gone.
+    expect(tableCss).not.toMatch(
+      /\[data-column-role="type"\]\s*\{[^}]*width:\s*5\.5rem/,
+    );
+    // date-range: the 23-char grammar measured 195.5px at the D2 font; the
+    // 12.5rem token could not contain it (#590 defect B).
+    expect(tableCss).toMatch(
+      /\[data-column-role="date-range"\]\s*\{[^}]*width:\s*14\.5rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-column-role="date-range"\]\s*\{[^}]*min-width:\s*14\.5rem/,
+    );
+    expect(tableCss).not.toMatch(
+      /\[data-column-role="date-range"\]\s*\{[^}]*width:\s*12\.5rem/,
     );
   });
 });
