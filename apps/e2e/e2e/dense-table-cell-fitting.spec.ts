@@ -70,8 +70,10 @@ async function fontMetricsSettled(page: Page): Promise<void> {
 }
 
 /** The core #590 invariant: every matched cell's painted content rect stays
- * inside its owning cell's border box (the shared border itself excluded),
- * not just the first row. */
+ * inside its owning cell's border box (half-px subpixel slack only), not just
+ * the first row. This is border-box containment; the stronger claim — content
+ * must not paint the 1px shared border band — is asserted per defect inside
+ * each test below. */
 async function expectCellsContainContent(
   cells: Locator,
   label: string,
@@ -170,5 +172,33 @@ test.describe("dense table cell fitting (issue #590)", () => {
       .filter({ hasText: "—" });
     await rangeCells.first().waitFor({ state: "visible" });
     await expectCellsContainContent(rangeCells, "date range");
+
+    // The historical defect instance, mirroring the users pill: on every
+    // canonical row the range ink must not paint the 1px shared
+    // 时间窗口/时长 border band, and the duration neighbor must begin
+    // exactly at that shared boundary (guards the measurement against a
+    // degenerate layout). The duration cell is resolved from the range cell
+    // itself via the sibling axis — filter({ has }) resolves its inner
+    // locator per outer row, so an nth()-indexed cell locator cannot be
+    // reused there.
+    const rowCount = await rangeCells.count();
+    for (let i = 0; i < rowCount; i++) {
+      const cell = rangeCells.nth(i);
+      const cellRect = await rectOf(cell);
+      const content = await contentRectOf(cell);
+      const durationRect = await rectOf(
+        cell.locator(
+          'xpath=following-sibling::*[@data-slot="table-cell"][@data-column-role="duration"][1]',
+        ),
+      );
+      expect(
+        Math.abs(right(cellRect) - durationRect.x),
+        `date range row ${i}: duration neighbor must begin at the shared boundary`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        right(content),
+        `date range row ${i}: range content must not paint across the shared border`,
+      ).toBeLessThanOrEqual(durationRect.x - 1 + PX);
+    }
   });
 });

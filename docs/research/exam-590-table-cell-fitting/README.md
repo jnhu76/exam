@@ -9,11 +9,13 @@ IMPLEMENTATION      fix/590-dense-table-cell-fitting-1 (recipes tokens + derivat
 E2E REGRESSION      apps/e2e/e2e/dense-table-cell-fitting.spec.ts (2 tests, permanent:
                     the two historical defects only; the width derivations are
                     owned by typeFixture.ts + table-contract-guards.test.ts)
-BEFORE ARTIFACT     users-before*.png / exams-before*.png (native-pixel captures from a
-                    fresh production web build of pre-fix master df5d1ad5, re-verified
-                    2026-09-22 at head 271da5b1 — see corrective section below)
-AFTER ARTIFACT      users-after*.png / exams-after*.png + before-after-contact-sheet.png
-                    (this directory, captured at 271da5b1)
+BEFORE/AFTER       before-after-contact-sheet.png (single permanent capture pack:
+                    users/exams BEFORE/AFTER macro @1440x900 + native-pixel
+                    micro crops of both shared borders and neighbors, from a
+                    fresh production web build of pre-fix master df5d1ad5,
+                    re-verified 2026-09-22 at head 271da5b1 — see corrective
+                    section below; the former individual captures were folded
+                    into it in the final-slim round)
 ```
 
 Environment of every number below: canonical E2E seed (`exam_e2e`, reset),
@@ -62,7 +64,8 @@ inline-end (right). The recovery relation cell therefore ends flush at its
 right border (ink pixel-scan: last ink column = border column; line-box
 advance overshoots the ink by ~2.5px of trailing-glyph side-bearing). It is
 contained with **zero margin** — one font metric from a visible crossing —
-which the negative-control test pins.
+recorded as one-off evidence only (no permanent test since the test-slim
+round).
 
 ## Chosen mechanisms (per-defect; adversarially gated)
 
@@ -223,9 +226,14 @@ EVIDENCE ONLY  relation 1 条关联, long datetime, 2-tag cluster, RowActions
 before-after-contact-sheet.png
 4334411d5eeb0991d92e6f9b6420bae04975f057d4f792f9c5caead68fb186c3
 
-users-before.png / users-after.png            table-shell macro @1440x900
-users-before-micro.png / users-after-micro.png  pill cell + shared border + status neighbor, native px
-exams-before.png / exams-after.png            table-shell macro @1440x900
-exams-before-micro.png / exams-after-micro.png  range cell + shared border + duration neighbor, native px
-users-*-1100.png / exams-*-1100.png           supplementary macro @1100x800
+users BEFORE/AFTER   table-shell macro @1440x900 + 3x native-px micro of the
+                     pill cell, shared 角色/状态 border, status neighbor
+exams BEFORE/AFTER   table-shell macro @1440x900 + 3x native-px micro of the
+                     range cell, shared 时间窗口/时长 border, duration neighbor
 ```
+
+The contact sheet is the only permanent capture (2 files in this directory
+after the final-slim round, README included); the individual captures it was
+assembled from were removed — nearest-neighbor micro panels preserve the
+native pixel columns, so the shared borders stay inspectable at native
+fidelity.
