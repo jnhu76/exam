@@ -7,8 +7,11 @@ the #582 visual freeze. Task `EXAM-590-DENSE-TABLE-CELL-FITTING-1`.
 BASE_SHA            df5d1ad5beb6b6cfd7df2fdfa9a749ca16afca64 (authoritative starting master)
 IMPLEMENTATION      fix/590-dense-table-cell-fitting-1 (recipes tokens + derivation fixture + guards)
 E2E REGRESSION      apps/e2e/e2e/dense-table-cell-fitting.spec.ts (8 tests, permanent)
-BEFORE ARTIFACT     docs/research/exam-582-visual-freeze/final-baseline-table-micro.png (reused, not duplicated)
-AFTER ARTIFACT      before-after-contact-sheet.png (this directory)
+BEFORE ARTIFACT     users-before*.png / exams-before*.png (native-pixel captures from a
+                    fresh production web build of pre-fix master df5d1ad5, re-verified
+                    2026-09-22 at head 271da5b1 — see corrective section below)
+AFTER ARTIFACT      users-after*.png / exams-after*.png + before-after-contact-sheet.png
+                    (this directory, captured at 271da5b1)
 ```
 
 Environment of every number below: canonical E2E seed (`exam_e2e`, reset),
@@ -135,15 +138,56 @@ document-level overflow stays clean. The spec now includes an in-band guard
 ```text
 structural      visual-finish.test.ts + table-contract-guards.test.ts  26/26
 e2e geometry    dense-table-cell-fitting.spec.ts                       8/8
-                (pre-fix on master: 5 failed / 2 passed — red reproduced)
+                (pre-fix on master: 5 failed / 2 passed — red reproduced;
+                 re-run 8/8 twice at 271da5b1 during the corrective round)
 static          pnpm verify:static                                     PASS
 full gate       pnpm verify                                            PASS
 adversarial     SUBAGENT_D_ADVERSARIAL_VERDICT: MINOR (no blockers)
 ```
 
+## Corrective-round re-verification (head 271da5b1, 2026-09-22)
+
+After the Corrective-1 test-only fix (width-band guard reading the right
+overflow owner), the two user-visible invariants were re-verified separately
+at exact head `271da5b174e279c385bc2c41b0fe76bb7a7fab17`, Chromium DPR 1,
+zoom 100%, zh-CN light, canonical E2E seed (plus the two deterministic rows
+the negative-control tests themselves create; identical rows served to both
+sides):
+
+```text
+G1 CONTENT_CONTAINMENT (runtime Range-rect probes, 1440x900 + 1100x800)
+  users role pill 考试管理员   BEFORE spill +6.5px  → AFTER spill −21.5px  PASS
+  exams date range (6/6 rows)  BEFORE spill +11.5px → AFTER spill −20.5px  PASS
+
+G2 BORDER_VISIBILITY (native-pixel screenshots, content + shared border +
+neighbor cell in every micro crop, 4x nearest-neighbor inspection)
+  users 角色/状态 border   BEFORE: pill background covers the border span;
+                           line only visible above/below the pill
+                           AFTER: border continuous, uncovered  PASS
+  exams 时间窗口/时长 border BEFORE: range text ink runs across the border
+                           position into the duration column padding
+                           AFTER: border continuous full-height  PASS
+```
+
+Both invariants PASS at `271da5b1`; the paint model itself
+(`border-collapse` 1px grid drawn on `th`/`td`) was inspected and is sound —
+in the BEFORE captures the only thing covering the shared border was content
+geometry, no stacking/paint defect exists.
+
+```text
+ROOT_CAUSE            ALLOCATION (confirmed; PAINT ruled out)
+PRODUCTION DIFF since 271da5b1   NONE (evidence + docs only)
+```
+
 ## Artifact
 
 ```text
-sha256(before-after-contact-sheet.png)
-203b41c2519f5a2da51b147a933424ca5465079cce2dc8ff45eac36e0d629e03
+before-after-contact-sheet.png
+4334411d5eeb0991d92e6f9b6420bae04975f057d4f792f9c5caead68fb186c3
+
+users-before.png / users-after.png            table-shell macro @1440x900
+users-before-micro.png / users-after-micro.png  pill cell + shared border + status neighbor, native px
+exams-before.png / exams-after.png            table-shell macro @1440x900
+exams-before-micro.png / exams-after-micro.png  range cell + shared border + duration neighbor, native px
+users-*-1100.png / exams-*-1100.png           supplementary macro @1100x800
 ```
