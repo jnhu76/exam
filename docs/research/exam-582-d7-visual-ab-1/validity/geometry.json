@@ -1,0 +1,2484 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-21T03:40:05.255Z",
+  "note": "Pairwise geometry deltas (letters only, no tier mapping). Background is paint-only: every delta must be 0.",
+  "pairs": [
+    {
+      "key": "course-dialog@1440x900:dialog-content",
+      "x": {
+        "x": 464,
+        "y": 258.5,
+        "width": 512,
+        "height": 383
+      },
+      "y": {
+        "x": 464,
+        "y": 258.5,
+        "width": 512,
+        "height": 383
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 381,
+      "scrollHeightY": 381,
+      "clientHeightX": 381,
+      "clientHeightY": 381,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:dialog-close",
+      "x": {
+        "x": 943,
+        "y": 275.5,
+        "width": 16,
+        "height": 16
+      },
+      "y": {
+        "x": 943,
+        "y": 275.5,
+        "width": 16,
+        "height": 16
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 16,
+      "scrollHeightY": 16,
+      "clientHeightX": 16,
+      "clientHeightY": 16,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:dialog-title",
+      "x": {
+        "x": 489,
+        "y": 283.5,
+        "width": 462,
+        "height": 18
+      },
+      "y": {
+        "x": 489,
+        "y": 283.5,
+        "width": 462,
+        "height": 18
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 19,
+      "scrollHeightY": 19,
+      "clientHeightX": 18,
+      "clientHeightY": 18,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:dialog-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 900,
+      "scrollHeightY": 900,
+      "clientHeightX": 900,
+      "clientHeightY": 900,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:name-input",
+      "x": {
+        "x": 489,
+        "y": 354.5,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 489,
+        "y": 354.5,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:code-input",
+      "x": {
+        "x": 489,
+        "y": 419.5,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 489,
+        "y": 419.5,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:description-textarea",
+      "x": {
+        "x": 489,
+        "y": 484.5,
+        "width": 462,
+        "height": 64
+      },
+      "y": {
+        "x": 489,
+        "y": 484.5,
+        "width": 462,
+        "height": 64
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 62,
+      "scrollHeightY": 62,
+      "clientHeightX": 62,
+      "clientHeightY": 62,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:footer-cancel-button",
+      "x": {
+        "x": 815,
+        "y": 580.5,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 815,
+        "y": 580.5,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:footer-save-button",
+      "x": {
+        "x": 887,
+        "y": 580.5,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 887,
+        "y": 580.5,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:table-th",
+      "x": {
+        "x": 265,
+        "y": 230,
+        "width": 462.8,
+        "height": 44
+      },
+      "y": {
+        "x": 265,
+        "y": 230,
+        "width": 462.8,
+        "height": 44
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 44,
+      "scrollHeightY": 44,
+      "clientHeightX": 44,
+      "clientHeightY": 44,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:table-td",
+      "x": {
+        "x": 265,
+        "y": 274,
+        "width": 462.8,
+        "height": 48
+      },
+      "y": {
+        "x": 265,
+        "y": 274,
+        "width": 462.8,
+        "height": 48
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 47,
+      "scrollHeightY": 47,
+      "clientHeightX": 47,
+      "clientHeightY": 47,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1440x900:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": 94,
+        "width": 215,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": 94,
+        "width": 215,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:dialog-content",
+      "x": {
+        "x": 464,
+        "y": 240,
+        "width": 512,
+        "height": 420
+      },
+      "y": {
+        "x": 464,
+        "y": 240,
+        "width": 512,
+        "height": 420
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 418,
+      "scrollHeightY": 418,
+      "clientHeightX": 418,
+      "clientHeightY": 418,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:dialog-close",
+      "x": {
+        "x": 943,
+        "y": 257,
+        "width": 16,
+        "height": 16
+      },
+      "y": {
+        "x": 943,
+        "y": 257,
+        "width": 16,
+        "height": 16
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 16,
+      "scrollHeightY": 16,
+      "clientHeightX": 16,
+      "clientHeightY": 16,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:dialog-title",
+      "x": {
+        "x": 489,
+        "y": 265,
+        "width": 462,
+        "height": 18
+      },
+      "y": {
+        "x": 489,
+        "y": 265,
+        "width": 462,
+        "height": 18
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 19,
+      "scrollHeightY": 19,
+      "clientHeightX": 18,
+      "clientHeightY": 18,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:dialog-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 900,
+      "scrollHeightY": 900,
+      "clientHeightX": 900,
+      "clientHeightY": 900,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:username-input",
+      "x": {
+        "x": 489,
+        "y": 336,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 489,
+        "y": 336,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:password-input",
+      "x": {
+        "x": 489,
+        "y": 401,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 489,
+        "y": 401,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:name-input",
+      "x": {
+        "x": 489,
+        "y": 466,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 489,
+        "y": 466,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:role-select-trigger",
+      "x": {
+        "x": 489,
+        "y": 531,
+        "width": 125,
+        "height": 36
+      },
+      "y": {
+        "x": 489,
+        "y": 531,
+        "width": 125,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:footer-cancel-button",
+      "x": {
+        "x": 815,
+        "y": 599,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 815,
+        "y": 599,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:footer-save-button",
+      "x": {
+        "x": 887,
+        "y": 599,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 887,
+        "y": 599,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:status-badge",
+      "x": {
+        "x": 1191,
+        "y": 510,
+        "width": 54,
+        "height": 22
+      },
+      "y": {
+        "x": 1191,
+        "y": 510,
+        "width": 54,
+        "height": 22
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 20,
+      "scrollHeightY": 20,
+      "clientHeightX": 20,
+      "clientHeightY": 20,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:table-th",
+      "x": {
+        "x": 265,
+        "y": 452.5,
+        "width": 410.8,
+        "height": 44
+      },
+      "y": {
+        "x": 265,
+        "y": 452.5,
+        "width": 410.8,
+        "height": 44
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 44,
+      "scrollHeightY": 44,
+      "clientHeightX": 44,
+      "clientHeightY": 44,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:table-td",
+      "x": {
+        "x": 265,
+        "y": 496.5,
+        "width": 410.8,
+        "height": 48
+      },
+      "y": {
+        "x": 265,
+        "y": 496.5,
+        "width": 410.8,
+        "height": 48
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 47,
+      "scrollHeightY": 47,
+      "clientHeightX": 47,
+      "clientHeightY": 47,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1440x900:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": 33,
+        "width": 215,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": 33,
+        "width": 215,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog-select@1440x900:select-content",
+      "x": {
+        "x": 488,
+        "y": 571,
+        "width": 128,
+        "height": 182.5
+      },
+      "y": {
+        "x": 488,
+        "y": 571,
+        "width": 128,
+        "height": 182.5
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 181,
+      "scrollHeightY": 181,
+      "clientHeightX": 181,
+      "clientHeightY": 181,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog-select@1440x900:select-item",
+      "x": {
+        "x": 493,
+        "y": 576,
+        "width": 118,
+        "height": 34.5
+      },
+      "y": {
+        "x": 493,
+        "y": 576,
+        "width": 118,
+        "height": 34.5
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 35,
+      "scrollHeightY": 35,
+      "clientHeightX": 35,
+      "clientHeightY": 35,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:dialog-content",
+      "x": {
+        "x": 294,
+        "y": 208.5,
+        "width": 512,
+        "height": 383
+      },
+      "y": {
+        "x": 294,
+        "y": 208.5,
+        "width": 512,
+        "height": 383
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 381,
+      "scrollHeightY": 381,
+      "clientHeightX": 381,
+      "clientHeightY": 381,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:dialog-close",
+      "x": {
+        "x": 773,
+        "y": 225.5,
+        "width": 16,
+        "height": 16
+      },
+      "y": {
+        "x": 773,
+        "y": 225.5,
+        "width": 16,
+        "height": 16
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 16,
+      "scrollHeightY": 16,
+      "clientHeightX": 16,
+      "clientHeightY": 16,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:dialog-title",
+      "x": {
+        "x": 319,
+        "y": 233.5,
+        "width": 462,
+        "height": 18
+      },
+      "y": {
+        "x": 319,
+        "y": 233.5,
+        "width": 462,
+        "height": 18
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 19,
+      "scrollHeightY": 19,
+      "clientHeightX": 18,
+      "clientHeightY": 18,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:dialog-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 800
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 800
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 800,
+      "scrollHeightY": 800,
+      "clientHeightX": 800,
+      "clientHeightY": 800,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:name-input",
+      "x": {
+        "x": 319,
+        "y": 304.5,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 319,
+        "y": 304.5,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:code-input",
+      "x": {
+        "x": 319,
+        "y": 369.5,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 319,
+        "y": 369.5,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:description-textarea",
+      "x": {
+        "x": 319,
+        "y": 434.5,
+        "width": 462,
+        "height": 64
+      },
+      "y": {
+        "x": 319,
+        "y": 434.5,
+        "width": 462,
+        "height": 64
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 62,
+      "scrollHeightY": 62,
+      "clientHeightX": 62,
+      "clientHeightY": 62,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:footer-cancel-button",
+      "x": {
+        "x": 645,
+        "y": 530.5,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 645,
+        "y": 530.5,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:footer-save-button",
+      "x": {
+        "x": 717,
+        "y": 530.5,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 717,
+        "y": 530.5,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:table-th",
+      "x": {
+        "x": 89,
+        "y": 230,
+        "width": 380.8,
+        "height": 44
+      },
+      "y": {
+        "x": 89,
+        "y": 230,
+        "width": 380.8,
+        "height": 44
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 44,
+      "scrollHeightY": 44,
+      "clientHeightX": 44,
+      "clientHeightY": 44,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:table-td",
+      "x": {
+        "x": 89,
+        "y": 274,
+        "width": 380.8,
+        "height": 48
+      },
+      "y": {
+        "x": 89,
+        "y": 274,
+        "width": 380.8,
+        "height": 48
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 47,
+      "scrollHeightY": 47,
+      "clientHeightX": 47,
+      "clientHeightY": 47,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "course-dialog@1100x800:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": 104,
+        "width": 39,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": 104,
+        "width": 39,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:dialog-content",
+      "x": {
+        "x": 294,
+        "y": 190,
+        "width": 512,
+        "height": 420
+      },
+      "y": {
+        "x": 294,
+        "y": 190,
+        "width": 512,
+        "height": 420
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 418,
+      "scrollHeightY": 418,
+      "clientHeightX": 418,
+      "clientHeightY": 418,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:dialog-close",
+      "x": {
+        "x": 773,
+        "y": 207,
+        "width": 16,
+        "height": 16
+      },
+      "y": {
+        "x": 773,
+        "y": 207,
+        "width": 16,
+        "height": 16
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 16,
+      "scrollHeightY": 16,
+      "clientHeightX": 16,
+      "clientHeightY": 16,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:dialog-title",
+      "x": {
+        "x": 319,
+        "y": 215,
+        "width": 462,
+        "height": 18
+      },
+      "y": {
+        "x": 319,
+        "y": 215,
+        "width": 462,
+        "height": 18
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 19,
+      "scrollHeightY": 19,
+      "clientHeightX": 18,
+      "clientHeightY": 18,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:dialog-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 800
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 800
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 800,
+      "scrollHeightY": 800,
+      "clientHeightX": 800,
+      "clientHeightY": 800,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:username-input",
+      "x": {
+        "x": 319,
+        "y": 286,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 319,
+        "y": 286,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:password-input",
+      "x": {
+        "x": 319,
+        "y": 351,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 319,
+        "y": 351,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:name-input",
+      "x": {
+        "x": 319,
+        "y": 416,
+        "width": 462,
+        "height": 36
+      },
+      "y": {
+        "x": 319,
+        "y": 416,
+        "width": 462,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:role-select-trigger",
+      "x": {
+        "x": 319,
+        "y": 481,
+        "width": 125,
+        "height": 36
+      },
+      "y": {
+        "x": 319,
+        "y": 481,
+        "width": 125,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:footer-cancel-button",
+      "x": {
+        "x": 645,
+        "y": 549,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 645,
+        "y": 549,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:footer-save-button",
+      "x": {
+        "x": 717,
+        "y": 549,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 717,
+        "y": 549,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:status-badge",
+      "x": {
+        "x": 851,
+        "y": 510,
+        "width": 54,
+        "height": 22
+      },
+      "y": {
+        "x": 851,
+        "y": 510,
+        "width": 54,
+        "height": 22
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 20,
+      "scrollHeightY": 20,
+      "clientHeightX": 20,
+      "clientHeightY": 20,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:table-th",
+      "x": {
+        "x": 89,
+        "y": 452.5,
+        "width": 328.8,
+        "height": 44
+      },
+      "y": {
+        "x": 89,
+        "y": 452.5,
+        "width": 328.8,
+        "height": 44
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 44,
+      "scrollHeightY": 44,
+      "clientHeightX": 44,
+      "clientHeightY": 44,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:table-td",
+      "x": {
+        "x": 89,
+        "y": 496.5,
+        "width": 328.8,
+        "height": 48
+      },
+      "y": {
+        "x": 89,
+        "y": 496.5,
+        "width": 328.8,
+        "height": 48
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 47,
+      "scrollHeightY": 47,
+      "clientHeightX": 47,
+      "clientHeightY": 47,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog@1100x800:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": -1,
+        "width": 39,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": -1,
+        "width": 39,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog-select@1100x800:select-content",
+      "x": {
+        "x": 318,
+        "y": 521,
+        "width": 128,
+        "height": 182.5
+      },
+      "y": {
+        "x": 318,
+        "y": 521,
+        "width": 128,
+        "height": 182.5
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 181,
+      "scrollHeightY": 181,
+      "clientHeightX": 181,
+      "clientHeightY": 181,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "users-dialog-select@1100x800:select-item",
+      "x": {
+        "x": 323,
+        "y": 526,
+        "width": 118,
+        "height": 34.5
+      },
+      "y": {
+        "x": 323,
+        "y": 526,
+        "width": 118,
+        "height": 34.5
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 35,
+      "scrollHeightY": 35,
+      "clientHeightX": 35,
+      "clientHeightY": 35,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:alert-dialog-content",
+      "x": {
+        "x": 464,
+        "y": 359.5,
+        "width": 512,
+        "height": 181
+      },
+      "y": {
+        "x": 464,
+        "y": 359.5,
+        "width": 512,
+        "height": 181
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 179,
+      "scrollHeightY": 179,
+      "clientHeightX": 179,
+      "clientHeightY": 179,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:alert-dialog-title",
+      "x": {
+        "x": 489,
+        "y": 384.5,
+        "width": 108,
+        "height": 28
+      },
+      "y": {
+        "x": 489,
+        "y": 384.5,
+        "width": 108,
+        "height": 28
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 28,
+      "scrollHeightY": 28,
+      "clientHeightX": 28,
+      "clientHeightY": 28,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:alert-dialog-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 900,
+      "scrollHeightY": 900,
+      "clientHeightX": 900,
+      "clientHeightY": 900,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:confirm-cancel-button",
+      "x": {
+        "x": 817,
+        "y": 479.5,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 817,
+        "y": 479.5,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:confirm-destructive-button",
+      "x": {
+        "x": 889,
+        "y": 479.5,
+        "width": 62,
+        "height": 36
+      },
+      "y": {
+        "x": 889,
+        "y": 479.5,
+        "width": 62,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 36,
+      "scrollHeightY": 36,
+      "clientHeightX": 36,
+      "clientHeightY": 36,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:status-badge",
+      "x": {
+        "x": 281,
+        "y": 198,
+        "width": 54,
+        "height": 22
+      },
+      "y": {
+        "x": 281,
+        "y": 198,
+        "width": 54,
+        "height": 22
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 20,
+      "scrollHeightY": 20,
+      "clientHeightX": 20,
+      "clientHeightY": 20,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1440x900:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": 94,
+        "width": 215,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": 94,
+        "width": 215,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:dialog-content",
+      "x": {
+        "x": 384,
+        "y": 234,
+        "width": 672,
+        "height": 432
+      },
+      "y": {
+        "x": 384,
+        "y": 234,
+        "width": 672,
+        "height": 432
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 430,
+      "scrollHeightY": 430,
+      "clientHeightX": 430,
+      "clientHeightY": 430,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:dialog-close",
+      "x": {
+        "x": 1023,
+        "y": 251,
+        "width": 16,
+        "height": 16
+      },
+      "y": {
+        "x": 1023,
+        "y": 251,
+        "width": 16,
+        "height": 16
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 16,
+      "scrollHeightY": 16,
+      "clientHeightX": 16,
+      "clientHeightY": 16,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:dialog-title",
+      "x": {
+        "x": 409,
+        "y": 259,
+        "width": 622,
+        "height": 18
+      },
+      "y": {
+        "x": 409,
+        "y": 259,
+        "width": 622,
+        "height": 18
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 19,
+      "scrollHeightY": 19,
+      "clientHeightX": 18,
+      "clientHeightY": 18,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:dialog-body-scroll-owner",
+      "x": {
+        "x": 409,
+        "y": 323.5,
+        "width": 622,
+        "height": 265.5
+      },
+      "y": {
+        "x": 409,
+        "y": 323.5,
+        "width": 622,
+        "height": 265.5
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 266,
+      "scrollHeightY": 266,
+      "clientHeightX": 266,
+      "clientHeightY": 266,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:dialog-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 900,
+      "scrollHeightY": 900,
+      "clientHeightX": 900,
+      "clientHeightY": 900,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:import-textarea",
+      "x": {
+        "x": 409,
+        "y": 371.5,
+        "width": 622,
+        "height": 108
+      },
+      "y": {
+        "x": 409,
+        "y": 371.5,
+        "width": 622,
+        "height": 108
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 106,
+      "scrollHeightY": 106,
+      "clientHeightX": 106,
+      "clientHeightY": 106,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:footer-close-button",
+      "x": {
+        "x": 409,
+        "y": 323.5,
+        "width": 622,
+        "height": 36
+      },
+      "y": {
+        "x": 409,
+        "y": 323.5,
+        "width": 622,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:footer-confirm-button",
+      "x": {
+        "x": 937,
+        "y": 605,
+        "width": 94,
+        "height": 36
+      },
+      "y": {
+        "x": 937,
+        "y": 605,
+        "width": 94,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1440x900:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": -9,
+        "width": 215,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": -9,
+        "width": 215,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:alert-dialog-content",
+      "x": {
+        "x": 294,
+        "y": 309.5,
+        "width": 512,
+        "height": 181
+      },
+      "y": {
+        "x": 294,
+        "y": 309.5,
+        "width": 512,
+        "height": 181
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 179,
+      "scrollHeightY": 179,
+      "clientHeightX": 179,
+      "clientHeightY": 179,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:alert-dialog-title",
+      "x": {
+        "x": 319,
+        "y": 334.5,
+        "width": 108,
+        "height": 28
+      },
+      "y": {
+        "x": 319,
+        "y": 334.5,
+        "width": 108,
+        "height": 28
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 28,
+      "scrollHeightY": 28,
+      "clientHeightX": 28,
+      "clientHeightY": 28,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:alert-dialog-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 800
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 800
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 800,
+      "scrollHeightY": 800,
+      "clientHeightX": 800,
+      "clientHeightY": 800,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:confirm-cancel-button",
+      "x": {
+        "x": 647,
+        "y": 429.5,
+        "width": 64,
+        "height": 36
+      },
+      "y": {
+        "x": 647,
+        "y": 429.5,
+        "width": 64,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:confirm-destructive-button",
+      "x": {
+        "x": 719,
+        "y": 429.5,
+        "width": 62,
+        "height": 36
+      },
+      "y": {
+        "x": 719,
+        "y": 429.5,
+        "width": 62,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 36,
+      "scrollHeightY": 36,
+      "clientHeightX": 36,
+      "clientHeightY": 36,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:status-badge",
+      "x": {
+        "x": 105,
+        "y": 198,
+        "width": 54,
+        "height": 22
+      },
+      "y": {
+        "x": 105,
+        "y": 198,
+        "width": 54,
+        "height": 22
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 20,
+      "scrollHeightY": 20,
+      "clientHeightX": 20,
+      "clientHeightY": 20,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "exam-detail-confirm@1100x800:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": 104,
+        "width": 39,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": 104,
+        "width": 39,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:dialog-content",
+      "x": {
+        "x": 214,
+        "y": 184,
+        "width": 672,
+        "height": 432
+      },
+      "y": {
+        "x": 214,
+        "y": 184,
+        "width": 672,
+        "height": 432
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 430,
+      "scrollHeightY": 430,
+      "clientHeightX": 430,
+      "clientHeightY": 430,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:dialog-close",
+      "x": {
+        "x": 853,
+        "y": 201,
+        "width": 16,
+        "height": 16
+      },
+      "y": {
+        "x": 853,
+        "y": 201,
+        "width": 16,
+        "height": 16
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 16,
+      "scrollHeightY": 16,
+      "clientHeightX": 16,
+      "clientHeightY": 16,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:dialog-title",
+      "x": {
+        "x": 239,
+        "y": 209,
+        "width": 622,
+        "height": 18
+      },
+      "y": {
+        "x": 239,
+        "y": 209,
+        "width": 622,
+        "height": 18
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 19,
+      "scrollHeightY": 19,
+      "clientHeightX": 18,
+      "clientHeightY": 18,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:dialog-body-scroll-owner",
+      "x": {
+        "x": 239,
+        "y": 273.5,
+        "width": 622,
+        "height": 265.5
+      },
+      "y": {
+        "x": 239,
+        "y": 273.5,
+        "width": 622,
+        "height": 265.5
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 266,
+      "scrollHeightY": 266,
+      "clientHeightX": 266,
+      "clientHeightY": 266,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:dialog-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 800
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 800
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 800,
+      "scrollHeightY": 800,
+      "clientHeightX": 800,
+      "clientHeightY": 800,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:import-textarea",
+      "x": {
+        "x": 239,
+        "y": 321.5,
+        "width": 622,
+        "height": 108
+      },
+      "y": {
+        "x": 239,
+        "y": 321.5,
+        "width": 622,
+        "height": 108
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 106,
+      "scrollHeightY": 106,
+      "clientHeightX": 106,
+      "clientHeightY": 106,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:footer-close-button",
+      "x": {
+        "x": 239,
+        "y": 273.5,
+        "width": 622,
+        "height": 36
+      },
+      "y": {
+        "x": 239,
+        "y": 273.5,
+        "width": 622,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:footer-confirm-button",
+      "x": {
+        "x": 767,
+        "y": 555,
+        "width": 94,
+        "height": 36
+      },
+      "y": {
+        "x": 767,
+        "y": 555,
+        "width": 94,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 34,
+      "scrollHeightY": 34,
+      "clientHeightX": 34,
+      "clientHeightY": 34,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "import-dialog@1100x800:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": -43,
+        "width": 39,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": -43,
+        "width": 39,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "sheet-nav@1023x800:sheet-content",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 288,
+        "height": 800
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 288,
+        "height": 800
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 800,
+      "scrollHeightY": 800,
+      "clientHeightX": 800,
+      "clientHeightY": 800,
+      "sheetPanelEdgeX": "right",
+      "sheetPanelEdgeY": "right"
+    },
+    {
+      "key": "sheet-nav@1023x800:sheet-close-button",
+      "x": {
+        "x": 243,
+        "y": 9.5,
+        "width": 36,
+        "height": 36
+      },
+      "y": {
+        "x": 243,
+        "y": 9.5,
+        "width": 36,
+        "height": 36
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 36,
+      "scrollHeightY": 36,
+      "clientHeightX": 36,
+      "clientHeightY": 36,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "sheet-nav@1023x800:sheet-overlay-dim",
+      "x": {
+        "x": 0,
+        "y": 0,
+        "width": 1023,
+        "height": 800
+      },
+      "y": {
+        "x": 0,
+        "y": 0,
+        "width": 1023,
+        "height": 800
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 800,
+      "scrollHeightY": 800,
+      "clientHeightX": 800,
+      "clientHeightY": 800,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "sheet-nav@1023x800:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": 95,
+        "width": 271,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": 95,
+        "width": 271,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "fields-dropdown@1440x900:dropdown-menu-content",
+      "x": {
+        "x": 1266,
+        "y": 333,
+        "width": 128,
+        "height": 113.5
+      },
+      "y": {
+        "x": 1266,
+        "y": 333,
+        "width": 128,
+        "height": 113.5
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 112,
+      "scrollHeightY": 112,
+      "clientHeightX": 112,
+      "clientHeightY": 112,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "fields-dropdown@1440x900:dropdown-menu-item",
+      "x": {
+        "x": 1271,
+        "y": 338,
+        "width": 118,
+        "height": 34.5
+      },
+      "y": {
+        "x": 1271,
+        "y": 338,
+        "width": 118,
+        "height": 34.5
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 35,
+      "scrollHeightY": 35,
+      "clientHeightX": 35,
+      "clientHeightY": 35,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "questions-popover@1440x900:popover-content",
+      "x": {
+        "x": 1097,
+        "y": 199,
+        "width": 256,
+        "height": 314
+      },
+      "y": {
+        "x": 1097,
+        "y": 199,
+        "width": 256,
+        "height": 314
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 312,
+      "scrollHeightY": 312,
+      "clientHeightX": 312,
+      "clientHeightY": 312,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "questions-d6@1440x900:tag-badge",
+      "x": {
+        "x": 1058.8,
+        "y": 262,
+        "width": 49,
+        "height": 22
+      },
+      "y": {
+        "x": 1058.8,
+        "y": 262,
+        "width": 49,
+        "height": 22
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 20,
+      "scrollHeightY": 20,
+      "clientHeightX": 20,
+      "clientHeightY": 20,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "questions-d6@1440x900:table-th",
+      "x": {
+        "x": 265,
+        "y": 207,
+        "width": 88,
+        "height": 42
+      },
+      "y": {
+        "x": 265,
+        "y": 207,
+        "width": 88,
+        "height": 42
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 42,
+      "scrollHeightY": 42,
+      "clientHeightX": 42,
+      "clientHeightY": 42,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "questions-d6@1440x900:table-td",
+      "x": {
+        "x": 265,
+        "y": 249,
+        "width": 88,
+        "height": 48
+      },
+      "y": {
+        "x": 265,
+        "y": 249,
+        "width": 88,
+        "height": 48
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 47,
+      "scrollHeightY": 47,
+      "clientHeightX": 47,
+      "clientHeightY": 47,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    },
+    {
+      "key": "questions-d6@1440x900:sidebar-link",
+      "x": {
+        "x": 8,
+        "y": 94,
+        "width": 215,
+        "height": 40
+      },
+      "y": {
+        "x": 8,
+        "y": 94,
+        "width": 215,
+        "height": 40
+      },
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaWidth": 0,
+      "deltaHeight": 0,
+      "scrollHeightX": 40,
+      "scrollHeightY": 40,
+      "clientHeightX": 40,
+      "clientHeightY": 40,
+      "sheetPanelEdgeX": null,
+      "sheetPanelEdgeY": null
+    }
+  ],
+  "violations": [],
+  "geometryPass": true
+}

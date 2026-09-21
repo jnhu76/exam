@@ -1,0 +1,453 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-21T03:40:05.255Z",
+  "declared": "Escape close, close-button visibility, focus containment and body scroll lock are active in BOTH arms and identical across arms (§23)",
+  "records": [
+    {
+      "surface": "course-dialog",
+      "variant": "X",
+      "viewport": "1440x900",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "users-dialog",
+      "variant": "X",
+      "viewport": "1440x900",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "course-dialog",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "users-dialog",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "course-dialog",
+      "variant": "X",
+      "viewport": "1100x800",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "users-dialog",
+      "variant": "X",
+      "viewport": "1100x800",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "course-dialog",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "users-dialog",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "exam-detail-confirm",
+      "variant": "X",
+      "viewport": "1440x900",
+      "closeButtonVisible": null,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "import-dialog",
+      "variant": "X",
+      "viewport": "1440x900",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "exam-detail-confirm",
+      "variant": "X",
+      "viewport": "1100x800",
+      "closeButtonVisible": null,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "import-dialog",
+      "variant": "X",
+      "viewport": "1100x800",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "sheet-nav",
+      "variant": "X",
+      "viewport": "1023x800",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "exam-detail-confirm",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "closeButtonVisible": null,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "import-dialog",
+      "variant": "Y",
+      "viewport": "1440x900",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "exam-detail-confirm",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "closeButtonVisible": null,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "import-dialog",
+      "variant": "Y",
+      "viewport": "1100x800",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    },
+    {
+      "surface": "sheet-nav",
+      "variant": "Y",
+      "viewport": "1023x800",
+      "closeButtonVisible": true,
+      "scrollLockActive": true,
+      "bodyOverflow": "hidden",
+      "bodyPointerEvents": "none",
+      "focusContainedAfterTabs": true,
+      "escapeClosed": true
+    }
+  ],
+  "pairs": [
+    {
+      "key": "course-dialog@1440x900",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "course-dialog",
+        "variant": "X",
+        "viewport": "1440x900",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "course-dialog",
+        "variant": "Y",
+        "viewport": "1440x900",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    },
+    {
+      "key": "users-dialog@1440x900",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "users-dialog",
+        "variant": "X",
+        "viewport": "1440x900",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "users-dialog",
+        "variant": "Y",
+        "viewport": "1440x900",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    },
+    {
+      "key": "course-dialog@1100x800",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "course-dialog",
+        "variant": "X",
+        "viewport": "1100x800",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "course-dialog",
+        "variant": "Y",
+        "viewport": "1100x800",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    },
+    {
+      "key": "users-dialog@1100x800",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "users-dialog",
+        "variant": "X",
+        "viewport": "1100x800",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "users-dialog",
+        "variant": "Y",
+        "viewport": "1100x800",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    },
+    {
+      "key": "exam-detail-confirm@1440x900",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "exam-detail-confirm",
+        "variant": "X",
+        "viewport": "1440x900",
+        "closeButtonVisible": null,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "exam-detail-confirm",
+        "variant": "Y",
+        "viewport": "1440x900",
+        "closeButtonVisible": null,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    },
+    {
+      "key": "import-dialog@1440x900",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "import-dialog",
+        "variant": "X",
+        "viewport": "1440x900",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "import-dialog",
+        "variant": "Y",
+        "viewport": "1440x900",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    },
+    {
+      "key": "exam-detail-confirm@1100x800",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "exam-detail-confirm",
+        "variant": "X",
+        "viewport": "1100x800",
+        "closeButtonVisible": null,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "exam-detail-confirm",
+        "variant": "Y",
+        "viewport": "1100x800",
+        "closeButtonVisible": null,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    },
+    {
+      "key": "import-dialog@1100x800",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "import-dialog",
+        "variant": "X",
+        "viewport": "1100x800",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "import-dialog",
+        "variant": "Y",
+        "viewport": "1100x800",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    },
+    {
+      "key": "sheet-nav@1023x800",
+      "identical": true,
+      "diffs": [],
+      "x": {
+        "surface": "sheet-nav",
+        "variant": "X",
+        "viewport": "1023x800",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      },
+      "y": {
+        "surface": "sheet-nav",
+        "variant": "Y",
+        "viewport": "1023x800",
+        "closeButtonVisible": true,
+        "scrollLockActive": true,
+        "bodyOverflow": "hidden",
+        "bodyPointerEvents": "none",
+        "focusContainedAfterTabs": true,
+        "escapeClosed": true
+      }
+    }
+  ],
+  "crossArmDivergences": [],
+  "absoluteViolations": [],
+  "pass": true
+}

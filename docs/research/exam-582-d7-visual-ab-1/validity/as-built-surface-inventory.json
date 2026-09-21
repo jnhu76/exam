@@ -1,0 +1,142 @@
+{
+  "_warning": "VALIDITY ONLY — MAPPING REVEALING. DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-21T03:39:11.458Z",
+  "note": "As-built overlay population actually reachable in product routes, recorded clean (no injection). Computed style is the authority (task §2).",
+  "tokenResolutions": {
+    "phase": "asbuilt",
+    "variant": "asbuilt",
+    "rawBg": "#f5f7fa",
+    "rawSurface": "#fff",
+    "rawBorder": "#dfe3e8",
+    "resolvedBg": "rgb(245, 247, 250)",
+    "resolvedSurface": "rgb(255, 255, 255)",
+    "resolvedBorder": "rgb(223, 227, 232)"
+  },
+  "authorityCheck": {
+    "modalPanelMatchCanvasToken": true,
+    "smallOverlayMatchContentToken": true,
+    "result": "PASS"
+  },
+  "rows": [
+    {
+      "slot": "dialog-content",
+      "overlayVariant": "modal",
+      "panelEdge": null,
+      "route": "/admin/courses (create-course dialog)",
+      "computedBackgroundColor": "rgb(245, 247, 250)",
+      "resolvedSemanticToken": "--bg",
+      "inclusion": "D7_INCLUDED",
+      "reason": "modal tier of surface/recipes.css .surface-overlay — large centered surface"
+    },
+    {
+      "slot": "dialog-content",
+      "overlayVariant": "modal",
+      "panelEdge": null,
+      "route": "/admin/users (create-user dialog)",
+      "computedBackgroundColor": "rgb(245, 247, 250)",
+      "resolvedSemanticToken": "--bg",
+      "inclusion": "D7_INCLUDED",
+      "reason": "modal tier of surface/recipes.css .surface-overlay — large centered surface"
+    },
+    {
+      "slot": "dialog-content",
+      "overlayVariant": "modal",
+      "panelEdge": null,
+      "route": "/admin/candidates (import wizard, size lg)",
+      "computedBackgroundColor": "rgb(245, 247, 250)",
+      "resolvedSemanticToken": "--bg",
+      "inclusion": "D7_INCLUDED",
+      "reason": "modal tier of surface/recipes.css .surface-overlay — large centered surface"
+    },
+    {
+      "slot": "alert-dialog-content",
+      "overlayVariant": "modal",
+      "panelEdge": null,
+      "route": "/admin/exams/ecd5c8b6-f026-4b39-a10a-c4dfe72437cd (unpublish confirm)",
+      "computedBackgroundColor": "rgb(245, 247, 250)",
+      "resolvedSemanticToken": "--bg",
+      "inclusion": "D7_INCLUDED",
+      "reason": "modal tier of surface/recipes.css .surface-overlay — large centered surface"
+    },
+    {
+      "slot": "sheet-content",
+      "overlayVariant": "panel",
+      "panelEdge": "right",
+      "route": "/admin/courses @1023 (mobile nav drawer)",
+      "computedBackgroundColor": "rgb(245, 247, 250)",
+      "resolvedSemanticToken": "--bg",
+      "inclusion": "D7_INCLUDED",
+      "reason": "panel tier of surface/recipes.css .surface-overlay — large edge-attached surface"
+    },
+    {
+      "slot": "select-content",
+      "overlayVariant": null,
+      "panelEdge": null,
+      "route": "/admin/users (role select popover)",
+      "computedBackgroundColor": "rgb(255, 255, 255)",
+      "resolvedSemanticToken": "--surface",
+      "inclusion": "D7_EXCLUDED",
+      "reason": "small overlay family — stays on the .surface-overlay base tier (task §1 exclusions)"
+    },
+    {
+      "slot": "dropdown-menu-content",
+      "overlayVariant": null,
+      "panelEdge": null,
+      "route": "/admin/candidate-fields (RowActions menu)",
+      "computedBackgroundColor": "rgb(255, 255, 255)",
+      "resolvedSemanticToken": "--surface",
+      "inclusion": "D7_EXCLUDED",
+      "reason": "small overlay family — stays on the .surface-overlay base tier (task §1 exclusions)"
+    },
+    {
+      "slot": "popover-content",
+      "overlayVariant": null,
+      "panelEdge": null,
+      "route": "/admin/questions (tag filter popover)",
+      "computedBackgroundColor": "rgb(255, 255, 255)",
+      "resolvedSemanticToken": "--surface",
+      "inclusion": "D7_EXCLUDED",
+      "reason": "small overlay family — stays on the .surface-overlay base tier (task §1 exclusions)"
+    },
+    {
+      "slot": "dialog-overlay",
+      "overlayVariant": null,
+      "panelEdge": null,
+      "route": "course-dialog (dimmer)",
+      "computedBackgroundColor": "oklab(0 0 0 / 0.5)",
+      "resolvedSemanticToken": "bg-black/50 utility",
+      "inclusion": "D7_EXCLUDED",
+      "reason": "overlay dimmer — D7 does not adjudicate dimming (§18)"
+    },
+    {
+      "slot": "dialog-overlay",
+      "overlayVariant": null,
+      "panelEdge": null,
+      "route": "users-dialog (dimmer)",
+      "computedBackgroundColor": "oklab(0 0 0 / 0.5)",
+      "resolvedSemanticToken": "bg-black/50 utility",
+      "inclusion": "D7_EXCLUDED",
+      "reason": "overlay dimmer — D7 does not adjudicate dimming (§18)"
+    },
+    {
+      "slot": "dialog-overlay",
+      "overlayVariant": null,
+      "panelEdge": null,
+      "route": "import-dialog (dimmer)",
+      "computedBackgroundColor": "oklab(0 0 0 / 0.5)",
+      "resolvedSemanticToken": "bg-black/50 utility",
+      "inclusion": "D7_EXCLUDED",
+      "reason": "overlay dimmer — D7 does not adjudicate dimming (§18)"
+    },
+    {
+      "slot": "sheet-overlay",
+      "overlayVariant": null,
+      "panelEdge": null,
+      "route": "sheet-nav (dimmer)",
+      "computedBackgroundColor": "oklab(0 0 0 / 0.5)",
+      "resolvedSemanticToken": "bg-black/50 utility",
+      "inclusion": "D7_EXCLUDED",
+      "reason": "overlay dimmer — D7 does not adjudicate dimming (§18)"
+    }
+  ]
+}

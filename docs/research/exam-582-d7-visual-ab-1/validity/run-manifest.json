@@ -1,0 +1,75 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE. Mapping: validity/variant-map.json.",
+  "runId": "d7-1789961872224",
+  "issue": 582,
+  "variable": "D7",
+  "question": "Dialog/Sheet modal-surface background tier (modal+panel move together), judged against the frozen upstream D2 (15px body/control), D3 (6px control family), D4 (13px/20px/500 table header), D5 (22px StatusBadge) and D6 (500 TagBadge) baselines",
+  "variants": ["X", "Y"],
+  "mapFileRef": "docs/research/exam-582-d7-visual-ab-1/validity/variant-map.json",
+  "d7Family": {
+    "included": [
+      "[data-slot=\"dialog-content\"][data-overlay-variant=\"modal\"]",
+      "[data-slot=\"alert-dialog-content\"][data-overlay-variant=\"modal\"]",
+      "[data-slot=\"sheet-content\"][data-overlay-variant=\"panel\"]"
+    ],
+    "excludedControlGroup": [
+      "[data-slot=popover-content]",
+      "[data-slot=dropdown-menu-content]",
+      "[data-slot=select-content]",
+      "(tooltip / toast / context-menu remain base-tier by construction)"
+    ]
+  },
+  "frozenConstants": {
+    "bodyControlBaseline": "15px (common D2 block injected in BOTH arms)",
+    "controlFamilyRadius": "6px (common D3 block injected in BOTH arms, incl. seam/pagination guards)",
+    "tableHeaderBaseline": "13px/20px/500 (upstream D4 as-built, verified per capture)",
+    "statusBadgeBaseline": "22px height / 12px / 500 (upstream D5 as-built, verified per capture)",
+    "tagBadgeBaseline": "weight 500 (common D6 block injected in BOTH arms)",
+    "dimmer": "bg-black/50 overlay computed color identical both arms",
+    "radiusShadowBorder": "modal/panel radius, shadow, border and panel edge identical both arms (D7 changes background only)"
+  },
+  "baseUrl": "http://localhost:3001",
+  "startedAt": "2026-09-21T03:38:56.874Z",
+  "viewports": [
+    {
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "name": "1100x800",
+      "width": 1100,
+      "height": 800
+    },
+    {
+      "name": "1023x800",
+      "width": 1023,
+      "height": 800
+    }
+  ],
+  "surfaces": [
+    "course-dialog",
+    "users-dialog",
+    "users-dialog-select",
+    "exam-detail-confirm",
+    "import-dialog",
+    "sheet-nav",
+    "fields-dropdown",
+    "questions-popover",
+    "questions-d6"
+  ],
+  "judgedSurfaces": [
+    "course-dialog",
+    "users-dialog",
+    "exam-detail-confirm",
+    "import-dialog",
+    "sheet-nav"
+  ],
+  "validityOnlySurfaces": [
+    "users-dialog-select",
+    "fields-dropdown",
+    "questions-popover",
+    "questions-d6"
+  ],
+  "injection": "addInitScript <style> — D2+D6+D3 common baseline blocks (both arms) + modal/panel background token (the only cross-arm difference)"
+}

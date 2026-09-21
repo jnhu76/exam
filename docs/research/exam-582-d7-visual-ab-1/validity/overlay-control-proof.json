@@ -1,0 +1,322 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-21T03:40:05.255Z",
+  "tokenResolutions": [
+    {
+      "phase": "asbuilt",
+      "variant": "asbuilt",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "asbuilt",
+      "variant": "asbuilt",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "asbuilt",
+      "variant": "asbuilt",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "asbuilt",
+      "variant": "asbuilt",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "asbuilt",
+      "variant": "asbuilt",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "X",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    },
+    {
+      "phase": "arm",
+      "variant": "Y",
+      "rawBg": "#f5f7fa",
+      "rawSurface": "#fff",
+      "rawBorder": "#dfe3e8",
+      "resolvedBg": "rgb(245, 247, 250)",
+      "resolvedSurface": "rgb(255, 255, 255)",
+      "resolvedBorder": "rgb(223, 227, 232)"
+    }
+  ],
+  "smallOverlayControlGroup": {
+    "declared": "popover/dropdown/select contents identical across arms at the content-token resolution",
+    "pairs": 7,
+    "violations": [],
+    "pass": true
+  },
+  "dimmerInvariant": {
+    "declared": "dialog/sheet overlay computed background identical",
+    "pairs": 9,
+    "violations": [],
+    "pass": true
+  },
+  "shadowInvariant": {
+    "declared": "modal/panel box-shadow identical across arms (§19)",
+    "evidence": "boxShadow is in the d7 controlled set — any movement fails d7SingleVariablePass"
+  },
+  "radiusInvariant": {
+    "declared": "modal/panel + small-overlay radius identical across arms (§20)",
+    "evidence": "borderRadius is in the controlled set for every target; modal/panel radius additionally absolute-identical"
+  },
+  "panelEdgeInvariant": {
+    "declared": "sheet panel edge attribute identical across arms (§21)",
+    "sheetPairs": 1,
+    "sheetBackgroundMovedPairs": 1,
+    "pass": true
+  }
+}

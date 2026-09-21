@@ -1,0 +1,38 @@
+{
+  "_warning": "VALIDITY BUNDLE — DO NOT PROVIDE TO BLIND MULTIMODAL JUDGE.",
+  "capturedAt": "2026-09-21T03:40:05.256Z",
+  "injectedBothArms": {
+    "d2": {
+      "declared": "15px body/control tier in BOTH arms",
+      "pass": true,
+      "completePairs": 15,
+      "violations": []
+    },
+    "d3": {
+      "declared": "6px primary control family radius in BOTH arms",
+      "pass": true,
+      "completePairs": 32,
+      "violations": []
+    },
+    "d6": {
+      "declared": "TagBadge weight 500 in BOTH arms",
+      "pass": true,
+      "completePairs": 1,
+      "violations": []
+    }
+  },
+  "asBuiltUpstream": {
+    "d4": {
+      "declared": "13px/20px/500 governed table header in BOTH arms",
+      "pass": true,
+      "completePairs": 5,
+      "violations": []
+    },
+    "d5": {
+      "declared": "22px/12px/500 StatusBadge in BOTH arms",
+      "pass": true,
+      "completePairs": 4,
+      "violations": []
+    }
+  }
+}
