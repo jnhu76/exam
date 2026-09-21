@@ -376,14 +376,14 @@ test.describe("dense table cell fitting (issue #590)", () => {
     await documentOverflowClean(page);
 
     const shell = page.locator('[data-slot="admin-table-shell"]').first();
-    const overflowing =
-      (await shell.getAttribute("data-overflowing")) === "true";
-    if (overflowing) {
-      await expect(
-        shell.locator('[data-slot="table-scroll-hint"]'),
-        "in-band local scroll must surface the owned affordance",
-      ).toBeVisible();
-    }
+    const region = shell.locator('[data-slot="table-scroll-region"]');
+
+    await expect(region).toHaveAttribute("data-overflowing", "true");
+
+    await expect(
+      shell.locator('[data-slot="table-scroll-hint"]'),
+      "in-band local scroll must surface the owned affordance",
+    ).toBeVisible();
   });
 
   test("negative control: relation count stays contained — /admin/recovery", async ({
