@@ -74,10 +74,9 @@ exists.
   **500** (CJK 700 reads heavy at UI sizes); 700 is reserved for large numeric
   metrics. `font-light`/300 is unused.
 - **Base:** `body { font-family: var(--font-ui); font-size: var(--text-sm) }` —
-  the Tailwind `text-sm` token currently resolves to **15px/1.5 line-height**
-  (22.5px line boxes) while the `type-body`/`type-secondary` recipes stay
-  14/22. This split is PENDING_VISUAL_A_B (decision D2: 14 vs 15); the two
-  layers follow their own owners until it lands.
+  the Tailwind `text-sm` token resolves to **15px/1.5 line-height**
+  (22.5px line boxes), and the `type-body`/`type-secondary` recipes render the
+  same 15px tier (issue 582 D2 converged the body tier upward).
 
 ## Typography recipes
 
@@ -88,13 +87,13 @@ machine-readable ownership registry is `apps/web/src/typography/recipeRegistry.t
 | Recipe | font-family | font-size | line-height | weight | letter-spacing | color | other |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `type-page-title` | `--font-ui` | 24px | 32px | 500 | -0.01em | `--text` | — |
-| `type-page-description` | `--font-ui` | 14px | 22px | 400 | — | `--text-muted` | — |
+| `type-page-description` | `--font-ui` | 15px | 22px | 400 | — | `--text-muted` | — |
 | `type-section-title` | `--font-ui` | 16px | 24px | 500 | — | `--text` | — |
-| `type-body` | `--font-ui` | 14px | 22px | 400 | — | `--text` | — |
-| `type-secondary` | `--font-ui` | 14px | 22px | 400 | — | `--text-muted` | — |
+| `type-body` | `--font-ui` | 15px | 22px | 400 | — | `--text` | — |
+| `type-secondary` | `--font-ui` | 15px | 22px | 400 | — | `--text-muted` | — |
 | `type-metadata` | `--font-ui` | 12px | 18px | 400 | — | `--text-muted` | — |
 | `type-reading` | `--font-reading` | 20px | 32px | 500 | — | `--text` | sustained reading |
-| `type-long-response` | `--font-reading` | 14px | 26px | 400 | — | `--text` | `white-space: pre-wrap` owned |
+| `type-long-response` | `--font-reading` | 15px | 26px | 400 | — | `--text` | `white-space: pre-wrap` owned |
 | `type-metric` | `--font-ui` | layout-owned | layout-owned | 700 | — | `--text` | `font-variant-numeric: tabular-nums` |
 | `type-metric-hero` | `--font-ui` | 48px | 1 | 700 | — | `--text` | `tabular-nums` (final-score emphasis) |
 | `type-numeric` | layout-owned | layout-owned | layout-owned | layout-owned | — | — | `tabular-nums` (table/timer/counts) |
@@ -125,15 +124,15 @@ Confirmed surface roles:
 
 **Overlay family (#577 M5):** the shadcn overlay primitives consume
 `surface-overlay` — they never compose their own background/radius/shadow.
-The variants materialize the current runtime population and do NOT decide it
-(grey-vs-white modal surface and the 6/8 radius split are deferred #577
-D3/D7): base = white/6px/shadow-md (popover, dropdown);
+Modal/panel render the content-tier surface background (issue 582 D7), so the
+family is single-tier on background with hierarchy carried by radius, shadow,
+border, and panel edge: base = surface/6px/shadow-md (popover, dropdown);
 `data-overlay-radius="lg"` = 8px (SelectContent);
 `data-overlay-elevation="lg"` = shadow-lg (dropdown sub-content);
-`data-overlay-variant="modal"` = grey/8px/shadow-lg (dialog, alert dialog);
-`data-overlay-variant="panel"` (+ `data-overlay-panel-edge`) = grey/shadow-lg,
-no radius, single-edge border (sheet). Consumer binding is gated by
-`surface/overlayAuthority.test.ts`.
+`data-overlay-variant="modal"` = surface/8px/shadow-lg (dialog, alert dialog);
+`data-overlay-variant="panel"` (+ `data-overlay-panel-edge`) =
+surface/shadow-lg, no radius, single-edge border (sheet). Consumer binding is
+gated by `surface/overlayAuthority.test.ts`.
 
 **Elevation vocabulary (three roles):**
 
@@ -480,8 +479,8 @@ statusMeta × supported-locale fixture), actions column **6rem** fine /
 **7.5rem** coarse pointer.
 
 Table typography (#577 M7): header cells render **13/20/500** via the
-unlayered recipe (PENDING_VISUAL_A_B, decision D4 — 13 vs 14); body cells
-render 14/22. The Question Management workbench carries an explicit compact
+unlayered recipe (issue 582 D4: frozen as-built); body cells render 15/22
+(issue 582 D2). The Question Management workbench carries an explicit compact
 density in `table/workbench.css` — 42px header height, 44px minimum body rows
 — distinct from the standard 44/48 geometry.
 
