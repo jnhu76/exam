@@ -49,6 +49,23 @@ describe("typography recipe layer (UI-RECIPE-1A)", () => {
     expect(RECIPES_CSS).not.toMatch(/var\(--(success|warning|danger|info)\)/);
     expect(RECIPES_CSS).not.toMatch(/text-(success|warning|destructive|info)/);
   });
+
+  it("pins the body/control tier at 15px (issue 582 D2)", () => {
+    // The frozen issue 582 visual decision: the governed body tier (and the table
+    // cell owner in table/recipes.css) converged UP to the existing 15px
+    // text-sm control tier (0.9375rem). Metadata/badges/small captions keep
+    // their own smaller tiers and must not ride along.
+    for (const recipe of [
+      "type-body",
+      "type-secondary",
+      "type-page-description",
+      "type-long-response",
+    ]) {
+      const rule = extractRule(RECIPES_CSS, recipe);
+      expect(rule, recipe).toContain("font-size: 0.9375rem");
+      expect(rule, recipe).not.toContain("font-size: 0.875rem");
+    }
+  });
 });
 
 /** Extract the CSS rule body for `.name { ... }` from the stylesheet text. */
