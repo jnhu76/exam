@@ -6,7 +6,7 @@ MASTER_SHA:
 CAMPAIGN:
 VISUAL_ADJUDICATION_COMPLETE
 IMPLEMENTATION_MERGED
-FINAL_RUNTIME_BASELINE_PENDING_REVIEW
+FINAL_RUNTIME_BASELINE_ESTABLISHED
 
 Purpose: prove `frozen research truth = merged production runtime truth` and
 establish the visual baseline #590 must build on. Task
@@ -198,3 +198,38 @@ only). SHA256 of the committed PNGs:
 final-baseline-contact-sheet.png  ae7c038d4ca4e8a38be939f94b0b14d970099d62de207e6f2f5633c121b0f206
 final-baseline-table-micro.png    4f87193152420ca7d26c3d1272a361e4cec14413242fde0700ab9eab5dbb846c
 ```
+
+## Final multimodal review
+
+```text
+review: EXAM-582-FINAL-VISUAL-REVIEW-1
+verdict: PASS
+new regression: NONE
+D2–D7 reopen: NO
+```
+
+The review confirmed:
+
+* D2 production typography is visually coherent.
+* D3 primary-control geometry is coherent across forms, Dialog, and AlertDialog.
+* D4 and D5 remain consistent in their frozen as-built state.
+* D6 TagBadge weight introduces no new density regression in covered runtime surfaces.
+* D7 Dialog / AlertDialog / Sheet hierarchy remains healthy.
+* No visual regression attributable to PR #595 was found.
+
+The following findings remain explicitly downstream of this baseline:
+
+```text
+#590:
+  role pill      CROSS_CELL_BOUNDARY
+  date range     CROSS_CELL_BOUNDARY
+  relation       CROWDED_BUT_CONTAINED
+  long datetime  CONTAINED
+  2-tag cluster  NO_DEFECT
+  3+ tag cluster COVERAGE GAP
+
+separate pre-existing defect:
+  destructive AlertDialog action palette
+```
+
+Therefore this document is the settled runtime baseline for subsequent UI work.
