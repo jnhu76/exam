@@ -110,7 +110,7 @@ Two implementation risks were flagged by the reviewer and are recorded here as c
 D2 = FROZEN at 15px
 D4 = FROZEN at 13px / 20px / 500
 D5 = FROZEN at 22px StatusBadge height (KEEP AS-BUILT)
-D6 = FROZEN at 500 TagBadge weight (KEEP AS-BUILT)
+D6 = FROZEN at 500 TagBadge weight (CHANGE from as-built 400 → 500)
 D3 = FROZEN at 6px primary control family radius (CONVERGE DOWN: button 8px → 6px)
 D7 = untouched
 ```
