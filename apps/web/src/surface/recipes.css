@@ -91,12 +91,11 @@
  * ConfirmDialog composes ui/dialog), so no overlay composes its own
  * background/radius/shadow from utilities (issue 577 M5).
  *
- * The variants materialize the CURRENT overlay population byte-for-byte; they
- * do not decide it. Two visual decisions stay deferred (issue 577 D3/D7): the
- * modal grey-vs-white surface (modal/panel keep the canvas-grey bg-background
- * dialogs render today) and the 6px-vs-8px radius split (menus stay 6px,
- * select stays 8px). Unifying those means editing these variants, not the
- * consumers. */
+ * The variants materialize the CURRENT overlay population; unifying the
+ * family means editing these variants, not the consumers. The modal/panel
+ * background is the content-tier var(--surface) per the frozen issue-582
+ * visual decisions (D7); the 6px-vs-8px overlay radius split (menus 6px,
+ * select 8px) remains an as-built, separately-owned fact. */
 .surface-overlay {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -118,9 +117,9 @@
     0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
-/* modal: centered dialogs/alerts — grey canvas surface + lg elevation. */
+/* modal: centered dialogs/alerts — content-tier surface + lg elevation. */
 .surface-overlay[data-overlay-variant="modal"] {
-  background: var(--bg);
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow:
     0 10px 15px -3px rgb(0 0 0 / 0.1),
@@ -133,7 +132,7 @@
  * zeroes the others — component utilities cannot re-widen them, because
  * unlayered recipes beat layered utilities). */
 .surface-overlay[data-overlay-variant="panel"] {
-  background: var(--bg);
+  background: var(--surface);
   border: 0;
   border-radius: 0;
   box-shadow:
