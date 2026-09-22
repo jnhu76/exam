@@ -371,10 +371,13 @@ describe("table contract v2 structural guards", () => {
     const contentBox = actionLabelColumnContentBoxPx();
     // Frozen invariant (#598): content box ≥ widest localized action label.
     expect(max).toBeLessThanOrEqual(contentBox);
-    // …and the token is the SMALLEST such quarter-rem step: one step narrower
-    // (0.25rem = 16px less content or more) must break the invariant. This is
-    // what makes the token derived from the vocabulary instead of copied.
-    expect(contentBox - 16).toBeLessThan(max);
+    // …and the token is the SMALLEST quarter-rem step that holds it: the token
+    // grid advances in 0.25rem steps (1rem = 16px at the product root font, so
+    // one step narrower is 0.25rem = 4px less column width — and therefore 4px
+    // less content box), and that previous step must break the invariant. This
+    // is what makes the token derived from the vocabulary instead of copied.
+    const quarterRemPx = 0.25 * 16;
+    expect(contentBox - quarterRemPx).toBeLessThan(max);
   });
 
   it("keeps the action-label token at the derived 9.5rem in recipes.css", () => {
