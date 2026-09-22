@@ -258,8 +258,13 @@ test.describe("table contract v2 runtime geometry (issue 454)", () => {
   }) => {
     await loginAsAdmin(page);
     await page.goto("/admin/audit-logs");
+    // Scoped to the row's identifier cell (targetId — the last short-id
+    // column): since #598 the preceding target column also renders the machine
+    // presenter, and its token values (e.g. `user`) are legitimately short
+    // enough to need no shortening. The contract under test is the
+    // identifier's middle truncation, not whichever presenter renders first.
     const presenter = page.locator(
-      '[data-slot="table-cell"] [data-overflow-policy="truncate-middle"]',
+      '[data-slot="table-cell"][data-column-role="short-id"]:last-child [data-overflow-policy="truncate-middle"]',
     );
     await expect(presenter.first()).toBeVisible({ timeout: 15_000 });
     const first = presenter.first();
