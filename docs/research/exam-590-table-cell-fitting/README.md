@@ -10,12 +10,12 @@ E2E REGRESSION      apps/e2e/e2e/dense-table-cell-fitting.spec.ts (2 tests, perm
                     the two historical defects only; the width derivations are
                     owned by typeFixture.ts + table-contract-guards.test.ts)
 BEFORE/AFTER       before-after-contact-sheet.png (single permanent capture pack:
-                    users/exams BEFORE/AFTER macro @1440x900 + native-pixel
-                    micro crops of both shared borders and neighbors, from a
-                    fresh production web build of pre-fix master df5d1ad5,
-                    re-verified 2026-09-22 at head 271da5b1 — see corrective
-                    section below; the former individual captures were folded
-                    into it in the final-slim round)
+                    users/exams BEFORE/AFTER macros @1440x900 AND @1100x800 +
+                    native-pixel micro crops of both shared borders and
+                    neighbors, from a fresh production web build of pre-fix
+                    master df5d1ad5, re-verified 2026-09-22 at head 271da5b1 —
+                    see corrective section below; the former individual
+                    captures were folded into it in the final-slim round)
 ```
 
 Environment of every number below: canonical E2E seed (`exam_e2e`, reset),
@@ -224,16 +224,20 @@ EVIDENCE ONLY  relation 1 条关联, long datetime, 2-tag cluster, RowActions
 
 ```text
 before-after-contact-sheet.png
-4334411d5eeb0991d92e6f9b6420bae04975f057d4f792f9c5caead68fb186c3
+47ab9cc1895e02e0e38785cd77f02fd60ce64ee84fc5289e18775572f883a8bf
 
-users BEFORE/AFTER   table-shell macro @1440x900 + 3x native-px micro of the
-                     pill cell, shared 角色/状态 border, status neighbor
-exams BEFORE/AFTER   table-shell macro @1440x900 + 3x native-px micro of the
-                     range cell, shared 时间窗口/时长 border, duration neighbor
+users BEFORE/AFTER   table-shell macros @1440x900 + @1100x800, plus 3x
+                     native-px micro of the pill cell, shared 角色/状态
+                     border, status neighbor
+exams BEFORE/AFTER   table-shell macros @1440x900 + @1100x800, plus 3x
+                     native-px micro of the range cell, shared
+                     时间窗口/时长 border, duration neighbor
 ```
 
-The contact sheet is the only permanent capture (2 files in this directory
-after the final-slim round, README included); the individual captures it was
-assembled from were removed — nearest-neighbor micro panels preserve the
-native pixel columns, so the shared borders stay inspectable at native
-fidelity.
+The contact sheet is the only permanent capture (2 files in this directory,
+README included). The individual captures it was assembled from were removed
+in the final-slim round; the 1100 macros were folded back in from branch
+history at closeout — byte-identical to the corrective-round captures
+(BEFORE from pre-fix master df5d1ad5, AFTER at 271da5b1 — no recapture).
+Nearest-neighbor micro panels preserve the native pixel columns, so the
+shared borders stay inspectable at native fidelity.
