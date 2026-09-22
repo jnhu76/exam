@@ -8,6 +8,66 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-09-22
+
+### Added
+
+- Durable PostgreSQL-backed exam admission state (#292, PR #521): restart-safe
+  queue membership, deterministic ordering, write-once admission, atomic
+  consumption at attempt start, and a fail-closed start gate. The old
+  process-local queue authority is gone.
+- Persisted-state value-set backstops (#542, PR #555): migration `0043` adds
+  fail-closed CHECK constraints for exam, enrollment, attempt, and grading
+  status vocabularies while keeping engine commands as the transition
+  authority. Historical `status='grading'` residue is never silently rewritten
+  and has an explicit operator recovery runbook.
+- Semantic table value ownership for audit actions (#598, PR #599): a dedicated
+  `action-label` role with vocabulary/copy completeness, accessible raw-key
+  fallback, machine-token ownership for `targetType`, and product date/time
+  formatting for invitation expiry.
+
+### Changed
+
+- HTTP API/docs/static/SPA routing now has one Fastify routing authority
+  (#429/#500, PR #499). API rate limiting is scope-owned, the API-reference
+  namespace never escapes into SPA fallback, and raw-URL policy classifiers
+  were removed (ADR-020).
+- Managed test/e2e profiles no longer inherit developer `.env` state, and the
+  WSL runner explicitly owns its API shard port/origin projection (PR #565).
+- Configuration semantics were tightened across #566–#570 (PRs #573–#578):
+  invalid explicit port/rate-limit values fail fast, production/no-op settings
+  were narrowed, and dead feature-flag plumbing was removed with bidirectional
+  contract gates.
+- Assignment and export affordances now reflect target active roles and actor
+  capabilities rather than cache/role surrogates; large catalogs use real
+  reachability via pagination/search (#548, PR #581).
+- Admin visual baseline converged through #582/#590/#598: governed body/table
+  text is 15px, primary controls use 6px radius, tags use 500 weight,
+  modal/panel backgrounds use the surface token, and dense-table allocation /
+  value-grammar ownership has dedicated regression coverage (PRs #594–#599).
+
+### Fixed
+
+- Restart and multi-process admission divergence from the legacy in-memory
+  queue, including ordering reset and over-admission across processes (#292).
+- API-reference requests falling through to the SPA shell when docs are
+  disabled (#499).
+- WSL E2E port collisions / mismatched health probes caused by developer `.env`
+  contamination (#565).
+- Silent fallback from invalid explicit numeric configuration (#566).
+- Staff assignment, proctor assignment, and score-export UI affordances that
+  could be shown when the canonical server capability would reject them (#548).
+- Dense-table role-pill, date-range, audit-action, audit-target, and invitation
+  expiry cells that could crowd or cross neighboring column boundaries
+  (#590/#598).
+
+### Removed
+
+- Process-local exam queue authority (`examQueues` and related in-memory queue
+  semantics) in favor of durable PostgreSQL admission state (#292).
+- Dead `FEATURE_*` configuration surface with no product consumer (#570).
+- Raw-URL policy classification that duplicated router identity (#499).
+
 ## [0.0.4] - 2026-09-07
 
 ### Added
@@ -282,7 +342,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/jnhu76/exam/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/jnhu76/exam/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/jnhu76/exam/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/jnhu76/exam/compare/v0.0.1...v0.0.2
