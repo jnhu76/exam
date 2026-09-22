@@ -141,9 +141,8 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).toMatch(
       /\[data-column-role="number"\]\s+\{[^}]*width:\s*4\.5rem/,
     );
-    expect(tableCss).toMatch(
-      /\[data-column-role="type"\]\s+\{[^}]*width:\s*5\.5rem/,
-    );
+    // type/date-range are vocabulary-bound tokens; their derived values are
+    // pinned once, by table-contract-guards.test.ts (issue #590 owner).
   });
 
   it("defines restrained row hover, focus, and selected states", () => {

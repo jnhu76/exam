@@ -184,9 +184,19 @@
   min-width: 10.5rem;
 }
 
+/*
+ * Date-range column — vocabulary-bound width 14.5rem (issue #590). The range
+ * grammar is the fixed 23-character `YYYY-MM-DD — YYYY-MM-DD` (dateTime.ts,
+ * test-pinned; 4-digit years are the practical maximum), rendered nowrap in
+ * the D2-frozen 15px cell font with tabular-nums. Measured product constant:
+ * the widest legal form renders 195.5px (Chromium, #590 runtime probe).
+ * Token 14.5rem = 232px gives a content box of 199px ≥ 195.5 + ~3.5px slack —
+ * the same slack discipline as the status token. The runtime half of the gate
+ * is the dense-table-cell-fitting E2E containment assertion.
+ */
 [data-column-role="date-range"] {
-  width: 12.5rem;
-  min-width: 12.5rem;
+  width: 14.5rem;
+  min-width: 14.5rem;
 }
 
 [data-column-role="duration"] {
@@ -209,9 +219,23 @@
   min-width: 7.5rem;
 }
 
+/*
+ * Type column — vocabulary-bound width 7.25rem (issue #590). Derived from the
+ * widest legal badge across the BOUNDED enumerated-label families rendered in
+ * type columns (role labels, question types, candidate-field labels, import
+ * types, incident severities — see typeFixture.ts, which auto-derives the
+ * universe the same way statusFixture.ts does for the status token): the
+ * widest badge estimates at 80px (5 × 12.4px CJK + 16px badge padding + 2px
+ * border; the workbench-compact badge variant is narrower and covered by the
+ * same bound). Token 7.25rem = 116px gives a content box of 83px ≥ 80 + slack.
+ * The runtime half of the gate is the dense-table-cell-fitting E2E containment
+ * assertion. Excluded from the derivation (tracked type-role follow-up of
+ * #590, wider than this token): audit-log action pills and the InvitationsCard
+ * expiresAt datetime misdeclared as type — see typeFixture.ts.
+ */
 [data-column-role="type"] {
-  width: 5.5rem;
-  min-width: 5.5rem;
+  width: 7.25rem;
+  min-width: 7.25rem;
 }
 
 [data-column-role="tag-list"] {
