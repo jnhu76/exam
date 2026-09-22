@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
@@ -70,6 +71,7 @@ function statusBadgeVariant(status: StaffInvitationDTO["status"]) {
  */
 export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const [invitations, setInvitations] = useState<StaffInvitationDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -201,9 +203,12 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
     },
     {
       id: "expiresAt",
-      meta: { role: "type", priority: "normal" },
+      // role "date" owns normal priority, so no override: the expiry joins the
+      // card meta line and renders through the product datetime authority
+      // (organization timezone), never the browser locale.
+      meta: { role: "date" },
       header: t("admin.users.invitations.columns.expiresAt"),
-      cell: ({ row }) => new Date(row.original.expiresAt).toLocaleString(),
+      cell: ({ row }) => formatDateTime(row.original.expiresAt),
     },
     {
       id: "actions",

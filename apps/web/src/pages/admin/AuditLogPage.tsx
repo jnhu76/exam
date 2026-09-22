@@ -5,6 +5,7 @@ import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { downloadFile } from "@/lib/download";
+import { isAuditAction } from "@exam/authz";
 import type { AuditActionMetadataEntry } from "@exam/contracts";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -374,8 +375,8 @@ export function AuditLogPage() {
                 columns={[
                   { role: "date" },
                   { role: "primary-text", key: "actor" },
-                  { role: "type", key: "action" },
-                  { role: "type", key: "target" },
+                  { role: "action-label", key: "action" },
+                  { role: "short-id", key: "target" },
                   { role: "short-id", key: "detail" },
                 ]}
               />
@@ -387,10 +388,10 @@ export function AuditLogPage() {
                   <DataTableHead role="primary-text">
                     {t("admin.audit.columns.actor")}
                   </DataTableHead>
-                  <DataTableHead role="type">
+                  <DataTableHead role="action-label">
                     {t("admin.audit.columns.action")}
                   </DataTableHead>
-                  <DataTableHead role="type">
+                  <DataTableHead role="short-id">
                     {t("admin.audit.columns.target")}
                   </DataTableHead>
                   <DataTableHead role="short-id">
@@ -413,19 +414,34 @@ export function AuditLogPage() {
                     <DataTableCell role="primary-text">
                       {item.actorName ?? item.actorId}
                     </DataTableCell>
-                    <DataTableCell role="type">
-                      <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
-                        {/* Known actions render localized (same authority as
-                            the filter); a future unknown action falls back to
-                            the raw machine key instead of going blank (C6
-                            F-14). */}
-                        {t(
-                          `admin.audit.filterActions.${item.action}` as never,
-                          item.action,
-                        )}
-                      </span>
+                    <DataTableCell role="action-label">
+                      {/* Two presenter paths, one semantic column: a declared
+                          action renders its localized label (copy is pinned
+                          complete for the whole registry by
+                          actionLabelFixture's guard AND by the typed catalog
+                          key — deliberately with no raw-key default, so a
+                          forgotten copy can never masquerade as the C6 F-14
+                          compatibility presentation), while a historical /
+                          version-skew key outside the registry keeps that
+                          compatibility channel — never bare unbounded nowrap
+                          text, always the accessible machine presenter. */}
+                      {isAuditAction(item.action) ? (
+                        <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
+                          {t(`admin.audit.filterActions.${item.action}`)}
+                        </span>
+                      ) : (
+                        <DataTableOverflowText
+                          mode="truncate-middle"
+                          value={item.action}
+                        />
+                      )}
                     </DataTableCell>
-                    <DataTableCell role="type">{item.targetType}</DataTableCell>
+                    <DataTableCell role="short-id">
+                      <DataTableOverflowText
+                        mode="truncate-middle"
+                        value={item.targetType}
+                      />
+                    </DataTableCell>
                     <DataTableCell role="short-id">
                       <DataTableOverflowText
                         mode="truncate-middle"

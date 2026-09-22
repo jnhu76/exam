@@ -42,6 +42,15 @@ import {
   TYPE_LABEL_NAMESPACES,
   typeColumnContentBoxPx,
 } from "@/table/typeFixture";
+import {
+  ACTION_LABEL_COLUMN_TOKEN,
+  ACTION_LABEL_COLUMN_WIDTH_PX,
+  ACTION_LABEL_VOCABULARY,
+  actionLabelColumnContentBoxPx,
+  actionLabelCopyKeys,
+  actionLabelFixture,
+  maxActionLabelWidth,
+} from "@/table/actionLabelFixture";
 import i18n, { SUPPORTED_LOCALES } from "@/i18n";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -118,6 +127,9 @@ describe("table contract v2 structural guards", () => {
     expect(columnOverflow({ role: "primary-text" })).toBe("wrap");
     expect(columnOverflow({ role: "secondary-text" })).toBe("wrap");
     expect(columnOverflow({ role: "long-text" })).toBe("wrap");
+    // Issue #598: localized action labels are atomic — a truncating presenter
+    // would drop meaning from a label that has no full-value affordance.
+    expect(columnOverflow({ role: "action-label" })).toBe("nowrap");
     // Explicit overrides flow through the single declaration.
     expect(
       columnOverflow({ role: "description", overflow: "line-clamp-2" }),
@@ -142,6 +154,7 @@ describe("table contract v2 structural guards", () => {
       "score",
       "actions",
       "primary-text",
+      "action-label",
     ] as const) {
       expect(
         () => columnOverflow({ role, overflow: "truncate" }),
@@ -329,5 +342,57 @@ describe("table contract v2 structural guards", () => {
     expect(tableCss).not.toMatch(
       /\[data-column-role="date-range"\]\s*\{[^}]*width:\s*12\.5rem/,
     );
+  });
+
+  it("binds the action-label token to the auto-deriving action-registry fixture (issue #598)", () => {
+    const rows = actionLabelFixture();
+    // Full coverage: every declared action × every supported locale enters the
+    // universe automatically (no hand-copied label list).
+    expect(rows.length).toBe(
+      ACTION_LABEL_VOCABULARY.length * SUPPORTED_LOCALES.length,
+    );
+    // Every declared action resolves its own localized copy. The fixture
+    // falls back to the key path when an action has no catalog entry, so
+    // `label !== key` is the loud-fail gate: an action shipped without display
+    // copy can no longer degrade silently to the raw machine key.
+    for (const row of rows) {
+      expect(row.label, `copy for ${row.action}@${row.locale}`).not.toBe(
+        row.key,
+      );
+      expect(row.label, `copy for ${row.action}@${row.locale}`).not.toBe("");
+    }
+    // The copy namespace and the action registry are the same set — in both
+    // directions: a declared action without copy (silent raw-key fallback) and
+    // a copy key without a declared action (dead copy / typo) both red here.
+    expect(actionLabelCopyKeys().sort()).toEqual(
+      [...ACTION_LABEL_VOCABULARY].sort(),
+    );
+    const max = maxActionLabelWidth();
+    const contentBox = actionLabelColumnContentBoxPx();
+    // Frozen invariant (#598): content box ≥ widest localized action label.
+    expect(max).toBeLessThanOrEqual(contentBox);
+    // …and the token is the SMALLEST quarter-rem step that holds it: the token
+    // grid advances in 0.25rem steps (1rem = 16px at the product root font, so
+    // one step narrower is 0.25rem = 4px less column width — and therefore 4px
+    // less content box), and that previous step must break the invariant. This
+    // is what makes the token derived from the vocabulary instead of copied.
+    const quarterRemPx = 0.25 * 16;
+    expect(contentBox - quarterRemPx).toBeLessThan(max);
+  });
+
+  it("keeps the action-label token at the derived 9.5rem in recipes.css", () => {
+    const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
+    expect(ACTION_LABEL_COLUMN_TOKEN).toBe("9.5rem");
+    expect(ACTION_LABEL_COLUMN_WIDTH_PX).toBe(152);
+    expect(tableCss).toMatch(
+      /\[data-column-role="action-label"\]\s*\{[^}]*width:\s*9\.5rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-column-role="action-label"\]\s*\{[^}]*min-width:\s*9\.5rem/,
+    );
+    // The token is not inflated to the type token's neighbors: the shared
+    // `type` value stays exactly as #590 froze it (7.25rem), so this role can
+    // never tax the other 15 conforming type columns.
+    expect(TYPE_COLUMN_TOKEN).toBe("7.25rem");
   });
 });

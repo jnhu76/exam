@@ -164,6 +164,20 @@ const auditItems = [
     userAgent: null,
     createdAt: "2025-01-15T10:06:00Z",
   },
+  {
+    // A current long machine target token (the #598 containment case): it
+    // renders through the machine presenter, never as bare nowrap text.
+    id: "log-4",
+    organizationId: "org-1",
+    actorId: "admin-1",
+    action: "user.invited",
+    targetType: "staff_invitation",
+    targetId: "inv-7f3a91c2-0b44-4d5e-9a11-8c7d6e5f4a3b",
+    metadata: {},
+    ipAddress: null,
+    userAgent: null,
+    createdAt: "2025-01-15T10:07:00Z",
+  },
 ];
 
 const mockAuditData = {
@@ -216,9 +230,69 @@ describe("AuditLogPage", () => {
     // as the dropdown), not the raw machine key (C6 F-14).
     expect(await screen.findByText("评分录入")).toBeInTheDocument();
     expect(screen.getByText("公布成绩")).toBeInTheDocument();
-    // A future unknown action falls back to the raw machine key instead of
-    // going blank (forward compatibility).
-    expect(screen.getByText("future.unknown_action")).toBeInTheDocument();
+    // A future unknown action keeps the raw compatibility channel: the full
+    // machine key stays the accessible value, the visible form is the
+    // presenter's deterministic shortening (#598 — never bare unbounded text
+    // in a fixed-width column).
+    const rawFallback = screen.getByLabelText("future.unknown_action");
+    expect(rawFallback).toBeInTheDocument();
+    expect(rawFallback).toHaveAttribute("title", "future.unknown_action");
+    expect(rawFallback).toHaveTextContent("future…tion");
+  });
+
+  it("declares the #598 roles: action-label for actions, short-id for targets", async () => {
+    renderPage();
+    await screen.findByText("评分录入");
+
+    // Headers and body cells carry the same frozen role for each column.
+    const actionHead = document.querySelectorAll(
+      '[data-slot="table-head"][data-column-role="action-label"]',
+    );
+    expect(actionHead.length).toBe(1);
+    expect(
+      document.querySelectorAll(
+        '[data-slot="table-cell"][data-column-role="action-label"]',
+      ).length,
+    ).toBe(auditItems.length);
+    // target + detail are both machine-token columns.
+    expect(
+      document.querySelectorAll(
+        '[data-slot="table-head"][data-column-role="short-id"]',
+      ).length,
+    ).toBe(2);
+
+    // Known action: the localized pill (page-local presenter, not a governed
+    // StatusBadge/TagBadge; not the machine presenter path).
+    const knownCell = screen
+      .getByText("评分录入")
+      .closest('[data-column-role="action-label"]');
+    expect(knownCell).toBeTruthy();
+    expect(knownCell?.querySelector("[data-overflow-policy]")).toBeNull();
+    expect(knownCell?.querySelector('[data-slot="badge"]')).toBeNull();
+
+    // Unknown action: the accessible machine presenter inside the SAME
+    // semantic column.
+    const rawFallback = screen.getByLabelText("future.unknown_action");
+    expect(
+      rawFallback.closest('[data-column-role="action-label"]'),
+    ).toBeTruthy();
+    expect(rawFallback).toHaveAttribute(
+      "data-overflow-policy",
+      "truncate-middle",
+    );
+
+    // Target: the long current token renders through the machine presenter
+    // with the full value still accessible.
+    const targetPresenter = screen.getByLabelText("staff_invitation");
+    expect(targetPresenter).toHaveAttribute(
+      "data-overflow-policy",
+      "truncate-middle",
+    );
+    expect(targetPresenter).toHaveAttribute("title", "staff_invitation");
+    expect(targetPresenter).toHaveTextContent("staff_…tion");
+    expect(
+      targetPresenter.closest('[data-column-role="short-id"]'),
+    ).toBeTruthy();
   });
 
   it("renders target type and target id", async () => {

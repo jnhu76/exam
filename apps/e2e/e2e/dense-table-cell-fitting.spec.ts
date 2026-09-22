@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { loginAsAdmin } from "../lib/login";
+import { adminApiToken, adminGet, adminPost } from "../lib/flow";
 
 /**
  * Dense-table cell-fitting regression (issue #590) — the two historical
@@ -7,6 +8,11 @@ import { loginAsAdmin } from "../lib/login";
  *   1. the users role pill (考试管理员) painted across the shared 角色/状态
  *      cell border;
  *   2. the exams date range painted into the duration column on every row.
+ *
+ * Issue #598 added the third test in this file — the audit-log action/target
+ * geometry — because this spec is the repository's runtime owner for
+ * border-crossing regressions in tier-governed tables. The two #590 tests
+ * above are unchanged.
  *
  * Division of ownership for the #590 mechanism:
  *   - the locked-width derivations (widest type-role badge; the fixed
@@ -200,5 +206,127 @@ test.describe("dense table cell fitting (issue #590)", () => {
         `date range row ${i}: range content must not paint across the shared border`,
       ).toBeLessThanOrEqual(durationRect.x - 1 + PX);
     }
+  });
+
+  /**
+   * Issue #598 runtime half. Two independent channels share the audit table's
+   * role allocation, and both historical defects were border-crossing paints:
+   *   - the action-label column (localized operational action labels, own
+   *     vocabulary-bound token);
+   *   - the target column, which renders a machine token through the
+   *     middle-truncating presenter.
+   *
+   * The rows are created through the product API so the measured content is
+   * deterministic (the dev seed's audit rows carry only short labels):
+   *   - `auth.password_reset_request_rejected` → 拒绝密码重置请求, one of the
+   *     two widest current labels (8 CJK glyphs; pinned by
+   *     actionLabelFixture's capacity guard), written by a rejected reset
+   *     request for an unknown account — no product state is mutated;
+   *   - `user.invited` → targetType `staff_invitation` (16 chars), written by
+   *     creating one staff invitation.
+   */
+  test("audit action label + machine target stay inside their cells — /admin/audit-logs", async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ ...VIEWPORT });
+    const suffix = Date.now();
+
+    const reset = await request.post("/api/auth/password-reset/request", {
+      data: { username: `audit-geometry-unknown-${suffix}` },
+    });
+    expect(reset.ok(), "rejected reset request must be accepted").toBe(true);
+    const token = await adminApiToken(request);
+    const invite = await adminPost(request, token, "/api/invitations", {
+      email: `audit-geometry-${suffix}@example.org`,
+      role: "Teacher",
+    });
+    expect(invite.status(), "invitation must be created").toBe(201);
+
+    // The rejected-reset audit row is best-effort (scheduled, not awaited by
+    // the request), so wait for the row itself rather than for a timeout.
+    await expect
+      .poll(
+        async () => {
+          const res = await adminGet(
+            request,
+            token,
+            "/api/admin/audit-logs?action=auth.password_reset_request_rejected&limit=1",
+          );
+          const body = (await res.json()) as { items: unknown[] };
+          return body.items.length;
+        },
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(0);
+
+    await loginAsAdmin(page);
+    await page.goto("/admin/audit-logs");
+    await fontMetricsSettled(page);
+
+    // ── Known localized action label (widest current family) ──
+    const knownCell = page
+      .locator('[data-slot="table-cell"][data-column-role="action-label"]')
+      .filter({ hasText: "拒绝密码重置请求" })
+      .first();
+    await expect(knownCell).toBeVisible({ timeout: 15_000 });
+    const knownRow = page
+      .locator('[data-slot="table-body"] [data-slot="table-row"]')
+      .filter({ has: knownCell })
+      .first();
+    const knownCellRect = await rectOf(knownCell);
+    const knownContent = await contentRectOf(knownCell);
+    const targetCell = await rectOf(
+      knownRow
+        .locator('[data-slot="table-cell"][data-column-role="short-id"]')
+        .first(),
+    );
+    expect(
+      Math.abs(right(knownCellRect) - targetCell.x),
+      "target neighbor must begin at the shared boundary",
+    ).toBeLessThanOrEqual(1);
+    expect(
+      right(knownContent),
+      "the localized action label must not paint across the shared border",
+    ).toBeLessThanOrEqual(targetCell.x - 1 + PX);
+
+    // ── Machine target token (long current value) ──
+    const targetPresenter = page
+      .locator(
+        '[data-slot="table-cell"][data-column-role="short-id"] [data-overflow-policy="truncate-middle"][aria-label="staff_invitation"]',
+      )
+      .first();
+    await expect(targetPresenter).toBeVisible({ timeout: 15_000 });
+    // The full machine token stays accessible; the visible form is the
+    // presenter's deterministic shortening (never bare nowrap text).
+    await expect(targetPresenter).toHaveAttribute("title", "staff_invitation");
+    expect(await targetPresenter.textContent()).toContain("…");
+    const targetRow = page
+      .locator('[data-slot="table-body"] [data-slot="table-row"]')
+      .filter({ has: targetPresenter })
+      .first();
+    const targetCellRect = await rectOf(
+      targetRow
+        .locator('[data-slot="table-cell"][data-column-role="short-id"]')
+        .first(),
+    );
+    const detailCellRect = await rectOf(
+      targetRow
+        .locator('[data-slot="table-cell"][data-column-role="short-id"]')
+        .nth(1),
+    );
+    // Painted ink, not the presenter's block box: the presenter is a block
+    // element, so its border box fills the cell by construction and could
+    // never prove the glyph budget.
+    const presenterInk = await contentRectOf(targetPresenter);
+    expect(presenterInk.x).toBeGreaterThanOrEqual(targetCellRect.x - PX);
+    expect(
+      Math.abs(right(targetCellRect) - detailCellRect.x),
+      "detail neighbor must begin at the shared boundary",
+    ).toBeLessThanOrEqual(1);
+    expect(
+      right(presenterInk),
+      "the target presenter must not paint across the shared border",
+    ).toBeLessThanOrEqual(detailCellRect.x - 1 + PX);
   });
 });
