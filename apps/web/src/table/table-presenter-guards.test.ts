@@ -34,6 +34,7 @@ import ts from "typescript";
 import type { ComponentProps } from "react";
 import {
   DataTableOverflowText,
+  ROLE_MACHINE_VALUE_OVERFLOW,
   ROLE_OVERFLOW,
 } from "@/components/shared/DataTableContract";
 
@@ -438,19 +439,41 @@ function presenterPairingViolations(
             }
           }
           // Reverse drift: a presenter inside a cell whose column declares a
-          // non-presenter overflow contradicts the colgroup declaration.
+          // non-presenter overflow contradicts the colgroup declaration —
+          // unless the role declares that exact mode as its machine-value
+          // compatibility channel (issue #598: a non-enumerable value class
+          // contained by the presenter while the enumerable class stays
+          // atomic). Any other mode in any other column is still a violation.
           for (const [index, declaration] of declarations.entries()) {
             if (isPresenterMode(declaration.effective)) continue;
+            const channelMode =
+              ROLE_MACHINE_VALUE_OVERFLOW[
+                declaration.role as keyof typeof ROLE_MACHINE_VALUE_OVERFLOW
+              ];
             for (const row of rowTemplates) {
               const cell = row[index];
               if (!cell) continue;
-              if (presenterUses(cell).modes.length > 0) {
-                fail(
-                  rel,
-                  declarationSite(sourceFile, cell),
-                  `body cell #${index + 1} renders DataTableOverflowText but column #${index + 1} declares "${declaration.effective}"`,
-                );
-              }
+              const { modes, nonLiteralMode } = presenterUses(cell);
+              // Channel-less roles keep the pre-existing rule verbatim (any
+              // presenter contradicts the declaration); a role that declares a
+              // machine-value channel additionally requires literal modes that
+              // match it exactly — an unprovable mode cannot be allowed to
+              // slip past the channel.
+              const violation =
+                channelMode === undefined
+                  ? modes.length > 0
+                  : nonLiteralMode ||
+                    !modes.every((mode) => mode === channelMode);
+              if (!violation) continue;
+              fail(
+                rel,
+                declarationSite(sourceFile, cell),
+                `body cell #${index + 1} renders DataTableOverflowText but column #${index + 1} declares "${declaration.effective}"${
+                  channelMode === undefined
+                    ? ""
+                    : ` (role "${declaration.role}" machine-value channel is "${channelMode}")`
+                }`,
+              );
             }
           }
         }
@@ -527,5 +550,90 @@ export function FixturePage({
     expect(violations[0]).toMatch(
       /FixturePage\.tsx:\d+ colgroup column #2 \(long-text, effective "truncate"\) must render DataTableOverflowText mode="truncate" in body cell #2 \(row template at this line\)/,
     );
+  });
+
+  it("keeps machine-value channels a closed, presenter-mode-only contract", () => {
+    // The channel map is the ONLY legal reason a presenter may appear in a
+    // non-presenter column, so it must stay narrow and internally consistent:
+    // every listed mode is a presenter policy, and no listed role may already
+    // own a presenter-mode column overflow (the two channels would collapse).
+    const roles = Object.keys(ROLE_MACHINE_VALUE_OVERFLOW);
+    expect(roles).toEqual(["action-label"]);
+    for (const role of roles) {
+      const mode =
+        ROLE_MACHINE_VALUE_OVERFLOW[
+          role as keyof typeof ROLE_MACHINE_VALUE_OVERFLOW
+        ];
+      expect(isPresenterMode(mode as string), role).toBe(true);
+      expect(
+        isPresenterMode(
+          ROLE_OVERFLOW[role as keyof typeof ROLE_OVERFLOW] as string,
+        ),
+        `${role} declares a presenter overflow — nothing is left for a channel`,
+      ).toBe(false);
+    }
+  });
+
+  it("reds a presenter outside the role's declared channel mode (in-memory mutation)", () => {
+    // Two mutations in one fixture: an action-label cell whose presenter mode
+    // is NOT the channel mode, and a status cell (no channel) that renders a
+    // presenter at all. Both must be reported. The third column is a compliant
+    // presenter column (the pairing analysis only runs for a colgroup that has
+    // one). In-memory — nothing on disk.
+    const fixture = `import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+  DataTableOverflowText,
+} from "@/components/shared/DataTableContract";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+
+export function FixturePage({
+  rows,
+}: {
+  rows: Array<{ action: string; status: string; id: string }>;
+}) {
+  return (
+    <Table>
+      <DataTableColumns
+        columns={[{ role: "action-label" }, { role: "status" }, { role: "short-id" }]}
+      />
+      <TableHeader>
+        <TableRow>
+          <DataTableHead role="action-label">Action</DataTableHead>
+          <DataTableHead role="status">Status</DataTableHead>
+          <DataTableHead role="short-id">ID</DataTableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.id}>
+            <DataTableCell role="action-label">
+              <DataTableOverflowText mode="truncate" value={row.action} />
+            </DataTableCell>
+            <DataTableCell role="status">
+              <DataTableOverflowText mode="truncate-middle" value={row.status} />
+            </DataTableCell>
+            <DataTableCell role="short-id">
+              <DataTableOverflowText mode="truncate-middle" value={row.id} />
+            </DataTableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+`;
+    const violations = presenterPairingViolations([
+      { rel: "pages/admin/FixturePage.tsx", text: fixture },
+    ]);
+    expect(violations).toHaveLength(2);
+    expect(violations[0]).toMatch(
+      /body cell #1 renders DataTableOverflowText but column #1 declares "nowrap" \(role "action-label" machine-value channel is "truncate-middle"\)/,
+    );
+    expect(violations[1]).toMatch(
+      /body cell #2 renders DataTableOverflowText but column #2 declares "nowrap"/,
+    );
+    expect(violations[1]).not.toMatch(/machine-value channel/);
   });
 });

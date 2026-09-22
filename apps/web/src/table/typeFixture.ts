@@ -15,15 +15,15 @@ import { AssignableRoleSchema } from "@exam/contracts";
  * family grows the fixture and turns the structural test red until the token
  * is revisited.
  *
- * Deliberately NOT part of this fixture — content wider than the token that
- * is tracked as the focused type-role vocabulary follow-up of issue #590
- * (fitting them would drive the token to ~9.5rem and is a separate contract
- * decision, not a silent inheritance of this derivation):
- *   - audit-log action pills (`admin.audit.filterActions.*`; widest
- *     关闭考试（自动） ≈ 112px — an enumerated family, but audit-only) and
- *     raw audit action-key/target-type fallbacks (unbounded machine strings);
- *   - InvitationsCard `expiresAt`, a toLocaleString() datetime misdeclared
- *     into the type role (semantically a date-role column).
+ * Issue #590 recorded two nonconforming `type` consumers as its follow-up;
+ * issue #598 moved both out of this role instead of widening this token, so
+ * the families above stay the complete derivation universe:
+ *   - audit-log action labels → the dedicated grammar-class role
+ *     `action-label`, derived from the action registry × locales by
+ *     actionLabelFixture.ts (its raw action-key compatibility path renders
+ *     through the DataTableOverflowText machine presenter);
+ *   - InvitationsCard `expiresAt` → the existing `date` role + the product
+ *     datetime formatter (`toLocaleString()` is gone).
  *
  * The per-glyph width is a MEASURED product constant (Chromium, 12px badge
  * text — the same measurement campaign as statusFixture's 12.4px constant):

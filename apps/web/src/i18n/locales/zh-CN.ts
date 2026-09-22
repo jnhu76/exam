@@ -1168,6 +1168,8 @@ const zhCN = {
         "exam.archive": "归档考试",
         "exam.publish_results": "公布成绩",
         "exam.delete": "删除考试",
+        // Security-sensitive schedule update on an already published exam.
+        "exam.published_schedule_updated": "更新已发布考试",
         "attempt.start": "开始答题",
         "attempt.restore": "恢复答题",
         "attempt.saveAnswer": "保存答案",
@@ -1249,6 +1251,10 @@ const zhCN = {
         // System operations (P7-E3 / P7-E2A).
         "ops.policy.updated": "更新运维策略",
         "system.email.test": "发送测试邮件",
+        // Email outbox worker actions (reserved: declared, not yet emitted).
+        "email.outbox_created": "创建发件记录",
+        "email.send_failed": "发送邮件失败",
+        "email.send_retried": "重试发送邮件",
       },
       filterTargets: {
         all: "全部目标",

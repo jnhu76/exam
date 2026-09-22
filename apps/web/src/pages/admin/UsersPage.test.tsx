@@ -178,13 +178,26 @@ function mockApiGet(usersOverride?: {
   });
 }
 
+/**
+ * Users-list GET mock for tests that need a custom users payload: it routes
+ * the invitations panel to the real endpoint's shape. The panel is a separate
+ * surface with its own DTO (StaffInvitationDTO) — serving it a users payload
+ * would render invitation rows from user objects, which no server can return.
+ */
+function mockUsersListGet(payload: unknown): void {
+  apiGet.mockImplementation(async (url: string) =>
+    url.startsWith("/api/invitations")
+      ? { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+      : payload,
+  );
+}
+
 function renderPage(capabilities?: string[]) {
   return render(
     <MemoryRouter initialEntries={["/admin/users"]}>
       <AuthProvider
         initialUser={{
           id: "u3",
-
           username: "admin",
           name: "Admin",
           role: "Admin",
@@ -346,7 +359,15 @@ describe("UsersPage", () => {
               { key: "Teacher", label: "Teacher", purpose: "x" },
             ],
           }
-        : { items: mockUsers, total: 1, page: 1, pageSize: 20, totalPages: 1 },
+        : url.startsWith("/api/invitations")
+          ? { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+          : {
+              items: mockUsers,
+              total: 1,
+              page: 1,
+              pageSize: 20,
+              totalPages: 1,
+            },
     );
     const user = userEvent.setup();
     renderPage();
@@ -506,7 +527,7 @@ describe("UsersPage", () => {
     // The server applies the staff filter BEFORE pagination. The client must
     // not re-filter by `users.role`: a Candidate-primary user with a staff
     // secondary assignment (compatibility role "Candidate") must stay visible.
-    apiGet.mockResolvedValue({
+    mockUsersListGet({
       items: [
         ...mockUsers,
         {
@@ -542,22 +563,24 @@ describe("UsersPage", () => {
               { key: "Candidate", label: "Candidate", purpose: "x" },
             ],
           }
-        : {
-            items: [
-              {
-                id: "u9",
-                username: "maint1",
-                name: "Maint One",
-                role: "Maintainer",
-                activeRoles: ["Maintainer"],
-                isActive: true,
-              },
-            ],
-            total: 1,
-            page: 1,
-            pageSize: 20,
-            totalPages: 1,
-          },
+        : url.startsWith("/api/invitations")
+          ? { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+          : {
+              items: [
+                {
+                  id: "u9",
+                  username: "maint1",
+                  name: "Maint One",
+                  role: "Maintainer",
+                  activeRoles: ["Maintainer"],
+                  isActive: true,
+                },
+              ],
+              total: 1,
+              page: 1,
+              pageSize: 20,
+              totalPages: 1,
+            },
     );
     const user = userEvent.setup();
     renderPage();
@@ -587,7 +610,7 @@ describe("UsersPage", () => {
     // "Candidate" is NOT selectable in the staff dialog → the role must be
     // read-only and PATCH must omit `role` (no silent flip, no unmappable
     // Select value).
-    apiGet.mockResolvedValue({
+    mockUsersListGet({
       items: [
         ...mockUsers,
         {
@@ -676,7 +699,7 @@ describe("UsersPage", () => {
     // A Candidate-only row would only reach this page if the server filter
     // regressed — displaying it (instead of silently hiding it) makes that
     // regression visible rather than masked by a client-side post-filter.
-    apiGet.mockResolvedValue({
+    mockUsersListGet({
       items: [
         ...mockUsers,
         {

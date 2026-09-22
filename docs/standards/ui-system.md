@@ -451,10 +451,11 @@ participate in table overflow/tier measurement** (the desktop branch owns
 
 Column cell roles (closed set in `DataTableContract`): **status**
 (StatusBadge), **date**, **date-range**, **duration**, **number**, **score**,
-**short-id**, **type**, **actions** (RowActions), plus text roles
-**primary-text**, **secondary-text**, **long-text**, **description**,
-**tag-list** (categorical `<Badge>`s). Headers use `surface-subtle`; body
-rows use `surface`.
+**short-id** (machine tokens, middle-truncated presenter), **type** (bounded
+categorical labels), **action-label** (localized operational action labels),
+**actions** (RowActions), plus text roles **primary-text**,
+**secondary-text**, **long-text**, **description**, **tag-list** (categorical
+`<Badge>`s). Headers use `surface-subtle`; body rows use `surface`.
 
 A column declaration carries three separate dimensions — they are not
 interchangeable:
@@ -475,8 +476,10 @@ interchangeable:
 
 Physical widths are recipes (`apps/web/src/table/recipes.css`); the normative
 anchors: status column **8.5rem** (vocabulary-bound, derived from the
-statusMeta × supported-locale fixture), actions column **6rem** fine /
-**7.5rem** coarse pointer.
+statusMeta × supported-locale fixture), type column **7.25rem** (bounded
+enumerated-label families), action-label column **9.5rem** (localized action
+labels, derived from the action registry × supported-locale fixture), actions
+column **6rem** fine / **7.5rem** coarse pointer.
 
 Table typography (#577 M7): header cells render **13/20/500** via the
 unlayered recipe (issue 582 D4: frozen as-built); body cells render 15/22
@@ -502,6 +505,22 @@ status × supported locale (`apps/web/src/table/statusFixture.ts` re-derives
 that universe automatically; a new status or locale grows the fixture and
 reds the guard until the token is revisited). Do not document the historical
 7rem as current.
+
+### Action-label capacity
+
+The platform action registry (`@exam/authz` `AuditAction`, projected by the API
+audit policy) owns the vocabulary, the `admin.audit.filterActions.*` catalog
+owns the copy, and the **action-label** role owns physical capacity:
+`apps/web/src/table/actionLabelFixture.ts` re-derives registry × supported
+locale, so an action shipped without display copy reds the contract guard
+instead of silently degrading to the raw key. Copy growth therefore pressures
+this token only — never the shared `type` token. The raw-key compatibility path
+for historical / version-skew rows is presenter-owned
+(`DataTableOverflowText`, middle truncation with full value in `title` /
+`aria-label`), because a fixed token cannot capacity-prove an open machine
+vocabulary: the role declares that second channel in
+`ROLE_MACHINE_VALUE_OVERFLOW`, which is the only reason the presenter-pairing
+guard accepts a presenter inside a non-presenter column.
 
 ## Dialogs
 

@@ -138,9 +138,9 @@
  *     down to their min-width. Multiple auto columns split evenly — this is
  *     what stops any one column from monopolizing the table.
  *   - LOCKED (atomic/metadata) columns: status, date, date-range, duration,
- *     number, score, short-id, type, actions. These carry fixed width =
- *     min-width (both set to the same value), so they do not grow with the
- *     container and never compress — they stay compact and never wrap.
+ *     number, score, short-id, type, action-label, actions. These carry fixed
+ *     width = min-width (both set to the same value), so they do not grow with
+ *     the container and never compress — they stay compact and never wrap.
  *     This mirrors TanStack Table's size/minSize model: locked = size+minSize
  *     match, flexible = the columns that absorb slack (TanStack itself stays
  *     a row/header model — sizing authority lives here, P3-Corrective §5.5).
@@ -229,13 +229,48 @@
  * border; the workbench-compact badge variant is narrower and covered by the
  * same bound). Token 7.25rem = 116px gives a content box of 83px ≥ 80 + slack.
  * The runtime half of the gate is the dense-table-cell-fitting E2E containment
- * assertion. Excluded from the derivation (tracked type-role follow-up of
- * #590, wider than this token): audit-log action pills and the InvitationsCard
- * expiresAt datetime misdeclared as type — see typeFixture.ts.
+ * assertion. The two #590-recorded nonconforming consumers left this role in
+ * issue #598: audit-log action labels are owned by the action-label token
+ * below, the InvitationsCard expiry datetime by the date role.
  */
 [data-column-role="type"] {
   width: 7.25rem;
   min-width: 7.25rem;
+}
+
+/*
+ * Action-label column — vocabulary-bound width 9.5rem (issue #598). It owns
+ * exactly one semantic family: localized operational action labels (the audit
+ * log's action column). The vocabulary authority is the platform action
+ * registry
+ * (@exam/authz `AuditAction`, projected by the API audit policy); the copy
+ * authority is the `admin.audit.filterActions.*` i18n namespace.
+ * actionLabelFixture.ts auto-derives the universe (registry ×
+ * SUPPORTED_LOCALES) and the contract guard reds as soon as an action ships
+ * without display copy — action-copy growth pressures this token only, never
+ * the shared `type` token.
+ *
+ * Rendered capacity: token 9.5rem = 152px gives a content box of 119px ≥ the
+ * widest derived label estimate 117.2px (8 CJK glyphs × 12.4px + 16px pill
+ * padding + 2px chrome — the same measured product-font constants the type
+ * fixture uses; the pill is borderless, so the chrome term over-estimates).
+ * 9.5rem is the smallest quarter-rem token whose content box fits, and it
+ * holds the measured 112px widest label (#598 runtime probe) with real slack.
+ *
+ * Why this is NOT the shared `type` token: these labels are operation-verb
+ * phrases (8 CJK glyphs today) — wider than the ≤5-glyph bounded categorical
+ * family 7.25rem was derived from (117.2px vs its 83px content box) — and the
+ * column carries a second, non-enumerable channel: raw machine action keys
+ * for historical / version-skew rows. No fixed nowrap token can
+ * capacity-prove that channel, so the raw-key path renders through
+ * DataTableOverflowText (truncate-middle, declared for this role by
+ * ROLE_MACHINE_VALUE_OVERFLOW) and ITS containment is owned by the presenter's
+ * glyph budget, never by this token. The runtime half of the gate is the
+ * dense-table-cell-fitting E2E containment assertion.
+ */
+[data-column-role="action-label"] {
+  width: 9.5rem;
+  min-width: 9.5rem;
 }
 
 [data-column-role="tag-list"] {

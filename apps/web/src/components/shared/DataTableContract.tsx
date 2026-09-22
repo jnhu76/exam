@@ -15,6 +15,7 @@ export type DataTableColumnRole =
   | "score"
   | "short-id"
   | "type"
+  | "action-label"
   | "tag-list"
   | "actions";
 
@@ -54,6 +55,7 @@ export const ROLE_OVERFLOW: Record<DataTableColumnRole, ColumnOverflow> = {
   score: "nowrap",
   "short-id": "truncate-middle",
   type: "nowrap",
+  "action-label": "nowrap",
   "tag-list": "wrap",
   actions: "nowrap",
 };
@@ -82,6 +84,7 @@ export const ROLE_ALLOWED_OVERFLOW: Record<
   score: ["nowrap"],
   "short-id": ["truncate-middle"],
   type: ["nowrap"],
+  "action-label": ["nowrap"],
   "tag-list": ["wrap"],
   actions: ["nowrap"],
 };
@@ -99,8 +102,29 @@ const ROLE_PRIORITY: Record<DataTableColumnRole, ColumnPriority> = {
   score: "high",
   "short-id": "normal",
   type: "low",
+  "action-label": "low",
   "tag-list": "low",
   actions: "high",
+};
+
+/**
+ * Machine-value compatibility channel, per role (issue 598). A role may own a
+ * second content class that no finite vocabulary fixture can bound — machine
+ * tokens reaching the cell from historical rows or version skew — rendered
+ * through {@link DataTableOverflowText} with the mode named here. The column's
+ * declared overflow still governs the role's enumerable channel, and the
+ * presenter-pairing guard accepts a presenter inside a non-presenter column
+ * ONLY when it matches this channel's mode exactly: an unlisted role can never
+ * grow a second, contradictory containment policy.
+ *
+ * INVARIANT: a listed mode is a presenter policy, and the role's own
+ * `ROLE_OVERFLOW` default is not (the two channels must not collapse into one
+ * policy) — pinned by the structural test.
+ */
+export const ROLE_MACHINE_VALUE_OVERFLOW: Partial<
+  Record<DataTableColumnRole, ColumnOverflow>
+> = {
+  "action-label": "truncate-middle",
 };
 
 /**
