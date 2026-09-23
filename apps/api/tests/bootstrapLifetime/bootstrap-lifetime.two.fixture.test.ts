@@ -12,9 +12,11 @@ import {
 /**
  * Bootstrap-lifetime proof — fixture file TWO of TWO. See the file-one
  * fixture and fixture-support.ts for the protocol: both files run in ONE
- * child worker process; the second file to run must see the slot bootstrap
- * already complete (zero lifecycle acquisitions) and the first file's
- * sentinel business row gone (per-file reset).
+ * child Vitest invocation and resolve to the SAME pool slot / worker-slot
+ * database, but Vitest may execute each file in a fresh worker process. The
+ * second file to run must see the slot bootstrap already complete (zero
+ * lifecycle acquisitions) and the first file's sentinel business row gone
+ * (per-file reset).
  */
 describe.skipIf(BOOTSTRAP_LIFETIME_HANDOFF === "")(
   "bootstrap lifetime fixture two",
