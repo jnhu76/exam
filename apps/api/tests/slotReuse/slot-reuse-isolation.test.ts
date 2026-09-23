@@ -47,9 +47,9 @@ import { resolveTestScope } from "@exam/db/src/testScope.js";
  * hosts canonically on `postgres` and a different coordination database is
  * not an isolation namespace.
  *
- * Mutation-demonstrated (round-3 validation): removing the one-time truncate
- * boundary in buildTestApp (workerDbTruncated / adapter.resetPostgres) makes
- * stage B observe stage A's sentinel and fail.
+ * Mutation-demonstrated (round-3 validation): removing the per-file
+ * business-data reset boundary in buildTestApp (fileBusinessDataReset /
+ * adapter.resetPostgres) makes stage B observe stage A's sentinel and fail.
  */
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 

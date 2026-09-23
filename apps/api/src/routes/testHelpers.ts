@@ -59,18 +59,30 @@ import {
 // multiple it blocks) are NOT affected because they call buildTestApp once.
 
 /**
- * Module-level flag: has the worker DB been truncated in this process?
+ * Module-level flag: has the business-data reset for the CURRENT test file
+ * already run?
  *
- * Worker databases persist across test runs, and `seed()` upserts on org
- * slug ("default"), so the same organization is reused. Without a one-time
- * truncation, business data accumulates indefinitely across runs, eventually
- * breaking tests that rely on pagination (e.g. grading queue default page 1).
+ * Lifetime is PER FILE by construction: Vitest `isolate: true` resets this
+ * module registry after every test file, so the first buildTestApp of each
+ * file in worker-database mode performs `resetPostgres()` and later builds
+ * inside the same file skip it. That is the required contract, not an
+ * accident:
  *
- * Set to `true` after the first `resetPostgres()` call in `buildTestApp`.
- * Each new test run spawns fresh worker processes, so the flag resets
- * naturally — no manual cleanup needed between runs.
+ * - Sequential files share one worker-slot database (the worker-DB bootstrap
+ *   has slot lifetime — see the @exam/db testWorkerDatabase bootstrap
+ *   registry), so each file must clear the business rows its predecessor
+ *   left on the slot, plus rows left by previous runs (`seed()` upserts on
+ *   the org slug; unbounded accumulation eventually breaks pagination
+ *   assertions).
+ * - Multi-build files (a shared beforeAll ctx plus in-test rebuilds) must NOT
+ *   truncate between builds: a later build would wipe ctx.org out from under
+ *   the still-referenced context (FK violations).
+ *
+ * INVARIANT: do NOT give this flag worker-global (slot) lifetime — the
+ * per-file business-data reset IS the cross-file isolation boundary on a
+ * shared slot database. Only the bootstrap fact has slot lifetime.
  */
-let workerDbTruncated = false;
+let fileBusinessDataReset = false;
 
 /**
  * Roles that exist in the broader Phase 3 vocabulary but are not assignable
@@ -192,21 +204,20 @@ export async function buildTestApp(
   // (e.g. grading queue entries), eventually causing tests that rely on
   // pagination to fail when accumulated rows exceed the default page size.
   //
-  // Solution: truncate business tables ONCE per worker process, on the first
-  // buildTestApp call. Subsequent calls within the same worker process skip
-  // truncation (preserving the multi-build pattern). Each new test run spawns
-  // fresh worker processes, so the flag resets naturally.
+  // Reset contract: the FIRST buildTestApp of every test file truncates
+  // business tables — clearing the previous file's rows on this shared slot
+  // database plus rows from previous runs. Later buildTestApp calls inside
+  // the same file skip truncation (preserving the multi-build pattern above).
   if (!resolvedSchemaName && isWorkerDatabaseMode()) {
     const adapter: ApiTestDatabaseHandle = await setupApiTestDatabaseFromEnv({
       namespace: "api",
       ...(opts?.databaseUrl ? { databaseUrl: opts.databaseUrl } : {}),
     });
-    // Truncate on the first build in this worker process to clear data from
-    // previous test runs. The seed() upsert reuses the same org, so without
-    // this, business data accumulates across runs.
-    if (!workerDbTruncated) {
+    // Per-file reset boundary (see the flag doclet): first build of THIS
+    // file resets; subsequent builds in the same file must not truncate.
+    if (!fileBusinessDataReset) {
       await adapter.resetPostgres();
-      workerDbTruncated = true;
+      fileBusinessDataReset = true;
     }
     // In worker mode there is no per-file schemaName; business tables live in
     // the worker DB's default `public` schema.

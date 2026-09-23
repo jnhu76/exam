@@ -357,7 +357,7 @@ PG_DESCRIBE(
       const secondAcquired = getTestInfraLockAcquisitionCount() - beforeSecond;
       try {
         expect(first.databaseName).toBe(second.databaseName);
-        // Fresh bootstrap pays ensure + migrate (2 acquisitions)…
+        // Fresh bootstrap pays ONE merged ensure+migrate critical section…
         expect(firstAcquired).toBeGreaterThanOrEqual(1);
         // …but a same-process repeat must reuse the memoized bootstrap and
         // acquire the lock ZERO times. Regression: the old implementation
@@ -386,8 +386,9 @@ PG_DESCRIBE(
 
 PG_DESCRIBE(
   "setupWorkerTestDatabase — bootstrap memo authority scoping (round-3)",
-  // Same lifecycle-queue budget: both bootstraps take the lock for
-  // ensure + migrate under their own coordination authority.
+  // Same lifecycle-queue budget: the bootstrap ACT (ensure+migrate) takes
+  // the lock under its own coordination authority; the fact-based precheck
+  // never takes it.
   { timeout: 30_000 },
   () => {
     it("same worker URL under a DIFFERENT coordination authority does not memo-hit (old key was workerUrl only)", async () => {
@@ -418,14 +419,43 @@ PG_DESCRIBE(
       try {
         expect(a.databaseName).toBe(b.databaseName);
         expect(acquiredA).toBeGreaterThanOrEqual(1);
-        // Old implementation: memo key ignored the authority → acquiredB was
-        // 0 (bootstrap skipped). New key (adminUrl + workerUrl) forces a fresh
-        // bootstrap under authority B.
-        expect(acquiredB).toBeGreaterThanOrEqual(1);
+        // Fact-based bootstrap: the bootstrap FACT (database exists + fully
+        // migrated) is authority-independent and read server-side, so once it
+        // is true, authority B performs NO act — 0 acquisitions. Authority
+        // scoping still governs the ACT (see the fresh-database test below)
+        // and the intra-process memo key.
+        expect(acquiredB).toBe(0);
       } finally {
         await a.close();
         await b.close();
         await dropDatabaseIfExists(ADMIN_URL, a.databaseName, {
+          keepMissing: true,
+        });
+      }
+    });
+
+    it("authority B serializes its own bootstrap ACT when the worker database does not exist", async () => {
+      // The ACT (CREATE DATABASE + migrate) must run under the calling
+      // authority's own lifecycle-lock queue — a different TEST_ADMIN_DATABASE
+      // is a different coordination namespace, and a fresh slot database has
+      // no server-side fact to shortcut through.
+      const runTag = Math.random().toString(36).slice(2, 8);
+      const workerId = `memoact_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      const injectedDb = new URL(BASE_URL).pathname.replace(/^\//, "");
+      const envAuthorityB = {
+        TEST_DB_ISOLATION: "worker-database",
+        TEST_WORKER_ID: workerId,
+        TEST_DATABASE_URL: BASE_URL,
+        TEST_ADMIN_DATABASE: injectedDb,
+      };
+      const beforeB = getTestInfraLockAcquisitionCount();
+      const b = await setupWorkerTestDatabase({ env: envAuthorityB });
+      const acquiredB = getTestInfraLockAcquisitionCount() - beforeB;
+      try {
+        expect(acquiredB).toBeGreaterThanOrEqual(1);
+      } finally {
+        await b.close();
+        await dropDatabaseIfExists(ADMIN_URL, b.databaseName, {
           keepMissing: true,
         });
       }
