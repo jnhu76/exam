@@ -13,12 +13,13 @@ import { resolveTestScope } from "@exam/db/src/testScope.js";
  * The proof is role-agnostic: whichever file the child runner executes first
  * elects the "first" role via an exclusive lock file, runs on the cold
  * worker-slot database, and records its process/slot identity and lifecycle
- * acquisition count. The second file must observe the SAME process, pool
- * slot, and worker database, ZERO new lifecycle acquisitions (the slot
- * lifetime of the @exam/db bootstrap registry across the per-file module
- * registry reset), and — because the per-file business-data reset has FILE
- * lifetime — no trace of the first file's sentinel business row, with
- * canonical seed state and migration metadata intact.
+ * acquisition count. The second file must observe the SAME pool slot and
+ * worker database even if Vitest executes it in a fresh worker process, plus
+ * ZERO new lifecycle acquisitions (the slot lifetime of the @exam/db
+ * bootstrap fact across per-file process/module isolation), and — because the
+ * per-file business-data reset has FILE lifetime — no trace of the first
+ * file's sentinel business row, with canonical seed state and migration
+ * metadata intact.
  *
  * The acquisition counter is module-local in `testInfraLock`, so it starts
  * at zero per file exactly like every other module-level fact — a faithful
