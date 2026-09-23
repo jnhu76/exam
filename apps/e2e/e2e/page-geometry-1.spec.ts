@@ -15,10 +15,10 @@ import { assertNoHorizontalOverflow } from "../lib/responsive";
  * vocabulary measured in real Chromium with the built app CSS. Pages
  * DECLARE their role on <PageContainer role>; layouts own only the gutter.
  *
- *   - UsersPage (admin-standard): page container caps at 1280 (max-w-7xl)
- *     inside the AdminLayout gutter at a 1920px viewport (the xl sidebar
- *     leaves 1624px of content width, so the role ceiling — not the
- *     viewport — is what stops the container);
+ *   - UsersPage (admin-dense, issue #601): page container caps at 1440
+ *     (max-w-[90rem]) inside the AdminLayout gutter at a 1920px viewport
+ *     (the xl sidebar leaves 1624px of content width, so the role ceiling —
+ *     not the viewport — is what stops the container);
  *   - ResultPage (candidate): the container caps at 896 (max-w-4xl) inside
  *     the ExamLayout p-4 sm:p-6 gutter, and the detail-comparison table
  *     region absorbs the shell borders (≈894) with no horizontal overflow;
@@ -42,7 +42,7 @@ async function containerWidth(page: Page): Promise<number> {
 test.describe("page geometry runtime evidence (issue 455)", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("UsersPage declares admin-standard: container caps at 1280 in the AdminLayout gutter", async ({
+  test("UsersPage declares admin-dense: container caps at 1440 in the AdminLayout gutter", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1920, height: 1000 });
@@ -57,14 +57,14 @@ test.describe("page geometry runtime evidence (issue 455)", () => {
       .locator(PAGE_CONTAINER)
       .first()
       .getAttribute("data-role");
-    expect(role).toBe("admin-standard");
+    expect(role).toBe("admin-dense");
 
     // 1920 viewport − 232 (expanded xl sidebar) − 2×32 (lg:p-8 gutter) =
-    // 1624 available; the container stops at the admin-standard ceiling
-    // (1280) instead of filling the page.
+    // 1624 available; the container stops at the admin-dense ceiling (1440,
+    // max-w-[90rem]) instead of filling the page.
     const width = await containerWidth(page);
-    expect(width).toBeGreaterThan(1278);
-    expect(width).toBeLessThanOrEqual(1281);
+    expect(width).toBeGreaterThan(1438);
+    expect(width).toBeLessThanOrEqual(1441);
     await assertNoHorizontalOverflow(page);
   });
 

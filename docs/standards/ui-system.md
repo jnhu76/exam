@@ -228,13 +228,17 @@ container role from the URL. The role vocabulary is closed:
 | `auth` | 448px | authentication |
 | `form` | 896px | create/edit and focused forms |
 | `admin-standard` | 1280px | dashboards and ordinary admin pages |
+| `admin-dense` | 1440px | dense admin table pages (users, questions, exams) |
 | `admin-wide` | 1536px | diagnostics and genuinely wide data |
 | `candidate` | 896px | candidate-facing list, detail, and result pages |
 | `exam-runtime` | 1280px | task-focused candidate runtime |
 
 The former `admin-sparse` (1024) role is **retired** (merged into
-`admin-standard`); re-adding a seventh role is a vocabulary-authority
-decision, not a page-local width. Page-root width ≠ local inner-content
+`admin-standard`). `admin-dense` (issue #601) is a bounded policy cap for the
+three dense admin table routes: 1440 was selected as the policy value — the
+supporting evidence does not distinguish it from 1536 on wider viewports, so
+adopting it further is a vocabulary-authority decision, not a page-local
+width. Page-root width ≠ local inner-content
 width: a narrower inner constraint (`max-w-sm` form, readability column)
 inside a declared-role page stays legal page-local composition.
 
@@ -481,11 +485,14 @@ enumerated-label families), action-label column **9.5rem** (localized action
 labels, derived from the action registry × supported-locale fixture), actions
 column **6rem** fine / **7.5rem** coarse pointer.
 
-Table typography (#577 M7): header cells render **13/20/500** via the
-unlayered recipe (issue 582 D4: frozen as-built); body cells render 15/22
-(issue 582 D2). The Question Management workbench carries an explicit compact
-density in `table/workbench.css` — 42px header height, 44px minimum body rows
-— distinct from the standard 44/48 geometry.
+Table typography (#577 M7): header cells render **14/20/500** via the
+unlayered recipe (issue #601 V2b supersedes the #582 D4 header value); body
+cells render 15/22 (issue 582 D2). Table geometry is one body-row baseline plus
+two header bands: the shared `TableCell` establishes the **52px** body-row
+baseline for every table, and the header band is **44px** standard with the
+Question Management workbench compact at **42px**
+(`table/workbench.css`). The 52px baseline is a floor, not a fixed height —
+rows grow naturally when wrapped or multiline content requires more room.
 
 ### Row actions
 

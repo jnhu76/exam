@@ -220,7 +220,7 @@ export function ExamPage() {
 
   return (
     <TooltipProvider>
-      <PageContainer role="admin-standard" className="flex flex-col gap-6">
+      <PageContainer role="admin-dense" className="flex flex-col gap-6">
         <PageHeader
           title={t("admin.exams.title")}
           actions={

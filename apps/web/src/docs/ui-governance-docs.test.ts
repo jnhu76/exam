@@ -24,6 +24,7 @@ const PAGE_ROLES: Record<PageContainerRole, true> = {
   auth: true,
   form: true,
   "admin-standard": true,
+  "admin-dense": true,
   "admin-wide": true,
   candidate: true,
   "exam-runtime": true,

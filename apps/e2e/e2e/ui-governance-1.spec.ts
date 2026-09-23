@@ -381,11 +381,12 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
       expect(m.scrollWidth, key).toBeLessThanOrEqual(m.clientWidth + TOL);
       // Physical containment: the rendered line boxes end inside the cell.
       expect(m.contentRight, key).toBeLessThanOrEqual(m.cellRight + TOL);
-      // The wrap really happened: the union of the rendered line boxes spans
-      // two lines. Table cells are fixed h-12 (48px), so the ROW height
-      // never changes on wrap — the line-box union is the direct proof
-      // (one 14px line ≈ 19-22px; the 50-char fixture cannot fit one line
-      // in any legal column width).
+      // The wrap really happened, and the rendered line-box union is the
+      // direct proof: body cells render 15px over a 22px line-height, and the
+      // 50-char fixture cannot fit one line at any legal column width, so a
+      // single line sits below this 30px floor. Table cells carry the shared
+      // 52px baseline through table-cell geometry and rows grow naturally for
+      // multiline content, so this fixture stays at baseline row height.
       expect(m.contentHeight, key).toBeGreaterThanOrEqual(30);
       // Vertical containment: the wrapped lines stay inside the cell box.
       expect(m.contentBottom, key).toBeLessThanOrEqual(m.cellBottom + TOL);

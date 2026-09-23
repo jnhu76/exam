@@ -46,14 +46,15 @@ export const ROUTE_PAGE_ROLES: readonly RoutePageRole[] = [
     page: "CandidateFieldsPage",
     role: "admin-standard",
   },
-  { route: "/admin/users", page: "UsersPage", role: "admin-standard" },
+  // admin-dense routes (issue #601): the three dense admin table pages.
+  { route: "/admin/users", page: "UsersPage", role: "admin-dense" },
   {
     route: "/admin/candidates",
     page: "CandidatesPage",
     role: "admin-standard",
   },
   { route: "/admin/courses", page: "CoursePage", role: "admin-standard" },
-  { route: "/admin/questions", page: "QuestionPage", role: "admin-standard" },
+  { route: "/admin/questions", page: "QuestionPage", role: "admin-dense" },
   {
     route: "/admin/questions/new",
     page: "QuestionEditPage",
@@ -69,7 +70,7 @@ export const ROUTE_PAGE_ROLES: readonly RoutePageRole[] = [
     page: "QuestionImportPage",
     role: "form",
   },
-  { route: "/admin/exams", page: "ExamPage", role: "admin-standard" },
+  { route: "/admin/exams", page: "ExamPage", role: "admin-dense" },
   { route: "/admin/exams/new", page: "ExamCreatePage", role: "form" },
   {
     route: "/admin/exams/:id",

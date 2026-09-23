@@ -350,7 +350,7 @@ export function QuestionPage() {
   const isEmpty = !isTableLoading && questions.length === 0;
 
   return (
-    <PageContainer role="admin-standard" className="flex flex-col gap-6">
+    <PageContainer role="admin-dense" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.questions.title" as never)}
         actions={
