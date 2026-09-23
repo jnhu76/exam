@@ -39,6 +39,8 @@
  */
 
 import postgres from "postgres";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { parseAppMode, resolveTestBranchUrl } from "./databaseUrl.js";
 import { createPostgresDatabase, migratePostgres } from "./postgres.js";
 import {
@@ -220,21 +222,7 @@ export async function ensureDatabaseExists(
   assertPgNameSafe(databaseName);
   await withTestInfraLifecycleLock(
     adminUrl,
-    async () => {
-      const admin = postgres(adminUrl);
-      try {
-        const rows = (await admin`
-        SELECT 1 FROM pg_database WHERE datname = ${databaseName}
-      `) as Array<{ "?column?": number }>;
-        if (rows.length === 0) {
-          await admin.unsafe(
-            `CREATE DATABASE ${quotePgIdentifier(databaseName)}`,
-          );
-        }
-      } finally {
-        await admin.end();
-      }
-    },
+    () => ensureDatabaseExistsUnlocked(adminUrl, databaseName),
     // Pass the caller's env DOWN: the lock must host on the SAME coordination
     // authority the caller resolved `adminUrl` from. Without this the lock
     // helper silently re-read process.env.TEST_ADMIN_DATABASE below the seam
@@ -242,6 +230,28 @@ export async function ensureDatabaseExists(
     // authority (round-4 wrapper-contract fix).
     { ...(options.env ? { env: options.env } : {}) },
   );
+}
+
+/**
+ * Existence check + optional `CREATE DATABASE` WITHOUT the lifecycle lock —
+ * the caller must already hold it (the worker-DB bootstrap merges ensure and
+ * migrate into ONE critical section). Never call unlocked from test setup.
+ */
+async function ensureDatabaseExistsUnlocked(
+  adminUrl: string,
+  databaseName: string,
+): Promise<void> {
+  const admin = postgres(adminUrl);
+  try {
+    const rows = (await admin`
+      SELECT 1 FROM pg_database WHERE datname = ${databaseName}
+    `) as Array<{ "?column?": number }>;
+    if (rows.length === 0) {
+      await admin.unsafe(`CREATE DATABASE ${quotePgIdentifier(databaseName)}`);
+    }
+  } finally {
+    await admin.end();
+  }
 }
 
 /**
@@ -306,27 +316,86 @@ export function isDatabaseMissingError(err: unknown): boolean {
 }
 
 /**
- * Per-process bootstrap memo: (coordination admin URL, worker URL) → completed
- * ensure+migrate promise.
+ * Worker-DB bootstrap: ensure + migrate, with WORKER-SLOT lifetime per run.
  *
- * Vitest runs every test file in a fresh isolated worker process, and several
- * files call `buildTestApp()` (→ `setupWorkerTestDatabase`) multiple times per
- * file. Without this memo every call re-acquired the global test-infra
- * advisory lock twice (existence check + migration no-op check) — pure queue
- * load with no work performed. The database for a given worker URL only needs
- * to be ensured + migrated once per process; the promise is shared so
- * concurrent first calls also collapse into one bootstrap. Failures evict the
- * entry so a retry re-runs the bootstrap.
+ * WHY the bootstrap fact lives server-side: Vitest 4 (forks pool,
+ * `isolate: true`) executes every test file in a FRESH worker process —
+ * no in-process memo can carry the bootstrap fact across files, and without
+ * one every file's first `setupWorkerTestDatabase()` re-acquired the global
+ * test-infra advisory lock twice (existence check + migration no-op check):
+ * pure queue load on the single lifecycle lane, with no work performed.
+ * Instead, a read-only lock-free precheck treats the slot as bootstrapped
+ * iff the database exists AND its applied-migration count equals the local
+ * journal length — the journal is append-only (enforced by lint:db-journal),
+ * so the count is a sufficient migration-state fingerprint, and the slot
+ * database itself is the only cross-process-honest home for the fact. A
+ * missing or stale slot takes ONE lane critical section that re-checks
+ * under the lock (another worker may have bootstrapped meanwhile) and then
+ * ensures + migrates. Dropped databases fail the precheck and re-bootstrap;
+ * concurrent same-server runs are excluded by the run lease.
  *
- * The memo key includes the coordination admin URL, not just the worker URL:
- * the bootstrap runs UNDER a coordination authority (its advisory-lock queue).
- * Two calls with the same worker URL but different authorities (e.g. different
+ * The per-process memo below remains for intra-file repeat builds (several
+ * test files call buildTestApp more than once); it has FILE lifetime — the
+ * cross-file fact is the server-side precheck. The memo key includes the
+ * coordination admin URL, not just the worker URL: the bootstrap runs UNDER
+ * a coordination authority (its advisory-lock queue), and two calls with the
+ * same worker URL but different authorities (e.g. different
  * `TEST_ADMIN_DATABASE` in their envs) must not share bootstrap state — the
  * second call's authority would silently skip its own serialized ensure+migrate
  * and fragment the one-queue guarantee. Same authority + same worker URL ⇒
  * memo hit; any authority change ⇒ fresh bootstrap.
  */
 const bootstrappedWorkerDatabases = new Map<string, Promise<void>>();
+
+/** Applied-entry count of the local Drizzle journal (append-only). */
+function localMigrationCount(): number {
+  const journal = fileURLToPath(
+    new URL("../migrations/postgres/meta/_journal.json", import.meta.url),
+  );
+  const parsed = JSON.parse(readFileSync(journal, "utf8")) as {
+    entries: unknown[];
+  };
+  return parsed.entries.length;
+}
+
+/**
+ * Read-only, lock-free bootstrap probe: does `databaseName` exist AND hold
+ * exactly the local journal's applied-migration count? Any error (missing
+ * DB, missing tracking table, unreachable server) means "not bootstrapped" —
+ * the caller then takes the real serialized path, where genuine failures
+ * surface.
+ */
+async function isWorkerDatabaseBootstrapped(
+  adminUrl: string,
+  workerUrl: string,
+  databaseName: string,
+): Promise<boolean> {
+  const expected = localMigrationCount();
+  let admin: postgres.Sql | undefined;
+  try {
+    admin = postgres(adminUrl, { max: 1 });
+    const exists = (await admin`
+      SELECT 1 FROM pg_database WHERE datname = ${databaseName}
+    `) as Array<{ "?column?": number }>;
+    if (exists.length === 0) return false;
+  } catch {
+    return false;
+  } finally {
+    await admin?.end().catch(() => {});
+  }
+  let conn: postgres.Sql | undefined;
+  try {
+    conn = postgres(workerUrl, { max: 1 });
+    const rows = (await conn`
+      SELECT count(*)::int AS c FROM drizzle.__drizzle_migrations
+    `) as Array<{ c: number }>;
+    return Number(rows[0]?.c) === expected;
+  } catch {
+    return false;
+  } finally {
+    await conn?.end().catch(() => {});
+  }
+}
 
 function workerBootstrapMemoKey(adminUrl: string, workerUrl: string): string {
   return `${adminUrl} ${workerUrl}`;
@@ -342,17 +411,35 @@ function ensureWorkerDatabaseBootstrapped(
   let bootstrap = bootstrappedWorkerDatabases.get(memoKey);
   if (!bootstrap) {
     bootstrap = (async () => {
-      await ensureDatabaseExists(adminUrl, databaseName, { env });
-      const conn = await createPostgresDatabase(workerUrl);
-      try {
-        await withTestInfraLifecycleLock(
-          adminUrl,
-          () => migratePostgres(conn.db),
-          { env },
-        );
-      } finally {
-        await conn.sql.end();
+      if (
+        await isWorkerDatabaseBootstrapped(adminUrl, workerUrl, databaseName)
+      ) {
+        return;
       }
+      await withTestInfraLifecycleLock(
+        adminUrl,
+        async () => {
+          // Re-check under the lock: a sibling worker may have bootstrapped
+          // this slot while this one queued.
+          if (
+            await isWorkerDatabaseBootstrapped(
+              adminUrl,
+              workerUrl,
+              databaseName,
+            )
+          ) {
+            return;
+          }
+          await ensureDatabaseExistsUnlocked(adminUrl, databaseName);
+          const conn = await createPostgresDatabase(workerUrl);
+          try {
+            await migratePostgres(conn.db);
+          } finally {
+            await conn.sql.end();
+          }
+        },
+        { env },
+      );
     })().catch((err: unknown) => {
       bootstrappedWorkerDatabases.delete(memoKey);
       throw err;
