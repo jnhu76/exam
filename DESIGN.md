@@ -109,7 +109,7 @@ titles use 500 (medium); 700 is reserved for large numeric metrics only.
 | section title | 16/24, 500 |
 | body | 15/22, 400 (issue 582 D2: `type-body`/`type-secondary` render the same 15px as the Tailwind `text-sm` control tier) |
 | emphasized cell | 15/22, 500 |
-| table header | 13/20, 500 (issue 582 D4: frozen as-built) |
+| table header | 14/20, 500 (issue #601 V2b supersedes the #582 D4 as-built header value) |
 | metadata | 12/18, 400, muted |
 | metric | 28/34, 700, tabular numbers |
 | button/label | follows `text-sm` → 15/22.5, 500 |
@@ -126,14 +126,22 @@ Numeric scores, counts, durations, dates, and percentages use tabular numbers.
 - Spacing scale: 4, 8, 12, 16, 24, 32.
 - Standard desktop control: 36px.
 - Mobile direct-touch control: 44px.
-- Table header: 44px (Question Management workbench uses an explicit compact
-  density: 42px header, 44px minimum rows).
-- Standard table row: 48px.
+- Table header band: 44px (the Question Management workbench uses an explicit
+  compact density: 42px header band).
+- Table body row: 52px baseline in both grammars (issue #601 V2a supersedes
+  the #582-era 48px row). The baseline is a floor, not a fixed height — a row
+  grows naturally when wrapped or multiline content needs more room.
 - Ordinary content has no shadow.
 - Only overlays and the sticky topbar may own elevation. The floating-layer
   appearance (background/border/radius/elevation) is owned by the
   `surface-overlay` recipe family in `apps/web/src/surface/recipes.css`
   (see ui-system.md §Surface and elevation).
+
+For table header typography and table body-row geometry, #601 is the current
+authority: it supersedes the relevant #582 as-built visual values (the
+13/20/500 header and the 48px body row). #582 remains the historical record of
+the earlier visual freeze and is not a competing authority for these two
+facts.
 
 ## Page containers
 
