@@ -58,7 +58,9 @@ export default defineConfig(({ mode }) => ({
       ...loadEnv(mode, workspaceRoot, ""),
       ...TEST_RUNTIME_ENV,
     },
-    // The lifetime proof: both fixture files in ONE worker process.
+    // The lifetime proof: both fixture files execute sequentially in ONE pool
+    // slot / VITEST_POOL_ID. With forks + isolate:true they may still run in
+    // distinct worker processes, so only the slot/database identity is shared.
     maxWorkers: 1,
   },
 }));
