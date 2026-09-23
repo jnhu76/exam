@@ -47,7 +47,7 @@ color-contrast baseline).
 | surface-subtle | `#f8fafc` | table headers, metadata strips, hover wells |
 | surface-hover | `#f8fafc` | neutral hover state |
 | surface-selected | `#eff6ff` | selected/info anchor |
-| text | `rgba(0,0,0,0.88)` | primary text |
+| text | `rgba(0,0,0,0.76)` | primary text (≥ AAA on surface) |
 | text-secondary | `rgba(0,0,0,0.65)` | emphasized secondary text |
 | text-muted | `#627287` | descriptions and metadata; ≥4.5:1 on surface/canvas |
 | text-subtle | `rgba(0,0,0,0.25)` | non-essential decoration only |
@@ -144,6 +144,7 @@ gutter and never infer a container role from the URL.
 | Role | Maximum | Use |
 | --- | --- | --- |
 | admin-standard | 1280px | dashboards and ordinary admin pages |
+| admin-dense | 1440px | dense admin table pages (users, questions, exams) |
 | admin-wide | 1536px | diagnostics and genuinely wide data |
 | candidate | 896px | candidate-facing list, detail, and result pages |
 | form | 896px | create/edit and focused forms |

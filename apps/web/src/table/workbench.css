@@ -111,14 +111,15 @@
 /* ──────────────────────────────────────────────────────────────────────
  * Row geometry — compact density.
  *
- * Header 42px, body rows min 44px. Single-line content with ellipsis.
+ * Header 42px, body rows min 52px (issue #601 V2a — in step with the
+ * standard TableCell h-13). Single-line content with ellipsis.
  * ────────────────────────────────────────────────────────────────────── */
 [data-slot="data-workbench"] [data-slot="table-head"] {
   height: 2.625rem;
 }
 
 [data-slot="data-workbench"] [data-slot="table-body"] [data-slot="table-row"] {
-  min-height: 2.75rem;
+  min-height: 3.25rem;
 }
 
 /* ──────────────────────────────────────────────────────────────────────

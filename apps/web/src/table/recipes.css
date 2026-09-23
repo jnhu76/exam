@@ -50,7 +50,10 @@
 [data-slot="table-head"] {
   color: var(--text-muted);
   background: var(--table-header);
-  font-size: 0.8125rem;
+  /* issue #601 V2b: 14px at weight 500 over the muted color — column targets
+   * stay subordinate to body ink without the header-smaller-than-body
+   * inversion. Line-height, band height and padding are frozen as-built. */
+  font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.25rem;
   border-right: 1px solid var(--border-grid);

@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
+const workbenchCss = readFileSync(join(here, "workbench.css"), "utf8");
 const indexCss = readFileSync(join(here, "../index.css"), "utf8");
+const tableTsx = readFileSync(join(here, "../components/ui/table.tsx"), "utf8");
 
 function listSourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -30,11 +32,51 @@ describe("table and color visual-finish authority", () => {
     expect(indexCss).toContain("--primary-soft-strong: #dbeafe");
     expect(indexCss).toContain("--primary-focus: #93c5fd");
     expect(indexCss).toContain("--bg: #f5f7fa");
-    expect(indexCss).toContain("--text: rgba(0, 0, 0, 0.88)");
+    expect(indexCss).toContain("--text: rgba(0, 0, 0, 0.76)");
     expect(indexCss).toContain("--border-control: #d1d5db");
     expect(indexCss).toContain("--border-shell: #dfe3e8");
     expect(indexCss).toContain("--border-header: #e1e5ea");
     expect(indexCss).toContain("--border-divider: #edf0f3");
+  });
+
+  it("keeps primary text ink at or above the AAA floor on white (issue #601 V1)", () => {
+    // The --text token is the single primary-ink authority; every heading,
+    // cell, label and metric inherits it. Phase C V1 selected 76% black ink
+    // (≈10.9:1 blended on white) for a graduated primary/secondary ladder.
+    // This guard recomputes the WCAG ratio from the token so any future alpha
+    // change that drops primary text below AAA fails here.
+    const m = /--text:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(
+      indexCss,
+    );
+    if (!m) throw new Error("--text token not found in index.css");
+    const [r, g, b, a] = [
+      Number(m[1]),
+      Number(m[2]),
+      Number(m[3]),
+      Number(m[4]),
+    ];
+    const blend = (c: number) => (c * a + 255 * (1 - a)) / 255;
+    const lin = (c: number) =>
+      c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    const luminance =
+      0.2126 * lin(blend(r)) + 0.7152 * lin(blend(g)) + 0.0722 * lin(blend(b));
+    const contrastOnWhite = 1.05 / (luminance + 0.05);
+    expect(contrastOnWhite).toBeGreaterThanOrEqual(7);
+  });
+
+  it("pins the 52px body-row breathing geometry (issue #601 V2a)", () => {
+    // Body-row minimum is 52px against the frozen 22px cell line-height —
+    // ≈15px vertical air per side for a single line. Both table grammars stay
+    // in step: the standard TableCell height class and the workbench row
+    // minimum. Height is a minimum, so multi-line rows grow safely.
+    expect(tableTsx).toMatch(/"h-13 px-4 py-0 align-middle/);
+    expect(tableTsx).not.toContain("h-12");
+    expect(tableCss).toMatch(
+      /\[data-slot="table-cell"\]\s*\{[^}]*line-height:\s*1\.375rem/,
+    );
+    expect(workbenchCss).toMatch(
+      /\[data-slot="data-workbench"\]\s+\[data-slot="table-body"\]\s+\[data-slot="table-row"\]\s*\{[^}]*min-height:\s*3\.25rem/,
+    );
   });
 
   it("gives table lines three distinct semantic boundaries", () => {
@@ -69,11 +111,13 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
-  it("pins the governed table typography (issue 582 D2 + D4)", () => {
+  it("pins the governed table typography (issue 582 D2 + issue #601 V2b)", () => {
     // D2: governed cells converge UP to the 15px body/control tier.
-    // D4 (frozen, KEEP AS-BUILT): the header stays 13px / 20px / weight 500.
+    // V2b (issue #601): the header reads 14px / 20px / weight 500 — removes
+    // the header-smaller-than-body inversion while the muted color keeps the
+    // header subordinate. Band heights (44/42px) stay untouched.
     expect(tableCss).toMatch(
-      /\[data-slot="table-head"\]\s*\{[^}]*font-size:\s*0\.8125rem/,
+      /\[data-slot="table-head"\]\s*\{[^}]*font-size:\s*0\.875rem/,
     );
     expect(tableCss).toMatch(
       /\[data-slot="table-head"\]\s*\{[^}]*line-height:\s*1\.25rem/,

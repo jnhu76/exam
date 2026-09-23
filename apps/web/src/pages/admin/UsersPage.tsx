@@ -708,7 +708,7 @@ export function UsersPage() {
   if (isLoading && users.length === 0) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadUsers} />;
   return (
-    <PageContainer role="admin-standard" className="flex flex-col gap-6">
+    <PageContainer role="admin-dense" className="flex flex-col gap-6">
       <PageHeader
         title={t("admin.users.title")}
         actions={

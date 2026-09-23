@@ -228,13 +228,17 @@ container role from the URL. The role vocabulary is closed:
 | `auth` | 448px | authentication |
 | `form` | 896px | create/edit and focused forms |
 | `admin-standard` | 1280px | dashboards and ordinary admin pages |
+| `admin-dense` | 1440px | dense admin table pages (users, questions, exams) |
 | `admin-wide` | 1536px | diagnostics and genuinely wide data |
 | `candidate` | 896px | candidate-facing list, detail, and result pages |
 | `exam-runtime` | 1280px | task-focused candidate runtime |
 
 The former `admin-sparse` (1024) role is **retired** (merged into
-`admin-standard`); re-adding a seventh role is a vocabulary-authority
-decision, not a page-local width. Page-root width ≠ local inner-content
+`admin-standard`). `admin-dense` (issue #601) is a bounded policy cap for the
+three dense admin table routes: 1440 was selected as the policy value — the
+supporting evidence does not distinguish it from 1536 on wider viewports, so
+adopting it further is a vocabulary-authority decision, not a page-local
+width. Page-root width ≠ local inner-content
 width: a narrower inner constraint (`max-w-sm` form, readability column)
 inside a declared-role page stays legal page-local composition.
 

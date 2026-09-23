@@ -11,6 +11,7 @@ describe("PageContainer", () => {
 
   it.each([
     ["admin-standard", "max-w-7xl"],
+    ["admin-dense", "max-w-[90rem]"],
     ["admin-wide", "max-w-screen-2xl"],
     ["form", "max-w-4xl"],
     ["auth", "max-w-md"],
@@ -22,7 +23,7 @@ describe("PageContainer", () => {
     expect(screen.getByText(role)).toHaveClass("mx-auto", "w-full", widthClass);
   });
 
-  it("keeps the role vocabulary closed at six roles (no admin-sparse)", () => {
+  it("keeps the role vocabulary closed at seven roles (no admin-sparse)", () => {
     // `as string` on purpose: a removed role must not typecheck back in, and
     // the runtime table must not accept it either.
     const removedRole = "admin-sparse" as unknown as PageContainerRole;

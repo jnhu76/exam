@@ -127,7 +127,10 @@
   --surface-muted: var(--surface-subtle);
   --surface-hover: #f8fafc;
   --surface-selected: #eff6ff;
-  --text: rgba(0, 0, 0, 0.88);
+  /* Primary ink (issue #601 V1): 76% black ≈ 10.9:1 on white — a graduated
+   * primary/secondary ladder (≈2.2× step down to --text-secondary) while every
+   * primary role stays ≥ AAA (7:1). Guarded by visual-finish.test.ts. */
+  --text: rgba(0, 0, 0, 0.76);
   --text-secondary: rgba(0, 0, 0, 0.65);
   /* WCAG body-text floor: the alpha-ink value (0.45 black ≈ 3.4:1) failed the
    * documented ≥4.5:1 contract (DESIGN.md token table); #627287 restores it

@@ -206,8 +206,9 @@ const layoutRenderedFiles = new Map(
 );
 
 describe("page geometry contract (issue 455)", () => {
-  it("keeps the role vocabulary closed at six roles with admin-sparse absent", () => {
+  it("keeps the role vocabulary closed at seven roles with admin-sparse absent", () => {
     expect([...pageContainerRoles].sort()).toEqual([
+      "admin-dense",
       "admin-standard",
       "admin-wide",
       "auth",
