@@ -24,7 +24,7 @@ preferredSubfamily: Medium
 
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_26fb9a.woff2") format("woff2");
+src:url("./Medium_26fb9a.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -32,7 +32,7 @@ unicode-range:U+251,U+259,U+261,U+292,U+2bb-2bc,U+2ca-2cb,U+2d8-2dd,U+2f3,U+301,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_7eb993.woff2") format("woff2");
+src:url("./Medium_7eb993.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -40,7 +40,7 @@ unicode-range:U+9aaa-9aae,U+9ab2-9ab5,U+9ab9,U+9abb,U+9abd-9abf,U+9ac3-9ac4,U+9a
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_c1ba5a.woff2") format("woff2");
+src:url("./Medium_c1ba5a.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -48,7 +48,7 @@ unicode-range:U+9da2-9da4,U+9da6-9da8,U+9daa-9dae,U+9db0-9db3,U+9db5-9dba,U+9dbd
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_21df70.woff2") format("woff2");
+src:url("./Medium_21df70.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -56,7 +56,7 @@ unicode-range:U+98b8-98bb,U+98bd-98c3,U+98c5,U+98c7,U+98c9-98cd,U+98cf-98d0,U+98
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_426cbb.woff2") format("woff2");
+src:url("./Medium_426cbb.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -64,7 +64,7 @@ unicode-range:U+9c1c-9c1f,U+9c21-9c22,U+9c24,U+9c26-9c27,U+9c2a-9c2c,U+9c2e-9c30
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_bdb945.woff2") format("woff2");
+src:url("./Medium_bdb945.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -72,7 +72,7 @@ unicode-range:U+96b2,U+96b5,U+96b7,U+96ba,U+96bf,U+96c2-96c3,U+96ca,U+96d0-96d1,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_7ede67.woff2") format("woff2");
+src:url("./Medium_7ede67.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -80,7 +80,7 @@ unicode-range:U+91f6,U+91f8,U+91fb-91ff,U+9202-9203,U+9205-9207,U+920a-920c,U+92
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_f3c5d2.woff2") format("woff2");
+src:url("./Medium_f3c5d2.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -88,7 +88,7 @@ unicode-range:U+93ce-93d0,U+93d2-93d5,U+93d9-93db,U+93e0,U+93e3,U+93e5-93e7,U+93
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_1dddf3.woff2") format("woff2");
+src:url("./Medium_1dddf3.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -96,7 +96,7 @@ unicode-range:U+8f17-8f1a,U+8f20-8f24,U+8f27-8f28,U+8f2b-8f2e,U+8f30-8f32,U+8f34
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_3968ea.woff2") format("woff2");
+src:url("./Medium_3968ea.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -104,7 +104,7 @@ unicode-range:U+8a2f-8a30,U+8a32-8a33,U+8a35,U+8a37-8a39,U+8a3c-8a3d,U+8a3f-8a40
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_db3eb6.woff2") format("woff2");
+src:url("./Medium_db3eb6.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -112,7 +112,7 @@ unicode-range:U+8cbe,U+8cc6,U+8cc9,U+8ccb-8cd0,U+8cd4,U+8cd6-8cd9,U+8cdb,U+8cdd,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_9c6b76.woff2") format("woff2");
+src:url("./Medium_9c6b76.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -120,7 +120,7 @@ unicode-range:U+8833-8835,U+8837-8838,U+883a,U+883d-883f,U+8841-8843,U+8847-8849
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_ea28d5.woff2") format("woff2");
+src:url("./Medium_ea28d5.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -128,7 +128,7 @@ unicode-range:U+8635-8637,U+8639,U+863b,U+863d-863e,U+8640-864c,U+8652-8653,U+86
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_37edcb.woff2") format("woff2");
+src:url("./Medium_37edcb.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -136,7 +136,7 @@ unicode-range:U+8196-8197,U+8199,U+819e-819f,U+81a1-81a2,U+81a4-81a5,U+81a7,U+81
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_bc55e8.woff2") format("woff2");
+src:url("./Medium_bc55e8.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -144,7 +144,7 @@ unicode-range:U+8474,U+8479,U+847b-8481,U+8483-8486,U+848a,U+848d,U+848f,U+8491-
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_487bb6.woff2") format("woff2");
+src:url("./Medium_487bb6.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -152,7 +152,7 @@ unicode-range:U+7e80-7e81,U+7e83-7e87,U+7e89,U+7e8b,U+7e8e,U+7e90-7e92,U+7e95,U+
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_db31c9.woff2") format("woff2");
+src:url("./Medium_db31c9.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -160,7 +160,7 @@ unicode-range:U+7c8f-7c90,U+7c93-7c94,U+7c96,U+7c99-7c9b,U+7ca0-7ca1,U+7ca3,U+7c
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_f4cdc3.woff2") format("woff2");
+src:url("./Medium_f4cdc3.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -168,7 +168,7 @@ unicode-range:U+787f-7886,U+7888,U+788a-788b,U+788f-7890,U+7892,U+7894-7896,U+78
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_2b06fd.woff2") format("woff2");
+src:url("./Medium_2b06fd.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -176,7 +176,7 @@ unicode-range:U+75ee-75ef,U+75f2-75f3,U+75f5-75f8,U+75fa-75fb,U+75fd,U+7604,U+76
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_d6726b.woff2") format("woff2");
+src:url("./Medium_d6726b.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -184,7 +184,7 @@ unicode-range:U+7a9a-7a9b,U+7a9e,U+7aa1-7aa4,U+7aa7,U+7aab,U+7ab0-7ab2,U+7ab4-7a
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_244bb9.woff2") format("woff2");
+src:url("./Medium_244bb9.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -192,7 +192,7 @@ unicode-range:U+7383,U+7385-7386,U+7388,U+738a,U+738c-738d,U+738f-7390,U+7392-73
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_5a89a4.woff2") format("woff2");
+src:url("./Medium_5a89a4.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -200,7 +200,7 @@ unicode-range:U+7153-7158,U+715a-715b,U+715d,U+715f-7161,U+7163,U+716a-716b,U+71
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_1f0144.woff2") format("woff2");
+src:url("./Medium_1f0144.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -208,7 +208,7 @@ unicode-range:U+6c0e,U+6c12,U+6c17,U+6c1c-6c1e,U+6c20,U+6c25,U+6c2d,U+6c31,U+6c3
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_d528fd.woff2") format("woff2");
+src:url("./Medium_d528fd.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -216,7 +216,7 @@ unicode-range:U+6f57,U+6f5a,U+6f5d,U+6f5f-6f61,U+6f63,U+6f65,U+6f67-6f6c,U+6f71,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_64a7fa.woff2") format("woff2");
+src:url("./Medium_64a7fa.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -224,7 +224,7 @@ unicode-range:U+6a49-6a4a,U+6a4c-6a4f,U+6a51-6a57,U+6a5a,U+6a5c-6a5e,U+6a60,U+6a
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_b79dec.woff2") format("woff2");
+src:url("./Medium_b79dec.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -232,7 +232,7 @@ unicode-range:U+6526-6529,U+652d,U+6530-6533,U+6537,U+653a,U+653c-653d,U+6540-65
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_3ec284.woff2") format("woff2");
+src:url("./Medium_3ec284.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -240,7 +240,7 @@ unicode-range:U+6219,U+621c-621e,U+6220,U+6223,U+6226,U+6228,U+622b,U+622d,U+622
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_69c9f1.woff2") format("woff2");
+src:url("./Medium_69c9f1.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -248,7 +248,7 @@ unicode-range:U+6801-6804,U+6806,U+680d,U+6810,U+6812,U+6814-6815,U+6818-681c,U+
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_14d9ff.woff2") format("woff2");
+src:url("./Medium_14d9ff.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -256,7 +256,7 @@ unicode-range:U+5f4b,U+5f4d,U+5f4f,U+5f51,U+5f54,U+5f59-5f5c,U+5f5f-5f60,U+5f63,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_bb8dd9.woff2") format("woff2");
+src:url("./Medium_bb8dd9.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -264,7 +264,7 @@ unicode-range:U+5ccc-5cd1,U+5cd3-5cd8,U+5cda-5ce0,U+5ce2-5ce3,U+5ce7,U+5ceb-5cec
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_e3de0b.woff2") format("woff2");
+src:url("./Medium_e3de0b.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -272,7 +272,7 @@ unicode-range:U+5a39-5a3b,U+5a3d-5a3f,U+5a42-5a45,U+5a47-5a48,U+5a4b-5a54,U+5a56
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_86ff5c.woff2") format("woff2");
+src:url("./Medium_86ff5c.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -280,7 +280,7 @@ unicode-range:U+5799-579a,U+579d-579f,U+57a5,U+57a8,U+57aa,U+57ac,U+57af-57b1,U+
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_f1ba19.woff2") format("woff2");
+src:url("./Medium_f1ba19.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -288,7 +288,7 @@ unicode-range:U+544d-544f,U+545a,U+545d-5461,U+5463,U+5465,U+5467,U+5469-5470,U+
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_308f90.woff2") format("woff2");
+src:url("./Medium_308f90.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -296,7 +296,7 @@ unicode-range:U+50b1,U+50b6,U+50b8-50b9,U+50bc-50bd,U+50bf-50c1,U+50c3-50c4,U+50
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_8ffd80.woff2") format("woff2");
+src:url("./Medium_8ffd80.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -304,7 +304,7 @@ unicode-range:U+4d5f-4db5,U+4e02,U+4e04-4e06,U+4e0f,U+4e12,U+4e17,U+4e20-4e21,U+
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_520974.woff2") format("woff2");
+src:url("./Medium_520974.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -312,7 +312,7 @@ unicode-range:U+4c6e-4d5e;
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_aaa17b.woff2") format("woff2");
+src:url("./Medium_aaa17b.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -320,7 +320,7 @@ unicode-range:U+4b63-4c6d,U+2f80f;
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_4c6f3e.woff2") format("woff2");
+src:url("./Medium_4c6f3e.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -328,7 +328,7 @@ unicode-range:U+4a49-4b62,U+2e774,U+2e779,U+2e8f4,U+2e932,U+2e9f4-2e9f5,U+2ea5d;
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_b72c0f.woff2") format("woff2");
+src:url("./Medium_b72c0f.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -336,7 +336,7 @@ unicode-range:U+47d1-491a,U+2ce2a,U+2ce7c,U+2ce88,U+2ce93,U+2d075,U+2d079,U+2d6a
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_b72ba6.woff2") format("woff2");
+src:url("./Medium_b72ba6.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -344,7 +344,7 @@ unicode-range:U+491b-4a48,U+2dc4a,U+2e0c4,U+2e267-2e268,U+2e26a-2e26b,U+2e428,U+
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_3fe1b9.woff2") format("woff2");
+src:url("./Medium_3fe1b9.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -352,7 +352,7 @@ unicode-range:U+46e2-47d0,U+2c542,U+2c613,U+2c618,U+2c621,U+2c629,U+2c62b-2c62d,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_cc44c2.woff2") format("woff2");
+src:url("./Medium_cc44c2.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -360,7 +360,7 @@ unicode-range:U+45be-46e1,U+2b9ef,U+2ba74,U+2bac7,U+2bb5f,U+2bb62,U+2bb7c,U+2bb8
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_e3279f.woff2") format("woff2");
+src:url("./Medium_e3279f.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -368,7 +368,7 @@ unicode-range:U+4498-45bd,U+2aed0,U+2afa2,U+2b124-2b125,U+2b127-2b128,U+2b137-2b
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_9e4bc0.woff2") format("woff2");
+src:url("./Medium_9e4bc0.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -376,7 +376,7 @@ unicode-range:U+4348-4497,U+2a3ad,U+2a7dd,U+2a8fb,U+2a917,U+2aa07,U+2aa17,U+2aa3
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_51aee4.woff2") format("woff2");
+src:url("./Medium_51aee4.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -384,7 +384,7 @@ unicode-range:U+4232-4347,U+29f7e,U+29f83,U+29f8c;
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_45bff9.woff2") format("woff2");
+src:url("./Medium_45bff9.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -392,7 +392,7 @@ unicode-range:U+40e6-4231,U+289c0,U+28a0f,U+28b46,U+28b49,U+28b4e,U+28c47,U+28c4
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_341ef7.woff2") format("woff2");
+src:url("./Medium_341ef7.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -400,7 +400,7 @@ unicode-range:U+3f87-40e5,U+27c35,U+27ff9,U+280bf,U+2812e,U+28263,U+28408,U+284c
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_97a99d.woff2") format("woff2");
+src:url("./Medium_97a99d.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -408,7 +408,7 @@ unicode-range:U+4e15,U+4e1e,U+4e2b,U+4eb3,U+4ec9,U+4f0e,U+4f3d,U+4f58,U+4f64,U+4
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_3921b7.woff2") format("woff2");
+src:url("./Medium_3921b7.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -416,7 +416,7 @@ unicode-range:U+3e15-3f86,U+26d4f,U+277c4;
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_107da6.woff2") format("woff2");
+src:url("./Medium_107da6.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -424,7 +424,7 @@ unicode-range:U+4e07,U+4e0e,U+4e13,U+4e1a,U+4e1c-4e1d,U+4e24-4e25,U+4e2a,U+4e30,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_a14520.woff2") format("woff2");
+src:url("./Medium_a14520.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -432,7 +432,7 @@ unicode-range:U+3cc0-3e14,U+260b3,U+260c2,U+26220-26221,U+26246,U+26291,U+26351,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_a366b5.woff2") format("woff2");
+src:url("./Medium_a366b5.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -440,7 +440,7 @@ unicode-range:U+4e4d,U+4e5e,U+4ea8,U+4ed5,U+4f51,U+4f7c,U+4f83,U+4fae,U+4fd1,U+4
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_f79830.woff2") format("woff2");
+src:url("./Medium_f79830.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -448,7 +448,7 @@ unicode-range:U+3b7e-3cbf,U+2538a,U+2546a,U+25532,U+25562,U+255a8,U+255fd,U+256f
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_2e32bb.woff2") format("woff2");
+src:url("./Medium_2e32bb.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -456,7 +456,7 @@ unicode-range:U+4e11,U+4e1b,U+4e22,U+4e27,U+4ec6,U+4ed3,U+4eff,U+4f26,U+4f2a,U+4
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_a8a924.woff2") format("woff2");
+src:url("./Medium_a8a924.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -464,7 +464,7 @@ unicode-range:U+3a18-3b7d,U+246d8,U+247a4,U+249db,U+24a0f,U+24a7d,U+24a8c,U+24ac
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_d96074.woff2") format("woff2");
+src:url("./Medium_d96074.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -472,7 +472,7 @@ unicode-range:U+4e01,U+4e39,U+4e43,U+4e4f,U+4e58-4e59,U+4e95,U+4ea1,U+4ea6,U+4ea
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_0cfb1c.woff2") format("woff2");
+src:url("./Medium_0cfb1c.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -480,7 +480,7 @@ unicode-range:U+3884-3a17,U+235cb,U+2365c,U+237c4,U+237f4,U+23a3c,U+23b72,U+23c7
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_6e0ff5.woff2") format("woff2");
+src:url("./Medium_6e0ff5.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -488,7 +488,7 @@ unicode-range:U+4e10,U+4e56,U+4ea2,U+4ea5,U+4ec3,U+4f36,U+4f3a,U+4f5f,U+4f6c,U+4
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_03a2d0.woff2") format("woff2");
+src:url("./Medium_03a2d0.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -496,7 +496,7 @@ unicode-range:U+3701-3883,U+2295e,U+2298f,U+22ad3,U+22aec,U+22b38,U+22ba5,U+22cd
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_40290d.woff2") format("woff2");
+src:url("./Medium_40290d.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -504,7 +504,7 @@ unicode-range:U+4e0c,U+4e28,U+4e36,U+4e3f,U+4ea0,U+4ec2,U+4ef3,U+4f74,U+4f91,U+4
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_ea9fa3.woff2") format("woff2");
+src:url("./Medium_ea9fa3.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -512,7 +512,7 @@ unicode-range:U+27e8-27e9,U+2e81,U+2e84,U+2e88,U+2e8b-2e8c,U+2e97,U+2ea7,U+2eaa,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_014f33.woff2") format("woff2");
+src:url("./Medium_014f33.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -520,7 +520,7 @@ unicode-range:U+20-7e,U+a0-17f,U+18f,U+192,U+1a0-1a1,U+1af-1b0,U+1cd-1dc,U+1e5,U
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_6434c7.woff2") format("woff2");
+src:url("./Medium_6434c7.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -528,7 +528,7 @@ unicode-range:U+3568-3700,U+21681,U+216df,U+21a18,U+21a25,U+21b36,U+21deb,U+21ed
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_26c975.woff2") format("woff2");
+src:url("./Medium_26c975.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -536,7 +536,7 @@ unicode-range:U+50b4,U+50e8,U+5110,U+51aa,U+5244,U+528c,U+52f1,U+532d,U+53b4,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_18d529.woff2") format("woff2");
+src:url("./Medium_18d529.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -544,7 +544,7 @@ unicode-range:U+3001-3002,U+3008-3011,U+3014-3017,U+4e00,U+4e03,U+4e09-4e0b,U+4e
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_f0cfc9.woff2") format("woff2");
+src:url("./Medium_f0cfc9.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -552,7 +552,7 @@ unicode-range:U+4fc1,U+5000,U+5096,U+50c9,U+5114-5115,U+526e,U+5274,U+5399,U+53c
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_f4ba32.woff2") format("woff2");
+src:url("./Medium_f4ba32.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -560,7 +560,7 @@ unicode-range:U+4e08,U+4e18-4e19,U+4e32,U+4e38,U+4e52-4e53,U+4e73,U+4e7e,U+4e9f,
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_5e7d98.woff2") format("woff2");
+src:url("./Medium_5e7d98.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -568,7 +568,7 @@ unicode-range:U+50af,U+50c2,U+5108,U+5137,U+513b,U+528a,U+5504,U+559e,U+560d,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_e4c002.woff2") format("woff2");
+src:url("./Medium_e4c002.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -576,7 +576,7 @@ unicode-range:U+37e,U+384-38a,U+38c,U+38e-3a1,U+3a3-3ce,U+3d1-3d2,U+3d6,U+400-45
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_bfef47.woff2") format("woff2");
+src:url("./Medium_bfef47.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -584,7 +584,7 @@ unicode-range:U+4e99,U+4f47,U+50e5,U+5102,U+513a,U+513c,U+5157,U+5191,U+5284,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_41449b.woff2") format("woff2");
+src:url("./Medium_41449b.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -592,7 +592,7 @@ unicode-range:U+4f96,U+4fb6,U+4fe0,U+5098,U+50ad,U+50d5,U+510d,U+516a,U+51dc,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_b51934.woff2") format("woff2");
+src:url("./Medium_b51934.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -600,7 +600,7 @@ unicode-range:U+4e1f,U+5006,U+5009,U+5074-5075,U+5078,U+50f1,U+5109,U+5147,U+514
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_2cb82f.woff2") format("woff2");
+src:url("./Medium_2cb82f.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -608,7 +608,7 @@ unicode-range:U+4e82,U+5016,U+502b,U+5049,U+5091,U+50b5,U+50b7,U+50be,U+50d1,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_be9e70.woff2") format("woff2");
+src:url("./Medium_be9e70.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -616,7 +616,7 @@ unicode-range:U+4e26,U+4e9e,U+4f15,U+4f48,U+4f54,U+4f86,U+4fb7,U+4fec,U+500b,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_8c8fb6.woff2") format("woff2");
+src:url("./Medium_8c8fb6.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -624,7 +624,7 @@ unicode-range:U+4e2c,U+4f1b,U+507e,U+5181,U+522d,U+523f,U+52a2,U+5326,U+537a,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_fdf82c.woff2") format("woff2");
+src:url("./Medium_fdf82c.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -632,7 +632,7 @@ unicode-range:U+4f25,U+4f27,U+4f65,U+4fa9-4faa,U+4fe3,U+4fe6,U+50a7,U+51eb,U+51f
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_a6c996.woff2") format("woff2");
+src:url("./Medium_a6c996.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -640,7 +640,7 @@ unicode-range:U+4eb5,U+4f2b,U+4fac,U+4fea,U+506c,U+507b,U+50a5,U+50a9,U+5156,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_1f70a4.woff2") format("woff2");
+src:url("./Medium_1f70a4.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -648,7 +648,7 @@ unicode-range:U+4e98,U+4ec7,U+4ed1,U+4f1e,U+4f63,U+4fa0,U+4fa3,U+4fa5,U+4fe8,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_ff7f25.woff2") format("woff2");
+src:url("./Medium_ff7f25.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -656,7 +656,7 @@ unicode-range:U+4e69,U+4f67,U+4f7e,U+4fdc,U+50e6,U+50ec,U+5196,U+51ab,U+51b1,U+5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_bcfe9f.woff2") format("woff2");
+src:url("./Medium_bcfe9f.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -664,7 +664,7 @@ unicode-range:U+4e47,U+4e5c,U+4e8d,U+4e93,U+4ebb,U+4ec4,U+4edf,U+4ef5,U+4f32,U+4
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_282107.woff2") format("woff2");
+src:url("./Medium_282107.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;
@@ -672,7 +672,7 @@ unicode-range:U+4edd-4ede,U+4ee1,U+4ee8,U+4eeb,U+4f09,U+4f22,U+4f43,U+4f57,U+4f5
 }
 @font-face {
 font-family:"HarmonyOS Sans SC";
-src:local("HarmonyOS Sans SC Medium"),local("HarmonyOS Sans SC Medium"),url("./Medium_f2caaa.woff2") format("woff2");
+src:url("./Medium_f2caaa.woff2") format("woff2");
 font-style: normal;
 font-weight: 500;
 font-display: swap;

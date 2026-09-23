@@ -45,6 +45,7 @@ const MISLEADING = [
 const DEFAULT_TARGETS = [
   "docs/architecture/frontend.md",
   "docs/standards/ui-system.md",
+  "docs/ui/visual-foundation.md",
   "docs/SPEC.md",
   "README.md",
   "AGENTS.md",

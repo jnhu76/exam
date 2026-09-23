@@ -58,6 +58,13 @@ exists.
 - **Primary UI sans:** self-hosted "HarmonyOS Sans SC" (Regular/Medium/Bold
   woff2, linked in `index.html` = weights 400/500/700). It is **first** in
   `--font-ui` so the same typeface renders across Windows/macOS/Linux.
+  **Bundled-source authority (#601):** the generated `@font-face` rules in
+  `public/fonts/harmonyos-sans-sc/*.css` must declare the bundled WOFF2 as
+  their only source — no host `local()` source may precede it, or a
+  host-installed face would silently replace the product binary. The
+  regeneration step after a `cn-font-split` re-run is
+  `scripts/fonts/bundled-font-sources.mjs`; the invariant is gated by
+  `apps/web/src/docs/fontAuthority.test.ts`.
   "Noto Sans CJK SC" and OS CJK fonts sit later in the stack as resilient
   name-in-stack fallbacks ONLY — no Noto sans webfont is loaded, and the
   `/fonts/noto-sans-cjk-sc` asset directory is currently unreferenced
@@ -398,9 +405,12 @@ SVG presentation attribute, and ANY author CSS rule that matches the icon
 beats it — so `index.css` keeps a primitive-internal optical thinning rule
 (`stroke-width: 1.5` for 16px icons) scoped strictly to primitive data-slots
 whose internal icons the primitive owns (select/checkbox/dropdown/dialog/
-sheet/pagination). A broad selector (e.g. bare `svg.lucide`) defeats
-AppIcon's per-role stroke contract for every Lucide icon and is gated by
-`AppIconStrokeCascade.test.tsx` (whole author-CSS surface).
+sheet/pagination), each excluding `[data-app-icon]` so a consumer-supplied
+AppIcon keeps its role stroke inside those primitives (#601 Step 1; the
+marker is emitted by `AppIcon` itself). A broad selector (e.g. bare
+`svg.lucide`) defeats AppIcon's per-role stroke contract for every Lucide
+icon and is gated by `AppIconStrokeCascade.test.tsx` (whole author-CSS
+surface, including real pagination/dropdown/select ancestry).
 
 ## Tables
 

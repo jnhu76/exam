@@ -15,6 +15,14 @@ import { cn } from "@/lib/utils";
  *   collapsing nav/metric/state icons to 16px. The CSS class is emitted on
  *   the wrapper so it wins over caller classes via tailwind-merge ordering.
  *
+ * Why the `data-app-icon` marker (issue 601 Step 1): author CSS beats SVG
+ * presentation attributes, so primitive-internal optical rules such as
+ * `[data-slot="pagination"] svg { stroke-width: 1.5 }` would also claim an
+ * AppIcon rendered inside those primitives and silently override its role
+ * stroke. Every such rule must exclude `[data-app-icon]`; the marker makes
+ * "primitive-owned internal icon" and "consumer-supplied AppIcon"
+ * distinguishable in the cascade. Gated by AppIconStrokeCascade.test.tsx.
+ *
  * Callers must NOT pass their own `size-*`, `width`, `height`, `strokeWidth`
  * or `absoluteStrokeWidth` props — the size role is the only sizing authority.
  * Caller `className` may carry color / opacity / animation / transition /
@@ -77,6 +85,7 @@ export function AppIcon(props: AppIconProps) {
         size={config.px}
         strokeWidth={config.stroke}
         absoluteStrokeWidth
+        data-app-icon=""
         role="img"
         aria-label={props.label}
         className={baseClassName}
@@ -89,6 +98,7 @@ export function AppIcon(props: AppIconProps) {
       size={config.px}
       strokeWidth={config.stroke}
       absoluteStrokeWidth
+      data-app-icon=""
       aria-hidden="true"
       className={baseClassName}
     />

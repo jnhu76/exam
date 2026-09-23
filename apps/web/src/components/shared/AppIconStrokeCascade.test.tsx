@@ -1,11 +1,25 @@
 import { render } from "@testing-library/react";
-import { Eye } from "lucide-react";
+import { Eye, MoreVertical, User } from "lucide-react";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { listAuthorStylesheets } from "@/test/cssRules";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { AppIcon } from "./AppIcon";
+import { DataTablePagination } from "./DataTablePagination";
 
 /**
  * AppIcon stroke authority vs the CSS cascade (issue 577 VAA2-B1 regression gate).
@@ -26,6 +40,15 @@ import { AppIcon } from "./AppIcon";
  * nothing in author CSS contests the presentation attribute and the attribute
  * IS the computed value. It also proves the primitive-internal optical rule
  * still reaches the icons those primitives own (R2).
+ *
+ * Ancestry ownership (issue #601 Step 1): data-slot scoping alone does NOT
+ * prove ownership — `[data-slot="pagination"] svg` also matches a
+ * consumer-supplied AppIcon rendered inside the primitive (the real
+ * DataTablePagination / row-action-menu ancestry). Every stroke-width
+ * selector must therefore exclude AppIcon output (`:not([data-app-icon])`),
+ * proven here against (a) a synthetic worst-case host chain naming every
+ * data-slot in the CSS and (b) the REAL opened primitives (pagination,
+ * dropdown menu, select), while primitive-owned internal icons stay matched.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -129,7 +152,9 @@ describe("AppIcon stroke authority survives the CSS cascade (issue 577 B1)", () 
 
   it("the primitive-internal optical rule still reaches icons the primitive owns (R2)", () => {
     const selectors = strokeWidthSelectors(ALL_CSS);
-    expect(selectors).toContain('[data-slot="select-trigger"] svg');
+    expect(selectors).toContain(
+      '[data-slot="select-trigger"] svg:not([data-app-icon])',
+    );
     // Proven through the selector engine on a representative primitive tree.
     const host = document.createElement("div");
     const trigger = document.createElement("button");
@@ -180,5 +205,158 @@ describe("AppIcon stroke authority survives the CSS cascade (issue 577 B1)", () 
     expect(
       broadStrokeSelectors('[data-slot="pagination"] svg{stroke-width:1.5}'),
     ).toEqual([]);
+  });
+});
+
+describe("AppIcon stroke ownership vs primitive ancestry (issue #601 Step 1)", () => {
+  /** Every data-slot the primitive-internal optical rule names today. */
+  const HOST_SLOTS = [
+    "select-trigger",
+    "select-content",
+    "checkbox-indicator",
+    "dropdown-menu-content",
+    "dialog-close",
+    "sheet-close",
+    "pagination",
+  ];
+
+  function expectAppIconUnmatched(container: HTMLElement) {
+    const svgs = [...container.querySelectorAll("svg[data-app-icon]")];
+    expect(svgs.length).toBeGreaterThan(0);
+    for (const svg of svgs) {
+      expect(
+        selectorsMatchingAppIcon(strokeWidthSelectors(ALL_CSS), svg),
+        `an author stroke rule claims an AppIcon rendered as ${svg.getAttribute("class")}`,
+      ).toEqual([]);
+    }
+  }
+
+  it("the primitive optical rule excludes AppIcon output in EVERY data-slot it names (synthetic worst-case chain)", () => {
+    for (const size of ["inline", "nav", "metric", "large"] as const) {
+      // Nest the AppIcon under EVERY host slot at once: a selector that
+      // claims consumer output under any of them reds here.
+      let host: HTMLElement = document.createElement("div");
+      const root = host;
+      for (const slot of HOST_SLOTS) {
+        const next = document.createElement("div");
+        next.setAttribute("data-slot", slot);
+        host.appendChild(next);
+        host = next;
+      }
+      const { container } = render(<AppIcon icon={Eye} size={size} />, {
+        container: host,
+        baseElement: root,
+      });
+      document.body.appendChild(root);
+      try {
+        expectAppIconUnmatched(container);
+      } finally {
+        root.remove();
+      }
+    }
+  });
+
+  it("a data-slot svg selector WITHOUT the AppIcon exclusion reds the gate (mutation)", () => {
+    const mutated = ALL_CSS.replace(
+      '[data-slot="pagination"] svg:not([data-app-icon])',
+      '[data-slot="pagination"] svg',
+    );
+    expect(mutated).not.toBe(ALL_CSS);
+    const { container } = render(
+      <div data-slot="pagination">
+        <AppIcon icon={Eye} size="nav" />
+      </div>,
+    );
+    const svg = container.querySelector("svg[data-app-icon]")!;
+    expect(
+      selectorsMatchingAppIcon(strokeWidthSelectors(mutated), svg),
+    ).toContain('[data-slot="pagination"] svg');
+  });
+
+  it("real DataTablePagination ancestry: AppIcon keeps its role stroke", () => {
+    const { container } = render(
+      <DataTablePagination
+        page={2}
+        pageSize={10}
+        total={50}
+        onPageChange={() => {}}
+      />,
+    );
+    expect(container.querySelector('[data-slot="pagination"]')).not.toBeNull();
+    expectAppIconUnmatched(container);
+  });
+
+  it("real opened DropdownMenu: AppIcon in the trigger and in menu items keeps its role stroke", () => {
+    const { container } = render(
+      <DropdownMenu open>
+        <DropdownMenuTrigger>
+          <AppIcon icon={MoreVertical} size="inline" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>
+            <AppIcon icon={User} size="inline" />
+            用户操作
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    // Radix portals the content into document.body — scan the whole body.
+    expectAppIconUnmatched(container);
+    expectAppIconUnmatched(document.body);
+  });
+
+  it("real opened Select: primitive-owned internal icons (trigger chevron, selected-item check) stay thinned (R2)", () => {
+    render(
+      <Select open defaultValue="a">
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="a">选项 A</SelectItem>
+        </SelectContent>
+      </Select>,
+    );
+    const primitiveIconSelectors = strokeWidthSelectors(ALL_CSS);
+    for (const [slot, iconClass] of [
+      ["select-trigger", "lucide-chevron-down"],
+      ["select-content", "lucide-check"],
+    ] as const) {
+      const icons = [
+        ...document.body.querySelectorAll(
+          `[data-slot="${slot}"] svg.${iconClass}`,
+        ),
+      ];
+      expect(icons.length, `${slot} internal ${iconClass}`).toBeGreaterThan(0);
+      for (const icon of icons) {
+        expect(
+          primitiveIconSelectors.some((sel) => {
+            try {
+              return icon.matches(sel);
+            } catch {
+              return false;
+            }
+          }),
+          `${slot} internal icon lost the primitive optical rule`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("real opened DropdownMenu still thins primitive-owned icons the primitive itself renders", () => {
+    render(
+      <DropdownMenu open>
+        <DropdownMenuTrigger>操作</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>菜单项</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    // The primitive's own item indicator (if rendered) is primitive property;
+    // what must NOT happen is AppIcon being claimed. Consumer items here have
+    // no AppIcon, so no svg in the menu may carry the marker.
+    const marked = document.body.querySelectorAll(
+      '[data-slot="dropdown-menu-content"] svg[data-app-icon]',
+    );
+    expect(marked.length).toBe(0);
   });
 });
