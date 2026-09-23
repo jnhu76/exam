@@ -282,19 +282,30 @@ h3 {
  * Targets only 16px svgs inside primitive data-slots; larger icons
  * (state/hero) are untouched.
  *
+ * OWNERSHIP DISCRIMINATOR (issue 601 Step 1): `:not([data-app-icon])` keeps
+ * these rules from claiming a consumer-supplied AppIcon rendered inside the
+ * primitive (DataTablePagination chevrons, RowActions menu items, …) — the
+ * AppIcon marker is what makes "primitive-owned internal icon" and
+ * "consumer icon" distinguishable in the cascade. Without the exclusion, the
+ * rule overrode the AppIcon role stroke (e.g. a 20px nav icon inside a menu
+ * rendered at 1.5 instead of 2). Primitive-owned internal icons carry no
+ * marker and stay thinned.
+ *
  * INVARIANT (issue 577 VAA2-B1): every selector here is scoped to a primitive
- * data-slot whose internal icon the primitive itself owns. A bare
- * class/element selector (the former `svg.lucide` prefix) also defeated
- * AppIcon's per-role absoluteStrokeWidth contract for EVERY Lucide icon,
- * because unlayered author CSS beats SVG presentation attributes.
- * AppIconStrokeCascade.test.tsx gates this selector shape across the whole author-CSS surface.
+ * data-slot whose internal icon the primitive itself owns, and excludes
+ * AppIcon output. A bare class/element selector (the former `svg.lucide`
+ * prefix) also defeated AppIcon's per-role absoluteStrokeWidth contract for
+ * EVERY Lucide icon, because unlayered author CSS beats SVG presentation
+ * attributes.
+ * AppIconStrokeCascade.test.tsx gates this selector shape across the whole
+ * author-CSS surface, including real pagination/dropdown/select ancestry.
  */
-[data-slot="select-trigger"] svg,
-[data-slot="select-content"] svg,
-[data-slot="checkbox-indicator"] svg,
-[data-slot="dropdown-menu-content"] svg,
-[data-slot="dialog-close"] svg,
-[data-slot="sheet-close"] svg,
-[data-slot="pagination"] svg {
+[data-slot="select-trigger"] svg:not([data-app-icon]),
+[data-slot="select-content"] svg:not([data-app-icon]),
+[data-slot="checkbox-indicator"] svg:not([data-app-icon]),
+[data-slot="dropdown-menu-content"] svg:not([data-app-icon]),
+[data-slot="dialog-close"] svg:not([data-app-icon]),
+[data-slot="sheet-close"] svg:not([data-app-icon]),
+[data-slot="pagination"] svg:not([data-app-icon]) {
   stroke-width: 1.5;
 }

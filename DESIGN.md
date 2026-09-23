@@ -244,10 +244,16 @@ every icon it renders: badge/inline = 16px @ 1.5px physical stroke,
 nav/metric = 20px @ 2px, large = 24px @ 2px, state = 32px @ 2px,
 hero = 40px @ 2px (`absoluteStrokeWidth` always on). Integer dimensions and
 layout coordinates where practical; no weak opacity; no scaled wrappers.
+Every AppIcon render carries a `data-app-icon` marker so primitive-internal
+optical rules (`index.css`) can exclude consumer-supplied icons — an AppIcon
+keeps its role stroke inside pagination/dropdown/select ancestry while
+primitive-owned internal icons stay thinned (issue #601 Step 1).
 shadcn/Radix primitive-internal 16px icons carry a dedicated optical thinning
 rule scoped to the primitive's own data-slots (`index.css`) — no broad global
 selector may also catch AppIcon output. A different icon source may be
-introduced only when unscaled DPR 1 crops prove a material gain.
+introduced only when unscaled DPR 1 crops prove a material gain. The visual
+authority map for the whole foundation is
+[`docs/ui/visual-foundation.md`](docs/ui/visual-foundation.md).
 
 ## Responsive shell
 

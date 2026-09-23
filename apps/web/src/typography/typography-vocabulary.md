@@ -66,7 +66,7 @@
 
 | Role | Resolves to | Purpose |
 | --- | --- | --- |
-| `font.ui` | `--font-ui` (Noto Sans CJK SC first) | All UI text |
+| `font.ui` | `--font-ui` (bundled HarmonyOS Sans SC first; host families are fallbacks only) | All UI text |
 | `font.reading` | `--font-reading` (currently = `--font-ui`) | Sustained reading family role; recipe `type-reading` uses this, NOT serif |
 | `font.serif` | `--font-serif` (Noto Serif SC) | Sustained Chinese reading ONLY, by explicit opt-in (UI-TYPO-2 boundary) |
 | `font.mono` | `--font-mono` | Code/log/mono presentation |

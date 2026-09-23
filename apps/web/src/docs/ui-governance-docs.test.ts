@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -195,5 +195,94 @@ describe("UI governance doc consistency (issue #461)", () => {
         v.startsWith("ui-system.md lost the frozen boundary sentence"),
       ),
     ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Visual Foundation authority map (issue #601 Step 1).
+//
+// docs/ui/visual-foundation.md is an INDEX, not a second numerical authority:
+// it must keep answering the governed-question map, and every repository path
+// it names must exist — a foundation index pointing at moved/renamed
+// authorities is exactly the drift class it exists to prevent.
+// ---------------------------------------------------------------------------
+
+const FOUNDATION_DOC_PATH = join(
+  repoRoot,
+  "docs",
+  "ui",
+  "visual-foundation.md",
+);
+
+/** Question areas the authority map must keep answering (§1 table rows). */
+const FOUNDATION_AUTHORITY_AREAS = [
+  "typography",
+  "font source / fallback",
+  "text/color roles",
+  "surfaces/borders",
+  "spacing",
+  "radius",
+  "icons",
+  "component geometry",
+  "responsive/density",
+  "theme",
+  "accessibility",
+  "rendering/DPI",
+] as const;
+
+/** Repo paths named in backticks that are expected to be files/dirs on disk. */
+const REPO_PATH_TOKEN =
+  /`((?:apps|docs|scripts|formal)\/[A-Za-z0-9._/-]+|(?:DESIGN|AGENTS|CONTEXT)\.md)`/g;
+
+export function visualFoundationViolations(
+  doc: string,
+  exists: (p: string) => boolean,
+): string[] {
+  const violations: string[] = [];
+  for (const area of FOUNDATION_AUTHORITY_AREAS) {
+    if (!doc.toLowerCase().includes(area.toLowerCase())) {
+      violations.push(
+        `visual-foundation.md lost the authority-map area: ${area}`,
+      );
+    }
+  }
+  if (!doc.includes("#601")) {
+    violations.push("visual-foundation.md lost its issue anchor (#601)");
+  }
+  if (!doc.includes("Phase-F")) {
+    violations.push("visual-foundation.md lost the Phase-F boundary");
+  }
+  for (const m of doc.matchAll(REPO_PATH_TOKEN)) {
+    const path = m[1]!;
+    if (!exists(path)) {
+      violations.push(
+        `visual-foundation.md names a nonexistent authority path: ${path}`,
+      );
+    }
+  }
+  return violations;
+}
+
+describe("visual-foundation.md authority map (issue #601 Step 1)", () => {
+  it("answers every governed-question area and names only existing authorities", () => {
+    const doc = readFileSync(FOUNDATION_DOC_PATH, "utf8");
+    expect(
+      visualFoundationViolations(doc, (p) => existsSync(join(repoRoot, p))),
+    ).toEqual([]);
+  });
+
+  it("reds when the index points at a moved authority (mutation)", () => {
+    const doc = readFileSync(FOUNDATION_DOC_PATH, "utf8");
+    const mutated = doc.replace(
+      "apps/web/src/typography/recipeRegistry.ts",
+      "apps/web/src/typography/recipe-registry.ts",
+    );
+    expect(
+      visualFoundationViolations(mutated, (p) => existsSync(join(repoRoot, p))),
+    ).toContainEqual(
+      expect.stringContaining(
+        "nonexistent authority path: apps/web/src/typography/recipe-registry.ts",
+      ),
+    );
   });
 });

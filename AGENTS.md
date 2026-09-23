@@ -96,7 +96,7 @@ OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前�
 | 状态机、答题、恢复、批改 | `docs/architecture/exam-runtime.md`、相关 Accepted ADR/契约 |
 | 权限、角色、scope | `docs/architecture/authorization.md`、相关 Accepted ADR |
 | 数据库、测试隔离、CI、flake | `docs/standards/testing.md`、`docs/standards/test-flakes.md` |
-| 前端结构和视觉修改 | `docs/architecture/frontend.md`、`docs/standards/ui-system.md`、`DESIGN.md` |
+| 前端结构和视觉修改 | `docs/architecture/frontend.md`、`docs/standards/ui-system.md`、`docs/ui/visual-foundation.md`、`DESIGN.md` |
 | 产品文案与 i18n | `docs/standards/i18n-copy-policy.md`、部署设置与 locale 的权威实现 |
 | 部署、备份、升级 | `docs/deployment/` 中对应 runbook/contract |
 | 形式化模型 | `formal/AGENTS.md`、`formal/README.md` 和相应模型说明 |

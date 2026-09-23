@@ -144,4 +144,11 @@ describe("AppIcon", () => {
     expect(cls).toContain("size-8");
     expect(cls).toContain("text-destructive");
   });
+
+  it("marks its output with data-app-icon — the ownership discriminator that keeps primitive-internal stroke CSS from claiming AppIcon (#601)", () => {
+    const { container } = render(<AppIcon icon={Eye} size="inline" />);
+    expect(container.querySelector("svg")!.hasAttribute("data-app-icon")).toBe(
+      true,
+    );
+  });
 });

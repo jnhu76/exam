@@ -102,6 +102,7 @@ Key recovery authority:
 | [`standards/i18n-copy-policy.md`](standards/i18n-copy-policy.md) | i18n hardcoded-copy gate + copy taxonomy (browser / wire compat / server-rendered / diagnostics / data-format); semantics live in `contracts/api-contract.md` |
 | [`standards/test-flakes.md`](standards/test-flakes.md) | Test flake registry |
 | [`standards/ui-system.md`](standards/ui-system.md) | Design tokens, recipes, component authority, accessibility, visual lint |
+| [`ui/visual-foundation.md`](ui/visual-foundation.md) | Visual Foundation authority map (issue #601): where each visual fact is governed, frozen non-table decisions, Agent-facing MUST rules, Phase-F table boundary |
 
 ### Status (what is implemented now)
 

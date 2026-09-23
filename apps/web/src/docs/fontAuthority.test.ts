@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -12,6 +12,14 @@ import { describe, expect, it } from "vitest";
  * carriers (index.html, index.css token + comment, DESIGN.md, ui-system.md)
  * must tell this same story; a doc that re-elevates Noto to "the loaded
  * self-hosted sans" is the exact drift class that survived commit b73c94cb.
+ *
+ * Bundled-source authority (issue #601 Step 1): the generated @font-face
+ * declarations must not list a host `local(...)` source before (or instead
+ * of) the bundled WOFF2 — a host with HarmonyOS Sans SC installed would
+ * otherwise silently replace the bundled binary, and the same `font-weight`
+ * renders with a different optical weight per host (the #601 Phase-A
+ * finding). Regeneration after a cn-font-split re-run goes through
+ * scripts/fonts/bundled-font-sources.mjs.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -96,5 +104,165 @@ describe("primary font truth is coherent across code + docs (R3)", () => {
       uiSystem: UI_SYSTEM,
     });
     expect(mutated.some((m) => m.startsWith("DESIGN.md"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bundled @font-face source authority (issue #601 Step 1).
+// ---------------------------------------------------------------------------
+
+const FONT_CSS_DIR = join(
+  repoRoot,
+  "apps",
+  "web",
+  "public",
+  "fonts",
+  "harmonyos-sans-sc",
+);
+const FACE_WEIGHTS = {
+  "Regular.css": "400",
+  "Medium.css": "500",
+  "Bold.css": "700",
+} as const;
+
+type FontFace = {
+  src: string;
+  family: string;
+  weight: string;
+  display: string;
+  unicodeRange: boolean;
+};
+
+export function parseFontFaces(css: string): FontFace[] {
+  return [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => {
+    const body = m[1] ?? "";
+    const prop = (name: string) =>
+      new RegExp(`${name}\\s*:\\s*([^;\\n]+)`).exec(body)?.[1]?.trim() ?? "";
+    return {
+      src: prop("src"),
+      family: prop("font-family"),
+      weight: prop("font-weight"),
+      display: prop("font-display"),
+      unicodeRange: /unicode-range\s*:/.test(body),
+    };
+  });
+}
+
+/**
+ * Pure checker over the three HarmonyOS face stylesheets. Returns every way
+ * the bundled-source authority is violated (in-memory, so mutation proofs
+ * never touch disk).
+ */
+export function bundledFontSourceViolations(files: {
+  [name: string]: string;
+}): string[] {
+  const v: string[] = [];
+  for (const [name, css] of Object.entries(files)) {
+    if (!css.includes("@font-face")) {
+      v.push(`${name}: no @font-face declarations found`);
+      continue;
+    }
+    if (/local\s*\(/.test(css)) {
+      v.push(
+        `${name}: declares a local() source — a host-installed HarmonyOS Sans SC would precede the bundled WOFF2`,
+      );
+    }
+    const faces = parseFontFaces(css);
+    const expectedWeight =
+      FACE_WEIGHTS[name as keyof typeof FACE_WEIGHTS] ?? "(unknown face)";
+    for (const [i, face] of faces.entries()) {
+      if (
+        face.family !== '"HarmonyOS Sans SC"' &&
+        face.family !== "'HarmonyOS Sans SC'"
+      ) {
+        v.push(`${name}: face ${i} has unexpected font-family ${face.family}`);
+      }
+      if (face.weight !== expectedWeight) {
+        v.push(
+          `${name}: face ${i} declares weight ${face.weight}, expected ${expectedWeight}`,
+        );
+      }
+      const urls = [...face.src.matchAll(/url\("(\.\/[^"]+\.woff2)"\)/g)].map(
+        (m) => m[1]!,
+      );
+      if (urls.length !== 1 || !/format\("woff2"\)/.test(face.src)) {
+        v.push(
+          `${name}: face ${i} src must be exactly one bundled woff2 url, got: ${face.src}`,
+        );
+      }
+      if (!face.unicodeRange) {
+        v.push(`${name}: face ${i} lost its unicode-range split`);
+      }
+      if (face.display !== "swap") {
+        v.push(`${name}: face ${i} changed font-display: ${face.display}`);
+      }
+    }
+  }
+  return v;
+}
+
+describe("bundled @font-face source authority (issue #601 Step 1)", () => {
+  const files = Object.fromEntries(
+    Object.keys(FACE_WEIGHTS).map((name) => [
+      name,
+      readFileSync(join(FONT_CSS_DIR, name), "utf8"),
+    ]),
+  );
+
+  it("the three face stylesheets linked from index.html exist under public/fonts", () => {
+    const linked = [
+      ...INDEX_HTML.matchAll(/fonts\/harmonyos-sans-sc\/(\w+\.css)/g),
+    ].map((m) => m[1]!);
+    expect(linked.sort()).toEqual(Object.keys(FACE_WEIGHTS).sort());
+    for (const name of Object.keys(FACE_WEIGHTS)) {
+      expect(existsSync(join(FONT_CSS_DIR, name)), name).toBe(true);
+    }
+  });
+
+  it("declares bundled-only sources with the frozen face shape", () => {
+    const violations = bundledFontSourceViolations(files);
+    expect(violations).toEqual([]);
+    // The shape assertions are meaningful only against the real corpus.
+    const faceCount = Object.values(files).flatMap(parseFontFaces).length;
+    expect(faceCount).toBeGreaterThanOrEqual(3 * 50);
+    for (const [name, expected] of Object.entries(FACE_WEIGHTS)) {
+      expect(
+        new Set(parseFontFaces(files[name]!).map((f) => f.weight)),
+      ).toEqual(new Set([expected]));
+    }
+  });
+
+  it("every referenced woff2 chunk exists on disk (source = real binary)", () => {
+    const chunks = Object.values(files).flatMap((css) =>
+      Object.values(parseFontFaces(css)).flatMap((face) =>
+        [...face.src.matchAll(/url\("(\.\/[^"]+\.woff2)"\)/g)].map(
+          (m) => m[1]!,
+        ),
+      ),
+    );
+    expect(chunks.length).toBeGreaterThanOrEqual(3 * 50);
+    for (const chunk of chunks) {
+      expect(existsSync(join(FONT_CSS_DIR, chunk)), chunk).toBe(true);
+    }
+  });
+
+  it("the directory holds no unlinked extra face stylesheet", () => {
+    expect(
+      readdirSync(FONT_CSS_DIR)
+        .filter((f) => f.endsWith(".css"))
+        .sort(),
+    ).toEqual(Object.keys(FACE_WEIGHTS).sort());
+  });
+
+  it("reds when local() precedence returns (mutation)", () => {
+    const mutated = {
+      "Regular.css": files["Regular.css"]!.replace(
+        /src:\s*url\((\s*"?\.\/[^"]+"?)\s*\)/,
+        'src:local("HarmonyOS Sans SC"),url($1)',
+      ),
+    };
+    expect(bundledFontSourceViolations(mutated)).toContainEqual(
+      expect.stringContaining("Regular.css: declares a local() source"),
+    );
   });
 });
