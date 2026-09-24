@@ -248,6 +248,8 @@ export const RecoveryAllowedActionSchema = z.enum([
   "link_interruption",
 ]);
 
+export type RecoveryAllowedAction = z.infer<typeof RecoveryAllowedActionSchema>;
+
 export const RecoveryAggregateResponseSchema = z.object({
   incident: IncidentResponseSchema,
   examSummary: RecoveryAggregateExamSummarySchema,
@@ -435,11 +437,19 @@ export const ExamRecoveryContextSchema = z.object({
 
 export type ExamRecoveryContext = z.infer<typeof ExamRecoveryContextSchema>;
 
-// ── Proctor Recovery Center (J6, #303) — narrow Proctor-scoped projections ──
+// ── Proctor Recovery Center (J6, #303) — Proctor Operations projections ──
 //
-// SCOPE (EXAM-303 authority freeze F3, human-gate corrective 2026-09-12):
-// these projections expose ONLY incident-domain truth an assigned Proctor
-// already has read authority over. They deliberately OMIT every Admin
+// PROJECTION (#606 D1): this is the narrow Proctor-OPERATIONS projection —
+// operational incident creation / investigation / documentation / evidence
+// linking. It is consumed by BOTH caller authorities: an Admin caller reads it
+// organization-wide (compatibility superset, same model as
+// /admin/proctor/exams), a Proctor caller reads it assignment-filtered. Do not
+// call it "Proctor-only collection": the effective collection is reported per
+// response by `collectionScope`, never inferred from the projection name.
+//
+// FIELD SCOPE (EXAM-303 authority freeze F3, human-gate corrective
+// 2026-09-12): these projections expose ONLY incident-domain truth an assigned
+// Proctor already has read authority over. They deliberately OMIT every Admin
 // recovery-only field the shared repo happens to carry: time-adjustment
 // ledger/summaries, auditReferences, activeProctors, candidate/account
 // operational details, and attempt-command execution details. An incident
@@ -458,11 +468,30 @@ export const ProctorRecoveryWorklistItemSchema = z.object({
   primaryAttempt: ProctorRecoveryAttemptSummarySchema.nullable(),
 });
 
+/**
+ * The effective collection the backend actually returned for THIS response —
+ * the same runtime-authority decision that selected the SQL predicate
+ * (Admin → `organization`, otherwise the actor's active Proctor assignments →
+ * `active_assignments`). It reports NOTHING else: not the projection identity,
+ * not the caller's role or permissions, and not the caller's allowed actions.
+ * The frontend MUST present this fact, never re-derive it from role,
+ * capabilities, or route (#606 D1 §3/§5).
+ */
+export const ProctorRecoveryCollectionScopeSchema = z.enum([
+  "organization",
+  "active_assignments",
+]);
+
 export const ProctorRecoveryWorklistResponseSchema = z.object({
   items: z.array(ProctorRecoveryWorklistItemSchema),
   nextCursor: z.string().nullable(),
   snapshotAt: z.string(),
+  collectionScope: ProctorRecoveryCollectionScopeSchema,
 });
+
+export type ProctorRecoveryCollectionScope = z.infer<
+  typeof ProctorRecoveryCollectionScopeSchema
+>;
 
 export const ProctorIncidentActionLinkSchema = z.object({
   id: z.string().uuid(),

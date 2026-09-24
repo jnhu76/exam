@@ -1557,11 +1557,14 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 8,
     },
 
-    // ── Proctor Recovery Center (J6, #303) — narrow Proctor-scoped reads ──
-    // Worklist: incidents across the caller's ACTIVE proctor assignments.
-    // incident.view IS in the Proctor preset, so admin_only is structurally
-    // impossible here (conformance); the collection filter is server-derived
+    // ── Proctor Recovery Center (J6, #303) — Proctor Operations projections ──
+    // Worklist: the narrow Proctor-OPERATIONS projection, consumed by BOTH
+    // caller authorities — an Admin short-circuits to org-wide (compatibility
+    // superset), a Proctor's collection filter is server-derived
     // (assignedProctorUserId from ctx) exactly like /admin/proctor/exams.
+    // incident.view IS in the Proctor preset, so admin_only is structurally
+    // impossible here (conformance). The response reports the effective
+    // collectionScope so the UI never re-derives the policy (#606).
     {
       method: "GET",
       path: "/admin/proctor/incidents",
@@ -1581,8 +1584,10 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     // Narrow incident detail (row + events/notes + link metadata + summaries
     // within Proctor read authority). The incident resolver + assignment gate
     // give the canonical 404 for unassigned/foreign/nonexistent incidents;
-    // allowedActions is capability-intersected so Admin terminal judgment
-    // (resolve/dismiss) is structurally unreachable for a Proctor.
+    // allowedActions is capability-intersected, so a Proctor never sees
+    // resolve/dismiss while an Admin caller legitimately does — rendering that
+    // authority on the Proctor Operations surface is a product-surface rule
+    // (#606), independent of this wire fact.
     {
       method: "GET",
       path: "/admin/incidents/:incidentId/detail",

@@ -65,15 +65,18 @@ const INCIDENT_SEVERITIES = ["info", "minor", "major", "critical"];
 const NAMESPACE = "admin.proctorRecovery";
 
 /**
- * Proctor Recovery Center worklist (J6, EXAM-303).
+ * Proctor Operations worklist (J6, EXAM-303; projection identity issue 606).
  *
- * Read surface over `GET /api/admin/proctor/incidents` — the server scopes
- * the collection to the caller's ACTIVE proctor assignments (never a client
- * parameter). Polling/refresh/staleness semantics are identical to the Admin
+ * Read surface over `GET /api/admin/proctor/incidents` — the narrow
+ * Proctor-OPERATIONS projection (operational incident handling). The page
+ * renders the effective collection scope EXACTLY as the server reports it in
+ * `collectionScope` (Admin caller → organization, Proctor caller → active
+ * assignments); it never derives scope from the user's role, capabilities, or
+ * the route. Polling/refresh/staleness semantics are identical to the Admin
  * recovery queue ({@link useRecoveryQueueProjection}). The only mutation is
- * incident creation on an assigned exam via the canonical
- * assignment-scoped incident command route; every other action lives on the
- * per-incident detail page.
+ * incident creation on an assigned exam via the canonical assignment-scoped
+ * incident command route; every other action lives on the per-incident detail
+ * page.
  */
 export function ProctorRecoveryPage() {
   const { t } = useTranslation();
@@ -90,6 +93,7 @@ export function ProctorRecoveryPage() {
     isRefreshing,
     isLoadingMore,
     snapshotAt,
+    collectionScope,
     lastUpdatedAt,
     isStale,
     refresh,
@@ -211,27 +215,40 @@ export function ProctorRecoveryPage() {
         }
       />
 
-      {snapshotAt && (
-        <span className="flex items-center gap-3 type-metadata">
-          <span className={isStale ? "text-warning" : undefined}>
-            {isStale && <AppIcon icon={CircleAlert} size="inline" />}
-            {t("admin.proctorRecovery.snapshotAt", {
-              time: formatTime(snapshotAt),
-            })}
-          </span>
-          {isStale && (
-            <span className="text-warning">
-              {t("admin.proctorRecovery.snapshotStale")}
+      {/* Scope presentation (issue 606): the backend-decided effective collection,
+          verbatim from the response — a product fact about WHICH data is on
+          screen, never an authorization explanation. Rendered independently
+          of the snapshot line so the wire fact is visible on its own. */}
+      {(collectionScope || snapshotAt) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 type-metadata">
+          {collectionScope && (
+            <span data-testid="proctor-recovery-collection-scope">
+              {t(`admin.proctorRecovery.scope.${collectionScope}` as never)}
             </span>
           )}
-          {lastUpdatedAt && (
-            <span>
-              {t("admin.proctorRecovery.lastUpdatedAt", {
-                time: formatTime(lastUpdatedAt),
-              })}
+          {snapshotAt && (
+            <span className="flex items-center gap-3">
+              <span className={isStale ? "text-warning" : undefined}>
+                {isStale && <AppIcon icon={CircleAlert} size="inline" />}
+                {t("admin.proctorRecovery.snapshotAt", {
+                  time: formatTime(snapshotAt),
+                })}
+              </span>
+              {isStale && (
+                <span className="text-warning">
+                  {t("admin.proctorRecovery.snapshotStale")}
+                </span>
+              )}
+              {lastUpdatedAt && (
+                <span>
+                  {t("admin.proctorRecovery.lastUpdatedAt", {
+                    time: formatTime(lastUpdatedAt),
+                  })}
+                </span>
+              )}
             </span>
           )}
-        </span>
+        </div>
       )}
 
       <DataTableShell

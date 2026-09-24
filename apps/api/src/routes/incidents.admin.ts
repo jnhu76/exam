@@ -1381,7 +1381,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ── Proctor Recovery Center (J6, #303) — narrow Proctor-scoped reads ──
+  // ── Proctor Recovery Center (J6, #303) — Proctor Operations projections ──
   //
   // EXAM-303 authority freeze (F3, human-gate corrective 2026-09-12): these
   // projections expose ONLY incident-domain truth an assigned Proctor already
@@ -1392,6 +1392,10 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
   // incident-domain link metadata only. Mutations keep flowing through the
   // existing assignment_scoped incident command routes above — zero new
   // commands, zero new state, canonical audit inherited.
+  //
+  // #606: this is the narrow Proctor-OPERATIONS projection, not a
+  // Proctor-only collection — an Admin caller legitimately consumes the same
+  // projection organization-wide.
 
   // Worklist: incidents of the caller's ACTIVE proctor assignments. Mirrors
   // GET /admin/proctor/exams: Admin short-circuits to org-wide; a Proctor is
@@ -1399,6 +1403,11 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
   // Scoping, keyset pagination and the snapshot live inside the ONE shared
   // queue query (recoveryRepo.listIncidentQueue); this route only narrows the
   // wire projection.
+  //
+  // #606: the effective collection scope is derived ONCE from the runtime
+  // authority decision and flows to BOTH the database predicate and the
+  // response fact, so the UI can present the scope without duplicating this
+  // policy.
   fastify.get(
     "/admin/proctor/incidents",
     {
@@ -1425,9 +1434,14 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
       const query = ProctorWorklistQuerySchema.parse(request.query ?? {});
       const ctx = ensureTargetOrg(getRequestContext(request));
       const runtimeCtx = getRequestContext(request);
-      const assignedProctorUserId = runtimeCtx.roles.includes(Role.Admin)
-        ? null
-        : runtimeCtx.actorId;
+      // ONE authority decision (#606): Admin runtime role set → org-wide
+      // collection, otherwise the actor's active Proctor assignments. The
+      // same decision feeds the SQL predicate AND the response fact.
+      const collectionScope = runtimeCtx.roles.includes(Role.Admin)
+        ? "organization"
+        : "active_assignments";
+      const assignedProctorUserId =
+        collectionScope === "active_assignments" ? runtimeCtx.actorId : null;
 
       const { items, nextCursor, snapshotAt } = await createRecoveryRepo(
         fastify.db,
@@ -1454,6 +1468,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
           })),
           nextCursor: encodeRecoveryCursor(nextCursor),
           snapshotAt: snapshotAt.toISOString(),
+          collectionScope,
         }),
       );
     },
@@ -1465,9 +1480,10 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
   // The assignment_scoped gate (authoritative incident resolver + active
   // assignment check) yields the canonical 404 for unassigned / foreign /
   // nonexistent incidents. allowedActions = status candidates ∩ caller
-  // capabilities — a Proctor structurally never sees resolve/dismiss here
-  // (IncidentResolve is Admin-only), so Admin terminal judgment cannot be
-  // surfaced from this endpoint.
+  // capabilities — for a Proctor (no IncidentResolve) resolve/dismiss are
+  // structurally absent; an Admin caller legitimately receives them here
+  // (caller authority), and whether the Proctor Operations surface renders
+  // them is a product-surface decision (#606), not this endpoint's.
   fastify.get(
     "/admin/incidents/:incidentId/detail",
     {

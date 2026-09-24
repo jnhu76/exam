@@ -229,6 +229,52 @@ describe("useRecoveryQueueProjection", () => {
       expect(result.current.snapshotAt).toBe("2025-06-01T12:00:00Z"),
     );
   });
+
+  it("carries the server collectionScope verbatim, and resets it on filter change (issue 606)", async () => {
+    const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
+    const { result, rerender } = renderHook(
+      ({ q }: { q: string }) =>
+        useRecoveryQueueProjection<Item>({
+          loadPage1,
+          loadMorePage,
+          pollIntervalMs: undefined,
+          deps: [q],
+        }),
+      { initialProps: { q: "" } },
+    );
+
+    // Before any load: null — the fact exists only when the server said it.
+    expect(result.current.collectionScope).toBeNull();
+
+    await waitFor(() => expect(page1Calls.length).toBe(1));
+    page1Calls[0]!.resolve({
+      items: [{ id: "a" }],
+      nextCursor: null,
+      snapshotAt: "2025-01-01T00:00:00Z",
+      collectionScope: "organization",
+    });
+    await flushMicros();
+    await waitFor(() =>
+      expect(result.current.collectionScope).toBe("organization"),
+    );
+
+    // A filter change resets the projection synchronously — the previous
+    // scope fact is never shown against a different collection.
+    rerender({ q: "status=open" });
+    expect(result.current.collectionScope).toBeNull();
+
+    await waitFor(() => expect(page1Calls.length).toBe(2));
+    page1Calls[1]!.resolve({
+      items: [],
+      nextCursor: null,
+      snapshotAt: "2025-01-01T00:00:00Z",
+      collectionScope: "active_assignments",
+    });
+    await flushMicros();
+    await waitFor(() =>
+      expect(result.current.collectionScope).toBe("active_assignments"),
+    );
+  });
 });
 
 describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
