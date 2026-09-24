@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
-import type { RecoveryQueueResponse } from "@exam/contracts";
+import type { RecoveryQueueItem, RecoveryQueueResponse } from "@exam/contracts";
 import { incidentStatusKey } from "@/lib/recovery";
 import { recoveryErrorMessageKey } from "@/lib/recoveryErrors";
 import { routes } from "@/lib/routes";
@@ -11,21 +11,20 @@ import { useRecoveryQueueProjection } from "@/hooks/useRecoveryQueueProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
+import { TextFilterInput } from "@/components/shared/TextFilterInput";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DatePicker } from "@/components/shared/DatePicker";
-import { Input } from "@/components/ui/input";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Select,
@@ -34,12 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LifeBuoy, RefreshCw, X, CircleAlert } from "lucide-react";
+import { RefreshCw, X, CircleAlert } from "lucide-react";
 
 /** Visible-tab polling interval (J5-I1B1 polling semantics). */
 const POLL_INTERVAL_MS = 30_000;
-/** Free-text filter debounce: commits to the URL after typing settles. */
-const FILTER_DEBOUNCE_MS = 400;
 /** A server snapshot older than this is flagged stale (Queue refresh contract). */
 const STALE_AFTER_MS = 60_000;
 /** Bounded failure backoff for the automatic poll cadence. */
@@ -151,94 +148,158 @@ export function RecoveryQueuePage() {
     deps: [queryKey],
   });
 
-  // Free-text filter draft + debounce. The two drafts share ONE timer: the
-  // debounced commit always submits BOTH fields from a ref, so typing examId
-  // and then candidateId within the window can not drop the first filter.
-  // The commit uses a functional searchParams updater so concurrent changes
-  // (e.g. a status Select while a debounce is pending) are never overwritten
-  // by a stale closure.
+  // Free-text exact-identifier filters. The commit choreography (draft →
+  // debounce → blur/Enter flush → reset) is owned by TextFilterInput /
+  // useDataViewTextCommit; this page owns only what a committed value MEANS —
+  // the URL parameter it writes, atomically across the filter group.
   const [examIdDraft, setExamIdDraft] = useState(filters.examId);
   const [candidateIdDraft, setCandidateIdDraft] = useState(filters.candidateId);
-  const draftRef = useRef({
+
+  // Sync a draft from the URL only while the user has not typed past the last
+  // committed value (back/forward, link share). A draft that has moved ahead
+  // of the URL is an in-progress input and wins until its own commit lands —
+  // otherwise committing one filter would reset the other's pending draft.
+  const lastCommitted = useRef({
     examId: filters.examId,
     candidateId: filters.candidateId,
   });
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sync drafts when the URL changes externally (back/forward, link share).
-  // While a debounce is pending the draft is the user's in-progress input —
-  // it wins until the commit lands.
   useEffect(() => {
-    if (debounceRef.current) return;
-    setExamIdDraft(filters.examId);
-    setCandidateIdDraft(filters.candidateId);
-    draftRef.current.examId = filters.examId;
-    draftRef.current.candidateId = filters.candidateId;
-  }, [filters.examId, filters.candidateId]);
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
-  /** Commits a filter patch to the URL with replace semantics, always
-      starting from the LATEST URL params (never a stale closure). */
-  function commitFilter(patch: Partial<QueueFilters>) {
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        for (const [key, value] of Object.entries(patch)) {
-          if (value) next.set(key, value);
-          else next.delete(key);
-        }
-        return next;
-      },
-      { replace: true },
-    );
-  }
-
-  /** One debounce timer for both free-text fields; the commit reads the
-      draft ref so neither filter can be lost to a cancelled timer. */
-  function scheduleDebouncedCommit() {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      debounceRef.current = null;
-      commitFilter({
-        examId: draftRef.current.examId,
-        candidateId: draftRef.current.candidateId,
-      });
-    }, FILTER_DEBOUNCE_MS);
-  }
-
-  /** Flushes a pending debounced commit immediately (blur / Enter). */
-  function flushDebouncedCommit() {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-      commitFilter({
-        examId: draftRef.current.examId,
-        candidateId: draftRef.current.candidateId,
-      });
+    if (examIdDraft === lastCommitted.current.examId) {
+      setExamIdDraft(filters.examId);
     }
+    if (candidateIdDraft === lastCommitted.current.candidateId) {
+      setCandidateIdDraft(filters.candidateId);
+    }
+    lastCommitted.current = {
+      examId: filters.examId,
+      candidateId: filters.candidateId,
+    };
+  }, [filters.examId, filters.candidateId, examIdDraft, candidateIdDraft]);
+
+  /**
+   * Commits a filter patch to the URL with replace semantics.
+   *
+   * The write is ATOMIC across the filter group: react-router's functional
+   * `setSearchParams` updater reads the params captured at RENDER time, so two
+   * commits landing in the same task — the two debounced text filters expiring
+   * together — would both apply against the same base and the first would be
+   * silently dropped. This ref carries the last written params, so every commit
+   * starts from the latest URL state whether or not a re-render happened in
+   * between.
+   */
+  const latestParams = useRef(searchParams);
+  useEffect(() => {
+    latestParams.current = searchParams;
+  }, [searchParams]);
+
+  function commitFilter(patch: Partial<QueueFilters>) {
+    const next = new URLSearchParams(latestParams.current);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    latestParams.current = next;
+    setSearchParams(next, { replace: true });
   }
 
   function clearFilters() {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
     setExamIdDraft("");
     setCandidateIdDraft("");
-    draftRef.current.examId = "";
-    draftRef.current.candidateId = "";
-    setSearchParams(new URLSearchParams(), { replace: true });
+    const cleared = new URLSearchParams();
+    latestParams.current = cleared;
+    setSearchParams(cleared, { replace: true });
   }
 
   const fromDate = filters.createdFrom
     ? new Date(filters.createdFrom)
     : undefined;
   const toDate = filters.createdTo ? new Date(filters.createdTo) : undefined;
+
+  const columns = useMemo<DataViewColumnDef<RecoveryQueueItem>[]>(
+    () => [
+      {
+        id: "incident",
+        meta: { role: "status" },
+        header: t("admin.recoveryQueue.columns.incident"),
+        cell: ({ row }) => (
+          <Link
+            to={routes.admin.recoveryIncident(row.original.incident.id)}
+            className="text-sm font-medium underline-offset-4 hover:underline"
+          >
+            <StatusBadge
+              status={incidentStatusKey(row.original.incident.status)}
+            />
+          </Link>
+        ),
+      },
+      {
+        id: "severity",
+        meta: { role: "type", priority: "normal" },
+        header: t("admin.recoveryQueue.columns.severity"),
+        cell: ({ row }) =>
+          t(
+            `admin.recoveryQueue.severity.${row.original.incident.severity}` as never,
+          ),
+      },
+      {
+        id: "exam",
+        meta: { role: "long-text", priority: "high" },
+        header: t("admin.recoveryQueue.columns.exam"),
+        cell: ({ row }) =>
+          // Exam title is on the never-silent-truncate list: wrap, never
+          // ellipsis (issue 445 P3 §16).
+          row.original.examSummary.title,
+      },
+      {
+        id: "candidate",
+        meta: { role: "primary-text" },
+        header: t("admin.recoveryQueue.columns.candidate"),
+        cell: ({ row }) =>
+          row.original.primaryCandidate?.displayName ??
+          t("admin.recoveryQueue.noCandidate"),
+      },
+      {
+        id: "attempt",
+        meta: { role: "status", priority: "low" },
+        header: t("admin.recoveryQueue.columns.attempt"),
+        cell: ({ row }) =>
+          row.original.primaryAttempt ? (
+            <StatusBadge status={row.original.primaryAttempt.status} />
+          ) : (
+            t("admin.recoveryQueue.noAttempt")
+          ),
+      },
+      {
+        id: "linked",
+        // A localized count label ("1 条关联"), not a bare numeric value —
+        // the number role's 72px floor cannot hold it and the cell clipped
+        // (measured on /admin/recovery). secondary-text is the bounded-text
+        // role; the label never reaches its wrap threshold.
+        meta: { role: "secondary-text", priority: "normal" },
+        header: t("admin.recoveryQueue.columns.linked"),
+        cell: ({ row }) =>
+          t("admin.recoveryQueue.linkedCount", {
+            count: row.original.linkedAttemptCount,
+          }),
+      },
+      {
+        id: "proctors",
+        meta: { role: "secondary-text", priority: "low" },
+        header: t("admin.recoveryQueue.columns.proctors"),
+        cell: ({ row }) =>
+          row.original.activeProctors.length > 0
+            ? row.original.activeProctors.map((p) => p.displayName).join("、")
+            : "—",
+      },
+      {
+        id: "createdAt",
+        meta: { role: "date" },
+        header: t("admin.recoveryQueue.columns.createdAt"),
+        cell: ({ row }) => formatTime(row.original.incident.createdAt),
+      },
+    ],
+    [t, formatTime],
+  );
 
   if (isInitialLoading) return <LoadingState />;
   if (error && snapshotAt === null) {
@@ -274,120 +335,6 @@ export function RecoveryQueuePage() {
           </Button>
         }
       />
-      <DataToolbar>
-        <Select
-          value={filters.status || "all"}
-          onValueChange={(v) => commitFilter({ status: v === "all" ? "" : v })}
-        >
-          <ToolbarFilter size="narrow">
-            <SelectTrigger
-              aria-label={t("admin.recoveryQueue.filters.statusAll")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-          </ToolbarFilter>
-          <SelectContent>
-            <SelectItem value="all">
-              {t("admin.recoveryQueue.filters.statusAll")}
-            </SelectItem>
-            {INCIDENT_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {t(`admin.recoveryQueue.status.${s}` as never)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={filters.severity || "all"}
-          onValueChange={(v) =>
-            commitFilter({ severity: v === "all" ? "" : v })
-          }
-        >
-          <ToolbarFilter size="narrow">
-            <SelectTrigger
-              aria-label={t("admin.recoveryQueue.filters.severityAll")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-          </ToolbarFilter>
-          <SelectContent>
-            <SelectItem value="all">
-              {t("admin.recoveryQueue.filters.severityAll")}
-            </SelectItem>
-            {INCIDENT_SEVERITIES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {t(`admin.recoveryQueue.severity.${s}` as never)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <ToolbarFilter size="wide">
-          <Input
-            aria-label={t("admin.recoveryQueue.filters.examPlaceholder")}
-            placeholder={t("admin.recoveryQueue.filters.examPlaceholder")}
-            value={examIdDraft}
-            onChange={(e) => {
-              setExamIdDraft(e.target.value);
-              draftRef.current.examId = e.target.value;
-              scheduleDebouncedCommit();
-            }}
-            onBlur={flushDebouncedCommit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") flushDebouncedCommit();
-            }}
-          />
-        </ToolbarFilter>
-        <ToolbarFilter size="wide">
-          <Input
-            aria-label={t("admin.recoveryQueue.filters.candidatePlaceholder")}
-            placeholder={t("admin.recoveryQueue.filters.candidatePlaceholder")}
-            value={candidateIdDraft}
-            onChange={(e) => {
-              setCandidateIdDraft(e.target.value);
-              draftRef.current.candidateId = e.target.value;
-              scheduleDebouncedCommit();
-            }}
-            onBlur={flushDebouncedCommit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") flushDebouncedCommit();
-            }}
-          />
-        </ToolbarFilter>
-        <DatePicker
-          aria-label={t("admin.recoveryQueue.filters.startDate")}
-          placeholder={t("admin.recoveryQueue.filters.startDate")}
-          value={fromDate}
-          onChange={(d) =>
-            commitFilter({
-              createdFrom: d ? startOfDayISO(d) : "",
-              createdTo: d && toDate && toDate < d ? "" : filters.createdTo,
-            })
-          }
-        />
-        <DatePicker
-          aria-label={t("admin.recoveryQueue.filters.endDate")}
-          placeholder={t("admin.recoveryQueue.filters.endDate")}
-          value={toDate}
-          onChange={(d) =>
-            commitFilter({
-              createdTo: d ? endOfDayISO(d) : "",
-              createdFrom:
-                d && fromDate && fromDate > d ? "" : filters.createdFrom,
-            })
-          }
-        />
-        {hasActiveFilter && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            className="text-muted-foreground"
-          >
-            <AppIcon icon={X} size="inline" className="mr-1" />
-            {t("admin.recoveryQueue.filters.clear")}
-          </Button>
-        )}
-      </DataToolbar>
 
       {snapshotAt && (
         <span className="flex items-center gap-3 type-metadata">
@@ -412,174 +359,150 @@ export function RecoveryQueuePage() {
         </span>
       )}
 
-      {items.length === 0 ? (
-        <EmptyState
-          icon={<AppIcon icon={LifeBuoy} size="state" />}
-          title={t("admin.recoveryQueue.empty")}
-          description={t("admin.recoveryQueue.emptyDescription")}
-        />
-      ) : (
-        <DataTableShell archetype="log-diagnostic">
-          {/* Desktop table */}
-          <div className="hidden md:block" data-testid="recovery-queue-table">
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "status", key: "incident" },
-                  { role: "type", key: "severity" },
-                  { role: "long-text", key: "exam" },
-                  { role: "primary-text", key: "candidate" },
-                  { role: "status", key: "attempt" },
-                  { role: "number", key: "linked" },
-                  { role: "secondary-text", key: "proctors" },
-                  { role: "date", key: "createdAt" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="status">
-                    {t("admin.recoveryQueue.columns.incident")}
-                  </DataTableHead>
-                  <DataTableHead role="type">
-                    {t("admin.recoveryQueue.columns.severity")}
-                  </DataTableHead>
-                  <DataTableHead role="long-text">
-                    {t("admin.recoveryQueue.columns.exam")}
-                  </DataTableHead>
-                  <DataTableHead role="primary-text">
-                    {t("admin.recoveryQueue.columns.candidate")}
-                  </DataTableHead>
-                  <DataTableHead role="status">
-                    {t("admin.recoveryQueue.columns.attempt")}
-                  </DataTableHead>
-                  <DataTableHead role="number">
-                    {t("admin.recoveryQueue.columns.linked")}
-                  </DataTableHead>
-                  <DataTableHead role="secondary-text">
-                    {t("admin.recoveryQueue.columns.proctors")}
-                  </DataTableHead>
-                  <DataTableHead role="date">
-                    {t("admin.recoveryQueue.columns.createdAt")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.incident.id}>
-                    <DataTableCell role="status">
-                      <Link
-                        to={routes.admin.recoveryIncident(item.incident.id)}
-                        className="text-sm font-medium underline-offset-4 hover:underline"
-                      >
-                        <StatusBadge
-                          status={incidentStatusKey(item.incident.status)}
-                        />
-                      </Link>
-                    </DataTableCell>
-                    <DataTableCell role="type">
-                      {t(
-                        `admin.recoveryQueue.severity.${item.incident.severity}` as never,
-                      )}
-                    </DataTableCell>
-                    <DataTableCell role="long-text">
-                      {/* Exam title is on the never-silent-truncate list:
-                          wrap, never ellipsis (issue 445 P3 §16). */}
-                      {item.examSummary.title}
-                    </DataTableCell>
-                    <DataTableCell role="primary-text">
-                      {item.primaryCandidate?.displayName ??
-                        t("admin.recoveryQueue.noCandidate")}
-                    </DataTableCell>
-                    <DataTableCell role="status">
-                      {item.primaryAttempt ? (
-                        <StatusBadge status={item.primaryAttempt.status} />
-                      ) : (
-                        t("admin.recoveryQueue.noAttempt")
-                      )}
-                    </DataTableCell>
-                    <DataTableCell role="number">
-                      {t("admin.recoveryQueue.linkedCount", {
-                        count: item.linkedAttemptCount,
-                      })}
-                    </DataTableCell>
-                    <DataTableCell role="secondary-text">
-                      {item.activeProctors.length > 0
-                        ? item.activeProctors
-                            .map((p) => p.displayName)
-                            .join("、")
-                        : "—"}
-                    </DataTableCell>
-                    <DataTableCell role="date">
-                      {formatTime(item.incident.createdAt)}
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Mobile card list */}
-          <ul
-            className="flex flex-col gap-3 md:hidden"
-            data-testid="recovery-queue-cards"
-          >
-            {items.map((item) => (
-              <li key={item.incident.id}>
-                <Link
-                  to={routes.admin.recoveryIncident(item.incident.id)}
-                  className="flex w-full flex-col gap-2 rounded-md border p-3 text-left"
+      <DataTableShell
+        archetype="log-diagnostic"
+        toolbar={
+          <DataToolbar>
+            <Select
+              value={filters.status || "all"}
+              onValueChange={(v) =>
+                commitFilter({ status: v === "all" ? "" : v })
+              }
+            >
+              <ToolbarFilter size="narrow">
+                <SelectTrigger
+                  aria-label={t("admin.recoveryQueue.filters.statusAll")}
                 >
-                  <span className="flex items-center justify-between gap-2">
-                    <StatusBadge
-                      status={incidentStatusKey(item.incident.status)}
-                    />
-                    <span className="type-metadata">
-                      {formatTime(item.incident.createdAt)}
-                    </span>
-                  </span>
-                  <span className="block text-sm font-medium">
-                    {item.examSummary.title}
-                  </span>
-                  <span className="type-metadata">
-                    {t(
-                      ("admin.recoveryQueue.severity." +
-                        item.incident.severity) as never,
-                    )}
-                    {" · "}
-                    {item.primaryCandidate?.displayName ??
-                      t("admin.recoveryQueue.noCandidate")}
-                    {" · "}
-                    {t("admin.recoveryQueue.linkedCount", {
-                      count: item.linkedAttemptCount,
-                    })}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </DataTableShell>
-      )}
+                  <SelectValue />
+                </SelectTrigger>
+              </ToolbarFilter>
+              <SelectContent>
+                <SelectItem value="all">
+                  {t("admin.recoveryQueue.filters.statusAll")}
+                </SelectItem>
+                {INCIDENT_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(`admin.recoveryQueue.status.${s}` as never)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={filters.severity || "all"}
+              onValueChange={(v) =>
+                commitFilter({ severity: v === "all" ? "" : v })
+              }
+            >
+              <ToolbarFilter size="narrow">
+                <SelectTrigger
+                  aria-label={t("admin.recoveryQueue.filters.severityAll")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+              </ToolbarFilter>
+              <SelectContent>
+                <SelectItem value="all">
+                  {t("admin.recoveryQueue.filters.severityAll")}
+                </SelectItem>
+                {INCIDENT_SEVERITIES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(`admin.recoveryQueue.severity.${s}` as never)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <ToolbarFilter size="wide">
+              <TextFilterInput
+                aria-label={t("admin.recoveryQueue.filters.examPlaceholder")}
+                placeholder={t("admin.recoveryQueue.filters.examPlaceholder")}
+                value={examIdDraft}
+                onChange={setExamIdDraft}
+                onCommit={(examId) => commitFilter({ examId })}
+              />
+            </ToolbarFilter>
+            <ToolbarFilter size="wide">
+              <TextFilterInput
+                aria-label={t(
+                  "admin.recoveryQueue.filters.candidatePlaceholder",
+                )}
+                placeholder={t(
+                  "admin.recoveryQueue.filters.candidatePlaceholder",
+                )}
+                value={candidateIdDraft}
+                onChange={setCandidateIdDraft}
+                onCommit={(candidateId) => commitFilter({ candidateId })}
+              />
+            </ToolbarFilter>
+            <DatePicker
+              aria-label={t("admin.recoveryQueue.filters.startDate")}
+              placeholder={t("admin.recoveryQueue.filters.startDate")}
+              value={fromDate}
+              onChange={(d) =>
+                commitFilter({
+                  createdFrom: d ? startOfDayISO(d) : "",
+                  createdTo: d && toDate && toDate < d ? "" : filters.createdTo,
+                })
+              }
+            />
+            <DatePicker
+              aria-label={t("admin.recoveryQueue.filters.endDate")}
+              placeholder={t("admin.recoveryQueue.filters.endDate")}
+              value={toDate}
+              onChange={(d) =>
+                commitFilter({
+                  createdTo: d ? endOfDayISO(d) : "",
+                  createdFrom:
+                    d && fromDate && fromDate > d ? "" : filters.createdFrom,
+                })
+              }
+            />
+            {hasActiveFilter && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="text-muted-foreground"
+              >
+                <AppIcon icon={X} size="inline" className="mr-1" />
+                {t("admin.recoveryQueue.filters.clear")}
+              </Button>
+            )}
+          </DataToolbar>
+        }
+        mobile={<MobileRecordList columns={columns} rows={items} />}
+        footer={
+          nextCursor ? (
+            <DataViewFooter
+              navigation={
+                <Button
+                  variant="outline"
+                  onClick={loadMore}
+                  disabled={isLoadingMore || isRefreshing}
+                >
+                  {isLoadingMore
+                    ? t("admin.recoveryQueue.loadingMore")
+                    : t("admin.recoveryQueue.loadMore")}
+                </Button>
+              }
+            />
+          ) : undefined
+        }
+      >
+        <DesktopDataTable
+          columns={columns}
+          data={items}
+          empty={items.length === 0}
+          emptyTitle={t("admin.recoveryQueue.empty")}
+          emptyDescription={t("admin.recoveryQueue.emptyDescription")}
+        />
+      </DataTableShell>
 
       {/* Background-refresh failure: inline warning outside the items branch
-          so an empty queue + poll failure keeps EmptyState + warning (P1-3). */}
+          so an empty queue + poll failure keeps the empty table + warning (P1-3). */}
       {error && snapshotAt !== null && (
         <InlineErrorBanner>
           {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
         </InlineErrorBanner>
-      )}
-
-      {nextCursor && (
-        <div className="flex justify-center">
-          <Button
-            variant="outline"
-            onClick={loadMore}
-            disabled={isLoadingMore || isRefreshing}
-          >
-            {isLoadingMore
-              ? t("admin.recoveryQueue.loadingMore")
-              : t("admin.recoveryQueue.loadMore")}
-          </Button>
-        </div>
       )}
     </PageContainer>
   );

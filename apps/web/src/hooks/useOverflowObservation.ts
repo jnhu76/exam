@@ -3,12 +3,16 @@ import { useLayoutEffect, useState, type RefObject } from "react";
 /**
  * Facts observed for one scrollable container region.
  *
- * `containerWidth` is the physical border-box width; `clientWidth` is the
- * layout client width (excludes borders/scrollbar); `scrollWidth` is the full
- * content width. `atStart`/`atEnd` are true when not overflowing.
+ * `containerWidth` is the physical border-box width; `contentWidth` is the
+ * EXACT (fractional) width available to content — the layout space a child may
+ * occupy before the region overflows; `clientWidth` is the same box rounded to
+ * whole pixels; `scrollWidth` is the content width rounded to whole pixels.
+ * `overflowing` is the integer fact `scrollWidth − clientWidth > threshold`;
+ * `atStart`/`atEnd` are true when not overflowing.
  */
 export interface OverflowObservation {
   containerWidth: number;
+  contentWidth: number;
   clientWidth: number;
   scrollWidth: number;
   overflowing: boolean;
@@ -18,6 +22,7 @@ export interface OverflowObservation {
 
 const INITIAL_OBSERVATION: OverflowObservation = {
   containerWidth: 0,
+  contentWidth: 0,
   clientWidth: 0,
   scrollWidth: 0,
   overflowing: false,
@@ -37,6 +42,28 @@ const INITIAL_OBSERVATION: OverflowObservation = {
  * observed first child), ResizeObserver on the region and its first child,
  * region scroll, and window resize. State updates are value-guarded so the
  * render-loop re-observation cannot cascade.
+ *
+ * Sub-pixel exactness (#601 Phase F): the two consumers of these facts need
+ * DIFFERENT numbers, and conflating them is a measured defect in both
+ * directions.
+ *
+ *   - SIZING consumers (the column allocator) must use `contentWidth`, the
+ *     exact fractional box: an integer target taken from the rounded
+ *     `clientWidth` overshoots a fractional box. Measured: box 1394.667px,
+ *     `clientWidth` 1395 → a 1395px table painted a 16px classic scrollbar on
+ *     a table that fit. The allocator therefore floors this value.
+ *   - OVERFLOW consumers (the scroll affordance) must use the integer pair:
+ *     `scrollWidth` is clamped to at least `clientWidth`, so
+ *     `scrollWidth > clientWidth` answers "is there a whole pixel to scroll"
+ *     exactly, and `maxScroll > threshold` absorbs scroll-position rounding.
+ *     Deriving overflow from `scrollWidth > contentWidth` instead is true for
+ *     EVERY region whose box has a fractional part ≥ 0.5 — measured: box
+ *     1394.667px, `scrollWidth` 1395, `clientWidth` 1395, nothing overflowing,
+ *     yet the "scroll for more" hint band rendered. `contentWidth` is never an
+ *     input to the overflow decision.
+ *
+ * The region is a bare overflow container: it must not carry borders or
+ * padding, otherwise the box arithmetic below would have to account for them.
  */
 export function useOverflowObservation(
   ref: RefObject<HTMLElement | null>,
@@ -50,8 +77,14 @@ export function useOverflowObservation(
     if (!region) return;
 
     const measure = () => {
+      const containerWidth = region.getBoundingClientRect().width;
+      // offsetWidth − clientWidth is the classic scrollbar's width (the region
+      // has no border): the exact content box is the border box minus it.
+      const scrollbarWidth = region.offsetWidth - region.clientWidth;
+      const contentWidth = containerWidth - scrollbarWidth;
       const next: OverflowObservation = {
-        containerWidth: region.getBoundingClientRect().width,
+        containerWidth,
+        contentWidth,
         clientWidth: region.clientWidth,
         scrollWidth: region.scrollWidth,
         overflowing: false,
@@ -65,6 +98,7 @@ export function useOverflowObservation(
         !next.overflowing || region.scrollLeft >= maxScroll - threshold;
       setObservation((prev) =>
         prev.containerWidth === next.containerWidth &&
+        prev.contentWidth === next.contentWidth &&
         prev.clientWidth === next.clientWidth &&
         prev.scrollWidth === next.scrollWidth &&
         prev.overflowing === next.overflowing &&

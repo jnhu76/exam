@@ -112,29 +112,45 @@ governance boundary, §Page geometry, §Tables). Implementation ownership:
 | Contract | Owning module (`apps/web/src/`) |
 | --- | --- |
 | page-root width, closed six-role vocabulary | `components/shared/PageContainer.tsx` (`roleClasses`; pages declare, layouts never infer from route) |
-| table archetype + tier negotiation + mobile eligibility | `components/shared/DataTableShell.tsx` (`TableArchetype`, `negotiateTier`, `ARCHETYPE_TIER_BOUNDS`, `isMobileRepresentationAllowed`) |
-| ordinary table-page surface composition | `DataTableShell` (title band / scroll frame / fades / hint / footer) |
+| table archetype vocabulary + mobile eligibility | `components/shared/DataTableShell.tsx` (`isMobileRepresentationAllowed`); the archetype/tier facts themselves live in `table/tableTiers.ts` (`TableArchetype`, `ARCHETYPE_TIER_BOUNDS`, `negotiateTier`) |
+| scroll-region contract: measurement, tier negotiation, allocation scope (`availableWidth` + `widthMode`), local scroll, fades/hint | `components/shared/TableScrollSurface.tsx` (consumed by BOTH shells — #601 Phase F) |
+| composition width intent (`fill` / `intrinsic`) | declared by whoever composes the surface — never an archetype property |
+| ordinary table-page surface composition | `DataTableShell` (title band / toolbar band / footer around the shared region) |
 | continuous workbench surface composition | `components/shared/DataWorkbench.tsx` (toolbar → table → footer as one shell; Question Management) |
-| column role/overflow/priority + presenters | `components/shared/DataTableContract.tsx` (`ROLE_OVERFLOW`, `ROLE_ALLOWED_OVERFLOW`, `DataTableOverflowText`, `middleTruncate`) |
+| column allocation (`{ floor, basis }` bands, three regimes, one table-level expansion cap) | `table/columnAllocation.ts` (`ROLE_GEOMETRY`, `EXPANSION_CAP`, `allocateTableColumns` — the single width authority) |
+| compressible-role floor calibration (token grid over a glyph-run + chrome budget) | `table/roleCalibration.ts` |
+| header-capacity channel (`basis ≥ declared header vocabulary`) | `table/headerCapacity.ts` (declared bound gated against the i18n catalog) |
+| permission-matrix geometry (roles × capabilities, derived key column) | `table/permissionMatrix.ts` + `components/shared/PermissionMatrixTable.tsx` |
+| column role/overflow/priority + presenters + clipped-value hover reveal | `components/shared/DataTableContract.tsx` (`ROLE_OVERFLOW`, `ROLE_ALLOWED_OVERFLOW`, `DataTableOverflowText`, `middleTruncate`) |
+| data-view footer (count/range + navigation, band or continuous variant) | `components/shared/DataViewFooter.tsx` |
+| text-entry commit choreography (draft → debounce → flush → clear) | `hooks/useDataViewTextCommit.ts`, consumed by `DataViewSearch` and `TextFilterInput` |
 | viewport representation switch (the only owner of the table representation-switch `lg` policy) | `components/shared/ResponsiveRepresentation.tsx` |
 | mobile card list + priority→slot derivation | `components/shared/MobileRecordList.tsx` (`deriveMobileCardFields`) / `MobileRecordCard.tsx` |
 | container-overflow facts, horizontal table regions (facts-only ResizeObserver owner) | `hooks/useOverflowObservation.ts` |
 | vertical overflow facts, navigation scroll regions (facts-only ResizeObserver owner) | `hooks/useVerticalOverflowObservation.ts` — these two are the only ResizeObserver measurement owners |
-| physical column widths, tier floors, sticky context column | `table/recipes.css` (fixed layout + col width/min-width; `detail-comparison` sticky first child) |
+| table CSS (alignment, typography, overflow, sticky context column, the expanded-regime trailing cell) | `table/recipes.css` (fixed layout is scoped to allocated tables; NO width/min-width rules — the allocator owns widths) |
 | desktop table rendering | `components/shared/DesktopDataTable.tsx` (TanStack stays a row/header model — no column sizing) |
 
 `DataTableShell` and `DataWorkbench` differ in **visual composition only**
 (stack of bordered surfaces vs one continuous surface). They must share the
-semantic authorities above — `DataWorkbench` imports tier negotiation and
-mobile eligibility from `DataTableShell` and consumes the same
-`ResponsiveRepresentation` + `useOverflowObservation`; forking a second
-breakpoint, tier, or measurement policy is a governance violation.
+semantic authorities above — both compose `TableScrollSurface` and
+`ResponsiveRepresentation`, and both read the archetype/tier facts from
+`table/tableTiers.ts` (neither re-exports them); forking a second breakpoint,
+tier, or measurement policy is a governance violation.
 
 Measurement order is fixed: `ResponsiveRepresentation` decides the
 representation first (viewport); only the desktop branch enters table
-measurement — overflow observation → tier negotiation → local scroll. Mobile
-cards are siblings of, never descendants of, the measurement node, so they
-cannot participate in overflow or tier decisions.
+measurement — overflow observation → tier negotiation → allocation scope →
+local scroll. Mobile cards are siblings of, never descendants of, the
+measurement node, so they cannot participate in overflow or allocation
+decisions. The desktop table width is computed, never negotiated by CSS:
+`useColumnAllocation` renders the colgroup and the exact table width from the
+measured scope, and publishes the allocation's own facts
+(`data-geometry-state` / `-floor` / `-basis` / `-spacer` / `-roles`) so runtime
+fixtures assert the contract instead of re-deriving it. A governed table
+outside a scroll surface fails loud in every build — there is no auto-layout
+fallback, because a second layout system is exactly the dual authority this
+chain exists to prevent.
 
 ## API client boundary
 

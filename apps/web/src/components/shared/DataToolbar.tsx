@@ -47,23 +47,32 @@ export function ToolbarFilter({
 }
 
 /**
- * Toolbar for data/list pages: optional search slot, filter children, action
- * buttons, and a summary line with responsive layout. The single toolbar
- * authority. Default accessible label resolves from `common.toolbar.dataLabel`;
- * explicit prop wins.
+ * Toolbar for data/list pages: optional search slot, filter children and
+ * action buttons. The single toolbar authority, rendered in the shell's
+ * toolbar band.
+ *
+ * It owns dataset-scoped CONTROLS only. A toolbar band exists when the dataset
+ * has dataset-scoped controls (search, filters, tabs-as-filter, selection/bulk
+ * actions); page-scoped actions (create, import, page refresh, navigation) stay
+ * in the PageHeader. A count/summary is not a control — it belongs in the
+ * data-view footer (DataViewFooter) or, when it belongs with the title, in the
+ * shell's title-band `meta` slot; the former `summary` slot is retired
+ * (issue 601 Phase F convergence: it was a second, parallel count authority
+ * with one production consumer).
+ *
+ * Default accessible label resolves from `common.toolbar.dataLabel`; explicit
+ * prop wins.
  */
 export function DataToolbar({
   search,
   children,
   actions,
-  summary,
   "aria-label": ariaLabel,
   className,
 }: {
   search?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
-  summary?: ReactNode;
   "aria-label"?: string;
   className?: string;
 }) {
@@ -94,9 +103,8 @@ export function DataToolbar({
           </div>
         )}
       </div>
-      {(summary || actions) && (
+      {actions && (
         <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
-          {summary && <div className="type-secondary">{summary}</div>}
           {actions}
         </div>
       )}

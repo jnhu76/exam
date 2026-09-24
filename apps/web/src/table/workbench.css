@@ -44,8 +44,10 @@
   background: var(--surface);
 }
 
-/* Footer band: the workbench's bottom region. Owns the count + pagination. */
-[data-slot="data-workbench"] [data-slot="workbench-footer"] {
+/* Footer band: the workbench's bottom region. Owns the count + navigation
+ * placement (DataViewFooter, continuous variant) — the same footer grammar the
+ * standard shell renders in its footer band, flattened into the shell. */
+[data-slot="data-workbench"] [data-slot="data-view-footer"] {
   min-height: 3.25rem;
   border-top: 1px solid var(--border-divider);
   background: var(--table-footer-bg);

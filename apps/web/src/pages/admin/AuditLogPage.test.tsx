@@ -237,7 +237,7 @@ describe("AuditLogPage", () => {
     const rawFallback = screen.getByLabelText("future.unknown_action");
     expect(rawFallback).toBeInTheDocument();
     expect(rawFallback).toHaveAttribute("title", "future.unknown_action");
-    expect(rawFallback).toHaveTextContent("future…tion");
+    expect(rawFallback).toHaveTextContent("futur…tion");
   });
 
   it("declares the #598 roles: action-label for actions, short-id for targets", async () => {
@@ -289,7 +289,7 @@ describe("AuditLogPage", () => {
       "truncate-middle",
     );
     expect(targetPresenter).toHaveAttribute("title", "staff_invitation");
-    expect(targetPresenter).toHaveTextContent("staff_…tion");
+    expect(targetPresenter).toHaveTextContent("staff…tion");
     expect(
       targetPresenter.closest('[data-column-role="short-id"]'),
     ).toBeTruthy();

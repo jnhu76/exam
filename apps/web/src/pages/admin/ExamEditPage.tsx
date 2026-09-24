@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { fetchAllPickerQuestions } from "@/lib/allQuestions";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -12,15 +13,16 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import {
   DataTableCell,
-  DataTableColumns,
+  DataTableSurface,
   DataTableHead,
   DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { TableAllocationRegion } from "@/components/shared/TableScrollSurface";
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -147,15 +149,15 @@ export function ExamEditPage() {
     if (!id) return;
     setIsLoading(true);
     try {
-      const [exam, cData, qData] = await Promise.all([
+      const [exam, cData, questions] = await Promise.all([
         api.get<ExamDetailResponse>(`/api/exams/${id}`),
         api.get<PaginatedResponse<CourseRow>>("/api/courses"),
-        api.get<PaginatedResponse<QuestionRow>>("/api/questions"),
+        fetchAllPickerQuestions(),
       ]);
       setConfig(examToConfig(exam));
       setExamStatus(exam.status);
       setCourses(cData.items);
-      setQuestions(qData.items);
+      setQuestions(questions);
     } catch {
       setError(t("admin.examEdit.feedback.loadDataFailed"));
     } finally {
@@ -304,15 +306,14 @@ export function ExamEditPage() {
             />
           ) : (
             <DataTableShell archetype="embedded-picker">
-              <Table>
-                <DataTableColumns
-                  columns={[
-                    { role: "type" },
-                    { role: "long-text", overflow: "truncate" },
-                    { role: "score" },
-                    { role: "actions" },
-                  ]}
-                />
+              <DataTableSurface
+                columns={[
+                  { role: "type" },
+                  { role: "long-text", overflow: "truncate" },
+                  { role: "score" },
+                  { role: "actions" },
+                ]}
+              >
                 <TableHeader>
                   <TableRow>
                     <DataTableHead role="type">
@@ -368,7 +369,7 @@ export function ExamEditPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </DataTableSurface>
             </DataTableShell>
           )}
         </div>
@@ -397,62 +398,63 @@ export function ExamEditPage() {
           </DialogHeader>
           {/* dialog-body owns the vertical scroll; header/footer fixed. */}
           <div data-slot="dialog-body">
-            <Table>
-              <DataTableColumns
+            <TableAllocationRegion>
+              <DataTableSurface
                 columns={[
                   { role: "type" },
                   { role: "long-text", overflow: "truncate" },
                   { role: "score" },
                   { role: "actions" },
                 ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="type">
-                    {t("admin.examEdit.tableHeaders.type")}
-                  </DataTableHead>
-                  <DataTableHead role="long-text">
-                    {t("admin.examEdit.tableHeaders.content")}
-                  </DataTableHead>
-                  <DataTableHead role="score">
-                    {t("admin.examEdit.tableHeaders.score")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.examEdit.dialogActions.add")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {availableQuestions.map((q) => (
-                  <TableRow key={q.id}>
-                    <DataTableCell role="type">
-                      <Badge variant="outline">
-                        {getTypeLabel(q.type, t) ?? q.type}
-                      </Badge>
-                    </DataTableCell>
-                    <DataTableCell role="long-text">
-                      <DataTableOverflowText
-                        mode="truncate"
-                        value={q.content}
-                      />
-                    </DataTableCell>
-                    <DataTableCell role="score">{q.score}</DataTableCell>
-                    <DataTableCell role="actions">
-                      {/* embedded-picker exception (P3 §4.4 (issue 445)): dialog
+              >
+                <TableHeader>
+                  <TableRow>
+                    <DataTableHead role="type">
+                      {t("admin.examEdit.tableHeaders.type")}
+                    </DataTableHead>
+                    <DataTableHead role="long-text">
+                      {t("admin.examEdit.tableHeaders.content")}
+                    </DataTableHead>
+                    <DataTableHead role="score">
+                      {t("admin.examEdit.tableHeaders.score")}
+                    </DataTableHead>
+                    <DataTableHead role="actions">
+                      {t("admin.examEdit.dialogActions.add")}
+                    </DataTableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {availableQuestions.map((q) => (
+                    <TableRow key={q.id}>
+                      <DataTableCell role="type">
+                        <Badge variant="outline">
+                          {getTypeLabel(q.type, t) ?? q.type}
+                        </Badge>
+                      </DataTableCell>
+                      <DataTableCell role="long-text">
+                        <DataTableOverflowText
+                          mode="truncate"
+                          value={q.content}
+                        />
+                      </DataTableCell>
+                      <DataTableCell role="score">{q.score}</DataTableCell>
+                      <DataTableCell role="actions">
+                        {/* embedded-picker exception (P3 §4.4 (issue 445)): dialog
                           picker tables keep a text add action — auto layout,
                           outside the admin shell's icon-only vocabulary. */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addQuestion(q.id)}
-                      >
-                        {t("admin.examEdit.dialogActions.add")}
-                      </Button>
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => addQuestion(q.id)}
+                        >
+                          {t("admin.examEdit.dialogActions.add")}
+                        </Button>
+                      </DataTableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </DataTableSurface>
+            </TableAllocationRegion>
           </div>
           <DialogFooter>
             <Button

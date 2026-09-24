@@ -8,14 +8,15 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
   DataTableCell,
-  DataTableColumns,
+  DataTableSurface,
   DataTableHead,
 } from "@/components/shared/DataTableContract";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -128,52 +129,72 @@ export function ImportLogsPage() {
         title={t("admin.importLogs.title")}
         description={t("admin.importLogs.description")}
       />
-      <DataToolbar>
-        <Select
-          value={typeFilter}
-          onValueChange={(v) => {
-            setTypeFilter(v);
-            setPage(1);
-          }}
-        >
-          <ToolbarFilter size="narrow">
-            <SelectTrigger aria-label={t("admin.importLogs.typeFilter")}>
-              <SelectValue />
-            </SelectTrigger>
-          </ToolbarFilter>
-          <SelectContent>
-            {TYPE_FILTERS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {t(f.labelKey as "admin.importLogs.typeFilters.all")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {hasActiveFilter && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            className="text-muted-foreground"
-          >
-            <AppIcon icon={X} size="inline" className="mr-1" />
-            {t("admin.importLogs.clearFilter")}
-          </Button>
-        )}
-      </DataToolbar>
-      <DataTableShell archetype="log-diagnostic">
-        <Table>
-          <DataTableColumns
-            columns={[
-              { role: "date" },
-              { role: "type" },
-              { role: "status" },
-              { role: "number", key: "total" },
-              { role: "number", key: "created" },
-              { role: "number", key: "updated" },
-              { role: "number", key: "errors" },
-            ]}
+      <DataTableShell
+        archetype="log-diagnostic"
+        toolbar={
+          <DataToolbar>
+            <Select
+              value={typeFilter}
+              onValueChange={(v) => {
+                setTypeFilter(v);
+                setPage(1);
+              }}
+            >
+              <ToolbarFilter size="narrow">
+                <SelectTrigger aria-label={t("admin.importLogs.typeFilter")}>
+                  <SelectValue />
+                </SelectTrigger>
+              </ToolbarFilter>
+              <SelectContent>
+                {TYPE_FILTERS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {t(f.labelKey as "admin.importLogs.typeFilters.all")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasActiveFilter && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="text-muted-foreground"
+              >
+                <AppIcon icon={X} size="inline" className="mr-1" />
+                {t("admin.importLogs.clearFilter")}
+              </Button>
+            )}
+          </DataToolbar>
+        }
+        footer={
+          <DataViewFooter
+            range={{
+              page: data.page,
+              pageSize: data.pageSize,
+              total: data.total,
+            }}
+            navigation={
+              <DataTablePagination
+                page={data.page}
+                pageSize={data.pageSize}
+                total={data.total}
+                onPageChange={setPage}
+              />
+            }
           />
+        }
+      >
+        <DataTableSurface
+          columns={[
+            { role: "date" },
+            { role: "type" },
+            { role: "status" },
+            { role: "number", key: "total" },
+            { role: "number", key: "created" },
+            { role: "number", key: "updated" },
+            { role: "number", key: "errors" },
+          ]}
+        >
           <TableHeader>
             <TableRow>
               <DataTableHead role="date">
@@ -232,7 +253,7 @@ export function ImportLogsPage() {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </DataTableSurface>
       </DataTableShell>
       {expandedId &&
         (() => {
@@ -263,12 +284,6 @@ export function ImportLogsPage() {
             </div>
           );
         })()}
-      <DataTablePagination
-        page={data.page}
-        pageSize={data.pageSize}
-        total={data.total}
-        onPageChange={setPage}
-      />
     </PageContainer>
   );
 }

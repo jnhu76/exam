@@ -15,6 +15,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { ACTIONS_MIN_COARSE, ROLE_GEOMETRY } from "@/table/columnAllocation";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, "..");
@@ -123,12 +124,9 @@ describe("row-action capacity contract", () => {
   });
 
   it("binds the actions column to the contract width (6rem fine / 7.5rem coarse)", () => {
-    expect(tableCss).toMatch(
-      /\[data-column-role="actions"\]\s*\{[^}]*width:\s*6rem/,
-    );
-    expect(tableCss).toMatch(
-      /@media \(pointer: coarse\)\s*\{[\s\S]*?\[data-column-role="actions"\]\s*\{[^}]*width:\s*7\.5rem/,
-    );
+    // #601 Phase F: the width authority is the allocator's ROLE_GEOMETRY.
+    expect(ROLE_GEOMETRY.actions).toEqual({ floor: 96, basis: 96 });
+    expect(ACTIONS_MIN_COARSE).toBe(120);
   });
 
   it("uses the typed declaration API at every RowActions call site", () => {

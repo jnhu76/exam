@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { History } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,13 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { RowActions } from "@/components/shared/RowActions";
 import {
   CircleAlert,
   RefreshCw,
@@ -154,6 +162,133 @@ export function ExamMonitoringPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const columns = useMemo<DataViewColumnDef<ProctorAttemptStatus>[]>(
+    () => [
+      {
+        id: "candidateName",
+        meta: { role: "primary-text" },
+        header: t("admin.examMonitoring.columns.candidate"),
+        cell: ({ row }) => (
+          <span className="flex items-center gap-2">
+            <AppIcon
+              icon={User}
+              size="badge"
+              className="text-muted-foreground shrink-0"
+            />
+            <span className="min-w-0">{row.original.candidateName}</span>
+          </span>
+        ),
+      },
+      {
+        id: "status",
+        meta: { role: "status" },
+        header: t("admin.examMonitoring.columns.status"),
+        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+      {
+        id: "onlineState",
+        meta: { role: "type", priority: "normal" },
+        header: t("admin.examMonitoring.columns.online"),
+        cell: ({ row }) => (
+          <Badge
+            variant="secondary"
+            className={ONLINE_COLOR[row.original.onlineState]}
+          >
+            {t(
+              ONLINE_LABEL_KEY[
+                row.original.onlineState
+              ] as "admin.examMonitoring.onlineLabels.online",
+            )}
+          </Badge>
+        ),
+      },
+      {
+        id: "lastHeartbeatAt",
+        meta: { role: "duration" },
+        header: t("admin.examMonitoring.columns.lastHeartbeat"),
+        cell: ({ row }) =>
+          row.original.lastHeartbeatAt
+            ? formatTimeAgo(row.original.lastHeartbeatAt)
+            : "—",
+      },
+      {
+        id: "lastSaveAt",
+        meta: { role: "duration" },
+        header: t("admin.examMonitoring.columns.lastSave"),
+        cell: ({ row }) =>
+          row.original.lastSaveAt
+            ? formatTimeAgo(row.original.lastSaveAt)
+            : "—",
+      },
+      {
+        id: "visibilityLostCount",
+        meta: { role: "number" },
+        header: t("admin.examMonitoring.columns.visibilityLost"),
+        cell: ({ row }) => row.original.visibilityLostCount,
+      },
+      {
+        id: "browserOfflineCount",
+        meta: { role: "number" },
+        header: t("admin.examMonitoring.columns.browserOffline"),
+        cell: ({ row }) => row.original.browserOfflineCount,
+      },
+      {
+        id: "saveFailedCount",
+        meta: { role: "number" },
+        header: t("admin.examMonitoring.columns.saveFailed"),
+        cell: ({ row }) => row.original.saveFailedCount,
+      },
+      {
+        id: "submitFailedCount",
+        meta: { role: "number" },
+        header: t("admin.examMonitoring.columns.submitFailed"),
+        cell: ({ row }) => row.original.submitFailedCount,
+      },
+      {
+        id: "warningLevel",
+        meta: { role: "type", priority: "normal" },
+        header: t("admin.examMonitoring.columns.warningLevel"),
+        cell: ({ row }) => (
+          <Badge
+            variant="secondary"
+            className={WARNING_COLOR[row.original.warningLevel]}
+          >
+            <span className="flex items-center gap-1">
+              {(() => {
+                const Icon = WARNING_ICON[row.original.warningLevel];
+                return Icon ? <AppIcon icon={Icon} size="badge" /> : null;
+              })()}
+              {t(
+                WARNING_LABEL_KEY[
+                  row.original.warningLevel
+                ] as "admin.examMonitoring.warningLabels.normal",
+              )}
+            </span>
+          </Badge>
+        ),
+      },
+      {
+        id: "actions",
+        meta: { role: "actions" },
+        header: t("admin.examMonitoring.columns.actions"),
+        cell: ({ row }) => (
+          <RowActions
+            row={row.original}
+            actions={[
+              {
+                id: "timeline",
+                label: t("admin.examMonitoring.timeline.button"),
+                icon: History,
+                onSelect: () => setSelectedAttemptId(row.original.attemptId),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [t],
+  );
+
   if (isLoading && attempts.length === 0) {
     return (
       <div className="flex flex-col gap-6">
@@ -184,29 +319,31 @@ export function ExamMonitoringPage() {
           <AlertDescription>{staleWarning}</AlertDescription>
         </Alert>
       )}
-      <div className="flex items-center justify-between">
-        <PageHeader title={t("admin.examMonitoring.pageTitle")} />
-        <div className="flex items-center gap-3">
-          {lastRefreshedAt !== null && (
-            <span className="type-numeric text-xs text-muted-foreground">
-              {t("admin.examMonitoring.lastRefreshed", {
-                time: formatTime(lastRefreshedAt),
-              })}
-            </span>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label={t("admin.examMonitoring.ariaRefresh")}
-            onClick={() => {
-              setIsLoading(true);
-              loadAttempts();
-            }}
-          >
-            <AppIcon icon={RefreshCw} size="inline" />
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title={t("admin.examMonitoring.pageTitle")}
+        actions={
+          <div className="flex items-center gap-3">
+            {lastRefreshedAt !== null && (
+              <span className="type-numeric text-xs text-muted-foreground">
+                {t("admin.examMonitoring.lastRefreshed", {
+                  time: formatTime(lastRefreshedAt),
+                })}
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={t("admin.examMonitoring.ariaRefresh")}
+              onClick={() => {
+                setIsLoading(true);
+                loadAttempts();
+              }}
+            >
+              <AppIcon icon={RefreshCw} size="inline" />
+            </Button>
+          </div>
+        }
+      />
 
       {attempts.length === 0 ? (
         <EmptyState
@@ -215,106 +352,9 @@ export function ExamMonitoringPage() {
           description={t("admin.examMonitoring.emptyDescription")}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-muted/50">
-              <tr className="border-b">
-                <Th>{t("admin.examMonitoring.columns.candidate")}</Th>
-                <Th>{t("admin.examMonitoring.columns.status")}</Th>
-                <Th>{t("admin.examMonitoring.columns.online")}</Th>
-                <Th>{t("admin.examMonitoring.columns.lastHeartbeat")}</Th>
-                <Th>{t("admin.examMonitoring.columns.lastSave")}</Th>
-                <Th>{t("admin.examMonitoring.columns.visibilityLost")}</Th>
-                <Th>{t("admin.examMonitoring.columns.browserOffline")}</Th>
-                <Th>{t("admin.examMonitoring.columns.saveFailed")}</Th>
-                <Th>{t("admin.examMonitoring.columns.submitFailed")}</Th>
-                <Th>{t("admin.examMonitoring.columns.warningLevel")}</Th>
-                <Th>{t("admin.examMonitoring.columns.actions")}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {attempts.map((a) => (
-                <tr
-                  key={a.attemptId}
-                  className="border-b last:border-0 hover:bg-muted/30"
-                >
-                  <Td>
-                    <div className="flex items-center gap-2">
-                      <AppIcon
-                        icon={User}
-                        size="badge"
-                        className="text-muted-foreground shrink-0"
-                      />
-                      <span className="truncate max-w-32">
-                        {a.candidateName}
-                      </span>
-                    </div>
-                  </Td>
-                  <Td>{t(statusLabelKey(getStatusMeta(a.status).labelKey))}</Td>
-                  <Td>
-                    <Badge
-                      variant="secondary"
-                      className={ONLINE_COLOR[a.onlineState]}
-                    >
-                      {t(
-                        ONLINE_LABEL_KEY[
-                          a.onlineState
-                        ] as "admin.examMonitoring.onlineLabels.online",
-                      )}
-                    </Badge>
-                  </Td>
-                  <Td className="type-numeric">
-                    {a.lastHeartbeatAt ? formatTimeAgo(a.lastHeartbeatAt) : "—"}
-                  </Td>
-                  <Td className="type-numeric">
-                    {a.lastSaveAt ? formatTimeAgo(a.lastSaveAt) : "—"}
-                  </Td>
-                  <Td className="type-numeric text-center">
-                    {a.visibilityLostCount}
-                  </Td>
-                  <Td className="type-numeric text-center">
-                    {a.browserOfflineCount}
-                  </Td>
-                  <Td className="type-numeric text-center">
-                    {a.saveFailedCount}
-                  </Td>
-                  <Td className="type-numeric text-center">
-                    {a.submitFailedCount}
-                  </Td>
-                  <Td>
-                    <Badge
-                      variant="secondary"
-                      className={WARNING_COLOR[a.warningLevel]}
-                    >
-                      <span className="flex items-center gap-1">
-                        {(() => {
-                          const Icon = WARNING_ICON[a.warningLevel];
-                          return Icon ? (
-                            <AppIcon icon={Icon} size="badge" />
-                          ) : null;
-                        })()}
-                        {t(
-                          WARNING_LABEL_KEY[
-                            a.warningLevel
-                          ] as "admin.examMonitoring.warningLabels.normal",
-                        )}
-                      </span>
-                    </Badge>
-                  </Td>
-                  <Td>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedAttemptId(a.attemptId)}
-                    >
-                      {t("admin.examMonitoring.timeline.button")}
-                    </Button>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTableShell archetype="log-diagnostic">
+          <DesktopDataTable columns={columns} data={attempts} />
+        </DataTableShell>
       )}
 
       <Dialog
@@ -378,26 +418,6 @@ export function ExamMonitoringPage() {
         </DialogContent>
       </Dialog>
     </PageContainer>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <td className={`px-3 py-2.5 whitespace-nowrap ${className}`}>{children}</td>
   );
 }
 

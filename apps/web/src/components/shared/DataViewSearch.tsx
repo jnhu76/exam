@@ -1,14 +1,15 @@
-import { useEffect, useRef } from "react";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { useDataViewTextCommit } from "@/hooks/useDataViewTextCommit";
 
 /**
- * Debounced search field for data toolbars.
+ * Debounced free-text search field for data toolbars.
  *
  * Wraps SearchInput (the visual authority — leading icon, clear button, focus
- * ring, placeholder) and adds a search contract: a short debounce
- * so the consumer's server-side query fires after typing settles, an optional
- * loading flag for the in-flight query, and a controlled `value`/`onSearch`
- * pair where `onSearch` receives the DEBOUNCED term (not every keystroke).
+ * ring, placeholder) and adds the search commit contract: the shared
+ * text-commit choreography (useDataViewTextCommit — draft, debounce, clear),
+ * an optional loading flag for the in-flight query, and a controlled
+ * `value`/`onSearch` pair where `onSearch` receives the DEBOUNCED term (not
+ * every keystroke).
  *
  * The input is FULLY CONTROLLED by `value` (no divergent local state): typing
  * calls onChange immediately so the host can update its own input state, while
@@ -17,6 +18,10 @@ import { SearchInput } from "@/components/shared/SearchInput";
  * host is reflected instantly, with no stale local copy and no pending debounce
  * overwriting it. This is what removes the "search box jumps / refetches on
  * every keystroke" jitter.
+ *
+ * Fuzzy search is the only control that wears this presentation; an
+ * exact-identifier filter uses TextFilterInput (same commit contract, no fake
+ * search semantics).
  */
 export function DataViewSearch({
   value,
@@ -50,43 +55,18 @@ export function DataViewSearch({
   containerClassName?: string;
   "aria-label"?: string;
 }) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, []);
-
-  // If the host clears the value externally (e.g. a "clear all filters" button
-  // that sets value="" directly, bypassing this field's own clear button),
-  // cancel any pending debounce so a stale term cannot re-fire onSearch and
-  // overwrite the cleared value moments later.
-  useEffect(() => {
-    if (value === "" && timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-  }, [value]);
-
-  function handleChange(next: string) {
-    onChange(next);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      onSearch(next);
-    }, debounceMs);
-  }
-
-  function handleClear() {
-    if (timer.current) clearTimeout(timer.current);
-    (onClear ?? onChange)("");
-  }
+  const commit = useDataViewTextCommit({
+    value,
+    onChange,
+    onCommit: onSearch,
+    debounceMs,
+  });
 
   return (
     <SearchInput
-      value={value}
-      onChange={handleChange}
-      onClear={handleClear}
+      value={commit.value}
+      onChange={commit.change}
+      onClear={onClear ?? commit.clear}
       placeholder={placeholder}
       clearLabel={clearLabel}
       aria-label={ariaLabel}

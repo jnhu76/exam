@@ -6,6 +6,7 @@ import { getApiErrorMessage } from "@/lib/apiErrors";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -727,6 +728,25 @@ export function UsersPage() {
         />
       ) : (
         <DataTableShell
+          footer={
+            usersTotal > USERS_PAGE_SIZE ? (
+              <DataViewFooter
+                range={{
+                  page: usersPage,
+                  pageSize: USERS_PAGE_SIZE,
+                  total: usersTotal,
+                }}
+                navigation={
+                  <DataTablePagination
+                    page={usersPage}
+                    pageSize={USERS_PAGE_SIZE}
+                    total={usersTotal}
+                    onPageChange={setUsersPage}
+                  />
+                }
+              />
+            ) : undefined
+          }
           mobile={
             <MobileRecordList
               columns={columns}
@@ -741,14 +761,6 @@ export function UsersPage() {
             getRowId={(u) => u.id}
           />
         </DataTableShell>
-      )}
-      {usersTotal > USERS_PAGE_SIZE && (
-        <DataTablePagination
-          page={usersPage}
-          pageSize={USERS_PAGE_SIZE}
-          total={usersTotal}
-          onPageChange={setUsersPage}
-        />
       )}
       <Dialog
         open={dialogOpen}
@@ -943,11 +955,20 @@ export function UsersPage() {
                           </RadioGroup>
                         )}
                         {courseTotal > CATALOG_PAGE_SIZE && (
-                          <DataTablePagination
-                            page={coursePage}
-                            pageSize={CATALOG_PAGE_SIZE}
-                            total={courseTotal}
-                            onPageChange={setCoursePage}
+                          <DataViewFooter
+                            range={{
+                              page: coursePage,
+                              pageSize: CATALOG_PAGE_SIZE,
+                              total: courseTotal,
+                            }}
+                            navigation={
+                              <DataTablePagination
+                                page={coursePage}
+                                pageSize={CATALOG_PAGE_SIZE}
+                                total={courseTotal}
+                                onPageChange={setCoursePage}
+                              />
+                            }
                           />
                         )}
                         <div className="flex justify-end">
@@ -1096,11 +1117,20 @@ export function UsersPage() {
                           </RadioGroup>
                         )}
                         {examTotal > CATALOG_PAGE_SIZE && (
-                          <DataTablePagination
-                            page={examPage}
-                            pageSize={CATALOG_PAGE_SIZE}
-                            total={examTotal}
-                            onPageChange={setExamPage}
+                          <DataViewFooter
+                            range={{
+                              page: examPage,
+                              pageSize: CATALOG_PAGE_SIZE,
+                              total: examTotal,
+                            }}
+                            navigation={
+                              <DataTablePagination
+                                page={examPage}
+                                pageSize={CATALOG_PAGE_SIZE}
+                                total={examTotal}
+                                onPageChange={setExamPage}
+                              />
+                            }
                           />
                         )}
                         <div className="flex justify-end">

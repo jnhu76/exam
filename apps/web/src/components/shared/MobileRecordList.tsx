@@ -153,7 +153,11 @@ export function MobileRecordList<TData>({
   });
   const fields = deriveMobileCardFields(columns);
 
-  if (loading) {
+  // Same footprint rule as the desktop table: the empty placeholder body is
+  // for a load with nothing to show yet. A reload that already has rows (a page
+  // change keeps the previous page's data until the next one arrives) keeps
+  // rendering them, so the card list never collapses to zero height.
+  if (loading && rows.length === 0) {
     return <div data-slot="mobile-record-list" className={className} />;
   }
   if (error) {

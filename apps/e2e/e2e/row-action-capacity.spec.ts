@@ -54,9 +54,11 @@ function expectWithinBounds(
 ) {
   expect(geometry.buttonRects.length).toBeGreaterThan(0);
   expect(geometry.buttonRects.length).toBeLessThanOrEqual(2);
-  expect(Math.abs(geometry.cellWidth - expected.cellWidth)).toBeLessThanOrEqual(
-    2,
-  );
+  // #601 Phase F: the actions number is the column's semantic FLOOR, not its
+  // exact rendered width — the proportional allocator may widen the column
+  // with the container, and the capacity claim is that the worst legal button
+  // set fits inside whatever the allocator rendered.
+  expect(geometry.cellWidth).toBeGreaterThanOrEqual(expected.cellWidth - 2);
   for (const rect of geometry.buttonRects) {
     expect(Math.abs(rect.width - expected.buttonWidth)).toBeLessThanOrEqual(1);
     // No leftward spill into the neighbouring column.

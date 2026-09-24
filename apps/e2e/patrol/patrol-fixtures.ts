@@ -225,8 +225,10 @@ export async function collectShellFacts(page: Page): Promise<{
       const overflowing =
         scroll != null ? scroll.scrollWidth > scroll.clientWidth + 1 : null;
       return {
-        archetype: shellEl.getAttribute("data-table-archetype"),
-        tier: shellEl.getAttribute("data-table-tier"),
+        // The scroll region is the single carrier of the geometry vocabulary
+        // (#601 Phase F) — the shell element differs per composition.
+        archetype: scroll?.getAttribute("data-table-archetype") ?? null,
+        tier: scroll?.getAttribute("data-table-tier") ?? null,
         containerWidth: shellEl.getBoundingClientRect().width,
         clientWidth: scroll?.clientWidth ?? null,
         scrollWidth: scroll?.scrollWidth ?? null,

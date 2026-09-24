@@ -269,7 +269,9 @@ describe("CoursePage", () => {
       screen.getByPlaceholderText("搜索课程名称、代码或描述..."),
       "不存在",
     );
-    expect(screen.getByText("未找到匹配的课程")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "未找到匹配的课程" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("搜索课程")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "清除课程搜索" }));
     expect(
@@ -297,7 +299,9 @@ describe("CoursePage", () => {
       totalPages: 0,
     });
     renderPage();
-    expect(await screen.findByText("暂无课程")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "暂无课程" }),
+    ).toBeInTheDocument();
   });
 
   it("shows saving state during save", async () => {
@@ -343,7 +347,7 @@ describe("CoursePage", () => {
       totalPages: 0,
     });
     renderPage();
-    await screen.findByText("暂无课程");
+    await screen.findByRole("heading", { name: "暂无课程" });
     expect(
       screen.queryByPlaceholderText("搜索课程名称、代码或描述..."),
     ).not.toBeInTheDocument();

@@ -244,7 +244,7 @@ export function ExamPage() {
             <DataTableShell
               title={t("admin.exams.listTitle")}
               description={t("admin.exams.listDescription")}
-              toolbar={
+              meta={
                 <span className="type-secondary">
                   {t("admin.exams.summary", { count: exams.length })}
                 </span>

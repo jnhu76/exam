@@ -137,31 +137,33 @@ export function ProctorWorkspacePage() {
         title={t("admin.proctorWorkspace.title")}
         description={t("admin.proctorWorkspace.description")}
       />
-      <DataToolbar>
-        <Select
-          value={statusFilter}
-          onValueChange={(value) => setStatusFilter(value as StatusFilter)}
-        >
-          <ToolbarFilter size="narrow">
-            <SelectTrigger
-              aria-label={t("admin.proctorWorkspace.statusFilter")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-          </ToolbarFilter>
-          <SelectContent>
-            {STATUS_FILTERS.map((status) => (
-              <SelectItem key={status} value={status}>
-                {t(
-                  `admin.proctorWorkspace.statusFilters.${status}` as "admin.proctorWorkspace.statusFilters.all",
-                )}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </DataToolbar>
       <DataTableShell
         title={t("admin.proctorWorkspace.tableTitle")}
+        toolbar={
+          <DataToolbar>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as StatusFilter)}
+            >
+              <ToolbarFilter size="narrow">
+                <SelectTrigger
+                  aria-label={t("admin.proctorWorkspace.statusFilter")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+              </ToolbarFilter>
+              <SelectContent>
+                {STATUS_FILTERS.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {t(
+                      `admin.proctorWorkspace.statusFilters.${status}` as "admin.proctorWorkspace.statusFilters.all",
+                    )}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </DataToolbar>
+        }
         mobile={
           <MobileRecordList
             columns={columns}

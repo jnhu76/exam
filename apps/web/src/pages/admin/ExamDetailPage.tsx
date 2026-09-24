@@ -16,11 +16,12 @@ import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataToolbar } from "@/components/shared/DataToolbar";
 import { RowActions } from "@/components/shared/RowActions";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { PageSection } from "@/components/shared/PageSection";
@@ -28,7 +29,6 @@ import { DefinitionList } from "@/components/shared/DefinitionList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -278,6 +278,82 @@ export function ExamDetailPage() {
       );
     }
   }
+
+  // Single-source column declarations: the desktop table and the mobile card
+  // list both derive from this array (issue 457 / issue 601 Phase F).
+  const columns = useMemo<DataViewColumnDef<EnrollmentItem>[]>(
+    () => [
+      {
+        id: "identity",
+        meta: { role: "primary-text" },
+        header: t("admin.examDetail.enrollment.columns.identity"),
+        cell: ({ row }) =>
+          // Candidate identity is a human identity: wrap, never truncate
+          // (issue 445 V3). "-" matches the missing-value convention used by
+          // finalScore etc.
+          row.original.candidateIdentity ?? "-",
+      },
+      {
+        id: "name",
+        meta: { role: "primary-text" },
+        header: t("admin.examDetail.enrollment.columns.name"),
+        cell: ({ row }) => row.original.candidateDisplayName,
+      },
+      {
+        id: "status",
+        meta: { role: "status" },
+        header: t("admin.examDetail.enrollment.columns.status"),
+        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+      {
+        id: "attemptCount",
+        meta: { role: "number" },
+        header: t("admin.examDetail.enrollment.columns.attemptCount"),
+        cell: ({ row }) => row.original.attemptCount,
+      },
+      {
+        id: "finalScore",
+        meta: { role: "score" },
+        header: t("admin.examDetail.enrollment.columns.score"),
+        cell: ({ row }) => row.original.finalScore ?? "-",
+      },
+      {
+        id: "actions",
+        meta: { role: "actions" },
+        header: t("admin.examDetail.enrollment.columns.actions"),
+        cell: ({ row }) => (
+          <RowActions
+            row={row.original}
+            actions={
+              mayManageEnrollments && row.original.status === "assigned"
+                ? [
+                    {
+                      id: "remove-candidate",
+                      label: t("admin.examDetail.confirm.removeCandidate"),
+                      icon: Trash2,
+                      tone: "destructive",
+                      confirm: {
+                        title: t("admin.examDetail.confirm.removeTitle"),
+                        description: t(
+                          "admin.examDetail.confirm.removeDescription",
+                          {
+                            name: row.original.candidateDisplayName,
+                          },
+                        ),
+                        destructive: true,
+                      },
+                      onSelect: () =>
+                        void handleRemoveEnrollment(row.original.id),
+                    },
+                  ]
+                : []
+            }
+          />
+        ),
+      },
+    ],
+    [t, mayManageEnrollments, handleRemoveEnrollment],
+  );
 
   /** Publishes the exam, making it available to enrolled candidates. */
   async function handlePublish() {
@@ -666,16 +742,27 @@ export function ExamDetailPage() {
             />
           </div>
 
-          <PageSection
+          {/* The shell IS the data surface (issue 601 Phase F convergence):
+              the section heading moves into its title band and the
+              dataset-scoped action into its toolbar band, so the table no
+              longer loses 44px to a second border+padding. The shell stays
+              mounted for the empty state too, so the dataset-scoped action is
+              available whether or not the list has rows. */}
+          <DataTableShell
             title={t("admin.examDetail.enrollment.title")}
-            actions={
-              mayManageEnrollments && (
-                <Button size="sm" onClick={handleOpenAddDialog}>
-                  <AppIcon icon={Plus} size="inline" />
-                  {t("admin.examDetail.enrollment.addCandidate")}
-                </Button>
-              )
+            toolbar={
+              mayManageEnrollments ? (
+                <DataToolbar
+                  actions={
+                    <Button size="sm" onClick={handleOpenAddDialog}>
+                      <AppIcon icon={Plus} size="inline" />
+                      {t("admin.examDetail.enrollment.addCandidate")}
+                    </Button>
+                  }
+                />
+              ) : undefined
             }
+            mobile={<MobileRecordList columns={columns} rows={enrollments} />}
           >
             {enrollments.length === 0 ? (
               <EmptyState
@@ -684,104 +771,9 @@ export function ExamDetailPage() {
                 description={t("admin.examDetail.enrollment.emptyDescription")}
               />
             ) : (
-              <DataTableShell contentClassName="p-0">
-                <Table>
-                  <DataTableColumns
-                    columns={[
-                      { role: "primary-text", key: "identity" },
-                      { role: "primary-text", key: "name" },
-                      { role: "status" },
-                      { role: "number" },
-                      { role: "score" },
-                      { role: "actions" },
-                    ]}
-                  />
-                  <TableHeader>
-                    <TableRow>
-                      <DataTableHead role="primary-text">
-                        {t("admin.examDetail.enrollment.columns.identity")}
-                      </DataTableHead>
-                      <DataTableHead role="primary-text">
-                        {t("admin.examDetail.enrollment.columns.name")}
-                      </DataTableHead>
-                      <DataTableHead role="status">
-                        {t("admin.examDetail.enrollment.columns.status")}
-                      </DataTableHead>
-                      <DataTableHead role="number">
-                        {t("admin.examDetail.enrollment.columns.attemptCount")}
-                      </DataTableHead>
-                      <DataTableHead role="score">
-                        {t("admin.examDetail.enrollment.columns.score")}
-                      </DataTableHead>
-                      <DataTableHead role="actions">
-                        {t("admin.examDetail.enrollment.columns.actions")}
-                      </DataTableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {enrollments.map((enrollment) => (
-                      <TableRow key={enrollment.id}>
-                        <DataTableCell role="primary-text">
-                          {/* Candidate identity is a human identity: wrap,
-                           * never truncate (issue 445 V3). "-" matches the
-                           * missing-value convention used by finalScore etc. */}
-                          {enrollment.candidateIdentity ?? "-"}
-                        </DataTableCell>
-                        <DataTableCell role="primary-text">
-                          {enrollment.candidateDisplayName}
-                        </DataTableCell>
-                        <DataTableCell role="status">
-                          <StatusBadge status={enrollment.status} />
-                        </DataTableCell>
-                        <DataTableCell role="number">
-                          {enrollment.attemptCount}
-                        </DataTableCell>
-                        <DataTableCell role="score">
-                          {enrollment.finalScore ?? "-"}
-                        </DataTableCell>
-                        <DataTableCell role="actions">
-                          <RowActions
-                            row={enrollment}
-                            actions={
-                              mayManageEnrollments &&
-                              enrollment.status === "assigned"
-                                ? [
-                                    {
-                                      id: "remove-candidate",
-                                      label: t(
-                                        "admin.examDetail.confirm.removeCandidate",
-                                      ),
-                                      icon: Trash2,
-                                      tone: "destructive",
-                                      confirm: {
-                                        title: t(
-                                          "admin.examDetail.confirm.removeTitle",
-                                        ),
-                                        description: t(
-                                          "admin.examDetail.confirm.removeDescription",
-                                          {
-                                            name: enrollment.candidateDisplayName,
-                                          },
-                                        ),
-                                        destructive: true,
-                                      },
-                                      onSelect: () =>
-                                        void handleRemoveEnrollment(
-                                          enrollment.id,
-                                        ),
-                                    },
-                                  ]
-                                : []
-                            }
-                          />
-                        </DataTableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </DataTableShell>
+              <DesktopDataTable columns={columns} data={enrollments} />
             )}
-          </PageSection>
+          </DataTableShell>
         </TabsContent>
 
         <TabsContent value="scores">
