@@ -213,7 +213,7 @@
  * headers never repeat the metadata.
  *
  * Pure-CSS policies:
- *   nowrap      — short atomic values
+ *   nowrap      — short fixed-capacity values
  *   wrap        — normal human text; overflow-wrap:anywhere survives long
  *                 unbroken tokens
  *   break-token — URLs / mixed machine-like strings; arbitrary break points

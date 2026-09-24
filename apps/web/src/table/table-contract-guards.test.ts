@@ -16,7 +16,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ARCHETYPE_TIER_BOUNDS,
   negotiateTier,
@@ -128,8 +128,9 @@ describe("table contract v2 structural guards", () => {
     expect(columnOverflow({ role: "primary-text" })).toBe("wrap");
     expect(columnOverflow({ role: "secondary-text" })).toBe("wrap");
     expect(columnOverflow({ role: "long-text" })).toBe("wrap");
-    // Issue #598: localized action labels are atomic — a truncating presenter
-    // would drop meaning from a label that has no full-value affordance.
+    // Issue #598: localized action labels are non-compressible — a truncating
+    // presenter would drop meaning from a label that has no full-value
+    // affordance.
     expect(columnOverflow({ role: "action-label" })).toBe("nowrap");
     // Explicit overrides flow through the single declaration.
     expect(
@@ -148,8 +149,10 @@ describe("table contract v2 structural guards", () => {
 
   it("rejects explicit overflow overrides outside the role's allowed domain", () => {
     // Corrective C1 (issue 454 review): the never-silent-truncate roles have
-    // no escape hatch — an illegal override throws in dev/test (vitest runs
-    // with import.meta.env.DEV === true) instead of silently truncating.
+    // no escape hatch — an illegal override throws in EVERY build (#605
+    // closeout: production no longer reinterprets the declaration into the
+    // role default; the DEV gate is banned by the data-view-grammar
+    // structural gate) instead of silently truncating.
     for (const role of [
       "status",
       "score",
@@ -182,6 +185,20 @@ describe("table contract v2 structural guards", () => {
     expect(
       columnOverflow({ role: "primary-text", overflow: "break-token" }),
     ).toBe("break-token");
+  });
+
+  it("fails loud on an illegal override in production builds too", () => {
+    // #605 closeout: the old production path returned the role default for an
+    // illegal declaration. Stub DEV false to prove the guard is not a
+    // dev-only assertion (the structural gate bans the DEV check outright).
+    vi.stubEnv("DEV", false);
+    try {
+      expect(() =>
+        columnOverflow({ role: "status", overflow: "truncate" }),
+      ).toThrow(/DataTable contract violation/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("assigns priority metadata (desktop never degrades on it)", () => {

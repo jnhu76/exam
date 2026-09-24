@@ -12,24 +12,32 @@ import type { DataTableColumnRole } from "@/components/shared/DataTableContract"
  * declare a narrower legal representation, and this module derives their floor
  * instead of copying a number:
  *
- *   representation family            roles                          floor vs basis
- *   ─────────────────────────────────────────────────────────────────────────────
- *   nowrap only (atomic)             status, type, date,             floor == basis
- *                                    date-range, duration, number,
- *                                    score, short-id, action-label,
- *                                    actions
- *   wrap / break-token               primary-text, secondary-text,   floor < basis
- *                                    long-text, tag-list
- *   presenter-bounded                description (truncate /         floor < basis
- *                                    line-clamp-2)
+ *   representation family                 roles                       floor vs basis
+ *   ────────────────────────────────────────────────────────────────────────────────
+ *   non-compressible / fixed capacity                                 floor == basis
+ *     nowrap-bounded value fixture        status, type, date,
+ *                                         date-range, duration, number,
+ *                                         score, action-label
+ *     presenter-bounded value budget      short-id (fixed
+ *                                         truncate-middle budget)
+ *     control-capacity                    actions
+ *   wrap / break-token                    primary-text,               floor < basis
+ *                                         secondary-text, long-text,
+ *                                         tag-list
+ *   presenter-bounded                     description (truncate /     floor < basis
+ *                                         line-clamp-2)
  *
- * Atomic roles have no narrower legal rendering — their capacity is bounded by
- * a value fixture (statusFixture / typeFixture / actionLabelFixture /
- * ROLE_OVERFLOW's single-member domains / the actions control budget), so
- * compressing them would either clip a value the product promises to show
- * whole or shrink a control below its hit-target budget. Their floor and basis
- * are the same token, and only the header channel (headerCapacity.ts) may
- * raise the basis.
+ * Non-compressible roles have no further AUTHORIZED GEOMETRY COMPRESSION:
+ * their current representation is itself a fixed-capacity contract — a value
+ * fixture (statusFixture / typeFixture / actionLabelFixture / ROLE_OVERFLOW's
+ * single-member nowrap domains), short-id's frozen truncate-middle presenter
+ * budget, or the actions control budget — so squeezing the column would clip
+ * a value the product promises to show whole or shrink a control below its
+ * hit-target budget. `floor == basis` therefore means "this representation has
+ * nothing narrower to fall back to", NOT "this role is nowrap": short-id
+ * compresses through its presenter, never through its column width. Their
+ * floor and basis are the same token, and only the header channel
+ * (headerCapacity.ts) may raise the basis.
  *
  * The compressible floors are calibrated against the SMALLEST READABLE LINE of
  * the role's content class — never against a production row, never measured at
@@ -143,7 +151,7 @@ export const MIN_READABLE_LINE = {
 
 export type CompressibleRole = keyof typeof MIN_READABLE_LINE;
 
-/** Every role whose floor is derived here (the rest are atomic). */
+/** Every role whose floor is derived here (the rest are non-compressible). */
 export const COMPRESSIBLE_ROLES = Object.keys(
   MIN_READABLE_LINE,
 ) as CompressibleRole[];

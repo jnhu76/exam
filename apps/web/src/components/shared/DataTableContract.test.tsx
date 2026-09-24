@@ -97,7 +97,7 @@ describe("DataTableContract", () => {
     ).toHaveAttribute("data-column-overflow", "line-clamp-2");
   });
 
-  it("keeps tag lists flexible while short identifiers stay atomic", () => {
+  it("keeps tag lists flexible while short identifiers hold a fixed capacity", () => {
     render(
       <table>
         <tbody>

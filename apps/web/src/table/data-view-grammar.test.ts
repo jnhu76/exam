@@ -196,6 +196,22 @@ describe("allocation ownership", () => {
     ).not.toMatch(/import\.meta\.env\.DEV/);
   });
 
+  it("has no production reinterpretation of an illegal overflow declaration", () => {
+    // #605 closeout: same contract as the allocation-scope guard — an
+    // illegal internal declaration fails loud in every build.
+    const contract = read("components/shared/DataTableContract.tsx");
+    const fn = contract.slice(
+      contract.indexOf("export function columnOverflow"),
+      contract.indexOf("export function columnPriority"),
+    );
+    const throwBlock = fn.slice(fn.indexOf("if (!ROLE_ALLOWED_OVERFLOW"));
+    expect(throwBlock).toMatch(/throw new Error/);
+    expect(
+      throwBlock.slice(0, throwBlock.indexOf("throw new Error")),
+      "the illegal-overflow failure must not be gated on the dev build",
+    ).not.toMatch(/import\.meta\.env\.DEV/);
+  });
+
   it("emits the allocation marker from exactly one module", () => {
     const writers = files
       .filter((path) =>

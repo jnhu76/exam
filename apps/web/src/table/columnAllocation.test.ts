@@ -100,12 +100,15 @@ describe("role geometry", () => {
     }
   });
 
-  it("keeps atomic roles at floor == basis == the value token", () => {
-    // The roles whose legal overflow domain is nowrap alone have no narrower
-    // legal rendering: compressing them would clip a value the product
-    // promises whole, or shrink a control below its hit-target budget. Only
-    // the header channel may raise their basis (number, duration).
-    const atomic = (
+  it("keeps non-compressible roles at floor == basis == the value token", () => {
+    // The non-compressible (fixed-capacity) roles have no further authorized
+    // geometry compression: their current representation is itself a capacity
+    // contract (nowrap value fixture, short-id's frozen truncate-middle
+    // budget, or the actions control budget), so squeezing them would clip a
+    // value the product promises whole, or shrink a control below its
+    // hit-target budget. Only the header channel may raise their basis
+    // (number, duration).
+    const fixedCapacity = (
       [
         "status",
         "type",
@@ -122,7 +125,7 @@ describe("role geometry", () => {
         basis: VALUE_GEOMETRY[role],
       });
     });
-    expect(atomic).toBeUndefined();
+    expect(fixedCapacity).toBeUndefined();
   });
 
   it("derives every compressible floor from its calibration fixture", () => {
@@ -211,7 +214,7 @@ describe("allocateTableColumns — regime A: genuine overflow", () => {
 });
 
 describe("allocateTableColumns — regime B: compressed fit", () => {
-  it("interpolates between floor and basis, atomics untouched", () => {
+  it("interpolates between floor and basis, fixed-capacity roles untouched", () => {
     const alloc = allocateTableColumns(QUESTION_ROLES, 800);
     expect(alloc.state).toBe("compressed");
     expect(alloc.tableWidth).toBe(800);
@@ -407,7 +410,7 @@ describe("degenerate declarations", () => {
     expectExactSum(roles, alloc);
   });
 
-  it("handles an all-atomic declaration set (Σfloor == Σbasis)", () => {
+  it("handles an all-fixed-capacity declaration set (Σfloor == Σbasis)", () => {
     const roles = ["status", "date", "actions"] as const;
     const alloc = allocateTableColumns(roles, 1280);
     expect(alloc.floorWidth).toBe(alloc.basisWidth);

@@ -442,8 +442,9 @@ function presenterPairingViolations(
           // non-presenter overflow contradicts the colgroup declaration —
           // unless the role declares that exact mode as its machine-value
           // compatibility channel (issue #598: a non-enumerable value class
-          // contained by the presenter while the enumerable class stays
-          // atomic). Any other mode in any other column is still a violation.
+          // contained by the presenter while the enumerable class stays in
+          // its single nowrap policy). Any other mode in any other column is
+          // still a violation.
           for (const [index, declaration] of declarations.entries()) {
             if (isPresenterMode(declaration.effective)) continue;
             const channelMode =

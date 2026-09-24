@@ -153,16 +153,14 @@ export function columnOverflow(column: {
   overflow?: ColumnOverflow;
 }): ColumnOverflow {
   if (column.overflow === undefined) return ROLE_OVERFLOW[column.role];
+  // INVARIANT: an override outside the role's domain is an illegal internal
+  // declaration, never a runtime input — every build fails loud (the
+  // allocation-scope guard holds the same contract), so no build can
+  // reinterpret a declaration into a different containment policy.
   if (!ROLE_ALLOWED_OVERFLOW[column.role].includes(column.overflow)) {
-    // DEV/test fail loud on an illegal override (RowActions precedent); a
-    // production build falls back to the role default so the semantic floor
-    // holds even for a violation that slipped through.
-    if (import.meta.env.DEV) {
-      throw new Error(
-        `DataTable contract violation: role "${column.role}" forbids overflow "${column.overflow}" (allowed: ${ROLE_ALLOWED_OVERFLOW[column.role].join(", ")})`,
-      );
-    }
-    return ROLE_OVERFLOW[column.role];
+    throw new Error(
+      `DataTable contract violation: role "${column.role}" forbids overflow "${column.overflow}" (allowed: ${ROLE_ALLOWED_OVERFLOW[column.role].join(", ")})`,
+    );
   }
   return column.overflow;
 }

@@ -22,10 +22,11 @@ import {
  * role's PREFERRED geometry (`basis`).
  *
  * Why basis and not floor: a header cell renders under its column's declared
- * overflow policy, and every atomic role's policy is `nowrap`, which clips
- * with an ellipsis. Clipping is a legal compressed representation, so header
- * demand is a PREFERRED-geometry requirement: at `basis` and above no header
- * ellipsizes, while a container between Σfloor and Σbasis compresses the whole
+ * overflow policy, and every non-compressible role's policy clips — `nowrap`
+ * with an end ellipsis, or `short-id`'s fixed-budget middle truncate. Clipping
+ * is a legal compressed representation, so header demand is a
+ * PREFERRED-geometry requirement: at `basis` and above no header ellipsizes,
+ * while a container between Σfloor and Σbasis compresses the whole
  * table — headers included — instead of forcing the table to scroll.
  *
  * The runtime geometry reads MAX_HEADER_GLYPHS, a declared per-role bound; the

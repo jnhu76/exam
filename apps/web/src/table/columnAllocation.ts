@@ -79,8 +79,9 @@ export interface RoleGeometry {
   /**
    * Preferred semantic geometry in border-box px: the basis of proportional
    * growth, and the width at which both the role's value vocabulary and its
-   * supported header vocabulary fit. `floor == basis` for an atomic role;
-   * `floor < basis` for a role with a narrower legal representation.
+   * supported header vocabulary fit. `floor == basis` for a non-compressible
+   * (fixed-capacity) role; `floor < basis` for a role with a narrower legal
+   * representation.
    */
   basis: number;
 }
@@ -134,8 +135,8 @@ export const VALUE_GEOMETRY: Record<DataTableColumnRole, number> = {
 };
 
 /**
- * The role geometry table. `floor` is the calibrated hard floor (the atomic
- * value token for roles with no narrower legal representation, the calibrated
+ * The role geometry table. `floor` is the calibrated hard floor (the fixed-
+ * capacity value token for non-compressible roles, the calibrated
  * smallest readable line for the compressible ones); `basis` is the larger of
  * the value token and the role's header capacity, so a role whose values are
  * short can never carry a header that does not fit at preferred geometry.

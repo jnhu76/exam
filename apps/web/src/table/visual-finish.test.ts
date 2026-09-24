@@ -202,9 +202,10 @@ describe("table and color visual-finish authority", () => {
     );
     // The geometry vocabulary is { floor, basis } only (issue 601 Phase F
     // convergence): no maxWidth, no grow/shrink weights, no per-role solver.
-    // `floor == basis` marks an atomic role; `floor < basis` marks a role that
-    // already declares a narrower legal representation. `basis` is the larger
-    // of the role's value token and its header capacity (number/duration).
+    // `floor == basis` marks a non-compressible role; `floor < basis` marks a
+    // role that already declares a narrower legal representation. `basis` is
+    // the larger of the role's value token and its header capacity
+    // (number/duration).
     expect(
       Object.entries(ROLE_GEOMETRY)
         .filter(([role]) => role !== "actions")
