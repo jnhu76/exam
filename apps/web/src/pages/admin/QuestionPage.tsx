@@ -10,10 +10,10 @@ import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import {
   DataWorkbench,
   DataWorkbenchToolbar,
-  DataWorkbenchFooter,
 } from "@/components/shared/DataWorkbench";
 import {
   DesktopDataTable,
@@ -529,14 +529,18 @@ export function QuestionPage() {
           </DataWorkbenchToolbar>
         }
         footer={
-          <DataWorkbenchFooter>
-            <DataTablePagination
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={total}
-              onPageChange={setPage}
-            />
-          </DataWorkbenchFooter>
+          <DataViewFooter
+            variant="continuous"
+            range={{ page, pageSize: PAGE_SIZE, total }}
+            navigation={
+              <DataTablePagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={total}
+                onPageChange={setPage}
+              />
+            }
+          />
         }
         desktopTable={
           <DesktopDataTable

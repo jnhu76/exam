@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import {
   DesktopDataTable,
   type DataViewColumnDef,
@@ -313,15 +314,24 @@ export function ScoreListPage() {
         }
         footer={
           scores.total > scores.pageSize ? (
-            <DataTablePagination
-              page={page}
-              pageSize={scores.pageSize}
-              total={scores.total}
-              onPageChange={(next) => {
-                const newParams = new URLSearchParams(searchParams);
-                newParams.set("page", String(next));
-                setSearchParams(newParams);
+            <DataViewFooter
+              range={{
+                page,
+                pageSize: scores.pageSize,
+                total: scores.total,
               }}
+              navigation={
+                <DataTablePagination
+                  page={page}
+                  pageSize={scores.pageSize}
+                  total={scores.total}
+                  onPageChange={(next) => {
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.set("page", String(next));
+                    setSearchParams(newParams);
+                  }}
+                />
+              }
             />
           ) : undefined
         }

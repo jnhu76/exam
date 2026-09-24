@@ -1,7 +1,10 @@
 import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { TableScrollSurface } from "@/components/shared/TableScrollSurface";
+import {
+  TableScrollSurface,
+  type TableWidthMode,
+} from "@/components/shared/TableScrollSurface";
 import { isMobileRepresentationAllowed } from "@/components/shared/DataTableShell";
 import type { TableArchetype } from "@/table/tableTiers";
 
@@ -39,6 +42,7 @@ export function DataWorkbench({
   footer,
   className,
   archetype = "management-list",
+  widthMode = "fill",
 }: {
   /** The toolbar band (search + filters + actions). Rendered as the shell top. */
   toolbar?: ReactNode;
@@ -49,10 +53,12 @@ export function DataWorkbench({
    * branch — a sibling of the desktop measurement branch, never inside the
    * measurement node. */
   mobileList?: ReactNode;
-  /** The footer band (count + pagination). Rendered as the shell bottom. */
+  /** The footer band (DataViewFooter, continuous variant). */
   footer?: ReactNode;
   className?: string;
   archetype?: TableArchetype;
+  /** The composition's width intent (TableWidthMode). */
+  widthMode?: TableWidthMode;
 }) {
   const { t } = useTranslation();
   const shellId = useId();
@@ -91,6 +97,7 @@ export function DataWorkbench({
       {toolbar}
       <TableScrollSurface
         archetype={archetype}
+        widthMode={widthMode}
         mobile={mobileEnabled ? mobileList : undefined}
         regionDataSlot="admin-table-shell"
       >
@@ -115,31 +122,6 @@ export function DataWorkbenchToolbar({
 }) {
   return (
     <div data-slot="workbench-toolbar" className={cn(className)}>
-      {children}
-    </div>
-  );
-}
-
-/**
- * The workbench footer band. Owns the count summary + pagination as the
- * shell's bottom region. Use this instead of rendering DataTablePagination as
- * a separate floating element.
- */
-export function DataWorkbenchFooter({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      data-slot="workbench-footer"
-      className={cn(
-        "flex flex-col gap-3 px-3 py-2 type-secondary sm:flex-row sm:items-center sm:justify-between",
-        className,
-      )}
-    >
       {children}
     </div>
   );

@@ -40,6 +40,90 @@
   border-collapse: collapse;
 }
 
+/*
+ * A table that FILLS its region ends the grid at the region's own edge.
+ *
+ * Under border-collapse the outer half of the last column's 1px right border
+ * lies outside the table's content edge, so a table sized to the region's
+ * content box reports scrollWidth = clientWidth + 1 — a fitted table with 1px
+ * of scrollable overflow, which classic scrollbars (Windows Chrome) answer with
+ * a painted horizontal scrollbar. Measured before this rule at 1440:
+ * /admin/exams, /admin/candidates and /admin/recovery each rendered a 1142.5px
+ * box inside a 1142px region (the 0.5px is exactly that collapsed half-border;
+ * thead and tr measured 1142). In the compressed/preferred regimes the table
+ * fills the region exactly, so that border IS the surface boundary and drawing
+ * it only paints half a line at the edge; the expanded regime keeps it, where
+ * it is an interior edge against the trailing spacer cell (::after above).
+ * No element here is a spacer — the colgroup is the full column list.
+ */
+[data-geometry-state="compressed"] tr > :last-child,
+[data-geometry-state="preferred"] tr > :last-child {
+  border-right-width: 0;
+}
+
+/*
+ * The bounded-expansion remainder (issue 601 Phase F convergence).
+ *
+ * A table stops growing at EXPANSION_CAP × its preferred width — a sparse
+ * table may not stretch a 120px identity column to 400px. The columns stop
+ * there, but the SHELL must not: a grid whose tinted header band and row
+ * separators end mid-surface reads as a rendering fault (measured on
+ * /admin/dashboard at 1440: the band stopped 430px short of the card edge).
+ *
+ * The remainder is therefore carried by one empty trailing cell per row. In
+ * Chromium `tr::after` with `display: table-cell` is a real anonymous cell: it
+ * absorbs exactly the space the colgroup leaves unclaimed and leaves the
+ * declared columns at their capped widths (measured: declared 150/150/150 in a
+ * 600px table render at exactly 150 each, the anonymous cell taking 150). The
+ * cell is present ONLY in the expanded regime — in every other regime the
+ * element and its columns are the same width, so there is nothing to absorb —
+ * and it repeats the row's own surface, so the header band, the row
+ * separators, hover, focus and selected states stay continuous across the full
+ * surface.
+ *
+ * No markup, no spacer column in the declaration model, no per-page rule: the
+ * table element's width and the regime attribute are the allocator's facts.
+ */
+[data-geometry-state="expanded"] thead tr::after {
+  content: "";
+  display: table-cell;
+  background: var(--table-header);
+  border-bottom: 1px solid var(--border-header);
+}
+
+[data-geometry-state="expanded"] tbody tr::after {
+  content: "";
+  display: table-cell;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-row);
+}
+
+[data-geometry-state="expanded"] tbody tr:hover::after {
+  background: var(--table-row-hover);
+}
+
+[data-geometry-state="expanded"] tbody tr:focus-within::after {
+  background: var(--table-row-focus);
+}
+
+[data-geometry-state="expanded"] tbody tr[data-state="selected"]::after {
+  background: var(--table-row-selected);
+}
+
+/*
+ * The permission matrix is the one specialized table (issue 601 Phase F
+ * convergence): its column semantics are roles × capabilities, not record
+ * fields, so it owns its widths in table/permissionMatrix.ts rather than in
+ * the column allocator. It still gets exact fixed layout from the same
+ * mechanism — explicit colgroup px + an explicit table width — and the shared
+ * surface (scroll region, cell padding, typography, grid borders) from
+ * everything else in this file.
+ */
+[data-table-matrix="permissions"] {
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
 [data-slot="admin-table-shell"] {
   border-color: var(--border-shell);
 }

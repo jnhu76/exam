@@ -123,29 +123,60 @@ an Issue, not absorbed silently into page-local classes.
 Step 1 left the table-first #601 criteria open; Phase F closed them:
 
 - **column semantics / allocator enforcement** — one allocation authority
-  (`apps/web/src/table/columnAllocation.ts`): semantic floors per role
-  (`ROLE_GEOMETRY`) plus the ratified two-state rule (below Σ minima → render
-  at the minima with local scroll; at or above → every column at floor × one
-  shared scale). Residual space belongs to the semantic geometry, never to
-  however many `width: auto` columns happen to exist.
+  (`apps/web/src/table/columnAllocation.ts`) with a two-number role geometry
+  (`RoleGeometry { floor, basis }`): `floor` is the hard structural minimum and
+  the local-scroll trigger, `basis` is the preferred geometry and the basis of
+  proportional growth. The allocation has exactly three regimes —
+  **overflow** (`A < Σfloor`: every column at its floor, region scrolls),
+  **compressed** (`Σfloor ≤ A < Σbasis`: `floor + t·(basis − floor)`, nothing
+  scrolls), **preferred/expanded** (`Σbasis ≤ A`: every column at
+  `basis × scale`, bounded by ONE table-level cap). Expansion is capped at
+  `EXPANSION_CAP × Σbasis`; past the cap the region's remainder is carried by an
+  empty trailing cell so the shell's grid stays complete. No per-role maxWidth,
+  no per-page tuning, no spacer-column framework.
+- **width intent is a composition fact** — `widthMode: "fill" | "intrinsic"` is
+  declared by whoever composes the surface (a page data view fills; an embedded
+  picker dialog renders at its preferred width). It is NOT an archetype
+  property: the archetype names the semantic table kind only.
+- **header copy is a geometry channel** — a role's `basis` is the larger of its
+  value token and its declared header capacity
+  (`apps/web/src/table/headerCapacity.ts`), so a supported header label is never
+  clipped at preferred geometry. The declared bound is gated against the i18n
+  catalog, so new header copy or a new locale forces an explicit geometry
+  review.
 - **table overflow policy closure** — a value wider than its column never
   paints over its neighbours: single-line policies clip at the cell and the
-  clipped cell reveals its full value on hover; presenter policies keep title
-  + keyboard focus; `actions` is never clipped. Region overflow stays with
-  `useOverflowObservation` (integer `scrollWidth − clientWidth` facts; the
-  exact fractional content box is the allocator's input only).
-- **narrow / normal / wide fixtures** — `apps/e2e/e2e/data-view-1.spec.ts`
-  (UI-DATA-VIEW-1): Narrow (local scroll at Σ minima), Normal/Wide
-  (proportional fill, ratio-gated per column — `/admin/exams` is the
-  canonical single-flexible-column fixture), Long content (per-role policy
-  gate), Search+toolbar (one band, count in the title band), and per-frame
-  pagination/search transition gates (no painted scrollbar while
-  `data-overflowing=false`; `scrollbar-gutter: stable` keeps the document
-  content box width invariant).
+  clipped cell reveals its full value on hover; presenter policies keep the
+  title and keyboard focus; `actions` is never clipped. Region overflow stays
+  with `useOverflowObservation` (integer `scrollWidth − clientWidth` facts; the
+  exact fractional content box is the allocator's input only). A table that
+  FILLS its region draws no border on its last column: under `border-collapse`
+  that outer half-border left a fitted region with exactly 1px of scroll range,
+  which classic scrollbars turn into a painted scrollbar on a table that
+  visibly fits.
+- **one data-view grammar** — `DataToolbar` owns dataset-scoped controls
+  (search / filters / bulk actions); a count is not a control and lives in
+  `DataViewFooter` or, when it belongs with the title, in the shell's
+  title-band `meta`. One shared text-commit choreography
+  (`hooks/useDataViewTextCommit.ts`) backs the search control and every
+  exact-text filter, so no page owns a debounce timer of its own. A governed
+  table is never nested inside a second bordered surface: the shell IS the data
+  surface, and its own title band carries the section heading.
+- **four-regime fixtures** — `apps/e2e/e2e/data-view-1.spec.ts`
+  (UI-DATA-VIEW-1): A overflow (`/admin/recovery` at 1024), B compressed
+  (`/admin/exams` at 1280 and the exam-edit inline panel — the two census pages
+  that used to scroll with region space unused), C preferred (`/admin/exams` at
+  1440), D expanded (`/admin/users` at 1280), plus header capacity across the
+  production routes, the fitted-region sub-pixel gate, Long content (per-role
+  policy gate), Search+toolbar (one band, count in the shared footer),
+  composition (no nested surface), and per-frame pagination/search transition
+  gates (no painted scrollbar while `data-overflowing=false`; the document
+  content box and the region's width stay invariant across the transition
+  without reserving a global `scrollbar-gutter`).
 - **behavioral verification** — the full table regression set
   (table-contract-2, dense-table-cell-fitting, ui-governance-1,
-  row-action-capacity, table-mobile-1, data-view-1) runs green on the Phase F
-  branch.
+  row-action-capacity, table-mobile-1, dialog-spatial, data-view-1) runs green
+  on the Phase F branch.
 
 The #602 optical facts listed in §2 stayed frozen throughout; Phase F did not
 re-open them.

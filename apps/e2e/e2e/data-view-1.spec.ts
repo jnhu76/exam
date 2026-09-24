@@ -2,41 +2,60 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { loginAsAdmin } from "../lib/login";
 import { adminApiToken, adminGet, adminPost } from "../lib/flow";
 import { assertNoHorizontalOverflow } from "../lib/responsive";
+import { seedExam } from "../lib/seed";
 
 /**
  * UI-DATA-VIEW-1 (#601 Phase F) — the canonical data-view fixture matrix.
  *
- * This is the runtime owner for the five fixtures the visual foundation issue
- * names for tables (Narrow / Normal / Wide / Long content / Search+toolbar),
- * and for the three defects Phase F closed while establishing them:
+ * This is the runtime owner for the FOUR allocation regimes the visual
+ * foundation issue names, and for the defects Phase F closed while
+ * establishing them:
  *
- *   1. a table whose columns fit was still stretched to a static tier floor
- *      (the #454 contract), so a narrow container clipped columns instead of
- *      scrolling — Narrow asserts the table stops at its semantic minimum and
- *      the region scrolls for real;
- *   2. a fractional region box (1394.667px) round-tripped through the document
- *      scrollbar on every page change, which re-allocated the table and left
- *      Chromium painting a stale horizontal scrollbar for two frames while
- *      `scrollWidth === clientWidth` — Normal asserts the painted-scrollbar
- *      fact (`offsetHeight === clientHeight`) and the gutter invariant
- *      (`document.scrollingElement.clientWidth` constant) across a real
- *      pagination transition, sampled per frame;
- *   3. an over-wide single-line value painted outside its column (a 19-digit
- *      score crossed the difficulty and tag columns by 98.79px) — Long content
- *      asserts the policy per column role: wrap, clip + hover reveal, or the
- *      presenter, and that no neighbour is ever overlapped.
+ *   A OVERFLOW    A < Σfloor  — the hard floors do not fit: every column
+ *                 renders at exactly its floor and the region scrolls locally
+ *                 with its affordance. (/admin/recovery at 1024.)
+ *   B COMPRESSED  Σfloor ≤ A < Σbasis — the table fits: columns interpolate
+ *                 between floor and basis and NOTHING scrolls. This is the
+ *                 regime the Data View Geometry Census proved missing: the
+ *                 pre-Phase-F rule used a *preferred* width as the scroll
+ *                 trigger, so /admin/recovery scrolled at every viewport with
+ *                 438px of its region unused and the exam-edit inline picker
+ *                 scrolled with its actions column off-screen.
+ *   C PREFERRED   Σbasis ≤ A ≤ cap·Σbasis — every column renders at
+ *                 basis × one shared scale (semantic geometry first +
+ *                 proportional residual, never a single lucky width:auto
+ *                 column — measured pre-Phase-F as /admin/exams 考试名称 626px
+ *                 while 及格分 stayed at 80px and clipped `60/100`).
+ *   D EXPANDED    A > cap·Σbasis — the table stops at ONE table-level cap
+ *                 (EXPANSION_CAP × Σbasis, no per-role maxWidth, no per-page
+ *                 tuning) and the region's remainder is carried by one empty
+ *                 trailing cell, so the header band, row separators and hover
+ *                 states stay continuous across the full surface instead of
+ *                 stopping mid-card.
+ *
+ * Two further Phase F closures are pinned here because only a browser can
+ * prove them:
+ *
+ *   - HEADER CAPACITY: header copy is a first-class geometry channel. Basis is
+ *     the larger of the role's value token and its declared header capacity
+ *     (table/headerCapacity.ts, gated by the i18n fixture in
+ *     table-contract-guards.test.ts), so a supported header label is never
+ *     clipped at preferred geometry. This spec proves it on the rendered pages.
+ *   - SUB-PIXEL FIT: under border-collapse the outer half of the last column's
+ *     1px right border lies outside the table's content edge, so a table sized
+ *     to the region's content box reported scrollWidth = clientWidth + 1 — a
+ *     fitted region with 1px of scrollable overflow, which classic scrollbars
+ *     (Windows Chrome) answer with a painted horizontal scrollbar. A filled
+ *     table's grid therefore ends at the region edge (recipes.css).
  *
  * Measurement is DOM geometry (getBoundingClientRect / clientWidth /
  * scrollWidth / computed style) and per-frame rAF sampling — screenshots are
- * never the proof.
- *
- * Ownership boundary: the semantic floor table and the distribution rule are
- * unit-gated at their owner (table/columnAllocation.ts +
- * columnAllocation.test.ts, table-contract-guards.test.ts). This spec pins the
- * RENDERED consequences — the allocation is what paints (every column at
- * floor × one shared scale on a fitting container), the container is never
- * overflowed, the document never scrolls sideways, and each column role's
- * overflow policy holds under real production CSS and font.
+ * never the proof. Numeric floors and bases are NOT duplicated here: the
+ * allocation publishes Σfloor / Σbasis / state / spacer as DOM facts
+ * (`data-geometry-*`), and this spec asserts the RENDERED consequences of the
+ * rule against those facts. The numbers themselves are owned by
+ * table/columnAllocation.ts + columnAllocation.test.ts +
+ * table-contract-guards.test.ts.
  */
 
 const NARROW = { width: 1024, height: 900 };
@@ -46,9 +65,21 @@ const WIDE = { width: 1920, height: 1000 };
 /** Half-px slack for sub-pixel rounding; borders stay excluded. */
 const PX = 0.5;
 
+/** The one table-level expansion cap (table/columnAllocation.ts). */
+const EXPANSION_CAP = 1.33;
+
 interface DataViewGeometry {
   archetype: string | null;
   tier: string | null;
+  state: string | null;
+  /** Σ of the role floors — the overflow trigger. */
+  floor: number;
+  /** Σ of the role bases — the preferred table width. */
+  basis: number;
+  /** The empty trailing cell's width (0 outside the expanded regime). */
+  spacer: number;
+  /** Per-column `floor:basis` bands, in declaration order. */
+  bands: { floor: number; basis: number }[];
   regionBox: number;
   clientWidth: number;
   scrollWidth: number;
@@ -58,7 +89,11 @@ interface DataViewGeometry {
   tableWidth: number;
   colSum: number;
   columns: { role: string | null; width: number }[];
-  cellWidths: number[];
+  headerWidths: number[];
+  /** Header labels whose box cannot hold their text. */
+  clippedHeaders: string[];
+  /** The rendered header row's own width (the band, spacer cell included). */
+  headerRowWidth: number;
 }
 
 /**
@@ -89,9 +124,26 @@ async function probeDataView(shell: Locator): Promise<DataViewGeometry> {
       role: c.getAttribute("data-column-role"),
       width: Number.parseFloat(c.style.width || "0"),
     }));
+    const headCells = Array.from(
+      table.querySelectorAll<HTMLElement>('[data-slot="table-head"]'),
+    );
+    const headerRow = table.querySelector<HTMLElement>(
+      '[data-slot="table-header"] [data-slot="table-row"]',
+    );
     return {
       archetype: region.getAttribute("data-table-archetype"),
       tier: region.getAttribute("data-table-tier"),
+      state: table.getAttribute("data-geometry-state"),
+      floor: Number(table.getAttribute("data-geometry-floor")),
+      basis: Number(table.getAttribute("data-geometry-basis")),
+      spacer: Number(table.getAttribute("data-geometry-spacer")),
+      bands: (table.getAttribute("data-geometry-roles") ?? "")
+        .split(",")
+        .filter(Boolean)
+        .map((pair) => {
+          const [floor, basis] = pair.split(":").map(Number);
+          return { floor: floor ?? 0, basis: basis ?? 0 };
+        }),
       regionBox: region.getBoundingClientRect().width,
       clientWidth: region.clientWidth,
       scrollWidth: region.scrollWidth,
@@ -100,9 +152,19 @@ async function probeDataView(shell: Locator): Promise<DataViewGeometry> {
       tableWidth: table.getBoundingClientRect().width,
       colSum: columns.reduce((sum, c) => sum + c.width, 0),
       columns,
-      cellWidths: Array.from(
-        table.querySelectorAll<HTMLElement>("[data-slot='table-head']"),
-      ).map((th) => th.getBoundingClientRect().width),
+      headerWidths: headCells.map((th) => th.getBoundingClientRect().width),
+      clippedHeaders: headCells
+        .filter((th) => {
+          const style = getComputedStyle(th);
+          return (
+            th.scrollWidth > th.clientWidth + 1 &&
+            (style.overflow === "hidden" || style.textOverflow === "ellipsis")
+          );
+        })
+        .map((th) => (th.textContent ?? "").trim()),
+      headerRowWidth: headerRow
+        ? headerRow.getBoundingClientRect().width
+        : Number.NaN,
     };
   });
 }
@@ -110,24 +172,55 @@ async function probeDataView(shell: Locator): Promise<DataViewGeometry> {
 /** The one geometry claim every fixture shares: the allocation is what paints. */
 function expectAllocationIsRendered(g: DataViewGeometry): void {
   expect(g.columns.length).toBeGreaterThan(0);
-  expect(g.cellWidths.length).toBe(g.columns.length);
+  expect(g.bands.length).toBe(g.columns.length);
+  expect(g.headerWidths.length).toBe(g.columns.length);
   for (const [index, column] of g.columns.entries()) {
     expect(
-      Math.abs(column.width - (g.cellWidths[index] ?? Number.NaN)),
+      Math.abs(column.width - (g.headerWidths[index] ?? Number.NaN)),
       `column ${index} (${column.role}): rendered width must equal its allocated width`,
     ).toBeLessThanOrEqual(PX);
   }
-  // Columns cover the table exactly — no rounding waste, no phantom column.
-  expect(Math.abs(g.colSum - g.tableWidth)).toBeLessThanOrEqual(PX);
+  // The declared columns and the element agree exactly — no rounding waste.
+  // In the expanded regime the difference IS the empty trailing cell.
+  const elementColumnWidth = g.colSum + (g.state === "expanded" ? g.spacer : 0);
+  expect(
+    Math.abs(elementColumnWidth - g.tableWidth),
+    "the colgroup (plus the expanded regime's trailing cell) must cover the table element",
+  ).toBeLessThanOrEqual(PX + 1);
 }
 
-/** A fitted region paints no scrollbar; a fitted table paints no bleed. */
-function expectNoPaintedScrollbar(g: DataViewGeometry): void {
+/** Every column inside its own declared [floor, basis] band. */
+function expectColumnsInsideTheirBands(g: DataViewGeometry): void {
+  for (const [index, column] of g.columns.entries()) {
+    const band = g.bands[index];
+    expect(band, `column ${index} has no declared band`).toBeTruthy();
+    expect(
+      column.width,
+      `column ${index} (${column.role}) must not be squeezed below its floor`,
+    ).toBeGreaterThanOrEqual((band?.floor ?? 0) - PX);
+    expect(
+      column.width,
+      `column ${index} (${column.role}) must not exceed its basis outside the expanded regime`,
+    ).toBeLessThanOrEqual((band?.basis ?? 0) + PX);
+  }
+}
+
+/**
+ * A fitted region paints no scrollbar AND has no scrollable pixel at all: the
+ * collapsed half-border of a filled table used to leave exactly 1px of scroll
+ * range, which classic scrollbars turn into a painted scrollbar on a table
+ * that visibly fits.
+ */
+function expectFittedRegion(g: DataViewGeometry): void {
   expect(g.overflowing).toBe(false);
   expect(
     g.paintedScrollbar,
     "a region that reports data-overflowing=false must not paint a horizontal scrollbar",
   ).toBe(0);
+  expect(
+    g.scrollWidth,
+    "a fitted region must have no scrollable pixel (sub-pixel table overflow)",
+  ).toBeLessThanOrEqual(g.clientWidth);
 }
 
 /** One animation frame's rendered facts for a data-view region. */
@@ -223,7 +316,7 @@ function expectCleanTransition(frames: TransitionFrame[]): void {
   ).toHaveLength(0);
   expect(
     new Set(frames.map((f) => f.docClientWidth)).size,
-    "the document content box must not change width across the transition (scrollbar-gutter: stable)",
+    "the document content box must not change width across the transition",
   ).toBe(1);
   expect(
     new Set(frames.map((f) => Math.round(f.regionBox))).size,
@@ -235,111 +328,363 @@ function expectCleanTransition(frames: TransitionFrame[]): void {
   ).toHaveLength(0);
 }
 
+/** Opens the first shell of a route and returns its allocation geometry. */
+async function openShell(
+  page: Page,
+  route: string,
+  which: "first" | "last" = "first",
+): Promise<{ shell: Locator; geometry: DataViewGeometry }> {
+  await page.goto(route);
+  const shells = page.locator('[data-slot="admin-table-shell"]');
+  const shell = which === "first" ? shells.first() : shells.last();
+  await shell.waitFor({ state: "visible" });
+  await expect(
+    shell.locator('[data-column-allocation="computed"]'),
+  ).toBeAttached();
+  return { shell, geometry: await probeDataView(shell) };
+}
+
 /**
- * The /admin/exams declaration set's semantic floors — the rendered column
- * roles in order (authoritative table: apps/web/src/table/columnAllocation.ts
- * ROLE_GEOMETRY). The fixture pins the ALGORITHM on this page (every column
- * renders at floor × one shared scale), never exact px.
+ * Probes every shell on the current route that actually renders an allocated
+ * table. A shell may legitimately carry an empty state instead (the
+ * invitations card, or a page whose dataset is empty) — such a shell has no
+ * columns, so there is nothing to measure and nothing that could clip.
  */
-const EXAMS_FLOORS = [192, 136, 232, 80, 72, 72, 80, 96] as const;
+async function probeAllocatedShells(
+  page: Page,
+): Promise<{ index: number; geometry: DataViewGeometry }[]> {
+  const shells = page.locator(
+    '[data-slot="admin-table-shell"], [data-slot="data-workbench"]',
+  );
+  await shells
+    .first()
+    .waitFor({ state: "visible", timeout: 10_000 })
+    .catch(() => {});
+  const found: { index: number; geometry: DataViewGeometry }[] = [];
+  for (let index = 0; index < (await shells.count()); index++) {
+    const shell = shells.nth(index);
+    if (
+      (await shell.locator('[data-column-allocation="computed"]').count()) === 0
+    ) {
+      continue;
+    }
+    await shell
+      .locator('[data-column-allocation="computed"]')
+      .first()
+      .waitFor({ state: "attached", timeout: 15_000 });
+    found.push({ index, geometry: await probeDataView(shell) });
+  }
+  return found;
+}
 
 test.describe("data view fixtures (UI-DATA-VIEW-1, #601 Phase F)", () => {
-  test("Narrow: a table wider than its region scrolls locally instead of compressing columns", async ({
+  test("A overflow: a container below Σfloor scrolls locally at the hard floors", async ({
     page,
   }) => {
+    // /admin/recovery is the census page for this regime: log-diagnostic (never
+    // card-replaced), 8 columns, Σfloor > the 1024 viewport's region.
     await page.setViewportSize({ ...NARROW });
     await loginAsAdmin(page);
-    await page.goto("/admin/exams");
-    const shell = page.locator('[data-slot="admin-table-shell"]').first();
-    await shell.waitFor({ state: "visible" });
-    const g = await probeDataView(shell);
+    const { shell, geometry: g } = await openShell(page, "/admin/recovery");
 
-    // The container is below the table's semantic minimum: the tier floors at
-    // compact and the table keeps its allocated width (Σ roleMin) rather than
-    // being squeezed into the container.
-    expect(g.tier).toBe("compact");
-    expect(g.tableWidth).toBeGreaterThan(g.clientWidth);
-    expectAllocationIsRendered(g);
+    expect(g.archetype).toBe("log-diagnostic");
+    expect(g.state).toBe("overflow");
+    expect(g.floor).toBeGreaterThan(g.clientWidth);
+    expect(g.basis).toBeGreaterThan(g.floor);
 
-    // Real local scroll with the container-gated affordance: the scrollbar is
-    // legitimate here (the region genuinely overflows).
+    // The table keeps its floors instead of being squeezed into the region:
+    // Σ rendered === Σ floor, and every column is exactly at its own floor.
+    // (The ELEMENT's box carries the collapsed outer half-border here — this
+    // regime draws the last column's right border because the table genuinely
+    // scrolls — so the element is allowed to be 0.5px wider than Σfloor.)
+    expect(g.colSum).toBe(g.floor);
+    expect(g.tableWidth).toBeGreaterThanOrEqual(g.floor);
+    expect(g.tableWidth).toBeLessThanOrEqual(g.floor + PX);
+    for (const [index, column] of g.columns.entries()) {
+      expect(
+        column.width,
+        `column ${index} (${column.role}) renders at exactly its floor`,
+      ).toBe(g.bands[index]?.floor);
+    }
+
+    // Real local scroll with the container-gated affordance.
     expect(g.overflowing).toBe(true);
     expect(g.scrollWidth).toBeGreaterThan(g.clientWidth + 1);
     await expect(
       shell.locator('[data-slot="table-scroll-hint"]'),
     ).toBeVisible();
+    expect(g.clippedHeaders).toEqual([]);
 
     // The narrow fixture never becomes a page-level horizontal scroll.
     await assertNoHorizontalOverflow(page);
   });
 
-  test("Normal: the table fills its measured container exactly, with no painted scrollbar", async ({
+  test("B compressed: a fitting container interpolates floor→basis and never scrolls", async ({
     page,
   }) => {
-    await page.setViewportSize({ ...NORMAL });
+    await page.setViewportSize({ width: 1280, height: 900 });
     await loginAsAdmin(page);
-    await page.goto("/admin/exams");
-    const shell = page.locator('[data-slot="admin-table-shell"]').first();
-    await shell.waitFor({ state: "visible" });
-    const g = await probeDataView(shell);
 
-    expect(g.archetype).toBe("management-list");
-    expect(g.tier).toBe("standard");
-    // Fills the region's exact content box (fractional), and the integer
-    // column widths cover the region's client box exactly.
-    expect(Math.abs(g.tableWidth - g.regionBox)).toBeLessThanOrEqual(PX);
+    // /admin/exams is the census page for the compressed regime at 1280.
+    const { geometry: g } = await openShell(page, "/admin/exams");
+    expect(g.state).toBe("compressed");
+    expect(g.floor).toBeLessThanOrEqual(g.clientWidth);
+    expect(g.basis).toBeGreaterThan(g.clientWidth);
+
+    // The table fills the region exactly and every column sits inside its own
+    // [floor, basis] band.
+    expect(g.tableWidth).toBeGreaterThanOrEqual(g.clientWidth);
+    expect(g.tableWidth).toBeLessThanOrEqual(g.clientWidth + PX);
     expect(g.colSum).toBe(g.clientWidth);
     expectAllocationIsRendered(g);
-    expectNoPaintedScrollbar(g);
-
-    // The canonical proportional-allocation gate (#601 Phase F, user-ratified
-    // rule B): with Σ floors = 960 and the container above it, EVERY column —
-    // not a flexible subset — renders at its floor × one shared scale. The
-    // pre-proportional rule poured the whole residual into the single
-    // primary-text column (626px) while 及格分 stayed at 80px and clipped
-    // `60/100`; this gate locks that defect out permanently.
-    expect(g.columns.length).toBe(EXAMS_FLOORS.length);
-    const scale =
-      g.tableWidth / EXAMS_FLOORS.reduce((sum, min) => sum + min, 0);
-    expect(scale).toBeGreaterThan(1);
-    for (const [index, min] of EXAMS_FLOORS.entries()) {
-      const rendered = g.columns[index]?.width ?? Number.NaN;
-      expect(
-        rendered,
-        `column ${index} (${g.columns[index]?.role}) must keep its floor`,
-      ).toBeGreaterThanOrEqual(min);
-      expect(
-        Math.abs(rendered - min * scale),
-        `column ${index} (${g.columns[index]?.role}) must render at floor × scale`,
-      ).toBeLessThanOrEqual(1.5);
+    expectColumnsInsideTheirBands(g);
+    // The interpolation is real: at least one column moved off its floor (the
+    // regime would otherwise be indistinguishable from overflow) and no
+    // atomic column (floor === basis) moved at all.
+    expect(
+      g.columns.filter((c, i) => c.width > (g.bands[i]?.floor ?? 0) + PX)
+        .length,
+      "compressed geometry must interpolate at least one column off its floor",
+    ).toBeGreaterThan(0);
+    for (const [index, column] of g.columns.entries()) {
+      const band = g.bands[index];
+      if (band && band.floor === band.basis) {
+        expect(
+          column.width,
+          `atomic column ${index} (${column.role}) keeps its token exactly`,
+        ).toBe(band.floor);
+      }
     }
-
-    await expect(shell.locator('[data-slot="table-scroll-hint"]')).toHaveCount(
+    expectFittedRegion(g);
+    await expect(page.locator('[data-slot="table-scroll-hint"]')).toHaveCount(
       0,
     );
     await assertNoHorizontalOverflow(page);
   });
 
-  test("Wide: the archetype ceiling holds and the allocation still covers the container", async ({
+  test("B compressed (canonical census page): /admin/recovery compresses instead of scrolling", async ({
     page,
   }) => {
-    await page.setViewportSize({ ...WIDE });
+    // The Data View Geometry Census measured this page scrolling at every
+    // viewport while 438px of its region went unused — the defect the floor/
+    // basis split exists for. It must now be compressed at 1280 and 1440, with
+    // every atomic role exactly at its token and the compressible ones strictly
+    // inside their band.
     await loginAsAdmin(page);
-    await page.goto("/admin/users");
-    // UsersPage hosts the invitations shell first; the users table is last.
-    const shell = page.locator('[data-slot="admin-table-shell"]').last();
-    await shell.waitFor({ state: "visible" });
+    for (const width of [1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const { geometry: g } = await openShell(page, "/admin/recovery");
+      expect(g.state, `at ${width}px`).toBe("compressed");
+      expect(g.colSum, `at ${width}px`).toBe(g.clientWidth);
+      expect(g.overflowing, `at ${width}px`).toBe(false);
+      expectColumnsInsideTheirBands(g);
+      expectFittedRegion(g);
+      // The compressible roles are the ones that move; the bounded-vocabulary
+      // roles (status / type / date) are atomic and stay exactly at their
+      // tokens in every regime.
+      expect(
+        g.columns.filter((c, i) => c.width > (g.bands[i]?.floor ?? 0)).length,
+        `at ${width}px: the compressible roles absorb the fit`,
+      ).toBeGreaterThan(0);
+      for (const [index, column] of g.columns.entries()) {
+        const band = g.bands[index];
+        if (band && band.floor === band.basis) {
+          expect(column.width, `at ${width}px: ${column.role} is atomic`).toBe(
+            band.floor,
+          );
+        }
+      }
+    }
+  });
+
+  test("B compressed (canonical census fixture): the exam-edit inline panel keeps its actions column on screen", async ({
+    page,
+    request,
+  }) => {
+    // The census' second forced-overflow fixture: the inline selected-question
+    // panel is ~438px wide, so pre-Phase-F the actions column was entirely
+    // off-screen behind a scroll. It must now compress and stay scroll-free.
+    const seeded = await seedExam(request, "data-view-inline", {
+      questionAnswer: true,
+    });
+    await page.setViewportSize({ ...NORMAL });
+    await loginAsAdmin(page);
+    await page.goto(`/admin/exams/${seeded.examId}/edit`);
+    // The inline panel renders once the exam's own questions have resolved —
+    // wait for the ROW (the data), not just for a shell to exist, so a slow
+    // question fetch on a loaded host cannot be mistaken for a geometry result.
+    const shell = page.locator('[data-slot="admin-table-shell"]').first();
+    await expect(
+      shell.locator('[data-slot="table-body"] [data-slot="table-row"]').first(),
+    ).toBeVisible({ timeout: 30_000 });
     const g = await probeDataView(shell);
 
-    // management-list can never upgrade beyond standard, however wide the
-    // container is (V4/S6 rule) — the ceiling is a tier fact, not a width cap.
-    expect(g.archetype).toBe("management-list");
-    expect(g.tier).toBe("standard");
-    expect(g.regionBox).toBeGreaterThan(1200);
+    expect(g.archetype).toBe("embedded-picker");
+    expect(g.state).toBe("compressed");
+    expect(g.clientWidth).toBeLessThan(600);
+    expect(g.colSum).toBe(g.clientWidth);
+    expect(g.overflowing).toBe(false);
+    expectFittedRegion(g);
+
+    // The actions column is INSIDE the frame — the census defect.
+    const actionsCell = shell
+      .locator('[data-slot="table-cell"][data-column-role="actions"]')
+      .first();
+    await expect(actionsCell).toBeVisible();
+    const cellBox = (await actionsCell.boundingBox())!;
+    const regionBox = (await shell
+      .locator("[data-table-archetype]")
+      .boundingBox())!;
+    expect(cellBox.x + cellBox.width).toBeLessThanOrEqual(
+      regionBox.x + regionBox.width + PX,
+    );
+    expect(g.clippedHeaders).toEqual([]);
+  });
+
+  test("C preferred: a container between Σbasis and the cap renders every column at basis × scale", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ ...NORMAL });
+    await loginAsAdmin(page);
+    const { geometry: g } = await openShell(page, "/admin/exams");
+
+    expect(g.state).toBe("preferred");
+    expect(g.clientWidth).toBeGreaterThanOrEqual(g.basis);
+    expect(g.clientWidth).toBeLessThanOrEqual(
+      Math.floor(g.basis * EXPANSION_CAP),
+    );
     expect(g.colSum).toBe(g.clientWidth);
     expectAllocationIsRendered(g);
-    expectNoPaintedScrollbar(g);
+    expectFittedRegion(g);
+
+    // ONE shared scale over the whole declaration set — not a single lucky
+    // width:auto column absorbing the residual while its neighbours clip
+    // (measured pre-Phase-F: 考试名称 626px while 及格分 stayed at 80px).
+    const scale = g.clientWidth / g.basis;
+    expect(scale).toBeGreaterThan(1);
+    for (const [index, column] of g.columns.entries()) {
+      const band = g.bands[index];
+      expect(band, `column ${index} has no declared band`).toBeTruthy();
+      expect(
+        column.width,
+        `column ${index} (${column.role}) must render at basis × scale`,
+      ).toBeGreaterThanOrEqual(Math.floor((band?.basis ?? 0) * scale) - 1);
+      expect(
+        column.width,
+        `column ${index} (${column.role}) must render at basis × scale`,
+      ).toBeLessThanOrEqual(Math.ceil((band?.basis ?? 0) * scale) + 1);
+      expect(
+        column.width,
+        `column ${index} (${column.role}) must grow past its floor here`,
+      ).toBeGreaterThanOrEqual((band?.floor ?? 0) - PX);
+    }
+    // The mixed-role declaration set is what makes this page the canonical
+    // fixture: at least one atomic role and one compressible role are present.
+    expect(
+      g.bands.filter((b) => b.floor === b.basis).length,
+      "the exams declaration set mixes atomic and compressible roles",
+    ).toBeGreaterThan(0);
+    expect(
+      g.bands.filter((b) => b.floor < b.basis).length,
+      "the exams declaration set mixes atomic and compressible roles",
+    ).toBeGreaterThan(0);
+
+    await expect(page.locator('[data-slot="table-scroll-hint"]')).toHaveCount(
+      0,
+    );
     await assertNoHorizontalOverflow(page);
+  });
+
+  test("D expanded: a container past the cap stops the columns and completes the surface", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await loginAsAdmin(page);
+    // The users table is the sparse fixture: Σbasis 732, so 1280's region is
+    // already past cap × Σbasis.
+    const { geometry: g } = await openShell(page, "/admin/users", "last");
+
+    expect(g.state).toBe("expanded");
+    expect(g.clientWidth).toBeGreaterThan(Math.floor(g.basis * EXPANSION_CAP));
+
+    // The declared columns stop at the cap...
+    const capWidth = Math.floor(g.basis * EXPANSION_CAP);
+    expect(g.colSum).toBe(capWidth);
+    // ...the table element keeps the region's full width, and the remainder is
+    // carried by the empty trailing cell.
+    expect(g.tableWidth).toBeGreaterThanOrEqual(g.clientWidth - 1);
+    expect(g.tableWidth).toBeLessThanOrEqual(g.clientWidth + PX);
+    expect(g.spacer).toBeGreaterThan(0);
+    expect(
+      Math.abs(g.spacer - (g.clientWidth - g.colSum)),
+      "the spacer is exactly the region's remainder",
+    ).toBeLessThanOrEqual(1);
+    // The grid stays complete: the header band spans the surface, not just the
+    // capped columns (measured pre-spacer: the tinted band stopped 430px short
+    // of the card edge on /admin/dashboard).
+    expect(g.headerRowWidth).toBeGreaterThanOrEqual(g.clientWidth - 1);
+    expect(g.headerRowWidth).toBeLessThanOrEqual(g.clientWidth + PX);
+
+    // Every column is basis × the cap scale — the bound is uniform, not a
+    // per-role maxWidth.
+    const capScale = capWidth / g.basis;
+    for (const [index, column] of g.columns.entries()) {
+      const basis = g.bands[index]?.basis ?? 0;
+      expect(
+        column.width,
+        `column ${index} (${column.role}) must stop at basis × cap`,
+      ).toBeGreaterThanOrEqual(Math.floor(basis * capScale) - 1);
+      expect(
+        column.width,
+        `column ${index} (${column.role}) must stop at basis × cap`,
+      ).toBeLessThanOrEqual(Math.ceil(basis * capScale) + 1);
+    }
+
+    expectAllocationIsRendered(g);
+    expectFittedRegion(g);
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("Header capacity: no supported header label is clipped on any production data view", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ ...NORMAL });
+    await loginAsAdmin(page);
+    // Header copy is a geometry channel, not decoration: the basis of every
+    // role is at least its declared header capacity (table/headerCapacity.ts),
+    // so at preferred geometry every supported label fits. This sweep proves
+    // the rendered consequence across the production surfaces that carry the
+    // widest header vocabulary. A route whose dataset is empty renders its own
+    // empty state (no table, nothing to measure) — the checked-shell count
+    // below keeps that from silently turning the gate into a no-op.
+    const ROUTES = [
+      "/admin/exams",
+      "/admin/questions",
+      "/admin/users",
+      "/admin/courses",
+      "/admin/results",
+      "/admin/grading-queue",
+      "/admin/audit-logs",
+      "/admin/recovery",
+      "/admin/candidates",
+      "/admin/candidate-fields",
+      "/admin/dashboard",
+    ];
+    let checked = 0;
+    for (const route of ROUTES) {
+      await page.goto(route);
+      for (const { index, geometry: g } of await probeAllocatedShells(page)) {
+        expect(
+          g.clippedHeaders,
+          `${route} shell ${index}: header labels must fit their column`,
+        ).toEqual([]);
+        checked += 1;
+      }
+    }
+    expect(
+      checked,
+      "the header-capacity sweep must actually reach the production tables",
+    ).toBeGreaterThanOrEqual(8);
   });
 
   test("Long content: every column role keeps its overflow policy and no neighbour is overlapped", async ({
@@ -490,7 +835,7 @@ test.describe("data view fixtures (UI-DATA-VIEW-1, #601 Phase F)", () => {
     }
 
     const g = await probeDataView(shell);
-    expectNoPaintedScrollbar(g);
+    expectFittedRegion(g);
     await assertNoHorizontalOverflow(page);
   });
 
@@ -530,7 +875,7 @@ test.describe("data view fixtures (UI-DATA-VIEW-1, #601 Phase F)", () => {
 
     // The workbench composition: ONE toolbar region of the same continuous
     // shell as the table, with the search slot and the filter controls inside
-    // it, and the count in the shell's footer region.
+    // it, and the count in the shared footer region.
     await page.goto("/admin/questions");
     const workbench = page.locator('[data-slot="data-workbench"]');
     await workbench.waitFor({ state: "visible" });
@@ -544,8 +889,18 @@ test.describe("data view fixtures (UI-DATA-VIEW-1, #601 Phase F)", () => {
       await workbench.locator('[data-slot="toolbar-filter"]').count(),
     ).toBeGreaterThan(0);
     await expect(
-      workbench.locator('[data-slot="workbench-footer"]'),
+      workbench.locator('[data-slot="data-view-footer"]'),
     ).toBeVisible();
+    // The count lives in ONE place — the shared footer — and never in the
+    // toolbar (DataToolbar.summary was retired by Phase F).
+    await expect(
+      workbench.locator('[data-slot="data-view-footer"]'),
+    ).toContainText(/\d/);
+    await expect(
+      workbench.locator(
+        '[data-slot="workbench-toolbar"] [data-slot="data-view-footer"]',
+      ),
+    ).toHaveCount(0);
     await expect(
       workbench
         .locator('[data-slot="table-body"] [data-slot="table-row"]')
@@ -561,6 +916,69 @@ test.describe("data view fixtures (UI-DATA-VIEW-1, #601 Phase F)", () => {
         .filter({ hasText: String(stamp) })
         .first(),
     ).toBeVisible();
+  });
+
+  test("Composition: a governed table never sits inside a second bordered surface", async ({
+    page,
+  }) => {
+    // The PageSection nesting accident: a shell wrapped in another
+    // `surface-content` section lost 44px to the second border + padding and
+    // painted a double edge. The fix is composition (the shell IS the data
+    // surface: its own title band carries the section heading), never a
+    // defensive prop — so the gate is structural: no governed shell may have a
+    // surface ancestor.
+    await page.setViewportSize({ ...NORMAL });
+    await loginAsAdmin(page);
+    const ROUTES = [
+      "/admin/exams",
+      "/admin/questions",
+      "/admin/users",
+      "/admin/courses",
+      "/admin/results",
+      "/admin/recovery",
+      "/admin/audit-logs",
+      "/admin/dashboard",
+      "/admin/candidate-fields",
+    ];
+    let checked = 0;
+    for (const route of ROUTES) {
+      await page.goto(route);
+      const shells = page.locator(
+        '[data-slot="admin-table-shell"], [data-slot="data-workbench"]',
+      );
+      await shells
+        .first()
+        .waitFor({ state: "visible", timeout: 10_000 })
+        .catch(() => {});
+      const count = await shells.count();
+      if (count === 0) continue; // empty dataset → the page's own empty state
+      const nested = await shells.evaluateAll((els) =>
+        els.map((el) => {
+          // The element's own surface (a DataTableShell IS a surface) is fine;
+          // an ANCESTOR surface is the nesting accident. The workbench is the
+          // one legal case: its region lives inside the workbench's own
+          // continuous surface.
+          const ancestor =
+            el.parentElement?.closest(".surface-content") ?? null;
+          if (ancestor === null) return null;
+          const legalWorkbenchRegion =
+            el.getAttribute("data-slot") === "admin-table-shell" &&
+            ancestor.getAttribute("data-slot") === "data-workbench";
+          return legalWorkbenchRegion
+            ? null
+            : `${ancestor.getAttribute("data-slot") ?? "section"}:${ancestor.className}`;
+        }),
+      );
+      expect(
+        nested.filter(Boolean),
+        `${route}: a data surface must not be nested inside another surface-content`,
+      ).toEqual([]);
+      checked += count;
+    }
+    expect(
+      checked,
+      "the composition sweep must actually reach the production surfaces",
+    ).toBeGreaterThanOrEqual(8);
   });
 
   test("Pagination: a page change repaints no scrollbar and keeps the table's footprint", async ({

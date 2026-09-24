@@ -57,11 +57,17 @@ describe("toolbar control sizing migration (issue 458)", () => {
     expect(datePicker).toMatch(/w-\[160px\]/);
   });
 
-  it("migrated RecoveryQueue ownerless bare inputs to the shared Input control", () => {
+  it("migrated RecoveryQueue ownerless bare inputs to the shared exact-text filter", () => {
     const source = read("pages/admin/RecoveryQueuePage.tsx");
     expect(source).not.toMatch(/<input\b/);
-    expect(source).toMatch(/<Input\b/);
+    // The exact-identifier filters use the shared text-commit owner (no
+    // page-local debounce / draftRef / blur-flush plumbing) and the semantic
+    // width tier.
+    expect(source).toMatch(/<TextFilterInput\b/);
     expect(source).toMatch(/ToolbarFilter size="wide"/);
+    expect(source).not.toMatch(
+      /draftRef|scheduleDebouncedCommit|FILTER_DEBOUNCE_MS/,
+    );
   });
 
   it("does not pre-build a filter-collapse mechanism", () => {

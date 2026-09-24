@@ -12,6 +12,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import {
   DataTableCell,
   DataTableSpanCell,
@@ -372,29 +373,33 @@ export function AuditLogPage() {
           </DataToolbar>
         }
         footer={
-          <div className="flex items-center justify-between type-secondary">
-            <span>{t("admin.audit.pageInfo", { count: items.length })}</span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!hasPrev}
-                onClick={goPrev}
-              >
-                <AppIcon icon={ChevronLeft} size="inline" className="mr-1" />
-                {t("common.table.prev")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!hasNext}
-                onClick={goNext}
-              >
-                {t("common.table.next")}
-                <AppIcon icon={ChevronRight} size="inline" className="ml-1" />
-              </Button>
-            </div>
-          </div>
+          // Cursor navigation stays semantically distinct from page-number
+          // pagination; only its placement and surface converge (DataViewFooter).
+          <DataViewFooter
+            summary={t("admin.audit.pageInfo", { count: items.length })}
+            navigation={
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!hasPrev}
+                  onClick={goPrev}
+                >
+                  <AppIcon icon={ChevronLeft} size="inline" className="mr-1" />
+                  {t("common.table.prev")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!hasNext}
+                  onClick={goNext}
+                >
+                  {t("common.table.next")}
+                  <AppIcon icon={ChevronRight} size="inline" className="ml-1" />
+                </Button>
+              </>
+            }
+          />
         }
       >
         <DataTableSurface

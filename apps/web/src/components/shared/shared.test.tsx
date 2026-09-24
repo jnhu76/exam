@@ -7,6 +7,7 @@ import { DesktopDataTable } from "./DesktopDataTable";
 import type { DataViewColumnDef } from "./DesktopDataTable";
 import { MobileRecordList } from "./MobileRecordList";
 import { DataTablePagination } from "./DataTablePagination";
+import { DataViewFooter } from "./DataViewFooter";
 import { DataTableShell } from "./DataTableShell";
 import { DataToolbar } from "./DataToolbar";
 import { EmptyState } from "./EmptyState";
@@ -320,15 +321,26 @@ describe("DataTablePagination", () => {
     const onPageChange = vi.fn();
 
     render(
-      <DataTablePagination
-        page={1}
-        pageSize={10}
-        total={25}
-        onPageChange={onPageChange}
+      <DataViewFooter
+        range={{ page: 1, pageSize: 10, total: 25 }}
+        navigation={
+          <DataTablePagination
+            page={1}
+            pageSize={10}
+            total={25}
+            onPageChange={onPageChange}
+          />
+        }
       />,
     );
 
+    // The count/range line is owned by the footer authority; the pagination
+    // control owns navigation only (issue 601 Phase F convergence).
     expect(screen.getByText("共 25 条，显示 1-10 条")).toBeInTheDocument();
+    expect(screen.getByText("共 25 条，显示 1-10 条")).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
 
     await user.click(screen.getByRole("button", { name: /下一页/ }));
     expect(onPageChange).toHaveBeenCalledWith(2);
@@ -352,11 +364,16 @@ describe("DataTablePagination", () => {
 
   it("normalizes non-positive page sizes", () => {
     render(
-      <DataTablePagination
-        page={1}
-        pageSize={0}
-        total={3}
-        onPageChange={() => {}}
+      <DataViewFooter
+        range={{ page: 1, pageSize: 0, total: 3 }}
+        navigation={
+          <DataTablePagination
+            page={1}
+            pageSize={0}
+            total={3}
+            onPageChange={() => {}}
+          />
+        }
       />,
     );
 
@@ -581,10 +598,7 @@ describe("FieldRow", () => {
 describe("DataToolbar", () => {
   it("renders toolbar content and actions", () => {
     render(
-      <DataToolbar
-        summary="共 3 条"
-        actions={<button type="button">导入</button>}
-      >
+      <DataToolbar actions={<button type="button">导入</button>}>
         <label htmlFor="keyword">关键词</label>
         <input id="keyword" />
       </DataToolbar>,
@@ -594,7 +608,6 @@ describe("DataToolbar", () => {
       screen.getByRole("toolbar", { name: "数据工具栏" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("关键词")).toBeInTheDocument();
-    expect(screen.getByText("共 3 条")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导入" })).toBeInTheDocument();
     expect(screen.getByRole("toolbar")).toHaveAttribute(
       "data-toolbar-appearance",

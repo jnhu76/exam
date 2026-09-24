@@ -18,10 +18,11 @@ import {
 } from "@/components/shared/DesktopDataTable";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
+import { TextFilterInput } from "@/components/shared/TextFilterInput";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DatePicker } from "@/components/shared/DatePicker";
-import { Input } from "@/components/ui/input";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/shared/PageContainer";
@@ -36,8 +37,6 @@ import { RefreshCw, X, CircleAlert } from "lucide-react";
 
 /** Visible-tab polling interval (J5-I1B1 polling semantics). */
 const POLL_INTERVAL_MS = 30_000;
-/** Free-text filter debounce: commits to the URL after typing settles. */
-const FILTER_DEBOUNCE_MS = 400;
 /** A server snapshot older than this is flagged stale (Queue refresh contract). */
 const STALE_AFTER_MS = 60_000;
 /** Bounded failure backoff for the automatic poll cadence. */
@@ -149,88 +148,66 @@ export function RecoveryQueuePage() {
     deps: [queryKey],
   });
 
-  // Free-text filter draft + debounce. The two drafts share ONE timer: the
-  // debounced commit always submits BOTH fields from a ref, so typing examId
-  // and then candidateId within the window can not drop the first filter.
-  // The commit uses a functional searchParams updater so concurrent changes
-  // (e.g. a status Select while a debounce is pending) are never overwritten
-  // by a stale closure.
+  // Free-text exact-identifier filters. The commit choreography (draft →
+  // debounce → blur/Enter flush → reset) is owned by TextFilterInput /
+  // useDataViewTextCommit; this page owns only what a committed value MEANS —
+  // the URL parameter it writes, atomically across the filter group.
   const [examIdDraft, setExamIdDraft] = useState(filters.examId);
   const [candidateIdDraft, setCandidateIdDraft] = useState(filters.candidateId);
-  const draftRef = useRef({
+
+  // Sync a draft from the URL only while the user has not typed past the last
+  // committed value (back/forward, link share). A draft that has moved ahead
+  // of the URL is an in-progress input and wins until its own commit lands —
+  // otherwise committing one filter would reset the other's pending draft.
+  const lastCommitted = useRef({
     examId: filters.examId,
     candidateId: filters.candidateId,
   });
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sync drafts when the URL changes externally (back/forward, link share).
-  // While a debounce is pending the draft is the user's in-progress input —
-  // it wins until the commit lands.
   useEffect(() => {
-    if (debounceRef.current) return;
-    setExamIdDraft(filters.examId);
-    setCandidateIdDraft(filters.candidateId);
-    draftRef.current.examId = filters.examId;
-    draftRef.current.candidateId = filters.candidateId;
-  }, [filters.examId, filters.candidateId]);
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
-  /** Commits a filter patch to the URL with replace semantics, always
-      starting from the LATEST URL params (never a stale closure). */
-  function commitFilter(patch: Partial<QueueFilters>) {
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        for (const [key, value] of Object.entries(patch)) {
-          if (value) next.set(key, value);
-          else next.delete(key);
-        }
-        return next;
-      },
-      { replace: true },
-    );
-  }
-
-  /** One debounce timer for both free-text fields; the commit reads the
-      draft ref so neither filter can be lost to a cancelled timer. */
-  function scheduleDebouncedCommit() {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      debounceRef.current = null;
-      commitFilter({
-        examId: draftRef.current.examId,
-        candidateId: draftRef.current.candidateId,
-      });
-    }, FILTER_DEBOUNCE_MS);
-  }
-
-  /** Flushes a pending debounced commit immediately (blur / Enter). */
-  function flushDebouncedCommit() {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-      commitFilter({
-        examId: draftRef.current.examId,
-        candidateId: draftRef.current.candidateId,
-      });
+    if (examIdDraft === lastCommitted.current.examId) {
+      setExamIdDraft(filters.examId);
     }
+    if (candidateIdDraft === lastCommitted.current.candidateId) {
+      setCandidateIdDraft(filters.candidateId);
+    }
+    lastCommitted.current = {
+      examId: filters.examId,
+      candidateId: filters.candidateId,
+    };
+  }, [filters.examId, filters.candidateId, examIdDraft, candidateIdDraft]);
+
+  /**
+   * Commits a filter patch to the URL with replace semantics.
+   *
+   * The write is ATOMIC across the filter group: react-router's functional
+   * `setSearchParams` updater reads the params captured at RENDER time, so two
+   * commits landing in the same task — the two debounced text filters expiring
+   * together — would both apply against the same base and the first would be
+   * silently dropped. This ref carries the last written params, so every commit
+   * starts from the latest URL state whether or not a re-render happened in
+   * between.
+   */
+  const latestParams = useRef(searchParams);
+  useEffect(() => {
+    latestParams.current = searchParams;
+  }, [searchParams]);
+
+  function commitFilter(patch: Partial<QueueFilters>) {
+    const next = new URLSearchParams(latestParams.current);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    latestParams.current = next;
+    setSearchParams(next, { replace: true });
   }
 
   function clearFilters() {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
     setExamIdDraft("");
     setCandidateIdDraft("");
-    draftRef.current.examId = "";
-    draftRef.current.candidateId = "";
-    setSearchParams(new URLSearchParams(), { replace: true });
+    const cleared = new URLSearchParams();
+    latestParams.current = cleared;
+    setSearchParams(cleared, { replace: true });
   }
 
   const fromDate = filters.createdFrom
@@ -435,23 +412,16 @@ export function RecoveryQueuePage() {
               </SelectContent>
             </Select>
             <ToolbarFilter size="wide">
-              <Input
+              <TextFilterInput
                 aria-label={t("admin.recoveryQueue.filters.examPlaceholder")}
                 placeholder={t("admin.recoveryQueue.filters.examPlaceholder")}
                 value={examIdDraft}
-                onChange={(e) => {
-                  setExamIdDraft(e.target.value);
-                  draftRef.current.examId = e.target.value;
-                  scheduleDebouncedCommit();
-                }}
-                onBlur={flushDebouncedCommit}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") flushDebouncedCommit();
-                }}
+                onChange={setExamIdDraft}
+                onCommit={(examId) => commitFilter({ examId })}
               />
             </ToolbarFilter>
             <ToolbarFilter size="wide">
-              <Input
+              <TextFilterInput
                 aria-label={t(
                   "admin.recoveryQueue.filters.candidatePlaceholder",
                 )}
@@ -459,15 +429,8 @@ export function RecoveryQueuePage() {
                   "admin.recoveryQueue.filters.candidatePlaceholder",
                 )}
                 value={candidateIdDraft}
-                onChange={(e) => {
-                  setCandidateIdDraft(e.target.value);
-                  draftRef.current.candidateId = e.target.value;
-                  scheduleDebouncedCommit();
-                }}
-                onBlur={flushDebouncedCommit}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") flushDebouncedCommit();
-                }}
+                onChange={setCandidateIdDraft}
+                onCommit={(candidateId) => commitFilter({ candidateId })}
               />
             </ToolbarFilter>
             <DatePicker
@@ -509,17 +472,19 @@ export function RecoveryQueuePage() {
         mobile={<MobileRecordList columns={columns} rows={items} />}
         footer={
           nextCursor ? (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={loadMore}
-                disabled={isLoadingMore || isRefreshing}
-              >
-                {isLoadingMore
-                  ? t("admin.recoveryQueue.loadingMore")
-                  : t("admin.recoveryQueue.loadMore")}
-              </Button>
-            </div>
+            <DataViewFooter
+              navigation={
+                <Button
+                  variant="outline"
+                  onClick={loadMore}
+                  disabled={isLoadingMore || isRefreshing}
+                >
+                  {isLoadingMore
+                    ? t("admin.recoveryQueue.loadingMore")
+                    : t("admin.recoveryQueue.loadMore")}
+                </Button>
+              }
+            />
           ) : undefined
         }
       >

@@ -128,7 +128,7 @@ test.describe("table contract v2 runtime geometry (issue 454)", () => {
     expect(g.containerWidth).toBeGreaterThan(850);
   });
 
-  test("V2 narrow: local scroll + affordance + sticky first column, score reachable", async ({
+  test("V2 narrow: the table fits without scroll and the score column is inside the frame", async ({
     page,
     request,
   }) => {
@@ -151,12 +151,63 @@ test.describe("table contract v2 runtime geometry (issue 454)", () => {
     await shell.waitFor({ state: "visible" });
     const g = await probeTable(shell);
 
-    // S2/S3 evidence: narrower than Σ roleMin → real physical scroll with
-    // container-gated affordance; the table is never silently compressed
-    // below its semantic column minima.
+    // #601 Phase F contract change (intentional, with evidence): the old rule
+    // used the role's PREFERRED width as the scroll trigger, so this 770px
+    // container scrolled even though every hard floor fits — the Data View
+    // Geometry Census' central defect. The allocator now scrolls only below
+    // Σfloor, so at 820px this table COMPRESSES into the container.
     expect(g.tier).toBe("compact");
-    expect(g.scrollWidth).toBeGreaterThan(g.clientWidth + 1);
+    expect(g.overflowing).toBe(false);
+    expect(g.scrollWidth).toBeLessThanOrEqual(g.clientWidth + 1);
+    expect(g.tableWidth).toBeLessThanOrEqual(g.clientWidth + 1);
+    await expect(shell.locator('[data-slot="table-scroll-hint"]')).toHaveCount(
+      0,
+    );
+
+    // Score is the LAST column and must be fully inside the scroll frame.
+    const scoreCell = page
+      .locator('[data-slot="table-cell"][data-column-role="score"]')
+      .last();
+    await expect(scoreCell).toBeVisible();
+    const frame = shell.locator('[data-slot="table-scroll-region"]');
+    const box = await frame.boundingBox();
+    const score = await scoreCell.boundingBox();
+    expect(box).not.toBeNull();
+    expect(score).not.toBeNull();
+    expect(right(score!)).toBeLessThanOrEqual(right(box!) + 1);
+  });
+
+  test("V2 overflow: below Σfloor the region scrolls with the affordance and a sticky first column", async ({
+    page,
+    request,
+  }) => {
+    // The same page and the same table as V2-narrow, driven below its hard
+    // floors: 375px leaves the detail-comparison table ~327px, so the local
+    // scroll (and only then) is the honest affordance. This is the regime
+    // split the census required — the scroll must not appear while the floors
+    // still fit.
+    await page.setViewportSize({ width: 375, height: 812 });
+    const seeded = await seedExam(request, "contract-v2-overflow", {
+      questionAnswer: true,
+      questionScore: 100,
+      passingScore: 60,
+      resultPublicationMode: "immediate",
+    });
+
+    await candidateLogin(page, seeded.candidate);
+    await startExamFromList(page, seeded.examId);
+    await answerTrueFalse(page, true);
+    await waitForSaveSaved(page);
+    await submitExam(page);
+    await page.waitForURL("**/result", { timeout: 15_000 });
+
+    const shell = page.locator('[data-slot="admin-table-shell"]');
+    await shell.waitFor({ state: "visible" });
+    const g = await probeTable(shell);
+
+    expect(g.archetype).toBe("detail-comparison");
     expect(g.overflowing).toBe(true);
+    expect(g.scrollWidth).toBeGreaterThan(g.clientWidth + 1);
     await expect(
       shell.locator('[data-slot="table-scroll-hint"]'),
     ).toBeVisible();

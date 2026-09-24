@@ -154,6 +154,29 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
+  it("ends a filled table's grid at the region edge (no 0.5px scroll range)", () => {
+    // #601 Phase F: under border-collapse the outer half of the last column's
+    // 1px right border sits outside the table's content edge, so a table sized
+    // to the region's content box reported scrollWidth = clientWidth + 1 — a
+    // fitted region with 1px of scrollable overflow, which classic scrollbars
+    // (Windows Chrome) answer with a painted horizontal scrollbar (measured at
+    // 1440: /admin/exams, /admin/candidates, /admin/recovery each rendered a
+    // 1142.5px table box inside a 1142px region). The compressed and preferred
+    // regimes fill the region exactly, so their last column draws no right
+    // border; the expanded regime keeps it (an interior edge against the
+    // trailing spacer cell) and the overflow regime keeps it too (the table
+    // genuinely scrolls and its right edge is scroll content).
+    expect(tableCss).toMatch(
+      /\[data-geometry-state="compressed"\]\s*tr\s*>\s*:last-child[\s\S]*?border-right-width:\s*0/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-geometry-state="preferred"\]\s*tr\s*>\s*:last-child[\s\S]*?border-right-width:\s*0/,
+    );
+    expect(tableCss).not.toMatch(
+      /\[data-geometry-state="expanded"\]\s*tr\s*>\s*:last-child[\s\S]*?border-right-width:\s*0/,
+    );
+  });
+
   it("binds the actions column to the icon-only contract width", () => {
     // issue 445 P3 §4.3: the inline row-action vocabulary is icon-only and
     // count-bounded, so the actions column's floor is the derived contract
@@ -161,7 +184,10 @@ describe("table and color visual-finish authority", () => {
     // density selectors are gone entirely. #601 Phase F: the width lives in
     // the allocation authority, not in CSS; a floor is a minimum, not an
     // exact rendered width (the proportional allocator may widen it).
-    expect(ROLE_GEOMETRY.actions).toEqual({ min: ACTIONS_MIN_FINE });
+    expect(ROLE_GEOMETRY.actions).toEqual({
+      floor: ACTIONS_MIN_FINE,
+      basis: ACTIONS_MIN_FINE,
+    });
     expect(ACTIONS_MIN_COARSE).toBe(120);
     expect(tableCss).not.toContain("data-actions-density");
   });
@@ -174,28 +200,30 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).not.toMatch(
       /\[data-column-role=[^\]]*\]\s*\{[^}]*min-width:/,
     );
-    // The geometry vocabulary is { min } only: the proportional allocator
-    // (#601 Phase F, user-ratified) has no locked/flexible split — every
-    // column's floor is both its minimum and its residual weight.
+    // The geometry vocabulary is { floor, basis } only (issue 601 Phase F
+    // convergence): no maxWidth, no grow/shrink weights, no per-role solver.
+    // `floor == basis` marks an atomic role; `floor < basis` marks a role that
+    // already declares a narrower legal representation. `basis` is the larger
+    // of the role's value token and its header capacity (number/duration).
     expect(
       Object.entries(ROLE_GEOMETRY)
         .filter(([role]) => role !== "actions")
-        .map(([role, g]) => `${role}:${g.min}`),
+        .map(([role, g]) => `${role}:${g.floor}/${g.basis}`),
     ).toEqual([
-      "primary-text:192",
-      "secondary-text:144",
-      "long-text:256",
-      "description:208",
-      "tag-list:160",
-      "status:136",
-      "date:168",
-      "date-range:232",
-      "duration:80",
-      "number:72",
-      "score:80",
-      "short-id:120",
-      "type:116",
-      "action-label:152",
+      "primary-text:100/192",
+      "secondary-text:84/144",
+      "long-text:132/256",
+      "description:132/208",
+      "tag-list:104/160",
+      "status:136/136",
+      "date:168/168",
+      "date-range:232/232",
+      "duration:80/96",
+      "number:72/112",
+      "score:80/80",
+      "short-id:120/120",
+      "type:116/116",
+      "action-label:152/152",
     ]);
   });
 

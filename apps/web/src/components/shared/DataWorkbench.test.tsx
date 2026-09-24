@@ -1,10 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  DataWorkbench,
-  DataWorkbenchToolbar,
-  DataWorkbenchFooter,
-} from "./DataWorkbench";
+import { DataWorkbench, DataWorkbenchToolbar } from "./DataWorkbench";
+import { DataViewFooter } from "./DataViewFooter";
 
 function setScrollMetrics(
   element: HTMLElement,
@@ -39,9 +36,7 @@ describe("DataWorkbench", () => {
         }
         desktopTable={<table aria-label="题目表" />}
         footer={
-          <DataWorkbenchFooter>
-            <span>共 0 条</span>
-          </DataWorkbenchFooter>
+          <DataViewFooter variant="continuous" summary={<span>共 0 条</span>} />
         }
       />,
     );

@@ -205,10 +205,13 @@ the component or density role, not improvised per page.
 
 ### Admin toolbar
 
-`DataToolbar` owns filter grouping, search, counts, reset/query controls, and
-secondary actions. The toolbar is a white bordered surface with 8px radius,
-coherent spacing, equal-height controls, and responsive wrapping. An empty
-toolbar or a strip containing only a count is forbidden.
+`DataToolbar` owns the dataset-scoped controls: filter grouping, search,
+reset/query controls, and bulk/secondary actions. It is a quiet band inside the
+data surface — not a second bordered surface — with coherent spacing,
+equal-height controls, and responsive wrapping. An empty toolbar is forbidden,
+and so is a band containing only a count: a count belongs to `DataViewFooter`
+(or to the shell's title band when it belongs with the title), because it is
+not a control. Page-scoped actions stay in the `PageHeader`.
 
 ### Admin table shell
 
@@ -216,7 +219,17 @@ toolbar or a strip containing only a count is forbidden.
 complete outer boundary, optional title/description/count band, local overflow,
 table area, and footer. Headers use `surface-subtle`, body rows use `surface`,
 and row separators remain visible. Action columns are stable, right-aligned,
-and use `RowActions` with accessible button targets.
+and use `RowActions` with accessible button targets. A shell is never nested
+inside a second bordered surface: it IS the data surface, and its title band
+carries the section heading.
+
+Column widths are computed by one allocator from each role's
+`{ floor, basis }` band (see
+[`docs/standards/ui-system.md`](docs/standards/ui-system.md) §Tables): below
+Σfloor the region scrolls at the floors, in between the columns interpolate,
+and above Σbasis they grow proportionally up to one table-level cap — past the
+cap the region's remainder stays as surface rather than stretching a short
+column across the card.
 
 ### Status and feedback
 

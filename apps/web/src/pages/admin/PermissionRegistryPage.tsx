@@ -16,14 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { PermissionMatrixTable } from "@/components/shared/PermissionMatrixTable";
 
 /** Backend projections (mirror the @exam/contracts response schemas). */
 interface PermissionEntry {
@@ -190,6 +184,19 @@ export function PermissionRegistryPage() {
     [registry],
   );
 
+  // The matrix's role-column labels are a bounded static vocabulary (the
+  // assignable presets), resolved once here so the geometry authority can size
+  // the columns without the page owning a width.
+  const roleLabels = useMemo(
+    () =>
+      assignableRoles.map((role) =>
+        t(`admin.permissions.roles.role.${role.key}` as never, {
+          defaultValue: role.label,
+        }),
+      ),
+    [assignableRoles, t],
+  );
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadRegistry} />;
 
@@ -249,61 +256,45 @@ export function PermissionRegistryPage() {
         <p className="type-secondary">
           {t("admin.permissions.roles.description")}
         </p>
-        <div className="overflow-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[220px]">
-                  {t("admin.permissions.roles.columnPermission")}
-                </TableHead>
-                {assignableRoles.map((role) => (
-                  <TableHead key={role.key} className="text-center">
-                    {t(`admin.permissions.roles.role.${role.key}` as never, {
-                      defaultValue: role.label,
+        <PermissionMatrixTable roleLabels={roleLabels}>
+          <TableBody>
+            {groupedPermissions.map(([category, entries]) => (
+              <Fragment key={category}>
+                <TableRow className="bg-muted/50">
+                  <TableCell
+                    colSpan={roleLabels.length + 1}
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t(`admin.permissions.categories.${category}` as never, {
+                      defaultValue: category,
                     })}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {groupedPermissions.map(([category, entries]) => (
-                <Fragment key={category}>
-                  <TableRow className="bg-muted/50">
-                    <TableCell
-                      colSpan={assignableRoles.length + 1}
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      {t(`admin.permissions.categories.${category}` as never, {
-                        defaultValue: category,
-                      })}
+                  </TableCell>
+                </TableRow>
+                {entries.map((entry) => (
+                  <TableRow key={entry.key}>
+                    <TableCell className="font-mono text-xs">
+                      {entry.key}
                     </TableCell>
-                  </TableRow>
-                  {entries.map((entry) => (
-                    <TableRow key={entry.key}>
-                      <TableCell className="font-mono text-xs">
-                        {entry.key}
+                    {assignableRoles.map((role) => (
+                      <TableCell key={role.key} className="text-center">
+                        {role.permissions.includes(entry.key) ? (
+                          <AppIcon
+                            icon={BadgeCheck}
+                            size="inline"
+                            className="text-primary"
+                            aria-label={t("admin.permissions.roles.granted")}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
-                      {assignableRoles.map((role) => (
-                        <TableCell key={role.key} className="text-center">
-                          {role.permissions.includes(entry.key) ? (
-                            <AppIcon
-                              icon={BadgeCheck}
-                              size="inline"
-                              className="text-primary"
-                              aria-label={t("admin.permissions.roles.granted")}
-                            />
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </Fragment>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                    ))}
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+          </TableBody>
+        </PermissionMatrixTable>
       </section>
 
       {/* 3. Capability grants of a staff user — role-preset union, NOT

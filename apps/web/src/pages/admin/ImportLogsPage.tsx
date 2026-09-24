@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
   DataTableCell,
@@ -166,11 +167,20 @@ export function ImportLogsPage() {
           </DataToolbar>
         }
         footer={
-          <DataTablePagination
-            page={data.page}
-            pageSize={data.pageSize}
-            total={data.total}
-            onPageChange={setPage}
+          <DataViewFooter
+            range={{
+              page: data.page,
+              pageSize: data.pageSize,
+              total: data.total,
+            }}
+            navigation={
+              <DataTablePagination
+                page={data.page}
+                pageSize={data.pageSize}
+                total={data.total}
+                onPageChange={setPage}
+              />
+            }
           />
         }
       >

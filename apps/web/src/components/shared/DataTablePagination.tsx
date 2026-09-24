@@ -31,7 +31,15 @@ function buildVisiblePages(page: number, pageCount: number) {
  * Pagination controls for data tables, showing item count summary,
  * page numbers, and previous/next navigation buttons. All copy resolves from
  * `common.table.*` with interpolation; explicit `aria-label` wins over the
- * default `common.table.paginationLabel`.
+ * Page-number navigation for data tables.
+ *
+ * It owns the NAVIGATION only: page numbers plus previous/next. The count /
+ * range line lives in DataViewFooter (the single footer/count composition
+ * authority, issue 601 Phase F convergence) — a pagination control that also
+ * rendered its own summary was a second, parallel count authority.
+ *
+ * All copy resolves from `common.table.*` with interpolation; explicit
+ * `aria-label` wins over the default `common.table.paginationLabel`.
  */
 export function DataTablePagination({
   page,
@@ -45,68 +53,55 @@ export function DataTablePagination({
   const safePageSize = pageSize > 0 ? pageSize : 1;
   const pageCount = Math.max(1, Math.ceil(total / safePageSize));
   const currentPage = Math.min(Math.max(page, 1), pageCount);
-  const startItem = total === 0 ? 0 : (currentPage - 1) * safePageSize + 1;
-  const endItem = Math.min(total, currentPage * safePageSize);
   const visiblePages = buildVisiblePages(currentPage, pageCount);
   const label = ariaLabel ?? t("common.table.paginationLabel");
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 type-secondary sm:flex-row sm:items-center sm:justify-between",
-        className,
-      )}
+    <Pagination
+      aria-label={label}
+      className={cn("mx-0 w-auto justify-end", className)}
     >
-      <div aria-live="polite">
-        {t("common.table.summary", {
-          total,
-          start: startItem,
-          end: endItem,
-        })}
-      </div>
-      <Pagination aria-label={label} className="mx-0 w-auto justify-end">
-        <PaginationContent>
-          <PaginationItem>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={currentPage <= 1}
-              onClick={() => onPageChange(currentPage - 1)}
+      <PaginationContent>
+        <PaginationItem>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(currentPage - 1)}
+          >
+            <AppIcon icon={ChevronLeftIcon} size="inline" />
+            {t("common.table.prev")}
+          </Button>
+        </PaginationItem>
+        {visiblePages.map((pageNumber) => (
+          <PaginationItem key={pageNumber}>
+            <PaginationLink
+              href="#"
+              isActive={pageNumber === currentPage}
+              aria-label={t("common.table.pageLabel", { page: pageNumber })}
+              onClick={(event) => {
+                event.preventDefault();
+                onPageChange(pageNumber);
+              }}
             >
-              <AppIcon icon={ChevronLeftIcon} size="inline" />
-              {t("common.table.prev")}
-            </Button>
+              {pageNumber}
+            </PaginationLink>
           </PaginationItem>
-          {visiblePages.map((pageNumber) => (
-            <PaginationItem key={pageNumber}>
-              <PaginationLink
-                href="#"
-                isActive={pageNumber === currentPage}
-                aria-label={t("common.table.pageLabel", { page: pageNumber })}
-                onClick={(event) => {
-                  event.preventDefault();
-                  onPageChange(pageNumber);
-                }}
-              >
-                {pageNumber}
-              </PaginationLink>
-            </PaginationItem>
-          ))}
-          <PaginationItem>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={currentPage >= pageCount}
-              onClick={() => onPageChange(currentPage + 1)}
-            >
-              {t("common.table.next")}
-              <AppIcon icon={ChevronRightIcon} size="inline" />
-            </Button>
-          </PaginationItem>
-        </PaginationContent>
-      </Pagination>
-    </div>
+        ))}
+        <PaginationItem>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={currentPage >= pageCount}
+            onClick={() => onPageChange(currentPage + 1)}
+          >
+            {t("common.table.next")}
+            <AppIcon icon={ChevronRightIcon} size="inline" />
+          </Button>
+        </PaginationItem>
+      </PaginationContent>
+    </Pagination>
   );
 }

@@ -14,7 +14,8 @@ import {
   DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
-import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
+import { ToolbarFilter } from "@/components/shared/DataToolbar";
+import { FormSection } from "@/components/shared/FormSection";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -243,8 +244,13 @@ export function QuestionImportPage() {
     <PageContainer role="form" className="flex flex-col gap-6">
       <PageHeader title={t("admin.questionImport.title")} />
 
-      <DataToolbar
-        aria-label={t("admin.questionImport.courseLabel")}
+      {/* The import inputs are a FORM, not a dataset-scoped toolbar: they
+          configure the import (target course, template, file) rather than
+          filtering a dataset, so they render as a form section above the
+          preview tables instead of opening a data-view toolbar band
+          (issue 601 Phase F convergence). */}
+      <FormSection
+        title={t("admin.questionImport.courseLabel")}
         actions={
           <>
             <Button variant="outline" onClick={downloadTemplate}>
@@ -254,26 +260,23 @@ export function QuestionImportPage() {
           </>
         }
       >
-        <div className="flex flex-col gap-2">
-          <Label>{t("admin.questionImport.courseLabel")}</Label>
-          <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-            <ToolbarFilter size="wide">
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={t("admin.questionImport.coursePlaceholder")}
-                />
-              </SelectTrigger>
-            </ToolbarFilter>
-            <SelectContent>
-              {courses.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </DataToolbar>
+        <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+          <ToolbarFilter size="wide">
+            <SelectTrigger>
+              <SelectValue
+                placeholder={t("admin.questionImport.coursePlaceholder")}
+              />
+            </SelectTrigger>
+          </ToolbarFilter>
+          <SelectContent>
+            {courses.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FormSection>
 
       {parsedRows.length > 0 && !importResult && (
         <>

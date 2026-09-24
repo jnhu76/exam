@@ -125,7 +125,7 @@ describe("row-action capacity contract", () => {
 
   it("binds the actions column to the contract width (6rem fine / 7.5rem coarse)", () => {
     // #601 Phase F: the width authority is the allocator's ROLE_GEOMETRY.
-    expect(ROLE_GEOMETRY.actions).toEqual({ min: 96 });
+    expect(ROLE_GEOMETRY.actions).toEqual({ floor: 96, basis: 96 });
     expect(ACTIONS_MIN_COARSE).toBe(120);
   });
 

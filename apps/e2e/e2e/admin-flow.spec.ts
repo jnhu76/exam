@@ -207,7 +207,12 @@ test.describe("admin operation flow", () => {
 
     // Submit; the button label reflects the selection count.
     await page.getByRole("button", { name: /^添加\s*\(/ }).click();
-    await expect(page.getByText(extraName).first()).toBeVisible({
+    // Assert on the desktop TABLE ROW, not on any text node: the page keeps a
+    // CSS-hidden mobile card list (lg:hidden, rendered BEFORE the table in the
+    // DOM) with the same name, so getByText(...).first() resolves to a hidden
+    // element whenever the refetch lands after the picker dialog unmounts.
+    // getByRole only matches the visible row representation.
+    await expect(page.getByRole("row", { name: extraName })).toBeVisible({
       timeout: 15_000,
     });
 

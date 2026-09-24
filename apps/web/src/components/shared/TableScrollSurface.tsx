@@ -7,19 +7,35 @@ import {
   ARCHETYPE_TIER_BOUNDS,
   negotiateTier,
   type TableArchetype,
-} from "@/components/shared/DataTableShell";
+} from "@/table/tableTiers";
+
+/**
+ * The width intent a composition declares for the table inside it
+ * (issue 601 Phase F convergence). It is NOT an archetype property: the
+ * archetype names the semantic table kind (management-list, log-diagnostic,
+ * detail-comparison, embedded-picker), while the width intent belongs to
+ * whoever composes the surface.
+ *
+ *   fill      — the table fills the region it was given, growing up to the
+ *               table-level expansion cap. Ordinary page data views, the
+ *               exam-edit inline selected-question panel and the import
+ *               preview all fill.
+ *   intrinsic — the table renders at its preferred width (cap = 1) inside
+ *               whatever container it has; the embedded question-picker dialog
+ *               is the production case.
+ */
+export type TableWidthMode = "fill" | "intrinsic";
 
 /**
  * The measured geometry one shell publishes to the column allocator
  * (issue 601 Phase F). `availableWidth` is the scroll region's EXACT content-box
  * width (fractional — the space a table may occupy before the region
- * overflows; the allocator floors it). `fill` is the archetype's
- * full-width decision: page shells fill their container, the embedded picker
- * renders at its intrinsic width — the allocator never guesses it.
+ * overflows; the allocator floors it). `widthMode` is the composition's width
+ * intent — the allocator never guesses it.
  */
 export interface TableAllocationScope {
   availableWidth: number;
-  fill: boolean;
+  widthMode: TableWidthMode;
 }
 
 export const TableAllocationContext =
@@ -27,18 +43,19 @@ export const TableAllocationContext =
 
 /**
  * The allocation scope for governed tables that live OUTSIDE a data-view
- * shell — the dialog question pickers (embedded-picker semantics: intrinsic
- * width at Σ role minima). Measures its own container exactly like the
- * shells' scroll region; pages never use this to escape shell composition
- * (the structural guards keep shell-less governed tables confined to the
- * picker dialogs).
+ * shell — the dialog question pickers, which render at their preferred width.
+ * Measures its own container exactly like the shells' scroll region; pages
+ * never use this to escape shell composition (the structural guards keep
+ * shell-less governed tables confined to the picker dialogs).
  */
 export function TableAllocationRegion({
   children,
   className,
+  widthMode = "intrinsic",
 }: {
   children: ReactNode;
   className?: string;
+  widthMode?: TableWidthMode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const overflow = useOverflowObservation(ref);
@@ -49,7 +66,7 @@ export function TableAllocationRegion({
       className={cn("min-w-0", className)}
     >
       <TableAllocationContext.Provider
-        value={{ availableWidth: overflow.contentWidth, fill: false }}
+        value={{ availableWidth: overflow.contentWidth, widthMode }}
       >
         {children}
       </TableAllocationContext.Provider>
@@ -89,6 +106,7 @@ export function TableScrollSurface({
   children,
   contentClassName,
   regionDataSlot = "table-scroll-region",
+  widthMode = "fill",
 }: {
   archetype: TableArchetype;
   /** Mobile card representation; rendered only for eligible archetypes. */
@@ -96,14 +114,16 @@ export function TableScrollSurface({
   children: ReactNode;
   contentClassName?: string;
   regionDataSlot?: "table-scroll-region" | "admin-table-shell";
+  /** The composition's width intent (see TableWidthMode). */
+  widthMode?: TableWidthMode;
 }) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
   const overflow = useOverflowObservation(scrollRef);
 
   // The negotiated tier is the archetype's density signal on the region
-  // (probes + E2E read it); it no longer feeds a table-width floor — width is
-  // the allocator's two-state rule over requiredMin vs the measured box.
+  // (probes + E2E read it); it does not feed a table-width floor — width is
+  // the allocator's three-regime rule over the measured box.
   const tier =
     archetype === "embedded-picker"
       ? null
@@ -114,7 +134,7 @@ export function TableScrollSurface({
         );
   const scope: TableAllocationScope = {
     availableWidth: overflow.contentWidth,
-    fill: true,
+    widthMode,
   };
 
   const desktopRegion = (

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { fetchAllPickerQuestions } from "@/lib/allQuestions";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -148,15 +149,15 @@ export function ExamEditPage() {
     if (!id) return;
     setIsLoading(true);
     try {
-      const [exam, cData, qData] = await Promise.all([
+      const [exam, cData, questions] = await Promise.all([
         api.get<ExamDetailResponse>(`/api/exams/${id}`),
         api.get<PaginatedResponse<CourseRow>>("/api/courses"),
-        api.get<PaginatedResponse<QuestionRow>>("/api/questions"),
+        fetchAllPickerQuestions(),
       ]);
       setConfig(examToConfig(exam));
       setExamStatus(exam.status);
       setCourses(cData.items);
-      setQuestions(qData.items);
+      setQuestions(questions);
     } catch {
       setError(t("admin.examEdit.feedback.loadDataFailed"));
     } finally {

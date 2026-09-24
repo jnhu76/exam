@@ -32,8 +32,8 @@ import {
 } from "@/components/shared/DesktopDataTable";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataToolbar } from "@/components/shared/DataToolbar";
 import { RowActions } from "@/components/shared/RowActions";
-import { PageSection } from "@/components/shared/PageSection";
 import { Mail, Plus, Trash2 } from "lucide-react";
 import type { AssignableRole, StaffInvitationDTO } from "@exam/contracts";
 
@@ -238,39 +238,46 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
   ];
 
   return (
-    <PageSection
-      title={t("admin.users.invitations.title")}
-      description={t("admin.users.invitations.description")}
-      actions={
-        <Button onClick={openInvite}>
-          <AppIcon icon={Plus} size="inline" />
-          {t("admin.users.invitations.inviteBtn")}
-        </Button>
-      }
-    >
-      {invitations.length === 0 && !isLoading ? (
-        <EmptyState
-          icon={<AppIcon icon={Mail} size="state" />}
-          title={t("admin.users.invitations.empty")}
-          description={t("admin.users.invitations.description")}
-        />
-      ) : (
-        <DataTableShell
-          mobile={
-            <MobileRecordList
-              columns={columns}
-              rows={invitations}
-              getRowId={(i) => i.id}
-            />
-          }
-        >
+    <>
+      {/* The shell IS the data surface: a bordered+padded PageSection around it
+          cost 44px of region and drew a second border (issue 601 Phase F
+          convergence). The section heading moves into the shell's title band
+          and the section-scoped action into its toolbar band. */}
+      <DataTableShell
+        title={t("admin.users.invitations.title")}
+        description={t("admin.users.invitations.description")}
+        toolbar={
+          <DataToolbar
+            actions={
+              <Button onClick={openInvite}>
+                <AppIcon icon={Plus} size="inline" />
+                {t("admin.users.invitations.inviteBtn")}
+              </Button>
+            }
+          />
+        }
+        mobile={
+          <MobileRecordList
+            columns={columns}
+            rows={invitations}
+            getRowId={(i) => i.id}
+          />
+        }
+      >
+        {invitations.length === 0 && !isLoading ? (
+          <EmptyState
+            icon={<AppIcon icon={Mail} size="state" />}
+            title={t("admin.users.invitations.empty")}
+            description={t("admin.users.invitations.description")}
+          />
+        ) : (
           <DesktopDataTable
             columns={columns}
             data={invitations}
             getRowId={(i) => i.id}
           />
-        </DataTableShell>
-      )}
+        )}
+      </DataTableShell>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -357,6 +364,6 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
           )}
         </DialogContent>
       </Dialog>
-    </PageSection>
+    </>
   );
 }

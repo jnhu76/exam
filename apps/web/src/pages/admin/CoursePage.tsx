@@ -264,6 +264,14 @@ export function CoursePage() {
         />
 
         <DataTableShell
+          // A lone count is a summary, not a control: it belongs in the title
+          // band (the frozen baseline position), never in a toolbar controls
+          // band of its own (issue 601 Phase F convergence).
+          meta={
+            <span className="type-secondary">
+              {t("admin.courses.count", { count: filteredCourses.length })}
+            </span>
+          }
           toolbar={
             // Product rule (pinned by test): the search box only exists when
             // there is something to search.
@@ -279,9 +287,6 @@ export function CoursePage() {
                     clearLabel={t("admin.courses.clearSearchLabel")}
                   />
                 }
-                summary={t("admin.courses.count", {
-                  count: filteredCourses.length,
-                })}
               />
             ) : undefined
           }

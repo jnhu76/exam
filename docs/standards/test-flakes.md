@@ -1856,6 +1856,62 @@ Error: Test timed out in 5000ms.
 
 ---
 
+## 2026-09-24 — assignment-affordances Story C 单次 transport 失败（#601 Phase F E2E 全量）
+
+### 失败位置
+
+- 文件：`apps/e2e/e2e/assignment-affordances.spec.ts`
+- 用例：`Story C: a course beyond the first 100 is reachable via catalog search and assignable (issue 548 corrective)`
+- 调用：`bash scripts/e2e/run-wsl.sh`（全量，2 shard，宿主 dev server + Playwright）
+
+### 错误
+
+```text
+Error: expect(locator).toContainText(expected) failed
+Locator: getByRole('dialog')
+Expected substring: "管理「E2E548教师1790246061073-fitl-c」的授课课程"
+Error: element(s) not found
+```
+
+失败时的页面快照同时显示两条客户端 toast：
+`加载课程分配失败，请稍后重试` 与 `网络连接失败，请稍后重试`。
+
+### 根因假设
+
+`refreshAssignments()`（`apps/web/src/pages/admin/UsersPage.tsx`）在读取
+`GET /api/admin/users/:id/course-assignments?status=all` 失败时按既有契约关闭对话框
+（`setAssignmentsUser(null)`）并给出 toast；第二条 toast 来自 `lib/api.ts` 的
+`errors.network` 分支——即 `fetch` 本身抛出非 `ApiError`/非 `AbortError` 的
+transport 错误（连接被拒/重置），而不是 4xx/5xx 语义失败（语义失败走
+`responseToApiError`，不会同时给出 `errors.network`）。用例在失败前刚通过 API 连续
+创建 101 门课程，同 shard 还在并行跑数据视图夹具，宿主 API 进程在连接层出现一次
+瞬时失败。
+
+### 已知不是的原因
+
+- 不是路由缺失：`/admin/users/:userId/course-assignments` 由
+  `apps/api/src/routes/teacherAssignments.admin.ts` 注册。
+- 不是服务端 5xx：同轮 API 日志中无 `statusCode:5xx`。
+- 不是 #601 Phase F 的因果路径：该 spec 与数据视图几何零交集，Phase F 未触碰用户
+  或课程分配的任何数据路径与组件。
+
+### 当前缓解
+
+无单点缓解（登记规则：偶发、与当前改动无因果，不加 timeout/skip/retry，也不弱化
+断言）。
+
+### 后续动作
+
+- 同代码复跑聚焦 E2E 全绿（见「复发记录」）。若复发 ≥3 次，按登记规则升级为正式
+  跟踪条目，并调查宿主 API 进程在并行 shard 下的连接接受行为（连接池 / backlog），
+  而不是在用例侧加等待。
+
+### 复发记录
+
+- 2026-09-24：#601 Phase F 全量 E2E（2 shard）单次出现（1/94）；同代码聚焦复跑
+  `run-wsl.sh data-view-1 table-contract-2 assignment-affordances` 两个 shard 全绿。
+
+---
 
 ## 模板（新增 flake 时复制使用）
 
@@ -1893,3 +1949,54 @@ Error: Test timed out in 5000ms.
 
 - YYYY-MM-DD：
 ```
+## 2026-09-24 — #601 Phase F 全量 E2E run4 shard1 双失败：mobile 卡片文本竞态（已修复）+ ExamEditPage 题目列表分页缺陷（已修复）
+
+### 失败位置
+
+- 文件：`apps/e2e/e2e/admin-flow.spec.ts`（:210）与 `apps/e2e/e2e/data-view-1.spec.ts`（:519，B compressed inline panel）
+- 调用：`bash scripts/e2e/run-wsl.sh`（全量，2 shard）
+- 同一轮 `pnpm verify` 期间还确认了 `src/server.shutdown.test.ts` 的 `EADDRINUSE
+  127.0.0.1:3000`：该用例子进程以 `NODE_ENV=development` 启动，而 development 模式
+  的端口所有权是 `DEV_API_PORT ?? 3000`（`runtimeConfig.ts`，`APP_PORT` 被有意忽略），
+  因此宿主上任何持有 3000 端口的 dev server 都会让它失败。环境敏感为既有设计，
+  非本次改动引入；端口空闲时（含 CI）稳定通过。
+
+### admin-flow：`getByText(...).first()` 命中 CSS 隐藏的 mobile 卡片（已修复）
+
+```text
+Error: expect(locator).toBeVisible() failed
+Locator: getByText('E2E-Enroll-1790249744976').first()
+32 × locator resolved to <div data-field-id="name" class="min-w-0 break-words">…</div>
+   - unexpected value "hidden"
+```
+
+- **根因（非确定性来源）**：`ExamDetailPage` 报考区在 `DataTableShell` 内同时渲染
+  desktop 表格与 mobile 卡片列表（`ResponsiveRepresentation` 的 mobile region 在
+  DOM 中位于 desktop 之前、由 `lg:hidden` 隐藏）。断言用 `getByText(name).first()`
+  依赖"提交后选择对话框关闭动画窗口内 refetch 先落地"的竞态：窗口内 first 命中
+  对话框里尚存的可见文本 → 通过；refetch 晚于对话框卸载 → first 永久落在隐藏
+  mobile 卡片 → 失败。宿主负载决定窗口开闭，故 4 轮全量 2 过 2 败。
+- **修复**：断言改为 `getByRole("row", { name })`（role 引擎默认排除 hidden
+  元素，且 mobile 卡片无 row role），并保留移除后的 `toHaveCount(0)` 双表示计数。
+
+### data-view-1 B-inline：ExamEditPage 只读题目列表默认第一页（产品缺陷，已修复）
+
+```text
+Error: expect(locator).toBeVisible() failed
+Locator: … [data-slot="admin-table-shell"] … [data-slot="table-row"]
+heading "已选题目 (1)" 与 heading "尚未选择题目" 同时出现
+```
+
+- **根因**：`ExamEditPage` 以裸 `GET /api/questions`（默认 pageSize=20，
+  `questionRepo.listFiltered` 按 `createdAt` 升序）填充已选题目面板；seed 的题目
+  是库内最新记录，worker 库累计 >20 条题目时它落在第一页之外 →
+  `selectedQuestions` 过滤为空 → 面板永久空态。题量 ≤20 时通过，故此前聚焦复跑
+  全绿；是真实产品缺陷（任何较新题目在编辑页都不可见），不是测试不稳定。
+- **修复**：新增 `apps/web/src/lib/allQuestions.ts`
+  `fetchAllPickerQuestions()`（pageSize=100 顶格 + 翻完全部页），`ExamEditPage` 与
+  `ExamCreatePage`（wizard 内联的第二份翻页实现）统一收敛到该唯一入口，并附
+  transport 边界 mock 的单元测试。
+
+### 后续动作
+
+- 全量 E2E 复跑验证；两者修复均带永久回归（E2E 断言/单元测试），无需额外跟踪。

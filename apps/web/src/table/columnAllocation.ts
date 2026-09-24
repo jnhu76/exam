@@ -1,63 +1,95 @@
 import type { DataTableColumnRole } from "@/components/shared/DataTableContract";
+import { headerCapacityPx } from "@/table/headerCapacity";
+import {
+  calibratedFloorPx,
+  isCompressibleRole,
+  tokenGrid,
+} from "@/table/roleCalibration";
 
 /**
- * #601 Phase F — the single column-allocation authority.
+ * #601 Phase F convergence — the single column-allocation authority.
  *
- * #454 asserted that `table-layout: fixed` + `<col>` min-width physically
- * enforces per-column minima. Runtime evidence disproved that: Chromium
- * consults col `min-width` only when deriving the TABLE-level minimum width,
- * then distributes the remaining space by its own rule (measured: long-text
- * floor 256px rendering at 186.7px). Phase F first replaced it with a
- * locked/flexible split; that rule had its own defect — residual space went to
- * the set of `width: auto` columns EQUALLY, so a page whose declaration had
- * exactly one flexible column (e.g. /admin/exams) watched it balloon to 626px
- * while every other column sat at its minimum, and turning a `description`
- * into a `status` changed a sibling column's width by hundreds of px. The
- * residual must belong to the SEMANTIC GEOMETRY, not to however many
- * `width: auto` columns happen to exist.
+ * Two meanings used to share one number: `min` was simultaneously the hard
+ * structural floor, the preferred width and the proportional-growth weight.
+ * The Data View Geometry Census measured where they diverge — /admin/recovery
+ * scrolled horizontally at every viewport while 438px of its region went
+ * unused, and the exam-edit inline picker scrolled with its actions column
+ * entirely off-screen — because a *preferred* width was being used as the
+ * scroll trigger. This module separates them:
  *
- * The allocation contract (#601 Phase F, user-ratified):
+ *   floor — the hard structural minimum. Below it the current declared
+ *           representation is no longer acceptably usable and local horizontal
+ *           overflow is justified.
+ *   basis — the preferred semantic geometry. It is the basis of proportional
+ *           growth and the width at which headers fit (headerCapacity.ts).
  *
- *   requiredMin = Σ semanticMin(column)
+ * The allocation has exactly three semantic regimes, in this order:
  *
- *   available < requiredMin → rendered_i = semanticMin_i,
- *                             tableWidth = requiredMin, local horizontal scroll
- *   available ≥ requiredMin → scale = available / requiredMin,
- *                             rendered_i = semanticMin_i × scale,
- *                             tableWidth = available
+ *   A < Σfloor                 OVERFLOW    rendered_i = floor_i, table = Σfloor
+ *   Σfloor ≤ A < Σbasis        COMPRESSED  rendered_i = floor_i + t·(basis_i − floor_i)
+ *                                          t = (A − Σfloor) / (Σbasis − Σfloor)
+ *   Σbasis ≤ A                 PREFERRED/  rendered_i = basis_i × scale, scale =
+ *                              EXPANDED    min(A, cap·Σbasis) / Σbasis
  *
- * Every governed column therefore keeps its semantic floor AND shares the
- * container's residual proportionally to that same floor — one mechanism for
- * Narrow (scroll at Σ minima), Normal and Wide (uniform proportional fill).
- * Whether a table fills its container at all is the ARCHETYPE's decision, not
- * the allocator's: page shells fill, the embedded picker renders at its
- * intrinsic width (`fill: false`). Deliberately NOT part of this module:
- * preferredWidth, maxWidth, grow/shrink weights, soft caps, solvers — none of
- * them has a fixture that the two-state rule cannot satisfy.
+ * Atomic roles (floor == basis) do not shrink in the compressed regime — the
+ * interpolation is the identity for them — while a compressible role absorbs
+ * exactly as much compression as its own declared representation allows
+ * (wrap / break-token / truncate / line-clamp-2). Local horizontal scroll is
+ * therefore reserved for the case the affordance promises: the hard floors
+ * genuinely do not fit.
+ *
+ * Expansion is bounded by ONE table-level cap. The census measured
+ * proportional growth as visually reasonable while the scale stayed near 1.2
+ * (exams 1.17, questions 1.22) and increasingly poor above it (users 1.54,
+ * courses 1.83, dashboard 2.27 — a 296px column holding `admin`), so a table
+ * stops growing at EXPANSION_CAP × its preferred width and the region keeps
+ * the remainder as its own surface. There is no per-role maxWidth and no
+ * per-page tuning.
+ *
+ * `widthMode` is the COMPOSITION's width intent, not the archetype's: a page
+ * data view fills the region it was given, while an embedded picker dialog
+ * renders at its preferred width (cap = 1) inside whatever container it has.
+ * The archetype describes the semantic table kind only.
  *
  * Accounting: every width is border-box px — cell padding (2 × 1rem) and the
  * 1px cell border live INSIDE the column width, exactly the accounting the
- * recipes.css role tokens used. requiredMin therefore needs no extra chrome
+ * recipes.css role tokens used. Σfloor / Σbasis therefore need no extra chrome
  * term.
  */
 
-export interface RoleGeometry {
-  /**
-   * Semantic floor in border-box px. It is both the column's guaranteed
-   * minimum and its weight in the proportional residual distribution.
-   */
-  min: number;
-}
-
-/** Actions column bound (UI-ACTION-CAPACITY-1, issue 453): fine vs coarse pointer. */
+/** Actions column value bound (UI-ACTION-CAPACITY-1, issue 453). */
 export const ACTIONS_MIN_FINE = 96;
 export const ACTIONS_MIN_COARSE = 120;
 
 /**
- * Role geometry table. Values are the #454/#590/#598-derived tokens
- * (rem × 16) — migration note: these numbers previously lived as CSS width
- * rules in recipes.css; Phase F moved them here so the allocator is their
- * single consumer. Fixture provenance of the vocabulary-bound tokens:
+ * The one table-level expansion cap (× Σbasis). Selected by the #601 Phase F
+ * convergence experiment over 1.25 / 1.33 / 1.50 on the representative pages
+ * (/admin/exams, questions, users, courses, results, dashboard) — see the
+ * census follow-up checkpoint for the measured comparison.
+ */
+export const EXPANSION_CAP = 1.33;
+
+export interface RoleGeometry {
+  /**
+   * Hard structural floor in border-box px: the width below which this role's
+   * declared representation stops being acceptably usable, so the table takes
+   * local horizontal scroll instead of squeezing further.
+   */
+  floor: number;
+  /**
+   * Preferred semantic geometry in border-box px: the basis of proportional
+   * growth, and the width at which both the role's value vocabulary and its
+   * supported header vocabulary fit. `floor == basis` for an atomic role;
+   * `floor < basis` for a role with a narrower legal representation.
+   */
+  basis: number;
+}
+
+/**
+ * VALUE geometry — the role's cell-value capacity. These are the #454/#590/#598
+ * derived tokens (rem × 16); Phase F moved them out of recipes.css so the
+ * allocator is their single consumer. Fixture provenance of the
+ * vocabulary-bound tokens:
  *
  *   status 136px (8.5rem, #445 P3-Corrective K1) — widest legal badge across
  *     statusMeta × SUPPORTED_LOCALES measures 100.02px (offline, icon); token
@@ -68,47 +100,61 @@ export const ACTIONS_MIN_COARSE = 120;
  *     widest legal form measures 195.5px; content box 199px ≥ 195.5 + slack.
  *
  *   type 116px (7.25rem, #590) — widest bounded enumerated-label badge across
- *     the typeFixture.ts families estimates 80px (5 × 12.4px CJK + 16px badge
- *     padding + 2px border); content box 83px ≥ 80 + slack.
+ *     the typeFixture.ts families estimates 80px; content box 83px ≥ 80 + slack.
  *
  *   action-label 152px (9.5rem, #598) — @exam/authz AuditAction registry ×
  *     `admin.audit.filterActions.*` copy; widest derived label estimates
- *     117.2px (8 CJK glyphs × 12.4px + pill padding); content box 119px.
- *     Raw machine action keys render through the truncate-middle presenter
- *     channel (ROLE_MACHINE_VALUE_OVERFLOW), not this token.
+ *     117.2px; content box 119px. Raw machine action keys render through the
+ *     truncate-middle presenter channel (ROLE_MACHINE_VALUE_OVERFLOW).
  *
  *   actions 96px fine / 120px coarse (#453 UI-ACTION-CAPACITY-1) — the inline
  *     row-action vocabulary is icon-only and count-bounded (N ≤ 2 inline;
- *     N > 2 → 1 primary + kebab): 2 × iconBtn(2rem) + gap + 2 × cell padding
- *     + slack ≈ 6rem fine; 2 × iconBtn(2.75rem) ≈ 7.5rem coarse.
+ *     N > 2 → 1 primary + kebab).
+ *
+ * The remaining tokens are the bounded-vocabulary roles (date grammar,
+ * duration, number, score, short-id) whose presenters/policies are pinned by
+ * table-presenter-guards.test.ts.
+ */
+export const VALUE_GEOMETRY: Record<DataTableColumnRole, number> = {
+  "primary-text": 192,
+  "secondary-text": 144,
+  "long-text": 256,
+  description: 208,
+  "tag-list": 160,
+  status: 136,
+  date: 168,
+  "date-range": 232,
+  duration: 80,
+  number: 72,
+  score: 80,
+  "short-id": 120,
+  type: 116,
+  "action-label": 152,
+  actions: ACTIONS_MIN_FINE,
+};
+
+/**
+ * The role geometry table. `floor` is the calibrated hard floor (the atomic
+ * value token for roles with no narrower legal representation, the calibrated
+ * smallest readable line for the compressible ones); `basis` is the larger of
+ * the value token and the role's header capacity, so a role whose values are
+ * short can never carry a header that does not fit at preferred geometry.
  *
  * A floor is a MINIMUM CONTENT CAPACITY, never an exact rendered width: at
- * wide containers every column's rendered width is its floor × the table's
- * scale, so status 136 → ~197 and actions 96 → ~139 on a 1440 admin-dense
- * page are the contract working, not a defect.
- *
- * The fixtures are structural-test oracles (table-contract-guards.test.ts): a
- * new status/type/action or locale grows the fixture and reds the gate until
- * the token here is revisited. The runtime halves are the
- * dense-table-cell-fitting / ui-governance / data-view E2E assertions.
+ * preferred/expanded geometry every column renders at basis × the table's
+ * scale.
  */
-export const ROLE_GEOMETRY: Record<DataTableColumnRole, RoleGeometry> = {
-  "primary-text": { min: 192 },
-  "secondary-text": { min: 144 },
-  "long-text": { min: 256 },
-  description: { min: 208 },
-  "tag-list": { min: 160 },
-  status: { min: 136 },
-  date: { min: 168 },
-  "date-range": { min: 232 },
-  duration: { min: 80 },
-  number: { min: 72 },
-  score: { min: 80 },
-  "short-id": { min: 120 },
-  type: { min: 116 },
-  "action-label": { min: 152 },
-  actions: { min: ACTIONS_MIN_FINE },
-};
+export const ROLE_GEOMETRY: Record<DataTableColumnRole, RoleGeometry> =
+  Object.fromEntries(
+    (Object.keys(VALUE_GEOMETRY) as DataTableColumnRole[]).map((role) => {
+      const value = VALUE_GEOMETRY[role];
+      const floor = isCompressibleRole(role) ? calibratedFloorPx(role) : value;
+      return [
+        role,
+        { floor, basis: tokenGrid(Math.max(value, headerCapacityPx(role))) },
+      ];
+    }),
+  ) as Record<DataTableColumnRole, RoleGeometry>;
 
 /** Host pointer context, evaluated once (a pointer type does not change at runtime). */
 export function isCoarsePointerContext(): boolean {
@@ -119,24 +165,73 @@ export function isCoarsePointerContext(): boolean {
   );
 }
 
+/**
+ * The allocator's regime decision, published by the scroll region
+ * (`data-geometry-state`) so runtime probes and the route-wide acceptance
+ * sweep read the same classification the allocation used.
+ *
+ *   overflow   — A < Σfloor: the hard floors do not fit; local scroll is the
+ *                honest affordance.
+ *   compressed — Σfloor ≤ A < Σbasis: every column renders between its floor
+ *                and its basis; nothing scrolls.
+ *   preferred  — Σbasis ≤ A ≤ cap·Σbasis: the table fills the region and grows
+ *                within the cap.
+ *   expanded   — A > cap·Σbasis: the table stops at the cap and the region
+ *                keeps the remainder (in `intrinsic` width mode the cap is 1,
+ *                i.e. the table renders at its preferred width).
+ */
+export type GeometryState =
+  | "overflow"
+  | "compressed"
+  | "preferred"
+  | "expanded";
+
 export interface ColumnAllocation {
-  /** The exact width the table element renders at. */
+  /**
+   * Σ of the rendered column widths — exactly what the colgroup accounts for.
+   * The table's columns always sum to this number, so the allocation is what
+   * paints.
+   */
   tableWidth: number;
-  /** Per-declaration border-box column widths, in declaration order. */
-  columnWidths: number[];
-  /** Σ role minima — the table-level content floor. */
-  requiredMin: number;
-  /** Total space distributed beyond the minima (0 below requiredMin). */
+  /**
+   * The width the table ELEMENT renders at. Equal to `tableWidth` in every
+   * regime except `expanded`, where the element keeps the region's full width
+   * and the remainder is taken by an empty trailing cell (recipes.css
+   * `tr::after`, present only in that state) — so the shell's grid stays
+   * complete instead of stopping mid-surface, while the declared columns keep
+   * their capped widths exactly.
+   */
+  elementWidth: number;
+  /** Σ role floors — the hard content floor and the overflow trigger. */
+  floorWidth: number;
+  /** Σ role bases — the preferred table width. */
+  basisWidth: number;
+  /** Which regime produced this allocation. */
+  state: GeometryState;
+  /** Total space distributed beyond Σfloor (0 in the overflow regime). */
   residual: number;
+  /**
+   * Whole-pixel column widths in declaration order; Σ === `tableWidth` exactly
+   * (largest-remainder rounding — see roundToExactSum). This is what the
+   * colgroup renders, so the allocation is what paints.
+   */
+  columnWidths: number[];
+  /**
+   * The resolved geometry of every declared column, in declaration order — the
+   * band `[floor, basis]` the rendered width was drawn from. Published by the
+   * contract as `data-geometry-roles` so a runtime fixture can assert each
+   * column against its own band without restating this table.
+   */
+  roleGeometry: RoleGeometry[];
 }
 
 export interface AllocateOptions {
   /**
-   * Whether the table fills its measured container (page shells) or renders
-   * at its intrinsic width (the embedded picker). The archetype owns this —
-   * see the module contract. Defaults to fill.
+   * The composition's width intent (see the module contract). Page data views
+   * fill their region; an embedded picker dialog renders at its preferred
+   * width. Defaults to fill.
    */
-  fill?: boolean;
+  widthMode?: "fill" | "intrinsic";
   /**
    * Pointer context for the actions-column bound. Defaults to the host's
    * `(pointer: coarse)` evaluation; tests inject it explicitly.
@@ -144,25 +239,44 @@ export interface AllocateOptions {
   pointerCoarse?: boolean;
 }
 
-function roleMin(role: DataTableColumnRole, pointerCoarse: boolean): number {
-  if (role === "actions" && pointerCoarse) return ACTIONS_MIN_COARSE;
-  return ROLE_GEOMETRY[role].min;
+function roleGeometry(
+  role: DataTableColumnRole,
+  pointerCoarse: boolean,
+): RoleGeometry {
+  const geometry = ROLE_GEOMETRY[role];
+  if (role !== "actions" || !pointerCoarse) return geometry;
+  return { floor: ACTIONS_MIN_COARSE, basis: ACTIONS_MIN_COARSE };
 }
 
-/** Σ visible-column role minima (the content half of the fit equation). */
+/** Σ visible-column hard floors (the overflow trigger). */
 export function requiredMinWidth(
   roles: readonly DataTableColumnRole[],
   options: AllocateOptions = {},
 ): number {
   const pointerCoarse = options.pointerCoarse ?? isCoarsePointerContext();
-  return roles.reduce((sum, role) => sum + roleMin(role, pointerCoarse), 0);
+  return roles.reduce(
+    (sum, role) => sum + roleGeometry(role, pointerCoarse).floor,
+    0,
+  );
+}
+
+/** Σ visible-column preferred widths (the preferred table width). */
+export function preferredWidth(
+  roles: readonly DataTableColumnRole[],
+  options: AllocateOptions = {},
+): number {
+  const pointerCoarse = options.pointerCoarse ?? isCoarsePointerContext();
+  return roles.reduce(
+    (sum, role) => sum + roleGeometry(role, pointerCoarse).basis,
+    0,
+  );
 }
 
 /**
  * Deterministic allocation from declarations + the measured container — the
- * two-state rule in the module contract. Whole-pixel columns always sum to
- * exactly `tableWidth`, and every column keeps `width ≥ semanticMin` in both
- * states (scale ≥ 1 whenever the table is wider than requiredMin).
+ * three-regime rule in the module contract. Whole-pixel columns always sum to
+ * exactly `tableWidth`; in the compressed regime every column lies inside
+ * [floor, basis]; below the floors every column renders at exactly its floor.
  */
 export function allocateTableColumns(
   roles: readonly DataTableColumnRole[],
@@ -170,10 +284,22 @@ export function allocateTableColumns(
   options: AllocateOptions = {},
 ): ColumnAllocation {
   const pointerCoarse = options.pointerCoarse ?? isCoarsePointerContext();
-  const mins = roles.map((role) => roleMin(role, pointerCoarse));
-  const requiredMin = mins.reduce((sum, min) => sum + min, 0);
-  if (requiredMin === 0) {
-    return { tableWidth: 0, columnWidths: [], requiredMin: 0, residual: 0 };
+  const geometry = roles.map((role) => roleGeometry(role, pointerCoarse));
+  const floors = geometry.map((g) => g.floor);
+  const bases = geometry.map((g) => g.basis);
+  const floorWidth = floors.reduce((sum, value) => sum + value, 0);
+  const basisWidth = bases.reduce((sum, value) => sum + value, 0);
+  if (floorWidth === 0) {
+    return {
+      tableWidth: 0,
+      elementWidth: 0,
+      columnWidths: [],
+      floorWidth: 0,
+      basisWidth: 0,
+      state: "overflow",
+      residual: 0,
+      roleGeometry: [],
+    };
   }
 
   // The measured box is fractional; columns are whole pixels. Floor it: a
@@ -182,18 +308,63 @@ export function allocateTableColumns(
   // visibly fits (measured: box 1394.67px, allocation 1395px, 16px scrollbar,
   // scrollWidth − clientWidth = 0 — invisible to the integer overflow facts).
   const available = Math.floor(availableWidth);
-  const tableWidth =
-    (options.fill ?? true) && available > requiredMin ? available : requiredMin;
-  const scale = tableWidth / requiredMin;
 
+  if (available < floorWidth) {
+    return {
+      tableWidth: floorWidth,
+      elementWidth: floorWidth,
+      columnWidths: floors,
+      floorWidth,
+      basisWidth,
+      state: "overflow",
+      residual: 0,
+      roleGeometry: geometry,
+    };
+  }
+
+  // Σfloor ≤ available < Σbasis. B > F holds here (available < Σbasis and
+  // available ≥ Σfloor would otherwise contradict), so the interpolation is
+  // well-defined.
+  if (available < basisWidth) {
+    const t = (available - floorWidth) / (basisWidth - floorWidth);
+    const raw = floors.map(
+      (floor, index) => floor + t * ((bases[index] ?? floor) - floor),
+    );
+    return {
+      tableWidth: available,
+      elementWidth: available,
+      columnWidths: roundToExactSum(raw, available),
+      floorWidth,
+      basisWidth,
+      state: "compressed",
+      residual: available - floorWidth,
+      roleGeometry: geometry,
+    };
+  }
+
+  const cap = options.widthMode === "intrinsic" ? 1 : EXPANSION_CAP;
+  // Floored, so the rendered table can never exceed cap × Σbasis (the bound is
+  // the contract, not an approximation of it).
+  const capWidth = Math.floor(basisWidth * cap);
+  const tableWidth = Math.min(available, capWidth);
+  const scale = tableWidth / basisWidth;
+
+  const capped = tableWidth < available;
   return {
     tableWidth,
+    // A capped table keeps the region's full width so the shell's grid stays
+    // complete: the columns stop at the cap and the empty trailing cell takes
+    // the remainder (recipes.css, keyed on data-geometry-state="expanded").
+    elementWidth: available,
     columnWidths: roundToExactSum(
-      mins.map((min) => min * scale),
+      bases.map((basis) => basis * scale),
       tableWidth,
     ),
-    requiredMin,
-    residual: tableWidth - requiredMin,
+    floorWidth,
+    basisWidth,
+    state: capped ? "expanded" : "preferred",
+    residual: tableWidth - floorWidth,
+    roleGeometry: geometry,
   };
 }
 

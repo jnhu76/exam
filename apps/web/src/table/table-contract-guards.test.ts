@@ -282,7 +282,7 @@ describe("table contract v2 structural guards", () => {
     expect(STATUS_COLUMN_TOKEN).toBe("8.5rem");
     // #601 Phase F: the token's px lives in ROLE_GEOMETRY (single width
     // authority); CSS carries no width rule for any role.
-    expect(ROLE_GEOMETRY.status).toEqual({ min: 136 });
+    expect(ROLE_GEOMETRY.status).toEqual({ floor: 136, basis: 136 });
   });
 
   it("binds the type column token to the auto-deriving fixture (issue #590)", () => {
@@ -317,10 +317,10 @@ describe("table contract v2 structural guards", () => {
   it("keeps the type token at the derived 7.25rem and the date-range token at the derived 14.5rem in the allocator", () => {
     expect(TYPE_COLUMN_TOKEN).toBe("7.25rem");
     // #590 tokens, relocated from recipes.css to ROLE_GEOMETRY by Phase F.
-    expect(ROLE_GEOMETRY.type).toEqual({ min: 116 });
+    expect(ROLE_GEOMETRY.type).toEqual({ floor: 116, basis: 116 });
     // date-range: the 23-char grammar measured 195.5px at the D2 font; the
     // 12.5rem token could not contain it (#590 defect B).
-    expect(ROLE_GEOMETRY["date-range"]).toEqual({ min: 232 });
+    expect(ROLE_GEOMETRY["date-range"]).toEqual({ floor: 232, basis: 232 });
   });
 
   it("binds the action-label token to the auto-deriving action-registry fixture (issue #598)", () => {
@@ -362,7 +362,7 @@ describe("table contract v2 structural guards", () => {
   it("keeps the action-label token at the derived 9.5rem in the allocator", () => {
     expect(ACTION_LABEL_COLUMN_TOKEN).toBe("9.5rem");
     expect(ACTION_LABEL_COLUMN_WIDTH_PX).toBe(152);
-    expect(ROLE_GEOMETRY["action-label"]).toEqual({ min: 152 });
+    expect(ROLE_GEOMETRY["action-label"]).toEqual({ floor: 152, basis: 152 });
     // The token is not inflated to the type token's neighbors: the shared
     // `type` value stays exactly as #590 froze it (7.25rem), so this role can
     // never tax the other 15 conforming type columns.

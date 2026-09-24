@@ -1,23 +1,10 @@
 import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { TableScrollSurface } from "@/components/shared/TableScrollSurface";
 import {
-  ARCHETYPE_TIER_BOUNDS,
-  negotiateTier,
-  TIER_MIN_WIDTH_PX,
-  type DataTableTier,
-  type TableArchetype,
-} from "@/table/tableTiers";
-
-// Re-exported for the existing public API (tests / E2E import these from the
-// shell module; the definitions live in table/tableTiers.ts).
-export {
-  ARCHETYPE_TIER_BOUNDS,
-  negotiateTier,
-  TIER_MIN_WIDTH_PX,
-  type DataTableTier,
-  type TableArchetype,
-};
+  TableScrollSurface,
+  type TableWidthMode,
+} from "@/components/shared/TableScrollSurface";
+import type { TableArchetype } from "@/table/tableTiers";
 
 /**
  * Production-safe mobile eligibility (issue 457 C2, extended by issue 601 Phase F):
@@ -66,6 +53,7 @@ export function DataTableShell({
   footer,
   className,
   archetype = "management-list",
+  widthMode = "fill",
 }: {
   title?: string;
   description?: string;
@@ -79,7 +67,9 @@ export function DataTableShell({
   meta?: ReactNode;
   /** The data-view toolbar (DataToolbar) — rendered as the shell's band below
    * the title, inside the surface. One composition for search/filter/action
-   * controls and the table (issue 601 Phase F). */
+   * controls and the table (issue 601 Phase F). A toolbar band exists only
+   * when the dataset has dataset-scoped controls: a page-scoped action belongs
+   * in the PageHeader. */
   toolbar?: ReactNode;
   children: ReactNode;
   /**
@@ -89,9 +79,16 @@ export function DataTableShell({
    * breakpoint. detail-comparison keeps horizontal scroll below lg.
    */
   mobile?: ReactNode;
+  /** The data-view footer (DataViewFooter) — count/range + navigation. */
   footer?: ReactNode;
   className?: string;
   archetype?: TableArchetype;
+  /**
+   * The composition's width intent (TableWidthMode). A page data view fills
+   * the region it was given; a table that must render at its preferred width
+   * (an embedded picker inside a form) declares `intrinsic`.
+   */
+  widthMode?: TableWidthMode;
 }) {
   const shellId = useId();
   const titleId = title ? `${shellId}-title` : undefined;
@@ -160,12 +157,18 @@ export function DataTableShell({
       )}
       <TableScrollSurface
         archetype={archetype}
+        widthMode={widthMode}
         mobile={mobileEnabled ? mobile : undefined}
       >
         {children}
       </TableScrollSurface>
       {footer && (
-        <div className="border-t bg-surface-subtle px-4 py-3">{footer}</div>
+        <div
+          data-slot="data-table-footer-band"
+          className="border-t bg-surface-subtle"
+        >
+          {footer}
+        </div>
       )}
     </section>
   );

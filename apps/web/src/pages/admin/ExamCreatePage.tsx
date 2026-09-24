@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { fetchAllPickerQuestions } from "@/lib/allQuestions";
 import { getApiErrorMessage, getApiFieldErrors } from "@/lib/apiErrors";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import {
@@ -20,6 +21,7 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FormSection } from "@/components/shared/FormSection";
+import { DataToolbar } from "@/components/shared/DataToolbar";
 import { FieldGroup, Field, FieldRow } from "@/components/shared/FieldGroup";
 import { FieldError } from "@/components/shared/FieldError";
 import { DefinitionList } from "@/components/shared/DefinitionList";
@@ -212,32 +214,17 @@ export function ExamCreatePage() {
     setError(null);
     setIsLoading(true);
     try {
-      const [cData, qData, pData] = await Promise.all([
+      const [cData, pData, questions] = await Promise.all([
         api.get<PaginatedResponse<CourseRow>>("/api/courses"),
-        // Load all selectable questions (API caps pageSize at 100) so the
-        // picker is not silently limited to the first page.
-        api.get<PaginatedResponse<QuestionRow>>(
-          "/api/questions?page=1&pageSize=100",
-        ),
         api.get<ExamProfileDTO[]>("/api/exam-profiles"),
+        fetchAllPickerQuestions(),
       ]);
       setCourses(cData.items);
       setProfiles(pData);
       setState((prev) =>
         prev.courseId ? prev : { ...prev, courseId: cData.items[0]?.id ?? "" },
       );
-      // The questions list can span multiple pages (pageSize cap = 100).
-      // Fetch the remaining pages and combine so the picker sees every
-      // selectable question; a single page short-circuits to page 1 alone.
-      const pageCount = Math.max(1, qData.totalPages);
-      const restPages = await Promise.all(
-        Array.from({ length: pageCount - 1 }, (_, i) =>
-          api.get<PaginatedResponse<QuestionRow>>(
-            `/api/questions?page=${i + 2}&pageSize=100`,
-          ),
-        ),
-      );
-      setQuestions([...qData.items, ...restPages.flatMap((r) => r.items)]);
+      setQuestions(questions);
     } catch {
       setError(t("admin.examWizard.feedback.loadDataFailed"));
     } finally {
@@ -586,17 +573,31 @@ export function ExamCreatePage() {
       {/* Step 3 — questions + scores */}
       {state.step === 3 && (
         <FieldGroup>
-          <FormSection title={t("admin.examWizard.steps.questions")}>
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">
+          {/* The shell IS the data surface (issue 601 Phase F convergence):
+              wrapping it in a padded, bordered FormSection cost the table 44px
+              of region and drew a second border. The section heading moves into
+              the shell's title band, the count into its meta slot and the
+              dataset-scoped picker action into its toolbar band. */}
+          <DataTableShell
+            archetype="embedded-picker"
+            title={t("admin.examWizard.steps.questions")}
+            meta={
+              <span className="type-secondary">
                 {t("admin.examWizard.questions.selectedCount", {
                   count: state.questionIds.length,
                 })}
-              </p>
-              <Button size="sm" onClick={() => setQuestionDialogOpen(true)}>
-                {t("admin.examWizard.questions.selectQuestions")}
-              </Button>
-            </div>
+              </span>
+            }
+            toolbar={
+              <DataToolbar
+                actions={
+                  <Button size="sm" onClick={() => setQuestionDialogOpen(true)}>
+                    {t("admin.examWizard.questions.selectQuestions")}
+                  </Button>
+                }
+              />
+            }
+          >
             {selectedQuestions.length === 0 ? (
               <EmptyState
                 icon={<AppIcon icon={BookOpen} size="state" />}
@@ -606,78 +607,76 @@ export function ExamCreatePage() {
                 )}
               />
             ) : (
-              <DataTableShell archetype="embedded-picker">
-                <DataTableSurface
-                  columns={[
-                    { role: "type" },
-                    { role: "long-text", overflow: "truncate" },
-                    { role: "score" },
-                    { role: "actions" },
-                  ]}
-                >
-                  <TableHeader>
-                    <TableRow>
-                      <DataTableHead role="type">
-                        {t("admin.examWizard.questions.tableHeaders.type")}
-                      </DataTableHead>
-                      <DataTableHead role="long-text">
-                        {t("admin.examWizard.questions.tableHeaders.content")}
-                      </DataTableHead>
-                      <DataTableHead role="score">
-                        {t("admin.examWizard.questions.tableHeaders.score")}
-                      </DataTableHead>
-                      <DataTableHead role="actions">
-                        {t("admin.examWizard.questions.tableHeaders.actions")}
-                      </DataTableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedQuestions.map((q) => (
-                      <TableRow key={q.id}>
-                        <DataTableCell role="type">
-                          <Badge variant="outline">
-                            {getTypeLabel(q.type, t) ?? q.type}
-                          </Badge>
-                        </DataTableCell>
-                        <DataTableCell role="long-text">
-                          <DataTableOverflowText
-                            mode="truncate"
-                            value={q.content}
-                          />
-                        </DataTableCell>
-                        <DataTableCell role="score">{q.score}</DataTableCell>
-                        <DataTableCell role="actions">
-                          <RowActions
-                            row={q}
-                            actions={[
-                              {
-                                id: "remove-question",
-                                label: t(
-                                  "admin.examWizard.questions.ariaDeleteQuestion",
+              <DataTableSurface
+                columns={[
+                  { role: "type" },
+                  { role: "long-text", overflow: "truncate" },
+                  { role: "score" },
+                  { role: "actions" },
+                ]}
+              >
+                <TableHeader>
+                  <TableRow>
+                    <DataTableHead role="type">
+                      {t("admin.examWizard.questions.tableHeaders.type")}
+                    </DataTableHead>
+                    <DataTableHead role="long-text">
+                      {t("admin.examWizard.questions.tableHeaders.content")}
+                    </DataTableHead>
+                    <DataTableHead role="score">
+                      {t("admin.examWizard.questions.tableHeaders.score")}
+                    </DataTableHead>
+                    <DataTableHead role="actions">
+                      {t("admin.examWizard.questions.tableHeaders.actions")}
+                    </DataTableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedQuestions.map((q) => (
+                    <TableRow key={q.id}>
+                      <DataTableCell role="type">
+                        <Badge variant="outline">
+                          {getTypeLabel(q.type, t) ?? q.type}
+                        </Badge>
+                      </DataTableCell>
+                      <DataTableCell role="long-text">
+                        <DataTableOverflowText
+                          mode="truncate"
+                          value={q.content}
+                        />
+                      </DataTableCell>
+                      <DataTableCell role="score">{q.score}</DataTableCell>
+                      <DataTableCell role="actions">
+                        <RowActions
+                          row={q}
+                          actions={[
+                            {
+                              id: "remove-question",
+                              label: t(
+                                "admin.examWizard.questions.ariaDeleteQuestion",
+                              ),
+                              icon: Trash2,
+                              tone: "destructive",
+                              confirm: {
+                                title: t(
+                                  "admin.examWizard.questions.confirmRemoveTitle",
                                 ),
-                                icon: Trash2,
-                                tone: "destructive",
-                                confirm: {
-                                  title: t(
-                                    "admin.examWizard.questions.confirmRemoveTitle",
-                                  ),
-                                  description: t(
-                                    "admin.examWizard.questions.confirmRemoveDescription",
-                                  ),
-                                  destructive: true,
-                                },
-                                onSelect: () => removeQuestion(q.id),
+                                description: t(
+                                  "admin.examWizard.questions.confirmRemoveDescription",
+                                ),
+                                destructive: true,
                               },
-                            ]}
-                          />
-                        </DataTableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </DataTableSurface>
-              </DataTableShell>
+                              onSelect: () => removeQuestion(q.id),
+                            },
+                          ]}
+                        />
+                      </DataTableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </DataTableSurface>
             )}
-          </FormSection>
+          </DataTableShell>
           <FormSection title={t("admin.examWizard.questions.totalScore")}>
             <FieldRow>
               <Field>

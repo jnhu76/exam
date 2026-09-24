@@ -250,22 +250,27 @@ body,
 }
 
 /*
- * INVARIANT: the viewport reserves the vertical scrollbar's gutter
- * unconditionally, so the app's content box width never depends on whether the
- * document currently scrolls. Without it, any content-height change
- * (pagination, filtering, search) toggles the document scrollbar and shifts
- * every governed table's scroll region by the scrollbar width. Measured on
- * /admin/questions pagination: the region's box went 1394.667px → 1410px and
- * back within one page change, the table re-allocated to match, and Chromium
- * painted a stale 16px horizontal scrollbar on the region for two frames
- * (while scrollWidth === clientWidth and scrollHeight === clientHeight). With
- * the gutter reserved, the region's box and the table's width stay constant
- * across the change and no scrollbar is painted. Only the vertical gutter is
- * stabilized: inner scroll regions keep their own overflow-x: auto.
+ * NO `scrollbar-gutter: stable` here (issue 601 Phase F convergence).
+ *
+ * Phase F first reserved the document scrollbar's gutter globally to stop a
+ * pagination transition from toggling the document scrollbar and re-allocating
+ * every governed table's scroll region. That treated a SYMPTOM: the region was
+ * only re-allocated because the loading placeholder swapped the previous page's
+ * rows out of the table body for two frames, which collapsed the document
+ * height (measured on /admin/questions: the region's box went 1394.667px →
+ * 1410px and back inside one page change). The loading-footprint fix keeps the
+ * rows until the next page arrives, so the document height no longer changes
+ * across a transition and the gutter reservation is unnecessary.
+ *
+ * It is also not free: a global gutter reserves the scrollbar width in EVERY
+ * viewport, including mobile, where it narrowed the dialog content box
+ * (measured: a 375px viewport lost ~14px, dropping dialog content below the
+ * 342px floor the dialog-spatial gate asserts). A table-local symptom must not
+ * change mobile viewport geometry. The pagination transition is gated instead:
+ * ui-data-view-1 samples every animation frame and asserts the document
+ * content box and the region's box are invariant, and that no scrollbar is
+ * painted, across a real page change.
  */
-html {
-  scrollbar-gutter: stable;
-}
 
 body {
   @apply antialiased font-sans text-sm font-normal;

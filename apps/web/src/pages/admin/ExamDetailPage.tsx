@@ -21,6 +21,7 @@ import {
 } from "@/components/shared/DesktopDataTable";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataToolbar } from "@/components/shared/DataToolbar";
 import { RowActions } from "@/components/shared/RowActions";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { PageSection } from "@/components/shared/PageSection";
@@ -741,16 +742,27 @@ export function ExamDetailPage() {
             />
           </div>
 
-          <PageSection
+          {/* The shell IS the data surface (issue 601 Phase F convergence):
+              the section heading moves into its title band and the
+              dataset-scoped action into its toolbar band, so the table no
+              longer loses 44px to a second border+padding. The shell stays
+              mounted for the empty state too, so the dataset-scoped action is
+              available whether or not the list has rows. */}
+          <DataTableShell
             title={t("admin.examDetail.enrollment.title")}
-            actions={
-              mayManageEnrollments && (
-                <Button size="sm" onClick={handleOpenAddDialog}>
-                  <AppIcon icon={Plus} size="inline" />
-                  {t("admin.examDetail.enrollment.addCandidate")}
-                </Button>
-              )
+            toolbar={
+              mayManageEnrollments ? (
+                <DataToolbar
+                  actions={
+                    <Button size="sm" onClick={handleOpenAddDialog}>
+                      <AppIcon icon={Plus} size="inline" />
+                      {t("admin.examDetail.enrollment.addCandidate")}
+                    </Button>
+                  }
+                />
+              ) : undefined
             }
+            mobile={<MobileRecordList columns={columns} rows={enrollments} />}
           >
             {enrollments.length === 0 ? (
               <EmptyState
@@ -759,15 +771,9 @@ export function ExamDetailPage() {
                 description={t("admin.examDetail.enrollment.emptyDescription")}
               />
             ) : (
-              <DataTableShell
-                mobile={
-                  <MobileRecordList columns={columns} rows={enrollments} />
-                }
-              >
-                <DesktopDataTable columns={columns} data={enrollments} />
-              </DataTableShell>
+              <DesktopDataTable columns={columns} data={enrollments} />
             )}
-          </PageSection>
+          </DataTableShell>
         </TabsContent>
 
         <TabsContent value="scores">

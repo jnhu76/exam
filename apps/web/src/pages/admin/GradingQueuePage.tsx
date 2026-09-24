@@ -11,6 +11,7 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataViewFooter } from "@/components/shared/DataViewFooter";
 import {
   DesktopDataTable,
   type DataViewColumnDef,
@@ -137,11 +138,16 @@ export function GradingQueuePage() {
       <DataTableShell
         footer={
           totalPages > 1 ? (
-            <DataTablePagination
-              page={page}
-              pageSize={pageSize}
-              total={data.total}
-              onPageChange={setPage}
+            <DataViewFooter
+              range={{ page, pageSize, total: data.total }}
+              navigation={
+                <DataTablePagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={data.total}
+                  onPageChange={setPage}
+                />
+              }
             />
           ) : undefined
         }

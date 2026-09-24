@@ -3,7 +3,10 @@ import { useContext, useMemo } from "react";
 import { TableCell, Table, TableHead } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { TableAllocationContext } from "@/components/shared/TableScrollSurface";
-import { allocateTableColumns } from "@/table/columnAllocation";
+import {
+  allocateTableColumns,
+  type GeometryState,
+} from "@/table/columnAllocation";
 
 export type DataTableColumnRole =
   | "primary-text"
@@ -196,12 +199,31 @@ export function DataTableColumns({
 
 /**
  * Props spread onto the table element when the allocation authority governs
- * it: the exact computed width plus the marker that scopes
- * `table-layout: fixed` (recipes.css) to allocated tables only.
+ * it: the exact computed width, the marker that scopes `table-layout: fixed`
+ * (recipes.css) to allocated tables only, and the allocation's own facts —
+ * its regime (`data-geometry-state`) and the two contract sums
+ * (`data-geometry-floor` / `data-geometry-basis`). The facts are published so
+ * the route-wide acceptance sweep and the E2E fixtures assert the contract
+ * directly instead of re-deriving Σfloor/Σbasis from the colgroup outside the
+ * authority that computed them.
  */
 export interface AllocatedTableProps {
   style: { width: string };
   "data-column-allocation": "computed";
+  "data-geometry-state": GeometryState;
+  "data-geometry-floor": string;
+  "data-geometry-basis": string;
+  /** The empty trailing cell's width (0 outside the expanded regime). */
+  "data-geometry-spacer": string;
+  /**
+   * Per-column `floor:basis` pairs in declaration order (the role itself is
+   * already on the colgroup). The sums above are enough to classify a table's
+   * regime; the pairs let a runtime fixture assert each column against ITS OWN
+   * contract band (compressed: inside [floor, basis]; preferred: basis × scale;
+   * overflow: exactly floor) without restating the geometry table in the test —
+   * the numbers stay owned here.
+   */
+  "data-geometry-roles": string;
 }
 
 /**
@@ -211,10 +233,12 @@ export interface AllocatedTableProps {
  * (DataTableSurface for contract-direct pages, DesktopDataTable for the
  * TanStack row model) consume this — there is no third path.
  *
- * Outside an allocation scope this falls back to attribute-only cols (auto
- * layout) in production and fails loud in development: a contract table
- * rendered outside a scroll surface is an illegal composition, not a
- * silently-degraded one.
+ * Outside an allocation scope this FAILS LOUD — in every build, not only in
+ * development. A governed table outside a scroll surface is an illegal
+ * composition (nothing has measured a container for it), and the alternative —
+ * silently rendering the colgroup without widths and letting the browser run a
+ * second, ungoverned layout system — is exactly the dual-authority defect this
+ * module exists to prevent.
  */
 export function useColumnAllocation(
   columns: readonly DataTableColumnDeclaration[],
@@ -230,12 +254,12 @@ export function useColumnAllocation(
         : allocateTableColumns(
             columns.map((column) => column.role),
             scope.availableWidth,
-            { fill: scope.fill },
+            { widthMode: scope.widthMode },
           ),
     [scope, columns],
   );
 
-  if (scope === null && import.meta.env.DEV) {
+  if (scope === null) {
     throw new Error(
       "DataTable contract violation: a governed table must render inside a TableScrollSurface (DataTableShell / DataWorkbench / an allocation provider) — the column allocator has no measured container here",
     );
@@ -249,8 +273,17 @@ export function useColumnAllocation(
       allocation === null
         ? {}
         : {
-            style: { width: `${allocation.tableWidth}px` },
+            style: { width: `${allocation.elementWidth}px` },
             "data-column-allocation": "computed",
+            "data-geometry-state": allocation.state,
+            "data-geometry-floor": String(allocation.floorWidth),
+            "data-geometry-basis": String(allocation.basisWidth),
+            "data-geometry-spacer": String(
+              allocation.elementWidth - allocation.tableWidth,
+            ),
+            "data-geometry-roles": allocation.roleGeometry
+              .map((g) => `${g.floor}:${g.basis}`)
+              .join(","),
           },
   };
 }

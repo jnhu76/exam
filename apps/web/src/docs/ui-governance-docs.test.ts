@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ColumnPriority } from "@/components/shared/DataTableContract";
-import type { TableArchetype } from "@/components/shared/DataTableShell";
+import type { TableArchetype } from "@/table/tableTiers";
 import type { PageContainerRole } from "@/components/shared/PageContainer";
 
 /**
