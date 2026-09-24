@@ -1,5 +1,5 @@
 /**
- * Proctor Recovery Center (J6, #303) — narrow Proctor-scoped read projections.
+ * Proctor Recovery Center (J6, #303) — Proctor Operations projections.
  *
  * EXAM-303 authority freeze (F3, human-gate corrective 2026-09-12):
  *   - worklist / detail expose ONLY incident-domain truth an assigned Proctor
@@ -12,6 +12,12 @@
  *     404 RESOURCE_NOT_FOUND (ADR-015 §9);
  *   - allowedActions is capability-intersected: a Proctor never sees
  *     resolve/dismiss; an Admin on the same endpoint does.
+ *
+ * #606 D1 collection scope: the worklist response carries `collectionScope` —
+ * the SAME runtime-authority decision that selects the SQL predicate
+ * (Admin runtime role set → `organization` + org-wide; otherwise the actor's
+ * active assignments → `active_assignments` + assignment-filtered). The scope
+ * is derived from runtime authority, never from the account's primary role.
  */
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -346,6 +352,8 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
     const res = await inject(p1Token, "GET", "/api/admin/proctor/incidents");
     expect(res.statusCode).toBe(200);
     const body = res.json();
+    // #606: the response reports the effective collection scope.
+    expect(body.collectionScope).toBe("active_assignments");
     expect(body.items).toHaveLength(2);
     const item = body.items.find(
       (i: { incident: { id: string } }) => i.incident.id === incidentAId,
@@ -371,6 +379,9 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
     const res = await inject(p2Token, "GET", "/api/admin/proctor/incidents");
     expect(res.statusCode).toBe(200);
     expect(res.json().items).toEqual([]);
+    // Empty page still reports its scope — the fact is about the collection
+    // policy, not about row presence (#606).
+    expect(res.json().collectionScope).toBe("active_assignments");
   });
 
   it("worklist: Admin short-circuits to org-wide", async () => {
@@ -380,11 +391,46 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
       "/api/admin/proctor/incidents",
     );
     expect(res.statusCode).toBe(200);
+    // #606: Admin caller → organization scope, no assignment rows required.
+    expect(res.json().collectionScope).toBe("organization");
     const ids = res
       .json()
       .items.map((i: { incident: { id: string } }) => i.incident.id);
     expect(ids).toContain(incidentAId);
     expect(ids).toContain(incidentA2Id);
+    expect(ids).toContain(incidentUId);
+  });
+
+  it("worklist: collectionScope follows runtime authority, not the account's primary role (#606)", async () => {
+    // Primary role Proctor whose ACTIVE runtime role set also contains Admin:
+    // the scope decision must read the runtime authority (organization), not
+    // the primary-role projection (active_assignments). Reuses the standard
+    // assignment fixture — only one extra active assignment row is needed.
+    const dual = await createAssignedUserForTest(
+      ctx.db,
+      orgAId,
+      "Proctor",
+      "prc-dual-runtime-admin",
+    );
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: randomUUID(),
+      organizationId: orgAId,
+      userId: dual.user.id,
+      role: "Admin",
+      isPrimary: false,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await inject(dual.token, "GET", "/api/admin/proctor/incidents");
+    expect(res.statusCode).toBe(200);
+    expect(res.json().collectionScope).toBe("organization");
+    const ids = res
+      .json()
+      .items.map((i: { incident: { id: string } }) => i.incident.id);
+    // Org-wide compatibility superset: the unassigned exam's incident is in
+    // the collection even though this account holds no Proctor assignment.
     expect(ids).toContain(incidentUId);
   });
 

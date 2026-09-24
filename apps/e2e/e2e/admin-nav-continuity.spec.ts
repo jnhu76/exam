@@ -163,7 +163,10 @@ const EXPECTED_GROUP_LABELS = [
   "题库",
   "考试",
   "监考",
-  "恢复中心",
+  // #606: the recovery group names the shared incident-handling domain; the
+  // two children carry the projection identities (恢复审查 / 监考处置), never
+  // an actor-dependent collection scope.
+  "恢复与处置",
   "管理",
 ];
 

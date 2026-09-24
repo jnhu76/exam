@@ -46696,9 +46696,18 @@
                     },
                     "snapshotAt": {
                       "type": "string"
+                    },
+                    "collectionScope": {
+                      "type": "string",
+                      "enum": ["organization", "active_assignments"]
                     }
                   },
-                  "required": ["items", "nextCursor", "snapshotAt"],
+                  "required": [
+                    "items",
+                    "nextCursor",
+                    "snapshotAt",
+                    "collectionScope"
+                  ],
                   "additionalProperties": false
                 }
               }

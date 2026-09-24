@@ -16,6 +16,12 @@
  * obtain incident truth through the UI (empty collection, generic detail
  * failure state), and the request path must not reveal whether the incident
  * exists at all.
+ *
+ * issue 606 extends the same spec with the Recovery projection identities:
+ * both projections reachable for Admin with distinct workflow naming, the
+ * server-reported collectionScope presented verbatim (organization /
+ * active_assignments), assignment-claim copy absent, and an Admin caller's
+ * terminal wire authority never rendered on the Proctor Operations detail.
  */
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
@@ -23,7 +29,7 @@ import {
   candidateLoginApi,
   candidateStartAttempt,
 } from "../lib/flow";
-import { loginViaUi } from "../lib/login";
+import { loginAsAdmin, loginViaUi } from "../lib/login";
 import { createProctorAssignmentFixture, seedExam } from "../lib/seed";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
@@ -149,17 +155,31 @@ test.describe("Proctor Recovery Center (#303)", () => {
     );
 
     // ── Reachability through the real product surface ──
-    // Nav label (nav.items.proctorRecovery) is the short form; the page title
-    // is "监考恢复中心".
+    // #606: nav label (nav.items.proctorRecovery) is the projection identity
+    // "监考处置"; the page title is the same workflow identity.
     const navLink = page
       .getByTestId("app-sidebar")
-      .getByRole("link", { name: "监考恢复" });
+      .getByRole("link", { name: "监考处置" });
     await expect(navLink).toBeVisible({ timeout: 15_000 });
     await navLink.click();
     await page.waitForURL("**/admin/proctor/recovery", { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "监考处置" })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // #606: the Proctor caller sees the assignment-filtered scope reported by
+    // the backend — and never the organization scope, never the old fixed
+    // assignment sentence that was false for Admin.
     await expect(
-      page.getByRole("heading", { name: "监考恢复中心" }),
-    ).toBeVisible({ timeout: 15_000 });
+      page.getByTestId("proctor-recovery-collection-scope"),
+    ).toHaveText("范围：我的当前监考任务");
+    await expect(page.getByText("范围：组织内全部考试")).toHaveCount(0);
+    await expect(page.getByText("与您监考分配相关")).toHaveCount(0);
+    // #606: the administrative projection nav stays invisible to a pure
+    // Proctor (UX-only gate; the backend remains the authority).
+    await expect(
+      page.getByTestId("app-sidebar").getByRole("link", { name: "恢复审查" }),
+    ).toHaveCount(0);
 
     // The assigned incident is discoverable in the worklist. The worklist
     // projects incident status (a link to the detail route) plus the exam
@@ -300,5 +320,69 @@ test.describe("Proctor Recovery Center (#303)", () => {
     expect(new URL(page.url()).pathname).toContain(
       `/admin/proctor/recovery/incidents/${incidentId}`,
     );
+  });
+
+  // ── #606: the two Recovery projections are distinct workflow identities ──
+
+  test("#606: Admin sees both projections; the Proctor Operations worklist reports organization scope", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+
+    const sidebar = page.getByTestId("app-sidebar");
+    // Both projections are reachable from navigation, named by workflow
+    // identity (not "full vs simplified" versions of one list).
+    await expect(sidebar.getByRole("link", { name: "恢复审查" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(sidebar.getByRole("link", { name: "监考处置" })).toBeVisible();
+
+    await sidebar.getByRole("link", { name: "监考处置" }).click();
+    await page.waitForURL("**/admin/proctor/recovery", { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "监考处置" })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // The backend reports organization scope for the Admin caller and the UI
+    // presents exactly that fact — never an assignment claim.
+    await expect(
+      page.getByTestId("proctor-recovery-collection-scope"),
+    ).toHaveText("范围：组织内全部考试");
+    await expect(page.getByText("范围：我的当前监考任务")).toHaveCount(0);
+    await expect(page.getByText("与您监考分配相关")).toHaveCount(0);
+    await expect(page.getByText("我的监考")).toHaveCount(0);
+
+    // Org-wide collection: the worklist carries the exam's incidents.
+    await expect(page.getByText(examTitle)).toHaveCount(2, {
+      timeout: 15_000,
+    });
+  });
+
+  test("#606: Admin caller on the Proctor Operations detail renders no terminal judgment controls", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto(`/admin/proctor/recovery/incidents/${incidentId}`);
+    await expect(page.getByText(incidentDescription).first()).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // callerAuthority != surfaceAffordanceSet: the Admin's wire allowedActions
+    // DO include resolve/dismiss (proven at the API layer), but this
+    // projection renders only the Proctor Operations surface family —
+    // terminal Admin judgment stays on 恢复审查.
+    for (const name of ["解决事件", "驳回事件"]) {
+      await expect(
+        page.getByRole("button", { name }),
+        `terminal judgment must not render on Proctor Operations: ${name}`,
+      ).toHaveCount(0);
+    }
+    // The operational workflow still renders for the Admin visitor.
+    for (const name of ["开始调查", "添加备注", "修改严重程度"]) {
+      await expect(
+        page.getByRole("button", { name }),
+        `operational action missing: ${name}`,
+      ).toBeVisible();
+    }
   });
 });

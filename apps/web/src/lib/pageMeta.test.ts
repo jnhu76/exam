@@ -11,7 +11,8 @@ describe("page metadata", () => {
   it("returns static admin route titles", () => {
     expect(getPageTitle("/admin/dashboard")).toBe("仪表盘");
     expect(getPageTitle("/admin/settings")).toBe("平台设置");
-    expect(getPageTitle("/admin/recovery")).toBe("恢复中心");
+    expect(getPageTitle("/admin/recovery")).toBe("恢复审查");
+    expect(getPageTitle("/admin/proctor/recovery")).toBe("监考处置");
     expect(getPageTitle("/admin/permissions")).toBe("权限注册表");
     expect(getPageTitle("/admin/exam-profiles")).toBe("策略模板");
     expect(getPageTitle("/admin/exam-profiles/new")).toBe("新建策略模板");

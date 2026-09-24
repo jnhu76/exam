@@ -381,7 +381,7 @@ const zhCN = {
       questionBank: "题库",
       exams: "考试",
       monitoring: "监考",
-      recovery: "恢复中心",
+      recovery: "恢复与处置",
       operations: "运维",
       management: "管理",
     },
@@ -396,8 +396,8 @@ const zhCN = {
       gradingQueue: "待评分",
       results: "成绩查询",
       proctorWorkspace: "监考工作台",
-      recoveryQueue: "恢复中心",
-      proctorRecovery: "监考恢复",
+      recoveryQueue: "恢复审查",
+      proctorRecovery: "监考处置",
       users: "用户管理",
       candidates: "考生管理",
       importLogs: "导入日志",
@@ -2539,8 +2539,9 @@ const zhCN = {
 
     /** Recovery Center — queue page (J5-I1B1, contract §5.4). */
     recoveryQueue: {
-      title: "恢复中心",
-      description: "查看组织内的中断事件、强制交卷与时间补偿记录。",
+      title: "恢复审查",
+      description:
+        "面向管理处置的恢复审查：核查组织内中断事件、强制交卷与时间补偿记录，并作出终态判断。",
       filters: {
         statusAll: "全部状态",
         severityAll: "全部严重程度",
@@ -2589,7 +2590,7 @@ const zhCN = {
       empty: "暂无中断事件",
       emptyDescription: "当前筛选条件下没有匹配的中断事件。",
       loadFailed: "加载恢复队列失败",
-      permissionDenied: "您没有查看恢复中心的权限。",
+      permissionDenied: "您没有使用恢复审查的权限。",
       notFound: "未找到相关事件。",
       unavailable: "恢复数据暂不可用，请稍后重试。",
       invalidFilter: "筛选条件无效，请检查后重试。",
@@ -2599,7 +2600,7 @@ const zhCN = {
     /** Recovery Center — incident detail page (J5-I1B2, contract §6.3). */
     recoveryIncident: {
       title: "事件详情",
-      back: "返回恢复中心",
+      back: "返回恢复审查",
       snapshotAt: "快照时间：{{time}}",
       snapshotStale: "快照较旧，数据可能已变化",
       notFound: "未找到该事件",
@@ -2703,7 +2704,7 @@ const zhCN = {
     /** Recovery Center — attempt operations page (J5-I1B3, contract §6.4). */
     recoveryAttempt: {
       title: "答题操作详情",
-      back: "返回恢复中心",
+      back: "返回恢复审查",
       attemptNo: "第 {{count}} 次答题",
       notFound: "未找到该答题",
       notFoundDescription: "答题不存在或已被删除。",
@@ -2776,7 +2777,7 @@ const zhCN = {
     /** Recovery Center — exam recovery detail page (J5-I1B4, contract §6.5). */
     recoveryExam: {
       title: "考试恢复详情",
-      back: "返回恢复中心",
+      back: "返回恢复审查",
       viewInQueue: "在队列中查看",
       notFound: "未找到该考试",
       notFoundDescription: "考试不存在或已被删除。",
@@ -2914,15 +2915,20 @@ const zhCN = {
 
     /** Proctor Recovery Center worklist (EXAM-303). */
     proctorRecovery: {
-      title: "监考恢复中心",
-      description: "查看与您监考分配相关的事件。",
+      title: "监考处置",
+      description:
+        "考试现场事件的处置与记录：创建事件、调查定性、补充备注并关联证据。",
       refresh: "刷新",
       refreshing: "刷新中…",
       snapshotAt: "数据快照：{{time}}",
       snapshotStale: "数据已过时",
       lastUpdatedAt: "最后更新：{{time}}",
       empty: "暂无事件",
-      emptyDescription: "当前没有与您监考分配相关的事件。",
+      emptyDescription: "当前范围内没有匹配的事件。",
+      scope: {
+        organization: "范围：组织内全部考试",
+        active_assignments: "范围：我的当前监考任务",
+      },
       loadingMore: "加载中…",
       loadMore: "加载更多",
       filters: {
@@ -2948,12 +2954,12 @@ const zhCN = {
       },
     },
 
-    /** Proctor Recovery incident detail (EXAM-303). */
+    /** Proctor Operations incident detail (EXAM-303; projection identity issue 606). */
     proctorRecoveryIncident: {
       title: "监考事件详情",
       refresh: "刷新",
       refreshing: "刷新中…",
-      back: "返回列表",
+      back: "返回监考处置",
       notFound: "事件未找到",
       notFoundDescription: "该事件不存在或您没有权限查看。",
       snapshotStale: "数据已过时",
@@ -3193,8 +3199,8 @@ const zhCN = {
       auditLogs: "审计日志",
       permissions: "权限注册表",
       importLogs: "导入日志",
-      recovery: "恢复中心",
-      proctorRecovery: "监考恢复中心",
+      recovery: "恢复审查",
+      proctorRecovery: "监考处置",
       examList: "我的考试",
       examSettings: "账号设置",
     },

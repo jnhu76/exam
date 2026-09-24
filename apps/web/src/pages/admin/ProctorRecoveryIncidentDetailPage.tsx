@@ -22,6 +22,7 @@ import {
   IncidentCommand,
   PayloadSummary,
 } from "@/features/recovery-operations/IncidentCommand";
+import { renderProctorOperationsActions } from "@/features/recovery-operations/proctorOperationsSurface";
 import { ArrowLeft, CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
 
 /**
@@ -32,7 +33,7 @@ const SNAPSHOT_STALE_MS = 2 * 60_000;
 const NAMESPACE = "admin.proctorRecoveryIncident";
 
 /**
- * Proctor Recovery incident detail (J6, EXAM-303).
+ * Proctor Operations incident detail (J6, EXAM-303; projection identity issue 606).
  *
  * Narrow Proctor projection over `GET /api/admin/incidents/:incidentId/detail`
  * (assignment_scoped): incident row + event history (notes are events) + link
@@ -41,14 +42,19 @@ const NAMESPACE = "admin.proctorRecoveryIncident";
  * ledger, NO auditReferences, and NO Admin attempt-command execution details —
  * the page cannot render what the server never sends.
  *
- * The operations area renders ONLY the server-computed `allowedActions`
- * (status candidates ∩ caller capabilities): for a Proctor that is the entire
- * investigate family — investigate / add_note / change_severity / link_action /
- * link_attempt / link_interruption — while resolve/dismiss (Admin terminal
- * judgment) is structurally absent and link_attempt appears only on
- * non-anchored incidents. Every button posts to the canonical
- * assignment-scoped incident command route; this page never derives
- * eligibility from status or from the caller's role.
+ * The operations area renders ONLY the intersection of the server-computed
+ * `allowedActions` (callerAuthority ∩ resource-state candidates) with this
+ * projection's surface affordance set
+ * ({@link renderProctorOperationsActions}): for a Proctor that is the entire
+ * investigate family — investigate / add_note / change_severity / link_action
+ * / link_attempt / link_interruption. For an Admin caller the wire may
+ * legitimately also carry resolve/dismiss; those are Admin TERMINAL judgment
+ * and stay on the administrative Recovery projection — the intersection
+ * structurally excludes them here. link_attempt appears only on non-anchored
+ * incidents. Every button posts to the canonical exam-scoped incident
+ * command route (assignment-enforced for Proctors; organization-wide for
+ * Admin); this page never derives eligibility from status or from the
+ * caller's role.
  */
 export function ProctorRecoveryIncidentDetailPage() {
   const { t } = useTranslation();
@@ -85,6 +91,10 @@ export function ProctorRecoveryIncidentDetailPage() {
       />
     );
   }
+
+  // issue 606: caller authority (server allowedActions) ∩ Proctor Operations
+  // surface affordance set — the ONLY source this page renders commands from.
+  const renderedActions = renderProctorOperationsActions(data.allowedActions);
 
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
@@ -129,15 +139,16 @@ export function ProctorRecoveryIncidentDetailPage() {
         </div>
       )}
 
-      {/* Operations — server-computed eligibility, never a client-side
-          derivation from status. */}
-      {data.allowedActions.length > 0 && (
+      {/* Operations — renderedActions = server allowedActions ∩ this
+          projection's affordance set. Never a client-side derivation from
+          status, role, or capabilities. */}
+      {renderedActions.length > 0 && (
         <PageSection
           title={t("admin.recoveryOps.operationsTitle")}
           className="lg:col-span-2"
         >
           <div className="flex flex-wrap gap-2">
-            {data.allowedActions.includes("investigate") && (
+            {renderedActions.includes("investigate") && (
               <IncidentCommand
                 incidentId={data.incident.id}
                 incidentVersion={data.incident.version}
@@ -183,7 +194,7 @@ export function ProctorRecoveryIncidentDetailPage() {
                 refresh={refresh}
               />
             )}
-            {data.allowedActions.includes("add_note") && (
+            {renderedActions.includes("add_note") && (
               <IncidentCommand
                 incidentId={data.incident.id}
                 incidentVersion={data.incident.version}
@@ -208,7 +219,7 @@ export function ProctorRecoveryIncidentDetailPage() {
                 refresh={refresh}
               />
             )}
-            {data.allowedActions.includes("change_severity") && (
+            {renderedActions.includes("change_severity") && (
               <IncidentCommand
                 incidentId={data.incident.id}
                 incidentVersion={data.incident.version}
@@ -256,7 +267,7 @@ export function ProctorRecoveryIncidentDetailPage() {
                 refresh={refresh}
               />
             )}
-            {data.allowedActions.includes("link_attempt") && (
+            {renderedActions.includes("link_attempt") && (
               <IncidentCommand
                 incidentId={data.incident.id}
                 incidentVersion={data.incident.version}
@@ -303,7 +314,7 @@ export function ProctorRecoveryIncidentDetailPage() {
                 refresh={refresh}
               />
             )}
-            {data.allowedActions.includes("link_action") && (
+            {renderedActions.includes("link_action") && (
               <IncidentCommand
                 incidentId={data.incident.id}
                 incidentVersion={data.incident.version}
@@ -347,7 +358,7 @@ export function ProctorRecoveryIncidentDetailPage() {
                 refresh={refresh}
               />
             )}
-            {data.allowedActions.includes("link_interruption") && (
+            {renderedActions.includes("link_interruption") && (
               <IncidentCommand
                 incidentId={data.incident.id}
                 incidentVersion={data.incident.version}

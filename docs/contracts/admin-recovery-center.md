@@ -1046,6 +1046,40 @@ A Proctor may *document* suspected misconduct as an incident; a Proctor may
 NOT apply the misconduct mark to the Attempt. Sharing a button component
 between Admin and Proctor does not change this.
 
+### 13.1 Recovery projection identities and collection scope (#606 D1)
+
+The two Recovery routes are different WORKFLOW PROJECTIONS, not detailed and
+simplified views of one list:
+
+```text
+/admin/recovery            projection = administrative recovery
+                           purpose = broad investigation / audit / Admin
+                           terminal judgment (resolve / dismiss)
+                           collection = organization
+
+/admin/proctor/recovery    projection = proctor operations
+                           purpose = operational incident creation /
+                           investigation / documentation / evidence linking
+                           collection = Admin caller → organization
+                                      = Proctor caller → active assignments
+```
+
+The Proctor Operations worklist (`GET /admin/proctor/incidents`) reports its
+effective collection as `collectionScope: "organization" | "active_assignments"`
+in every response. The field is computed from the SAME runtime-authority
+decision that selects the SQL predicate (Admin runtime role set → org-wide,
+otherwise the actor's active Proctor assignments); it encodes nothing else —
+not projection identity, role, permissions, or allowed actions. The frontend
+presents this fact verbatim and MUST NOT re-derive it from `user.role`,
+capabilities, or route. Navigation and page identity describe the projection;
+they never encode the actor-dependent collection scope.
+
+Surface affordances are likewise a product-surface decision, independent of
+caller authority: the Proctor Operations detail surface renders
+`server allowedActions ∩ PROCTOR_OPERATIONS_SURFACE_ACTIONS` (the operational
+family only), so an Admin caller's `resolve` / `dismiss` wire authority never
+renders there — terminal judgment stays on the administrative projection.
+
 ---
 
 ## 14. Acceptance checklist (J5-R0)

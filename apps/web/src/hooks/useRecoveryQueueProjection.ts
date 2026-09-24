@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ProctorRecoveryCollectionScope } from "@exam/contracts";
 import {
   classifyRecoveryError,
   type ClassifiedRecoveryError,
@@ -38,6 +39,13 @@ export interface QueuePageResult<TItem> {
   items: TItem[];
   nextCursor: string | null;
   snapshotAt: string;
+  /**
+   * Page-1-level effective collection scope, when the endpoint reports one
+   * (issue 606). The Proctor Recovery worklist requires it on the wire; the Admin
+   * recovery queue does not carry it. Passed through verbatim — this hook
+   * never derives or defaults it.
+   */
+  collectionScope?: ProctorRecoveryCollectionScope;
 }
 
 export interface UseRecoveryQueueProjectionOptions<TItem> {
@@ -70,6 +78,12 @@ export interface UseRecoveryQueueProjectionResult<TItem> {
   isLoadingMore: boolean;
   /** Server RR snapshot timestamp (from the latest page-1 result). */
   snapshotAt: string | null;
+  /**
+   * Server-decided effective collection scope of the latest page-1 result
+   * (issue 606), verbatim from the wire — null until the first page-1 load and
+   * for queues whose endpoint does not report one. Never derived locally.
+   */
+  collectionScope: ProctorRecoveryCollectionScope | null;
   /** Client receive time of the last successful page-1 load (diagnostic). */
   lastUpdatedAt: Date | null;
   /** Server-snapshot-based staleness (true when older than `staleAfterMs`). */
@@ -102,6 +116,8 @@ export function useRecoveryQueueProjection<TItem>(
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
+  const [collectionScope, setCollectionScope] =
+    useState<ProctorRecoveryCollectionScope | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   // True once the first page-1 load has resolved (success OR failure). This
@@ -180,6 +196,7 @@ export function useRecoveryQueueProjection<TItem>(
         setItems(result.items);
         setNextCursor(result.nextCursor);
         setSnapshotAt(result.snapshotAt);
+        setCollectionScope(result.collectionScope ?? null);
         setError(null);
         setLastUpdatedAt(new Date());
         failureRef.current = 0;
@@ -279,6 +296,7 @@ export function useRecoveryQueueProjection<TItem>(
     setItems([]);
     setNextCursor(null);
     setSnapshotAt(null);
+    setCollectionScope(null);
     setError(null);
     setLastUpdatedAt(null);
     setIsRefreshing(false);
@@ -339,6 +357,7 @@ export function useRecoveryQueueProjection<TItem>(
       isRefreshing: false,
       isLoadingMore: false,
       snapshotAt: null,
+      collectionScope: null,
       lastUpdatedAt: null,
       isStale: false,
       refresh,
@@ -354,6 +373,7 @@ export function useRecoveryQueueProjection<TItem>(
     isRefreshing,
     isLoadingMore,
     snapshotAt,
+    collectionScope,
     lastUpdatedAt,
     isStale,
     refresh,
