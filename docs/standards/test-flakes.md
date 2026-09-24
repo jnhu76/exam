@@ -2000,3 +2000,11 @@ heading "已选题目 (1)" 与 heading "尚未选择题目" 同时出现
 ### 后续动作
 
 - 全量 E2E 复跑验证；两者修复均带永久回归（E2E 断言/单元测试），无需额外跟踪。
+
+### 复发记录（同日全量复跑中的独立环境事件）
+
+- 2026-09-24 run5：`recovery-operations-a11y.spec.ts:80` 以
+  `page.goto: net::ERR_NETWORK_CHANGED at http://localhost:3101/login` 一次性
+  失败（shard 2，2 例未执行为 serial 级联）。ERR_NETWORK_CHANGED 是 Chromium
+  网络栈对宿主网络接口变化的报错，非应用代码可达路径（WSL2 网络瞬时抖动）；
+  同代码复跑 run6 两 shard 全绿。按登记规则不设 timeout/skip/retry。
