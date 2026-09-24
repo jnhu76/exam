@@ -51,8 +51,9 @@ const NAMESPACE = "admin.proctorRecoveryIncident";
  * legitimately also carry resolve/dismiss; those are Admin TERMINAL judgment
  * and stay on the administrative Recovery projection — the intersection
  * structurally excludes them here. link_attempt appears only on non-anchored
- * incidents. Every button posts to the canonical assignment-scoped incident
- * command route; this page never derives eligibility from status or from the
+ * incidents. Every button posts to the canonical exam-scoped incident
+ * command route (assignment-enforced for Proctors; organization-wide for
+ * Admin); this page never derives eligibility from status or from the
  * caller's role.
  */
 export function ProctorRecoveryIncidentDetailPage() {

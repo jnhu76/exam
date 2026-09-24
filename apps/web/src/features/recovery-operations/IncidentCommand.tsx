@@ -31,7 +31,9 @@ import { Wrench } from "lucide-react";
  * Shared by the Admin Recovery incident detail and the Proctor Recovery
  * Center (EXAM-303): the component is authority-neutral — callers render it only
  * for actions the server already listed in `allowedActions`, and the endpoint
- * it posts to is the same canonical assignment-scoped incident command route.
+ * it posts to is the same canonical exam-scoped incident command route
+ * (assignment-enforced for Proctors; Admin carries the organization-wide
+ * superset authority).
  */
 export interface IncidentCommandFieldBase {
   kind: "text" | "select";

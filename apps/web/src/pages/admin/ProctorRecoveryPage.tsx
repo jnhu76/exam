@@ -74,9 +74,9 @@ const NAMESPACE = "admin.proctorRecovery";
  * assignments); it never derives scope from the user's role, capabilities, or
  * the route. Polling/refresh/staleness semantics are identical to the Admin
  * recovery queue ({@link useRecoveryQueueProjection}). The only mutation is
- * incident creation on an assigned exam via the canonical assignment-scoped
- * incident command route; every other action lives on the per-incident detail
- * page.
+ * incident creation within the caller's effective Proctor Operations scope via
+ * the canonical scoped incident command route; every other action lives on the
+ * per-incident detail page.
  */
 export function ProctorRecoveryPage() {
   const { t } = useTranslation();
@@ -317,11 +317,13 @@ export function ProctorRecoveryPage() {
 }
 
 /**
- * Incident creation on an ASSIGNED exam (canonical assignment-scoped
- * `POST /admin/exams/:examId/incidents`). The exam select is populated from
- * the same assignment-scoped list the workspace uses; ONE operationId per
- * dialog session (reused on retry), indeterminate outcomes keep the dialog in
- * the retry state instead of pretending success.
+ * Incident creation through the canonical scoped incident route
+ * (`POST /admin/exams/:examId/incidents`). The exam select is populated from
+ * /admin/proctor/exams: Admin receives the organization-wide
+ * compatibility-superset collection; a Proctor receives active-assignment-
+ * filtered exams. ONE operationId per dialog session (reused on retry),
+ * indeterminate outcomes keep the dialog in the retry state instead of
+ * pretending success.
  */
 function CreateIncidentButton({
   open,
@@ -339,8 +341,8 @@ function CreateIncidentButton({
   const [severity, setSeverity] = useState("");
   const [description, setDescription] = useState("");
 
-  // Load the assigned-exam options fresh per dialog session — the
-  // assignment scope can change between sessions (revocation/reassignment).
+  // Load the effective exam options fresh per dialog session because the
+  // server-derived collection may change between sessions.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
