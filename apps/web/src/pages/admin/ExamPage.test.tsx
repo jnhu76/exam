@@ -142,11 +142,11 @@ describe("ExamPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("declares atomic duration, score, date and action columns", async () => {
+  it("declares fixed-capacity duration, score, date and action columns", async () => {
     renderPage();
 
-    // Atomic columns are a desktop-table declaration; scope to it (row
-    // content also renders in the mobile card list).
+    // Non-compressible columns are a desktop-table declaration; scope to it
+    // (row content also renders in the mobile card list).
     const table = await screen.findByRole("table");
     const duration = within(table).getAllByText("60分钟");
     const score = within(table).getAllByText("60/100");

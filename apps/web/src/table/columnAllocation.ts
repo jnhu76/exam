@@ -31,12 +31,12 @@ import {
  *   Σbasis ≤ A                 PREFERRED/  rendered_i = basis_i × scale, scale =
  *                              EXPANDED    min(A, cap·Σbasis) / Σbasis
  *
- * Atomic roles (floor == basis) do not shrink in the compressed regime — the
- * interpolation is the identity for them — while a compressible role absorbs
- * exactly as much compression as its own declared representation allows
- * (wrap / break-token / truncate / line-clamp-2). Local horizontal scroll is
- * therefore reserved for the case the affordance promises: the hard floors
- * genuinely do not fit.
+ * Non-compressible roles (floor == basis) do not shrink in the compressed
+ * regime — the interpolation is the identity for them — while a compressible
+ * role absorbs exactly as much compression as its own declared representation
+ * allows (wrap / break-token / truncate / line-clamp-2). Local horizontal
+ * scroll is therefore reserved for the case the affordance promises: the hard
+ * floors genuinely do not fit.
  *
  * Expansion is bounded by ONE table-level cap. The census measured
  * proportional growth as visually reasonable while the scale stayed near 1.2
