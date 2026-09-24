@@ -118,19 +118,37 @@ casually introduce a new visual rhythm or component geometry outside the
 existing authority; when it must, the exception is declared and adjudicated in
 an Issue, not absorbed silently into page-local classes.
 
-## 4. Phase-F boundary (intentionally open)
+## 4. Phase-F boundary (closed by Phase F)
 
-The only #601 acceptance criteria not closed by Step 1 are table-first:
+Step 1 left the table-first #601 criteria open; Phase F closed them:
 
-- table column semantics / allocator enforcement (heterogeneous
-  column-minimum allocation, width-allocation and sizing algorithm);
-- table overflow policy closure;
-- narrow / normal / wide table fixtures;
-- full Phase-F table behavioral verification and the table
-  horizontal-scroll correctness campaign.
+- **column semantics / allocator enforcement** — one allocation authority
+  (`apps/web/src/table/columnAllocation.ts`): semantic floors per role
+  (`ROLE_GEOMETRY`) plus the ratified two-state rule (below Σ minima → render
+  at the minima with local scroll; at or above → every column at floor × one
+  shared scale). Residual space belongs to the semantic geometry, never to
+  however many `width: auto` columns happen to exist.
+- **table overflow policy closure** — a value wider than its column never
+  paints over its neighbours: single-line policies clip at the cell and the
+  clipped cell reveals its full value on hover; presenter policies keep title
+  + keyboard focus; `actions` is never clipped. Region overflow stays with
+  `useOverflowObservation` (integer `scrollWidth − clientWidth` facts; the
+  exact fractional content box is the allocator's input only).
+- **narrow / normal / wide fixtures** — `apps/e2e/e2e/data-view-1.spec.ts`
+  (UI-DATA-VIEW-1): Narrow (local scroll at Σ minima), Normal/Wide
+  (proportional fill, ratio-gated per column — `/admin/exams` is the
+  canonical single-flexible-column fixture), Long content (per-role policy
+  gate), Search+toolbar (one band, count in the title band), and per-frame
+  pagination/search transition gates (no painted scrollbar while
+  `data-overflowing=false`; `scrollbar-gutter: stable` keeps the document
+  content box width invariant).
+- **behavioral verification** — the full table regression set
+  (table-contract-2, dense-table-cell-fitting, ui-governance-1,
+  row-action-capacity, table-mobile-1, data-view-1) runs green on the Phase F
+  branch.
 
-The #602 optical facts listed in §2 stay frozen meanwhile; Step 2 must not
-re-open them either.
+The #602 optical facts listed in §2 stayed frozen throughout; Phase F did not
+re-open them.
 
 ## 5. Rendering / DPI policy
 

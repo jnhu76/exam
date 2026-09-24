@@ -11,6 +11,11 @@ function setScrollMetrics(
   metrics: { clientWidth: number; scrollWidth: number; scrollLeft: number },
 ) {
   Object.defineProperties(element, {
+    getBoundingClientRect: {
+      configurable: true,
+      value: () => ({ width: metrics.clientWidth }),
+    },
+    offsetWidth: { configurable: true, get: () => metrics.clientWidth },
     clientWidth: { configurable: true, get: () => metrics.clientWidth },
     scrollWidth: { configurable: true, get: () => metrics.scrollWidth },
     scrollLeft: {
@@ -133,24 +138,26 @@ describe("DataWorkbench", () => {
     ).not.toBeNull();
   });
 
-  it("T3: fails loud when mobileList meets a non-management archetype (DEV/test)", () => {
+  it("T3: fails loud when mobileList meets an ineligible archetype (DEV/test)", () => {
+    // #601 Phase F extended mobile eligibility to log-diagnostic;
+    // detail-comparison stays scroll-only.
     expect(() =>
       render(
         <DataWorkbench
-          archetype="log-diagnostic"
+          archetype="detail-comparison"
           desktopTable={<table aria-label="桌面表" />}
           mobileList={<div>移动卡片内容</div>}
         />,
       ),
-    ).toThrow(/management-list mechanism/);
+    ).toThrow(/management-list\/log-diagnostic mechanism/);
   });
 
-  it("R1 production fallback: illegal log-diagnostic + mobileList keeps the desktop representation", () => {
+  it("R1 production fallback: ineligible detail-comparison + mobileList keeps the desktop representation", () => {
     vi.stubEnv("DEV", false);
     try {
       render(
         <DataWorkbench
-          archetype="log-diagnostic"
+          archetype="detail-comparison"
           desktopTable={<table aria-label="桌面表" />}
           mobileList={<div>移动卡片内容</div>}
         />,

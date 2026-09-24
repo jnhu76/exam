@@ -727,6 +727,16 @@ export function UsersPage() {
         />
       ) : (
         <DataTableShell
+          footer={
+            usersTotal > USERS_PAGE_SIZE ? (
+              <DataTablePagination
+                page={usersPage}
+                pageSize={USERS_PAGE_SIZE}
+                total={usersTotal}
+                onPageChange={setUsersPage}
+              />
+            ) : undefined
+          }
           mobile={
             <MobileRecordList
               columns={columns}
@@ -741,14 +751,6 @@ export function UsersPage() {
             getRowId={(u) => u.id}
           />
         </DataTableShell>
-      )}
-      {usersTotal > USERS_PAGE_SIZE && (
-        <DataTablePagination
-          page={usersPage}
-          pageSize={USERS_PAGE_SIZE}
-          total={usersTotal}
-          onPageChange={setUsersPage}
-        />
       )}
       <Dialog
         open={dialogOpen}

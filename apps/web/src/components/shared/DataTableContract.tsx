@@ -1,6 +1,9 @@
-import type { ComponentProps } from "react";
-import { TableCell, TableHead } from "@/components/ui/table";
+import type { ComponentProps, MouseEvent, ReactNode } from "react";
+import { useContext, useMemo } from "react";
+import { TableCell, Table, TableHead } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { TableAllocationContext } from "@/components/shared/TableScrollSurface";
+import { allocateTableColumns } from "@/table/columnAllocation";
 
 export type DataTableColumnRole =
   | "primary-text"
@@ -24,11 +27,13 @@ export type DataTableColumnRole =
  * resolves its overflow from the role default (`ROLE_OVERFLOW`) or declares an
  * explicit override on the column declaration.
  *
- * Pure-CSS policies: `nowrap`, `wrap`, `break-token`.
+ * Pure-CSS policies: `nowrap`, `wrap`, `break-token`. `nowrap` is single-line
+ * and clips at the cell (recipes.css), so its value can never paint outside
+ * the column; the cell reveals the full value on hover when it does not fit
+ * (see {@link DataTableCell}).
  * Content-presenter policies: `truncate`, `truncate-middle`, `line-clamp-2` —
  * these keep the full value accessible (title + keyboard focus) and are
- * realized through {@link DataTableOverflowText}, never through silent
- * cell-level clipping.
+ * realized through {@link DataTableOverflowText}.
  */
 export type ColumnOverflow =
   | "nowrap"
@@ -168,8 +173,11 @@ export function columnPriority(column: {
 
 export function DataTableColumns({
   columns,
+  widths,
 }: {
   columns: readonly DataTableColumnDeclaration[];
+  /** Explicit per-column border-box px from the allocation authority. */
+  widths?: readonly number[];
 }) {
   return (
     <colgroup data-slot="data-table-columns">
@@ -177,12 +185,98 @@ export function DataTableColumns({
         <col
           key={column.key ?? `${column.role}-${index}`}
           data-column-role={column.role}
-          data-column-width={column.role}
           data-column-overflow={columnOverflow(column)}
           data-column-priority={columnPriority(column)}
+          {...(widths ? { style: { width: `${widths[index]}px` } } : {})}
         />
       ))}
     </colgroup>
+  );
+}
+
+/**
+ * Props spread onto the table element when the allocation authority governs
+ * it: the exact computed width plus the marker that scopes
+ * `table-layout: fixed` (recipes.css) to allocated tables only.
+ */
+export interface AllocatedTableProps {
+  style: { width: string };
+  "data-column-allocation": "computed";
+}
+
+/**
+ * Resolve the column allocation for one declaration set from the enclosing
+ * scroll surface's measured scope (issue 601 Phase F). Returns the colgroup and
+ * the table-element props; both renderers of governed tables
+ * (DataTableSurface for contract-direct pages, DesktopDataTable for the
+ * TanStack row model) consume this — there is no third path.
+ *
+ * Outside an allocation scope this falls back to attribute-only cols (auto
+ * layout) in production and fails loud in development: a contract table
+ * rendered outside a scroll surface is an illegal composition, not a
+ * silently-degraded one.
+ */
+export function useColumnAllocation(
+  columns: readonly DataTableColumnDeclaration[],
+): {
+  colgroup: ReactNode;
+  tableProps: AllocatedTableProps | Record<string, never>;
+} {
+  const scope = useContext(TableAllocationContext);
+  const allocation = useMemo(
+    () =>
+      scope === null
+        ? null
+        : allocateTableColumns(
+            columns.map((column) => column.role),
+            scope.availableWidth,
+            { fill: scope.fill },
+          ),
+    [scope, columns],
+  );
+
+  if (scope === null && import.meta.env.DEV) {
+    throw new Error(
+      "DataTable contract violation: a governed table must render inside a TableScrollSurface (DataTableShell / DataWorkbench / an allocation provider) — the column allocator has no measured container here",
+    );
+  }
+
+  return {
+    colgroup: (
+      <DataTableColumns columns={columns} widths={allocation?.columnWidths} />
+    ),
+    tableProps:
+      allocation === null
+        ? {}
+        : {
+            style: { width: `${allocation.tableWidth}px` },
+            "data-column-allocation": "computed",
+          },
+  };
+}
+
+/**
+ * The table element for contract-direct pages: the ui Table primitive bound
+ * to the allocation authority (computed colgroup + exact table width +
+ * computed-layout marker). Pages declare semantics through the column
+ * declarations and render their own header/body rows — this component owns
+ * only the table element + colgroup wiring, so there is exactly one width
+ * authority for both composition styles.
+ */
+export function DataTableSurface({
+  columns,
+  children,
+  ...props
+}: Omit<ComponentProps<typeof Table>, "children"> & {
+  columns: readonly DataTableColumnDeclaration[];
+  children: ReactNode;
+}) {
+  const { colgroup, tableProps } = useColumnAllocation(columns);
+  return (
+    <Table {...tableProps} {...props}>
+      {colgroup}
+      {children}
+    </Table>
   );
 }
 
@@ -216,6 +310,33 @@ export function DataTableHead({
   );
 }
 
+/**
+ * INVARIANT: a clipped single-line cell keeps its full value reachable.
+ *
+ * Clipping a value wider than its column is what the visual authority does —
+ * Element Plus, koi-ui's table engine, puts `overflow: hidden` on every
+ * `.el-table .cell` — and it is the only way a cell can never paint over its
+ * neighbours. Clipping alone is not that policy though: Element Plus pairs it
+ * with `show-overflow-tooltip`, which reveals the full text on hover exactly
+ * when the text overflows the cell (measured there as the text range against
+ * the cell width). This is that reveal, on the platform's own tooltip: the
+ * annotation is derived from the cell's own layout facts at hover time —
+ * nothing is stored, observed or re-rendered, a cell that fits stays silent,
+ * and a cell whose value changed re-annotates itself on the next hover.
+ *
+ * The full value is never only in the tooltip: the text stays in the DOM, so
+ * it is still selectable, copyable and announced by assistive technology.
+ */
+function revealClippedValue(event: MouseEvent<HTMLTableCellElement>) {
+  const cell = event.currentTarget;
+  if (cell.scrollWidth > cell.clientWidth) {
+    const value = cell.textContent ?? "";
+    if (value && cell.title !== value) cell.title = value;
+    return;
+  }
+  if (cell.title) cell.removeAttribute("title");
+}
+
 export function DataTableCell({
   role,
   overflow,
@@ -226,10 +347,14 @@ export function DataTableCell({
   overflow?: ColumnOverflow;
   priority?: ColumnPriority;
 }) {
+  const clipped = columnOverflow({ role, overflow }) === "nowrap";
   return (
     <TableCell
       data-column-role={role}
       {...overflowAttributes({ role, overflow, priority })}
+      {...(clipped && role !== "actions"
+        ? { onMouseOver: revealClippedValue }
+        : {})}
       {...props}
     />
   );
@@ -263,18 +388,25 @@ export function DataTableSpanCell({
 
 /**
  * Deterministic middle truncation for machine identifiers (short-id role).
- * Visible = recognizable head + ellipsis + tail (≥4 visible glyphs); the full
- * value stays available via title/aria-label on the focusable presenter.
+ * Visible = recognizable head + ellipsis + tail; the full value stays available
+ * via title/aria-label on the focusable presenter.
  *
- * The budget is glyph-count based (not measured): machine identifiers are
- * ASCII-dominated, and 6+4 visible glyphs fit the short-id 7.5rem content box
- * (~88px ≈ 12 ASCII glyphs) without cell clipping. Strings short enough to
- * fit are never truncated.
+ * The budget is glyph-count based (not measured at runtime) and is DERIVED from
+ * the rendered geometry of the frozen short-id token, in the product font at
+ * the governed 15px cell tier (issue 601 Phase F): the column is 7.5rem (120px) and
+ * the cell's px-4 leaves 104px of paintable text width, while a glyph in the
+ * product stack advances ~9.5px (letters/underscore; hex digits are narrower).
+ * The former 6+4 form (11 glyphs ≈ 97–105px) was budgeted against a 95px
+ * content box that does not exist — measured, it overflowed the text area and
+ * crossed the cell border by 1px for letter/underscore-heavy tokens (caught by
+ * the issue 439 V3 runtime gate on /admin/audit-logs). A 10-glyph form (≈95px) is
+ * the largest budget that fits with margin; values within it render whole —
+ * e.g. the 10-char `employeeId` key must never truncate.
  */
-const MIDDLE_TRUNCATE_HEAD = 6;
+const MIDDLE_TRUNCATE_HEAD = 5;
 const MIDDLE_TRUNCATE_TAIL = 4;
 const MIDDLE_TRUNCATE_THRESHOLD =
-  MIDDLE_TRUNCATE_HEAD + MIDDLE_TRUNCATE_TAIL + 2;
+  MIDDLE_TRUNCATE_HEAD + MIDDLE_TRUNCATE_TAIL + 1;
 
 export function middleTruncate(value: string): string {
   if (value.length <= MIDDLE_TRUNCATE_THRESHOLD) return value;

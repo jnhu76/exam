@@ -193,8 +193,10 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
     // D: the status badge remains fully inside the status cell.
     expect(g.statusBadge.left).toBeGreaterThanOrEqual(g.statusCell.left - TOL);
     expect(g.statusBadge.right).toBeLessThanOrEqual(g.statusCell.right + TOL);
-    // E: contract width authority — 6rem (96px) fine pointer.
-    expect(Math.abs(g.actionsCell.width - 96)).toBeLessThanOrEqual(2);
+    // E: contract floor authority — 6rem (96px) fine pointer. #601 Phase F:
+    // the floor is a minimum; the proportional allocator may render the
+    // column wider on a wide container (the data-view spec owns the ratio).
+    expect(g.actionsCell.width).toBeGreaterThanOrEqual(94);
   });
 
   test.describe("V1 coarse pointer", () => {
@@ -226,8 +228,9 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
       expect(g.buttons).toHaveLength(2);
       expect(g.statusCell.right).toBeLessThanOrEqual(g.actionsCell.left + TOL);
       expect(g.statusBadge.right).toBeLessThanOrEqual(g.statusCell.right + TOL);
-      // Coarse capacity authority — 7.5rem (120px).
-      expect(Math.abs(g.actionsCell.width - 120)).toBeLessThanOrEqual(2);
+      // Coarse capacity floor authority — 7.5rem (120px); the proportional
+      // allocator may render it wider (#601 Phase F).
+      expect(g.actionsCell.width).toBeGreaterThanOrEqual(118);
     });
   });
 
@@ -267,7 +270,8 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
         ),
       );
       return {
-        archetype: el.getAttribute("data-table-archetype"),
+        // The region owns the geometry vocabulary (#601 Phase F).
+        archetype: region?.getAttribute("data-table-archetype"),
         overflowing: region?.getAttribute("data-overflowing"),
         scrollLeft: region?.scrollLeft ?? -1,
         regionBox: region?.getBoundingClientRect(),
@@ -408,12 +412,13 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
     await expect(presenters.first()).toBeVisible({ timeout: 15_000 });
     await waitForSettledLayout(page);
 
-    // middleTruncate never truncates values ≤ 12 glyphs (DataTableContract),
-    // so pin the assertions to the first presenter whose FULL value actually
-    // truncates — a short id (e.g. "ops-policy") on top of the audit list is
-    // legal behavior, not a truncation failure.
+    // middleTruncate renders values within its 9-glyph visible budget in full
+    // (DataTableContract, #601 Phase F), so pin the assertions to the first
+    // presenter whose FULL value actually truncates — a short id (e.g.
+    // "ops-policy") on top of the audit list is legal behavior, not a
+    // truncation failure.
     const longIndex = await presenters.evaluateAll((els) =>
-      els.findIndex((el) => (el.getAttribute("title") ?? "").length > 12),
+      els.findIndex((el) => (el.getAttribute("title") ?? "").length > 9),
     );
     expect(
       longIndex,
@@ -443,7 +448,11 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
         cellRight: cell.getBoundingClientRect().right,
       };
     });
-    expect(Math.abs(probe.cellWidth - 120)).toBeLessThanOrEqual(2);
+    // #601 Phase F: 120px is the short-id semantic floor (the proportional
+    // allocator may render the column wider on a wide container — the
+    // data-view spec owns the ratio gate). What THIS gate owns: the column
+    // never shrinks below the floor, and the presenter's ink stays inside it.
+    expect(probe.cellWidth).toBeGreaterThanOrEqual(118);
     expect(probe.contentRight).toBeLessThanOrEqual(probe.cellRight + TOL);
   });
 
@@ -603,11 +612,11 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
         // Geometry proof: the badge fits the frozen status column physically.
         expect(r.badgeInCell, `containment ${r.status}`).toBe(true);
         expect(r.badgeScrollFits, `no clipping ${r.status}`).toBe(true);
-        // The locked 8.5rem (136px) status capacity held for every label.
-        expect(
-          Math.abs(r.statusCellWidth - 136),
-          `width ${r.status}`,
-        ).toBeLessThanOrEqual(2);
+        // The 8.5rem (136px) status floor held for every label (#601
+        // Phase F: a floor is a minimum, the allocator may widen it).
+        expect(r.statusCellWidth, `width ${r.status}`).toBeGreaterThanOrEqual(
+          134,
+        );
       }
       // Table-inflation proof: the status matrix never grows the table
       // beyond its container (fixed layout + locked column), and every

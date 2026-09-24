@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import type {
+  ProctorRecoveryWorklistItem,
   ProctorRecoveryWorklistResponse,
   ProctorExamListResponse,
 } from "@exam/contracts";
@@ -15,13 +16,12 @@ import { useRecoveryQueueProjection } from "@/hooks/useRecoveryQueueProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -30,7 +30,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldError } from "@/components/shared/FieldError";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 import {
   Select,
@@ -41,7 +40,7 @@ import {
 } from "@/components/ui/select";
 import { RecoveryCommandDialog } from "@/features/recovery-operations/RecoveryCommandDialog";
 import { useRecoveryOperation } from "@/features/recovery-operations/useRecoveryOperation";
-import { LifeBuoy, RefreshCw, CircleAlert, Wrench } from "lucide-react";
+import { RefreshCw, CircleAlert, Wrench } from "lucide-react";
 
 /** Visible-tab polling interval — same cadence as the Admin recovery queue. */
 const POLL_INTERVAL_MS = 30_000;
@@ -114,6 +113,62 @@ export function ProctorRecoveryPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
 
+  const columns = useMemo<DataViewColumnDef<ProctorRecoveryWorklistItem>[]>(
+    () => [
+      {
+        id: "incident",
+        meta: { role: "status" },
+        header: t("admin.proctorRecovery.columns.incident"),
+        cell: ({ row }) => (
+          <Link
+            to={routes.admin.proctorRecoveryIncident(row.original.incident.id)}
+            className="text-sm font-medium underline-offset-4 hover:underline"
+          >
+            <StatusBadge
+              status={incidentStatusKey(row.original.incident.status)}
+            />
+          </Link>
+        ),
+      },
+      {
+        id: "severity",
+        meta: { role: "type", priority: "normal" },
+        header: t("admin.proctorRecovery.columns.severity"),
+        cell: ({ row }) =>
+          t(
+            `admin.recoveryQueue.severity.${row.original.incident.severity}` as never,
+          ),
+      },
+      {
+        id: "exam",
+        meta: { role: "long-text", priority: "high" },
+        header: t("admin.proctorRecovery.columns.exam"),
+        cell: ({ row }) =>
+          // Exam title is on the never-silent-truncate list: wrap, never
+          // ellipsis (issue 445 P3 §16).
+          row.original.examSummary.title,
+      },
+      {
+        id: "attempt",
+        meta: { role: "status", priority: "low" },
+        header: t("admin.proctorRecovery.columns.attempt"),
+        cell: ({ row }) =>
+          row.original.primaryAttempt ? (
+            <StatusBadge status={row.original.primaryAttempt.status} />
+          ) : (
+            t("admin.recoveryQueue.noAttempt")
+          ),
+      },
+      {
+        id: "createdAt",
+        meta: { role: "date" },
+        header: t("admin.proctorRecovery.columns.createdAt"),
+        cell: ({ row }) => formatTime(row.original.incident.createdAt),
+      },
+    ],
+    [t, formatTime],
+  );
+
   if (isInitialLoading) return <LoadingState />;
   if (error && snapshotAt === null) {
     return (
@@ -155,30 +210,6 @@ export function ProctorRecoveryPage() {
           </div>
         }
       />
-      <DataToolbar>
-        <Select
-          value={statusFilter || "all"}
-          onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}
-        >
-          <ToolbarFilter size="narrow">
-            <SelectTrigger
-              aria-label={t("admin.proctorRecovery.filters.statusAll")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-          </ToolbarFilter>
-          <SelectContent>
-            <SelectItem value="all">
-              {t("admin.proctorRecovery.filters.statusAll")}
-            </SelectItem>
-            {INCIDENT_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {t(`admin.recoveryQueue.status.${s}` as never)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </DataToolbar>
 
       {snapshotAt && (
         <span className="flex items-center gap-3 type-metadata">
@@ -203,120 +234,59 @@ export function ProctorRecoveryPage() {
         </span>
       )}
 
-      {items.length === 0 ? (
-        <EmptyState
-          icon={<AppIcon icon={LifeBuoy} size="state" />}
-          title={t("admin.proctorRecovery.empty")}
-          description={t("admin.proctorRecovery.emptyDescription")}
-        />
-      ) : (
-        <DataTableShell archetype="log-diagnostic">
-          {/* Desktop table */}
-          <div className="hidden md:block" data-testid="proctor-recovery-table">
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "status", key: "incident" },
-                  { role: "type", key: "severity" },
-                  { role: "long-text", key: "exam" },
-                  { role: "status", key: "attempt" },
-                  { role: "date", key: "createdAt" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="status">
-                    {t("admin.proctorRecovery.columns.incident")}
-                  </DataTableHead>
-                  <DataTableHead role="type">
-                    {t("admin.proctorRecovery.columns.severity")}
-                  </DataTableHead>
-                  <DataTableHead role="long-text">
-                    {t("admin.proctorRecovery.columns.exam")}
-                  </DataTableHead>
-                  <DataTableHead role="status">
-                    {t("admin.proctorRecovery.columns.attempt")}
-                  </DataTableHead>
-                  <DataTableHead role="date">
-                    {t("admin.proctorRecovery.columns.createdAt")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.incident.id}>
-                    <DataTableCell role="status">
-                      <Link
-                        to={routes.admin.proctorRecoveryIncident(
-                          item.incident.id,
-                        )}
-                        className="text-sm font-medium underline-offset-4 hover:underline"
-                      >
-                        <StatusBadge
-                          status={incidentStatusKey(item.incident.status)}
-                        />
-                      </Link>
-                    </DataTableCell>
-                    <DataTableCell role="type">
-                      {t(
-                        `admin.recoveryQueue.severity.${item.incident.severity}` as never,
-                      )}
-                    </DataTableCell>
-                    <DataTableCell role="long-text">
-                      {/* Exam title is on the never-silent-truncate list:
-                          wrap, never ellipsis (issue 445 P3 §16). */}
-                      {item.examSummary.title}
-                    </DataTableCell>
-                    <DataTableCell role="status">
-                      {item.primaryAttempt ? (
-                        <StatusBadge status={item.primaryAttempt.status} />
-                      ) : (
-                        t("admin.recoveryQueue.noAttempt")
-                      )}
-                    </DataTableCell>
-                    <DataTableCell role="date">
-                      {formatTime(item.incident.createdAt)}
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Mobile card list */}
-          <ul
-            className="flex flex-col gap-3 md:hidden"
-            data-testid="proctor-recovery-cards"
-          >
-            {items.map((item) => (
-              <li key={item.incident.id}>
-                <Link
-                  to={routes.admin.proctorRecoveryIncident(item.incident.id)}
-                  className="flex w-full flex-col gap-2 rounded-md border p-3 text-left"
+      <DataTableShell
+        archetype="log-diagnostic"
+        toolbar={
+          <DataToolbar>
+            <Select
+              value={statusFilter || "all"}
+              onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}
+            >
+              <ToolbarFilter size="narrow">
+                <SelectTrigger
+                  aria-label={t("admin.proctorRecovery.filters.statusAll")}
                 >
-                  <span className="flex items-center justify-between gap-2">
-                    <StatusBadge
-                      status={incidentStatusKey(item.incident.status)}
-                    />
-                    <span className="type-metadata">
-                      {formatTime(item.incident.createdAt)}
-                    </span>
-                  </span>
-                  <span className="block text-sm font-medium">
-                    {item.examSummary.title}
-                  </span>
-                  <span className="type-metadata">
-                    {t(
-                      ("admin.recoveryQueue.severity." +
-                        item.incident.severity) as never,
-                    )}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </DataTableShell>
-      )}
+                  <SelectValue />
+                </SelectTrigger>
+              </ToolbarFilter>
+              <SelectContent>
+                <SelectItem value="all">
+                  {t("admin.proctorRecovery.filters.statusAll")}
+                </SelectItem>
+                {INCIDENT_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(`admin.recoveryQueue.status.${s}` as never)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </DataToolbar>
+        }
+        mobile={<MobileRecordList columns={columns} rows={items} />}
+        footer={
+          nextCursor ? (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                onClick={loadMore}
+                disabled={isLoadingMore || isRefreshing}
+              >
+                {isLoadingMore
+                  ? t("admin.proctorRecovery.loadingMore")
+                  : t("admin.proctorRecovery.loadMore")}
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        <DesktopDataTable
+          columns={columns}
+          data={items}
+          empty={items.length === 0}
+          emptyTitle={t("admin.proctorRecovery.empty")}
+          emptyDescription={t("admin.proctorRecovery.emptyDescription")}
+        />
+      </DataTableShell>
 
       {/* Background-refresh failure: inline warning outside the items branch
           so an empty worklist + poll failure keeps EmptyState + warning. */}
@@ -324,20 +294,6 @@ export function ProctorRecoveryPage() {
         <InlineErrorBanner>
           {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
         </InlineErrorBanner>
-      )}
-
-      {nextCursor && (
-        <div className="flex justify-center">
-          <Button
-            variant="outline"
-            onClick={loadMore}
-            disabled={isLoadingMore || isRefreshing}
-          >
-            {isLoadingMore
-              ? t("admin.proctorRecovery.loadingMore")
-              : t("admin.proctorRecovery.loadMore")}
-          </Button>
-        </div>
       )}
     </PageContainer>
   );

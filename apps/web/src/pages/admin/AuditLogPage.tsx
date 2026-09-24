@@ -10,18 +10,18 @@ import type { AuditActionMetadataEntry } from "@exam/contracts";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
   DataTableCell,
-  DataTableColumns,
+  DataTableSpanCell,
+  DataTableSurface,
   DataTableHead,
   DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { DatePicker } from "@/components/shared/DatePicker";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -295,184 +295,83 @@ export function AuditLogPage() {
         title={t("admin.audit.title")}
         description={t("admin.audit.description")}
       />
-      <DataToolbar>
-        <Select value={actionFilter} onValueChange={(v) => setActionFilter(v)}>
-          <ToolbarFilter size="narrow">
-            <SelectTrigger aria-label={t("admin.audit.filterActions.all")}>
-              <SelectValue />
-            </SelectTrigger>
-          </ToolbarFilter>
-          <SelectContent>
-            <SelectItem key="all" value="all">
-              {t("admin.audit.filterActions.all")}
-            </SelectItem>
-            {actionOptions.map(({ action }) => (
-              <SelectItem key={action} value={action}>
-                {t(`admin.audit.filterActions.${action}` as never, action)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={targetFilter} onValueChange={(v) => setTargetFilter(v)}>
-          <ToolbarFilter size="narrow">
-            <SelectTrigger aria-label={t("admin.audit.filterTargets.all")}>
-              <SelectValue />
-            </SelectTrigger>
-          </ToolbarFilter>
-          <SelectContent>
-            {TARGET_FILTER_KEYS.map((key) => (
-              <SelectItem key={key} value={key}>
-                {t(`admin.audit.filterTargets.${key}` as never)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <DatePicker
-          aria-label={t("admin.audit.startDate")}
-          placeholder={t("admin.audit.startDate")}
-          value={fromDate}
-          onChange={(d) => handleDateChange(d, true)}
-        />
-        <DatePicker
-          aria-label={t("admin.audit.endDate")}
-          placeholder={t("admin.audit.endDate")}
-          value={toDate}
-          onChange={(d) => handleDateChange(d, false)}
-        />
-        {hasActiveFilter && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            className="text-muted-foreground"
-          >
-            <AppIcon icon={X} size="inline" className="mr-1" />
-            {t("admin.audit.clearFilter")}
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExport}
-          disabled={exporting}
-          className="ml-auto"
-        >
-          <AppIcon icon={Download} size="inline" className="mr-1" />
-          {exporting ? t("admin.audit.exporting") : t("admin.audit.export")}
-        </Button>
-      </DataToolbar>
-      {items.length === 0 ? (
-        <EmptyState
-          icon={<AppIcon icon={ScrollText} size="state" />}
-          title={t("admin.audit.empty")}
-          description={t("admin.audit.emptyDescription")}
-        />
-      ) : (
-        <>
-          <DataTableShell archetype="log-diagnostic">
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "date" },
-                  { role: "primary-text", key: "actor" },
-                  { role: "action-label", key: "action" },
-                  { role: "short-id", key: "target" },
-                  { role: "short-id", key: "detail" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="date">
-                    {t("admin.audit.columns.time")}
-                  </DataTableHead>
-                  <DataTableHead role="primary-text">
-                    {t("admin.audit.columns.actor")}
-                  </DataTableHead>
-                  <DataTableHead role="action-label">
-                    {t("admin.audit.columns.action")}
-                  </DataTableHead>
-                  <DataTableHead role="short-id">
-                    {t("admin.audit.columns.target")}
-                  </DataTableHead>
-                  <DataTableHead role="short-id">
-                    {t("admin.audit.columns.detail")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    className="cursor-pointer"
-                    onClick={() =>
-                      setExpandedId(expandedId === item.id ? null : item.id)
-                    }
-                  >
-                    <DataTableCell role="date" className="type-secondary">
-                      {formatDateTime(item.createdAt)}
-                    </DataTableCell>
-                    <DataTableCell role="primary-text">
-                      {item.actorName ?? item.actorId}
-                    </DataTableCell>
-                    <DataTableCell role="action-label">
-                      {/* Two presenter paths, one semantic column: a declared
-                          action renders its localized label (copy is pinned
-                          complete for the whole registry by
-                          actionLabelFixture's guard AND by the typed catalog
-                          key — deliberately with no raw-key default, so a
-                          forgotten copy can never masquerade as the C6 F-14
-                          compatibility presentation), while a historical /
-                          version-skew key outside the registry keeps that
-                          compatibility channel — never bare unbounded nowrap
-                          text, always the accessible machine presenter. */}
-                      {isAuditAction(item.action) ? (
-                        <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
-                          {t(`admin.audit.filterActions.${item.action}`)}
-                        </span>
-                      ) : (
-                        <DataTableOverflowText
-                          mode="truncate-middle"
-                          value={item.action}
-                        />
-                      )}
-                    </DataTableCell>
-                    <DataTableCell role="short-id">
-                      <DataTableOverflowText
-                        mode="truncate-middle"
-                        value={item.targetType}
-                      />
-                    </DataTableCell>
-                    <DataTableCell role="short-id">
-                      <DataTableOverflowText
-                        mode="truncate-middle"
-                        value={item.targetId}
-                      />
-                    </DataTableCell>
-                  </TableRow>
+      <DataTableShell
+        archetype="log-diagnostic"
+        toolbar={
+          <DataToolbar>
+            <Select
+              value={actionFilter}
+              onValueChange={(v) => setActionFilter(v)}
+            >
+              <ToolbarFilter size="narrow">
+                <SelectTrigger aria-label={t("admin.audit.filterActions.all")}>
+                  <SelectValue />
+                </SelectTrigger>
+              </ToolbarFilter>
+              <SelectContent>
+                <SelectItem key="all" value="all">
+                  {t("admin.audit.filterActions.all")}
+                </SelectItem>
+                {actionOptions.map(({ action }) => (
+                  <SelectItem key={action} value={action}>
+                    {t(`admin.audit.filterActions.${action}` as never, action)}
+                  </SelectItem>
                 ))}
-              </TableBody>
-            </Table>
-          </DataTableShell>
-          {expandedId &&
-            (() => {
-              const item = items.find((i) => i.id === expandedId);
-              if (!item) return null;
-              return (
-                <div className="rounded-md border p-4">
-                  <h3 className="mb-2 text-sm font-medium">
-                    {t("admin.audit.columns.detail")}
-                  </h3>
-                  <pre className="type-code rounded bg-muted p-3">
-                    {JSON.stringify(item.metadata, null, 2)}
-                  </pre>
-                  {item.ipAddress && (
-                    <p className="mt-2 type-metadata">
-                      {t("admin.audit.ipAddress", { address: item.ipAddress })}
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
+              </SelectContent>
+            </Select>
+            <Select
+              value={targetFilter}
+              onValueChange={(v) => setTargetFilter(v)}
+            >
+              <ToolbarFilter size="narrow">
+                <SelectTrigger aria-label={t("admin.audit.filterTargets.all")}>
+                  <SelectValue />
+                </SelectTrigger>
+              </ToolbarFilter>
+              <SelectContent>
+                {TARGET_FILTER_KEYS.map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {t(`admin.audit.filterTargets.${key}` as never)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <DatePicker
+              aria-label={t("admin.audit.startDate")}
+              placeholder={t("admin.audit.startDate")}
+              value={fromDate}
+              onChange={(d) => handleDateChange(d, true)}
+            />
+            <DatePicker
+              aria-label={t("admin.audit.endDate")}
+              placeholder={t("admin.audit.endDate")}
+              value={toDate}
+              onChange={(d) => handleDateChange(d, false)}
+            />
+            {hasActiveFilter && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="text-muted-foreground"
+              >
+                <AppIcon icon={X} size="inline" className="mr-1" />
+                {t("admin.audit.clearFilter")}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={exporting}
+              className="ml-auto"
+            >
+              <AppIcon icon={Download} size="inline" className="mr-1" />
+              {exporting ? t("admin.audit.exporting") : t("admin.audit.export")}
+            </Button>
+          </DataToolbar>
+        }
+        footer={
           <div className="flex items-center justify-between type-secondary">
             <span>{t("admin.audit.pageInfo", { count: items.length })}</span>
             <div className="flex gap-2">
@@ -496,8 +395,127 @@ export function AuditLogPage() {
               </Button>
             </div>
           </div>
-        </>
-      )}
+        }
+      >
+        <DataTableSurface
+          columns={[
+            { role: "date" },
+            { role: "primary-text", key: "actor" },
+            { role: "action-label", key: "action" },
+            { role: "short-id", key: "target" },
+            { role: "short-id", key: "detail" },
+          ]}
+        >
+          <TableHeader>
+            <TableRow>
+              <DataTableHead role="date">
+                {t("admin.audit.columns.time")}
+              </DataTableHead>
+              <DataTableHead role="primary-text">
+                {t("admin.audit.columns.actor")}
+              </DataTableHead>
+              <DataTableHead role="action-label">
+                {t("admin.audit.columns.action")}
+              </DataTableHead>
+              <DataTableHead role="short-id">
+                {t("admin.audit.columns.target")}
+              </DataTableHead>
+              <DataTableHead role="short-id">
+                {t("admin.audit.columns.detail")}
+              </DataTableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.length === 0 && (
+              <TableRow>
+                <DataTableSpanCell colSpan={5} className="h-32">
+                  <div className="flex flex-col items-center gap-2 text-center">
+                    <div className="text-muted-foreground" aria-hidden="true">
+                      <AppIcon icon={ScrollText} size="state" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{t("admin.audit.empty")}</p>
+                      <p className="text-sm text-text-muted">
+                        {t("admin.audit.emptyDescription")}
+                      </p>
+                    </div>
+                  </div>
+                </DataTableSpanCell>
+              </TableRow>
+            )}
+            {items.map((item) => (
+              <TableRow
+                key={item.id}
+                className="cursor-pointer"
+                onClick={() =>
+                  setExpandedId(expandedId === item.id ? null : item.id)
+                }
+              >
+                <DataTableCell role="date" className="type-secondary">
+                  {formatDateTime(item.createdAt)}
+                </DataTableCell>
+                <DataTableCell role="primary-text">
+                  {item.actorName ?? item.actorId}
+                </DataTableCell>
+                <DataTableCell role="action-label">
+                  {/* Two presenter paths, one semantic column: a declared
+                          action renders its localized label (copy is pinned
+                          complete for the whole registry by
+                          actionLabelFixture's guard AND by the typed catalog
+                          key — deliberately with no raw-key default, so a
+                          forgotten copy can never masquerade as the C6 F-14
+                          compatibility presentation), while a historical /
+                          version-skew key outside the registry keeps that
+                          compatibility channel — never bare unbounded nowrap
+                          text, always the accessible machine presenter. */}
+                  {isAuditAction(item.action) ? (
+                    <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
+                      {t(`admin.audit.filterActions.${item.action}`)}
+                    </span>
+                  ) : (
+                    <DataTableOverflowText
+                      mode="truncate-middle"
+                      value={item.action}
+                    />
+                  )}
+                </DataTableCell>
+                <DataTableCell role="short-id">
+                  <DataTableOverflowText
+                    mode="truncate-middle"
+                    value={item.targetType}
+                  />
+                </DataTableCell>
+                <DataTableCell role="short-id">
+                  <DataTableOverflowText
+                    mode="truncate-middle"
+                    value={item.targetId}
+                  />
+                </DataTableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </DataTableSurface>
+      </DataTableShell>
+      {expandedId &&
+        (() => {
+          const item = items.find((i) => i.id === expandedId);
+          if (!item) return null;
+          return (
+            <div className="rounded-md border p-4">
+              <h3 className="mb-2 text-sm font-medium">
+                {t("admin.audit.columns.detail")}
+              </h3>
+              <pre className="type-code rounded bg-muted p-3">
+                {JSON.stringify(item.metadata, null, 2)}
+              </pre>
+              {item.ipAddress && (
+                <p className="mt-2 type-metadata">
+                  {t("admin.audit.ipAddress", { address: item.ipAddress })}
+                </p>
+              )}
+            </div>
+          );
+        })()}
     </PageContainer>
   );
 }

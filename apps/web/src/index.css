@@ -249,6 +249,24 @@ body,
   @apply min-h-screen bg-background text-foreground;
 }
 
+/*
+ * INVARIANT: the viewport reserves the vertical scrollbar's gutter
+ * unconditionally, so the app's content box width never depends on whether the
+ * document currently scrolls. Without it, any content-height change
+ * (pagination, filtering, search) toggles the document scrollbar and shifts
+ * every governed table's scroll region by the scrollbar width. Measured on
+ * /admin/questions pagination: the region's box went 1394.667px → 1410px and
+ * back within one page change, the table re-allocated to match, and Chromium
+ * painted a stale 16px horizontal scrollbar on the region for two frames
+ * (while scrollWidth === clientWidth and scrollHeight === clientHeight). With
+ * the gutter reserved, the region's box and the table's width stay constant
+ * across the change and no scrollbar is painted. Only the vertical gutter is
+ * stabilized: inner scroll regions keep their own overflow-x: auto.
+ */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   @apply antialiased font-sans text-sm font-normal;
   font-synthesis: none;

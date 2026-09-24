@@ -14,6 +14,7 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import {
   DesktopDataTable,
   type DataViewColumnDef,
@@ -24,14 +25,6 @@ import { RowActions } from "@/components/shared/RowActions";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageContainer } from "@/components/shared/PageContainer";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { Eye, FileText } from "lucide-react";
 import { Permission } from "@exam/authz";
 import { useAuth } from "@/hooks/useAuth";
@@ -281,32 +274,33 @@ export function ScoreListPage() {
         />
       </div>
 
-      <DataToolbar aria-label={t("admin.scoreList.filters.label")}>
-        <Tabs
-          value={passFilter}
-          onValueChange={(v) => {
-            const newParams = new URLSearchParams(searchParams);
-            newParams.set("passFilter", v);
-            newParams.delete("page");
-            setSearchParams(newParams);
-          }}
-        >
-          <TabsList>
-            <TabsTrigger value="all">
-              {t("admin.scoreList.filters.all")}
-            </TabsTrigger>
-            <TabsTrigger value="passed">
-              {t("admin.scoreList.filters.passed")}
-            </TabsTrigger>
-            <TabsTrigger value="failed">
-              {t("admin.scoreList.filters.failed")}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </DataToolbar>
-
       <DataTableShell
         title={t("admin.scoreList.listTitle")}
+        toolbar={
+          <DataToolbar aria-label={t("admin.scoreList.filters.label")}>
+            <Tabs
+              value={passFilter}
+              onValueChange={(v) => {
+                const newParams = new URLSearchParams(searchParams);
+                newParams.set("passFilter", v);
+                newParams.delete("page");
+                setSearchParams(newParams);
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="all">
+                  {t("admin.scoreList.filters.all")}
+                </TabsTrigger>
+                <TabsTrigger value="passed">
+                  {t("admin.scoreList.filters.passed")}
+                </TabsTrigger>
+                <TabsTrigger value="failed">
+                  {t("admin.scoreList.filters.failed")}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </DataToolbar>
+        }
         mobile={
           <MobileRecordList
             columns={columns}
@@ -319,49 +313,16 @@ export function ScoreListPage() {
         }
         footer={
           scores.total > scores.pageSize ? (
-            <Pagination>
-              <PaginationContent>
-                {page > 1 && (
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={() => {
-                        const newParams = new URLSearchParams(searchParams);
-                        newParams.set("page", String(page - 1));
-                        setSearchParams(newParams);
-                      }}
-                    />
-                  </PaginationItem>
-                )}
-                {Array.from(
-                  { length: Math.ceil(scores.total / scores.pageSize) },
-                  (_, i) => i + 1,
-                ).map((p) => (
-                  <PaginationItem key={p}>
-                    <PaginationLink
-                      isActive={p === page}
-                      onClick={() => {
-                        const newParams = new URLSearchParams(searchParams);
-                        newParams.set("page", String(p));
-                        setSearchParams(newParams);
-                      }}
-                    >
-                      {p}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                {page < Math.ceil(scores.total / scores.pageSize) && (
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={() => {
-                        const newParams = new URLSearchParams(searchParams);
-                        newParams.set("page", String(page + 1));
-                        setSearchParams(newParams);
-                      }}
-                    />
-                  </PaginationItem>
-                )}
-              </PaginationContent>
-            </Pagination>
+            <DataTablePagination
+              page={page}
+              pageSize={scores.pageSize}
+              total={scores.total}
+              onPageChange={(next) => {
+                const newParams = new URLSearchParams(searchParams);
+                newParams.set("page", String(next));
+                setSearchParams(newParams);
+              }}
+            />
           ) : undefined
         }
       >

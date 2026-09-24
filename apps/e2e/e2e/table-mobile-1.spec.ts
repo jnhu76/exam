@@ -24,8 +24,16 @@ import { assertNoHorizontalOverflow } from "../lib/responsive";
  *     (type badge header, content primary, labeled score meta, RowActions);
  *   - lg boundary (1024px): the SAME page keeps the table — narrow
  *     containers degrade the TIER (tier negotiation), never swap to cards;
- *   - negative proofs: log-diagnostic (AuditLogPage) and detail-comparison
- *     (ResultPage) keep their scrolling table at 375px — no cards.
+ *   - negative proofs: a log-diagnostic page that declares no mobile
+ *     representation (AuditLogPage) and detail-comparison (ResultPage) keep
+ *     their scrolling table at 375px — no cards.
+ *
+ * #601 Phase F superseded the #457 freeze that made the card declaration
+ * management-list-only: log-diagnostic pages that DO declare a mobile slot
+ * (RecoveryQueuePage, ProctorRecoveryPage — both previously carried page-local
+ * breakpoint card lists) now render through the same shared switch. Eligibility
+ * is a permission, not an obligation: a dense log that has no faithful card
+ * form simply declares none and keeps the scroll.
  *
  * Screenshots are evidence artifacts only; every gate is DOM state /
  * computed visibility, per the repo's deterministic-geometry rule.
@@ -204,7 +212,10 @@ test.describe("management-list mobile card representation (issue 457)", () => {
     // identity-lifecycle invitations exist (#504).
     await expect(usersDesktopRegion(page)).toBeVisible();
     await expect(usersMobileRegion(page)).toBeHidden();
-    const tier = await usersShell(page).getAttribute("data-table-tier");
+    // The region owns the geometry vocabulary (#601 Phase F).
+    const tier = await usersShell(page)
+      .locator('[data-slot="table-scroll-region"]')
+      .getAttribute("data-table-tier");
     expect(tier).toBe("compact");
     expect(await usersShell(page).locator(CARD).first().isVisible()).toBe(
       false,
@@ -222,8 +233,12 @@ test.describe("management-list mobile card representation (issue 457)", () => {
       .waitForLoadState("networkidle", { timeout: 5_000 })
       .catch(() => {});
 
-    // Scroll-retained archetype: the table stays the representation below
-    // lg; no mobile region, no record cards anywhere on the page.
+    // Negative proof for the PARITY side of the switch: AuditLogPage declares
+    // no mobile representation (its rows are a dense machine audit trail), so
+    // the scrolling table stays the representation below lg — no mobile
+    // region, no record cards anywhere on the page. log-diagnostic pages that
+    // DO declare cards (RecoveryQueuePage, ProctorRecoveryPage) are covered by
+    // the adoption spec instead.
     await expect(
       page.locator('[data-slot="admin-table-shell"]').first(),
     ).toBeVisible();

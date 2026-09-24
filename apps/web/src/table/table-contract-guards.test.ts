@@ -21,7 +21,7 @@ import {
   ARCHETYPE_TIER_BOUNDS,
   negotiateTier,
   TIER_MIN_WIDTH_PX,
-} from "@/components/shared/DataTableShell";
+} from "@/table/tableTiers";
 import {
   columnOverflow,
   columnPriority,
@@ -29,6 +29,7 @@ import {
   ROLE_ALLOWED_OVERFLOW,
   ROLE_OVERFLOW,
 } from "@/components/shared/DataTableContract";
+import { ROLE_GEOMETRY } from "@/table/columnAllocation";
 import {
   maxStatusBadgeWidth,
   statusBadgeFixture,
@@ -192,15 +193,18 @@ describe("table contract v2 structural guards", () => {
   });
 
   it("middle-truncates machine identifiers with a recognizable head+tail", () => {
-    // Short values (fits the ~88px short-id content box) are never truncated.
+    // The visible budget is 10 glyphs — the widest form the frozen 7.5rem
+    // short-id token paints in the product font (#601 Phase F, measured);
+    // values within it render whole (employeeId must never truncate).
     expect(middleTruncate("AB-12345")).toBe("AB-12345");
+    expect(middleTruncate("employeeId")).toBe("employeeId");
     expect(middleTruncate("")).toBe("");
-    // Long opaque IDs keep head + tail with ≥4 visible glyphs.
+    // Longer opaque IDs keep head + tail with ≥4 visible glyphs each side.
     const truncated = middleTruncate("550e8400-e29b-41d4-a716-446655440000");
-    expect(truncated).toMatch(/^550e84…0000$/);
-    expect(truncated.replace("…", "").length).toBeGreaterThanOrEqual(4);
-    // A 13-char ASCII ID exceeds the content box, so it truncates too.
-    expect(middleTruncate("CERT-2026-001")).toBe("CERT-2…-001");
+    expect(truncated).toMatch(/^550e8…0000$/);
+    expect(truncated.replace("…", "").length).toBeGreaterThanOrEqual(8);
+    // A 13-char ASCII ID exceeds the budget, so it truncates too.
+    expect(middleTruncate("CERT-2026-001")).toBe("CERT-…-001");
   });
 
   it("keeps TanStack as a row/header model (no columnSizing)", () => {
@@ -274,19 +278,11 @@ describe("table contract v2 structural guards", () => {
     }
   });
 
-  it("keeps the status token at the authoritative 8.5rem in recipes.css", () => {
-    const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
+  it("keeps the status token at the authoritative 8.5rem in the allocator", () => {
     expect(STATUS_COLUMN_TOKEN).toBe("8.5rem");
-    expect(tableCss).toMatch(
-      /\[data-column-role="status"\]\s*\{[^}]*width:\s*8\.5rem/,
-    );
-    expect(tableCss).toMatch(
-      /\[data-column-role="status"\]\s*\{[^}]*min-width:\s*8\.5rem/,
-    );
-    // The old 5.5rem magic number is gone.
-    expect(tableCss).not.toMatch(
-      /\[data-column-role="status"\]\s*\{[^}]*width:\s*5\.5rem/,
-    );
+    // #601 Phase F: the token's px lives in ROLE_GEOMETRY (single width
+    // authority); CSS carries no width rule for any role.
+    expect(ROLE_GEOMETRY.status).toEqual({ min: 136 });
   });
 
   it("binds the type column token to the auto-deriving fixture (issue #590)", () => {
@@ -318,30 +314,13 @@ describe("table contract v2 structural guards", () => {
     expect(max).toBeLessThanOrEqual(contentBox);
   });
 
-  it("keeps the type token at the derived 7.25rem and the date-range token at the derived 14.5rem in recipes.css", () => {
-    const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
+  it("keeps the type token at the derived 7.25rem and the date-range token at the derived 14.5rem in the allocator", () => {
     expect(TYPE_COLUMN_TOKEN).toBe("7.25rem");
-    expect(tableCss).toMatch(
-      /\[data-column-role="type"\]\s*\{[^}]*width:\s*7\.25rem/,
-    );
-    expect(tableCss).toMatch(
-      /\[data-column-role="type"\]\s*\{[^}]*min-width:\s*7\.25rem/,
-    );
-    // The pre-#590 magic numbers are gone.
-    expect(tableCss).not.toMatch(
-      /\[data-column-role="type"\]\s*\{[^}]*width:\s*5\.5rem/,
-    );
+    // #590 tokens, relocated from recipes.css to ROLE_GEOMETRY by Phase F.
+    expect(ROLE_GEOMETRY.type).toEqual({ min: 116 });
     // date-range: the 23-char grammar measured 195.5px at the D2 font; the
     // 12.5rem token could not contain it (#590 defect B).
-    expect(tableCss).toMatch(
-      /\[data-column-role="date-range"\]\s*\{[^}]*width:\s*14\.5rem/,
-    );
-    expect(tableCss).toMatch(
-      /\[data-column-role="date-range"\]\s*\{[^}]*min-width:\s*14\.5rem/,
-    );
-    expect(tableCss).not.toMatch(
-      /\[data-column-role="date-range"\]\s*\{[^}]*width:\s*12\.5rem/,
-    );
+    expect(ROLE_GEOMETRY["date-range"]).toEqual({ min: 232 });
   });
 
   it("binds the action-label token to the auto-deriving action-registry fixture (issue #598)", () => {
@@ -380,16 +359,10 @@ describe("table contract v2 structural guards", () => {
     expect(contentBox - quarterRemPx).toBeLessThan(max);
   });
 
-  it("keeps the action-label token at the derived 9.5rem in recipes.css", () => {
-    const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
+  it("keeps the action-label token at the derived 9.5rem in the allocator", () => {
     expect(ACTION_LABEL_COLUMN_TOKEN).toBe("9.5rem");
     expect(ACTION_LABEL_COLUMN_WIDTH_PX).toBe(152);
-    expect(tableCss).toMatch(
-      /\[data-column-role="action-label"\]\s*\{[^}]*width:\s*9\.5rem/,
-    );
-    expect(tableCss).toMatch(
-      /\[data-column-role="action-label"\]\s*\{[^}]*min-width:\s*9\.5rem/,
-    );
+    expect(ROLE_GEOMETRY["action-label"]).toEqual({ min: 152 });
     // The token is not inflated to the type token's neighbors: the shared
     // `type` value stays exactly as #590 froze it (7.25rem), so this role can
     // never tax the other 15 conforming type columns.

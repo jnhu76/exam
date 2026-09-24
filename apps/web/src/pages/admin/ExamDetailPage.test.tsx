@@ -172,8 +172,9 @@ describe("ExamDetailPage", () => {
         });
       });
       renderPage();
-      expect(await screen.findByText("张三")).toBeInTheDocument();
-      expect(screen.getByText("EMP001")).toBeInTheDocument();
+      const table = await screen.findByRole("table");
+      expect(within(table).getByText("张三")).toBeInTheDocument();
+      expect(within(table).getByText("EMP001")).toBeInTheDocument();
     });
 
     it("shows empty state when no enrollments", async () => {
@@ -436,8 +437,9 @@ describe("ExamDetailPage", () => {
         return Promise.resolve(mockDraftExam);
       });
       renderPage();
-      expect(await screen.findByText("张三")).toBeInTheDocument();
-      expect(screen.getByText("已分配")).toBeInTheDocument();
+      const table = await screen.findByRole("table");
+      expect(within(table).getByText("张三")).toBeInTheDocument();
+      expect(within(table).getByText("已分配")).toBeInTheDocument();
     });
 
     it("shows remove button only for assigned enrollments", async () => {
@@ -468,8 +470,11 @@ describe("ExamDetailPage", () => {
         return Promise.resolve(mockDraftExam);
       });
       renderPage();
-      await screen.findByText("张三");
-      const removeButtons = screen.getAllByRole("button", { name: "移除考生" });
+      const table = await screen.findByRole("table");
+      expect(within(table).getByText("张三")).toBeInTheDocument();
+      const removeButtons = within(table).getAllByRole("button", {
+        name: "移除考生",
+      });
       expect(removeButtons).toHaveLength(1);
     });
   });

@@ -9,9 +9,9 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   DataTableCell,
-  DataTableColumns,
   DataTableHead,
   DataTableSpanCell,
+  useColumnAllocation,
   type ColumnOverflow,
   type ColumnPriority,
   type DataTableColumnRole,
@@ -22,14 +22,16 @@ import { BookOpen } from "lucide-react";
 
 /**
  * Column meta: the role-based column contract (role + overflow + priority),
- * lifted onto a TanStack ColumnDef. The role drives width/alignment and the
- * overflow default via table/recipes.css (the visual authority); overflow and
- * priority are single-source declarations the table derives DOM attributes
- * from — headers/cells never repeat them (P3 §18).
+ * lifted onto a TanStack ColumnDef. The role drives alignment and the
+ * overflow default (recipes.css) plus the column's semantic geometry in the
+ * allocation authority (table/columnAllocation.ts); overflow and priority are
+ * single-source declarations the table derives DOM attributes from —
+ * headers/cells never repeat them (P3 §18).
  *
  * TanStack stays a row/header model only: no column-size state, no header
- * sizing calls, no inline widths. Width authority is DataTableContract +
- * recipes.css exclusively (P3-Corrective §5.5).
+ * sizing calls, no inline widths. Width authority is columnAllocation.ts
+ * exclusively, consumed through useColumnAllocation (P3-Corrective §5.5,
+ * superseded by issue 601 Phase F).
  */
 export interface DataViewColumnMeta {
   /** The semantic column role — drives CSS width/wrap/alignment. */
@@ -154,10 +156,20 @@ export function DesktopDataTable<TData>({
       })),
     [columns],
   );
+  const { colgroup, tableProps } = useColumnAllocation(roleColumns);
+  const rows = table.getRowModel().rows;
+  // The placeholder row replaces the body only when there is nothing to show
+  // yet. A reload that already has rows (a page change keeps the previous
+  // page's data until the next one arrives) must keep rendering them:
+  // measured on /admin/questions, swapping them for the single placeholder row
+  // collapsed the table from 1374px to 170px for two frames, which made the
+  // document shorter than the viewport and made the page's own scrollbar
+  // disappear and reappear on every page change.
+  const showPlaceholder = loading && rows.length === 0;
 
   return (
-    <Table>
-      <DataTableColumns columns={roleColumns} />
+    <Table {...tableProps}>
+      {colgroup}
       <TableHeader>
         <TableRow>
           {table.getHeaderGroups().map((hg) =>
@@ -184,8 +196,8 @@ export function DesktopDataTable<TData>({
           )}
         </TableRow>
       </TableHeader>
-      <TableBody>
-        {loading ? (
+      <TableBody aria-busy={loading || undefined}>
+        {showPlaceholder ? (
           <TableRow aria-hidden="true">
             <DataTableSpanCell colSpan={span} className="h-32 p-0" />
           </TableRow>
@@ -221,7 +233,7 @@ export function DesktopDataTable<TData>({
             </DataTableSpanCell>
           </TableRow>
         ) : (
-          table.getRowModel().rows.map((row) => (
+          rows.map((row) => (
             <TableRow
               key={row.id}
               data-testid={getRowTestId?.(row.original)}

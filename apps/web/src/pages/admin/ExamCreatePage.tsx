@@ -25,11 +25,12 @@ import { FieldError } from "@/components/shared/FieldError";
 import { DefinitionList } from "@/components/shared/DefinitionList";
 import {
   DataTableCell,
-  DataTableColumns,
+  DataTableSurface,
   DataTableHead,
   DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { TableAllocationRegion } from "@/components/shared/TableScrollSurface";
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +51,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { BookOpen, Trash2 } from "lucide-react";
 import { getTypeLabel } from "@/lib/constants";
 import { WizardStepper } from "@/components/exam/wizard/WizardStepper";
@@ -606,15 +607,14 @@ export function ExamCreatePage() {
               />
             ) : (
               <DataTableShell archetype="embedded-picker">
-                <Table>
-                  <DataTableColumns
-                    columns={[
-                      { role: "type" },
-                      { role: "long-text", overflow: "truncate" },
-                      { role: "score" },
-                      { role: "actions" },
-                    ]}
-                  />
+                <DataTableSurface
+                  columns={[
+                    { role: "type" },
+                    { role: "long-text", overflow: "truncate" },
+                    { role: "score" },
+                    { role: "actions" },
+                  ]}
+                >
                   <TableHeader>
                     <TableRow>
                       <DataTableHead role="type">
@@ -674,7 +674,7 @@ export function ExamCreatePage() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </DataTableSurface>
               </DataTableShell>
             )}
           </FormSection>
@@ -973,62 +973,63 @@ export function ExamCreatePage() {
           </DialogHeader>
           {/* dialog-body owns the vertical scroll; header/footer fixed. */}
           <div data-slot="dialog-body">
-            <Table>
-              <DataTableColumns
+            <TableAllocationRegion>
+              <DataTableSurface
                 columns={[
                   { role: "type" },
                   { role: "long-text", overflow: "truncate" },
                   { role: "score" },
                   { role: "actions" },
                 ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="type">
-                    {t("admin.examWizard.questions.tableHeaders.type")}
-                  </DataTableHead>
-                  <DataTableHead role="long-text">
-                    {t("admin.examWizard.questions.tableHeaders.content")}
-                  </DataTableHead>
-                  <DataTableHead role="score">
-                    {t("admin.examWizard.questions.tableHeaders.score")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.examWizard.questions.dialogActions.add")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {availableQuestions.map((q) => (
-                  <TableRow key={q.id}>
-                    <DataTableCell role="type">
-                      <Badge variant="outline">
-                        {getTypeLabel(q.type, t) ?? q.type}
-                      </Badge>
-                    </DataTableCell>
-                    <DataTableCell role="long-text">
-                      <DataTableOverflowText
-                        mode="truncate"
-                        value={q.content}
-                      />
-                    </DataTableCell>
-                    <DataTableCell role="score">{q.score}</DataTableCell>
-                    <DataTableCell role="actions">
-                      {/* embedded-picker exception (P3 §4.4 (issue 445)): dialog
+              >
+                <TableHeader>
+                  <TableRow>
+                    <DataTableHead role="type">
+                      {t("admin.examWizard.questions.tableHeaders.type")}
+                    </DataTableHead>
+                    <DataTableHead role="long-text">
+                      {t("admin.examWizard.questions.tableHeaders.content")}
+                    </DataTableHead>
+                    <DataTableHead role="score">
+                      {t("admin.examWizard.questions.tableHeaders.score")}
+                    </DataTableHead>
+                    <DataTableHead role="actions">
+                      {t("admin.examWizard.questions.dialogActions.add")}
+                    </DataTableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {availableQuestions.map((q) => (
+                    <TableRow key={q.id}>
+                      <DataTableCell role="type">
+                        <Badge variant="outline">
+                          {getTypeLabel(q.type, t) ?? q.type}
+                        </Badge>
+                      </DataTableCell>
+                      <DataTableCell role="long-text">
+                        <DataTableOverflowText
+                          mode="truncate"
+                          value={q.content}
+                        />
+                      </DataTableCell>
+                      <DataTableCell role="score">{q.score}</DataTableCell>
+                      <DataTableCell role="actions">
+                        {/* embedded-picker exception (P3 §4.4 (issue 445)): dialog
                           picker tables keep a text add action — auto layout,
                           outside the admin shell's icon-only vocabulary. */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addQuestion(q.id)}
-                      >
-                        {t("admin.examWizard.questions.dialogActions.add")}
-                      </Button>
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => addQuestion(q.id)}
+                        >
+                          {t("admin.examWizard.questions.dialogActions.add")}
+                        </Button>
+                      </DataTableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </DataTableSurface>
+            </TableAllocationRegion>
           </div>
           <DialogFooter>
             <Button

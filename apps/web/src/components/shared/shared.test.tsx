@@ -3,6 +3,9 @@ import { Eye } from "lucide-react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DesktopDataTable } from "./DesktopDataTable";
+import type { DataViewColumnDef } from "./DesktopDataTable";
+import { MobileRecordList } from "./MobileRecordList";
 import { DataTablePagination } from "./DataTablePagination";
 import { DataTableShell } from "./DataTableShell";
 import { DataToolbar } from "./DataToolbar";
@@ -622,12 +625,110 @@ describe("DataToolbar", () => {
   });
 });
 
+/**
+ * The loading-footprint rule (#601 Phase F): the placeholder body is for a
+ * load with nothing to show yet. A reload that already has rows — a page
+ * change keeps the previous page's data until the next one arrives — must
+ * keep rendering them: measured on /admin/questions, swapping them for the
+ * single placeholder row collapsed the table for two frames, made the
+ * document shorter than the viewport, and made the page's own scrollbar
+ * disappear and reappear on every page change.
+ */
+interface FootprintRow {
+  id: string;
+  name: string;
+  score: number;
+}
+
+const footprintColumns: DataViewColumnDef<FootprintRow>[] = [
+  { id: "name", accessorKey: "name", meta: { role: "primary-text" } },
+  { id: "score", accessorKey: "score", meta: { role: "score" } },
+];
+
+const footprintRows: FootprintRow[] = [
+  { id: "1", name: "安全考试", score: 5 },
+  { id: "2", name: "技能考试", score: 8 },
+];
+
+function renderFootprint(rows: FootprintRow[], loading: boolean) {
+  return render(
+    <DataTableShell>
+      <DesktopDataTable
+        columns={footprintColumns}
+        data={rows}
+        getRowId={(row) => row.id}
+        loading={loading}
+      />
+    </DataTableShell>,
+  );
+}
+
+describe("table loading footprint", () => {
+  it("keeps the previous rows on screen while a reload is in flight", () => {
+    renderFootprint(footprintRows, true);
+
+    expect(screen.getByText("安全考试")).toBeInTheDocument();
+    expect(screen.getByText("技能考试")).toBeInTheDocument();
+    // The placeholder span row stays out of a body that has rows.
+    expect(document.querySelector('[data-column-role="span"]')).toBeNull();
+    expect(document.querySelector('[data-slot="table-body"]')).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+  });
+
+  it("renders the placeholder only for a load with nothing to show yet", () => {
+    renderFootprint([], true);
+
+    expect(document.querySelector('[data-column-role="span"]')).not.toBeNull();
+    expect(screen.queryByText("安全考试")).not.toBeInTheDocument();
+  });
+
+  it("keeps the previous cards on screen in the mobile representation too", () => {
+    render(
+      <MobileRecordList
+        columns={footprintColumns}
+        rows={footprintRows}
+        getRowId={(row) => row.id}
+        loading
+      />,
+    );
+
+    expect(screen.getByText("安全考试")).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="mobile-record-card"]'),
+    ).not.toBeNull();
+  });
+});
+
 describe("DataTableShell", () => {
+  /**
+   * Stubs the measurement facts of a scroll region. `offsetWidth`/the border
+   * box mirror `clientWidth` (no classic scrollbar), so the observed content
+   * box equals the region's layout width — the same relationship a browser
+   * reports for a region that fits its content.
+   */
   function setScrollMetrics(
     element: HTMLElement,
-    metrics: { clientWidth: number; scrollWidth: number; scrollLeft: number },
+    metrics: {
+      clientWidth: number;
+      scrollWidth: number;
+      scrollLeft: number;
+      /** Fractional border-box width; defaults to clientWidth. */
+      containerWidth?: number;
+      /** Border-box width incl. a classic scrollbar; defaults to clientWidth. */
+      offsetWidth?: number;
+    },
   ) {
     Object.defineProperties(element, {
+      getBoundingClientRect: {
+        configurable: true,
+        value: () => ({ width: metrics.containerWidth ?? metrics.clientWidth }),
+      },
+      offsetWidth: {
+        configurable: true,
+        get: () => metrics.offsetWidth ?? metrics.clientWidth,
+      },
       clientWidth: { configurable: true, get: () => metrics.clientWidth },
       scrollWidth: { configurable: true, get: () => metrics.scrollWidth },
       scrollLeft: {
@@ -681,6 +782,33 @@ describe("DataTableShell", () => {
     expect(screen.getByText("第 1 页")).toBeInTheDocument();
   });
 
+  it("keeps metadata in the title band instead of opening a controls band", () => {
+    // #601 Phase F corrective: a lone count line is metadata, not a toolbar.
+    // The pre-Phase-F shell rendered it right-aligned in the title band; a
+    // controls band of its own would add a full-width empty row above the
+    // table (regression caught on /admin/exams).
+    render(
+      <DataTableShell title="考试列表" meta={<span>共 20 场考试</span>}>
+        <table aria-label="考试数据" />
+      </DataTableShell>,
+    );
+
+    const shell = screen
+      .getByRole("heading", { name: "考试列表" })
+      .closest('[data-slot="admin-table-shell"]') as HTMLElement;
+    const titleBand = shell.querySelector(
+      '[data-slot="data-table-title-band"]',
+    );
+    const meta = shell.querySelector('[data-slot="data-table-title-meta"]');
+
+    expect(meta).not.toBeNull();
+    expect(meta?.textContent).toBe("共 20 场考试");
+    expect(titleBand?.contains(meta)).toBe(true);
+    expect(
+      shell.querySelector('[data-slot="data-table-toolbar-band"]'),
+    ).toBeNull();
+  });
+
   it("owns a distinct header surface around the list title", () => {
     render(
       <DataTableShell title="考生列表">
@@ -710,9 +838,6 @@ describe("DataTableShell", () => {
       </DataTableShell>,
     );
 
-    const shell = screen
-      .getByRole("table", { name: "宽表格" })
-      .closest('[data-slot="admin-table-shell"]');
     const scrollRegion = screen
       .getByRole("table", { name: "宽表格" })
       .closest('[data-slot="table-scroll-region"]');
@@ -720,8 +845,13 @@ describe("DataTableShell", () => {
     // jsdom has no layout: the hook's initial observation is unmeasured, so
     // the negotiation falls back to the archetype minTier (compact) — the
     // same deterministic initial state real browsers paint pre-measurement.
-    expect(shell).toHaveAttribute("data-table-archetype", "log-diagnostic");
-    expect(shell).toHaveAttribute("data-table-tier", "compact");
+    // The region is the single carrier of the geometry vocabulary (#601
+    // Phase F): archetype AND tier live there for both shell compositions.
+    expect(scrollRegion).toHaveAttribute(
+      "data-table-archetype",
+      "log-diagnostic",
+    );
+    expect(scrollRegion).toHaveAttribute("data-table-tier", "compact");
     expect(scrollRegion).toHaveAttribute("data-overflow-owner", "local");
   });
 
@@ -743,6 +873,37 @@ describe("DataTableShell", () => {
 
     expect(region).toHaveAttribute("data-overflowing", "false");
     expect(screen.queryByText(/滑动查看更多/)).not.toBeInTheDocument();
+  });
+
+  it("shows no affordance when a fractional content box rounds up to the content width", () => {
+    // Measured regression on /admin/questions: the region's content box is
+    // 1394.667px, so clientWidth and scrollWidth both round to 1395 while the
+    // table fits exactly. The hint band must stay out of the DOM — deriving
+    // overflow from `scrollWidth > contentWidth` reported overflow here and
+    // rendered "向右滑动查看更多" over a table that fit.
+    render(
+      <DataTableShell>
+        <table aria-label="刚好放下的表格" />
+      </DataTableShell>,
+    );
+    const region = screen
+      .getByRole("table", { name: "刚好放下的表格" })
+      .closest('[data-slot="table-scroll-region"]') as HTMLElement;
+    setScrollMetrics(region, {
+      containerWidth: 1394.667,
+      clientWidth: 1395,
+      scrollWidth: 1395,
+      scrollLeft: 0,
+    });
+    act(() => window.dispatchEvent(new Event("resize")));
+
+    expect(region).toHaveAttribute("data-overflowing", "false");
+    expect(
+      document.querySelector('[data-slot="table-scroll-hint"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="table-scroll-fade-right"]'),
+    ).not.toBeInTheDocument();
   });
 
   it("tracks start, middle, and end scroll affordance states", () => {

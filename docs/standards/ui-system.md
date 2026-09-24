@@ -416,13 +416,16 @@ surface, including real pagination/dropdown/select ancestry).
 
 `DataTableShell` is the mandatory shell for equivalent management tables. It owns
 the complete outer boundary (`overflow-hidden` + flush body so `<Table>` meets
-the border), optional title/description/`toolbar` slot, footer slot, the
-archetype-driven tier negotiation, and the shared overflow
-observation. `DataWorkbench` (toolbar → table → footer as one continuous
-surface) shares every semantic authority with `DataTableShell` — archetype,
-column semantics, tier negotiation, overflow observation, responsive
-representation, mobile derivation — and differs only in visual composition;
-the two surfaces must never fork a semantic policy. Implementation ownership:
+the border) plus optional title band (with the trailing `meta` slot — a lone
+count is not a toolbar), toolbar band and footer. The scroll region itself —
+container measurement, tier negotiation, the column-allocation scope, local
+scroll, fades and hint band — is `TableScrollSurface`, the single contract
+both shells consume. `DataWorkbench` (toolbar → table → footer as one
+continuous surface) shares every semantic authority with `DataTableShell` —
+archetype, column semantics, allocation scope, overflow observation,
+responsive representation, mobile derivation — and differs only in visual
+composition; the two surfaces must never fork a semantic policy.
+Implementation ownership:
 [`docs/architecture/frontend.md`](../architecture/frontend.md).
 
 ### Table archetypes (closed vocabulary)
@@ -431,16 +434,20 @@ The page declares one archetype on the shell; the vocabulary is closed:
 
 | Archetype | Desktop | Viewport < lg | Container pressure |
 | --- | --- | --- | --- |
-| `management-list` | semantic table, container-driven tier negotiation | shared mobile cards (`MobileRecordList`) | tier degradation → local scroll |
-| `log-diagnostic` | table | **table** (never cards) | local horizontal scroll |
-| `detail-comparison` | table, sticky first context column | **table** (never cards) | local horizontal scroll |
-| `embedded-picker` | embedded/dialog authority, auto layout (no tier attribute) | unchanged | scrolls inside its dialog surface |
+| `management-list` | semantic table, container-driven tier negotiation | shared mobile cards (`MobileRecordList`) | below Σ semantic minima → local scroll |
+| `log-diagnostic` | table | table by default; a page MAY declare cards | below Σ semantic minima → local scroll |
+| `detail-comparison` | table, sticky first context column | **table** (never cards) | below Σ semantic minima → local scroll |
+| `embedded-picker` | embedded/dialog authority, intrinsic width (no tier attribute) | unchanged | scrolls inside its dialog surface |
 
-Do not add an archetype. The mobile card slot is a `management-list`
-mechanism only — a DEV contract throw guards the shell against an illegal
-combination, and only a management-list with an explicit mobile slot
-participates in the viewport switch (production-safe fallback: desktop/scroll
-at every width).
+Do not add an archetype. The mobile card slot is a `management-list` /
+`log-diagnostic` mechanism — a DEV contract throw guards the shell against an
+illegal combination, and only an eligible archetype with an explicit mobile
+slot participates in the viewport switch (production-safe fallback:
+desktop/scroll at every width). Eligibility is a permission, not an
+obligation: a dense audit log with no faithful card form declares none and
+keeps the scroll (#601 Phase F superseded the #457 management-list-only
+freeze — RecoveryQueuePage and ProctorRecoveryPage had shipped page-local
+card lists and now render through the same shared switch).
 
 ### Three independent signals
 
@@ -449,9 +456,18 @@ the mobile-card and tier defects:
 
 - **viewport** → representation (`ResponsiveRepresentation`: < lg cards for
   management-list, ≥ lg table);
-- **container width** → table tier / local scroll (`negotiateTier` from the
-  archetype's min/max tier bounds; fixed layout + col min-width enforce
-  `renderedTableMin = max(tierMin, contentMin)` physically);
+- **container width** → column allocation / local scroll. The scroll region
+  publishes the measured content box to the allocator
+  (`table/columnAllocation.ts`), which resolves explicit px widths with the
+  ratified two-state rule: below Σ semantic minima every column renders at
+  exactly its minimum and the region scrolls locally; at or above them every
+  column renders at its floor × one shared scale (semantic minima first +
+  proportional residual — residual space belongs to the semantic geometry,
+  never to however many `width: auto` columns happen to exist). The
+  negotiated tier (`negotiateTier`, archetype min/max bounds) is the region's
+  density signal; it no longer feeds a width floor. The #454 claim that fixed
+  layout + col min-width enforce per-column minima physically is disproven
+  (measured: a 256px long-text floor rendering at 186.7px);
 - **column priority** → mobile information selection only (never desktop tier
   logic).
 
@@ -478,8 +494,13 @@ interchangeable:
   `score`, `actions`, … closed set in `DataTableContract`);
 - **overflow** — how the content physically behaves (closed vocabulary
   `nowrap` / `wrap` / `break-token` / `truncate` / `truncate-middle` /
-  `line-clamp-2`, per-role allowed domains; truncation never happens silently
-  at the cell — presenter policies keep the full value accessible);
+  `line-clamp-2`, per-role allowed domains). A value wider than its column
+  never paints over its neighbours: single-line policies clip at the cell
+  (`overflow: hidden` + ellipsis — the Element Plus pairing), and the clipped
+  cell reveals its full value on hover; presenter policies
+  (`truncate` / `truncate-middle` / `line-clamp-2`) keep the full value
+  accessible via title + keyboard focus; the `actions` role is never clipped
+  (an unreachable control is a functional defect);
 - **priority** — whether/how the column participates in the mobile card
   summary. Frozen vocabulary: `high` / `normal` / `low` — no additions. The
   priority→slot mapping is frozen: `high` renders in the card header (or as
@@ -488,12 +509,19 @@ interchangeable:
   order is preserved; pages must not keep a second page-local mobile field
   map — both representations derive from the same `DataViewColumnDef[]`.
 
-Physical widths are recipes (`apps/web/src/table/recipes.css`); the normative
-anchors: status column **8.5rem** (vocabulary-bound, derived from the
-statusMeta × supported-locale fixture), type column **7.25rem** (bounded
-enumerated-label families), action-label column **9.5rem** (localized action
-labels, derived from the action registry × supported-locale fixture), actions
-column **6rem** fine / **7.5rem** coarse pointer.
+Column geometry lives in ONE authority: `ROLE_GEOMETRY`
+(`apps/web/src/table/columnAllocation.ts`) — semantic floors in border-box px
+that are both each column's guaranteed minimum and its weight in the
+proportional residual distribution; `recipes.css` carries no width rules
+(structurally gated). The floors are vocabulary-bound anchors, not exact
+rendered widths: status **8.5rem** (statusMeta × supported-locale fixture),
+type **7.25rem** (bounded enumerated-label families), action-label **9.5rem**
+(action registry × locale fixture), actions **6rem** fine / **7.5rem** coarse
+pointer, date-range **14.5rem** (the 23-char grammar), short-id **7.5rem**
+(the middle-truncate presenter budget is derived against this token's 104px
+paintable text width). A new status/type/action or locale grows the fixture
+and reds the guard (`table-contract-guards.test.ts`) until the token is
+revisited.
 
 Table typography (#577 M7): header cells render **14/20/500** via the
 unlayered recipe (issue #601 V2b supersedes the #582 D4 header value); body

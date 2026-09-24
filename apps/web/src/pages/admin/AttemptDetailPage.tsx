@@ -23,7 +23,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PageSection } from "@/components/shared/PageSection";
 import {
   DataTableCell,
-  DataTableColumns,
+  DataTableSurface,
   DataTableHead,
   DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
@@ -62,7 +62,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { getTypeLabelKey } from "@/lib/constants";
 import type {
@@ -766,19 +766,18 @@ export function AttemptDetailPage() {
       </PageSection>
 
       <PageSection title={t("admin.attemptDetail.result.detailTitle")}>
-        <DataTableShell archetype="detail-comparison" contentClassName="p-0">
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "number" },
-                { role: "long-text", key: "question", overflow: "truncate" },
-                { role: "type" },
-                { role: "secondary-text", key: "candidate-answer" },
-                { role: "secondary-text", key: "standard-answer" },
-                { role: "score", key: "earned-score" },
-                { role: "score", key: "max-score" },
-              ]}
-            />
+        <DataTableShell archetype="detail-comparison">
+          <DataTableSurface
+            columns={[
+              { role: "number" },
+              { role: "long-text", key: "question", overflow: "truncate" },
+              { role: "type" },
+              { role: "secondary-text", key: "candidate-answer" },
+              { role: "secondary-text", key: "standard-answer" },
+              { role: "score", key: "earned-score" },
+              { role: "score", key: "max-score" },
+            ]}
+          >
             <TableHeader>
               <TableRow>
                 <DataTableHead role="number">
@@ -838,7 +837,7 @@ export function AttemptDetailPage() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </DataTableSurface>
         </DataTableShell>
       </PageSection>
 

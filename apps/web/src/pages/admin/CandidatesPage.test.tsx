@@ -353,7 +353,9 @@ describe("CandidatesPage", () => {
       screen.getByPlaceholderText("搜索考生姓名或用户名..."),
       "不存在",
     );
-    expect(screen.getByText("未找到匹配的考生")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "未找到匹配的考生" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("搜索考生")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "清除考生搜索" }),
@@ -395,7 +397,9 @@ describe("CandidatesPage", () => {
       });
     });
     renderPage();
-    expect(await screen.findByText("暂无考生")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "暂无考生" }),
+    ).toBeInTheDocument();
   });
 
   it("preserves USER_ALREADY_EXISTS save error", async () => {

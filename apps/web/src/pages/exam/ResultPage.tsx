@@ -17,12 +17,12 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import {
   DataTableCell,
-  DataTableColumns,
+  DataTableSurface,
   DataTableHead,
   DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContainer } from "@/components/shared/PageContainer";
 
 /** Formats an answer value into a human-readable string via i18n. */
@@ -152,21 +152,17 @@ export function ResultPage() {
           </Card>
 
           <PageSection title={t("candidateResult.detail.title")}>
-            <DataTableShell
-              archetype="detail-comparison"
-              contentClassName="p-0"
-            >
-              <Table>
-                <DataTableColumns
-                  columns={[
-                    { role: "number" },
-                    { role: "long-text", key: "question" },
-                    { role: "type" },
-                    { role: "secondary-text", key: "candidate-answer" },
-                    { role: "secondary-text", key: "correct-answer" },
-                    { role: "score" },
-                  ]}
-                />
+            <DataTableShell archetype="detail-comparison">
+              <DataTableSurface
+                columns={[
+                  { role: "number" },
+                  { role: "long-text", key: "question" },
+                  { role: "type" },
+                  { role: "secondary-text", key: "candidate-answer" },
+                  { role: "secondary-text", key: "correct-answer" },
+                  { role: "score" },
+                ]}
+              >
                 <TableHeader>
                   <TableRow>
                     <DataTableHead role="number">
@@ -272,7 +268,7 @@ export function ResultPage() {
                     );
                   })}
                 </TableBody>
-              </Table>
+              </DataTableSurface>
             </DataTableShell>
           </PageSection>
         </>

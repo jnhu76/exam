@@ -33,17 +33,23 @@ describe("data table column-contract migration", () => {
       const source = readFileSync(join(here, path), "utf8");
 
       // A consumer routes columns through the semantic role contract in ONE of
-      // two ways: (a) directly via <DataTableColumns> + DataTableHead/Cell, or
+      // three ways: (a) directly via <DataTableColumns> + DataTableHead/Cell,
       // (b) via <DesktopDataTable> whose ColumnDefs carry meta: { role } (the
-      // DesktopDataTable renders the contract primitives internally).
+      // DesktopDataTable renders the contract primitives internally), or
+      // (c) via <DataTableSurface columns={...}> which owns the allocation
+      // colgroup for contract-direct tables.
       // UI-TOKEN-TABLE-FOUNDATION-1: QuestionPage migrated to pattern (b).
-      const usesDirectContract = source.includes("<DataTableColumns");
+      // #601 Phase F: contract-direct consumers use pattern (c) so the shared
+      // allocator owns the colgroup.
+      const usesDirectContract =
+        source.includes("<DataTableColumns") ||
+        source.includes("<DataTableSurface");
       const usesDesktopDataTable =
         source.includes("<DesktopDataTable") &&
         /meta:\s*\{\s*role:/.test(source);
       expect(
         usesDirectContract || usesDesktopDataTable,
-        `${path} must route columns through the semantic role contract (either <DataTableColumns> or <DesktopDataTable> with meta.role)`,
+        `${path} must route columns through the semantic role contract (either <DataTableColumns>, <DataTableSurface>, or <DesktopDataTable> with meta.role)`,
       ).toBe(true);
 
       // Raw <TableHead>/<TableCell> bypass the contract in either pattern.

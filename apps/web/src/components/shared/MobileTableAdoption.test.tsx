@@ -1,10 +1,15 @@
 /**
- * UI-TABLE-MOBILE-1 structural guards (issue 457).
+ * UI-TABLE-MOBILE-1 structural guards (issue 457, eligibility extended by
+ * #601 Phase F).
  *
  * Pins the mobile card representation at the SOURCE level:
- *   - the mobile slot is a management-list mechanism only: log-diagnostic and
- *     detail-comparison consumers keep horizontal scroll below lg (negative
- *     proofs), and the shell itself fails loud on the illegal combination;
+ *   - the mobile slot serves management-list and log-diagnostic archetypes;
+ *     detail-comparison keeps horizontal scroll below lg (negative proofs),
+ *     and the shell itself fails loud on the illegal combination. The #457
+ *     management-list-only freeze is superseded by Phase F evidence: the two
+ *     log-diagnostic queue pages had shipped hand-rolled md-breakpoint card
+ *     lists — the authority converged onto them instead of preserving the
+ *     page-local second implementation;
  *   - the adopted management-list pages render BOTH representations from one
  *     DataViewColumnDef column array — the derived MobileRecordList consumes
  *     the same `columns` variable the desktop table does (no page-local
@@ -46,13 +51,18 @@ const adoptedPages = [
   "../../pages/admin/ExamProfilePage",
   "../../pages/admin/GradingQueuePage",
   "../../pages/admin/InvitationsCard",
+  "../../pages/admin/ProctorRecoveryPage",
   "../../pages/admin/ProctorWorkspacePage",
+  "../../pages/admin/RecoveryQueuePage",
   "../../pages/admin/ResultsOverviewPage",
   "../../pages/admin/ScoreListPage",
   "../../pages/admin/UsersPage",
 ] as const;
 
-/** Non-management-list archetypes: mobile cards are forbidden (scroll stays). */
+/**
+ * Archetypes without a declared mobile slot: scroll stays (attempt detail /
+ * audit / import logs / the exam result sheet keep their column context).
+ */
 const scrollOnlyConsumers = [
   {
     file: "../../pages/admin/AttemptDetailPage",
@@ -60,7 +70,6 @@ const scrollOnlyConsumers = [
   },
   { file: "../../pages/admin/AuditLogPage", archetype: "log-diagnostic" },
   { file: "../../pages/admin/ImportLogsPage", archetype: "log-diagnostic" },
-  { file: "../../pages/admin/RecoveryQueuePage", archetype: "log-diagnostic" },
   { file: "../../pages/exam/ResultPage", archetype: "detail-comparison" },
 ] as const;
 
@@ -74,12 +83,12 @@ describe("mobile card representation structural guards (issue 457)", () => {
       hasMobile: false,
       expected: false,
     },
+    { archetype: "log-diagnostic" as const, hasMobile: true, expected: true },
     {
       archetype: "detail-comparison" as const,
       hasMobile: true,
       expected: false,
     },
-    { archetype: "log-diagnostic" as const, hasMobile: true, expected: false },
     { archetype: "embedded-picker" as const, hasMobile: true, expected: false },
   ])(
     "isMobileRepresentationAllowed($archetype, $hasMobile) → $expected",
@@ -90,22 +99,20 @@ describe("mobile card representation structural guards (issue 457)", () => {
     },
   );
 
-  it.each(["detail-comparison", "log-diagnostic"])(
+  it.each(["detail-comparison"] as const)(
     "the shell fails loud when the mobile slot meets archetype %s (DEV/test)",
     (archetype) => {
       expect(() =>
         render(
-          // @ts-expect-error -- deliberately illegal prop combination (mobile
-          // is not typed for non-management-list archetypes by contract)
           <DataTableShell archetype={archetype} mobile={<div>x</div>}>
             <table />
           </DataTableShell>,
         ),
-      ).toThrow(/management-list mechanism/);
+      ).toThrow(/management-list\/log-diagnostic mechanism/);
     },
   );
 
-  it.each(["detail-comparison", "log-diagnostic"] as const)(
+  it.each(["detail-comparison"] as const)(
     "the workbench fails loud when mobileList meets archetype %s (DEV/test)",
     (archetype) => {
       expect(() =>
@@ -116,7 +123,7 @@ describe("mobile card representation structural guards (issue 457)", () => {
             mobileList={<div>x</div>}
           />,
         ),
-      ).toThrow(/management-list mechanism/);
+      ).toThrow(/management-list\/log-diagnostic mechanism/);
     },
   );
 
@@ -271,11 +278,16 @@ describe("mobile card representation structural guards (issue 457)", () => {
     expect(workbench).not.toMatch(/className="[^"]*hidden lg:block/);
   });
 
-  it("DataTableShell and DataWorkbench both consume ResponsiveRepresentation", () => {
+  it("DataTableShell and DataWorkbench both consume the shared scroll surface", () => {
+    // #601 Phase F: both shells compose TableScrollSurface, which composes
+    // ResponsiveRepresentation — still one responsive policy owner.
     const shell = read("./DataTableShell.tsx");
     const workbench = read("./DataWorkbench.tsx");
-    expect(shell).toContain("ResponsiveRepresentation");
-    expect(workbench).toContain("ResponsiveRepresentation");
+    expect(shell).toContain("TableScrollSurface");
+    expect(workbench).toContain("TableScrollSurface");
+    expect(read("./TableScrollSurface.tsx")).toContain(
+      "ResponsiveRepresentation",
+    );
   });
 
   it("keeps the viewport switch CSS-only (no JS breakpoint drives representation)", () => {

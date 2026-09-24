@@ -10,20 +10,13 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import {
   DesktopDataTable,
   type DataViewColumnDef,
 } from "@/components/shared/DesktopDataTable";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { PageContainer } from "@/components/shared/PageContainer";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { ListChecks } from "lucide-react";
 
 interface GradingQueueItem {
@@ -142,6 +135,16 @@ export function GradingQueuePage() {
         description={t("admin.grading.description")}
       />
       <DataTableShell
+        footer={
+          totalPages > 1 ? (
+            <DataTablePagination
+              page={page}
+              pageSize={pageSize}
+              total={data.total}
+              onPageChange={setPage}
+            />
+          ) : undefined
+        }
         mobile={
           <MobileRecordList
             columns={columns}
@@ -166,34 +169,6 @@ export function GradingQueuePage() {
           }
         />
       </DataTableShell>
-      {totalPages > 1 && (
-        <Pagination>
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                aria-disabled={page === 1}
-              />
-            </PaginationItem>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-              <PaginationItem key={p}>
-                <PaginationLink
-                  isActive={p === page}
-                  onClick={() => setPage(p)}
-                >
-                  {p}
-                </PaginationLink>
-              </PaginationItem>
-            ))}
-            <PaginationItem>
-              <PaginationNext
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                aria-disabled={page === totalPages}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      )}
     </PageContainer>
   );
 }

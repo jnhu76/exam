@@ -15,19 +15,29 @@ import { loginAsAdmin } from "../lib/login";
 
 /**
  * issue 445 V2/V3/V4 + S1–S6 runtime geometry regression — UI-TABLE-CONTRACT-2
- * (issue 454).
+ * (issue 454), re-based on the #601 Phase F allocation contract.
  *
  * Real Chromium, real pages, real product CSS/font (Playwright bundles its own
  * Chromium; the built app serves the self-hosted Noto Sans CJK SC stack).
  * Geometry is asserted with getBoundingClientRect / clientWidth / scrollWidth
  * — screenshots are never the proof.
  *
- * Contract under test (P3-Corrective §5):
- *   effectiveTier = largest tier in [minTier, maxTier] with tierMin ≤
- *   containerWidth, floored at minTier; renderedTableMin = max(tierMin,
- *   contentMin) is a CSS physical fact (no runtime Σmin channel). Detail-
- *   comparison stays compact with a sticky first column; management-list can
- *   never upgrade beyond standard; status columns are 8.5rem (V4).
+ * Contract under test (#601 Phase F, superseding #454 §5):
+ *   the scroll region negotiates the tier from its own containerWidth
+ *   (largest tier in [minTier, maxTier] with tierMin ≤ containerWidth, floored
+ *   at minTier) and publishes it; the column allocator (columnAllocation.ts)
+ *   then computes EXPLICIT px widths with the two-state rule: below Σ semantic
+ *   minima the table renders at exactly those minima and the region scrolls
+ *   locally; at or above them every column renders at its floor × one shared
+ *   scale (semantic minima first + proportional residual — user-ratified rule
+ *   B). Per-column minima are therefore a computed allocation, NOT a CSS
+ *   fact: Chromium's fixed-layout split of leftover space ignored the
+ *   per-column floors (measured: 256px long-text floor rendered at 186.7px),
+ *   and the interim locked/equal-share rule poured the whole residual into
+ *   whichever width:auto columns existed (measured: /admin/exams 考试名称
+ *   626px while 及格分 stayed at 80px and clipped 60/100). Detail-comparison
+ *   stays compact with a sticky first column; management-list can never
+ *   upgrade beyond standard; status floors are 8.5rem (V4).
  */
 
 function right(box: { x: number; width: number }): number {
@@ -50,9 +60,11 @@ async function probeTable(
   return shell.evaluate((el) => {
     const region = el.querySelector('[data-slot="table-scroll-region"]');
     const table = el.querySelector('[data-slot="table"]');
+    // The region owns the geometry vocabulary (#601 Phase F): archetype and
+    // tier are read from the measured element, never from an outer wrapper.
     return {
-      archetype: el.getAttribute("data-table-archetype") ?? "",
-      tier: el.getAttribute("data-table-tier"),
+      archetype: region?.getAttribute("data-table-archetype") ?? "",
+      tier: region?.getAttribute("data-table-tier") ?? null,
       containerWidth: region ? region.getBoundingClientRect().width : 0,
       clientWidth: region ? region.clientWidth : 0,
       scrollWidth: region ? region.scrollWidth : 0,
@@ -107,8 +119,10 @@ test.describe("table contract v2 runtime geometry (issue 454)", () => {
     expect(g.overflowing).toBe(false);
     expect(g.scrollWidth).toBeLessThanOrEqual(g.clientWidth + 1);
 
-    // S1 evidence: rendered table = contentMin (~784.5), not the old static
-    // standard floor (980) that produced V2's 44px clip.
+    // S1 evidence (#601 Phase F contract): the allocated table fills the
+    // measured container (availableWidth dominates both the compact floor and
+    // Σ roleMin here) rather than being stretched to the old static standard
+    // floor (980) that produced V2's 44px clip.
     expect(g.tableWidth).toBeGreaterThan(700);
     expect(g.tableWidth).toBeLessThanOrEqual(g.clientWidth + 1);
     expect(g.containerWidth).toBeGreaterThan(850);
@@ -137,8 +151,9 @@ test.describe("table contract v2 runtime geometry (issue 454)", () => {
     await shell.waitFor({ state: "visible" });
     const g = await probeTable(shell);
 
-    // S2/S3 evidence: narrower than contentMin → real physical scroll with
-    // container-gated affordance; the table is never silently compressed.
+    // S2/S3 evidence: narrower than Σ roleMin → real physical scroll with
+    // container-gated affordance; the table is never silently compressed
+    // below its semantic column minima.
     expect(g.tier).toBe("compact");
     expect(g.scrollWidth).toBeGreaterThan(g.clientWidth + 1);
     expect(g.overflowing).toBe(true);

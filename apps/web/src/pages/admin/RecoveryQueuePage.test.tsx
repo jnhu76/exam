@@ -152,7 +152,7 @@ describe("RecoveryQueuePage", () => {
 
   it("renders the queue table with server fields", async () => {
     renderPage();
-    const table = await screen.findByTestId("recovery-queue-table");
+    const table = await screen.findByRole("table");
     expect(within(table).getByText("网络恢复考试")).toBeInTheDocument();
     expect(within(table).getByText("考生张三")).toBeInTheDocument();
     expect(within(table).getByText("严重")).toBeInTheDocument();
@@ -225,7 +225,7 @@ describe("RecoveryQueuePage", () => {
   it("the incident status link navigates to the incident detail route", async () => {
     const user = userEvent.setup();
     renderPage();
-    const table = await screen.findByTestId("recovery-queue-table");
+    const table = await screen.findByRole("table");
     // The incident status badge is the navigation link (keyboard-accessible,
     // open-in-new-tab capable). Clicking it navigates to the detail route.
     const incidentLink = within(table).getByText("待处理");
@@ -248,7 +248,7 @@ describe("RecoveryQueuePage", () => {
       nextCursor: null,
     });
     renderPage();
-    const table = await screen.findByTestId("recovery-queue-table");
+    const table = await screen.findByRole("table");
     expect(within(table).getByText("网络恢复考试")).toBeInTheDocument();
 
     await user.click(screen.getByText("加载更多"));
@@ -285,7 +285,7 @@ describe("RecoveryQueuePage", () => {
     });
     renderPage();
     await act(async () => {});
-    const table = screen.getByTestId("recovery-queue-table");
+    const table = screen.getByRole("table");
     expect(within(table).getByText("网络恢复考试")).toBeInTheDocument();
 
     // Load page 2, then a poll refresh must REPLACE the chain with page 1.

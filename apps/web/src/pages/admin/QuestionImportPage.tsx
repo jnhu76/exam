@@ -9,12 +9,12 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { FileUpload } from "@/components/shared/FileUpload";
 import {
   DataTableCell,
-  DataTableColumns,
+  DataTableSurface,
   DataTableHead,
   DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
-import { ToolbarFilter } from "@/components/shared/DataToolbar";
+import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { CircleCheck, CircleAlert, CircleX } from "lucide-react";
@@ -243,9 +243,17 @@ export function QuestionImportPage() {
     <PageContainer role="form" className="flex flex-col gap-6">
       <PageHeader title={t("admin.questionImport.title")} />
 
-      {/* flex-wrap: course select + template/download actions exceed narrow
-          viewports as one nowrap row. */}
-      <div className="flex flex-wrap items-end gap-4">
+      <DataToolbar
+        aria-label={t("admin.questionImport.courseLabel")}
+        actions={
+          <>
+            <Button variant="outline" onClick={downloadTemplate}>
+              {t("admin.questionImport.downloadTemplate")}
+            </Button>
+            <FileUpload onText={loadCsv} />
+          </>
+        }
+      >
         <div className="flex flex-col gap-2">
           <Label>{t("admin.questionImport.courseLabel")}</Label>
           <Select value={selectedCourse} onValueChange={setSelectedCourse}>
@@ -265,13 +273,7 @@ export function QuestionImportPage() {
             </SelectContent>
           </Select>
         </div>
-
-        <Button variant="outline" onClick={downloadTemplate}>
-          {t("admin.questionImport.downloadTemplate")}
-        </Button>
-
-        <FileUpload onText={loadCsv} />
-      </div>
+      </DataToolbar>
 
       {parsedRows.length > 0 && !importResult && (
         <>
@@ -281,15 +283,14 @@ export function QuestionImportPage() {
               count: parsedRows.length,
             })}
           >
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "number" },
-                  { role: "type" },
-                  { role: "long-text", overflow: "truncate" },
-                  { role: "score" },
-                ]}
-              />
+            <DataTableSurface
+              columns={[
+                { role: "number" },
+                { role: "type" },
+                { role: "long-text", overflow: "truncate" },
+                { role: "score" },
+              ]}
+            >
               <TableHeader>
                 <TableRow>
                   <DataTableHead role="number">
@@ -327,7 +328,7 @@ export function QuestionImportPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </DataTableSurface>
           </DataTableShell>
           {parsedRows.length > 20 && (
             <p className="type-secondary">
@@ -378,14 +379,13 @@ export function QuestionImportPage() {
             archetype="embedded-picker"
             title={t("admin.questionImport.previewColumns.detail")}
           >
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "number" },
-                  { role: "status" },
-                  { role: "long-text", overflow: "truncate" },
-                ]}
-              />
+            <DataTableSurface
+              columns={[
+                { role: "number" },
+                { role: "status" },
+                { role: "long-text", overflow: "truncate" },
+              ]}
+            >
               <TableHeader>
                 <TableRow>
                   <DataTableHead role="number">
@@ -439,7 +439,7 @@ export function QuestionImportPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </DataTableSurface>
           </DataTableShell>
 
           <div className="flex gap-3">

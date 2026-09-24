@@ -2,6 +2,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  ACTIONS_MIN_COARSE,
+  ACTIONS_MIN_FINE,
+  ROLE_GEOMETRY,
+} from "@/table/columnAllocation";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
@@ -133,60 +138,84 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
-  it("enforces fixed layout + collapsed borders in tier-governed shells only", () => {
-    // Fixed layout makes <col> widths authoritative (root cause fix for
-    // candidate-fields horizontal scroll + users header/body misalign).
-    // Scoped to TIER-GOVERNED shells (those carrying data-table-tier):
-    // embedded-picker shells keep auto layout (the named exception, issue 445
-    // P3 §9), as do calendar, Dialog, and Card tables outside the shell.
-    // border-collapse (not separate): collapse lets a width:100% fixed-layout
-    // table shrink to its container when declared col widths would overflow
-    // (the candidate-fields horizontal-scroll fix). The low-contrast grid is
-    // drawn directly on <th>/<td>, which renders reliably under collapse.
+  it("enforces fixed layout + collapsed borders on allocated tables only", () => {
+    // #601 Phase F: fixed layout is exact under the computed allocation —
+    // colgroup, header and body cells share one allocation emitted by
+    // useColumnAllocation. Scoped to the `data-column-allocation="computed"`
+    // marker: calendar, Dialog and Card tables outside the contract keep auto
+    // layout. border-collapse (not separate): headers and body share column
+    // edges; the low-contrast grid is drawn directly on <th>/<td>, which
+    // renders reliably under collapse.
     expect(tableCss).toMatch(
-      /\[data-slot="admin-table-shell"\]\[data-table-tier\]\s+\[data-slot="table"\][\s\S]*?table-layout:\s*fixed/,
+      /\[data-column-allocation="computed"\]\s*\{[^}]*table-layout:\s*fixed/,
     );
     expect(tableCss).toMatch(
-      /\[data-slot="admin-table-shell"\]\s+\[data-slot="table"\][\s\S]*?border-collapse:\s*collapse/,
+      /\[data-column-allocation="computed"\][\s\S]*?border-collapse:\s*collapse/,
     );
   });
 
   it("binds the actions column to the icon-only contract width", () => {
     // issue 445 P3 §4.3: the inline row-action vocabulary is icon-only and
-    // count-bounded, so the actions column is a LOCKED column at the derived
-    // contract width (6rem fine / 7.5rem coarse) — not a per-page density
-    // tier. The density selectors are gone entirely.
-    expect(tableCss).toMatch(
-      /\[data-column-role="actions"\]\s+\{[^}]*width:\s*6rem/,
-    );
-    expect(tableCss).toMatch(
-      /@media \(pointer: coarse\)\s*\{[\s\S]*?\[data-column-role="actions"\]\s+\{[^}]*width:\s*7\.5rem/,
-    );
+    // count-bounded, so the actions column's floor is the derived contract
+    // width (6rem fine / 7.5rem coarse) — not a per-page density tier. The
+    // density selectors are gone entirely. #601 Phase F: the width lives in
+    // the allocation authority, not in CSS; a floor is a minimum, not an
+    // exact rendered width (the proportional allocator may widen it).
+    expect(ROLE_GEOMETRY.actions).toEqual({ min: ACTIONS_MIN_FINE });
+    expect(ACTIONS_MIN_COARSE).toBe(120);
     expect(tableCss).not.toContain("data-actions-density");
   });
 
-  it("splits columns into flexible (auto) and locked (fixed-width) tiers", () => {
-    // UI-TABLE-COLUMN-PRIORITY-1: flexible columns (text/content) carry
-    // width:auto so under fixed layout they split the container's remaining
-    // space (after locked columns take their fixed width). Locked columns
-    // (atomic/metadata) carry a fixed width = min-width so they stay compact
-    // and never wrap. This mirrors TanStack's size/minSize model.
-    // Flexible (auto):
-    expect(tableCss).toMatch(
-      /\[data-column-role="primary-text"\]\s+\{[^}]*width:\s*auto/,
+  it("keeps column widths out of CSS — the allocator is the single width owner", () => {
+    // #601 Phase F: ROLE_GEOMETRY (table/columnAllocation.ts) owns every
+    // column width. recipes.css must not reintroduce a second width
+    // authority — not for flexible roles, not for locked roles.
+    expect(tableCss).not.toMatch(/\[data-column-role=[^\]]*\]\s*\{[^}]*width:/);
+    expect(tableCss).not.toMatch(
+      /\[data-column-role=[^\]]*\]\s*\{[^}]*min-width:/,
     );
-    expect(tableCss).toMatch(
-      /\[data-column-role="long-text"\]\s+\{[^}]*width:\s*auto/,
-    );
-    expect(tableCss).toMatch(
-      /\[data-column-role="secondary-text"\]\s+\{[^}]*width:\s*auto/,
-    );
-    // Locked (fixed width):
-    expect(tableCss).toMatch(
-      /\[data-column-role="number"\]\s+\{[^}]*width:\s*4\.5rem/,
-    );
-    // type/date-range are vocabulary-bound tokens; their derived values are
-    // pinned once, by table-contract-guards.test.ts (issue #590 owner).
+    // The geometry vocabulary is { min } only: the proportional allocator
+    // (#601 Phase F, user-ratified) has no locked/flexible split — every
+    // column's floor is both its minimum and its residual weight.
+    expect(
+      Object.entries(ROLE_GEOMETRY)
+        .filter(([role]) => role !== "actions")
+        .map(([role, g]) => `${role}:${g.min}`),
+    ).toEqual([
+      "primary-text:192",
+      "secondary-text:144",
+      "long-text:256",
+      "description:208",
+      "tag-list:160",
+      "status:136",
+      "date:168",
+      "date-range:232",
+      "duration:80",
+      "number:72",
+      "score:80",
+      "short-id:120",
+      "type:116",
+      "action-label:152",
+    ]);
+  });
+
+  it("carries the geometry vocabulary on exactly one element per shell", () => {
+    // #601 Phase F: the scroll region is the single writer of
+    // data-table-archetype / data-table-tier. Both shell compositions render
+    // that region (DataTableShell as an inner div, DataWorkbench with the
+    // region itself carrying data-slot="admin-table-shell"), so CSS and
+    // runtime probes have one element to read. A second writer — e.g. the
+    // archetype repeated on the outer section — would let a probe read a
+    // stale value from an element that is not the measured region.
+    const webRoot = join(here, "..");
+    // Matches the attribute WRITE (JSX `data-table-archetype={...}` or an
+    // attribute object key), not a comment that names the attribute.
+    const write = /["']?data-table-(?:archetype|tier)["']?\s*[:=]/;
+    const writers = listSourceFiles(webRoot)
+      .filter((path) => write.test(readFileSync(path, "utf8")))
+      .map((path) => relative(webRoot, path))
+      .sort();
+    expect(writers).toEqual(["components/shared/TableScrollSurface.tsx"]);
   });
 
   it("defines restrained row hover, focus, and selected states", () => {
@@ -216,6 +245,9 @@ describe("table and color visual-finish authority", () => {
     // owner, or a component re-deriving facts, still fails here. Test-infra
     // (`src/test/`) is not a measurement owner — its ResizeObserver stub
     // exists only so Radix popper primitives can mount under jsdom.
+    //
+    // The probe matches property READS (`el.scrollWidth`), not prose: a doc
+    // comment that quotes the measurement vocabulary is not an owner.
     const webRoot = join(here, "..");
     const owners = listSourceFiles(webRoot)
       .filter((path) => !path.startsWith(join(webRoot, "test")))
@@ -223,10 +255,19 @@ describe("table and color visual-finish authority", () => {
         path: relative(webRoot, path),
         text: readFileSync(path, "utf8"),
       }))
-      .filter(({ text }) => /ResizeObserver|scrollWidth/.test(text))
+      .filter(({ text }) =>
+        /ResizeObserver|\.(?:scrollWidth|clientWidth|offsetWidth)\b/.test(text),
+      )
       .map(({ path }) => path)
       .sort();
+    // Two closed fact classes, one owner each (#601 Phase F): REGION
+    // overflow facts (the observation that drives affordances and the
+    // allocation scope) belong to the hooks; the CELL clip fact — the hover
+    // reveal of a clipped single-line value — belongs to DataTableContract,
+    // reads its own element once per hover event, and must never grow into a
+    // second region observer.
     expect(owners).toEqual([
+      "components/shared/DataTableContract.tsx",
       "hooks/useOverflowObservation.ts",
       "hooks/useVerticalOverflowObservation.ts",
     ]);

@@ -57,7 +57,7 @@ function isPresenterMode(value: string): value is PresenterMode {
 
 /** The generic renderer piping runtime-guarded DataViewColumnDefs into the
  * colgroup; its `columns` prop is legitimately non-literal. */
-const GENERIC_COLGROUP_CONSUMER = "components/shared/DesktopDataTable.tsx";
+const GENERIC_COLGROUP_CONSUMER = "components/shared/DataTableContract.tsx";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, "..");

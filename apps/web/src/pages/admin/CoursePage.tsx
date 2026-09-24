@@ -9,7 +9,6 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
-import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { DataTableOverflowText } from "@/components/shared/DataTableContract";
@@ -19,6 +18,7 @@ import {
 } from "@/components/shared/DesktopDataTable";
 import { MobileRecordList } from "@/components/shared/MobileRecordList";
 import { DataToolbar } from "@/components/shared/DataToolbar";
+import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -263,59 +263,73 @@ export function CoursePage() {
           }
         />
 
-        {courses.length > 0 && (
-          <DataToolbar
-            search={
-              <SearchInput
-                aria-label={t("admin.courses.searchLabel")}
-                placeholder={t("admin.courses.searchPlaceholder")}
-                value={search}
-                onChange={setSearch}
-                onClear={() => setSearch("")}
-                clearLabel={t("admin.courses.clearSearchLabel")}
-                containerClassName="max-w-md"
+        <DataTableShell
+          toolbar={
+            // Product rule (pinned by test): the search box only exists when
+            // there is something to search.
+            courses.length > 0 ? (
+              <DataToolbar
+                search={
+                  <DataViewSearch
+                    aria-label={t("admin.courses.searchLabel")}
+                    placeholder={t("admin.courses.searchPlaceholder")}
+                    value={search}
+                    onChange={setSearch}
+                    onSearch={setSearch}
+                    clearLabel={t("admin.courses.clearSearchLabel")}
+                  />
+                }
+                summary={t("admin.courses.count", {
+                  count: filteredCourses.length,
+                })}
               />
-            }
-            summary={t("admin.courses.count", {
-              count: filteredCourses.length,
-            })}
-          />
-        )}
-
-        {courses.length === 0 ? (
-          <EmptyState
-            icon={<AppIcon icon={BookOpen} size="state" />}
-            title={t("admin.courses.empty")}
-            description={t("admin.courses.emptyDescription")}
-          />
-        ) : filteredCourses.length === 0 ? (
-          <EmptyState
-            icon={<AppIcon icon={Search} size="state" />}
-            title={t("admin.courses.noMatch")}
-            description={t("admin.courses.noMatchDescription", { q: search })}
-            action={
-              <Button variant="outline" onClick={() => setSearch("")}>
-                {t("admin.common.clearSearch")}
-              </Button>
-            }
-          />
-        ) : (
-          <DataTableShell
-            mobile={
-              <MobileRecordList
-                columns={columns}
-                rows={filteredCourses}
-                getRowId={(c) => c.id}
-              />
-            }
-          >
+            ) : undefined
+          }
+          mobile={
+            <MobileRecordList
+              columns={columns}
+              rows={filteredCourses}
+              getRowId={(c) => c.id}
+              empty={filteredCourses.length === 0}
+              emptyTitle={t(
+                courses.length === 0
+                  ? "admin.courses.empty"
+                  : "admin.courses.noMatch",
+              )}
+              emptyDescription={t(
+                courses.length === 0
+                  ? "admin.courses.emptyDescription"
+                  : "admin.courses.noMatchDescription",
+                { q: search },
+              )}
+            />
+          }
+        >
+          {courses.length === 0 ? (
+            <EmptyState
+              icon={<AppIcon icon={BookOpen} size="state" />}
+              title={t("admin.courses.empty")}
+              description={t("admin.courses.emptyDescription")}
+            />
+          ) : filteredCourses.length === 0 ? (
+            <EmptyState
+              icon={<AppIcon icon={Search} size="state" />}
+              title={t("admin.courses.noMatch")}
+              description={t("admin.courses.noMatchDescription", { q: search })}
+              action={
+                <Button variant="outline" onClick={() => setSearch("")}>
+                  {t("admin.common.clearSearch")}
+                </Button>
+              }
+            />
+          ) : (
             <DesktopDataTable
               columns={columns}
               data={filteredCourses}
               getRowId={(c) => c.id}
             />
-          </DataTableShell>
-        )}
+          )}
+        </DataTableShell>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent aria-describedby={undefined}>

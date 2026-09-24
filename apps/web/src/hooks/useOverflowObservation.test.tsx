@@ -24,6 +24,12 @@ function installMockResizeObserver() {
   });
 }
 
+/**
+ * Stubs one region's measurement facts. `offsetWidth` defaults to the border
+ * box (no classic scrollbar); an overflowing region in a real browser reports
+ * `offsetWidth − clientWidth` = scrollbar width, so pass `scrollbarWidth` for
+ * those cases.
+ */
 function setMetrics(
   element: HTMLElement,
   metrics: {
@@ -31,13 +37,16 @@ function setMetrics(
     clientWidth: number;
     scrollWidth: number;
     scrollLeft: number;
+    scrollbarWidth?: number;
   },
 ) {
+  const offsetWidth = metrics.clientWidth + (metrics.scrollbarWidth ?? 0);
   Object.defineProperties(element, {
     getBoundingClientRect: {
       configurable: true,
       value: () => ({ width: metrics.containerWidth }),
     },
+    offsetWidth: { configurable: true, get: () => offsetWidth },
     clientWidth: { configurable: true, get: () => metrics.clientWidth },
     scrollWidth: { configurable: true, get: () => metrics.scrollWidth },
     scrollLeft: {
@@ -58,6 +67,7 @@ function Probe({ threshold }: { threshold?: number }) {
       ref={ref}
       data-testid="region"
       data-container-width={String(facts.containerWidth)}
+      data-content-width={String(facts.contentWidth)}
       data-client-width={String(facts.clientWidth)}
       data-scroll-width={String(facts.scrollWidth)}
       data-overflowing={String(facts.overflowing)}
@@ -85,7 +95,7 @@ describe("useOverflowObservation", () => {
     const region = getByTestId("region");
     setMetrics(region, {
       containerWidth: 502.5,
-      clientWidth: 500,
+      clientWidth: 502,
       scrollWidth: 500,
       scrollLeft: 0,
     });
@@ -94,7 +104,8 @@ describe("useOverflowObservation", () => {
     });
 
     expect(region).toHaveAttribute("data-container-width", "502.5");
-    expect(region).toHaveAttribute("data-client-width", "500");
+    expect(region).toHaveAttribute("data-content-width", "502.5");
+    expect(region).toHaveAttribute("data-client-width", "502");
     expect(region).toHaveAttribute("data-scroll-width", "500");
     expect(region).toHaveAttribute("data-overflowing", "false");
     expect(region).toHaveAttribute("data-at-start", "true");
@@ -105,42 +116,55 @@ describe("useOverflowObservation", () => {
     const { getByTestId } = render(<Probe />);
     const region = getByTestId("region");
     setMetrics(region, {
-      containerWidth: 600,
+      containerWidth: 516,
       clientWidth: 500,
       scrollWidth: 900,
       scrollLeft: 0,
+      scrollbarWidth: 16,
     });
     act(() => {
       observerInstances.forEach((i) => i.cb([], {} as ResizeObserver));
     });
 
+    expect(region).toHaveAttribute("data-content-width", "500");
     expect(region).toHaveAttribute("data-overflowing", "true");
     expect(region).toHaveAttribute("data-at-start", "true");
     expect(region).toHaveAttribute("data-at-end", "false");
   });
 
-  it("treats maxScroll at or below the 1px threshold as not overflowing", () => {
+  it("keeps the exact content box out of the overflow decision (#601 Phase F)", () => {
     const { getByTestId } = render(<Probe />);
     const region = getByTestId("region");
-    // maxScroll = 501 - 500 = 1 → exactly at threshold → fits.
+    // Measured regression on /admin/questions: a 1394.667px content box whose
+    // content fits reports clientWidth === scrollWidth === 1395 (both rounded
+    // up), so nothing overflows. The exact box is published for SIZING
+    // consumers, but comparing scrollWidth against it reports overflow for
+    // every box whose fractional part is ≥ 0.5 — it rendered the "scroll for
+    // more" hint over a table that fit exactly.
     setMetrics(region, {
-      containerWidth: 501,
-      clientWidth: 500,
-      scrollWidth: 501,
+      containerWidth: 1394.667,
+      clientWidth: 1395,
+      scrollWidth: 1395,
       scrollLeft: 0,
     });
     act(() => window.dispatchEvent(new Event("resize")));
-    expect(region).toHaveAttribute("data-overflowing", "false");
 
-    // maxScroll = 2 → beyond threshold → overflowing.
+    expect(region).toHaveAttribute("data-content-width", "1394.667");
+    expect(region).toHaveAttribute("data-overflowing", "false");
+    expect(region).toHaveAttribute("data-at-start", "true");
+    expect(region).toHaveAttribute("data-at-end", "true");
+
+    // The same fractional box with a whole pixel of scrollable content is
+    // still reported.
     setMetrics(region, {
-      containerWidth: 502,
-      clientWidth: 500,
-      scrollWidth: 502,
+      containerWidth: 1394.667,
+      clientWidth: 1395,
+      scrollWidth: 1397,
       scrollLeft: 0,
     });
     act(() => window.dispatchEvent(new Event("resize")));
     expect(region).toHaveAttribute("data-overflowing", "true");
+    expect(region).toHaveAttribute("data-at-end", "false");
   });
 
   it("supports an explicit threshold", () => {
@@ -155,16 +179,27 @@ describe("useOverflowObservation", () => {
     });
     act(() => window.dispatchEvent(new Event("resize")));
     expect(region).toHaveAttribute("data-overflowing", "false");
+
+    // maxScroll = 5 > threshold 4 → overflowing.
+    setMetrics(region, {
+      containerWidth: 505,
+      clientWidth: 500,
+      scrollWidth: 505,
+      scrollLeft: 0,
+    });
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(region).toHaveAttribute("data-overflowing", "true");
   });
 
   it("tracks atStart/atEnd across the ±1px boundaries while scrolling", () => {
     const { getByTestId } = render(<Probe />);
     const region = getByTestId("region");
     const metrics = {
-      containerWidth: 600,
+      containerWidth: 516,
       clientWidth: 500,
       scrollWidth: 900,
       scrollLeft: 0,
+      scrollbarWidth: 16,
     };
     setMetrics(region, metrics);
     act(() => window.dispatchEvent(new Event("resize")));
@@ -208,10 +243,11 @@ describe("useOverflowObservation", () => {
     expect(region).toHaveAttribute("data-overflowing", "false");
 
     setMetrics(region, {
-      containerWidth: 600,
+      containerWidth: 516,
       clientWidth: 500,
       scrollWidth: 800,
       scrollLeft: 0,
+      scrollbarWidth: 16,
     });
     act(() => {
       observerInstances.forEach((i) => i.cb([], {} as ResizeObserver));
@@ -223,10 +259,11 @@ describe("useOverflowObservation", () => {
     const { getByTestId } = render(<Probe />);
     const region = getByTestId("region");
     const metrics = {
-      containerWidth: 600,
+      containerWidth: 516,
       clientWidth: 500,
       scrollWidth: 900,
       scrollLeft: 0,
+      scrollbarWidth: 16,
     };
     setMetrics(region, metrics);
     act(() => window.dispatchEvent(new Event("resize")));
@@ -253,10 +290,11 @@ describe("useOverflowObservation", () => {
     expect(region).toHaveAttribute("data-overflowing", "false");
 
     setMetrics(region, {
-      containerWidth: 600,
-      clientWidth: 400,
-      scrollWidth: 500,
+      containerWidth: 516,
+      clientWidth: 500,
+      scrollWidth: 700,
       scrollLeft: 0,
+      scrollbarWidth: 16,
     });
     act(() => window.dispatchEvent(new Event("resize")));
     expect(region).toHaveAttribute("data-overflowing", "true");

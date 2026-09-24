@@ -1,256 +1,169 @@
-import { useId, useRef, type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-import { useOverflowObservation } from "@/hooks/useOverflowObservation";
+import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { ResponsiveRepresentation } from "@/components/shared/ResponsiveRepresentation";
+import { TableScrollSurface } from "@/components/shared/TableScrollSurface";
+import {
+  ARCHETYPE_TIER_BOUNDS,
+  negotiateTier,
+  TIER_MIN_WIDTH_PX,
+  type DataTableTier,
+  type TableArchetype,
+} from "@/table/tableTiers";
 
-export type DataTableTier = "compact" | "standard" | "wide";
-
-/**
- * Closed table archetype vocabulary (issue 445 P3-Corrective §C). Pages declare the
- * archetype; the shell derives the effective tier from the measured container
- * width. `embedded-picker` is the named auto-layout exception: it stays inside
- * the shell surface but is NOT governed by fixed-tier negotiation.
- */
-export type TableArchetype =
-  | "management-list"
-  | "log-diagnostic"
-  | "detail-comparison"
-  | "embedded-picker";
-
-/**
- * Physical tier floors (recipes.css `min-width` on the shell-scoped table).
- * The negotiation is the ONLY consumer of these numbers — no runtime Σmin
- * channel is built (P3-Corrective K2: fixed layout + col min-width +
- * border-collapse physically enforce `renderedTableMin = max(tierMin,
- * contentMin)` in Chromium; Σrole minima is a structural-test oracle only).
- */
-export const TIER_MIN_WIDTH_PX: Record<DataTableTier, number> = {
-  compact: 720, //   45rem
-  standard: 980, // 61.25rem
-  wide: 1200, //     75rem
-};
-
-const TIER_ORDER: DataTableTier[] = ["compact", "standard", "wide"];
-
-/** Per-archetype tier bounds (P3-Corrective §C / §5.4). */
-export const ARCHETYPE_TIER_BOUNDS: Record<
-  Exclude<TableArchetype, "embedded-picker">,
-  { min: DataTableTier; max: DataTableTier }
-> = {
-  "management-list": { min: "compact", max: "standard" },
-  "log-diagnostic": { min: "compact", max: "wide" },
-  "detail-comparison": { min: "compact", max: "compact" },
+// Re-exported for the existing public API (tests / E2E import these from the
+// shell module; the definitions live in table/tableTiers.ts).
+export {
+  ARCHETYPE_TIER_BOUNDS,
+  negotiateTier,
+  TIER_MIN_WIDTH_PX,
+  type DataTableTier,
+  type TableArchetype,
 };
 
 /**
- * Container-driven tier negotiation (pure, testable — no hysteresis):
+ * Production-safe mobile eligibility (issue 457 C2, extended by issue 601 Phase F):
+ * management-list and log-diagnostic archetypes with an explicit mobile slot
+ * participate in the CSS viewport switch. Other archetypes safely fall back
+ * to desktop/scroll at every width. Extracted as a pure function for direct
+ * unit testing.
  *
- *   effective = largest tier in [minTier, maxTier] whose tierMin ≤ container
- *   if none fits → minTier (the initial/unmeasured container falls here; the
- *   hook measures pre-paint so the first painted width is already negotiated).
- *
- * `minTier` caps how low a table degrades, `maxTier` caps how wide it may grow
- * (management-list must never upgrade to wide on a huge container).
- */
-export function negotiateTier(
-  containerWidth: number,
-  minTier: DataTableTier,
-  maxTier: DataTableTier,
-): DataTableTier {
-  const minIndex = TIER_ORDER.indexOf(minTier);
-  const maxIndex = TIER_ORDER.indexOf(maxTier);
-  let effective: DataTableTier = minTier;
-  for (let i = maxIndex; i >= minIndex; i--) {
-    const tier = TIER_ORDER[i];
-    if (tier !== undefined && TIER_MIN_WIDTH_PX[tier] <= containerWidth) {
-      effective = tier;
-      break;
-    }
-  }
-  return effective;
-}
-
-/**
- * Production-safe mobile eligibility (issue 457 C2): only management-list
- * archetypes with an explicit mobile slot participate in the CSS viewport
- * switch. Other archetypes safely fall back to desktop/scroll at every width.
- * Extracted as a pure function for direct unit testing.
+ * The issue 457 freeze (management-list only) is superseded by Phase F evidence:
+ * RecoveryQueuePage and ProctorRecoveryPage — log-diagnostic — both shipped
+ * hand-rolled `md`-breakpoint card lists, i.e. the product needed a mobile
+ * representation the authority refused to provide. Converging them onto
+ * MobileRecordList under this eligibility replaces the page-local second
+ * implementation instead of preserving the bypass.
  */
 export function isMobileRepresentationAllowed(
   archetype: TableArchetype,
   hasMobile: boolean,
 ): boolean {
-  return archetype === "management-list" && hasMobile;
+  return (
+    hasMobile &&
+    (archetype === "management-list" || archetype === "log-diagnostic")
+  );
 }
 
 /**
- * Standard shell for data table pages, providing an optional title, description,
- * toolbar slot, content area, and footer within a bordered card container.
+ * Standard shell for data table pages, providing an optional title,
+ * description, toolbar band, content area, and footer within a bordered card
+ * container.
  *
- * The shell owns container-driven tier negotiation (from the archetype's
- * min/max tier bounds and the measured container width) and the overflow
- * affordance; it never computes column widths (that belongs to
- * DataTableContract + recipes.css).
+ * The scroll region (measurement, tier negotiation, allocation scope, local
+ * scroll, fades/hint) and the viewport representation switch are owned by
+ * TableScrollSurface — the single shared scroll-region contract that
+ * DataWorkbench composes too. That region element is also the single carrier
+ * of the geometry vocabulary (`data-table-archetype` + the negotiated
+ * `data-table-tier`) for both shells, so CSS and runtime probes read one
+ * element that always exists in either composition.
  */
 export function DataTableShell({
   title,
   description,
+  meta,
   toolbar,
   children,
   mobile,
   footer,
   className,
-  contentClassName,
   archetype = "management-list",
 }: {
   title?: string;
   description?: string;
+  /**
+   * Title-band metadata — a count/context line that belongs WITH the title,
+   * rendered in the band's trailing (right-aligned) slot. This is the frozen
+   * baseline position for a data view's summary line; a lone count is not a
+   * toolbar and must not open a controls band of its own (issue 601 Phase F
+   * corrective: the pre-Phase-F shell put it here).
+   */
+  meta?: ReactNode;
+  /** The data-view toolbar (DataToolbar) — rendered as the shell's band below
+   * the title, inside the surface. One composition for search/filter/action
+   * controls and the table (issue 601 Phase F). */
   toolbar?: ReactNode;
   children: ReactNode;
   /**
-   * Mobile card list for the management-list archetype (issue 457): a
-   * viewport-only (<lg) representation derived from the same column
+   * Mobile card list for mobile-eligible archetypes (issue 457, extended by Phase
+   * F): a viewport-only (<lg) representation derived from the same column
    * declarations as the desktop table. The switch is pure CSS (`lg:`) — no JS
-   * breakpoint. Other archetypes keep horizontal scroll below lg.
+   * breakpoint. detail-comparison keeps horizontal scroll below lg.
    */
   mobile?: ReactNode;
   footer?: ReactNode;
   className?: string;
-  contentClassName?: string;
   archetype?: TableArchetype;
 }) {
-  const { t } = useTranslation();
   const shellId = useId();
   const titleId = title ? `${shellId}-title` : undefined;
   const descriptionId = description ? `${shellId}-description` : undefined;
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const overflow = useOverflowObservation(scrollRef);
 
   if (
     import.meta.env.DEV &&
     mobile !== undefined &&
-    archetype !== "management-list"
+    !isMobileRepresentationAllowed(archetype, true)
   ) {
     throw new Error(
-      `DataTableShell contract violation: the mobile card slot is a management-list mechanism; archetype "${archetype}" keeps horizontal scroll below lg`,
+      `DataTableShell contract violation: the mobile card slot is a management-list/log-diagnostic mechanism; archetype "${archetype}" keeps horizontal scroll below lg`,
     );
   }
 
-  // Production-safe eligibility: only management-list with an explicit mobile
-  // slot participates in the CSS viewport switch. Other archetypes safely
-  // fall back to desktop/scroll at every width — illegal declarations in
-  // production do not change product semantics.
+  // Production-safe eligibility: only eligible archetypes with an explicit
+  // mobile slot participate in the CSS viewport switch. Other archetypes
+  // safely fall back to desktop/scroll at every width — illegal declarations
+  // in production do not change product semantics.
   const mobileEnabled = isMobileRepresentationAllowed(
     archetype,
     mobile !== undefined,
   );
-
-  const tier =
-    archetype === "embedded-picker"
-      ? null
-      : negotiateTier(
-          overflow.containerWidth,
-          ARCHETYPE_TIER_BOUNDS[archetype].min,
-          ARCHETYPE_TIER_BOUNDS[archetype].max,
-        );
 
   return (
     <section
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       data-slot="admin-table-shell"
-      data-table-archetype={archetype}
-      {...(tier ? { "data-table-tier": tier } : {})}
       className={cn("surface-content overflow-hidden", className)}
     >
-      {(title || description || toolbar) && (
+      {(title || description || meta) && (
         <div
           data-slot="data-table-title-band"
           className="flex flex-col gap-3 border-b border-border-divider bg-surface px-4 py-3 lg:flex-row lg:items-start lg:justify-between"
         >
-          {(title || description) && (
-            <div className="min-w-0">
-              {title && (
-                <h2 id={titleId} className="type-section-title">
-                  {title}
-                </h2>
-              )}
-              {description && (
-                <p
-                  id={descriptionId}
-                  className={cn("type-secondary", title && "mt-1")}
-                >
-                  {description}
-                </p>
-              )}
+          <div className="min-w-0">
+            {title && (
+              <h2 id={titleId} className="type-section-title">
+                {title}
+              </h2>
+            )}
+            {description && (
+              <p
+                id={descriptionId}
+                className={cn("type-secondary", title && "mt-1")}
+              >
+                {description}
+              </p>
+            )}
+          </div>
+          {meta && (
+            <div data-slot="data-table-title-meta" className="shrink-0">
+              {meta}
             </div>
           )}
-          {toolbar && <div className="shrink-0">{toolbar}</div>}
         </div>
       )}
-      <div data-slot="table-scroll-frame" className="relative min-w-0">
-        {mobileEnabled ? (
-          <ResponsiveRepresentation
-            mobile={mobile}
-            desktop={
-              <div
-                ref={scrollRef}
-                data-slot="table-scroll-region"
-                data-overflow-owner="local"
-                data-overflowing={String(overflow.overflowing)}
-                data-scroll-start={String(overflow.atStart)}
-                data-scroll-end={String(overflow.atEnd)}
-                className={cn("min-w-0 overflow-x-auto", contentClassName)}
-              >
-                {children}
-              </div>
-            }
-          />
-        ) : (
-          <div
-            ref={scrollRef}
-            data-slot="table-scroll-region"
-            data-overflow-owner="local"
-            data-overflowing={String(overflow.overflowing)}
-            data-scroll-start={String(overflow.atStart)}
-            data-scroll-end={String(overflow.atEnd)}
-            className={cn("min-w-0 overflow-x-auto", contentClassName)}
-          >
-            {children}
-          </div>
-        )}
-        {overflow.overflowing && !overflow.atStart && (
-          <span data-slot="table-scroll-fade-left" aria-hidden="true" />
-        )}
-        {overflow.overflowing && !overflow.atEnd && (
-          <span data-slot="table-scroll-fade-right" aria-hidden="true" />
-        )}
-        {overflow.overflowing && (
-          <div
-            data-slot="table-scroll-hint"
-            data-scroll-direction={
-              overflow.atStart ? "right" : overflow.atEnd ? "left" : "both"
-            }
-            className={cn(
-              "pointer-events-none flex h-6 items-center border-t border-border-divider bg-surface-soft px-3 text-xs text-text-muted",
-              overflow.atStart
-                ? "justify-end"
-                : overflow.atEnd
-                  ? "justify-start"
-                  : "justify-center",
-            )}
-          >
-            {t(
-              overflow.atStart
-                ? "common.table.scrollHintRight"
-                : overflow.atEnd
-                  ? "common.table.scrollHintLeft"
-                  : "common.table.scrollHintBoth",
-            )}
-          </div>
-        )}
-      </div>
+      {toolbar && (
+        <div
+          data-slot="data-table-toolbar-band"
+          className="border-b border-border-divider"
+        >
+          {toolbar}
+        </div>
+      )}
+      <TableScrollSurface
+        archetype={archetype}
+        mobile={mobileEnabled ? mobile : undefined}
+      >
+        {children}
+      </TableScrollSurface>
       {footer && (
         <div className="border-t bg-surface-subtle px-4 py-3">{footer}</div>
       )}

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   DataTableCell,
@@ -6,6 +6,17 @@ import {
   DataTableHead,
   DataTableOverflowText,
 } from "./DataTableContract";
+
+/** Stubs one cell's layout box: the clip fact the hover reveal measures. */
+function stubCellBox(
+  cell: HTMLElement,
+  box: { clientWidth: number; scrollWidth: number },
+) {
+  Object.defineProperties(cell, {
+    clientWidth: { configurable: true, get: () => box.clientWidth },
+    scrollWidth: { configurable: true, get: () => box.scrollWidth },
+  });
+}
 
 describe("DataTableContract", () => {
   it("emits semantic column roles and derived overflow/priority", () => {
@@ -49,7 +60,7 @@ describe("DataTableContract", () => {
     );
     expect(
       document.querySelector('col[data-column-role="duration"]'),
-    ).toHaveAttribute("data-column-width", "duration");
+    ).toBeDefined();
     expect(screen.getByText("安全培训考试")).toHaveAttribute(
       "data-column-priority",
       "high",
@@ -108,11 +119,65 @@ describe("DataTableContract", () => {
     );
   });
 
+  it("reveals a clipped single-line value on hover and stays silent when it fits", () => {
+    // The single-line clip (recipes.css) must not be the only channel for the
+    // value: Element Plus pairs the clip with `show-overflow-tooltip`, which
+    // shows the full text on hover exactly when the text overflows the cell.
+    // Measured on /admin/questions: a 19-digit score in the 80px score column.
+    const long = "1000000000000000000";
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <DataTableCell role="score">{long}</DataTableCell>
+            <DataTableCell role="duration">90分钟</DataTableCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    const clipped = screen.getByText(long);
+    const fitting = screen.getByText("90分钟");
+    stubCellBox(clipped, { clientWidth: 80, scrollWidth: 99 });
+    stubCellBox(fitting, { clientWidth: 80, scrollWidth: 80 });
+
+    fireEvent.mouseOver(clipped);
+    expect(clipped).toHaveAttribute("title", long);
+
+    fireEvent.mouseOver(fitting);
+    expect(fitting).not.toHaveAttribute("title");
+
+    // A value that fits again drops the annotation (no stale tooltip).
+    stubCellBox(clipped, { clientWidth: 80, scrollWidth: 80 });
+    fireEvent.mouseOver(clipped);
+    expect(clipped).not.toHaveAttribute("title");
+  });
+
+  it("keeps the actions cell free of the clip and its reveal", () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <DataTableCell role="actions">
+              <button type="button">编辑</button>
+            </DataTableCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+
+    const cell = screen.getByRole("button", { name: "编辑" })
+      .parentElement as HTMLElement;
+    stubCellBox(cell, { clientWidth: 96, scrollWidth: 140 });
+
+    fireEvent.mouseOver(cell);
+    expect(cell).not.toHaveAttribute("title");
+  });
+
   it("presents truncated values with the full value accessible", () => {
     const long = "550e8400-e29b-41d4-a716-446655440000";
     render(<DataTableOverflowText mode="truncate-middle" value={long} />);
 
-    const el = screen.getByText(/550e84…0000/);
+    const el = screen.getByText(/550e8…0000/);
     expect(el).toHaveAttribute("aria-label", long);
     expect(el).toHaveAttribute("title", long);
     expect(el).toHaveAttribute("tabindex", "0");

@@ -112,15 +112,17 @@ governance boundary, §Page geometry, §Tables). Implementation ownership:
 | Contract | Owning module (`apps/web/src/`) |
 | --- | --- |
 | page-root width, closed six-role vocabulary | `components/shared/PageContainer.tsx` (`roleClasses`; pages declare, layouts never infer from route) |
-| table archetype + tier negotiation + mobile eligibility | `components/shared/DataTableShell.tsx` (`TableArchetype`, `negotiateTier`, `ARCHETYPE_TIER_BOUNDS`, `isMobileRepresentationAllowed`) |
-| ordinary table-page surface composition | `DataTableShell` (title band / scroll frame / fades / hint / footer) |
+| table archetype + mobile eligibility | `components/shared/DataTableShell.tsx` (`TableArchetype`, `ARCHETYPE_TIER_BOUNDS`, `isMobileRepresentationAllowed`) |
+| scroll-region contract: measurement, tier negotiation, allocation scope, local scroll, fades/hint | `components/shared/TableScrollSurface.tsx` (consumed by BOTH shells — #601 Phase F) |
+| ordinary table-page surface composition | `DataTableShell` (title band / toolbar band / footer around the shared region) |
 | continuous workbench surface composition | `components/shared/DataWorkbench.tsx` (toolbar → table → footer as one shell; Question Management) |
-| column role/overflow/priority + presenters | `components/shared/DataTableContract.tsx` (`ROLE_OVERFLOW`, `ROLE_ALLOWED_OVERFLOW`, `DataTableOverflowText`, `middleTruncate`) |
+| column allocation (semantic minima + proportional residual) | `table/columnAllocation.ts` (`ROLE_GEOMETRY`, `allocateTableColumns` — the single width authority) |
+| column role/overflow/priority + presenters + clipped-value hover reveal | `components/shared/DataTableContract.tsx` (`ROLE_OVERFLOW`, `ROLE_ALLOWED_OVERFLOW`, `DataTableOverflowText`, `middleTruncate`) |
 | viewport representation switch (the only owner of the table representation-switch `lg` policy) | `components/shared/ResponsiveRepresentation.tsx` |
 | mobile card list + priority→slot derivation | `components/shared/MobileRecordList.tsx` (`deriveMobileCardFields`) / `MobileRecordCard.tsx` |
 | container-overflow facts, horizontal table regions (facts-only ResizeObserver owner) | `hooks/useOverflowObservation.ts` |
 | vertical overflow facts, navigation scroll regions (facts-only ResizeObserver owner) | `hooks/useVerticalOverflowObservation.ts` — these two are the only ResizeObserver measurement owners |
-| physical column widths, tier floors, sticky context column | `table/recipes.css` (fixed layout + col width/min-width; `detail-comparison` sticky first child) |
+| table CSS (alignment, typography, overflow, sticky context column) | `table/recipes.css` (fixed layout is scoped to allocated tables; NO width/min-width rules — the allocator owns widths) |
 | desktop table rendering | `components/shared/DesktopDataTable.tsx` (TanStack stays a row/header model — no column sizing) |
 
 `DataTableShell` and `DataWorkbench` differ in **visual composition only**
@@ -132,9 +134,12 @@ breakpoint, tier, or measurement policy is a governance violation.
 
 Measurement order is fixed: `ResponsiveRepresentation` decides the
 representation first (viewport); only the desktop branch enters table
-measurement — overflow observation → tier negotiation → local scroll. Mobile
-cards are siblings of, never descendants of, the measurement node, so they
-cannot participate in overflow or tier decisions.
+measurement — overflow observation → tier negotiation → allocation scope →
+local scroll. Mobile cards are siblings of, never descendants of, the
+measurement node, so they cannot participate in overflow or allocation
+decisions. The desktop table width is computed, never negotiated by CSS:
+`useColumnAllocation` renders the colgroup and the exact table width from the
+measured scope.
 
 ## API client boundary
 

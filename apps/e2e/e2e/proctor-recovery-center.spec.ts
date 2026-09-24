@@ -167,8 +167,13 @@ test.describe("Proctor Recovery Center (#303)", () => {
     // surface. The title renders twice by design (responsive table + card
     // list), so assert the count rather than a single match.
     await expect(page.getByText(examTitle)).toHaveCount(2, { timeout: 15_000 });
+    // #601 Phase F: the shared responsive switch mounts the mobile card
+    // region FIRST in DOM order (ResponsiveRepresentation), so a bare
+    // .first() resolves the hidden <lg copy at this desktop viewport. The
+    // worklist link is asserted in the representation this viewport renders.
     await expect(
       page
+        .locator('[data-slot="responsive-desktop-region"]')
         .locator(`a[href="/admin/proctor/recovery/incidents/${incidentId}"]`)
         .first(),
     ).toBeVisible();

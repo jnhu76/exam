@@ -40,9 +40,10 @@ import {
   Power,
 } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
-import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataToolbar } from "@/components/shared/DataToolbar";
+import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import {
   DesktopDataTable,
   type DataViewColumnDef,
@@ -509,68 +510,83 @@ export function CandidatesPage() {
           </div>
         }
       />
-      <SearchInput
-        aria-label={t("admin.candidates.searchLabel")}
-        placeholder={t("admin.candidates.searchPlaceholder")}
-        value={search}
-        onChange={setSearch}
-        onClear={() => setSearch("")}
-        clearLabel={t("admin.candidates.clearSearchLabel")}
-        containerClassName="max-w-md flex-1"
-      />
-      {filteredCandidates.length === 0 && search ? (
-        <EmptyState
-          icon={<AppIcon icon={Search} size="state" />}
-          title={t("admin.candidates.noMatch")}
-          description={t("admin.candidates.noMatchDescription", { q: search })}
-          action={
-            <Button variant="outline" onClick={() => setSearch("")}>
-              {t("admin.common.clearSearch")}
-            </Button>
-          }
-        />
-      ) : filteredCandidates.length === 0 ? (
-        <EmptyState
-          icon={<AppIcon icon={Users} size="state" />}
-          title={t("admin.candidates.empty")}
-          description={t("admin.candidates.emptyDescription")}
-          action={
-            <div className="flex gap-2">
-              <Button onClick={() => open()}>
-                {t("admin.candidates.createBtn")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setImportOpen(true);
-                  setImportSummary("");
-                  setCsv("");
-                }}
-              >
-                {t("admin.candidates.importBtn")}
-              </Button>
-            </div>
-          }
-        />
-      ) : (
-        <>
-          <DataTableShell
-            mobile={
-              <MobileRecordList
-                columns={columns}
-                rows={filteredCandidates}
-                getRowId={(c) => c.id}
+      <DataTableShell
+        toolbar={
+          <DataToolbar
+            search={
+              <DataViewSearch
+                aria-label={t("admin.candidates.searchLabel")}
+                placeholder={t("admin.candidates.searchPlaceholder")}
+                value={search}
+                onChange={setSearch}
+                onSearch={setSearch}
+                clearLabel={t("admin.candidates.clearSearchLabel")}
               />
             }
-          >
-            <DesktopDataTable
-              columns={columns}
-              data={filteredCandidates}
-              getRowId={(c) => c.id}
-            />
-          </DataTableShell>
-        </>
-      )}
+          />
+        }
+        mobile={
+          <MobileRecordList
+            columns={columns}
+            rows={filteredCandidates}
+            getRowId={(c) => c.id}
+            empty={filteredCandidates.length === 0}
+            emptyTitle={t(
+              search ? "admin.candidates.noMatch" : "admin.candidates.empty",
+            )}
+            emptyDescription={t(
+              search
+                ? "admin.candidates.noMatchDescription"
+                : "admin.candidates.emptyDescription",
+              { q: search },
+            )}
+          />
+        }
+      >
+        {filteredCandidates.length === 0 && search ? (
+          <EmptyState
+            icon={<AppIcon icon={Search} size="state" />}
+            title={t("admin.candidates.noMatch")}
+            description={t("admin.candidates.noMatchDescription", {
+              q: search,
+            })}
+            action={
+              <Button variant="outline" onClick={() => setSearch("")}>
+                {t("admin.common.clearSearch")}
+              </Button>
+            }
+          />
+        ) : filteredCandidates.length === 0 ? (
+          <EmptyState
+            icon={<AppIcon icon={Users} size="state" />}
+            title={t("admin.candidates.empty")}
+            description={t("admin.candidates.emptyDescription")}
+            action={
+              <div className="flex gap-2">
+                <Button onClick={() => open()}>
+                  {t("admin.candidates.createBtn")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setImportOpen(true);
+                    setImportSummary("");
+                    setCsv("");
+                  }}
+                >
+                  {t("admin.candidates.importBtn")}
+                </Button>
+              </div>
+            }
+          />
+        ) : (
+          <DesktopDataTable
+            columns={columns}
+            data={filteredCandidates}
+            getRowId={(c) => c.id}
+          />
+        )}
+      </DataTableShell>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
