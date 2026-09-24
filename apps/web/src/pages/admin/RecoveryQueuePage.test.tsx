@@ -209,6 +209,32 @@ describe("RecoveryQueuePage", () => {
     expect(lastCall).toContain("status=investigating");
   });
 
+  it("two text filters expiring together both land in the URL (commit is atomic across filters)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    renderPage();
+    await act(async () => {});
+
+    fireEvent.change(screen.getByRole("textbox", { name: "考试 ID" }), {
+      target: { value: "exam-abc" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "考生 ID" }), {
+      target: { value: "cand-1" },
+    });
+    // ONE advance past both debounce deadlines: the two commits flush in the
+    // same task — the race the latest-params ref exists for. If the first
+    // commit were dropped, only candidateId would appear.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    const search = screen.getByTestId("location-search");
+    expect(search).toHaveTextContent("examId=exam-abc");
+    expect(search).toHaveTextContent("candidateId=cand-1");
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain("examId=exam-abc");
+    expect(lastCall).toContain("candidateId=cand-1");
+  });
+
   it("clearing filters resets the URL and refetches", async () => {
     const user = userEvent.setup();
     renderPage(["/admin/recovery?status=open"]);

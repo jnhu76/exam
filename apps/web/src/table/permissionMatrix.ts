@@ -1,11 +1,10 @@
 import { Permission } from "@exam/authz";
 import {
   CELL_CHROME_PX,
-  CJK_ADVANCE_EM,
-  HEADER_TIER_PX,
   TOKEN_GRID_PX,
   tokenGrid,
 } from "@/table/roleCalibration";
+import { headerGlyphRun } from "@/table/headerCapacity";
 
 /**
  * Permission-matrix geometry — the named specialized authority for
@@ -30,11 +29,6 @@ import {
 
 /** Mono advance for the capability keys at the matrix's 12px mono tier. */
 export const MATRIX_MONO_ADVANCE_PX = 7.2;
-
-/** Full-width glyph advance at the header tier, rounded up. */
-function headerGlyphRun(glyphs: number): number {
-  return Math.ceil(glyphs * HEADER_TIER_PX * CJK_ADVANCE_EM);
-}
 
 /** Width of `glyphs` full-width glyphs at the 12px mono tier, rounded up. */
 function monoGlyphRun(glyphs: number): number {
