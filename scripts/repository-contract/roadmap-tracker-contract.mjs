@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Roadmap tracker pointer contract (#614 G5 guard 1).
+ * Roadmap tracker pointer contract.
  *
  * Relation checked: every active surface that names the CURRENT roadmap
  * tracker points at the SAME issue, and — live — that issue is OPEN and
@@ -13,7 +13,7 @@
  * hardcoded and no local closed-issue table is kept — GitHub itself is the
  * only staleness oracle.
  *
- * Historical failure caught (issue #611 R1): all seven active surfaces kept
+ * Historical failure caught (issue #611 R1): every active surface kept
  * pointing at the CLOSED #552 tracker after its successor opened — the
  * documented first step of the agent workflow landed on a dead issue.
  *

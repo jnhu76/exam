@@ -12,11 +12,6 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const workers = Number(process.env.E2E_WORKERS_PER_SHARD) || 1;
 const shardTotal = Number(process.env.E2E_SHARD_TOTAL) || 0;
 
-// Reporter selection:
-//   E2E_SHARD_TOTAL > 1  → blob (per-shard, merged later by merge-reports)
-//   CI                   → list
-//   otherwise            → list + html (local development)
-
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,

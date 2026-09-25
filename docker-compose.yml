@@ -99,14 +99,13 @@ services:
     networks:
       - exam-net
     restart: unless-stopped
-    # INVARIANT (#351 shutdown budget contract): stop_grace_period MUST
-    # dominate the app's whole graceful-shutdown worst case — email loop
-    # drain (EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS, default 8s) + audit drain
-    # (AUDIT_DRAIN_TIMEOUT_MS, 10s) + DB pool close (10s) + bounded exit
-    # assist (BOUNDED_EXIT_ASSIST_MS, 2s) = 30s — or a stuck in-flight
-    # email send turns SIGTERM into SIGKILL (exit 137). Keep the margin
-    # when changing any term; enforced by
-    # scripts/repository-contract/deployment-topology-contract.mjs.
+    # INVARIANT: stop_grace_period MUST dominate the app's whole
+    # graceful-shutdown worst case (email loop drain + audit drain + DB pool
+    # close + bounded exit assist, run serially) — or a stuck in-flight email
+    # send turns SIGTERM into SIGKILL (exit 137). The terms and their real
+    # sources are enumerated in scripts/repository-contract/
+    # deployment-topology-contract.mjs (assertShutdownBudgetContract), which
+    # fails when the relation breaks.
     stop_grace_period: 45s
 
   db:

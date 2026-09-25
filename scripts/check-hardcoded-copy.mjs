@@ -17,11 +17,11 @@
  *
  *     // i18n-copy-allow: <category> — <reason>
  *
- * with category one of wire-compat | server-rendered | developer-diagnostic
- * | data-format | temporary. The directive must sit on the literal's own
- * line (trailing) or on the immediately following line (a block of
- * consecutive directive comments is allowed for multi-line reasons), and
- * the category and reason must be separated by an em dash (—).
+ * with a category from the suppression list defined by the copy policy
+ * (executable set: SUPPRESSION_CATEGORIES below). The directive must sit on
+ * the literal's own line (trailing) or on the immediately following line (a
+ * block of consecutive directive comments is allowed for multi-line reasons),
+ * and the category and reason must be separated by an em dash (—).
  * INVARIANT: a directive must not degrade into file-level immunity — any
  * other CJK literal in the same file still fails, an unknown category,
  * missing reason, malformed directive, or stale directive fails, and one

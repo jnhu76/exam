@@ -1,41 +1,14 @@
 // DB / test-config regression guards.
 //
-// Locks in the invariants established by the config single-source refactor so a
-// future change can't silently regress them. Runs as part of `pnpm verify`
-// (via the lint step). Mirrors the walk + regex + exit-1 style of
-// check-code-quality.mjs — pure Node, no deps.
+// Locks the single-source invariants of the DB URL resolver, the forced test
+// runtime mode, the raw DATABASE_URL read ban, and the queue-participant hook
+// budget, so a future change cannot silently regress them. Runs as its own
+// step of verify:static (`pnpm lint:db-config`). Pure Node, no dependencies.
 //
-// Guards:
-//   1. No second DB URL resolver: only packages/db/src/databaseUrl.ts may
-//      declare `resolveDatabaseUrl` / `resolveTestDatabaseUrl` /
-//      `resolveTestBranchUrl`. Other files may call/import them, not redefine.
-//      (Prevents the 3-resolver drift that caused the dev/test DB split.)
-//   2. No hardcoded `postgresql://...localhost...` LIVE defaults outside
-//      databaseUrl.ts. The dev-mode convenience fallback lives there once;
-//      database.ts / drizzle.config.ts / runtimeConfig.ts must not reintroduce
-//      a localhost default (a missing URL must fail fast).
-//   3. vitest configs force test mode via the shared TEST_RUNTIME_ENV constant,
-//      not an inline `APP_MODE: "test"` literal. (Prevents per-config drift of
-//      the forced test mode — the "one macro per AI" failure mode.)
-//   4. Vitest configs never read process.env.DATABASE_URL directly (they go
-//      through resolveDatabaseUrl), and test files never read a bare
-//      process.env.DATABASE_URL outside the config-resolution tests that
-//      legitimately exercise the resolver itself. (Absorbed from the retired
-//      check-test-env-contract.mjs when its CI/WSL/origin obligations moved
-//      to scripts/repository-contract/config-contract.mjs — #370.)
-//   5. Queue-participant lifecycle hooks declare an explicit numeric hook
-//      budget (PR #242 rule). A hook participates in the shared test-infra DDL
-//      advisory lock queue when it directly calls a lock holder
-//      (setupIsolatedTestDb / getIsolatedTestDb / ensureDatabaseExists /
-//      dropDatabaseIfExists / applyAllMigrations / createTestSchema /
-//      dropTestSchema / withTestInfraLifecycleLock), tears down an isolated
-//      test schema (`.cleanup()` on a setup binding, or a bare call of a
-//      cleanup alias assigned from one), or calls a same-file helper that
-//      queues. Such hooks must pass `beforeAll(fn, 30_000/120_000)` — the 10s
-//      default silently pays the lock queue wait, and a timed-out hook is
-//      not cancelled (it keeps holding the lock → cascade). There is
-//      deliberately NO package-wide hookTimeout raise. Scans both the
-//      @exam/db and @exam/api test trees (they share the same lock).
+// Each guard states its constraint and the failure it catches at its own site
+// below. The application semantic settings model is owned by
+// apps/api/src/config/settings.ts and the per-topology binding relations by
+// scripts/repository-contract/config-contract.mjs.
 
 import { readFile, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";

@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Guard script: validates time/async testing contract.
- *
- * Checks:
- *   1. No real `setTimeout` / `sleep` in tests (should use fake timers)
- *   2. No large test-level timeouts (10000+ ms) masking hangs
- *   3. No `Date.now()` elapsed assertions with ms tolerance
- *   4. No `waitFor(... { timeout: 10000+ })` (should be smaller or use fake timers)
- *   5. Timer advancement wrapped in `act()` for React tests
+ * Guard script: enforces the machine-checkable subset of the time/async
+ * testing contract in docs/standards/testing.md §3 — real sleeps, oversized
+ * test/waitFor timeouts, and Date.now() elapsed assertions. Each check below
+ * owns its own threshold (real waits fire at >= 5000ms, timeout checks at
+ * >= 10000ms) and failure class.
  *
  * Usage: node scripts/check-test-time-contract.mjs
- * Exit 0 = pass, exit 1 = violations found.
+ * Exit 0 = pass, exit 1 = errors (warnings alone exit 0).
  */
 
 import { readFileSync, readdirSync } from "node:fs";

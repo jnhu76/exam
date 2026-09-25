@@ -15,18 +15,12 @@
 // deterministic, dependency-free, and pure-Node. Wired into `pnpm verify:static`
 // alongside the other check-* guards.
 //
-// Invariants verified:
-//   - _journal.json parses; version/dialect correct
-//   - entries non-empty
-//   - idx starts at 0 and is contiguous (no gaps)
-//   - idx unique; tag unique; when is a safe integer; when unique
-//   - when strictly increases along entry order, EXCEPT for the locked
-//     HISTORICAL_BACKWARD_WHEN set below (the irreparable 0022/0024 cases)
-//   - the historical exception set is an exact snapshot: the actual journal
-//     backward steps must match it exactly, so any NEW backward step fails the
-//     check and any tampering with a known exception also fails the check
-//   - every tag has a matching <tag>.sql file
-//   - no orphan numbered migration .sql file
+// Invariant classes verified (each check states its own failure mode below):
+// journal structure (version/dialect/non-empty entries), journal monotonicity
+// and uniqueness (idx contiguity, unique tag/when, strictly increasing when
+// except the locked HISTORICAL_BACKWARD_WHEN set), and the file-system
+// invariants Drizzle relies on (every registered tag has a .sql file; no
+// orphan numbered .sql file; the tag's numeric prefix matches idx).
 
 import { access, readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";

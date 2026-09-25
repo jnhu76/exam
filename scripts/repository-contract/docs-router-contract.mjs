@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Docs router ↔ tree listing contract (#614 G5 guard 3).
+ * Docs router ↔ tree listing contract.
  *
  * Relations checked:
  *   1. The docs/README.md ADR range expression ("ADR-001 … ADR-0NN") must

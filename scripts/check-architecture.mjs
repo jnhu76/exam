@@ -32,8 +32,10 @@ await forbid("packages/domain/src", [
     "domain must remain a leaf package",
   ],
 ]);
-// authz is the Phase 3 RBAC leaf (ADR RBAC-M1): no fastify/React/Drizzle, and
-// it may only reach @exam/domain (not db/contracts/api) so it stays portable.
+// authz is the RBAC leaf package (ADR-010-scoped-rbac-architecture.md): no
+// fastify/React/Drizzle, and it may only reach @exam/domain, so the permission
+// vocabulary stays portable. The enforced importer set is the forbid() list
+// below.
 await forbid("packages/authz/src", [
   [
     /from ["'](?:fastify|react|drizzle-orm)/,
@@ -49,31 +51,29 @@ await forbid("packages/contracts/src", [
 ]);
 await forbid("packages/exam-engine/src", [
   [/from ["']fastify/, "exam-engine cannot depend on fastify"],
-  // P3-FORMAL-P0-D2 — no explicit cast to the transaction-affine EA capability.
-  // The brand symbols are module-private; the only legitimate mint is the
-  // canonical seam (lockEnrollmentAndAttempt). A cast is a forgery bypass.
+  // No explicit cast to the transaction-affine EA capability: the brand symbols
+  // are module-private, the only legitimate mint is the canonical seam
+  // (lockEnrollmentAndAttempt), and a cast is a forgery bypass.
   [
     /\bas\s+LockedEnrollmentAttemptIdentity\b/,
     "do not cast to LockedEnrollmentAttemptIdentity — mint via lockEnrollmentAndAttempt",
   ],
-  // EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 — no explicit cast to the narrow
-  // opaque Attempt mutation context. Its provenance brand is module-private
-  // (deadlineReconciliation.ts); the only legitimate mint is the canonical
-  // preparation seam (prepareReconciledAttemptMutation). A cast is a
-  // forgery bypass that would defeat the P2 repo-affinity proof. The
-  // .testHelpers.ts file is exempt (test harness).
+  // No explicit cast to the narrow opaque Attempt mutation context. Its
+  // provenance brand is module-private (deadlineReconciliation.ts); the only
+  // legitimate mint is the canonical preparation seam
+  // (prepareReconciledAttemptMutation). A cast is a forgery bypass that would
+  // defeat the repo-affinity proof. The .testHelpers.ts file is exempt (test
+  // harness).
   [
     /\bas\s+ReconciledAttemptMutationContext\b/,
     "do not cast to ReconciledAttemptMutationContext — mint via prepareReconciledAttemptMutation",
   ],
 ]);
 await forbid("apps/api/src", [
-  // P3-FORMAL-P0-D2 — same cast ban for the API surface (routes/orchestrators).
   [
     /\bas\s+LockedEnrollmentAttemptIdentity\b/,
     "do not cast to LockedEnrollmentAttemptIdentity — mint via lockEnrollmentAndAttempt",
   ],
-  // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — same mutation-context cast ban.
   [
     /\bas\s+ReconciledAttemptMutationContext\b/,
     "do not cast to ReconciledAttemptMutationContext — mint via prepareReconciledAttemptMutation",
