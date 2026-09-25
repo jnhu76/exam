@@ -607,4 +607,4 @@ flowchart TB
 
 **Authority**: `apps/api/src/plugins/auth.ts`, `authz.ts`, `packages/exam-engine/src/lockSeam.ts`, `apps/api/src/routes/attempts.shared.ts`
 **Evidence**: Each boundary maps to documented code. `loadAssignmentAuthority` resolves from `user_role_assignments`. `computeAnswerVisibility` always returns hidden.
-**Known limitations**: Teacher resource-scope (Teacher@course) is NOT IMPLEMENTED — capabilities are flat org-wide. IP/CIDR, device binding, emergency access are NOT IMPLEMENTED.
+**Known limitations**: Teacher resource scope (Teacher@course) is ENFORCED (#286) — capability grant alone is insufficient; active course assignment + resource-scope enforcement determine reach. IP/CIDR, device binding, emergency access are NOT IMPLEMENTED.

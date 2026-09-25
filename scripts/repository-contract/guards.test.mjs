@@ -7,25 +7,34 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  chmodSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { judgeTrackerIssue } from "./roadmap-tracker-contract.mjs";
 
 const GUARD = (name) => join(import.meta.dirname, `${name}.mjs`);
 
-function run(name, root) {
+function run(name, root, envOverrides) {
   return execFileSync(process.execPath, [GUARD(name), root], {
     encoding: "utf8",
     timeout: 60_000,
+    env: envOverrides ? { ...process.env, ...envOverrides } : process.env,
   });
 }
 
-function runExpectFail(name, root) {
+function runExpectFail(name, root, envOverrides) {
   try {
     execFileSync(process.execPath, [GUARD(name), root], {
       encoding: "utf8",
       timeout: 60_000,
+      env: envOverrides ? { ...process.env, ...envOverrides } : process.env,
     });
   } catch (e) {
     return e;
@@ -108,8 +117,76 @@ test("roadmap-tracker: accepts a historical predecessor mention (negative contro
   files["docs/roadmap/current.md"] =
     "> Current sequencing and disposition live in GitHub Issue\n> [#584](https://github.com/jnhu76/exam/issues/584) — successor to the completed #552 roadmap.\n";
   writeAll(root, files);
-  const out = run("roadmap-tracker-contract", root);
+  // Surface agreement is a docs relation; run in local mode (CI cleared) so
+  // the live GitHub oracle takes its clearly reported SKIP path.
+  const out = run("roadmap-tracker-contract", root, {
+    CI: "",
+    GITHUB_ACTIONS: "",
+  });
   assert.match(out, /PASS/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("roadmap-tracker: live oracle rejects a CLOSED canonical issue even when all surfaces agree", () => {
+  assert.match(
+    judgeTrackerIssue("closed\t[ROADMAP][CURRENT] #584 roadmap", "584"),
+    /is closed, not open/,
+  );
+});
+
+test("roadmap-tracker: live oracle rejects an OPEN issue without the [ROADMAP][CURRENT] title", () => {
+  assert.match(
+    judgeTrackerIssue("open\tBacklog sequencing", "584"),
+    /not titled \[ROADMAP\]\[CURRENT\]/,
+  );
+});
+
+test("roadmap-tracker: live oracle accepts OPEN + [ROADMAP][CURRENT] (negative control)", () => {
+  assert.equal(
+    judgeTrackerIssue("open\t[ROADMAP][CURRENT] #584 roadmap", "584"),
+    null,
+  );
+});
+
+test("roadmap-tracker: fails closed in CI when the live oracle cannot run", () => {
+  const root = fixture();
+  writeAll(root, TRACKER_SURFACES("584"));
+  const e = runExpectFail("roadmap-tracker-contract", root, {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+  });
+  assert.ok(e, "guard passed in CI without a runnable live oracle");
+  assert.match(String(e.stderr), /live roadmap oracle could not run in CI/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("roadmap-tracker: executes the live gh oracle and rejects a closed tracker end-to-end", () => {
+  const root = mkdtempSync(join(tmpdir(), "exam-guard-gh-"));
+  writeAll(root, TRACKER_SURFACES("584"));
+  // Fake gh seam: answers with a CLOSED tracker so the guard's verdict (not
+  // a silent skip) is what gets proven.
+  writeDocs(
+    root,
+    "bin/gh",
+    "#!/bin/sh\nprintf 'closed\\t[ROADMAP][CURRENT] #584 roadmap\\n'\n",
+  );
+  chmodSync(join(root, "bin", "gh"), 0o755);
+  execFileSync("git", ["init", "--quiet"], { cwd: root });
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "https://github.com/jnhu76/exam.git"],
+    { cwd: root },
+  );
+  const e = runExpectFail("roadmap-tracker-contract", root, {
+    PATH: `${join(root, "bin")}:${process.env.PATH ?? ""}`,
+    CI: "",
+    GITHUB_ACTIONS: "",
+  });
+  assert.ok(
+    e,
+    "guard passed although the live gh oracle reported a closed tracker",
+  );
+  assert.match(String(e.stderr), /is closed, not open/);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -125,6 +202,22 @@ test("adr-status-uniqueness: rejects the ADR-010 dual-status form (F-1 mutation)
   assert.match(
     String(e.stderr),
     /Proposed.*conflicts.*Accepted|Accepted.*conflicts.*Proposed|conflicting|conflicts/,
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("adr-status-uniqueness: rejects an ADR with no document-level current status (zero-status mutation)", () => {
+  const root = fixture();
+  writeDocs(
+    root,
+    "docs/adr/ADR-003-statusless.md",
+    "# ADR — Something\n\n## Context\n\nBody prose. A revision was previously Proposed and later dropped, but no document-level current status is declared anywhere.\n",
+  );
+  const e = runExpectFail("adr-status-uniqueness-contract", root);
+  assert.ok(e, "guard passed on a statusless ADR");
+  assert.match(
+    String(e.stderr),
+    /no recognizable document-level current status/,
   );
   rmSync(root, { recursive: true, force: true });
 });
@@ -259,6 +352,45 @@ test("verification-marker: rejects an ambiguous marker with no disposition", () 
     String(e.stderr),
     /no current-vs-historical disposition|does not resolve/,
   );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("verification-marker: associates the SHA with the marker, not arbitrary nearby prose (mutation)", () => {
+  const root = mkdtempSync(join(tmpdir(), "exam-guard-git-"));
+  const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: initGit(root),
+    encoding: "utf8",
+  }).trim();
+  // The marker itself names no commit; the only resolvable SHA inside the
+  // disposition window belongs to unrelated prose. A broad-window parser
+  // would resolve it and wrongly PASS; the marker-scoped parser must fail.
+  writeDocs(
+    root,
+    "docs/x.md",
+    `Last verified against commit:\n\nVerification scope: baseline history lives in ${sha}; retained as evidence.\n`,
+  );
+  const e = runExpectFail("verification-marker-contract", root);
+  assert.ok(
+    e,
+    "guard accepted a marker whose SHA association came from surrounding prose",
+  );
+  assert.match(String(e.stderr), /names no commit SHA/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("verification-marker: accepts a two-line marker whose value line carries the SHA (negative control)", () => {
+  const root = mkdtempSync(join(tmpdir(), "exam-guard-git-"));
+  const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: initGit(root),
+    encoding: "utf8",
+  }).trim();
+  writeDocs(
+    root,
+    "docs/x.md",
+    `Last verified against commit:\n${sha} (2026-09-25, corrective pass)\n\nVerification scope:\nPoint-in-time snapshot; delivery-state claims re-verified 2026-09-25; other sections retain their baseline.\n`,
+  );
+  const out = run("verification-marker-contract", root);
+  assert.match(out, /PASS/);
   rmSync(root, { recursive: true, force: true });
 });
 

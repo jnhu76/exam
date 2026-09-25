@@ -198,12 +198,13 @@ MVP deployment now has:
 
 - production-safe required configuration;
 - clean database migration and first-Admin bootstrap;
-- app + PostgreSQL + Email worker default topology;
-- optional Redis;
+- app + PostgreSQL default Compose topology (Redis optional) — email outbox
+  delivery runs as an in-process application loop (#320 CONVERGE); there is
+  no separate email-worker service;
 - serialized production migrations;
-- bootstrap-pending Email worker state;
+- bootstrap-pending state in the in-process email delivery loop lifecycle;
 - PostgreSQL Inbox and Email outbox;
-- worker heartbeat and diagnostics;
+- delivery-loop heartbeat and diagnostics;
 - clean production Docker build;
 - repeatable relocated clean-volume Compose smoke evidence.
 
@@ -392,9 +393,10 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the
-  resident Email delivery worker drains the outbox asynchronously. The worker
-  is now wired as a first-class Compose service in the supported production
-  topology (see P6 deployment topology audit). `POST /api/email/test` remains
+  in-process email delivery loop — registered inside the API application
+  (#320 CONVERGE) — drains the outbox asynchronously. The supported Compose
+  topology is app + PostgreSQL (+ optional Redis) with no separate
+  email-worker service. `POST /api/email/test` remains
   as the synchronous connectivity probe. Staff invitation / Email password
   reset / account lifecycle are implemented (#297 — see *Identity lifecycle*
   below); standalone self-registration is not a product flow.

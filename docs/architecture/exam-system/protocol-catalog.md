@@ -1,6 +1,6 @@
 # Protocol Catalog
 
-> Normative description of every protocol in the exam system: purpose, actor, preconditions, state transition, writes, transaction boundary, idempotency, and audit.
+> Explanatory catalog of every protocol in the exam system: purpose, actor, preconditions, state transition, writes, transaction boundary, idempotency, and audit. Explanatory, not a competing normative authority — binding decisions live in Accepted ADRs and [`../../contracts/`](../../contracts/) (#614 authority split; see [README.md](./README.md)).
 
 ```text
 Last verified against commit:
@@ -22,7 +22,7 @@ Each protocol is documented with:
 - **Actor**: Who initiates it
 - **Required capability**: The RBAC permission gate
 - **Current preset actors**: Which role presets grant this capability
-- **Scope status**: flat org-wide / scoped resolver / marked scoped but currently flat
+- **Scope status**: org-wide (Admin-level role) / Teacher@Course scoped and ENFORCED (#286) — capability grant alone is insufficient; active course assignment + resource-scope enforcement determine reach (executable authority: authz preset + API scoped-gate / repository filtering)
 - **Input contract**: The request shape
 - **Preconditions**: What must be true before the protocol runs
 - **Authoritative reads**: What data is read as truth
@@ -73,7 +73,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `question.create` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | `CreateQuestionRequest` (type, content, options, standardAnswer, score, difficulty, tags, gradingRule, rubric?) |
 | **Preconditions** | Actor is authenticated; course exists |
 | **State transition** | None (Question has no lifecycle) |
@@ -90,7 +90,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `question.update` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | `UpdateQuestionRequest` |
 | **Preconditions** | Question exists in actor's organization |
 | **State transition** | None |
@@ -108,7 +108,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `question.delete` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | Question ID |
 | **Preconditions** | Question exists in actor's organization |
 | **State transition** | None |
@@ -128,7 +128,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.create` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | `CreateExamRequest` |
 | **Preconditions** | Actor is authenticated |
 | **State transition** | None (exam is created as `draft`) |
@@ -145,7 +145,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.update` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | `UpdateExamRequest` |
 | **Preconditions** | Exam exists in actor's organization |
 | **State transition** | None (status unchanged) |
@@ -163,7 +163,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.publish` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | Exam ID |
 | **Preconditions** | Exam is in `draft` state; ≥1 question; valid schedule; `timed_window`; manual selection; valid retake policy; totalScore matches question scores; auto-graded questions have non-empty standardAnswer; text_response questions have non-empty rubric |
 | **State transition** | `draft → published` |
@@ -180,7 +180,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.close` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | Exam ID |
 | **Preconditions** | Exam is in `open` state; no unresolved attempts (route-layer guard) |
 | **State transition** | `open → closed` |
@@ -271,7 +271,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.result.publish` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Route** | `POST /exams/:id/publish-results` |
 | **Preconditions** | Exam is `published`, `open`, or `closed` |
 | **State transition** | None (status unchanged; `resultsPublishedAt` is a fact timestamp) |
@@ -292,7 +292,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.enrollment.manage` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | Exam ID, candidate ID list |
 | **State transition** | None (enrollment is created as `assigned`) |
 | **Writes** | `exam_enrollments` rows |
@@ -505,7 +505,7 @@ facts; new positive operator decisions use this protocol and
 | **Actor** | Admin, Teacher |
 | **Required capability** | `score.all.view` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **State transition** | None |
 | **Writes** | None |
 | **Security invariants** | INV-R-001 does NOT apply — Admin/Teacher may see frozen standardAnswer in grading detail. Candidate ownership is NOT required for ScoreAllView. |

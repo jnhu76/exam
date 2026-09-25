@@ -3,8 +3,8 @@
 > **Authority:** canonical deployment and operations document for the
 > implemented MVP subset (single deployment / single default organization /
 > Admin + Teacher + Candidate MVP roles / `timed_window` exams / objective +
-> manual grading / result publication / Inbox + Email outbox / PostgreSQL
-> Email worker / LAN-on-premise).
+> manual grading / result publication / Inbox + Email outbox with the
+> in-process email delivery loop (#320) / LAN-on-premise).
 >
 > **Companion documents:**
 >
@@ -461,9 +461,7 @@ honors `RUN_SEED=1` (baseline) / `RUN_SEED=e2e` (canonical E2E seed), but the
 topologies set it (`docker-compose.test.yml`, the dev entrypoint). It refuses
 to run when `APP_MODE=production`. For full demo data (courses, questions,
 exams, attempts), use `pnpm db:seed:demo` against the dev DB only — never
-against the production DB. For full demo data (courses, questions, exams,
-attempts), use `pnpm db:seed:demo` against the dev DB only — never against
-the production DB.
+against the production DB.
 
 > **Custom seed credentials** (optional, dev/test only): `SEED_ORG_NAME`,
 > `SEED_ORG_DISPLAY_NAME`, `SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD`,

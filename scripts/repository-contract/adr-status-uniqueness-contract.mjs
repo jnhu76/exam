@@ -8,8 +8,10 @@
  *   1. labeled status lines in the HEADER region (before the `## Status`
  *      heading — front-matter / title block);
  *   2. the first status-vocabulary word inside the `## Status` section.
- * A file fails when its header labels disagree with each other, or when a
- * header label disagrees with the section's declared status.
+ * A file fails when its header labels disagree with each other, when a
+ * header label disagrees with the section's declared status, or when it has
+ * ZERO recognizable document-level current status (no labeled header status
+ * and no status-vocabulary word in the `## Status` section).
  *
  * Historical failure caught (issue #611 F-1 / REC-02): ADR-010 carried a
  * front-matter "**Status:** Proposed" next to a "## Status: Accepted"
@@ -79,6 +81,11 @@ for (const f of files) {
   ) {
     errors.push(
       `${f}: labeled status ${labeledDistinct[0]} conflicts with the Status section's declared ${sectionFirst}`,
+    );
+  }
+  if (labeledDistinct.length === 0 && !sectionFirst) {
+    errors.push(
+      `${f}: no recognizable document-level current status — add a labeled status line in the header or a ## Status section whose first status word (ACCEPTED/PROPOSED/DEFERRED/SUPERSEDED/REJECTED) declares it`,
     );
   }
 }

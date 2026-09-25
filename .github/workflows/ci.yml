@@ -13,6 +13,9 @@ permissions:
   contents: read
   # actions: write lets the e2e job (if needed) delete artifacts later; keep it if you want that behavior.
   actions: write
+  # roadmap-tracker-contract.mjs (verify:static) reads the canonical tracker
+  # issue's state and title as its live oracle; read-only.
+  issues: read
 
 # Turborepo remote cache — TURBO_TOKEN from secrets, TURBO_TEAM from vars.
 # GitHub-native .turbo caching below is an independent fallback and also lets
@@ -32,10 +35,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    env:
+      # The verification-marker guard proves that doc marker SHAs resolve to
+      # real commits, so this job checks out complete history. A shallow
+      # checkout would make valid historical markers unresolvable. Read-only:
+      # no git credentials are persisted.
+      GH_TOKEN: ${{ github.token }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          # Full history: verification-marker-contract.mjs resolves marker
+          # SHAs via git; the default shallow clone would fail valid markers.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install pnpm

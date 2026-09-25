@@ -68,6 +68,12 @@ Consequences of the retirement:
   amendment note;
   ADR-017's Maintainer-preset addition itself remains in force, materialized
   in the code presets (`packages/authz/src/presets.ts`).
+- Wording elsewhere in this ADR that assumes future custom roles become
+  `is_system = false` DB rows (Option C's "why recommended" rationale and
+  Migration Stage 9) is likewise retained only as history and superseded:
+  any future custom-role persistence model requires a NEW accepted design
+  decision. PostgreSQL's authority over runtime assignments and
+  resource-ownership facts is unchanged.
 
 This ADR is documentation-only — it changes no code by being written. It records
 the architecture decisions that the implementation then realized.
@@ -135,11 +141,11 @@ All load-bearing claims in this ADR cite a file path + line number, an audit sec
 ## Decision Summary
 
 1. **Phase 3 adopts a formal Scoped RBAC model** — actor → role assignment → role → permission → scope → resource resolver → audit action — **not** a role-string gate and **not** a flat permission-list gate.
-2. **Roles are product presets, not authorization hardcoding.** `Admin`, `Teacher`, `Proctor`, `Grader`, `Candidate`, `System` are defined as data (code constants seeded as DB rows), and `users.role` becomes a compatibility cache backed by `user_role_assignments`.
+2. **Roles are product presets, not authorization hardcoding.** `Admin`, `Teacher`, `Proctor`, `Grader`, `Candidate`, `System` are defined as data — code constants in `packages/authz/src/presets.ts`, the sole built-in preset authority (2026-09-25 amendment: the originally planned DB-seeding half was never built and is retired) — and `users.role` becomes a compatibility cache backed by `user_role_assignments`.
 3. **`requireCapability()` replaces `requireRole()` and flat `requirePermission()` for all scoped resources.** Flat permission checks remain allowed only for system-level / non-resource routes.
 4. **Admin is a compatibility superset during migration.** Existing Admin behavior is preserved. Migration is route-by-route behind a shadow mode.
-5. **PostgreSQL is the authorization source of truth.** Redis is explicitly ruled out as an AuthZ authority (§Audit Boundary, §Redis Boundary).
-6. **Custom role UI is deferred, not made impossible.** The backend model supports custom roles; the Admin Console UI for them is Phase 4.
+5. **PostgreSQL is the authorization source of truth for user ↔ role assignments and resource-ownership facts** (`user_role_assignments`, ownership chains). Built-in permission/preset *definitions* are code constants, not DB rows (2026-09-25 amendment). Redis is explicitly ruled out as an AuthZ authority (§Audit Boundary, §Redis Boundary).
+6. **Custom role UI is deferred, not made impossible.** Future custom-role *persistence* is not decided by this ADR — any future custom-role model requires a separate accepted design decision (2026-09-25 amendment).
 7. **RBAC and the domain state machine are two independent checks.** Every runtime state transition requires *both* a permission check and a state-machine legality check, plus an audit event when sensitive (§22.3). This is a global invariant, restated below.
 
 > **Cross-cutting invariant — RBAC does not replace the domain state machine.**

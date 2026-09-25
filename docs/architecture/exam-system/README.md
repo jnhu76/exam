@@ -22,7 +22,7 @@ Recovery contract documentation (ADR-012, candidate-recovery.md) updated in PR #
 
 ## Purpose
 
-This directory contains the authoritative normative description of how the exam system's core domain actually works. It answers:
+This directory explains how the exam system's core domain currently works. It is a current-architecture projection of its owning authorities, not an independent normative owner. It answers:
 
 - What are the core domain objects, and what authority does each own?
 - What protocols operate on them?
@@ -42,16 +42,23 @@ It does **not** cover UI implementation details, deployment topology, or non-dom
 
 ## Authority Model
 
-The repository has two distinct authority dimensions. Architecture documents must respect both.
-
-### Normative intent authority
-
-These define intended invariants and accepted decisions:
+Binding authority lives upstream of this directory. This directory is a projection of it:
 
 ```text
-Accepted ADR
-  → active SPEC / CONTEXT
-  → approved architecture documents (this directory)
+Accepted ADR / SPEC / contracts / executable implementation
+  ↓
+exam-system/** = explanatory current-architecture projection
+                 + explicitly bounded historical analysis
+```
+
+### Owning authorities
+
+These define intended invariants and accepted decisions; this directory must track them and never compete with them:
+
+```text
+Accepted ADR (docs/adr/) — binding architecture decisions
+  → SPEC (docs/SPEC.md) — product invariants
+  → contracts (docs/contracts/) — wire behavior and data formats
 ```
 
 ### As-built reality authority
@@ -124,7 +131,7 @@ For absent or proposed behavior, these explicit labels are used:
 
 ## How Future Audits Update These Documents
 
-1. A new audit or architecture Job SHOULD read these documents as the current normative baseline.
-2. When implementation changes, the relevant document MUST be updated to reflect the new normative state.
-3. When an ADR supersedes a document section, the document MUST be updated to reference the ADR and remove the superseded content.
+1. A new audit or architecture Job MAY read these documents as a navigational baseline for the current explanatory state, but MUST verify every load-bearing fact against its owning authority (Accepted ADR / SPEC / contracts) and the as-built implementation before treating it as current truth. These documents are not a competing normative owner.
+2. When implementation changes, the affected document MUST be updated so its explanation keeps tracking the owning authority — not to declare a new normative state.
+3. When an ADR supersedes a document section, the document MUST be updated to reference the ADR and remove the superseded content or mark it explicitly as bounded history.
 4. Each document carries a "Last verified against commit" marker near its title. After a change, the marker MUST be updated and the affected sections re-verified. A marker MUST name a commit that exists in this repository AND state its verification scope (which sections are current as of it, which retain an earlier snapshot). Commit distance from HEAD alone is never treated as staleness; an unpinned or ambiguous marker is a defect.

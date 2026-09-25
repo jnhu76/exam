@@ -46,7 +46,7 @@ exam.enrollment.manage, exam.result.publish
 score.all.view
 ```
 
-**Scope status**: Teacher's `course.create`, `course.update`, `exam.create`, `exam.update`, `exam.publish`, `exam.close`, `exam.enrollment.manage`, `exam.result.publish`, and `score.all.view` are marked scoped in the preset matrix, but the scoped resolver infrastructure (Teacher@course) is **NOT IMPLEMENTED**. Teacher permissions are currently flat org-wide. This is a **known Teacher resource-scope gap** (future M11 work).
+**Scope status**: Teacher@Course resource scope is **ENFORCED** (#286) — `teacher_course_assignments` carriers, per-request scoped capability enforcement (`resolveTeacherCourseScope` / `teacherAccess`), and SQL-side LIST filtering narrow the capabilities above (which are marked scoped in the preset matrix) to assigned courses. Capability grant alone is insufficient; active course assignment + resource-scope enforcement determine reach. Executable authority remains the authz preset + API scoped-gate / repository filtering implementation. (Historical note: before #286 this was flat org-wide — the former "Teacher capability scope gap" / M11 wording is superseded.)
 
 ## 3. Aggregate Catalog
 

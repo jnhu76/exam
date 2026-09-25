@@ -225,8 +225,10 @@ export type ScopeType = (typeof Scope)[keyof typeof Scope];
 /**
  * The seven Phase 3+ role presets. System is non-login, non-assignable; the
  * others are product defaults assigned via the existing user-management
- * surface. Custom roles (Phase 4) are `is_system = false` DB rows, not new keys
- * here.
+ * surface. These code constants are the sole built-in preset authority
+ * (ADR-010 2026-09-25 amendment): no DB seed rows back them. Custom-role
+ * persistence is not decided by this catalog — any future custom-role model
+ * requires a separate accepted design decision.
  *
  * P7-E2A (ADR-017 D2 amendment of ADR-010): Maintainer is the seventh
  * built-in assignable human role — the Application Maintainer / System

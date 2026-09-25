@@ -4,9 +4,10 @@
  *
  * Relation checked: every "Last verified against (commit):" marker in an
  * ACTIVE doc must (a) name a SHA that resolves to a real commit in this
- * repository, or carry an explicit "not pinned" declaration, AND (b) state a
- * current-vs-historical disposition (a verification scope / snapshot /
- * historical note) near the marker.
+ * repository — the SHA must sit on the marker line itself or on the
+ * immediate marker value line that follows — or carry an explicit "not
+ * pinned" declaration, AND (b) state a current-vs-historical disposition (a
+ * verification scope / snapshot / historical note) near the marker.
  *
  * Historical failure caught (issue #611 CD-04 / REC-05): the exam-system doc
  * set shared one stale verification lineage with no disposition, so its
@@ -83,7 +84,10 @@ for (const file of files) {
       );
     }
 
-    const sha = block.match(SHA)?.[0];
+    // The SHA must sit on the marker line itself or on the immediate marker
+    // value line that follows (two-line form) — never an arbitrary hex token
+    // picked from the surrounding disposition prose.
+    const sha = lines[i].match(SHA)?.[0] ?? lines[i + 1]?.match(SHA)?.[0];
     if (!sha) {
       if (!/not pinned/i.test(block)) {
         errors.push(

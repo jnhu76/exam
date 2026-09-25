@@ -1,6 +1,6 @@
 # State and Authority Model
 
-> Normative description of the exam system's lifecycle states, sub-process states, policies, and fact timestamps.
+> Explanatory description of the exam system's lifecycle states, sub-process states, policies, and fact timestamps. Explanatory, not a competing normative authority — binding decisions live in Accepted ADRs (#614 authority split; see [README.md](./README.md)).
 > Recovery semantics are governed by [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md). Interruption detection and time compensation are governed by [ADR-013](../../adr/ADR-013-interruption-time-compensation-policy.md). Both are described in [candidate-recovery.md](./candidate-recovery.md).
 
 ```text
