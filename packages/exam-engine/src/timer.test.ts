@@ -16,10 +16,16 @@ describe("timer", () => {
       expect(deadline).toEqual(startedAt);
     });
 
-    it("handles fractional minutes", () => {
+    it("adds a multi-hour duration across the hour boundary (90 min)", () => {
       const startedAt = new Date("2025-01-01T10:00:00Z");
       const deadline = calculateDeadlineAt(startedAt, 90);
       expect(deadline).toEqual(new Date("2025-01-01T11:30:00Z"));
+    });
+
+    it("handles fractional minutes (1.5 min = 90 s)", () => {
+      const startedAt = new Date("2025-01-01T10:00:00Z");
+      const deadline = calculateDeadlineAt(startedAt, 1.5);
+      expect(deadline).toEqual(new Date("2025-01-01T10:01:30Z"));
     });
   });
 

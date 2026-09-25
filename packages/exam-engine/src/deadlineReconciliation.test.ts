@@ -865,20 +865,15 @@ describe("ensureAttemptDeadlineReconciled (EXAM-558 serialization contract)", ()
 });
 
 describe("computeEffectiveDeadline", () => {
-  it("throws ValidationError when exam.closeAt is null", () => {
-    const exam = makeExam({ closeAt: null as unknown as Date });
-    const attempt = makeAttempt();
-    expect(() => computeEffectiveDeadline(exam, attempt)).toThrow(
-      /closeAt is required/,
-    );
-  });
-
-  it("throws ValidationError when exam.closeAt is undefined", () => {
-    const exam = makeExam({ closeAt: undefined as unknown as Date });
-    const attempt = makeAttempt();
-    expect(() => computeEffectiveDeadline(exam, attempt)).toThrow(
-      /closeAt is required/,
-    );
+  it("throws ValidationError when exam.closeAt is null or undefined", () => {
+    // null and undefined hit the same fail-closed branch (closeAt is required).
+    for (const closeAt of [null, undefined]) {
+      const exam = makeExam({ closeAt: closeAt as unknown as Date });
+      const attempt = makeAttempt();
+      expect(() => computeEffectiveDeadline(exam, attempt)).toThrow(
+        /closeAt is required/,
+      );
+    }
   });
 });
 

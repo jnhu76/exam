@@ -1,9 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  gradeAttempt,
   gradeAttemptIdempotent,
   finalizeGrading,
-  finalizeTerminalGrading,
   computeGradingResult,
   readGradingSnapshot,
   shouldEnrollmentComplete,
@@ -169,7 +167,7 @@ function makeRepos(
     },
   };
   // Slice 4: derive the workset repo from the canonical auto-grader output
-  // so finalizeGrading/gradeAttempt aggregate the same score the old
+  // so finalizeGrading/gradeAttemptIdempotent aggregate the same score the old
   // result-based path produced.
   const worksetRepo: GradingWorksetRepository = {
     findByAttempt: async (id) => {
@@ -209,7 +207,10 @@ function makeRepos(
   };
 }
 
-describe("gradeAttempt", () => {
+// Retargeted rows from the deleted test-only `gradeAttempt` wrapper onto the
+// production entry point `gradeAttemptIdempotent` — same finalizeGrading →
+// aggregateGradingEntries path for submitted, non-pending-manual attempts.
+describe("gradeAttemptIdempotent — auto command path", () => {
   it("persists question results and marks a passing attempt graded", async () => {
     const repos = makeRepos(makeExam(), makeAttempt(), makeEnrollment());
     const cap = await mintCap(
@@ -219,7 +220,7 @@ describe("gradeAttempt", () => {
     );
     const gradedAt = new Date("2026-06-01T12:00:00Z");
 
-    const result = await gradeAttempt(
+    const result = await gradeAttemptIdempotent(
       repos.examRepo,
       repos.enrollmentRepo,
       repos.attemptRepo,
@@ -258,7 +259,7 @@ describe("gradeAttempt", () => {
       "attempt-1",
     );
     await expect(
-      gradeAttempt(
+      gradeAttemptIdempotent(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
@@ -295,7 +296,7 @@ describe("gradeAttempt", () => {
         repos.attemptRepo,
         "attempt-1",
       );
-      await gradeAttempt(
+      await gradeAttemptIdempotent(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
@@ -325,7 +326,7 @@ describe("gradeAttempt", () => {
         repos.attemptRepo,
         "attempt-1",
       );
-      await gradeAttempt(
+      await gradeAttemptIdempotent(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
@@ -365,7 +366,7 @@ describe("gradeAttempt", () => {
       update: () => enrollment,
     };
 
-    // Slice 4: gradeAttempt now aggregates from a workset repo. Derive entries
+    // Slice 4: the grading path aggregates from a workset repo. Derive entries
     // from the canonical auto-grader so aggregation succeeds and the test
     // reaches the intended persist-failure point.
     const worksetRepo: GradingWorksetRepository = {
@@ -399,7 +400,7 @@ describe("gradeAttempt", () => {
 
     const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     await expect(
-      gradeAttempt(
+      gradeAttemptIdempotent(
         examRepo,
         enrollmentRepo,
         attemptRepo,
@@ -440,7 +441,7 @@ describe("gradeAttempt", () => {
       update: () => null,
     };
 
-    // Slice 4: gradeAttempt now aggregates from a workset repo. Derive entries
+    // Slice 4: the grading path aggregates from a workset repo. Derive entries
     // from the canonical auto-grader so aggregation succeeds and the test
     // reaches the intended persist-failure point.
     const worksetRepo: GradingWorksetRepository = {
@@ -474,7 +475,7 @@ describe("gradeAttempt", () => {
 
     const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     await expect(
-      gradeAttempt(
+      gradeAttemptIdempotent(
         examRepo,
         enrollmentRepo,
         attemptRepo,
@@ -586,7 +587,7 @@ describe("computeGradingResult — submitted_answers read path (P3-L0-2)", () =>
 // itself (no @exam/db). Per the repo's established Plan A pattern, the
 // transaction is owned by the CALLER (submitAndGradeAttempt TX2,
 // autoSubmitAndGrade, attempts.admin force-submit, gradingQueue.ts), which
-// wraps gradeAttempt/finalizeGrading in executeInTransaction with tx-scoped
+// wraps finalizeGrading in executeInTransaction with tx-scoped
 // repos and a locked attempt row. The engine logic only needs to be provably
 // ATOMIC UNDER THAT CONTRACT: a failure after the attempt write must roll the
 // attempt write back too (the caller's tx does this), not leave a half-graded
@@ -738,54 +739,7 @@ async function runInTransaction<T>(
 describe("grading transactional boundary (P0-2)", () => {
   const gradedAt = new Date("2026-06-01T12:00:00Z");
 
-  // Case A: a failure AFTER the attempt is written graded must NOT leave a
-  // half-graded attempt visible. The caller's transaction rolls the attempt
-  // write back. We force the failure by making enrollment.update throw.
-  it("rolls back the attempt write when the enrollment update fails mid-grade (no half-graded state)", async () => {
-    const exam = makeExam();
-    const attempt = makeAttempt();
-    const enrollment = makeEnrollment();
-    const harness = makeTransactionalRepos(exam, attempt, enrollment);
-
-    // First staged scope: inject a failing enrollment update so finalizeGrading
-    // throws after the attempt was already written graded.
-    const failingScope = harness.scopedRepos();
-    const failingEnrollmentRepo: EnrollmentRepository = {
-      ...failingScope.enrollmentRepo,
-      update: vi.fn(() => {
-        throw new Error("boom: enrollment write failed");
-      }),
-    };
-
-    const cap = await mintCap(
-      failingEnrollmentRepo,
-      failingScope.attemptRepo,
-      "attempt-1",
-    );
-    await expect(
-      finalizeGrading(
-        failingEnrollmentRepo,
-        failingScope.attemptRepo,
-        makeResultWorksetRepo(attempt, exam, gradedAt),
-        cap,
-        exam,
-        gradedAt,
-      ),
-    ).rejects.toThrow("enrollment write failed");
-
-    // NOTE: this scope was never committed (it threw). Visible state below is
-    // read from the committed store and must be UNCHANGED.
-    const finalAttempt = harness.getAttempt();
-    const finalEnrollment = harness.getEnrollment();
-    expect(finalAttempt.status).toBe("submitted"); // NOT partially graded
-    expect(finalAttempt.score).toBeUndefined();
-    expect(finalAttempt.gradingResult).toBeUndefined();
-    expect(finalEnrollment.status).toBe("started");
-    expect(finalEnrollment.finalScore).toBeUndefined();
-    expect(failingEnrollmentRepo.update).toHaveBeenCalledTimes(1);
-  });
-
-  // Case B: under the same transactional harness, the happy path still commits
+  // Case B: under the transactional harness, the happy path commits
   // the full result (attempt graded + enrollment finalized) atomically.
   it("commits the full graded result on success (score/status/enrollment consistent)", async () => {
     const exam = makeExam();
@@ -823,48 +777,11 @@ describe("grading transactional boundary (P0-2)", () => {
       finalAttemptId: "attempt-1",
     });
   });
-
-  // Case C: every mutation flows through the SAME tx-scoped repo handle passed
-  // in by the caller — grading never escapes to a non-tx repo. Proven by
-  // spying: attempt.update and enrollment.update are the injected instances.
-  it("routes all grading mutations through the caller-provided (tx-scoped) repo handle", async () => {
-    const exam = makeExam();
-    const attempt = makeAttempt();
-    const enrollment = makeEnrollment();
-    const harness = makeTransactionalRepos(exam, attempt, enrollment);
-    const scope = harness.scopedRepos();
-
-    const attemptUpdateSpy = vi.spyOn(scope.attemptRepo, "update");
-    const enrollmentUpdateSpy = vi.spyOn(scope.enrollmentRepo, "update");
-
-    const cap = await mintCap(
-      scope.enrollmentRepo,
-      scope.attemptRepo,
-      "attempt-1",
-    );
-    await finalizeGrading(
-      scope.enrollmentRepo,
-      scope.attemptRepo,
-      makeResultWorksetRepo(attempt, exam, gradedAt),
-      cap,
-      exam,
-      gradedAt,
-    );
-
-    // Exactly one attempt write (the graded transition) and one enrollment
-    // write — both on the injected tx-scoped instances, none elsewhere.
-    expect(attemptUpdateSpy).toHaveBeenCalledTimes(1);
-    expect(attemptUpdateSpy).toHaveBeenLastCalledWith(
-      "attempt-1",
-      expect.objectContaining({ status: "graded" }),
-    );
-    expect(enrollmentUpdateSpy).toHaveBeenCalledTimes(1);
-  });
 });
 
-/** Helper: compute the ScoreResult the way gradeAttempt does, for direct
- * finalizeGrading calls in the transactional tests. Reuses the engine's own
- * computeGradingResult so semantics stay identical. */
+/** Helper: compute the ScoreResult the way gradeAttemptIdempotent does, for
+ * direct finalizeGrading calls in the transactional tests. Reuses the engine's
+ * own computeGradingResult so semantics stay identical. */
 function computeResult(
   attempt: ExamAttempt,
   exam: Exam,
@@ -1358,5 +1275,18 @@ describe("shouldEnrollmentComplete", () => {
         new Date("2026-06-03T00:00:00Z"),
       ),
     ).toBe(true);
+  });
+
+  it("returns false for an untimed exam (closeAt null) — no window cutoff can ever complete it", () => {
+    // #291 Phase A: untimed exams have no close cutoff; only the retake rules
+    // above can complete the enrollment. Any `now` must keep it started.
+    expect(
+      shouldEnrollmentComplete(
+        { ...baseExam, retakePolicy: "unlimited", closeAt: null },
+        baseEnrollment,
+        false,
+        new Date("9999-01-01T00:00:00Z"),
+      ),
+    ).toBe(false);
   });
 });

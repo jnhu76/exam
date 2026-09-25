@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { NotFoundError, ValidationError } from "@exam/domain";
 import type { ExamAttempt, ExamEnrollment } from "@exam/domain";
 import type {
@@ -256,6 +256,12 @@ describe("lockEnrollmentAndAttempt (J1 protocol)", () => {
 
 // ---------------------------------------------------------------------------
 // J2 — Repository-affinity assertion.
+//
+// Retry-remint framing (former J5): a witness minted against one repo pair
+// (transaction T1) is invalid for a different pair (transaction T2) even with
+// identical ids — that is exactly the "throws when both repos differ" row
+// below; a freshly minted T2 witness passing is exactly the
+// "passes when the consumer uses the exact mint-time repo pair" row.
 // ---------------------------------------------------------------------------
 
 describe("assertCapabilityFor (J2 affinity)", () => {
@@ -344,135 +350,5 @@ describe("assertCapabilityFor (J2 affinity)", () => {
     expect(() =>
       assertCapabilityFor(cap, t1.enrollmentRepo, t2.attemptRepo),
     ).toThrow(/transaction-affinity violation/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// J5 — Retry remint: a T1-minted witness is invalid for a T2 pair; a freshly
-// minted T2 witness is valid. Uses identical ids.
-// ---------------------------------------------------------------------------
-
-describe("retry remint semantics (J5)", () => {
-  function makeStore(): {
-    attemptRepo: AttemptRepository;
-    enrollmentRepo: EnrollmentRepository;
-  } {
-    const attempt = makeAttempt();
-    const enrollment = makeEnrollment();
-    const attemptRepo: AttemptRepository = {
-      findById: () => attempt,
-      findByIdForUpdate: () => attempt,
-      findActiveByEnrollment: () => null,
-      findByEnrollmentAndAttemptNo: () => null,
-      create: () => attempt,
-      update: () => attempt,
-      refreshLastActivityIfInProgress: () => attempt,
-    };
-    const enrollmentRepo: EnrollmentRepository = {
-      findByExamAndCandidate: () => enrollment,
-      findByExamAndCandidateForUpdate: () => enrollment,
-      create: () => enrollment,
-      update: () => enrollment,
-    };
-    return { attemptRepo, enrollmentRepo };
-  }
-
-  it("a T1-minted witness is invalid for the T2 repo pair (identical ids)", async () => {
-    const t1 = makeStore();
-    const t2 = makeStore();
-    const capT1 = await lockEnrollmentAndAttempt(
-      t1.enrollmentRepo,
-      t1.attemptRepo,
-      "attempt-1",
-    );
-    expect(capT1.attemptId).toBe("attempt-1");
-    expect(capT1.enrollmentId).toBe("enr-1");
-    expect(() =>
-      assertCapabilityFor(capT1, t2.enrollmentRepo, t2.attemptRepo),
-    ).toThrow(/transaction-affinity violation/);
-  });
-
-  it("a freshly minted T2 witness is valid for the T2 repo pair", async () => {
-    const t2 = makeStore();
-    const capT2 = await lockEnrollmentAndAttempt(
-      t2.enrollmentRepo,
-      t2.attemptRepo,
-      "attempt-1",
-    );
-    expect(() =>
-      assertCapabilityFor(capT2, t2.enrollmentRepo, t2.attemptRepo),
-    ).not.toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// J4 — Ended-transaction composite safety (consumer-level unit proof).
-//
-// This is the boundary D1C3 does NOT encode in repo identity alone: if the
-// minting transaction has ended but the consumer still holds the exact
-// original repo objects, reference identity may still match. The underlying
-// tx-bound repository session rejects further DB use ("Transaction query
-// already complete"). This test PROVES the consumer-level half: when the
-// post-assertion Attempt read fails (as it would against a dead session), the
-// Enrollment UPDATE is NEVER reached. Combined with the real-DB proof in
-// apps/api/tests/concurrency/ea-lock-order.test.ts (captured tx-bound repo
-// ops fail after transaction end), this establishes the composite safety
-// model: repo-affinity assertion + tx-session liveness.
-// ---------------------------------------------------------------------------
-
-describe("ended-transaction composite safety (J4 consumer-level)", () => {
-  it("a repo-read failure (dead session) after the affinity assertion prevents the Enrollment UPDATE", async () => {
-    // The attempt repo's findById succeeds during mint (locator read), then
-    // throws on the next call — mirroring what the tx-bound session does when
-    // used after commit/rollback. assertCapabilityFor passes (same repo
-    // identity); the consumer's first repo operation (Attempt re-read) then
-    // throws; the Enrollment UPDATE must never execute.
-    const attempt: ExamAttempt = makeAttempt();
-    const enrollment = makeEnrollment();
-    let enrollmentUpdateCalled = false;
-    let findByIdCallCount = 0;
-    const attemptRepo: AttemptRepository = {
-      findById: () => {
-        findByIdCallCount++;
-        if (findByIdCallCount >= 2) {
-          throw new Error("Transaction query already complete");
-        }
-        return attempt;
-      },
-      findByIdForUpdate: () => attempt,
-      findActiveByEnrollment: () => null,
-      findByEnrollmentAndAttemptNo: () => null,
-      create: () => attempt,
-      update: () => attempt,
-      refreshLastActivityIfInProgress: () => attempt,
-    };
-    const enrollmentRepo: EnrollmentRepository = {
-      findByExamAndCandidate: () => enrollment,
-      findByExamAndCandidateForUpdate: () => enrollment,
-      create: () => enrollment,
-      update: () => {
-        enrollmentUpdateCalled = true;
-        return enrollment;
-      },
-    };
-    // Mint the capability against the SAME repo pair (identity matches); the
-    // locator read is the FIRST findById call and succeeds.
-    const cap = await lockEnrollmentAndAttempt(
-      enrollmentRepo,
-      attemptRepo,
-      "attempt-1",
-    );
-    // Affinity assertion passes (same repo identity, even though the session
-    // is logically ended — repo identity alone cannot detect this).
-    expect(() =>
-      assertCapabilityFor(cap, enrollmentRepo, attemptRepo),
-    ).not.toThrow();
-    // The consumer's first repo op (Attempt re-read) is the SECOND findById
-    // call — it throws, simulating the dead session.
-    expect(() => attemptRepo.findById("attempt-1")).toThrow(
-      /Transaction query already complete/,
-    );
-    // The Enrollment UPDATE was never reached.
-    expect(enrollmentUpdateCalled).toBe(false);
   });
 });

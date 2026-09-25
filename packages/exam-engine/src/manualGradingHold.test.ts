@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { InvalidStateTransitionError } from "@exam/domain";
 import type {
   AttemptGradingEntry,
   Exam,
@@ -38,7 +39,6 @@ const noneResolution: SubmitInterruptionResolution = {
 };
 import {
   finalizeGrading,
-  gradeAttempt,
   gradeAttemptIdempotent,
   computeGradingResult,
 } from "./grading.js";
@@ -473,8 +473,11 @@ describe("P3-L0-2C: pure-objective inline auto-grade regression", () => {
 describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
   it("refuses to advance a pending_manual attempt to graded via finalizeGrading", async () => {
     // Pre-conditions: the freeze barrier already established the authoritative
-    // pending_manual classification. finalizeGrading (the automatic terminal
-    // path) must NOT overwrite status to graded for such an attempt.
+    // pending_manual classification, AND the grading workset is fully
+    // TERMINAL (as after gradeQuestion completed the manual entries) so the
+    // pending_manual guard is the ONLY mechanism that can reject. With a
+    // non-terminal workset the aggregator would throw first and this row
+    // could not attribute its rejection to the guard.
     const submittedPendingManual = makeAttempt({
       status: "submitted",
       gradingStatus: "pending_manual",
@@ -497,7 +500,32 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
     });
     const repos = makeRepos(submittedPendingManual);
 
-    const result = computeGradingResult(repos.getAttempt(), makeExam(), NOW);
+    // Terminal workset: objective entry completed_auto, manual entry
+    // completed_manual — exactly what the manual path leaves behind.
+    await repos.gradingWorksetRepo.bulkCreate([
+      {
+        attemptId: "attempt-1",
+        questionId: "q-obj",
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 5,
+        earnedScore: 5,
+        candidateAnswer: true,
+        standardAnswer: true,
+        correct: true,
+      },
+      {
+        attemptId: "attempt-1",
+        questionId: "q-text",
+        gradingMode: "manual",
+        status: "completed_manual",
+        maxScore: 5,
+        earnedScore: 3,
+        candidateAnswer: "主观答案",
+        standardAnswer: null,
+        correct: false,
+      },
+    ]);
 
     // The engine boundary must fail closed (or return a non-finalized
     // outcome). It must NOT write graded + pending_manual.
@@ -515,7 +543,7 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
         makeExam(),
         NOW,
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(InvalidStateTransitionError);
 
     expect(repos.getAttempt().status).toBe("submitted");
     expect(repos.getAttempt().gradingStatus).toBe("pending_manual");
@@ -554,37 +582,7 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
     expect(repos.getAttempt().status).toBe("submitted");
     expect(repos.getAttempt().gradingStatus).toBe("pending_manual");
   });
-
-  it("gradeAttempt does not advance a pending_manual attempt", async () => {
-    const submittedPendingManual = makeAttempt({
-      status: "submitted",
-      gradingStatus: "pending_manual",
-      submittedAt: NOW,
-      submissionReason: "manual",
-      submittedAnswers: {
-        schemaVersion: 1 as const,
-        answers: [{ questionId: "q-text", value: "主观答案" }],
-      },
-      questionSnapshot: [textResponseSnapshot("q-text", 10)],
-    });
-    const repos = makeRepos(submittedPendingManual);
-
-    const cap = await mintCap(
-      repos.enrollmentRepo,
-      repos.attemptRepo,
-      "attempt-1",
-    );
-    await expect(
-      gradeAttempt(
-        repos.examRepo,
-        repos.enrollmentRepo,
-        repos.attemptRepo,
-        repos.gradingWorksetRepo,
-        cap,
-        NOW,
-      ),
-    ).rejects.toThrow();
-
-    expect(repos.getAttempt().status).toBe("submitted");
-  });
+  // The former test-only `gradeAttempt` wrapper row added nothing here: its
+  // fail-closed rejection is the finalizeGrading guard row above, and its
+  // no-advance outcome is the gradeAttemptIdempotent row.
 });

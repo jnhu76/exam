@@ -189,6 +189,7 @@ describe("Slice 4 B: stale persisted gradingResult has zero scoring authority", 
     ];
     // Persisted gradingResult claims q-obj scored 0 (stale) — the entry says 40.
     // The entry MUST win; the old "persisted wins" precedence is forbidden.
+    // Poisoned to full-zero (objective=0, manual absent) — a total wipe.
     const attempt = makeAttempt(questions, {
       gradingResult: [
         {
@@ -199,7 +200,18 @@ describe("Slice 4 B: stale persisted gradingResult has zero scoring authority", 
           candidateAnswer: "a",
           standardAnswer: "a",
         },
+        {
+          questionId: "q-text",
+          score: 0, // stale — conflicts with the entry's 30
+          maxScore: 60,
+          correct: false,
+          candidateAnswer: null,
+          standardAnswer: null,
+        },
       ],
+      // Poison the scalar projections too: they carry zero authority.
+      score: 0,
+      passed: false,
     });
     const entries = [
       entry("q-obj", {
@@ -226,6 +238,10 @@ describe("Slice 4 B: stale persisted gradingResult has zero scoring authority", 
 
     // 40 (entry) + 30 = 70, NOT 0 (stale) + 30 = 30.
     expect(result.totalScore).toBe(70);
+    // Per-row scores come from the entries, not the poisoned gradingResult.
+    expect(result.questionResults.map((q) => q.score)).toEqual([40, 30]);
+    // PASSING=50; 70 >= 50 → passed despite the stale passed=false.
+    expect(result.passed).toBe(true);
   });
 });
 
@@ -698,5 +714,44 @@ describe("Slice 4: mode/maxScore consistency guards", () => {
     expect(() =>
       aggregateGradingEntries(attempt, entries, DEFAULT_PASSING),
     ).toThrow(/earnedScore 15 out of range/);
+  });
+
+  it("corruption rejection is pure — the input attempt object is never mutated (fail-closed boundary)", () => {
+    // A corrupted workset throws before any aggregate is returned, so no
+    // caller (finalizeGrading) can reach its attemptRepo.update with a
+    // corrupted result. Locks that the rejection itself never mutates the
+    // attempt's terminal facts as a side effect.
+    const questions = [
+      objectiveSnapshot("q1", 10, "a"),
+      objectiveSnapshot("q2", 10, "b"),
+    ];
+    const attempt = makeAttempt(questions);
+    const entries = [
+      entry("q1", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 10,
+        earnedScore: 10,
+        correct: true,
+      }),
+      // Duplicate questionId (q1 twice, q2 absent) — count matches, so the
+      // duplicate-detection branch is the one that fires.
+      entry("q1", {
+        id: "entry-q1-dup",
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 10,
+        earnedScore: 5,
+        correct: false,
+      }),
+    ];
+
+    expect(() =>
+      aggregateGradingEntries(attempt, entries, DEFAULT_PASSING),
+    ).toThrow(/duplicate grading entry/);
+    expect(attempt.score).toBeUndefined();
+    expect(attempt.gradingResult).toBeUndefined();
+    expect(attempt.passed).toBeUndefined();
+    expect(attempt.status).toBe("submitted");
   });
 });
