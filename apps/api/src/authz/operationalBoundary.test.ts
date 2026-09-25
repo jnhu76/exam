@@ -248,6 +248,14 @@ describe("P7-E2A Operational RBAC Boundary", () => {
       ["GET", "/api/admin/recovery/incidents"],
       ["GET", "/api/roles/assignable"],
       ["GET", "/api/exam-profiles"],
+      [
+        "GET",
+        "/api/admin/attempts/00000000-0000-4000-8000-000000000001/export",
+      ],
+      [
+        "GET",
+        "/api/admin/attempts/00000000-0000-4000-8000-000000000001/export/csv",
+      ],
     ] as const)("%s %s → 403", async (method, url) => {
       const res = await asMaintainer(method, url);
       expect(res.statusCode, `${method} ${url}`).toBe(403);
@@ -325,6 +333,13 @@ describe("P7-E2A Operational RBAC Boundary", () => {
           proctorUserId: "some-user",
         },
       ],
+      [
+        "PATCH",
+        "/api/exams/00000000-0000-4000-8000-000000000001",
+        { title: "Denied" },
+      ],
+      ["POST", "/api/exams/00000000-0000-4000-8000-000000000001/publish", {}],
+      ["DELETE", "/api/exams/00000000-0000-4000-8000-000000000001", undefined],
     ] as const)("%s %s → 403", async (method, url, payload) => {
       const res = await asMaintainer(method, url, payload);
       expect(res.statusCode, `${method} ${url}`).toBe(403);
