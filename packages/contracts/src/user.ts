@@ -5,17 +5,12 @@ import { nullableEmailField, optionalEmailField } from "./emailField.js";
 // ── User ──────────────────────────────────────────────────────────
 
 /**
- * Roles assignable to a human user (RBAC-M8). Phase 3 widens the Phase 1
- * {Admin, Candidate} set with Teacher / Proctor / Grader; P7-E2A (ADR-017 D2)
- * adds Maintainer — the application-side System Operations Owner (operational
- * observation only). `System` is excluded (synthetic, non-assignable);
- * `SuperAdmin` is not defined (no ADR).
+ * Roles assignable to a human user (RBAC-M8). `System` is excluded (synthetic,
+ * non-assignable); `SuperAdmin` is not defined (no ADR).
  *
  * `RoleSchema` mirrors the assignable set because a user's primary active
  * assignment — which becomes `users.role` (the compatibility cache) and the
- * value returned by login/`/auth/me` — may now be any of these six. Route
- * authorization gates are NOT flipped in this PR; assignment is a capability,
- * not an enforcement change (enforcement is PR #3).
+ * value returned by login/`/auth/me` — may be any of them.
  */
 export const AssignableRoleSchema = z.enum([
   "Admin",
@@ -52,9 +47,7 @@ export const UserSchema = z.object({
 export type UserDTO = z.infer<typeof UserSchema>;
 
 /**
- * Request schema for creating a new user account. Role is any assignable role
- * (RBAC-M8); the route still gates on legacy `requireRole(["Admin"])` until
- * enforcement (PR #3).
+ * Request schema for creating a new user account. Role is any assignable role.
  */
 export const CreateUserRequestSchema = z.object({
   username: z.string().min(3).max(50),
@@ -81,7 +74,7 @@ export const UpdateUserRequestSchema = z.object({
 /** Type for an update-user request. */
 export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;
 
-// ── Role assignments (RBAC-M8) ────────────────────────────────────
+// ── Role assignments ──────────────────────────────────────────────
 
 /** A user-role-assignment row as exposed over the API. */
 export const UserRoleAssignmentSchema = z.object({
@@ -101,8 +94,8 @@ export const AssignRoleRequestSchema = z.object({
 export type AssignRoleRequest = z.infer<typeof AssignRoleRequestSchema>;
 
 /**
- * Request body for patching an assignment — an XOR command contract (P7-E
- * review P2-1): exactly ONE of the three commands per PATCH.
+ * Request body for patching an assignment — an XOR command contract: exactly
+ * ONE of the three commands per PATCH.
  *
  *   { isPrimary: true }  → promote this assignment to primary active
  *   { isActive: true }   → (re)activate this assignment
@@ -110,9 +103,7 @@ export type AssignRoleRequest = z.infer<typeof AssignRoleRequestSchema>;
  *
  * Anything else — `{}`, `{ isPrimary: false }`, or a mixed payload like
  * `{ isPrimary: true, isActive: false }` — is an invalid command and must be
- * rejected with 400, never silently half-applied (the old permissive schema
- * let `{ isPrimary: true, isActive: false }` through and the route simply
- * ignored `isActive`).
+ * rejected with 400, never silently half-applied.
  */
 export const PatchRoleAssignmentRequestSchema = z
   .object({

@@ -1,17 +1,17 @@
 /**
- * Phase 3 Scoped RBAC catalog constants (RBAC-M1).
+ * Scoped RBAC catalog constants (RBAC-M1).
  *
  * Source of truth: `docs/adr/ADR-010-scoped-rbac-architecture.md`
  * §Permission Catalog v0, §Scope Model v0, §Role Presets.
  *
  * These are the closed, type-safe unions and the SOLE built-in permission
- * authority (ADR-010 2026-09-25 amendment retired the never-built DB seed
- * half). Unknown strings are prevented by the closed union itself: a typo
- * against the union is a compile error, and conformance tests guard the
- * registry surface.
+ * authority (ADR-010 2026-09-25 amendment). Unknown strings are prevented by
+ * the closed union itself: a typo against the union is a compile error, and
+ * conformance tests guard the registry surface.
  *
- * Naming: dotted `domain.resource.action` (lowercase). This supersedes the
- * legacy `SCREAMING_SNAKE` keys in `@exam/domain` enums.
+ * Naming: dotted `domain.resource.action` (lowercase). It is layered over —
+ * and must not be conflated with — the legacy `SCREAMING_SNAKE` keys in the
+ * `@exam/domain` enums, which remain only as the legacy flat-permission type.
  */
 
 // ───────────────────────── Permissions (ADR §4) ─────────────────────────
@@ -39,9 +39,9 @@ export const Permission = {
   CandidateCreate: "candidate.create",
   CandidateUpdate: "candidate.update",
   CandidateImport: "candidate.import",
-  // CandidateDelete (candidate.delete): UNRESOLVED — granted to Admin but no
-  // DELETE /candidates/:id route exists today. Retained pending product
-  // decision (P4-G-04). Removing the route-less grant is out of P4-C1 scope.
+  // CandidateDelete (candidate.delete): granted to Admin but no
+  // DELETE /candidates/:id route consumes it, so no request path can reach it.
+  // Retained pending a product decision on candidate deletion.
   CandidateDelete: "candidate.delete",
   CandidateFieldView: "candidate_field.view",
   CandidateFieldCreate: "candidate_field.create",
@@ -96,66 +96,61 @@ export const Permission = {
   GradingDetailView: "grading.detail.view",
   GradingAnswerView: "grading.answer.view",
   GradingScoreWrite: "grading.score.write",
-  // GradingFinalize / GradingIdentityView: RESERVED for M11 scoped grading.
+  // GradingFinalize / GradingIdentityView: RESERVED for scoped grading.
   // Omitted from all human presets by design (scoped finalize + double-blind
-  // identity). No route consumes them today; grade-question +
-  // finalizeTerminalGrading run without a separate HTTP gate. Owner: M11.
+  // identity). No HTTP route gates on them: grade-question +
+  // finalizeTerminalGrading run without a separate capability gate.
   GradingFinalize: "grading.finalize",
   GradingIdentityView: "grading.identity.view",
 
   // §4.8 Scores / Results
-  // NOTE: the historical `result.publish` alias (ResultPublish) was removed in
-  // P4-C1. The live result-publication capability is `ExamResultPublish`
-  // (exam.result.publish), granted to Admin+Teacher and consumed by
-  // POST /exams/:id/publish-results. `result.publish` had zero route consumers
-  // and zero grants — see docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
   ScoreAllView: "score.all.view",
   ScoreExport: "score.export",
 
   // §4.9 System / Diagnostics
   SystemHealthView: "system.health.view",
   SystemDiagnosticsView: "system.diagnostics.view",
-  // SystemBusinessIntegrityView (system.business_integrity.view): P7-E2A
-  // (ADR-017 D8) — the business-integrity diagnostics block (submitted-not-
+  // SystemBusinessIntegrityView (system.business_integrity.view):
+  // (ADR-017 D8) the business-integrity diagnostics block (submitted-not-
   // terminalized / workset-mismatch attempt anomalies) is a BUSINESS-domain
   // surface, Admin-only. GET /system/diagnostics includes the `integrity`
   // block only for actors holding this capability; the operational projection
   // (Maintainer) never receives it.
   SystemBusinessIntegrityView: "system.business_integrity.view",
-  // SystemBusinessSummaryView (system.business_summary.view): P7-E2C — the
+  // SystemBusinessSummaryView (system.business_summary.view): the
   // business-owner summary dashboard (question/exam/candidate/attempt
   // aggregates + recent exams) is BUSINESS-domain observation, Admin-only.
   // The Maintainer preset must never receive business statistics through an
   // operational capability.
   SystemBusinessSummaryView: "system.business_summary.view",
-  // SystemBackupView (system.backup.view): P7-E2B — read-only backup evidence
+  // SystemBackupView (system.backup.view): read-only backup evidence
   // projection (latest / latest verified / history / last failure). No write
   // sibling exists: backup.trigger / schedule / retention are decision-gated
-  // (ADR-017 D5) and NOT implemented.
+  // (ADR-017 D5).
   SystemBackupView: "system.backup.view",
-  // SystemRestoreReadinessView (system.restore_readiness.view): P7-E2B —
+  // SystemRestoreReadinessView (system.restore_readiness.view):
   // read-only restore-readiness / drill evidence projection. Restore itself
   // stays host-only (ADR-017 D4); only drill EVIDENCE is readable.
   SystemRestoreReadinessView: "system.restore_readiness.view",
-  // SystemOpsPolicyView (system.ops.policy.view): P7-E3 — read the Admin's
+  // SystemOpsPolicyView (system.ops.policy.view): read the Admin's
   // DESIRED operational objectives (intent) + the compliance projection.
   // Granted to Admin AND Maintainer (Maintainer may view intent, never
   // modify it — ADR-017 D9).
   SystemOpsPolicyView: "system.ops.policy.view",
-  // SystemOpsPolicyManage (system.ops.policy.manage): P7-E3 — Admin is the
+  // SystemOpsPolicyManage (system.ops.policy.manage): Admin is the
   // SOLE intent owner. Writes the typed, audited, non-binding policy intent
   // record. Never granted to Maintainer (execution-side policy authority is
   // decision-gated, ADR-017 D5/D9).
   SystemOpsPolicyManage: "system.ops.policy.manage",
-  // SystemEmailTest (system.email.test): P7-E2A (ADR-017 D7) — the
+  // SystemEmailTest (system.email.test): (ADR-017 D7) — the
   // side-effecting email test action split out of the diagnostics VIEW
   // capability. VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT; POST /email/test
   // is gated by this permission, never by SystemDiagnosticsView. Granted to the
   // Admin preset only; the Maintainer preset does NOT receive it by default.
   SystemEmailTest: "system.email.test",
-  // SystemInfoView (system.info.view): UNRESOLVED — GET /system/info is public
-  // today, so no role needs this perm. Retained pending product decision
-  // (P4-G-04); removing it is out of P4-C1 scope.
+  // SystemInfoView (system.info.view): GET /system/info is unauthenticated, so
+  // no route gates on this permission. Retained pending a product decision on
+  // whether system info needs a gated variant.
   SystemInfoView: "system.info.view",
   // SystemAutoSubmit / SystemHeartbeatScan / SystemLifecycleReconcile:
   // System-actor-only capabilities bound to synthetic actor identities in the
@@ -165,8 +160,8 @@ export const Permission = {
   SystemHeartbeatScan: "system.heartbeat_scan",
   SystemLifecycleReconcile: "system.lifecycle_reconcile",
   // SystemIncidentCreate (system.incident.create): System-actor-only authority
-  // to create evidence-bearing incidents from a bounded detector (#304,
-  // ADR-014 §8 Gate A item 2). Held by the System preset only; creation is
+  // to create evidence-bearing incidents from a bounded detector
+  // (ADR-014 §8 Gate A item 2). Held by the System preset only; creation is
   // creation-only authority and implies no time-grant (Gate B stays CLOSED).
   SystemIncidentCreate: "system.incident.create",
 
@@ -175,8 +170,8 @@ export const Permission = {
   IncidentCreate: "incident.create",
   IncidentInvestigate: "incident.investigate",
   IncidentResolve: "incident.resolve",
-  // Admin-only Recovery Center read (J5-R0): organization-wide recovery queue
-  // and aggregate incident detail. NOT granted to Proctor (Proctor uses
+  // Admin-only Recovery Center read: organization-wide recovery queue and
+  // aggregate incident detail. NOT granted to Proctor (Proctor uses
   // IncidentView via assignment_scoped on the core incident routes).
   IncidentRecoveryView: "incident.recovery.view",
 
@@ -184,13 +179,13 @@ export const Permission = {
   ExamProctorAssignmentView: "exam.proctor_assignment.view",
   ExamProctorAssignmentManage: "exam.proctor_assignment.manage",
 
-  // §4.12 Teacher-to-Course assignments (issue #286) — Admin-only scope
-  // management. The carrier grants zero capabilities by itself.
+  // §4.12 Teacher-to-Course assignments (ADR-015-style scope management) —
+  // Admin-only. The carrier grants zero capabilities by itself.
   CourseTeacherAssignmentView: "course.teacher_assignment.view",
   CourseTeacherAssignmentManage: "course.teacher_assignment.manage",
 
-  // §4.13 Grader-to-Exam assignments (issue #296) — Admin-only scope
-  // management. The carrier grants zero capabilities by itself.
+  // §4.13 Grader-to-Exam assignments — Admin-only scope management. The
+  // carrier grants zero capabilities by itself.
   ExamGraderAssignmentView: "exam.grader_assignment.view",
   ExamGraderAssignmentManage: "exam.grader_assignment.manage",
 } as const;
@@ -202,8 +197,8 @@ export type PermissionKey = (typeof Permission)[keyof typeof Permission];
 
 /**
  * Scope model. `school`, `grading_task` are deferred (no tables) and therefore
- * intentionally absent. `question` is a resource, not an enforced scope, in
- * Phase 3 (ADR §5.4) — not listed as a scope.
+ * intentionally absent. `question` is a resource, not an enforced scope
+ * (ADR §5.4) — not listed as a scope.
  */
 export const Scope = {
   System: "system",

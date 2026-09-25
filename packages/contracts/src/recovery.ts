@@ -443,9 +443,9 @@ export const ExamRecoveryContextSchema = z.object({
 
 export type ExamRecoveryContext = z.infer<typeof ExamRecoveryContextSchema>;
 
-// ── Proctor Recovery Center (J6, #303) — Proctor Operations projections ──
+// ── Proctor Recovery Center — Proctor Operations projections ──
 //
-// PROJECTION (#606 D1): this is the narrow Proctor-OPERATIONS projection —
+// PROJECTION: this is the narrow Proctor-OPERATIONS projection —
 // operational incident creation / investigation / documentation / evidence
 // linking. It is consumed by BOTH caller authorities: an Admin caller reads it
 // organization-wide (compatibility superset, same model as
@@ -453,8 +453,7 @@ export type ExamRecoveryContext = z.infer<typeof ExamRecoveryContextSchema>;
 // call it "Proctor-only collection": the effective collection is reported per
 // response by `collectionScope`, never inferred from the projection name.
 //
-// FIELD SCOPE (EXAM-303 authority freeze F3, human-gate corrective
-// 2026-09-12): these projections expose ONLY incident-domain truth an assigned
+// FIELD SCOPE: these projections expose ONLY incident-domain truth an assigned
 // Proctor already has read authority over. They deliberately OMIT every Admin
 // recovery-only field the shared repo happens to carry: time-adjustment
 // ledger/summaries, auditReferences, activeProctors, candidate/account
@@ -481,7 +480,7 @@ export const ProctorRecoveryWorklistItemSchema = z.object({
  * `active_assignments`). It reports NOTHING else: not the projection identity,
  * not the caller's role or permissions, and not the caller's allowed actions.
  * The frontend MUST present this fact, never re-derive it from role,
- * capabilities, or route (#606 D1 §3/§5).
+ * capabilities, or route.
  */
 export const ProctorRecoveryCollectionScopeSchema = z.enum([
   "organization",

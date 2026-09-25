@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-// ── Test Email (M3 — Email Outbox Backend Foundation) ────────────
-
 /**
  * Request body for `POST /api/email/test`. `to` is validated as an email to
  * prevent the endpoint from becoming an open relay and to reject malformed

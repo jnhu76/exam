@@ -3,7 +3,7 @@ import { passwordField } from "./passwordPolicy.js";
 import { TimingModeEnum } from "./exam.js";
 import { optionalEmailField } from "./emailField.js";
 
-// ── Candidate Exam Summary (Phase 1 derived contract) ─────────────
+// ── Candidate Exam Summary (derived contract) ─────────────────────
 
 /**
  * All possible availability statuses for a candidate's view of an exam,

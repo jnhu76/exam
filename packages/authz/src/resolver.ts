@@ -6,10 +6,8 @@
  * §Scope Resolver Performance (§22.2), and cross-cutting invariant §3.4
  * (Organization Anchor).
  *
- * This module defines the **contract**. The resource-aware resolvers
- * (attempt/exam/course/candidate/own_attempt/own_score/grading) are
- * **interfaces** that RBAC-M10 / PROCTOR-M1 / GRADING-M1 implement behind
- * their own tests, against the integrity rules documented below.
+ * This module defines the **contract**. Server-side implementations live in
+ * `apps/api/src/authz/resolvers/` and MUST honor the integrity rules below.
  *
  * ─── Integrity rules every resource resolver MUST implement (ADR §22.1, §3.4) ───
  *
@@ -20,7 +18,7 @@
  *    silently allow (ADR §22.1 invariant; §3.9 never fail open).
  * 4. PostgreSQL is the source of truth. Redis must not decide authorization.
  * 5. Hot-path resolvers (attempt/exam/own_attempt) target ≤ 2 DB reads and use
- *    request-local caching (ADR §22.2). Cross-request caching is Phase 4 only.
+ *    request-local caching (ADR §22.2).
  *
  * Frozen parent links (immutable after creation): attempt→exam, answer→attempt,
  * enrollment→exam, grading_entry→attempt. Mutable (with audit): exam→course,

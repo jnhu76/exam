@@ -23,7 +23,7 @@ export const MisconductFlagSchema = z.object({
 export type MisconductFlagDTO = z.infer<typeof MisconductFlagSchema>;
 
 /**
- * Attempt lifecycle status on the wire (#542): mirrors `@exam/domain`
+ * Attempt lifecycle status on the wire: mirrors `@exam/domain`
  * AttemptStatus. `grading` is not a member — terminal grading closes
  * `submitted → graded` transactionally and the durable grading-pipeline
  * state is `gradingStatus`, so no attempt ever persists or carries the
@@ -42,7 +42,7 @@ export type AttemptStatusValue = z.infer<typeof AttemptStatusEnum>;
 
 /**
  * Zod enum of reasons a save-answer request may be rejected by the server.
- * INVALID_ANSWER (#301) is additive: the payload shape failed validation
+ * INVALID_ANSWER is additive: the payload shape failed validation
  * against the frozen question's answer grammar (e.g. a rich text_response
  * answer that is not a valid ContentDocumentV1).
  */
@@ -108,7 +108,7 @@ export const QuestionSnapshotSchema = z.object({
     fillBlankCaseSensitive: z.boolean().optional(),
   }),
   order: z.number().int(),
-  // P3-L0-1: frozen grading source (dual-layer). Historical JSONB rows
+  // Frozen grading source (dual-layer). Historical JSONB rows
   // predating this field omit the key; the transform normalizes missing
   // values to null so legacy snapshots parse without migration.
   rubric: z
@@ -398,7 +398,7 @@ export type RestoreAttemptResponse = z.infer<
   typeof RestoreAttemptResponseSchema
 >;
 
-// ── Proctor Incident (P3-M9) ────────────────────────────────────
+// ── Proctor Incident ─────────────────────────────────────────────
 
 /**
  * Allowed incident types for proctor incident logging v0.
@@ -444,19 +444,16 @@ export type MarkProctorIncidentResponse = z.infer<
 
 // ── Force Submit (Admin) ──────────────────────────────────────────
 //
-// The legacy `ForceSubmitRequestSchema` (optional `reason`, no operationId)
-// was REMOVED in J5-I1C Slice 2: the operation-aware
-// {@link ForceSubmitWithOperationRequestSchema} below is the only accepted
-// force-submit wire shape (J5-R0 §8.1/§8.2 — required canonical reason +
-// client-generated operationId). The receipt payload schemas below carry the
-// canonical request identity.
+// {@link ForceSubmitWithOperationRequestSchema} is the ONLY accepted
+// force-submit wire shape: required canonical reason + client-generated
+// operationId (audit §4.1, J5-R0 §8.1/§8.2). The receipt payload schemas below
+// carry the canonical request identity.
 
-// ── Attempt Command Receipts (J5-I1C Slice 1) ─────────────────────
+// ── Attempt Command Receipts ──────────────────────────────────────
 //
 // Durable, operationId-keyed command-receipt contracts for the two dangerous
-// Attempt commands (`force_submit`, `misconduct_mark`). Both routes are live
-// on these shapes (force submit since J5-I1C Slice 2; misconduct mark via
-// `MisconductMarkWithOperationRequestSchema` below).
+// Attempt commands (`force_submit`, `misconduct_mark`). Both routes accept only
+// these shapes.
 //
 // See docs/archive/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§6.
 
@@ -534,7 +531,7 @@ export type ForceSubmitRequestPayload = z.infer<
  *
  * `notes` is `.trim()`-ed at this canonical layer so the durable payload
  * agrees with {@link MisconductMarkWithOperationRequestSchema} and the
- * domain canonicalizer (review J5-I1C0 PR #261 P1-2): without the trim, a
+ * domain canonicalizer: without the trim, a
  * `notes: "  x  "` payload would persist with surrounding whitespace while
  * the wire request / domain canonicalizer would store `"x"` — three
  * representations of the same operation identity. The trim here makes the
@@ -553,8 +550,8 @@ export type MisconductMarkRequestPayload = z.infer<
 
 /**
  * operationId-carrying force-submit request (audit §4.1, J5-R0 §8.1/§8.2).
- * The ONLY accepted wire shape for `POST /admin/attempts/:attemptId/force-submit`
- * since J5-I1C Slice 2 (the legacy optional-reason shape was removed).
+ * The ONLY accepted wire shape for
+ * `POST /admin/attempts/:attemptId/force-submit`.
  * `reason` is required, trimmed, 1..500. `.strict()` rejects unknown fields
  * (the wire request is the operation identity input).
  */
@@ -589,9 +586,7 @@ export type MisconductMarkWithOperationRequest = z.infer<
 /**
  * The immutable committed fact stored in a receipt's `result_payload` jsonb and
  * returned verbatim on replay (audit §4.2/§4.4). A discriminated union on
- * `commandType` freezes the FULL per-command result shapes (overnight
- * hardening: the previous envelope-only union carried no committed fact, so a
- * replay could not tell the client what the original command actually did).
+ * `commandType` freezes the FULL per-command result shapes.
  * Note: the `commandType` discriminator is duplicated inside the jsonb payload
  * so the stored fact is self-describing and the union is discriminable; the
  * audit §4.2/§4.4 field sets are preserved verbatim.
@@ -643,10 +638,10 @@ export type AttemptCommandReceiptRequestPayload = z.infer<
 /**
  * A durable attempt command receipt record (the DB row projection, audit §7).
  * This is the internal record contract; the wire response contract
- * {@link AttemptCommandReceiptResponseSchema} below intentionally does not leak
- * every internal column (e.g. `actorId` surfacing is deferred to the route
- * slices per audit §4). The jsonb payloads are bound to the frozen canonical /
- * result unions so a row with a mismatched payload shape cannot be expressed.
+ * {@link AttemptCommandReceiptResponseSchema} below intentionally omits the
+ * internal column set (no `actorId`, `organizationId`, or `attemptId`). The
+ * jsonb payloads are bound to the frozen canonical / result unions so a row
+ * with a mismatched payload shape cannot be expressed.
  */
 export const AttemptCommandReceiptRecordSchema = z
   .object({
@@ -701,10 +696,10 @@ export type AttemptCommandReceiptRecord = z.infer<
  *
  * A replay does not write a new row — it returns the original receipt's fact.
  *
- * The outer `commandType` and the inner `resultPayload.commandType` must
- * agree (review J5-I1C0 PR #261 P1-2): a replay response claiming two
- * different command identities is corrupted and must be rejected. This
- * mirrors the {@link AttemptCommandReceiptRecordSchema} consistency rule — a
+ * The outer `commandType` and the inner `resultPayload.commandType` must agree:
+ * a replay response claiming two different command identities is corrupted and
+ * must be rejected. This mirrors the
+ * {@link AttemptCommandReceiptRecordSchema} consistency rule — a
  * discriminator-by-disposition wrapper cannot express cross-field binding by
  * itself, so a `superRefine` is layered on top of the union.
  */
@@ -946,8 +941,11 @@ export const QueueStatusResponseSchema = z.object({
 export type QueueStatusResponse = z.infer<typeof QueueStatusResponseSchema>;
 
 /**
- * #292 — operator visibility over the durable admission queue (Admin-only;
- * automatic policy owns admission, so this surface is read-only).
+ * Operator visibility over the durable admission queue. READ-ONLY by design:
+ * admission is owned by the automatic batch policy derived from the frozen
+ * exam flags, so there are no operator actions to authorize or audit beyond
+ * this scoped view. Reachable by Admin and by course-assignment-scoped
+ * Teachers (ExamView + teacherAccess).
  */
 export const AdmissionItemSchema = z.object({
   candidateId: z.string().uuid(),
@@ -976,7 +974,7 @@ export type ExamAdmissionsResponse = z.infer<
  * Detailed exam view for a candidate, including exam metadata, control flags, attempt history,
  * availability status, and the recommended primary action.
  *
- * #291 Phase A: `durationMinutes` is nullable exactly like `ExamSchema` — it is
+ * `durationMinutes` is nullable exactly like `ExamSchema` — it is
  * null for deadline and untimed modes (no personal time limit). The canonical
  * `timingMode` (same authority as `CandidateExamSummarySchema`) is exposed so
  * the client keys its "不限时"/countdown copy on the mode, never on a null
@@ -1124,7 +1122,7 @@ export const CandidateTakeSnapshotSchema = z.object({
   lockReason: LockReasonEnum.optional(),
   resultVisibility: VisibilityEnum,
   answerVisibility: VisibilityEnum,
-  // #291 Phase A: the canonical timing mode. The client renders the personal
+  // The canonical timing mode. The client renders the personal
   // countdown ONLY for timed_window — it must not infer the mode from a null
   // effectiveDeadline.
   timingMode: TimingModeEnum,

@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 /**
- * Client event categories. `log` is the general frontend logger category;
- * `exam_telemetry` and `proctor` are reserved for future Phase 2+ runtime
- * instrumentation and are accepted by the contract now so the schema does
- * not need a breaking change later.
+ * Client event categories. `log` is the general frontend logger category,
+ * `exam_telemetry` the candidate runtime telemetry channel, and `proctor` the
+ * server-revalidated proctor monitoring rows. The union is the wire
+ * vocabulary: an unknown kind is rejected by this closed enum.
  */
 export const ClientEventKindEnum = z.enum(["log", "exam_telemetry", "proctor"]);
 /** Type for a client event kind. */

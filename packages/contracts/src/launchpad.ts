@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { passwordField } from "./passwordPolicy.js";
 
-// ── Launchpad (first-install only, P7-C1) ──────────────────────────
+// ── Launchpad (first-install only) ───────────────────────────────
 
 /**
  * Response schema for the installation-status probe.

@@ -41,17 +41,6 @@ export const GradingStatusEnum = z.enum([
   "fully_graded",
 ]);
 
-/**
- * Schema for a single manual grading entry — one grader's score + comment
- * for one subjective question within one attempt. Uniqueness of
- * (attemptId, questionId) is enforced at the DB layer.
- *
- * P3-L0-2E Slice 3: manual grading entries now live in
- * `attempt_grading_entries` (status `completed_manual`). The legacy
- * `manual_grading_entries` table and its dedicated DTO are removed; the
- * public grading-details/grade-question response shapes remain unchanged.
- */
-
 // ── Grading Queue (P2D-J3) ───────────────────────────────────────
 
 /**
@@ -248,7 +237,7 @@ const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
 });
 
 /**
- * Reason the full result is withheld in the hidden response variant (P2D-J5a).
+ * Reason the full result is withheld in the hidden response variant.
  *
  * - `not_graded` — grading is incomplete or pending manual scoring; the result
  *   is not yet computable.
@@ -385,7 +374,7 @@ export type ScoreListResponse = z.infer<typeof ScoreListResponseSchema>;
 // ── Export ────────────────────────────────────────────────────────
 
 /**
- * Request schema for exporting scores for a given exam. Currently supports CSV format.
+ * Request schema for exporting scores for a given exam.
  */
 export const ExportScoresRequestSchema = z.object({
   examId: z.string().uuid(),

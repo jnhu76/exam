@@ -1,18 +1,11 @@
 /**
- * Phase 3 role preset matrix (RBAC-M2).
+ * Role preset matrix (RBAC-M2).
  *
- * Mirrors the ADR §Role Presets and §Role → Permission Matrix exactly.
- * These are **default grants** (preset permissions). Scope narrowing per
- * resource is a SEPARATE enforcement layer, NOT applied here:
- *   - Proctor@exam: ENFORCED (exam_proctor_assignments + ProctorAssignmentGate
- *     on scoped proctor routes).
- *   - Teacher@course: ENFORCED (issue #286 — teacher_course_assignments
- *     carrier + teacherAccess gate + SQL-side LIST filtering; see the
- *     Teacher section comment below).
- *   - Grader@exam: ENFORCED (issue #296 — grader_exam_assignments carrier +
- *     graderAccess gate on grading detail/write + SQL-side grading-queue
- *     LIST filtering before pagination/count; see the Grader section
- *     comment below).
+ * These are **default grants** (preset permissions) and the runtime preset
+ * authority. ADR §Role Presets names the matrix; this file is what the API
+ * reads. Scope narrowing per resource is a SEPARATE enforcement layer, NOT
+ * applied here — its owner is the per-route declaration in apps/api
+ * (scopedCapability teacher/proctor/grader access + SQL-side LIST filters).
  *
  * Boundary invariants encoded here (ADR §7 review checklist):
  *  - Admin is a compatibility superset (no Candidate-own, no System-only).
@@ -37,7 +30,7 @@ export interface RolePreset {
   label: string;
   /** One-line purpose from the ADR. */
   purpose: string;
-  /** Immutable built-in preset (custom roles remain Phase 4). Authority lives in these code constants, not in DB rows (ADR-010 2026-09-25 amendment). */
+  /** Immutable built-in preset. Authority lives in these code constants, not in DB rows (ADR-010 2026-09-25 amendment). */
   isSystem: boolean;
   /** Whether a human can be assigned this role via user management. */
   assignable: boolean;
@@ -122,16 +115,16 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // System / diagnostics (current /system/diagnostics is Admin-gated)
   Permission.SystemHealthView,
   Permission.SystemDiagnosticsView,
-  // P7-E2A (ADR-017 D8): the business-integrity diagnostics block is an
+  // (ADR-017 D8) the business-integrity diagnostics block is an
   // Admin-only business-domain surface; Maintainer never receives it.
   Permission.SystemBusinessIntegrityView,
-  // P7-E2B: backup evidence + restore-readiness drill evidence read views.
+  // Backup evidence + restore-readiness drill evidence read views.
   Permission.SystemBackupView,
   Permission.SystemRestoreReadinessView,
-  // P7-E2C: the business-owner summary dashboard is Admin-only business
+  // The business-owner summary dashboard is Admin-only business
   // observation — never granted to Maintainer.
   Permission.SystemBusinessSummaryView,
-  // P7-E3 (ADR-017 D9): Admin is the SOLE operational-policy intent owner.
+  // ADR-017 D9: Admin is the SOLE operational-policy intent owner.
   Permission.SystemOpsPolicyView,
   Permission.SystemOpsPolicyManage,
   // P7-E2A (ADR-017 D7): email test is a side effect, split out of the
@@ -161,41 +154,33 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
 
 // ───────────────────────── Teacher (course/exam manager) ─────────────────────────
 //
-// F-04 — IMPLEMENTED (issue #286): Teacher@Course scope is enforced at
-// runtime. The teacher_course_assignments carrier (0036) persists the
-// Teacher↔Course episodes; the course/question/exam routes resolve the scope
-// fresh from the DB per request (requireScopedCapability with
-// teacherAccess: "course_assignment_scoped") and LIST routes filter in SQL
-// BEFORE pagination. Authority = capability × assignment: the markers below
-// name the capabilities whose RESOURCE reach is course-scoped for a
-// non-Admin actor. Admin keeps its org-wide short-circuit.
-//   Marker boundary rule: a marker is applied to every permission whose
-//   resource lives under a course (candidate visibility for course enrollment,
-//   course, question, exam, enrollment, result, score). Organization-level
-//   permissions (OrganizationView) are NOT course resources and stay unmarked.
-//   Since #286 the markers are descriptive of the enforced narrowing; the
-//   enforcement itself lives in apps/api (scopedCapability teacherAccess +
-//   LIST scope filters) and is proven by the teacherCourseScope suite.
+// Authority = capability × assignment, not capability alone. Teacher@Course
+// reach is enforced in apps/api: the teacher_course_assignments carrier
+// persists the Teacher↔Course episodes, the course/question/exam routes declare
+// teacherAccess: "course_assignment_scoped" (resolved fresh per request), and
+// LIST routes filter in SQL BEFORE pagination. Admin keeps its org-wide
+// short-circuit. Which capabilities narrow under this rule is owned by those
+// route declarations, not by this preset.
 
 const TEACHER_PERMISSIONS: readonly PermissionKey[] = [
   Permission.OrganizationView,
-  Permission.CandidateView, // course-scoped for non-Admin (enforced, #286)
-  Permission.CourseView, // course-scoped for non-Admin (enforced, #286)
-  Permission.CourseCreate, // course-scoped for non-Admin (enforced, #286)
-  Permission.CourseUpdate, // course-scoped for non-Admin (enforced, #286)
-  Permission.QuestionView, // course-scoped for non-Admin (enforced, #286)
-  Permission.QuestionCreate, // course-scoped for non-Admin (enforced, #286)
-  Permission.QuestionUpdate, // course-scoped for non-Admin (enforced, #286)
-  Permission.QuestionDelete, // course-scoped for non-Admin (enforced, #286)
-  Permission.QuestionImport, // course-scoped for non-Admin (enforced, #286)
-  Permission.ExamView, // course-scoped for non-Admin (enforced, #286)
-  Permission.ExamCreate, // course-scoped for non-Admin (enforced, #286)
-  Permission.ExamUpdate, // course-scoped for non-Admin (enforced, #286)
-  Permission.ExamPublish, // course-scoped for non-Admin (enforced, #286)
-  Permission.ExamClose, // course-scoped for non-Admin (enforced, #286)
-  Permission.ExamEnrollmentManage, // course-scoped for non-Admin (enforced, #286)
-  Permission.ExamResultPublish, // course-scoped for non-Admin (enforced, #286)
-  Permission.ScoreAllView, // course-scoped for non-Admin (enforced, #286)
+  Permission.CandidateView,
+  Permission.CourseView,
+  Permission.CourseCreate,
+  Permission.CourseUpdate,
+  Permission.QuestionView,
+  Permission.QuestionCreate,
+  Permission.QuestionUpdate,
+  Permission.QuestionDelete,
+  Permission.QuestionImport,
+  Permission.ExamView,
+  Permission.ExamCreate,
+  Permission.ExamUpdate,
+  Permission.ExamPublish,
+  Permission.ExamClose,
+  Permission.ExamEnrollmentManage,
+  Permission.ExamResultPublish,
+  Permission.ScoreAllView,
   // Explicitly NOT granted: GradingAnswerView, GradingScoreWrite, proctor perms.
 ];
 
@@ -210,22 +195,20 @@ const PROCTOR_PERMISSIONS: readonly PermissionKey[] = [
   Permission.IncidentView,
   Permission.IncidentCreate,
   Permission.IncidentInvestigate,
-  // AttemptMisconductMark + AttemptForceSubmit REMOVED in J4-I1B (ADR-015
-  // §13): the pre-existing org-wide grants were a current, reachable risk
-  // (M11-R0 reality audit G1/G2). The routes stay scoped
-  // (`proctorAccess = admin_only`) and the permissions remain valid Admin
-  // grants. A future dangerous-permissions policy profile must re-add them
-  // with its own activation gate — they are NOT deferred Proctor capabilities.
+  // AttemptMisconductMark + AttemptForceSubmit are deliberately NOT Proctor
+  // capabilities: the routes stay scoped (`proctorAccess = admin_only`) and the
+  // permissions remain valid Admin grants. A future dangerous-permissions
+  // policy profile may re-add them ONLY with its own activation gate — they are
+  // not deferred Proctor capabilities.
   // Operator time grant (AttemptTimeGrant) is Admin-only; Proctor has no grant path.
   // Explicitly NOT granted: grading.*, ExamResultPublish, ScoreAllView, ExamPublish.
 ];
 
 // ───────────────────────── Grader (manual scoring) ─────────────────────────
 //
-// Issue #296 — IMPLEMENTED: Grader@Exam scope is enforced at runtime. The
-// grader_exam_assignments carrier (0037) persists the Grader↔Exam episodes;
-// grading detail/write routes resolve the attempt→exam chain fresh from the
-// DB per request (requireScopedCapability with graderAccess:
+// Grader@Exam reach is enforced at runtime. The grader_exam_assignments carrier
+// persists the Grader↔Exam episodes; grading detail/write routes resolve the
+// attempt→exam chain fresh from the DB per request (graderAccess:
 // "exam_assignment_scoped") and the grading-queue LIST filters in SQL BEFORE
 // pagination/count. Authority = capability × assignment: the Grader preset
 // capabilities above are NECESSARY but not sufficient — without an active
@@ -245,17 +228,14 @@ const GRADER_PERMISSIONS: readonly PermissionKey[] = [
 // ───────────────────────── Maintainer (system operations owner) ─────────────────────────
 
 /**
- * Application Maintainer preset (P7-E2A — ADR-017 D2/D3 Plane B, amends
- * ADR-010 role preset set).
+ * Application Maintainer preset (ADR-017 D2/D3 Plane B, amends ADR-010 role
+ * preset set).
  *
  * HARD CONSTRAINT: ONLY operational observation capabilities, zero business
  * permissions. No `user.*`, `candidate.*`, `course.*`, `question.*`, `exam.*`,
  * `grading.*`, `score.*`, no incident business mutation, no force-submit /
  * time-grant / misconduct, no result publish, no email test side effect, no
  * permanently-forbidden execution capability (ADR-017 D4).
- *
- * `system.backup.view` / `system.restore_readiness.view` /
- * `system.ops.policy.view` are added when their E2B/E3 read surfaces ship.
  */
 const MAINTAINER_PERMISSIONS: readonly PermissionKey[] = [
   Permission.SystemHealthView,
