@@ -2282,7 +2282,7 @@ export function deriveStatusActionCandidates(
  * - `force_submit`: `voided` is the only truly invalid state (the Admin
  *   force-submit route; `submitted` rows are recovered to `graded`, and
  *   `grading`/`graded` are idempotent no-ops).
- * - `misconduct_mark`: allowed on ANY attempt status (§16).
+ * - `misconduct_mark`: allowed on ANY attempt status (no status excluded).
  *
  * These are status-derived candidates ONLY. The route layer further filters
  * by the caller's capabilities (attempt.time.grant / attempt.force_submit /

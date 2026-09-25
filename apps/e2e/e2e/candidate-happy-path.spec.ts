@@ -38,7 +38,7 @@ test.describe("candidate happy path", () => {
     request,
   }) => {
     // Seed: objective true_false + a text_response question. Per the approved
-    // protocol (exam-protocol.md §1.1), text_response is an independent
+    // protocol (docs/architecture/exam-runtime.md §1.1), text_response is an independent
     // QuestionType — NOT fill_blank + standardAnswer=null.
     const seeded = await seedExam(request, "happy-text", {
       questionAnswer: true,

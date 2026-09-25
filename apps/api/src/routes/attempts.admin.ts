@@ -38,7 +38,8 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   /**
    * POST /admin/attempts/:attemptId/misconduct — Admin records a misconduct
    * flag on an attempt (informational; does not change status). Allowed on
-   * any attempt status (ADR-014 §16).
+   * any attempt status (ADR-014 §1: incident state is orthogonal to Attempt
+   * status).
    *
    * The request carries an operationId (client-generated command identity).
    * The execution is a durable, operationId-keyed command arbitrated by the

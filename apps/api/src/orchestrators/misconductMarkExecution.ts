@@ -48,7 +48,7 @@
  *     the projection write under concurrent marks)
  *   → reject missing attempt (404, 0 receipt / 0 audit / 0 mutation)
  *   → plan the outcome (always `applied` — misconduct is allowed on ANY status
- *     per ADR-014 §16; there is no `no_change` for misconduct, every new
+ *     per ADR-014 §1; there is no `no_change` for misconduct, every new
  *     operationId is a real append)
  *   → INSERT the receipt row (FIRST write, commandType=`misconduct_mark`)
  *   → UPDATE `exam_attempts.misconduct` projection (the MisconductFlag this

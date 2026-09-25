@@ -171,7 +171,7 @@ export function hasSubjectiveQuestions(questions: QuestionSnapshot[]): boolean {
 /**
  * Returns true when any question in the snapshot requires manual grading.
  *
- * P3-L0-2C authoritative classification seam (exam-protocol.md §1.1, §1.4):
+ * P3-L0-2C authoritative classification seam (docs/architecture/exam-runtime.md §1.1, §1.4):
  * `text_response` is the canonical manual-graded QuestionType —
  * `gradingMode = manual` is derived from `QuestionType`, NOT from
  * `standardAnswer`. The protocol explicitly states

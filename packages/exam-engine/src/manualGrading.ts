@@ -107,7 +107,7 @@ export async function gradeQuestion(
   // gradeQuestion is the command that completes a pending_manual entry while
   // the attempt is submitted + pending_manual; it REJECTS score-revision /
   // re-grade attempts. Lifecycle guards run BEFORE any workset lookup or score
-  // mutation so a rejected call cannot touch truth. exam-protocol.md §3.3:
+  // mutation so a rejected call cannot touch truth. docs/architecture/exam-runtime.md §3.3:
   // submitted(pending_manual) → graded(fully_graded) is one-way; post-terminal
   // score revision is not part of the current protocol.
   if (attempt.status !== "submitted") {

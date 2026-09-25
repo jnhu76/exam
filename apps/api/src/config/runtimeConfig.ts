@@ -196,7 +196,7 @@ export interface SmtpConfig {
 /**
  * Email runtime config (M3). Disabled by default so a bare deployment sends
  * nothing, needs no SMTP secret, and touches no network. See
- * `docs/architecture/email-config.md`.
+ * `docs/operations/email-config.md`.
  */
 export interface EmailConfig {
   enabled: boolean;
@@ -486,10 +486,10 @@ function resolveEmailConfig(
   // or misconfigured env says so. This prevents tests from accidentally
   // constructing a real nodemailer transport (and potentially sending real
   // mail via POST /api/email/test) when a dev .env with EMAIL_TRANSPORT=smtp
-  // leaks into the test runtime. See docs/architecture/email-config.md §6.
+  // leaks into the test runtime. See docs/operations/email-config.md §6.
   if (opts.isTestLike && transport === "smtp") {
-    // TODO: replace with the app logger once one is available at config-load
-    // time. Using stderr directly keeps this side-effect free of fastify.
+    // WHY: config resolution runs before the fastify app (and its logger)
+    // exists, so this diagnostic writes to stderr and stays fastify-free.
     process.stderr.write(
       "[runtimeConfig] EMAIL_TRANSPORT=smtp ignored in test/e2e/ci mode; forcing 'fake' to prevent real SMTP/network use in tests.\n",
     );

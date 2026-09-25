@@ -147,8 +147,12 @@ export function parseImportCsv(
 /**
  * Detects whether a parsed import row duplicates an existing candidate
  * by checking the unique identity field or username.
+ *
+ * AUTHORITY: `routes/candidate.ts` requires exactly one field to carry
+ * `unique`, so the first match here IS the configured identity field. If that
+ * constraint is ever relaxed to allow several, every unique field must be
+ * checked instead of just the first.
  */
-// TODO: follow-up — iterate all unique fields if CandidateField constraint is relaxed to allow multiple
 export function detectDuplicate(
   row: ParsedImportRow,
   fieldConfigs: CandidateFieldConfig[],
