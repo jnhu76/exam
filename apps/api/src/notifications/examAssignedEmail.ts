@@ -1,7 +1,7 @@
-// exam_assigned Email renderer (#299, first slice of #402).
+// exam_assigned Email renderer.
 //
 // Pure function over a structured payload, following the
-// `renderGradeNotificationEmail` content boundary (P5-N1-I2): server-generated
+// `renderGradeNotificationEmail` content boundary: server-generated
 // zh-CN copy, a single trusted absolute link, and no leakage class beyond the
 // exam title — no exam state, no questions, no rubric. The Inbox notification
 // is the awareness channel; this Email is the offline recall.

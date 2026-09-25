@@ -3,7 +3,7 @@ import { RuntimeConfigError } from "@exam/domain";
 import type { RedisConfig, RedisMode } from "../config/runtimeConfig.js";
 
 /**
- * Redis runtime lifecycle (P7 — Redis first real adoption).
+ * Redis runtime lifecycle.
  *
  * Models the Redis client lifecycle explicitly instead of a boolean:
  * `disabled | connecting | ready | degraded | closing`, plus a
@@ -22,7 +22,7 @@ import type { RedisConfig, RedisMode } from "../config/runtimeConfig.js";
  *   runtime (reason `command_failure`) regardless of the transport status —
  *   ioredis `commandTimeout` rejects the command without closing the
  *   connection, so `client.status === "ready"` does NOT mean operational
- *   health (P7 review P1-3);
+ *   health;
  * - probe-based recovery: while degraded, a bounded background PING probe
  *   restores `ready` only after the probe succeeds (never a random business
  *   command silently flipping state back).
@@ -234,8 +234,8 @@ export class RedisRuntime {
           "degraded",
           isStartupTimeout ? "startup_timeout" : "connection_lost",
         );
-        // Never echo the raw REDIS_URL here: it may carry a password
-        // (P7 review P1-2). Only the host:port is operator-usable.
+        // Never echo the raw REDIS_URL here: it may carry a password.
+        // Only the host:port is operator-usable.
         throw new RuntimeConfigError(
           `REDIS_MODE=required: Redis did not become ready within ` +
             `${this.config.startupTimeoutMs}ms ` +
@@ -265,8 +265,7 @@ export class RedisRuntime {
    * command without closing the connection, so a transport-`ready` client
    * can be operationally broken (overload, half-open socket, hung server).
    * Degrading makes store selection consistent (optional → local,
-   * required → fail closed) instead of hitting broken Redis per request
-   * (P7 review P1-3).
+   * required → fail closed) instead of hitting broken Redis per request.
    */
   noteRedisCommandError(): void {
     if (this.stateInternal !== "ready") return;
@@ -434,7 +433,7 @@ export class RedisRuntime {
  * Describe a Redis endpoint for error messages WITHOUT credentials or the
  * raw URL: `host:port` only (or "configured Redis endpoint" when the URL is
  * unset/unparsable). The raw REDIS_URL must never be echoed — it may carry
- * a password (P7 review P1-2).
+ * a password.
  */
 export function describeRedisEndpoint(url: string | null): string {
   if (!url) return "configured Redis endpoint";

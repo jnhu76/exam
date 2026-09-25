@@ -1,6 +1,4 @@
-// P5-N1-I2 Slice 2 — grade_notification Email renderer.
-//
-// Authority: P5-N1-R0 §15 (frozen content boundary).
+// grade_notification Email renderer.
 //
 // The renderer is a PURE function over a structured payload. It does NOT
 // query repositories, does NOT call SMTP, and does NOT depend on Fastify.
@@ -8,9 +6,9 @@
 //   - building the payload from trusted sources (exam title from Exam row;
 //     actionPath from buildResultPublishedActionPath)
 //   - combining the actionPath with PUBLIC_WEB_ORIGIN via
-//     buildAbsoluteResultLink BEFORE passing the absolute URL here
+//     buildAbsoluteNotificationLink BEFORE passing the absolute URL here
 //
-// Content boundary (mirrors P3-R0 §6 leakage class):
+// Content boundary:
 //   subject: "考试结果已发布" (server-generated zh-CN)
 //   body:    examTitle (HTML-escaped) + a trusted link back to EXAM
 //   MUST NOT include: score, pass/fail, standard answers, rubric, grader
@@ -25,7 +23,7 @@ export interface GradeNotificationPayload {
   examTitle: string;
   /**
    * Absolute result URL = PUBLIC_WEB_ORIGIN + validated action path. The
-   * caller is responsible for combining via `buildAbsoluteResultLink` so the
+   * caller is responsible for combining via `buildAbsoluteNotificationLink` so the
    * renderer never sees a site-relative path or an unvalidated origin.
    */
   actionPath: string;
@@ -36,7 +34,7 @@ export interface GradeNotificationPayload {
  *
  * The output is server-generated zh-CN copy with the exam title interpolated
  * (escaped) and a single trusted link. No score, no pass/fail, no standard
- * answers, no rubric, no grader identity (P5-N1-R0 §15 / P3-R0 §6).
+ * answers, no rubric, no grader identity.
  */
 export function renderGradeNotificationEmail(
   payload: GradeNotificationPayload,

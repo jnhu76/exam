@@ -2,15 +2,15 @@
  * Vitest globalSetup: DB availability pre-check + test-DB ownership contract
  * + run-level exclusion lease.
  *
- * WHY the pre-check: @exam/api's integration tests (39 files) all use
- * `buildTestApp` in `beforeAll`, which opens a real PostgreSQL connection. When
+ * WHY the pre-check: @exam/api's integration tests all use `buildTestApp` in
+ * `beforeAll`, which opens a real PostgreSQL connection. When
  * the test DB is unreachable (container stopped, wrong port, slow startup), the
  * FIRST test file's `beforeAll` throws `ECONNREFUSED`, but vitest continues
  * running the file's sibling `it` blocks (see vitest issues #1213 / #1459 —
  * historical behavior). Those siblings then cascade with a misleading
  * `TypeError: Cannot read properties of undefined (reading 'app'/'db')`
- * because `ctx` was never assigned. The result: 60+ files × dozens of tests
- * all "failing" with an error that hides the actual root cause.
+ * because `ctx` was never assigned. The result: the whole run "fails" with an
+ * error that hides the actual root cause.
  *
  * OWNERSHIP CONTRACT (via `prepareTestDatabase`, @exam/db): an explicit
  * TEST_DATABASE_URL / TEST_DB_URL means the target database is operator-owned

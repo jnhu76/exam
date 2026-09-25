@@ -42,7 +42,7 @@ export type AuthzMetadata =
        */
       proctorAccess?: "assignment_scoped";
       /**
-       * Issue #286: present when the route enforces the Teacher-to-Course
+       * Present when the route enforces the Teacher-to-Course
        * assignment for non-Admin actors (`course_assignment_scoped`).
        * Parallel to proctorAccess; proves the runtime wiring matches the
        * registry.
@@ -82,11 +82,11 @@ declare module "fastify" {
      */
     ctx?: RuntimeRequestContext;
     /**
-     * Score preHandler's authoritative own/all decision (RBAC-M10-E). Set
+     * Score preHandler's authoritative own/all decision. Set
      * ONLY by `requireScoreCapability`'s preHandler after it arbitrates
      * ScoreAllView vs ScoreOwnView+ownership. Consumed by the score
      * publication handler to decide visibility — NEVER defaults; a missing
-     * signal is a wiring bug and surfaces as 503 AUTHZ_UNAVAILABLE (P1-4).
+     * signal is a wiring bug and surfaces as 503 AUTHZ_UNAVAILABLE.
      */
     scoreView?: "own" | "all";
   }
@@ -99,15 +99,9 @@ declare module "fastify" {
     requireRole: (
       roles: Role[],
     ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-    // NOTE: the dead legacy `requirePermission` decorator type was removed in
-    // P4-C1. It had zero route consumers and read only `ctx.permissions` (which
-    // is `[]` on every runtime context). The authoritative capability gate is
-    // `requireCapability` / `requireScopedCapability` / resource-aware gates.
-    // See docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
-    /** Phase 3 capability gate (RBAC runtime activation, PR #3). */
     requireCapability: (permission: PermissionKey) => AuthzPreHandler;
     /**
-     * Resource-aware capability gate (RBAC-M10-finish, P4-2A). Strict superset
+     * Resource-aware capability gate (ADR §3.4, §3.9). Strict superset
      * of requireCapability: same preset check, plus a DB-backed scope resolver
      * that verifies the resource's organization anchor + existence (ADR §3.4,
      * §3.9). Resolver denial mapping: resource_not_found -> 404;
@@ -117,12 +111,12 @@ declare module "fastify" {
      * additionally require an active Proctor-to-Exam assignment to the resolved
      * Exam for non-Admin actors (missing assignment -> 404 RESOURCE_NOT_FOUND).
      *
-     * Issue #286: pass `{ teacherAccess: "course_assignment_scoped" }` to
+     * Pass `{ teacherAccess: "course_assignment_scoped" }` to
      * additionally require an active Teacher-to-Course assignment to the
      * resolved Course for non-Admin actors (missing assignment -> 404
      * RESOURCE_NOT_FOUND).
      *
-     * Issue #296: pass `{ graderAccess: "exam_assignment_scoped" }` to
+     * Pass `{ graderAccess: "exam_assignment_scoped" }` to
      * additionally require an active Grader-to-Exam assignment to the
      * resolved Exam for non-Admin actors (missing assignment -> 404
      * RESOURCE_NOT_FOUND).
@@ -152,7 +146,7 @@ declare module "fastify" {
       reply: FastifyReply,
     ) => Promise<void>;
     /**
-     * Candidate-context capability gate (RBAC-M10-A archetype A). Preset-only
+     * Candidate-context capability gate. Preset-only
      * gate for `GET /candidate/exams` — the query is scoped to the candidate
      * profile in the handler (defense-in-depth). No DB resolver. Replies 401
      * if no ctx, 403 if the preset lacks the permission. Attaches runtime
@@ -160,7 +154,7 @@ declare module "fastify" {
      */
     requireCandidateContext: (permission: PermissionKey) => AuthzPreHandler;
     /**
-     * Candidate exam-eligibility gate (RBAC-M10-A archetype B). Capability +
+     * Candidate exam-eligibility gate. Capability +
      * eligibility for exam detail / queue / start. The exam must resolve under
      * the org anchor (ADR §3.4) AND the actor must resolve to a candidate
      * profile with an enrollment for the exam — server-derived, no client
@@ -174,7 +168,7 @@ declare module "fastify" {
       eligibilityDenialMode: EligibilityDenialMode,
     ) => AuthzPreHandler;
     /**
-     * Own-attempt capability gate (RBAC-M10-A archetype C/D). Capability +
+     * Own-attempt capability gate. Capability +
      * ownership for attempt view / take / answer-save / submit / heartbeat /
      * restore. The attempt must resolve under the org anchor AND its owner
      * (`candidateProfiles.userId`) must equal the actor. Anti-enumeration:

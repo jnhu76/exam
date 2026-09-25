@@ -1,9 +1,8 @@
-// Shared rendered-Email content contract (#300 convergence).
+// Shared rendered-Email content contract.
 //
-// Every production Email renderer (notifications/gradeNotificationEmail.ts,
-// identity/identityEmails.ts) returns this shape and escapes interpolated
-// values through `escapeEmailHtml`. Renderers stay separate pure functions —
-// this module only owns the ONE content shape and the ONE HTML escaping rule.
+// This module owns the ONE content shape and the ONE HTML escaping rule that
+// every production Email renderer returns. Renderers stay separate pure
+// functions.
 
 /** Rendered Email content handed to the outbox. */
 export interface RenderedEmailContent {

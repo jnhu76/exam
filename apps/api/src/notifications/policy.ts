@@ -1,25 +1,10 @@
 import type { EmailType, NotificationType } from "@exam/domain";
 
-// P5-N1-I2 — static channel policy + NotificationType -> EmailType mapping.
+// Static channel policy + NotificationType -> EmailType mapping.
 //
-// Authority: P5-N1-R0 §10 (static policy) + §14 (mapping); `exam_assigned`
-// added under #402/#299.
-//
-// Policy:
-//   result_published:
-//     Inbox = required
-//     Email = enabled when a normalized recipient email exists
-//   exam_assigned:
-//     Inbox = required
-//     Email = enabled when a normalized recipient email exists
-//
-// Mappings (exactly one entry per type):
-//   result_published -> grade_notification
-//   exam_assigned    -> exam_notification
-//
-// NotificationType and EmailType are INDEPENDENT string spaces. The mapping
-// is explicit and tested (apps/api/src/notifications/policy.test.ts); it is
-// NEVER inferred by string equality between the two unions.
+// NotificationType and EmailType are INDEPENDENT string spaces. The mapping is
+// explicit and tested (apps/api/src/notifications/policy.test.ts); it is NEVER
+// inferred by string equality between the two unions.
 
 /**
  * Maps a NotificationType to its operational EmailType, or null when no Email
@@ -42,8 +27,7 @@ export function resolveEmailTypeForNotification(
       return "exam_notification";
     default: {
       // Exhaustiveness guard: a NotificationType without a mapping is a
-      // compile error here. The cast is for the test-only hypothetical path;
-      // in production this branch is unreachable.
+      // compile error here.
       const _exhaustive: never = type;
       void _exhaustive;
       return null;

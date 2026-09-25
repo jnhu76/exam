@@ -11,14 +11,13 @@ const isCheckMode = process.argv.includes("--check");
 async function main() {
   const spec = await generateOpenAPISpec();
 
-  // Remove non-deterministic fields that would cause false drift.
+  // Deterministic output for --check: `servers` varies by environment and would
+  // show as a false diff. info.version is stable (hardcoded in config.ts);
+  // prettier keeps the committed file's formatting.
   const stable = JSON.parse(JSON.stringify(spec)) as Record<string, unknown>;
-  // Ensure info.version is stable (already hardcoded in config).
-  // Remove any server URL that might vary by environment.
   delete (stable as Record<string, unknown>).servers;
 
   const rawJson = JSON.stringify(stable, null, 2) + "\n";
-  // Format with prettier to match the committed file style.
   const json = await format(rawJson, { parser: "json" });
 
   if (isCheckMode) {

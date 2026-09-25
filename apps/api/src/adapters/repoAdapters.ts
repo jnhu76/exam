@@ -291,11 +291,7 @@ export function createTimeAdjustmentRepoAdapter(
 
 /** Adapts the DB attempt-grading-entry repo to the GradingWorksetRepository
  * interface expected by the exam-engine `materializeGradingWorkset` and
- * `gradeQuestion` functions, binding the request context (P3-L0-2E Slice 3).
- *
- * Slice 3 consolidates the manual-score write path onto this single adapter:
- * manual grading now updates existing `attempt_grading_entries` rows instead
- * of upserting into the legacy `manual_grading_entries` table. */
+ * `gradeQuestion` functions, binding the request context. */
 export function createGradingWorksetRepoAdapter(
   repo: ReturnType<typeof createAttemptGradingEntryRepo>,
   ctx: RequestContext,
@@ -410,7 +406,7 @@ export function createRestoreEngineRepos(
 }
 
 /**
- * #292 — adapts the DB admission repo (ctx-bound method style) to the
+ * Adapts the DB admission repo (ctx-bound method style) to the
  * engine's {@link ExamAdmissionRepository} port. Rows are structurally
  * identical; the adapter only binds the request context. Must be constructed
  * against the ACTIVE transaction's repo so the admission consume participates

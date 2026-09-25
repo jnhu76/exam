@@ -35,7 +35,7 @@ export interface EmailSenderConfig {
   /** Simulated transport latency for the fake sender (0 = immediate). */
   fakeDelayMs?: number;
   /**
-   * Test-only witness seam (#482): when set, `FakeEmailSender` writes this
+   * Test-only witness seam: when set, `FakeEmailSender` writes this
    * file the moment execution enters `send()`, BEFORE the simulated delay,
    * so a test can observe "send entered" with a real happens-before
    * guarantee (a queue-claim observation — status=processing — cannot
@@ -62,7 +62,7 @@ export class DisabledEmailSender implements EmailSender {
  * assertable. Never touches the network. `delayMs` simulates transport
  * latency before resolving/rejecting (0 = immediate).
  *
- * When `sendEnteredFile` is set (test/deployment-rehearsal seam, #482), the
+ * When `sendEnteredFile` is set (test/deployment-rehearsal seam), the
  * file is written synchronously on entry to `send()`, BEFORE the delay —
  * "witness exists" therefore implies "send body entered and the fake delay
  * is now in flight". The real SMTP path never writes it.
@@ -75,7 +75,7 @@ export class FakeEmailSender implements EmailSender {
   ) {}
   async send(_message: EmailMessage): Promise<EmailSendResult> {
     if (this.sendEnteredFile) {
-      // INVARIANT (#482): the witness must be on disk BEFORE the simulated
+      // INVARIANT: the witness must be on disk BEFORE the simulated
       // delay starts, so "witness exists" => "send entered and delay is in
       // flight". Written synchronously (no await before the delay timer) so
       // the ordering cannot race. A write failure fails the send: a silent
@@ -157,7 +157,6 @@ export class SmtpEmailSender implements EmailSender {
           ? info.messageId
           : null;
 
-      // Check accepted/rejected for single-recipient sends
       if (
         info &&
         Array.isArray(info.rejected) &&
@@ -221,16 +220,8 @@ function buildNodemailerTransport(smtp: SmtpOptions): Record<string, unknown> {
 }
 
 /**
- * Select the active sender from runtime config (M3 transport selection):
- *
- * | Condition                                    | Sender              |
- * | -------------------------------------------- | ------------------- |
- * | `enabled === false`                          | DisabledEmailSender |
- * | `enabled && transport === "fake"`            | FakeEmailSender     |
- * | `enabled && transport === "smtp"`            | SmtpEmailSender     |
- *
- * Invalid configuration fails fast: `smtp` transport without an SMTP host,
- * or `smtp` with no SMTP options, throws before any send is attempted.
+ * Select the active sender from runtime config. `smtp` transport without an
+ * SMTP host (or with no SMTP options) throws before any send is attempted.
  */
 export function createEmailSender(config: EmailSenderConfig): EmailSender {
   if (!config.enabled) {

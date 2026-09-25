@@ -2,7 +2,7 @@
  * Parallelism contract for the @exam/api vitest run (extracted from
  * vitest.config.ts so the invariants are unit-testable).
  *
- * Rules (ADR-007 Phase 5A/5B + round-3 contract):
+ * Rules (ADR-007 parallel isolation contract):
  *   1. Default is SERIAL (fileParallelism: false). Parallel is opt-in via a
  *      positive-integer `API_TEST_MAX_WORKERS` AND
  *      `TEST_DB_ISOLATION=worker-database` (per-worker PG databases).
