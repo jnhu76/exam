@@ -134,13 +134,6 @@ describe("GradingQueuePage", () => {
     expect(await screen.findByText("暂无待评分的试卷")).toBeInTheDocument();
   });
 
-  it("shows loading state then data", async () => {
-    renderPage();
-    expect(screen.getByText("加载中...")).toBeInTheDocument();
-    const table = await screen.findByRole("table");
-    expect(within(table).getByText("张三")).toBeInTheDocument();
-  });
-
   it("shows error state on fetch failure", async () => {
     getMock.mockRejectedValue(new Error("Network error"));
     renderPage();

@@ -245,11 +245,6 @@ describe("ExamDetailPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("renders publish button for draft", async () => {
-      renderPage();
-      expect(await screen.findByText("发布考试")).toBeInTheDocument();
-    });
-
     it("publishes exam successfully", async () => {
       postMock.mockResolvedValue({});
       const user = userEvent.setup();

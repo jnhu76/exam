@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { AppSidebar } from "./AppSidebar";
 import { AdminLayout } from "./AdminLayout";
 import { BrandHeader } from "./BrandHeader";
-import { BrandProvider, useBranding } from "./BrandProvider";
+import { BrandProvider } from "./BrandProvider";
 import { ExamLayout } from "./ExamLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
@@ -80,11 +80,6 @@ const teacherCandidate: MeResponse = {
   ],
 };
 
-function BrandingProbe() {
-  const branding = useBranding();
-  return <p>{branding.productName}</p>;
-}
-
 function renderWithProviders(ui: React.ReactElement, route = "/") {
   return render(
     <MemoryRouter initialEntries={[route]}>
@@ -96,20 +91,9 @@ function renderWithProviders(ui: React.ReactElement, route = "/") {
 }
 
 describe("branding", () => {
-  it("provides generic fallback branding", () => {
-    renderWithProviders(<BrandingProbe />);
-    expect(screen.getByText("考试平台")).toBeInTheDocument();
-  });
-
-  it("exposes product subtitle in branding", () => {
-    renderWithProviders(
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-      </Routes>,
-      "/login",
-    );
-    expect(screen.getByText("内部考核与准入控制")).toBeInTheDocument();
-  });
+  // Fallback branding strings (productName / productSubtitle) are owned by
+  // BrandProvider.test.tsx via the same context hook; the /login render fact
+  // is owned by LoginPage.test.tsx. This describe keeps only BrandHeader.
 
   it("renders a stable BrandMark fallback with the product name", () => {
     renderWithProviders(<BrandHeader />);

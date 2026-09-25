@@ -21,12 +21,6 @@ describe("InlineErrorBanner", () => {
     expect(banner).toHaveAttribute("data-feedback-tone", "destructive");
   });
 
-  it("owns role=alert and does not accept a caller role override", () => {
-    // The authority fixes role=alert; there is no role prop on the API.
-    render(<InlineErrorBanner>x</InlineErrorBanner>);
-    expect(screen.getByRole("alert")).toBeInTheDocument();
-  });
-
   it("merges a caller-supplied className after the canonical recipe", () => {
     render(<InlineErrorBanner className="mt-4">x</InlineErrorBanner>);
     const banner = screen.getByRole("alert");

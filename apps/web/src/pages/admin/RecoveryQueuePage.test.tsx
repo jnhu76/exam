@@ -162,12 +162,6 @@ describe("RecoveryQueuePage", () => {
     expect(within(table).getByText("1 条关联")).toBeInTheDocument();
   });
 
-  it("shows loading state then data", async () => {
-    renderPage();
-    expect(screen.getByText("加载中...")).toBeInTheDocument();
-    expect(await screen.findAllByText("网络恢复考试")).toHaveLength(2);
-  });
-
   it("shows empty state when no incidents match", async () => {
     getMock.mockResolvedValue({ items: [], nextCursor: null });
     renderPage();

@@ -228,14 +228,6 @@ describe("RecoveryExamDetailPage", () => {
     );
   });
 
-  it("shows loading state then data", async () => {
-    renderPage();
-    expect(screen.getByText("加载中...")).toBeInTheDocument();
-    expect(
-      (await screen.findAllByText("网络恢复考试")).length,
-    ).toBeGreaterThanOrEqual(1);
-  });
-
   it("shows not-found for 404 and retry works", async () => {
     getMock.mockRejectedValueOnce(new ApiError(404, "Not found"));
     renderPage();

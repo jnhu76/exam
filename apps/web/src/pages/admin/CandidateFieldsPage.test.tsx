@@ -128,11 +128,6 @@ describe("CandidateFieldsPage", () => {
     apiDelete.mockResolvedValue(undefined);
   });
 
-  it("renders page title", async () => {
-    renderPage();
-    expect(await screen.findByText("考生字段配置")).toBeInTheDocument();
-  });
-
   it("renders field list with columns", async () => {
     renderPage();
     // Row content renders twice by design (desktop table + mobile cards);
@@ -151,16 +146,6 @@ describe("CandidateFieldsPage", () => {
     const table = await screen.findByRole("table");
     expect(within(table).getByText("department")).toBeInTheDocument();
     expect(screen.getByText("选项")).toBeInTheDocument();
-  });
-
-  it("renders add field and download template buttons", async () => {
-    renderPage();
-    expect(
-      await screen.findByRole("button", { name: /添加字段/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /下载模板/ }),
-    ).toBeInTheDocument();
   });
 
   it("opens create dialog", async () => {
@@ -333,7 +318,15 @@ describe("CandidateFieldsPage", () => {
     await within(await screen.findByRole("table")).findByText("department");
     const menu = await openRowMenu(user, 1);
     await user.click(within(menu).getByRole("menuitem", { name: "上移" }));
+    // department (sortOrder 1) swaps with employeeId (sortOrder 0): the two
+    // PATCH bodies must carry the swapped pair, not a no-op rewrite.
     expect(apiPatch).toHaveBeenCalledTimes(2);
+    expect(apiPatch.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["/api/candidate-fields/cf2", { sortOrder: 0 }],
+        ["/api/candidate-fields/cf1", { sortOrder: 1 }],
+      ]),
+    );
   });
 
   it("moves a field down", async () => {
@@ -342,7 +335,14 @@ describe("CandidateFieldsPage", () => {
     await within(await screen.findByRole("table")).findByText("employeeId");
     const menu = await openRowMenu(user, 0);
     await user.click(within(menu).getByRole("menuitem", { name: "下移" }));
+    // employeeId (sortOrder 0) swaps with department (sortOrder 1).
     expect(apiPatch).toHaveBeenCalledTimes(2);
+    expect(apiPatch.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["/api/candidate-fields/cf1", { sortOrder: 1 }],
+        ["/api/candidate-fields/cf2", { sortOrder: 0 }],
+      ]),
+    );
   });
 
   it("first up item and last down item are disabled", async () => {

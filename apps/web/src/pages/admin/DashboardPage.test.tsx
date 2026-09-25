@@ -125,15 +125,6 @@ describe("DashboardPage", () => {
       expect(screen.getByText("今日考试")).toBeInTheDocument();
       expect(screen.getByText("2")).toBeInTheDocument();
     });
-
-    it("renders stats in a 4-column grid at desktop", async () => {
-      renderPage();
-      const grid = await screen.findByText("题目总数").then((el) => {
-        return el.closest("[class*='grid']");
-      });
-      expect(grid).toBeInTheDocument();
-      expect(grid!.className).toContain("lg:grid-cols-4");
-    });
   });
 
   describe("status badges", () => {

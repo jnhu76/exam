@@ -113,11 +113,6 @@ describe("CoursePage", () => {
     apiDelete.mockResolvedValue(undefined);
   });
 
-  it("renders page title", async () => {
-    renderPage();
-    expect(await screen.findByText("课程管理")).toBeInTheDocument();
-  });
-
   it("renders course list", async () => {
     renderPage();
     // Row content renders twice by design (desktop table + mobile cards);
@@ -126,13 +121,6 @@ describe("CoursePage", () => {
     expect(within(table).getByText("数学")).toBeInTheDocument();
     expect(within(table).getByText("MATH101")).toBeInTheDocument();
     expect(within(table).getByText("英语")).toBeInTheDocument();
-  });
-
-  it("renders new course button", async () => {
-    renderPage();
-    expect(
-      await screen.findByRole("button", { name: "新增课程" }),
-    ).toBeInTheDocument();
   });
 
   it("opens create dialog", async () => {

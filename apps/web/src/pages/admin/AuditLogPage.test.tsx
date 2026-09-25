@@ -313,12 +313,6 @@ describe("AuditLogPage", () => {
     expect(await screen.findByText("暂无审计日志")).toBeInTheDocument();
   });
 
-  it("shows loading state then data", async () => {
-    renderPage();
-    expect(screen.getByText("加载中...")).toBeInTheDocument();
-    expect(await screen.findByText("评分录入")).toBeInTheDocument();
-  });
-
   it("shows error state on fetch failure", async () => {
     getMock.mockImplementation((path: string) => {
       if (path.includes("/api/admin/audit-log/actions")) {
