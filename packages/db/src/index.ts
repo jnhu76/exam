@@ -3,7 +3,6 @@ export * from "./database.js";
 export * from "./databaseUrl.js";
 export * from "./postgres.js";
 export * from "./types.js";
-export * from "./testScope.js";
 export * from "./scripts/destructiveDbNameGuard.js";
 export * from "./scripts/rollbackIncidentTables.js";
 export * from "./scripts/rollbackAttemptCommandReceipts.js";

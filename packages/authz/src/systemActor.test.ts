@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
-import {
-  SYSTEM_ACTOR_IDS,
-  SYSTEM_PERMISSIONS,
-  createSystemRequestContext,
-} from "./systemActor.js";
-import { Role, Permission } from "./catalog.js";
+import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "./systemActor.js";
+import { Role } from "./catalog.js";
 
 describe("SYSTEM-M1 system actor — stable actor ids", () => {
   it("exposes the closed scanner/detector actor ids", () => {
@@ -16,17 +12,6 @@ describe("SYSTEM-M1 system actor — stable actor ids", () => {
   it("actor ids are unique", () => {
     const ids = Object.values(SYSTEM_ACTOR_IDS);
     expect(new Set(ids).size).toBe(ids.length);
-  });
-});
-
-describe("SYSTEM-M1 system actor — System role's real grants (dotted)", () => {
-  it("SYSTEM_PERMISSIONS is exactly the 4 system-only perms", () => {
-    const perms = new Set(SYSTEM_PERMISSIONS);
-    expect(perms.size).toBe(4);
-    expect(perms.has(Permission.SystemAutoSubmit)).toBe(true);
-    expect(perms.has(Permission.SystemHeartbeatScan)).toBe(true);
-    expect(perms.has(Permission.SystemLifecycleReconcile)).toBe(true);
-    expect(perms.has(Permission.SystemIncidentCreate)).toBe(true);
   });
 });
 

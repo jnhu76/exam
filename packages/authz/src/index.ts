@@ -5,7 +5,6 @@
  * May depend only on `@exam/domain` for legacy types.
  */
 export * from "./catalog.js";
-export * from "./legacyMap.js";
 export * from "./presets.js";
 export * from "./auditActions.js";
 export * from "./permissionMetadata.js";

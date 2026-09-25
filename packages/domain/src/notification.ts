@@ -42,16 +42,3 @@ export const NOTIFICATION_TYPES = [
  * ships.
  */
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
-
-/**
- * Type guard: true iff `value` is one of the implemented
- * {@link NotificationType} literals. Use this on every untrusted boundary
- * (DB reads, API inputs) so a future type can be added without silently
- * widening legacy readers.
- */
-export function isNotificationType(value: unknown): value is NotificationType {
-  return (
-    typeof value === "string" &&
-    (NOTIFICATION_TYPES as readonly string[]).includes(value)
-  );
-}

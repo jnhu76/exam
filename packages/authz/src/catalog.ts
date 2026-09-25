@@ -11,8 +11,7 @@
  * registry surface.
  *
  * Naming: dotted `domain.resource.action` (lowercase). This supersedes the
- * legacy `SCREAMING_SNAKE` keys in `@exam/domain` enums; {@link legacyMap.ts}
- * bridges the two during migration.
+ * legacy `SCREAMING_SNAKE` keys in `@exam/domain` enums.
  */
 
 // ───────────────────────── Permissions (ADR §4) ─────────────────────────
