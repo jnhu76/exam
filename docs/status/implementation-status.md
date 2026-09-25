@@ -73,8 +73,9 @@ B2 decision — the #292 admission runtime it would build on exists).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
 - ✅ Admin operator time grant (`POST /admin/attempts/:id/time-grants`,
-  `requireScopedCapability(AttemptTimeGrant, Attempt)`); Proctor is denied
-  until M11 resource scope is implemented.
+  `requireScopedCapability(AttemptTimeGrant, Attempt)`); under ADR-015 §13 it
+  remains **Admin-only** even after M11 resource-scope delivery, so Proctor has
+  no time-grant path.
 - ✅ Misconduct marking (`POST /admin/attempts/:id/misconduct` +
   `/proctor-incident`, `requireCapability(AttemptMisconductMark)`).
 - ✅ Proctor monitoring: visibility, polling (5s), event timeline, incident logging.
@@ -84,9 +85,10 @@ B2 decision — the #292 admission runtime it would build on exists).
 - ✅ Exam operation audit coverage.
 - ✅ Diagnostics page (DB / Redis / scanner health).
 - ✅ Manual grading queue and detail page (admin route + repo infrastructure;
-  plain-text subjective-answer runtime, candidate-answer detail, and
-  result flow are now CLOSED — PRs #237/#238, 2026-07-31; only
-  rich-text/WYSIWYG answering remains Phase 3/P7).
+  plain-text subjective-answer runtime, candidate-answer detail, and result
+  flow closed in PRs #237/#238, 2026-07-31; rich content plus rich
+  `text_response` answering subsequently shipped under ADR-019 and is now
+  accepted/current).
 - ✅ Result publishing modes (immediate / after_grading / manual).
 - ✅ Client telemetry pipeline (logger → buffer → batch POST → sanitize → DB).
 - ✅ Candidate/admin permission boundary enforced on every route.
@@ -124,8 +126,10 @@ The authorization **infrastructure** is live (not "not started"):
   course selection, publish validation + frozen question snapshot, candidate
   metadata isolation, candidate multiline answering + submission, real Grading
   Queue UI discovery, manual grading + final result, and post-publish live-edit
-  snapshot-freeze proof. Rich-text/WYSIWYG editing and the generic ADR-008
-  final-answer submit barrier (answer-type-independent) remain open.
+  snapshot-freeze proof. Rich-text/WYSIWYG content and rich `text_response`
+  answering subsequently shipped under ADR-019 and are now accepted/current;
+  the generic ADR-008 final-answer submit barrier (answer-type-independent)
+  remains a separate follow-up.
 - ✅ Candidate answering runtime (P0 CLOSED): all MVP question types render,
   save/restore/submit; `deriveTakeExamView` pure function + transient reducer.
 - ✅ Manual grading closeout (P1 CLOSED): grader views frozen submitted answers,
@@ -228,9 +232,11 @@ notification onto the now-stable result-publication transaction (P5-N1).
   grading assignment, announcements) remain deferred pending separate
   evidence.
 - Plain-text `text_response` authoring UI flow and result loop are CLOSED
-  (PRs #237/#238, 2026-07-31). The remaining Phase 3/P7 product tasks are
-  rich-text/WYSIWYG authoring and the generic ADR-008 final-answer submit
-  barrier (Option D follow-up; answer-type-independent).
+  (PRs #237/#238, 2026-07-31). Rich-text/WYSIWYG content and rich
+  `text_response` answering subsequently shipped under ADR-019 and are now
+  accepted/current. In this answer/content family, the remaining follow-up is
+  the generic ADR-008 final-answer submit barrier (Option D;
+  answer-type-independent).
 
 ## Phase 4 — Platformization and Integration: ⬜ NOT STARTED
 
