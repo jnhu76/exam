@@ -1158,6 +1158,58 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(finalizedAudits.total).toBe(1);
   });
 
+  // ── #613 GAP-02: successful grading-details read persists audit ──
+  it("records a grading.detail_viewed audit row for a successful authorized details read", async () => {
+    const { attemptId, examId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-view")],
+      title: "Detail View Audit Exam",
+    });
+    await seedGradingEntries(
+      ctx,
+      attemptId,
+      [subjectiveQuestion("q-view")],
+      [],
+    );
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+
+    // INVARIANT: sensitive-read audit rows are persisted synchronously
+    // before the response (recordSensitiveReadAudit), so the row is
+    // queryable immediately — no eventual-consistency drain needed.
+    const requestContext = {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const { items } = await createAuditLogRepo(ctx.db).listPaginatedFiltered(
+      requestContext,
+      1,
+      50,
+      { action: "grading.detail_viewed", targetId: attemptId },
+    );
+    const mine = items.find((i) => i.auditLog.actorId === ctx.admin.id);
+    expect(mine).toBeDefined();
+    expect(mine).toMatchObject({
+      auditLog: {
+        action: "grading.detail_viewed",
+        targetType: "attempt",
+        targetId: attemptId,
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        metadata: { examId },
+      },
+      actorName: ctx.admin.name,
+    });
+  });
+
   // ── Slice 12: grading-details surfaces the candidate's answer ────
   it("returns the candidate's answer for a subjective question in details", async () => {
     const { attemptId } = await seedAttempt(ctx, {
