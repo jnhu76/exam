@@ -2,8 +2,7 @@ import { Input } from "@/components/ui/input";
 import { useDataViewTextCommit } from "@/hooks/useDataViewTextCommit";
 
 /**
- * The exact-text filter control for a data-view toolbar (issue 601 Phase F
- * convergence).
+ * The exact-text filter control for a data-view toolbar.
  *
  * An exact-identifier filter (exam ID, candidate ID, …) is NOT fuzzy search,
  * so it must not wear search semantics: no leading search icon, no "clear the
@@ -12,8 +11,8 @@ import { useDataViewTextCommit } from "@/hooks/useDataViewTextCommit";
  * flush, Enter flush — which is owned once by useDataViewTextCommit.
  *
  * Width belongs to the toolbar's semantic tier, not to this control: pages
- * wrap it in `<ToolbarFilter size="wide">` (11.25rem, the entity/filter tier),
- * exactly like the enum selects use `size="narrow"`.
+ * wrap it in `<ToolbarFilter size="wide">`, exactly like the enum selects use
+ * `size="narrow"` (docs/standards/ui-system.md).
  */
 export function TextFilterInput({
   value,

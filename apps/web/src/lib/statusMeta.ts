@@ -187,9 +187,8 @@ export const statusMeta = {
     icon: CircleAlert,
     iconPolicy: "show",
   },
-  // P3-M5B: diagnostics infrastructure status vocabulary. Used by the
-  // SystemDiagnosticsPage email/worker surfaces via StatusBadge. Map the
-  // API's lower-case enum values to these keys with infraStatusKey() below.
+  // Diagnostics infrastructure status keys (API lower-case enum → key via
+  // infraStatusKey below).
   infraAvailable: {
     labelKey: "status.infra.available",
     tone: "success",
@@ -237,7 +236,7 @@ export const statusMeta = {
     tone: "muted",
     icon: HelpCircle,
   },
-  // P7-E3 compliance projection statuses (DESIRED vs OBSERVED vs STATUS).
+  // Compliance projection statuses (DESIRED vs OBSERVED vs STATUS).
   compliance_satisfied: {
     labelKey: "status.ops.compliance.satisfied",
     tone: "success",
@@ -308,11 +307,9 @@ export function isStatusKey(status: string): status is StatusKey {
 }
 
 /**
- * Maps a diagnostics infrastructure status value (the API's lower-case enum:
- * available/degraded/unavailable/disabled/unknown) to the matching statusMeta
- * key. Used by the SystemDiagnosticsPage email/worker surfaces so they can
- * render via `<StatusBadge status={infraStatusKey(emailStatus.status)} />`.
- * Unknown values fall back to `infraUnknown` (fail-safe, never throws).
+ * Maps a diagnostics infrastructure status value to the matching statusMeta
+ * key, for `<StatusBadge status={infraStatusKey(status)} />`. Unknown values
+ * fall back to `infraUnknown` (never throws).
  */
 export function infraStatusKey(
   status: string,

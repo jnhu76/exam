@@ -43,9 +43,8 @@ function AlertDialogOverlay({
   )
 }
 
-// AlertDialog shares the Dialog size vocabulary (P3 §12, issue 459): the
-// former 320px `sm` tier (max-w-xs) is retired — zero consumers — and the
-// legacy "default" becomes the explicit "md". Same sm/md/lg widths as Dialog.
+// AlertDialog shares the Dialog size vocabulary (dialog.tsx DialogSize): the
+// same sm/md/lg → max-width mapping, never a second table.
 const ALERT_DIALOG_SIZE_CLASSES: Record<DialogSize, string> = {
   sm: "sm:max-w-sm",
   md: "sm:max-w-lg",

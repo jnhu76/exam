@@ -9,12 +9,10 @@ import {
 } from "@/table/permissionMatrix";
 
 /**
- * The role × capability permission matrix (issue 601 Phase F convergence).
+ * The role × capability permission matrix.
  *
- * The only production data table whose semantics are not a record list, and the
- * only one that used to bypass the governed stack: a raw `<Table>` with a
- * page-local `min-w-[220px]` first column, no scroll region, no overflow
- * ownership. It now composes the SHARED surface —
+ * The only production data table whose semantics are not a record list. It
+ * composes the SHARED surface —
  *
  *   TableScrollSurface   scroll region, overflow facts, local-scroll affordance
  *   ui Table primitives  cell/header padding (recipes.css keys on data-slot)

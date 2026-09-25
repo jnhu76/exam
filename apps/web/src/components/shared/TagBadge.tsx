@@ -6,9 +6,7 @@ import { cn } from "@/lib/utils";
  * Metadata tag chip. Geometry/typography (height, radius, size, weight) is
  * owned by the single `[data-slot="tag-badge"]` recipe in badge/recipes.css —
  * including the compact-table variant for the Question Management workbench
- * tag columns (issue 577 m2: previously split across badge/recipes.css and a second
- * conflicting workbench.css block). The 400-vs-500 weight choice stays a
- * deferred visual decision; the recipe records the current 400.
+ * tag columns.
  */
 export type TagBadgeVariant = "default" | "compact-table";
 

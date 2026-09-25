@@ -26,9 +26,10 @@ export type DataTableColumnRole =
   | "actions";
 
 /**
- * Closed overflow vocabulary (issue 445 P3-Corrective §16). A column either
- * resolves its overflow from the role default (`ROLE_OVERFLOW`) or declares an
- * explicit override on the column declaration.
+ * Closed overflow vocabulary. A column either resolves its overflow from the
+ * role default (`ROLE_OVERFLOW`) or declares an explicit override on the
+ * column declaration (policy semantics: docs/standards/ui-system.md "Column
+ * contract").
  *
  * Pure-CSS policies: `nowrap`, `wrap`, `break-token`. `nowrap` is single-line
  * and clips at the cell (recipes.css), so its value can never paint outside
@@ -46,8 +47,9 @@ export type ColumnOverflow =
   | "truncate-middle"
   | "line-clamp-2";
 
-/** Column importance, metadata only in this issue (issue 445 P3 §5; consumed by
- * UI-TABLE-MOBILE-1 for card field selection — never by desktop tier logic). */
+/** Column importance — consumed by the mobile card mapping only
+ *  (MobileRecordList; docs/standards/ui-system.md "Column contract"), never
+ *  by desktop tier logic. */
 export type ColumnPriority = "high" | "normal" | "low";
 
 export const ROLE_OVERFLOW: Record<DataTableColumnRole, ColumnOverflow> = {
@@ -116,7 +118,7 @@ const ROLE_PRIORITY: Record<DataTableColumnRole, ColumnPriority> = {
 };
 
 /**
- * Machine-value compatibility channel, per role (issue 598). A role may own a
+ * Machine-value compatibility channel, per role. A role may own a
  * second content class that no finite vocabulary fixture can bound — machine
  * tokens reaching the cell from historical rows or version skew — rendered
  * through {@link DataTableOverflowText} with the mode named here. The column's
@@ -226,7 +228,7 @@ export interface AllocatedTableProps {
 
 /**
  * Resolve the column allocation for one declaration set from the enclosing
- * scroll surface's measured scope (issue 601 Phase F). Returns the colgroup and
+ * scroll surface's measured scope. Returns the colgroup and
  * the table-element props; both renderers of governed tables
  * (DataTableSurface for contract-direct pages, DesktopDataTable for the
  * TanStack row model) consume this — there is no third path.
@@ -424,15 +426,13 @@ export function DataTableSpanCell({
  *
  * The budget is glyph-count based (not measured at runtime) and is DERIVED from
  * the rendered geometry of the frozen short-id token, in the product font at
- * the governed 15px cell tier (issue 601 Phase F): the column is 7.5rem (120px) and
- * the cell's px-4 leaves 104px of paintable text width, while a glyph in the
- * product stack advances ~9.5px (letters/underscore; hex digits are narrower).
- * The former 6+4 form (11 glyphs ≈ 97–105px) was budgeted against a 95px
- * content box that does not exist — measured, it overflowed the text area and
- * crossed the cell border by 1px for letter/underscore-heavy tokens (caught by
- * the issue 439 V3 runtime gate on /admin/audit-logs). A 10-glyph form (≈95px) is
- * the largest budget that fits with margin; values within it render whole —
- * e.g. the 10-char `employeeId` key must never truncate.
+ * the governed 15px cell tier: the column is 7.5rem (120px) and the cell's px-4
+ * leaves 104px of paintable text width, while a glyph in the product stack
+ * advances ~9.5px (letters/underscore; hex digits are narrower). A 6+4 form
+ * (11 glyphs ≈ 97–105px) overflows that text area and crosses the cell border
+ * by 1px for letter/underscore-heavy tokens (measured on /admin/audit-logs). A
+ * 10-glyph form (≈95px) is the largest budget that fits with margin; values
+ * within it render whole — e.g. the 10-char `employeeId` key must never truncate.
  */
 const MIDDLE_TRUNCATE_HEAD = 5;
 const MIDDLE_TRUNCATE_TAIL = 4;

@@ -20,20 +20,12 @@ import {
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 
-// P5-N1-I3 — Candidate NotificationBell + panel (V1).
+// Candidate NotificationBell + panel.
 //
-// Authority: P5-N1-R0 §20 (frozen UI surface: bell + small panel).
-//
-// Behavior:
-//   - unread badge from /api/notifications/unread-count, refreshed on auth
-//     app start + after every read operation + on a bounded poll interval
-//   - panel lists result_published notifications (title/body/createdAt),
-//     with loading (Skeleton) / empty / error (InlineErrorBanner) states
-//   - click a notification: mark one read, refresh count, navigate to the
-//     authoritative /exam/:attemptId/result page
-//   - "mark all read" button calls /read-all and refreshes count
-//   - NO WebSocket/SSE/browser push; bounded setInterval polling only
-//     (mirrors ProctorDashboardPage.tsx)
+// NO WebSocket/SSE/browser push: the unread badge is refreshed by a bounded
+// setInterval poll (POLL_INTERVAL_MS), mirroring the proctor dashboard. Count
+// failures are non-fatal — the badge keeps its last value; the panel's own
+// error state surfaces persistent failures.
 
 /** Polling interval for the unread badge (ms). Bounded; not real-time. */
 const POLL_INTERVAL_MS = 60_000;
@@ -105,7 +97,6 @@ export function NotificationBell() {
     };
   }, [refreshCount]);
 
-  // Load the list when the panel opens.
   useEffect(() => {
     if (open) void loadList();
   }, [open, loadList]);

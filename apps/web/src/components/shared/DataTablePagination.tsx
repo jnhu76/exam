@@ -28,15 +28,11 @@ function buildVisiblePages(page: number, pageCount: number) {
 }
 
 /**
- * Pagination controls for data tables, showing item count summary,
- * page numbers, and previous/next navigation buttons. All copy resolves from
- * `common.table.*` with interpolation; explicit `aria-label` wins over the
- * Page-number navigation for data tables.
+ * Pagination controls for data tables: page numbers plus previous/next.
  *
- * It owns the NAVIGATION only: page numbers plus previous/next. The count /
- * range line lives in DataViewFooter (the single footer/count composition
- * authority, issue 601 Phase F convergence) — a pagination control that also
- * rendered its own summary was a second, parallel count authority.
+ * It owns the NAVIGATION only. The count / range line lives in DataViewFooter
+ * (the single footer/count authority) — a pagination control that also rendered
+ * its own summary would be a second, parallel count authority.
  *
  * All copy resolves from `common.table.*` with interpolation; explicit
  * `aria-label` wins over the default `common.table.paginationLabel`.

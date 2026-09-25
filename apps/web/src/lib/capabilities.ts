@@ -1,7 +1,7 @@
 /**
- * Frontend UX capability helper (P4-4, RBAC-M10-E closure).
+ * Frontend UX capability helper.
  *
- * Capabilities now come from the backend on both /login and /auth/me,
+ * Capabilities come from the backend on both /login and /auth/me,
  * resolved fresh from active user_role_assignments (the single source of
  * truth for human actor authorization). Every can* function reads from
  * user.capabilities (the union of every active role assignment's preset),
@@ -81,20 +81,14 @@ export function canAccessExamRuntime(
  * surrogate permission and not a role-label check.
  *
  * NOTE: CandidateView is intentionally excluded. Teacher also holds CandidateView
- * (scoped to course assignment per the preset comment), but the management
- * section is the Admin-only surface (users/audit/settings/candidateFields).
- * CandidateView is shared, so including it would over-grant the management nav
- * to Teacher. The Admin-only management perms are the four below; CandidateView
- * alone does not gate the management section.
+ * (course-scoped per the preset), but the management section is the Admin-only
+ * business-management surface, so including it would over-grant the management
+ * nav to Teacher. The permissions below are that surface.
  *
- * P7-RBAC-REMEDIATION F-08: SystemHealthView was previously included here, but
- * it is an OPERATIONAL capability held by BOTH Admin and Maintainer. Including
- * it over-granted the "管理" nav group to Maintainer (it leaked a lone
- * "系统监控" item into the management section). Operational surfaces belong to
- * the "运维" group (canSeeOperations); the management group is the Admin-only
- * business-management surface. SystemDiagnosticsView was never listed (the
- * stray item entered only because SystemHealthView gated the group AND
- * SystemDiagnosticsView gated the item).
+ * Operational capabilities (e.g. SystemHealthView, held by Admin AND Maintainer)
+ * are deliberately NOT in this set: they gate the "运维" group
+ * (canSeeOperations), not business management. Keep the two surfaces separate —
+ * the group gate and the per-item filters must not drift apart.
  */
 const MANAGEMENT_SURFACE_PERMS: readonly PermissionKey[] = [
   Permission.UserView,
@@ -148,10 +142,8 @@ export function canSeePermissionRegistry(
   return can(user, Permission.UserView);
 }
 
-/**
- * Business-owner summary dashboard — Admin-only business observation
- * (P7-E2C). The Maintainer preset does not hold system.business_summary.view.
- */
+/** Business-owner summary dashboard — the gate is SystemBusinessSummaryView
+ *  (membership is owned by packages/authz presets). */
 export function canSeeDashboard(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): boolean {
@@ -160,7 +152,7 @@ export function canSeeDashboard(
 
 /**
  * Operations surface (health / diagnostics / backup evidence / restore
- * readiness) — Admin + Maintainer (P7-E2C).
+ * readiness).
  */
 export function canSeeOperations(
   user: Pick<MeResponse, "role" | "capabilities">,
@@ -222,7 +214,6 @@ export function canSeeProctor(
   return can(user, Permission.ExamRoomView);
 }
 
-/** Recovery Center nav — Admin only (`incident.recovery.view` preset). */
 export function canSeeRecovery(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): boolean {
@@ -268,7 +259,7 @@ export function canManageEnrollments(
 ): boolean {
   return can(user, Permission.ExamEnrollmentManage);
 }
-// Admin-only destructive exam actions (task 2.5) — Teacher must NOT see these.
+// Destructive exam actions: Teacher must NOT see these (the capability gates it).
 export function canUnpublishExam(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): boolean {
@@ -299,11 +290,10 @@ export function adminLandingPath(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): string | null {
   // Most specific role workspaces first, tiered by role specificity.
-  // Dashboard (SystemBusinessSummaryView, P7-E2C) is the business owner's
-  // landing — check first so Admin lands on the dashboard. Maintainer (no
-  // business-summary capability) lands on the Operations surface. Proctor
-  // workspace is the most targeted non-Admin surface, followed by grading
-  // queue, then exams as a general fallback. CourseView, QuestionView, and
+  // Dashboard is the business owner's landing — check first so Admin lands on
+  // the dashboard, not an operational surface. Proctor workspace is the most
+  // targeted non-Admin surface, followed by grading queue, then exams as a
+  // general fallback. CourseView, QuestionView, and
   // management-surface perms extend the set so non-standard presets or
   // multi-role unions still get a console landing.
   if (canSeeDashboard(user)) return routes.admin.dashboard;

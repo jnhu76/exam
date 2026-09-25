@@ -46,7 +46,6 @@ export const ROUTE_PAGE_ROLES: readonly RoutePageRole[] = [
     page: "CandidateFieldsPage",
     role: "admin-standard",
   },
-  // admin-dense routes (issue #601): the three dense admin table pages.
   { route: "/admin/users", page: "UsersPage", role: "admin-dense" },
   {
     route: "/admin/candidates",

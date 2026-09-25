@@ -3,13 +3,9 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /**
- * The single data-view footer authority (issue 601 Phase F convergence).
+ * The single data-view footer authority.
  *
- * The census found three footer/count homes across the 24 data-view routes —
- * `DataWorkbenchFooter`, `DataTableShell`'s footer prop, and `DataToolbar`'s
- * `summary` slot (one production consumer) — so a count could appear in a
- * toolbar band, in a title band, in a shell band, or nowhere, depending on the
- * page. This component owns the count/range placement, the footer spacing, the
+ * This component owns the count/range placement, the footer spacing, the
  * footer surface and the navigation placement for EVERY data view; the
  * navigation BEHAVIOUR stays semantically distinct and is passed in as a slot
  * (page-number pagination, cursor prev/next, load-more) — there is no fake

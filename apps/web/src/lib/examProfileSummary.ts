@@ -1,4 +1,4 @@
-// ── P7-M: human-readable summary of an exam policy profile ──
+// ── Human-readable summary of an exam policy profile ──
 //
 // Pure formatter. Produces a concise, author-friendly one-line summary of a
 // profile (or any ExamProfilePolicyDefaults-shaped value), e.g.:

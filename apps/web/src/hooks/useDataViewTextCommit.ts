@@ -1,18 +1,13 @@
 import { useCallback, useEffect, useRef } from "react";
 
 /**
- * The single text-commit interaction owner for data-view text controls
- * (issue 601 Phase F convergence).
+ * The single text-commit interaction owner for data-view text controls.
  *
- * The census found two text controls doing the same interaction with two
- * different implementations: the free-text search (DataViewSearch, 300ms,
- * component-owned) and the exact-identifier filters (/admin/recovery, 400ms,
- * page-local `draftRef` + blur flush + Enter flush + reset choreography). The
- * *query semantics* of the two controls differ — fuzzy search vs exact
- * identifier — but the commit choreography does not, so it lives here once and
- * both controls consume it. Pages keep owning what the committed value MEANS
- * (which query parameter, which API call); this hook owns only when a settled
- * value is committed.
+ * The free-text search and the exact-identifier filters have different *query
+ * semantics* — fuzzy matching vs exact identifier — but the same commit
+ * choreography, so it lives here once and both controls consume it. Pages keep
+ * owning what the committed value MEANS (which query parameter, which API
+ * call); this hook owns only when a settled value is committed.
  *
  * Contract:
  *   - the field is fully controlled by `value`; `change` reflects every

@@ -6,7 +6,7 @@ import {
 } from "@/lib/recoveryErrors";
 
 /**
- * J5-I1B Recovery Center — Queue-specific projection coordinator (P1-4).
+ * J5-I1B Recovery Center — Queue-specific projection coordinator.
  *
  * The generic {@link useRecoveryProjection} is a detail-page primitive. The
  * Queue page additionally paginates (keyset cursor) and must coordinate a
@@ -217,7 +217,7 @@ export function useRecoveryQueueProjection<TItem>(
         if (seq === seqRef.current && !disposedRef.current) {
           setIsRefreshing(false);
           setHasResolved(true);
-          // Re-arm the cadence from THIS completion (see P1-4): a manual
+          // Re-arm the cadence from THIS completion: a manual
           // refresh with an unchanged item count, or a failed background
           // refresh, must not stop polling.
           scheduleNextPoll();
@@ -233,7 +233,7 @@ export function useRecoveryQueueProjection<TItem>(
     const cursor = nextCursorRef.current;
     if (!cursor) return;
     // Drop loadMore if a page-1 refresh is already in flight — refresh has
-    // priority to avoid the isRefreshing state getting stuck (P1-2).
+    // priority to avoid the isRefreshing state getting stuck.
     if (controllerRef.current !== null) return;
     const controller = new AbortController();
     controllerRef.current = controller;

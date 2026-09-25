@@ -10,10 +10,9 @@ import {
 } from "@/table/tableTiers";
 
 /**
- * The width intent a composition declares for the table inside it
- * (issue 601 Phase F convergence). It is NOT an archetype property: the
- * archetype names the semantic table kind (management-list, log-diagnostic,
- * detail-comparison, embedded-picker), while the width intent belongs to
+ * The width intent a composition declares for the table inside it. It is NOT
+ * an archetype property: the archetype names the semantic table kind
+ * (management-list, log-diagnostic, detail-comparison, embedded-picker), while the width intent belongs to
  * whoever composes the surface.
  *
  *   fill      — the table fills the region it was given, growing up to the
@@ -27,8 +26,8 @@ import {
 export type TableWidthMode = "fill" | "intrinsic";
 
 /**
- * The measured geometry one shell publishes to the column allocator
- * (issue 601 Phase F). `availableWidth` is the scroll region's EXACT content-box
+ * The measured geometry one shell publishes to the column allocator.
+ * `availableWidth` is the scroll region's EXACT content-box
  * width (fractional — the space a table may occupy before the region
  * overflows; the allocator floors it). `widthMode` is the composition's width
  * intent — the allocator never guesses it.
@@ -76,7 +75,7 @@ export function TableAllocationRegion({
 
 /**
  * TableScrollSurface — the single scroll-region contract shared by
- * DataTableShell and DataWorkbench (issue 601 Phase F ownership convergence).
+ * DataTableShell and DataWorkbench.
  *
  * It owns, for BOTH shells:
  *   - the container measurement (useOverflowObservation — facts only) and the

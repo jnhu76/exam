@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
  *
  * Default icon visibility follows `statusMeta[status].iconPolicy`:
  * ordinary/dense statuses render text-only; only urgency/destructive/live
- * statuses (iconPolicy "show") render an icon by default. An explicit
- * `showIcon` prop overrides this either way (backward compatibility).
+ * statuses (iconPolicy "show") render an icon by default. `showIcon` prop
+ * overrides the policy explicitly.
  */
 export function StatusBadge({
   status,

@@ -1,7 +1,7 @@
 import { ApiError } from "./api";
 
 /**
- * J5-I1B Recovery Center — pure error classification (P2-1).
+ * Recovery Center — pure error classification.
  *
  * Maps an arbitrary thrown value to a closed {@link RecoveryErrorKind} so the
  * Recovery pages can render distinct loading / permission-denied / not-found /
@@ -10,15 +10,11 @@ import { ApiError } from "./api";
  * pages resolve the localized message from the kind via
  * {@link recoveryErrorMessageKey}.
  *
- * Status mapping (ADR-014 / J5-R0 §8):
- *   401 → unauthenticated   (the API client also redirects to /login)
- *   403 → permission-denied
- *   404 → not-found         (missing / cross-org — anti-enumeration)
- *   400 → invalid           (filter / cursor validation)
- *   503 → unavailable       (broken parent/relationship chain — fail-closed
- *                            AUTHZ_UNAVAILABLE)
- *   0   → network           (transport failure; ApiError.status === 0)
- *   *   → unknown
+ * Security-relevant status semantics (ADR-014):
+ *   404 → not-found    (missing / cross-org — anti-enumeration)
+ *   503 → unavailable  (broken parent/relationship chain — fail-closed
+ *                       AUTHZ_UNAVAILABLE)
+ *   0   → network      (transport failure; ApiError.status === 0)
  */
 export type RecoveryErrorKind =
   | "unauthenticated"

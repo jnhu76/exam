@@ -5,7 +5,7 @@ import {
 } from "@/lib/recoveryErrors";
 
 /**
- * J5-I1B Recovery Center — shared projection loader (P1-3 / P1-4 / P2-1).
+ * J5-I1B Recovery Center — shared projection loader.
  *
  * One hook backing the four Recovery surfaces (Queue, Incident detail,
  * Attempt operations, Exam context). It owns the J5-R0 §9 refresh model:
@@ -40,11 +40,10 @@ import {
  *     stale + an inline warning, NOT a full-screen ErrorState — the page
  *     decides that via `error && !data`).
  *
- * Concurrency promise (review amendment #4): no concurrently owned client
- * requests; aborted/superseded responses cannot commit. Server-side
- * instantaneous overlap cannot be absolutely prevented (a request may already
- * have arrived before abort propagates) — the client never commits such a
- * response.
+ * Concurrency promise: no concurrently owned client requests; aborted/superseded
+ * responses cannot commit. Server-side instantaneous overlap cannot be
+ * absolutely prevented (a request may already have arrived before abort
+ * propagates) — the client never commits such a response.
  */
 
 type Trigger = "initial" | "manual" | "poll" | "visible" | "focus";
