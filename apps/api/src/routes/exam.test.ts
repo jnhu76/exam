@@ -1483,6 +1483,38 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
     expect(res.json().error.code).toBe("EXAM_ARCHIVE_NOT_ALLOWED");
   });
 
+  it("a published (pre-openAt) exam can be archived -> 200 archived", async () => {
+    // createPublishedExam uses a future openAt so the exam stays `published`
+    // after publish (ADR-005: a published exam whose openAt already passed
+    // reconciles to `open`, and `open -> archived` is not allowed — must go
+    // via close). The archive route reconciles under lock before asserting.
+    const examId = await createPublishedExam("Archive Published");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("archived");
+  });
+
+  it("an archived exam cannot be published again -> 409", async () => {
+    const examId = await createPublishedExam("Archived Republish");
+    const archiveRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(archiveRes.statusCode).toBe(200);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
   it("already-archived exam returns 200 and does not duplicate exam.archive audit", async () => {
     const examId = await createPublishedExam("Archive Idempotent");
     // First archive: genuine transition -> 200 + one audit event.

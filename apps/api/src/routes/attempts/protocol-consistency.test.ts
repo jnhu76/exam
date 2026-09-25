@@ -14,25 +14,17 @@ import {
 /**
  * P3-PROTO-1 — Backend State Consistency Tests (L0)
  *
- * Proves 14 protocol boundary scenarios from the exam protocol matrix.
- * Scenarios 1-8, 11-12, 14 exercise existing behavior.
- * Scenarios 9-10, 13 depend on L0 implementations (RED until landed).
- *
- * Coverage map:
- *   #1  save before submit allowed            → existing candidate-save-submit.test.ts:282
- *   #2  save after submit rejected            → existing candidate-save-submit.test.ts:925
- *   #3  double submit idempotency             → existing candidate-save-submit.test.ts:524
- *   #4  save/submit race                      → existing submitFreezeBarrier.test.ts
- *   #5  refresh after submit                  → THIS FILE
- *   #6  candidate cannot see score before release → existing scores.test.ts:261
- *   #7  candidate cannot see standardAnswer   → existing candidate-save-submit.test.ts:188
- *   #8  grading view sees submitted answers   → existing gradingQueue.test.ts:728
- *   #9  deadline reconciliation via take      → THIS FILE (RED until P3-L0-3)
- *   #10 deadline reconciliation idempotent    → THIS FILE (RED until P3-L0-3)
- *   #11 save after deadline rejected          → existing candidate-save-submit.test.ts:678
- *   #12 submit after deadline returns existing → existing candidate-save-submit.test.ts:764
- *   #13 text_response grading reads submitted_answers → THIS FILE (RED until P3-L0-1/L0-2)
- *   #14 grading queue queries gradingStatus   → existing gradingQueue.test.ts:201,232
+ * Proves the protocol boundary scenarios this file OWNS; the rest of the
+ * original matrix lives with its named keepers:
+ *   #1  save before submit allowed            → candidate-save-submit.test.ts:439
+ *   #3a double submit HTTP idempotency        → candidate-save-submit.test.ts:744 (FIX-2)
+ *   #4  save/submit race                      → submitFreezeBarrier.test.ts
+ *   #5  refresh after submit                  → candidate-take.test.ts:120 + candidate-save-submit.test.ts:1205
+ *   #6  candidate cannot see score before release → scores.test.ts:261
+ *   #7  candidate cannot see standardAnswer   → candidate-take.test.ts:334
+ *   #11 save after deadline rejected          → candidate-save-submit.test.ts:938
+ *   #12 submit after deadline returns existing → candidate-save-submit.test.ts:938
+ *   #14 grading queue queries grading entries → gradingQueue.test.ts:348
  */
 describe("P3-PROTO-1: protocol boundary consistency", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -62,101 +54,6 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
     permissions: [] as import("@exam/domain").Permission[],
     sessionId: "test",
     targetOrganizationId: ctx.org.id,
-  });
-
-  // ─── Scenario #5: refresh after submit ─────────────────────────
-  describe("#5 refresh after submit — GET returns locked + submitted answers", () => {
-    let attemptId: string;
-
-    beforeAll(async () => {
-      const examRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: buildExamPayload({
-          title: "Proto1-#5 Refresh After Submit",
-          courseId,
-          questionIds: [questionId],
-        }),
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const refreshExamId = examRes.json().id as string;
-
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/exams/${refreshExamId}/publish`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      await enrollCandidateForExam(ctx, candidateProfileId, refreshExamId);
-
-      const startRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${refreshExamId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      attemptId = startRes.json().id as string;
-      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
-
-      // Save an answer then submit
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${qId}`,
-        payload: {
-          attemptId,
-          questionId: qId,
-          answer: "b",
-          clientSeq: 1,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/submit`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-    });
-
-    it("GET after submit returns locked attempt with submitted status", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/attempts/${attemptId}`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.status).toBe("graded");
-      expect(body.submittedAt).toBeDefined();
-      // Candidate should not see standardAnswer after submit
-      expect(body.questionSnapshot[0]).not.toHaveProperty("standardAnswer");
-    });
-
-    it("save after submit is rejected (ATTEMPT_ALREADY_SUBMITTED)", async () => {
-      const qId = (
-        await ctx.app.inject({
-          method: "GET",
-          url: `/api/attempts/${attemptId}`,
-          cookies: { "auth-token": ctx.candidateToken },
-        })
-      ).json().questionSnapshot[0].originalQuestionId;
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${qId}`,
-        payload: {
-          attemptId,
-          questionId: qId,
-          answer: "a",
-          clientSeq: 999,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json().accepted).toBe(false);
-      expect(res.json().reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
-    });
   });
 
   // ─── Scenario #2 (DB invariant): submitted_answers unchanged ───
@@ -252,9 +149,10 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
   });
 
   // ─── Scenario #3: double submit — submitted_answers stable ─────
+  // The HTTP-level idempotency of the second submit (same body) is owned by
+  // candidate-save-submit.test.ts FIX-2; here we pin the DB freeze.
   describe("#3 double submit — submitted_answers and submittedAt stable", () => {
     let attemptId: string;
-    let firstSubmitBody: Record<string, unknown>;
 
     beforeAll(async () => {
       const examRes = await ctx.app.inject({
@@ -303,24 +201,17 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
         url: `/api/attempts/${attemptId}/submit`,
         cookies: { "auth-token": ctx.candidateToken },
       });
-      firstSubmitBody = firstRes.json();
+      expect(firstRes.statusCode).toBe(200);
     });
 
-    it("second submit returns same status, score, and submittedAt", async () => {
+    it("DB submitted_answers not overwritten by second submit", async () => {
       const secondRes = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${attemptId}/submit`,
         cookies: { "auth-token": ctx.candidateToken },
       });
-      const secondBody = secondRes.json();
-
       expect(secondRes.statusCode).toBe(200);
-      expect(secondBody.status).toBe(firstSubmitBody.status);
-      expect(secondBody.score).toBe(firstSubmitBody.score);
-      expect(secondBody.submittedAt).toBe(firstSubmitBody.submittedAt);
-    });
 
-    it("DB submitted_answers not overwritten by second submit", async () => {
       const repo = createAttemptRepo(ctx.db);
       const row = await repo.findById(candidateCtx(), attemptId);
       // submittedAt should be stable (not updated by second submit)
@@ -341,49 +232,6 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
   // Covered by existing scores.test.ts:261 ("hides score details when
   // immediate results are disabled") and scores.test.ts:311 ("allows
   // admins to view a single attempt result"). No duplication here.
-
-  // ─── Scenario #7: candidate cannot see standardAnswer ──────────
-  describe("#7 candidate cannot see standardAnswer in attempt snapshot", () => {
-    it("GET attempt never exposes standardAnswer to candidate", async () => {
-      const examRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: buildExamPayload({
-          title: "Proto1-#7 No standardAnswer Leak",
-          courseId,
-          questionIds: [questionId],
-        }),
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const saExamId = examRes.json().id as string;
-
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/exams/${saExamId}/publish`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      await enrollCandidateForExam(ctx, candidateProfileId, saExamId);
-
-      const startRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${saExamId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      const attemptId = startRes.json().id as string;
-
-      const getRes = await ctx.app.inject({
-        method: "GET",
-        url: `/api/attempts/${attemptId}`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      expect(getRes.statusCode).toBe(200);
-      const snapshot = getRes.json().questionSnapshot;
-      for (const q of snapshot) {
-        expect(q).not.toHaveProperty("standardAnswer");
-        expect(q).not.toHaveProperty("rubric");
-      }
-    });
-  });
 
   // ─── Scenario #8: grading view sees submitted answers ──────────
   describe("#8 grading view reads from submitted answers", () => {
@@ -585,225 +433,10 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
     });
   });
 
-  // ─── Scenario #11: save after deadline rejected ────────────────
-  describe("#11 save after deadline returns DEADLINE_EXCEEDED", () => {
-    it("save is rejected when deadline has passed", async () => {
-      const examRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: buildExamPayload({
-          title: "Proto1-#11 Save After Deadline",
-          courseId,
-          questionIds: [questionId],
-          durationMinutes: 1,
-        }),
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const sadExamId = examRes.json().id as string;
-
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/exams/${sadExamId}/publish`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      await enrollCandidateForExam(ctx, candidateProfileId, sadExamId);
-
-      const startRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${sadExamId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      const attemptId = startRes.json().id as string;
-      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
-
-      // Move time past deadline
-      ctx.setNow(new Date(Date.now() + 5 * 60 * 1000));
-
-      const saveRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${qId}`,
-        payload: {
-          attemptId,
-          questionId: qId,
-          answer: "b",
-          clientSeq: 1,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      expect(saveRes.statusCode).toBe(200);
-      expect(saveRes.json().accepted).toBe(false);
-      // P3-L0-3: lazy deadline reconciliation now freezes the attempt at the
-      // save entry point, so the rejection reason is ATTEMPT_ALREADY_SUBMITTED
-      // (deadline-submitted), not the legacy DEADLINE_EXCEEDED.
-      expect(saveRes.json().reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
-
-      ctx.setNow(null);
-    });
-  });
-
-  // ─── Scenario #12: submit after deadline returns existing ──────
-  describe("#12 submit after deadline submits with saved answers", () => {
-    it("submit still works after deadline", async () => {
-      const examRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: buildExamPayload({
-          title: "Proto1-#12 Submit After Deadline",
-          courseId,
-          questionIds: [questionId],
-          durationMinutes: 1,
-        }),
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const sadExamId2 = examRes.json().id as string;
-
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/exams/${sadExamId2}/publish`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      await enrollCandidateForExam(ctx, candidateProfileId, sadExamId2);
-
-      const startRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${sadExamId2}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      const attemptId = startRes.json().id as string;
-      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
-
-      // Save answer before deadline
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${qId}`,
-        payload: {
-          attemptId,
-          questionId: qId,
-          answer: "b",
-          clientSeq: 1,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-
-      // Move past deadline
-      ctx.setNow(new Date(Date.now() + 5 * 60 * 1000));
-
-      const submitRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/submit`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      expect(submitRes.statusCode).toBe(200);
-      expect(submitRes.json().status).toBeDefined();
-
-      ctx.setNow(null);
-    });
-  });
-
-  // ─── Scenario #14: grading queue queries gradingStatus ─────────
-  describe("#14 grading queue lists only pending_manual attempts", () => {
-    it("auto-graded attempt does not appear in grading queue", async () => {
-      // The shared fixture exam is auto-graded (single_choice with standardAnswer)
-      const startRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${examId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      if (startRes.statusCode !== 201) {
-        // Attempt already exists from another test — skip assertion
-        return;
-      }
-
-      const attemptId = startRes.json().id as string;
-      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
-
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${qId}`,
-        payload: {
-          attemptId,
-          questionId: qId,
-          answer: "b",
-          clientSeq: 1,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/submit`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-
-      // Grading queue should not contain auto-graded attempts
-      const queueRes = await ctx.app.inject({
-        method: "GET",
-        url: "/api/admin/grading-queue",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(queueRes.statusCode).toBe(200);
-      const items = queueRes.json().items ?? queueRes.json();
-      if (Array.isArray(items)) {
-        const found = items.find(
-          (item: Record<string, unknown>) => item.attemptId === attemptId,
-        );
-        expect(found).toBeUndefined();
-      }
-    });
-  });
-
-  // ─── Scenario #1: save before submit allowed ───────────────────
-  describe("#1 save before submit is allowed", () => {
-    it("in_progress attempt accepts save", async () => {
-      const examRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: buildExamPayload({
-          title: "Proto1-#1 Save Allowed",
-          courseId,
-          questionIds: [questionId],
-        }),
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const saExamId = examRes.json().id as string;
-
-      await ctx.app.inject({
-        method: "POST",
-        url: `/api/exams/${saExamId}/publish`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      await enrollCandidateForExam(ctx, candidateProfileId, saExamId);
-
-      const startRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${saExamId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      const attemptId = startRes.json().id as string;
-      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
-
-      const saveRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${qId}`,
-        payload: {
-          attemptId,
-          questionId: qId,
-          answer: "a",
-          clientSeq: 1,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      expect(saveRes.statusCode).toBe(200);
-      expect(saveRes.json().accepted).toBe(true);
-    });
-  });
+  // ─── Scenario #11/#12/#14: deadline save/submit + grading queue ─
+  // Owned by candidate-save-submit.test.ts:938 (save after deadline rejected,
+  // submit of saved answers still works) and gradingQueue.test.ts:348
+  // (queue excludes attempts whose grading entries are all completed_auto).
 
   // ─── Scenario #15: future baseVersion rejected (P7-S2-B) ───
   // ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION: a save claiming a

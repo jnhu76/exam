@@ -13,11 +13,10 @@
  *
  * Layers proven here:
  *  1. baseline driver laziness (no instrumentation);
- *  2. `Promise.resolve(query)` DOES execute a lazy query;
- *  3. the SUPERSEDED pre-corrective wrapper (inline copy of the old
- *     mechanism) eagerly executed every statement — the MAJOR-2 defect;
- *  4. the corrective wrapper does NOT execute or reorder anything;
- *  5. full OFF-vs-ON neutrality gate: identical server-side journal,
+ *  2. `Promise.resolve(query)` DOES execute a lazy query — this owns the
+ *     eager-observation mechanism the superseded MAJOR-2 wrapper relied on;
+ *  3. the corrective wrapper does NOT execute or reorder anything;
+ *  4. full OFF-vs-ON neutrality gate: identical server-side journal,
  *     returned values, transaction semantics, and error propagation.
  */
 import { describe, expect, it } from "vitest";
@@ -47,24 +46,6 @@ async function pgReachable(): Promise<boolean> {
 
 const PG_UP = await pgReachable();
 const PG_DESCRIBE = PG_UP ? describe : describe.skip;
-
-/**
- * SUPERSEDED pre-corrective mechanism, kept verbatim as the MAJOR-2
- * characterization target. It observed completion by attaching
- * catch/finally through `Promise.resolve(result)` — which submits the lazy
- * Query for execution at CREATION time. Never reintroduce this.
- */
-function installSupersededEagerWrapper(sql: postgres.Sql): void {
-  const orig = sql.unsafe.bind(sql);
-  const instrumented = (...args: Parameters<typeof orig>) => {
-    const result = orig(...args);
-    void Promise.resolve(result)
-      .catch(() => undefined)
-      .finally(() => undefined);
-    return result;
-  };
-  sql.unsafe = instrumented as typeof sql.unsafe;
-}
 
 /** One-connection real-PG fixture bound to the isolated test schema. */
 async function makeSql(
@@ -120,27 +101,6 @@ PG_DESCRIBE("capacity research instrumentation neutrality", () => {
       const probe = await probeCount(sql, table);
       expect(probe[0]?.n).toBe(1);
       await eager;
-    } finally {
-      await sql.end();
-      await iso.cleanup();
-    }
-  });
-
-  it("SUPERSEDED pre-corrective wrapper eagerly executed the statement (MAJOR-2 defect, characterized)", async () => {
-    const iso = await getIsolatedTestDb("cap-neutral-superseded");
-    const sql = await makeSql(iso.schemaName, iso.databaseUrl);
-    try {
-      installSupersededEagerWrapper(sql);
-      const table = await createLogTable(sql);
-      const q = sql.unsafe(
-        `INSERT INTO ${table} (op) VALUES ('superseded-wrapper')`,
-      );
-      const probe = await probeCount(sql, table);
-      // The INSERT is durable BEFORE any caller awaited it — the wrapper
-      // alone submitted the query. This changed execution timing and, for
-      // later-created statements, submission order.
-      expect(probe[0]?.n).toBe(1);
-      await q;
     } finally {
       await sql.end();
       await iso.cleanup();

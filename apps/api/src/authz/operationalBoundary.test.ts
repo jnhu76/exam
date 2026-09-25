@@ -21,6 +21,7 @@ import { eq } from "drizzle-orm";
  *   - Maintainer cannot perform business mutations (force-submit, time grant,
  *     misconduct, result publish);
  *   - Maintainer never receives business-integrity diagnostics (D8);
+ *   - operational responses never echo secrets or host paths (P7-E);
  *   - POST /email/test no longer rides the diagnostics view capability (D7);
  *   - Admin behavior unchanged (compatibility);
  *   - Admin + Maintainer on the same actor is rejected server-side (D14).
@@ -209,6 +210,24 @@ describe("P7-E2A Operational RBAC Boundary", () => {
       const body = res.json();
       expect(body.integrity).toBeDefined();
       expect(typeof body.integrity.submittedNotTerminalized).toBe("number");
+    });
+
+    it("all operational responses are free of secrets and host paths", async () => {
+      const urls = [
+        "/api/system/health",
+        "/api/system/diagnostics",
+        "/api/system/backups",
+        "/api/system/restore-readiness",
+        "/api/system/ops-policy",
+      ];
+      for (const url of urls) {
+        const res = await asAdmin("GET", url);
+        expect(res.statusCode, `GET ${url}`).toBe(200);
+        const text = JSON.stringify(res.json());
+        expect(text).not.toMatch(
+          /postgresql:\/\/|PGPASSWORD|SMTP_PASSWORD|JWT_SECRET|REDIS_PASSWORD|\/var\/lib|\/mnt\//i,
+        );
+      }
     });
   });
 
