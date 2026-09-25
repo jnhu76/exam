@@ -1,10 +1,10 @@
-// ── P7-M: exam creation wizard state (single overrides authority) ──
+// ── Exam creation wizard state (single overrides authority) ──
 //
 // Authority: user review decision — single-state `overrides` authority, no
 // parallel explicitNulls Set. Property absent ⇒ inherit selected profile
 // (or code default when no profile). Property present (incl. explicit null) ⇒
-// explicit override. This mirrors the M2 route's `rawBody[field] !==
-// undefined` contract byte-for-byte.
+// explicit override. This mirrors the exam-create route's `rawBody[field] !==
+// undefined` contract.
 //
 // The preview reuses `applyExamProfileDefaults` from `@exam/domain` via
 // `buildWizardPolicyPreview` — the frontend NEVER re-implements precedence.
@@ -98,7 +98,7 @@ export function setOverride<K extends keyof ExamProfilePolicyDefaults>(
  * Set the interruption policy override ATOMICALLY. Leaving `bounded_grace`
  * (strict / operator_incident) also writes explicit `null` for both grace
  * caps, so profile-supplied caps cannot survive into a policy that forbids
- * them (ADR-013 / M1 INVALID_INTERRUPTION_POLICY). This mirrors the
+ * them (ADR-013 / INVALID_INTERRUPTION_POLICY). This mirrors the
  * ExamProfileEditPage semantics for the same transition.
  */
 export function setInterruptionPolicyOverride(
@@ -167,9 +167,9 @@ export function goToStep(state: WizardState, step: number): WizardState {
  * The schedule is a required user decision — missing openAt/closeAt FAILS
  * CLOSED instead of silently inventing "now" / "now + 24h" authority.
  *
- * Per M2 P2-1: when a profile supplies resultPublicationMode, the wizard does
- * NOT send controlFlags.showResultImmediately (it sends no controlFlags at
- * all — control flags are not part of the supported policy surface).
+ * When a profile supplies resultPublicationMode, the wizard does NOT send
+ * controlFlags.showResultImmediately (it sends no controlFlags at all — control
+ * flags are not part of the supported policy surface).
  */
 export function buildCreateExamPayload(
   state: WizardState,
@@ -209,7 +209,7 @@ export function buildCreateExamPayload(
     }
   } else {
     // deadline/untimed: explicit semantic null. Omitting would let a profile
-    // duration survive into an illegal combination (M2 wire rule §161).
+    // duration survive into an illegal combination.
     payload.durationMinutes = null;
   }
   // Send ONLY the explicit overrides (own keys, preserving null) via the

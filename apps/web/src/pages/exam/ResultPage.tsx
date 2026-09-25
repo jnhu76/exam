@@ -52,9 +52,9 @@ function formatQuestionType(type: string, t: (key: string) => string): string {
 /**
  * Renders an answer value as text, with optional truncation for long fill-blank answers. Rich documents render through the static content renderer (issue 301).
  *
- * issue 301 corrective pass: the frozen `answerMode` is the render authority —
- * a payload that merely looks like a ContentDocumentV1 envelope on a
- * non-rich (or corrupt) answer keeps the safe legacy formatter.
+ * The frozen `answerMode` is the render authority: a payload that merely looks
+ * like a ContentDocumentV1 envelope on a non-rich (or corrupt) answer keeps the
+ * plain-text formatter.
  */
 function AnswerText({
   answer,
@@ -189,9 +189,9 @@ export function ResultPage() {
               <TableBody>
                 {result.questionResults.map((question) => {
                   const isManual = question.manualGraded === true;
-                  // Candidate DTO strips standardAnswer server-side
-                  // (RBAC-M10-E); an objective question whose answer is
-                  // absent was hidden, not manually graded.
+                  // Candidate DTO strips standardAnswer server-side, so an
+                  // objective question whose answer is absent was hidden, not
+                  // manually graded.
                   const answerHidden =
                     !isManual && question.standardAnswer == null;
                   return (

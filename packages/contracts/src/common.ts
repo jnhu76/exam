@@ -55,7 +55,7 @@ export type SortParams = z.infer<typeof SortParamsSchema>;
  * Includes a machine-readable code, human message, optional details, and request ID.
  *
  * Semantics are frozen by the Message & Error Contract
- * (docs/contracts/api-contract.md, #413 C0):
+ * (docs/contracts/api-contract.md):
  * - `code` is a stable coarse product-level machine contract.
  * - `message` is non-authoritative compatibility text; clients MUST NOT
  *   parse or branch on it. Wording/fallback language is not machine semantics.
@@ -90,11 +90,11 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 /**
  * Schema for a single field-level validation error detail.
  *
- * Semantics frozen by the Message & Error Contract (#413 C0): `field` is
- * the machine-addressable path, `code` is the machine semantic, `message`
- * is compatibility human text (non-authoritative). C2 adds `params` for
- * structured dynamic values (additive; value domain frozen to
- * `string | number`).
+ * Semantics frozen by the Message & Error Contract
+ * (docs/contracts/api-contract.md D0.7): `field` is the machine-addressable
+ * path, `code` is the machine semantic, `message` is compatibility human text
+ * (non-authoritative), and `params` carries structured dynamic values
+ * (additive; value domain frozen to `string | number`).
  */
 export const ValidationErrorDetailSchema = z.object({
   field: z

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Verification-marker contract (#614 G5 guard 4).
+ * Verification-marker contract.
  *
  * Relation checked: every "Last verified against (commit):" marker in an
  * ACTIVE doc must (a) name a SHA that resolves to a real commit in this

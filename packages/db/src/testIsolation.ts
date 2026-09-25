@@ -123,7 +123,7 @@ async function withAdminConnection<T>(
  * Create an isolated schema in the PostgreSQL database.
  * Idempotent — safe to call multiple times.
  *
- * ADR-007 Phase 6D: the `CREATE SCHEMA` is wrapped in the cross-process
+ * The `CREATE SCHEMA` is wrapped in the cross-process
  * test-infra advisory lock. Under `@exam/db` coverage, several Vitest workers
  * concurrently CREATE SCHEMA + migrate against the same PG instance, contending
  * with `testWorkerDatabase.test.ts`'s CREATE DATABASE. The lock serializes the
@@ -165,7 +165,7 @@ export async function createTestSchemaUnlocked(
  * Drop an isolated schema and all its contents.
  * Idempotent — safe to call multiple times.
  *
- * ADR-007 Phase 6D: wrapped in the test-infra advisory lock to avoid racing
+ * Wrapped in the test-infra advisory lock to avoid racing
  * with concurrent CREATE SCHEMA / CREATE DATABASE on the same catalog.
  */
 export async function dropTestSchema(
@@ -187,9 +187,6 @@ export async function dropTestSchema(
   });
 }
 
-/**
- * Options for {@link setupIsolatedTestDb}.
- */
 export interface TestDbIsolationOptions {
   /** Namespace for the schema (e.g. "api", "db", "api-coverage", "db-coverage"). */
   namespace: string;
@@ -201,9 +198,6 @@ export interface TestDbIsolationOptions {
   keepSchema?: boolean;
 }
 
-/**
- * Result of {@link setupIsolatedTestDb}.
- */
 export interface IsolatedTestDb {
   /** The created schema name. */
   schemaName: string;

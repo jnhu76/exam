@@ -22,7 +22,7 @@ export interface CourseListFilters {
   /** Case-insensitive substring search over course `name` or `code`. */
   search?: string;
   /**
-   * Restrict the listing to these course ids (issue #286 LIST scope filter).
+   * Restrict the listing to these course ids (LIST scope filter).
    * Applied in SQL BEFORE pagination/count — callers pass the actor's active
    * Teacher assignment set (an EMPTY array here yields zero rows by contract).
    */
@@ -36,7 +36,7 @@ export function createCourseRepo(db: Database) {
   return {
     ...repo,
     /**
-     * Authorization chain for the course scope resolver (issue #286): the
+     * Authorization chain for the course scope resolver: the
      * course row + its organization anchor, org-scoped. Mirrors
      * examRepo.findAuthorizationChain — single query, `.limit(1)`, no
      * error surfacing (the resolver maps null to resource_not_found).

@@ -2,11 +2,11 @@ import { z } from "zod";
 import { NOTIFICATION_TYPES } from "@exam/domain";
 import { PaginationParamsSchema, PaginatedResponseSchema } from "./common.js";
 
-// P5-N1 — Notification Inbox contracts.
+// Notification Inbox contracts.
 //
-// Authority: P5-N1-R0 §19 (frozen V1 API contract), extended additively for
-// `exam_assigned` (#402/#299). Pagination REUSES the repo's offset/page
-// convention (PaginationParamsSchema), NOT an opaque base64url cursor.
+// Frozen V1 API contract (message contract / docs/contracts/api-contract.md).
+// Pagination REUSES the repo's offset/page convention (PaginationParamsSchema),
+// NOT an opaque base64url cursor (contrast the audit-log keyset cursor).
 // Clients never pass organizationId or recipientUserId; scope derives from
 // authenticated context.
 

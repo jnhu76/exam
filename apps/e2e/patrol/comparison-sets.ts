@@ -105,7 +105,7 @@ export const SHELL_COMPARISON_VIEWPORT = { width: 1280, height: 800 };
 export const ROLE_COMPARISON_VIEWPORT = { width: 1440, height: 900 };
 
 /**
- * §43 Set E — navigation hierarchy continuity (#494 corrective-1). The
+ * Set E — navigation hierarchy continuity (#494). The
  * varying dimension is the ROUTE INSIDE one navigation family; persona,
  * viewport (1280×800), browser and seed stay constant. Every tile of a
  * family must keep the SAME current destination (its family root), proving

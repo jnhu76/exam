@@ -1,11 +1,10 @@
 /**
  * Candidate exam-eligibility capability preHandler (RBAC-M10-A, archetype B).
  *
- * Resource-aware authorization for the candidate exam-eligibility routes:
- *
- *   GET /candidate/exams/:examId         (ExamTake)
- *   POST /attempts/:examId/queue         (AttemptStart)
- *   POST /attempts/:examId/start         (AttemptStart)
+ * Resource-aware authorization for the candidate exam-eligibility routes — the
+ * registry entries declaring `runtimeAuthz.kind: "exam_eligibility"`
+ * (`authz/routeRegistry.ts` owns the route → capability pairing and each
+ * route's `eligibilityDenialMode`).
  *
  * These routes reference an exam (and an enrollment) but NO attempt exists
  * yet (directive §4 archetype B). The authorization decision is **capability +

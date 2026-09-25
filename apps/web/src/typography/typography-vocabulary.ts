@@ -1,10 +1,10 @@
 /**
- * Typography semantic vocabulary — public API surface (UI-VOCAB-1T).
+ * Typography semantic vocabulary — public API surface.
  *
- * DERIVED FROM the canonical `recipeRegistry.ts` (UI-TYPOGRAPHY-AUTHORITY-RECON-1
- * §8). This file deliberately holds NO ownership data of its own — the registry
- * is the single canonical authority. Names and types are re-exported here so
- * existing callers (and `typography-vocabulary.test.ts`) keep their public API.
+ * DERIVED FROM the canonical `recipeRegistry.ts`. This file deliberately holds
+ * NO ownership data of its own — the registry is the single canonical
+ * authority. Names and types are re-exported here so existing callers keep
+ * their public API.
  *
  * Authority chain:
  *   recipeRegistry.ts (canonical) → this file (names/types) → .md (generated
@@ -14,11 +14,12 @@
  * component-owned authorities (FieldError, StatusBadge), not typography recipes.
  *
  * Note: a structural lint proxy for these recipes (`exam-ui/no-raw-typography`)
- * was retired in UI-MIGRATE-N-W3 §12 — it could not deterministically
- * distinguish section-title ownership from topbar/question/overlay title roles.
- * Recipe authority is now enforced by the deterministic
- * `exam-ui/no-typography-authority-conflict` rule (RECON-1 §12, conflict-only
- * where a type-* recipe is explicitly selected) plus the recipe authority tests.
+ * is not viable — it cannot deterministically distinguish section-title
+ * ownership from topbar/question/overlay title roles. Recipe authority is
+ * enforced instead by the deterministic
+ * `exam-ui/no-typography-authority-conflict` rule (conflict-only where a type-*
+ * recipe is explicitly selected) plus the recipe authority tests in
+ * `recipeRegistry.test.ts` / `recipes.test.ts`.
  */
 import { RECIPE_NAMES, isRegisteredRecipe } from "./recipeRegistry";
 

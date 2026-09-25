@@ -13,8 +13,6 @@ export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, string> = {
   multiple_choice: "questionType.multiple_choice",
   fill_blank: "questionType.fill_blank",
   true_false: "questionType.true_false",
-  // P3-L0-1: text_response is registered so the type map stays exhaustive.
-  // The TakeExam runtime branch (textarea rendering) is P3-MOD-P0-2.
   text_response: "questionType.text_response",
 };
 
@@ -63,7 +61,7 @@ export const TYPE_VARIANT: Record<string, "default" | "secondary" | "outline"> =
     multiple_choice: "secondary",
     fill_blank: "outline",
     true_false: "outline",
-    // P3-MOD-P2-1C: text_response gets an explicit variant so it never
-    // silently falls back to default; secondary keeps it visually neutral.
+    // text_response gets an explicit variant so it never silently falls back
+    // to default; secondary keeps it visually neutral.
     text_response: "secondary",
   };

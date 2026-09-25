@@ -1,12 +1,8 @@
 /**
  * exam-ui/no-recipe-recomposition
  *
- * UI-STABILIZATION-GOAL-1 (#305): after the secondary/metadata/numeric
- * migration waves closed every legitimate bypass, three raw utility stacks
- * remained that map 1:1 onto registered recipes — unlike the retired
- * `no-raw-typography` (text-{base,lg} + font-{semibold,bold}), whose
- * remaining hits were four distinct unregistered title roles with no sound
- * detector:
+ * Three raw utility stacks map 1:1 onto registered recipes and may not be
+ * hand-written:
  *
  *   - `text-sm text-muted-foreground` replicates `type-secondary` (and drops
  *     its CJK line-height correction);

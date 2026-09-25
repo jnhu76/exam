@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { trackExamEvent } from "@/lib/examTelemetry";
 
 /**
- * REC-I3 — Disrupted-attempt direct restore UX (ADR-012 §Recovery Semantics).
+ * Disrupted-attempt direct restore UX (ADR-012 §Recovery Semantics).
  *
  * The frontend recovery flow frozen by ADR-012:
  *
@@ -17,7 +17,7 @@ import { trackExamEvent } from "@/lib/examTelemetry";
  * infer restore legality from `attemptStatus === "disrupted"` alone; it must
  * read `snapshot.canResume`.
  *
- * Race-safety model (revised after the PR #219 review):
+ * Race-safety model:
  * - A **monotonic generation token** + **`currentAttemptIdRef`** isolate
  *   asynchronous generations. The old shared-boolean `cancelledRef` could be
  *   reset by a new effect setup before a stale async chain resumed; a token

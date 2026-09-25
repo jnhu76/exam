@@ -256,7 +256,7 @@ export async function seedExam(
   // initializing questionIds empty and pushing base last.
   const questionIds: string[] = [questionId];
   // P3-MOD-P0-4: text_response is an independent QuestionType. Per
-  // exam-protocol.md §1.1 the legacy `fill_blank + standardAnswer=null`
+  // docs/architecture/exam-runtime.md §1.1 the legacy `fill_blank + standardAnswer=null`
   // encoding is deprecated for free-text questions.
   const textResponseQuestionIds: string[] = [];
   for (const tr of opts.textResponseQuestions ?? []) {

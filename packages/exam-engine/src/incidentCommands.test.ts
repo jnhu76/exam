@@ -1081,7 +1081,7 @@ describe("incidentCommands — link scope authority (fail-closed lookupAttempt)"
 
     it("rejects a force_submit target that does not match the incident anchor (400)", async () => {
       // Anchor-mismatch branch of the scope quadruple, proven at the command
-      // boundary (the deleted helper-only describe covered the same branch).
+      // boundary.
       const repo = makeRepo({
         findById: vi
           .fn()
@@ -1113,7 +1113,7 @@ describe("incidentCommands — link scope authority (fail-closed lookupAttempt)"
 
     it("links a force_submit whose scope quadruple matches (applied)", async () => {
       // The acceptance branch of the scope quadruple, proven at the command
-      // boundary (the deleted helper-only describe covered the same branch).
+      // boundary.
       const incident = examWideIncident();
       const repo = makeRepo({
         findById: vi.fn().mockResolvedValue(incident) as never,

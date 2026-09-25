@@ -24,7 +24,6 @@ export interface SeedUserIds {
   candidate2Id: string;
 }
 
-/** Return value of {@link seed}, containing the organization ID and user IDs. */
 export interface SeedResult {
   orgId: string;
   users: SeedUserIds;
@@ -76,11 +75,10 @@ const USER_DEFS = [
 ] as const;
 
 /**
- * P6-008: refuse to run the baseline seed in production. The baseline seed
- * ships known default credentials (admin/admin123, candidate/candidate123)
- * and is dev/test infrastructure only. The canonical production bootstrap
- * is `apps/api/src/scripts/bootstrap-admin.ts` (explicit credentials, no
- * Candidate accounts, audit evidence).
+ * Refuse to run the baseline seed in production. The baseline seed ships
+ * known default credentials and is dev/test infrastructure only. The canonical
+ * production bootstrap is `apps/api/src/scripts/bootstrap-admin.ts` (explicit
+ * credentials, no Candidate accounts, audit evidence).
  *
  * This guard is fail-closed: it throws when `APP_MODE=production` (or
  * `NODE_ENV=production` when APP_MODE is unset). It does NOT throw in
@@ -111,17 +109,16 @@ export function assertNotProductionSeed(
  * (admin, candidate, candidate2). Idempotent — re-running upserts on
  * conflict by username.
  *
- * Phase 1 minimal authentication/dev seed: creates `organizations` + `users` +
- * `user_role_assignments` only. Does NOT create `candidate_profiles`,
- * `candidate_fields`, `organization_settings`, courses, exams, or attempts.
+ * Minimal authentication/dev seed: it creates no candidate profiles, settings,
+ * courses, exams, or attempts (the implementation is the table-list authority).
  * Use `demo-seed.ts` for a complete interactive demo. A `Candidate`-role user
  * created by this seed can authenticate but has no CandidateProfile —
  * `POST /users/:id/reset-password` will reject it (target identity check
  * requires a profile).
  *
- * Production safety (P6-008): this function refuses to run when
- * `APP_MODE=production`. Use {@link assertNotProductionSeed} directly when
- * you need to guard without invoking the seed.
+ * Production safety: this function refuses to run when `APP_MODE=production`.
+ * Use {@link assertNotProductionSeed} directly when you need to guard without
+ * invoking the seed.
  *
  * @param db - Database instance.
  * @param hashFn - Password hashing function.
@@ -131,7 +128,7 @@ export async function seed(
   db: Database,
   hashFn: HashFunction,
 ): Promise<SeedResult> {
-  // P6-008: production fail-closed guard. The baseline seed is dev/test
+  // Production fail-closed guard. The baseline seed is dev/test
   // infrastructure and ships known default credentials (admin/admin123,
   // candidate/candidate123). It MUST NOT be used as the production
   // bootstrap path. The canonical production bootstrap is
@@ -203,10 +200,9 @@ export async function seed(
             // Conflict branch only resets `passwordHash`/`name` — deliberately
             // does NOT overwrite `role`/`isActive`, to preserve (a) authority
             // changes made via the role-assignment surface since the last seed,
-            // and (b) account-disable state (RBAC-M10-E authority preservation,
-            // commit 9f0261a).
+            // and (b) account-disable state (authority preservation).
             target: [schema.users.organizationId, schema.users.username],
-            // #325 classification decision: this re-seed DOES rewrite the
+            // This re-seed DOES rewrite the
             // stored credential, but it deliberately does NOT advance
             // users.auth_epoch. Seed is dev/demo tooling outside the product
             // login surface — every buildTestApp/seed run would otherwise
@@ -241,7 +237,7 @@ export async function seed(
     userIds.push(seededUserId!);
   }
 
-  // P7-E2A (ADR-017 D14): seed must never leave committed state with an
+  // ADR-017 D14: seed must never leave committed state with an
   // actor holding both active Admin and active Maintainer assignments
   // (e.g. a Maintainer secondary assignment added via the assignment surface
   // before a re-seed). Fail loudly instead of silently producing the

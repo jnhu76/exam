@@ -113,9 +113,8 @@ export async function scanForDisruptedAttempts(
  * actor, used when the background scanner needs to interact with
  * repositories that require a context.
  */
-// SYSTEM-M1: system actor context built by the shared @exam/authz factory
-// (role=System, actorId=system:heartbeat). Replaces the prior role:"Admin"
-// synthetic context. Scanner code never reads ctx.permissions.
+// System actor context from the shared @exam/authz factory (role=System,
+// actorId from SYSTEM_ACTOR_IDS). Scanner code never reads ctx.permissions.
 function createSystemContext(organizationId: string): RequestContext {
   return createSystemRequestContext(organizationId, SYSTEM_ACTOR_ID);
 }

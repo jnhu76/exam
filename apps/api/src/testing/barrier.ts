@@ -1,5 +1,5 @@
 /**
- * REC-I4-V1 — Deterministic concurrency barrier primitive.
+ * Deterministic concurrency barrier primitive.
  *
  * A `Deferred` is a one-shot promise that can be resolved or rejected from
  * outside the promise constructor. Useful for coordinating concurrent test

@@ -402,12 +402,12 @@ export function GradingDetailPage() {
           toast.success(t("admin.gradingDetail.toast.saved"));
         }
       } catch {
-        // Ambiguous result reconciliation (audit P1-5 / Slice 3). The POST may
-        // have committed on the server but lost its response (network error /
-        // timeout), so we must NOT assume failure. Re-GET grading-details and
-        // branch on the target question's authoritative server state. The
-        // classification is based on the server entry status, never on matching
-        // an English error message string.
+        // Ambiguous result reconciliation. The POST may have committed on the
+        // server but lost its response (network error / timeout), so we must NOT
+        // assume failure. Re-GET grading-details and branch on the target
+        // question's authoritative server state. The classification is based on
+        // the server entry status, never on matching an English error message
+        // string.
         await reconcileAfterPostError(questionId, score, commentAtSubmit);
       } finally {
         setSaving((prev) => ({ ...prev, [questionId]: false }));
@@ -496,11 +496,12 @@ export function GradingDetailPage() {
                   className="min-h-16"
                 >
                   {(() => {
-                    // issue 301 corrective pass: the frozen answerMode is the
-                    // render authority. Only a rich-mode answer that also
-                    // passes the deep document validation renders through
-                    // the rich renderer; anything else keeps the safe
-                    // legacy formatter.
+                    // The frozen answerMode is the render authority (see
+                    // resolveRichAnswerDocument): only a rich-mode answer that
+                    // also passes the deep document validation reaches the rich
+                    // renderer. A rich-mode value that fails validation shows the
+                    // explicit unsupported-answer notice instead of silently
+                    // degrading to the plain formatter.
                     const richDocument = resolveRichAnswerDocument(
                       q.candidateAnswer,
                       q.answerMode,

@@ -6,11 +6,10 @@
  * frequency, payload validation, and runtime emitter ownership are separate
  * concerns defined by the API audit boundary.
  *
- * **ADR Audit Boundary — NO rename.** The legacy names (`attempt.forceSubmit`,
- * `grading.score_entered`, `export_scores`, `branding.update`, …) are kept
- * verbatim. The jobcard-proposed `attempt.force_submitted` /
- * `grading.score_submitted` are NOT introduced (ADR "Naming collision guard").
- * New vocabulary is additive; lifecycle and compatibility decisions are
+ * **NO rename.** The legacy spellings (`attempt.forceSubmit`,
+ * `grading.score_entered`, `export_scores`, `branding.update`, …) are the wire
+ * and stored vocabulary and are kept verbatim; new vocabulary is additive
+ * (ADR "Naming collision guard"). Lifecycle and compatibility decisions are
  * recorded by the policy layer rather than encoded in this enum.
  */
 
@@ -25,7 +24,7 @@ export const AuditAction = {
   Logout: "logout",
   AuthProfileUpdate: "auth.profile_update",
   AuthPasswordUpdate: "auth.password_update",
-  // #297 identity lifecycle. Issuance of a reset capability is an atomic
+  // Identity lifecycle. Issuance of a reset capability is an atomic
   // credential fact (committed with token + outbox); rejected/burst request
   // observations are best-effort under a separate action. Both record the
   // routing outcome only — never a client-visible signal, and the actor is
@@ -54,11 +53,11 @@ export const AuditAction = {
   // ── Branding / settings ──
   BrandingUpdate: "branding.update",
 
-  // ── System operations (P7-E2A, ADR-017 D7) ──
+  // ── System operations (ADR-017 D7) ──
   // POST /email/test is a side-effecting action; it is audited under its own
   // action, never under a diagnostics-view action.
   SystemEmailTest: "system.email.test",
-  // P7-E3 (ADR-017 D9): Admin records the operational policy INTENT.
+  // ADR-017 D9: Admin records the operational policy INTENT.
   OpsPolicyUpdated: "ops.policy.updated",
 
   // ── Candidate ──
@@ -95,7 +94,7 @@ export const AuditAction = {
   ExamOpen: "exam.open",
   ExamClosed: "exam.closed",
 
-  // ── Exam policy profiles (P7-M2 authoring templates) ──
+  // ── Exam policy profiles (authoring templates) ──
   ExamProfileCreate: "exam_profile.create",
   ExamProfileUpdate: "exam_profile.update",
   ExamProfileDelete: "exam_profile.delete",
@@ -113,7 +112,7 @@ export const AuditAction = {
   UserDisabled: "user.disabled",
   UserReactivated: "user.reactivated",
   UserDelete: "user.delete",
-  // #297 staff invitation lifecycle.
+  // Staff invitation lifecycle.
   UserInvited: "user.invited",
   UserInvitationRevoked: "user.invitation_revoked",
   UserInvitationAccepted: "user.invitation_accepted",
@@ -133,12 +132,12 @@ export const AuditAction = {
   // ── Published exam security-sensitive update ──
   ExamPublishedScheduleUpdated: "exam.published_schedule_updated",
 
-  // ── Email outbox (P3-M4A) ──
+  // ── Email outbox ──
   EmailOutboxCreated: "email.outbox_created",
   EmailSendFailed: "email.send_failed",
   EmailSendRetried: "email.send_retried",
 
-  // ── Proctor incidents (P3-M9) ──
+  // ── Proctor incidents ──
   ProctorIncidentMarked: "proctor.incident_marked",
 
   // ── Exam incidents (ADR-014) ──
@@ -156,11 +155,11 @@ export const AuditAction = {
   ExamProctorAssigned: "exam.proctor_assigned",
   ExamProctorRevoked: "exam.proctor_revoked",
 
-  // ── Teacher-to-Course assignments (issue #286) ──
+  // ── Teacher-to-Course assignments (ADR-010 §4.12 carriers) ──
   CourseTeacherAssigned: "course.teacher_assigned",
   CourseTeacherRevoked: "course.teacher_revoked",
 
-  // ── Grader-to-Exam assignments (issue #296) ──
+  // ── Grader-to-Exam assignments (ADR-010 §4.13 carriers) ──
   ExamGraderAssigned: "exam.grader_assigned",
   ExamGraderRevoked: "exam.grader_revoked",
 } as const;

@@ -103,8 +103,8 @@ const heartbeatResponseSchema = z.object({
 
 /**
  * #292 — maps an engine-derived queue view onto the candidate wire contract.
- * The wire vocabulary (waiting/ready + position) is unchanged from the
- * legacy gate; the authority behind it is now the durable admission row.
+ * The wire vocabulary (waiting/ready + position) is fixed by the client
+ * contract; the authority behind it is the durable admission row.
  */
 function toQueueStatusResponse(
   examId: string,
@@ -666,8 +666,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       }
       const { exam } = statusResult;
       // #292: admission is enforced INSIDE startOrRestoreAttempt (engine
-      // authority, same transaction as the attempt create). The legacy
-      // route-level in-memory guard is gone.
+      // authority, same transaction as the attempt create).
       let attempt: ExamAttempt;
       let isNew: boolean;
       try {
@@ -683,7 +682,6 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
               ctx,
             );
 
-            // Build interruption repos for the full restore path.
             const episodeRepo = createInterruptionEpisodeRepoAdapter(
               createAttemptInterruptionRepo(tx),
               ctx,
@@ -853,7 +851,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
-        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam and
+        // Mint the EA capability via the canonical seam and
         // thread it (plus the same repo pair) into the reconciliation path.
         const cap = await lockEnrollmentAndAttempt(
           enrollments,
@@ -903,7 +901,6 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         return reconciled;
       })) as ExamAttempt;
 
-      // Load the exam for visibility/deadline computation
       const examRepo = createExamRepo(fastify.db);
       const examRow = await examRepo.findById(ctx, attempt.examId);
       if (!examRow) {
@@ -987,7 +984,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
-        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam
+        // Mint the EA capability via the canonical seam
         // (Enrollment → Attempt order). The canonical seam's locator read
         // doubles as the existence check; the ownership check runs against the
         // post-preparation attempt below.
@@ -1285,7 +1282,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             ctx,
           );
 
-          // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam.
+          // Mint the EA capability via the canonical seam.
           const cap = await lockEnrollmentAndAttempt(
             enrollments,
             attempts,

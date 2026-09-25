@@ -2,12 +2,11 @@
  * exam-ui/no-dialog-spatial-override
  *
  * Dialog geometry is owned by the DialogContent / AlertDialogContent size
- * vocabulary (P3 §12 dialog contract, issue 459): sm = 384, md = 512 (default),
- * lg = 672, plus the Content max-height and the data-slot="dialog-body"
- * vertical-scroll convention. A page overriding that geometry with bare
- * max-w-* / max-h-* / overflow-* utilities (including responsive-prefixed
- * variants like sm:max-w-lg) recreates the pre-contract page-private dialog
- * spatial system this rule exists to retire.
+ * vocabulary + max-height + the data-slot="dialog-body" scroll convention in
+ * components/ui/dialog.tsx (the authority for those values). A page overriding
+ * that geometry with bare max-w-* / max-h-* / overflow-* utilities (including
+ * responsive-prefixed variants like sm:max-w-lg) recreates the page-private
+ * dialog spatial system this rule exists to retire.
  *
  * Scope: JSX elements named DialogContent / AlertDialogContent in files that
  * import them from the ui/dialog / ui/alert-dialog primitives

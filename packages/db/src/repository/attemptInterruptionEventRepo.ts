@@ -19,7 +19,7 @@ export type InsertAttemptInterruptionEventInput = Omit<
 
 /**
  * Durable fact set of one committed heartbeat-detected episode, joined with
- * the attempt identity the System incident is derived from (#304 F3/F4A).
+ * the attempt identity the System incident is derived from.
  */
 export interface HeartbeatDetectedEpisodeRow {
   interruptionId: string;
@@ -173,8 +173,8 @@ export function createAttemptInterruptionEventRepo(db: Database) {
   }
 
   /**
-   * Durable-ledger discovery for the System incident reconciliation leg
-   * (#304 F4A): every committed heartbeat-detected episode of the
+   * Durable-ledger discovery for the System incident reconciliation leg:
+   * every committed heartbeat-detected episode of the
    * organization, oldest first. Deliberately NOT filtered by completion —
    * the completion probe is the caller's batch check against the
    * `exam_incident_events` operation-unique arbiter (the episode id cannot

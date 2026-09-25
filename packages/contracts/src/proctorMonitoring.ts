@@ -11,10 +11,9 @@ import { AttemptStatusEnum, type AttemptStatusValue } from "./attempt.js";
  * failures, connectivity), never a risk-control verdict. Timeline `metadata`
  * is a server-projected **allowlist** projection — never the raw client blob.
  *
- * NAMING NOTE: "proctor" here denotes the monitoring DOMAIN, not a standalone
- * role. Phase 1/2.1 has only Admin + Candidate; these APIs are Admin-gated.
- * A formal Proctor role, proctor_assignments, and scoped RBAC arrive in
- * Phase 3. The name is retained so the domain vocabulary is stable.
+ * NAMING NOTE: "proctor" here denotes the monitoring DOMAIN. Route authority
+ * (admin_only vs assignment_scoped) is owned by the route registry, not by
+ * these types.
  */
 
 /**

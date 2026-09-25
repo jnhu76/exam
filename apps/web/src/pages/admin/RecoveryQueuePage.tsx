@@ -498,7 +498,7 @@ export function RecoveryQueuePage() {
       </DataTableShell>
 
       {/* Background-refresh failure: inline warning outside the items branch
-          so an empty queue + poll failure keeps the empty table + warning (P1-3). */}
+          so an empty queue + poll failure keeps the empty table + warning. */}
       {error && snapshotAt !== null && (
         <InlineErrorBanner>
           {t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}

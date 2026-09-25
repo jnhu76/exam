@@ -67,15 +67,14 @@ function isAuthzPreHandler(ph: unknown): ph is AuthzPreHandler {
  *   - "flat": a `requireCapability` gate (authz.kind === "flat").
  *   - "scoped": a `requireScopedCapability` / candidate-runtime gate
  *     (authz.kind in scoped/candidate_context/exam_eligibility/own_attempt).
- *   - "other": anything else (e.g. tenant guard, zod validation).
+ *   - "other": anything else (e.g. zod validation).
  *
- * RBAC-M10-B PR190 REVIEW CORRECTIVE 1, Finding 2: the prior capture pipeline
- * filtered preHandlers through `isAuthzPreHandler` only, which excluded
- * `requireRole` handlers (they carry no `.authz` metadata). A route containing
- * BOTH `requireRole(["Admin"])` AND `requireCapability(perm)` would therefore
- * appear to have exactly one capability handler and pass the assertion
- * vacuously. This classification closes that hole by tagging role /
- * permission-list handlers at the decorator (mirroring the existing
+ * Classification hazard: filtering preHandlers through `isAuthzPreHandler`
+ * only would exclude `requireRole` handlers (they carry no `.authz`
+ * metadata). A route containing BOTH `requireRole(["Admin"])` AND
+ * `requireCapability(perm)` would then appear to have exactly one capability
+ * handler and pass the assertion vacuously. Role / permission-list handlers
+ * are therefore tagged at the decorator (mirroring the existing
  * `_isAuthenticate` tag), so the conformance test can assert `roleHandlers`
  * is exactly zero on every M10-B route.
  *
@@ -308,53 +307,20 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   // ──────────────────────── M10-B conformance ────────────────────────
 
   /**
-   * M10-B: 28 admin/management routes using capability-based gates (kind "flat").
+   * M10-B: the admin/management routes in `m10bRouteSpecs` below use flat
+   * capability-based gates — each spec is asserted to have exactly one
+   * flat-capability handler and zero scoped / role / permission-list handlers.
    *
-   * INVENTORY SPLIT:
-   *   Category A — 21 pre-existing flat-capability routes (not modified by M10-B).
-   *   Category B — 7 routes migrated from requireRole(["Admin"]) to requireCapability.
-   *
-   * MIGRATION CLOSURE:
-   *   The 7 migrated routes used capabilities granted only to Admin in the
-   *   current permission presets. The migration does not widen the effective
-   *   access matrix.
-   *
-   * RESOURCE-SCOPE ENFORCEMENT:
-   *   NOT IMPLEMENTED BY M10-B.
-   *
-   *   The application is single-tenant, so cross-tenant authorization is not
-   *   required. However, single-tenancy does not eliminate resource-level
-   *   assignment requirements. The current repository has no authoritative
-   *   Teacher/Course, Teacher/Exam, Proctor/Exam, or Grader/Work assignment
-   *   data model. Resource-scope authorization is therefore deferred to a
-   *   separate resource-relationship authorization milestone.
-   *
-   *   The registry fields `scope`, `resolver`, `resource`, and `migrationStage`
-   *   are PLANNED metadata for future resource-scope enforcement — they are
-   *   NOT consumed at runtime by the current "flat" capability preHandler.
-   *
-   * ensureTargetOrg:
-   *   - enforces the current organization data context;
-   *   - does not prove Teacher-to-course assignment;
-   *   - does not prove Teacher-to-exam assignment;
-   *   - does not prove Proctor-to-exam assignment;
-   *   - does not prove Grader-to-work assignment.
-   *
-   * CURRENT IMPLEMENTED MODEL:
-   *   - authentication
-   *   - flat capability preset
-   *   - single-organization data context
-   *   - handler/service existence checks
-   *   - handler/service state invariants
-   *
-   * NOT IMPLEMENTED:
-   *   - Teacher resource assignment
-   *   - Proctor resource assignment
-   *   - Grader resource assignment
-   *   - general resource-scope resolver execution
+   * "Flat" means organizational scope only: these routes resolve no resource
+   * assignment, so their authorization is the capability preset plus the
+   * handler's own org-anchor check (`ensureTargetOrg`). Resource-assignment
+   * scoping for other route families is owned by the scoped-capability gates
+   * (`requireScopedCapability`, ADR-010) and asserted in the scoped-grant
+   * block below — not here.
    *
    * This conformance test verifies structural correctness of the capability
-   * gate declarations. It does NOT prove resource-level authorization closure.
+   * gate declarations for these specs. It does NOT prove resource-level
+   * authorization closure.
    */
   const m10bRouteSpecs: Array<{
     method: string;
@@ -400,8 +366,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   ];
 
   /**
-   * Per-route M10-B conformance (RBAC-M10-B PR190 REVIEW CORRECTIVE 1,
-   * Finding 2). For each of the 28 routes we prove:
+   * Per-route M10-B conformance. For each spec in `m10bRouteSpecs` we prove:
    *
    *   - exactly one matching route registration exists;
    *   - exactly one flat-capability handler is wired;
@@ -411,11 +376,11 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    *   - zero legacy permission-list handlers are wired.
    *
    * The role / permission-list assertions use the `_isRequireRole` /
-   * `_isRequirePermission` introspection tags applied at the decorators. The
-   * prior implementation only filtered through `isAuthzPreHandler`, which
-   * silently excluded role handlers and made the assertion vacuous for any
-   * route that carried BOTH a role gate and a capability gate. The tag-based
-   * classification closes that hole.
+   * `_isRequirePermission` introspection tags applied at the decorators.
+   * Filtering only through `isAuthzPreHandler` would silently exclude role
+   * handlers and make the assertion vacuous for any route that carried BOTH a
+   * role gate and a capability gate; the tag-based classification closes that
+   * hole.
    */
   it.each(m10bRouteSpecs)(
     "[M10-B] $method $path — flat capability gate, no role/permission gate",
@@ -807,37 +772,15 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   // ──────────────────────── M10-C conformance ────────────────────────
 
   /**
-   * M10-C: identity & role-assignment authority. 10 admin routes using
-   * capability-based gates (kind "flat"), migrated from legacy
-   * requireRole(["Admin"]).
+   * M10-C: identity & role-assignment authority. The route inventory, methods
+   * and target permissions live in `m10cRouteSpecs` below — the registration
+   * under test, not a copy. Each entry is a flat capability gate (no resolver).
+   * Org-anchor isolation is enforced by `ensureTargetOrg` in the handlers.
    *
-   * INVENTORY SPLIT:
-   *   - user.ts: 5 routes (GET /users, POST /users, PATCH /users/:id,
-   *     POST /users/:id/reset-password, DELETE /users/:id)
-   *   - roleAssignments.ts: 5 routes (GET /roles/assignable,
-   *     GET /users/:id/role-assignments, POST /users/:id/role-assignments,
-   *     PATCH /role-assignments/:assignmentId,
-   *     DELETE /role-assignments/:assignmentId)
-   *
-   * TARGET PERMISSIONS:
-   *   UserView, UserCreate, UserUpdate, UserPasswordReset, UserDelete,
-   *   UserRoleAssign. All six are Admin-only across every role preset
-   *   (Teacher/Proctor/Grader/Candidate/System), so the migration is
-   *   access-matrix-neutral (zero effective expansion, zero Admin regression).
-   *
-   * RUNTIME AUTHORITY BOUNDARY:
-   *   - users.role remains the de facto runtime authorization source.
-   *   - user_role_assignments remains assignment-management data only.
-   *   - syncUsersRoleFromPrimary is preserved on every primary-active
-   *     assignment mutation path (POST/PATCH/DELETE in roleAssignments.ts;
-   *     PATCH role-change in user.ts).
-   *   - M10-C does NOT begin M10-E (assignment-backed runtime authority).
-   *
-   * RESOURCE-SCOPE ENFORCEMENT: NOT IMPLEMENTED BY M10-C. Same single-tenant
-   * boundary as M10-B. The registry's scope/resolver/migrationStage fields
-   * remain planned metadata; they are not consumed at runtime by the flat
-   * capability preHandler. Org-anchor isolation continues to be enforced
-   * via ensureTargetOrg in the route handlers.
+   * INVARIANT: every primary-active assignment mutation path keeps the
+   * `users.role` compatibility cache in sync via `syncUsersRoleFromPrimary`
+   * (POST/PATCH/DELETE in roleAssignments.ts; PATCH role-change in user.ts).
+   * `users.role` is a cache; authorization reads the capability authority.
    */
   const m10cRouteSpecs: Array<{
     method: string;
@@ -932,7 +875,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   );
 
   /**
-   * Negative control (Finding 2 §5.4). Proves the tag-based classification
+   * Negative control. Proves the tag-based classification
    * actually detects a role gate. Without this, the corrected assertion above
    * could still be vacuous — for example if the tag were never set or the
    * classifier silently ignored it.
@@ -941,7 +884,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    * BOTH `authenticate` AND `requireRole(["Admin"])` AND
    * `requireCapability(Permission.ExamView)`. The capture pipeline must report
    * exactly one role handler and exactly one flat-capability handler. This
-   * synthetic route is NOT part of the 28-route production inventory.
+   * synthetic route is NOT part of the production inventory.
    */
   it("negative control — capture detects a role gate on a synthetic route", async () => {
     const syntheticCaptured: CapturedRoute[] = [];

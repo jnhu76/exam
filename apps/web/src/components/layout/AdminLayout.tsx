@@ -32,19 +32,19 @@ import { AccessDeniedPage } from "@/pages/admin/AccessDeniedPage";
  *
  *   <lg            mobile/tablet — sidebar removed from flow (CSS hidden),
  *                 navigation in a left Sheet drawer; menu trigger in topbar.
- *   lg … <xl       compact desktop — persistent 56px icon rail (collapsed).
- *   >=xl           full desktop — persistent 232px sidebar; the user-controlled
- *                 collapse (232→56) is available only here.
+ *   lg … <xl       compact desktop — persistent collapsed icon rail.
+ *   >=xl           full desktop — persistent expanded sidebar; the
+ *                 user-controlled collapse is available only here.
  *
- * Width is driven by the existing AppSidebar `collapsed` prop (w-14 vs
- * w-[232px]); visibility below lg is CSS (`hidden lg:flex`). The shell always
- * renders <AppSidebar> (test-visible) and selects `collapsed` from the xl
- * breakpoint. The mobile drawer reuses the same SidebarContent authority.
- * Redirects unauthenticated or candidate-role users to /login.
+ * Width is driven by AppSidebar's `collapsed` prop; visibility below lg is CSS
+ * (`hidden lg:flex`). The shell always renders <AppSidebar> (test-visible) and
+ * selects `collapsed` from the xl breakpoint. The mobile drawer reuses the same
+ * SidebarContent authority. Redirects unauthenticated or candidate-role users
+ * to /login.
  *
- * OWNERSHIP (issue 455 Model A): this shell owns navigation chrome and the
- * main gutter only. Page width roles are declared by each page through
- * <PageContainer role="…">; the shell must never infer a role from the URL.
+ * OWNERSHIP: this shell owns navigation chrome and the main gutter only. Page
+ * width roles are declared by each page through <PageContainer role="…">
+ * (docs/standards/ui-system.md); the shell must never infer a role from the URL.
  */
 export function AdminLayout() {
   const { t } = useTranslation();
@@ -118,11 +118,11 @@ export function AdminLayout() {
     );
   }
 
-  // P4-C2: centralized per-route capability guard. The actor has some console
+  // Centralized per-route capability guard. The actor has some console
   // capability (admitted above), but may lack the specific capability the
   // current /admin/* route requires (e.g. a Teacher direct-URLing /admin/users).
   // Render a clear 403 page instead of the privileged page. Backend remains
-  // authoritative; this fixes direct-URL UX consistency (P4-G-02).
+  // authoritative; this keeps direct-URL behavior consistent with the guard.
   const relativePath = adminRelativePath(location.pathname);
   const routeDenied =
     relativePath !== null && !canAccessAdminRoute(user, relativePath);

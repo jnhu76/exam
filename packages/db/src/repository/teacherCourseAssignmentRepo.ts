@@ -24,11 +24,12 @@ export interface RevokeTeacherCourseAssignmentInput {
 }
 
 /**
- * Tenant-scoped repository for the Teacher-to-Course assignment aggregate
- * (issue #286 §3A). Every method filters by `ctx.organizationId` (fail closed
- * on cross-organization rows); user/course same-organization consistency is
- * enforced by the route command layer (plain `users(id)` / composite
- * `courses(organization_id, id)` FKs, mirroring ADR-015 §15).
+ * Tenant-scoped repository for the Teacher-to-Course assignment aggregate.
+ * Every method filters by `ctx.organizationId` (fail closed on cross-
+ * organization rows); user/course same-organization consistency is enforced
+ * by the route command layer (plain `users(id)` / composite
+ * `courses(organization_id, id)` FKs, mirroring the ADR-015 §4.1 episode
+ * pattern).
  *
  * Episode semantics: at most one ACTIVE episode per (organization, teacher,
  * course) — enforced by the `teacher_course_assignments_active_unique`
@@ -231,7 +232,7 @@ export function createTeacherCourseAssignmentRepo(db: Database) {
 
   /**
    * Deletes EVERY episode (active + revoked) for a course, scoped to the
-   * tenant. Used inside the course-delete transaction (issue #286): the
+   * tenant. Used inside the course-delete transaction: the
    * composite course FK would otherwise block deletion once any episode
    * exists. Episode history for a deleted course is meaningless; the
    * compliance record lives in audit_logs.

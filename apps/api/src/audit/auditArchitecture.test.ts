@@ -175,10 +175,11 @@ describe("audit architecture", () => {
   });
 
   it("keeps a narrow atomic set and excludes exam runtime domain history", () => {
-    // REC-I6 (ADR-014): the nine incident write commands record atomic
-    // compliance audits inside their command transaction. That contract
-    // block is pinned exactly below; the ratio guard applies to the rest so
-    // atomic durability cannot grow unbounded outside a documented contract.
+    // The incident write commands listed in INCIDENT_ATOMIC below record
+    // atomic compliance audits inside their command transaction (ADR-014).
+    // That contract set is pinned exactly; the ratio guard applies to the rest
+    // so atomic durability cannot grow unbounded outside a documented
+    // contract.
     const INCIDENT_ATOMIC: AuditActionKey[] = [
       AuditAction.IncidentCreated,
       AuditAction.IncidentInvestigated,

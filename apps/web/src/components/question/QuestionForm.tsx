@@ -73,8 +73,8 @@ export interface QuestionFormData {
     fillBlankMatchMode: "exact" | "keyword";
     fillBlankCaseSensitive?: boolean;
   };
-  // P3-MOD-P2-1C: text_response grading basis. null for objective types;
-  // a non-empty, non-whitespace string required for text_response publish.
+  // text_response grading basis. null for objective types; a non-empty,
+  // non-whitespace string required for text_response publish.
   rubric: string | null;
 }
 
@@ -223,7 +223,6 @@ export function QuestionForm({
     });
   }
 
-  /** Applies the pending lossy downgrade after the user confirms. */
   function confirmPendingToPlain() {
     if (pendingToPlain === "content") {
       downgradePromptToPlain();

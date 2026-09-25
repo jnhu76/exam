@@ -122,8 +122,8 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
 
   it("proctor monitoring reads stay flagged sensitive", () => {
     // proctor-incident's sensitive flag is pinned above; these two reads are
-    // the remaining sensitive proctor routes (pin formerly duplicated in
-    // proctorMonitoring.crossOrg.test.ts).
+    // the remaining sensitive proctor routes. The registry entry is their
+    // single pin owner — route-level suites must not re-declare it.
     for (const [method, path] of [
       ["GET", "/admin/exams/:examId/proctor/attempts"],
       ["GET", "/admin/attempts/:attemptId/proctor-events"],
@@ -134,21 +134,20 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
 });
 
 /**
- * RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — registry/runtime conformance.
+ * Registry/runtime conformance for the scoped-authorization routes.
  *
  * The route registry is the documented target state for every protected
- * route. Four routes were migrated in this corrective to close the
- * registry-vs-runtime drift surfaced in review #2/#5:
+ * route. These four declarations are pinned here:
  *
  *   - GET  /scores/attempts/:attemptId        -> score capability (own/all)
  *   - GET  /admin/exams/:examId/proctor/attempts   -> exam resolver
  *   - GET  /admin/attempts/:attemptId/proctor-events   -> attempt resolver
  *   - POST /admin/attempts/:attemptId/proctor-incident -> attempt resolver
  *
- * These tests pin the registry declarations so the runtime migration (which
- * the route-level + permission-matrix tests prove behaviorally) is backed by
- * a stable contract. If a future edit reverts a runtime decorator without
- * updating the registry (or vice versa), the mismatch surfaces here.
+ * The route-level + permission-matrix tests prove the runtime behaviorally, so
+ * this file backs it with a stable registry contract. If a future edit reverts
+ * a runtime decorator without updating the registry (or vice versa), the
+ * mismatch surfaces here.
  */
 describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — migrated-route registry declarations", () => {
   const find = (method: string, path: string) =>

@@ -35,15 +35,14 @@ export interface SubmitAndGradeResult {
  *
  * Submit freeze barrier (ADR-008): submit, answer snapshot read, score
  * computation, and finalization all run inside ONE transaction holding the
- * attempt row lock. Previously this was split into TX1 (submit) → non-tx
- * `readGradingSnapshot`/`computeGradingResult` → TX2 (finalize), and a
- * concurrent `saveAnswer(baseVersion === currentVersion)` landing in the
- * inter-tx window could change which answer the score was computed from
- * (0/100 swing). Folding everything into the locked transaction makes the
- * answers captured under the submit lock the grading authority: any save that
- * arrives after `submitAttempt` flips the row to `submitted` is rejected by
- * the answer protocol (`ATTEMPT_ALREADY_SUBMITTED`), and the score is
- * computed from the locked, post-submit answers in the same tx.
+ * attempt row lock. Splitting them into separate transactions would leave an
+ * inter-tx window where a concurrent `saveAnswer(baseVersion ===
+ * currentVersion)` changes which answer the score is computed from (0/100
+ * swing). Folding everything into the locked transaction makes the answers
+ * captured under the submit lock the grading authority: any save that arrives
+ * after `submitAttempt` flips the row to `submitted` is rejected by the answer
+ * protocol (`ATTEMPT_ALREADY_SUBMITTED`), and the score is computed from the
+ * locked, post-submit answers in the same tx.
  *
  * `submitted` (not yet `graded`) is treated as a crash-recovery case: submit
  * landed but grading didn't, so a retry grades it idempotently without
@@ -143,7 +142,7 @@ export async function submitAndGradeAttempt(
         return { mode: "none", episodeRepo, eventRepo };
       };
 
-      // P3-L0-3: lazy deadline reconciliation before submit. If the attempt
+      // Lazy deadline reconciliation before submit. If the attempt
       // is past its effective deadline, freeze it as deadline-submitted
       // (submittedAt = effectiveDeadline, submissionReason='deadline') and
       // return that frozen result. The candidate's submit then returns the
@@ -198,7 +197,7 @@ export async function submitAndGradeAttempt(
         }
       }
 
-      // P3-L0-2C: branch on the authoritative gradingStatus established at
+      // Branch on the authoritative gradingStatus established at
       // the submit/freeze barrier. A pending_manual attempt MUST hold at
       // submitted — the manual-grading queue owns the final transition. No
       // question-type rescan here; the freeze barrier is the single

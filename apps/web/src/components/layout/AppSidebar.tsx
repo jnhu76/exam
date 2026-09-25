@@ -97,10 +97,10 @@ const groups: NavGroup[] = [
     ],
   },
   {
-    // P7-E2C: the Operations group is the operational control-plane surface
-    // (Admin business-owner summary + Application Maintainer detail). It is
-    // distinct from business management navigation — Maintainer sees this
-    // group and nothing else.
+    // The operations group is the operational control-plane surface (health /
+    // diagnostics / backup / restore readiness). It is distinct from business
+    // management navigation; membership follows the operational capabilities
+    // (lib/capabilities.ts), not a role label.
     labelKey: "nav.groups.operations",
     items: [
       {
@@ -110,12 +110,9 @@ const groups: NavGroup[] = [
         visible: canSeeOperations,
       },
       {
-        // P7-RBAC-REMEDIATION F-08: moved out of the management group. This
-        // is an OPERATIONAL surface (SystemDiagnosticsView, held by Admin AND
-        // Maintainer); keeping it under the management group leaked a lone
-        // item to Maintainer and mislabeled diagnostics as business
-        // management. It belongs with the other operational surfaces in the
-        // operations group.
+        // Operational surface (SystemDiagnosticsView, held by Admin AND
+        // Maintainer). It belongs with the other operational surfaces in the
+        // operations group, not under business management.
         labelKey: "nav.items.system",
         to: routes.admin.system,
         icon: Activity,
@@ -255,9 +252,6 @@ const managementItems: NavItem[] = [
     visible: (user) =>
       user.capabilities.includes(Permission.CandidateFieldView),
   },
-  // P7-RBAC-REMEDIATION F-08: the system-diagnostics item moved to the
-  // operations group above — it is an operational surface, not business
-  // management.
 ];
 
 /** A single navigation link with icon and active state styling.
@@ -334,16 +328,15 @@ export function SidebarContent({
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [location.pathname]);
 
-  // P7-E2C (P3-3 closure): management items are individually capability-gated
-  // so a partial-authority actor (e.g. Maintainer) never sees an item that
-  // would 403 on click (dead navigation).
+  // Management items are individually capability-gated so a partial-authority
+  // actor never sees an item that would 403 on click (dead navigation).
   const management = managementItems.filter(
     (item) => !item.visible || item.visible(user),
   );
-  // The group-level gate (canSeeManagement) passes on ANY management-surface
-  // permission — including system.health.view, which Maintainer holds — so
-  // the section must ALSO be hidden when the per-item filter removed every
-  // item (empty "管理" heading + stray separator otherwise).
+  // Belt-and-braces: the group gate and the per-item predicates are kept in
+  // sync by the four management perms, but if a future per-item gate drops
+  // every item, hide the empty heading + separator instead of rendering a
+  // bare section.
   const showManagement = canSeeManagement(user) && management.length > 0;
   const initials = user.name.slice(0, 2);
 
@@ -489,12 +482,12 @@ export function AppSidebar({
     <aside
       data-testid="app-sidebar"
       className={cn(
-        // Viewport-constrained desktop sidebar (MVP-P2-04): sticky + h-screen
-        // keeps the aside attached to the viewport while the main page
-        // scrolls; self-start prevents the row flex parent from stretching it
-        // to the full page height (which previously pushed 管理/logout below
-        // the fold and made the whole page scroll). min-h-0 lets the nav
-        // region shrink so overflow-y-auto engages as a real scroll region.
+        // Viewport-constrained desktop sidebar: sticky + h-screen keeps the
+        // aside attached to the viewport while the main page scrolls;
+        // self-start prevents the row flex parent from stretching it to the
+        // full page height (which would push 管理/logout below the fold and
+        // make the whole page scroll). min-h-0 lets the nav region shrink so
+        // overflow-y-auto engages as a real scroll region.
         "sticky top-0 hidden h-screen min-h-0 shrink-0 self-start flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] lg:flex",
         collapsed ? "w-14" : "w-[232px]",
       )}

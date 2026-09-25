@@ -23,11 +23,10 @@ export const TimingModeEnum = z.enum([
   "untimed",
 ]);
 /**
- * Timing modes authoring may select in Phase A (#291). `timed_sync` remains
- * in the wire enum (the response contract already carries it) but is rejected
- * by the canonical exam-policy validator pending the B2 product-activation
- * decision; the #292 durable admission runtime already exists. Zod stays
- * shape-level; the matrix lives in the engine.
+ * Timing modes authoring may select. `timed_sync` remains in the wire enum
+ * (the response contract already carries it) but is rejected with
+ * `EXAM_TIMING_MODE_INVALID` by the canonical exam-policy validator, the ONE
+ * timing-matrix authority (`packages/exam-engine`). Zod stays shape-level.
  */
 export const PhaseATimingModeEnum = z.enum([
   "timed_window",
@@ -176,7 +175,8 @@ export type EnrollCandidatesRequest = z.infer<
  * and then run the canonical full parse (`CreateExamRequestSchema`) which
  * applies code defaults to whatever is still omitted.
  *
- * Phase 1 supports only `timed_window` timing and `manual` question selection.
+ * Question selection is still `manual`-only; timing-mode legality (including
+ * the `timed_sync` rejection) is owned by the canonical engine validator.
  */
 export const CreateExamRequestBaseSchema = z.object({
   title: z.string().min(1).max(200),

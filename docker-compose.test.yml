@@ -38,11 +38,12 @@ services:
       # APP_MODE=e2e disables the rate-limit plugin in runtimeConfig.
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
-      # Fast background scanners for E2E only (P2A-J6 abnormal-path specs).
-      # These override the production defaults (heartbeat timeout 60s / scan
-      # 30s, deadline scan 30s) so that disconnect/restore and deadline-crash
-      # E2E tests are deterministic without multi-minute wall-clock waits.
-      # Production deployments keep the defaults via docker-compose.yml.
+      # Fast background scanners for E2E only (abnormal-path specs): these
+      # override the production defaults defined in
+      # apps/api/src/config/settings.ts so disconnect/restore and
+      # deadline-crash tests stay deterministic without multi-minute
+      # wall-clock waits. Production keeps the defaults via
+      # docker-compose.yml.
       HEARTBEAT_TIMEOUT_MS: ${HEARTBEAT_TIMEOUT_MS:-15000}
       HEARTBEAT_SCAN_INTERVAL_MS: ${HEARTBEAT_SCAN_INTERVAL_MS:-5000}
       DEADLINE_SCAN_INTERVAL_MS: ${DEADLINE_SCAN_INTERVAL_MS:-5000}
@@ -148,11 +149,9 @@ services:
       - ./packages:/app/packages:ro
       # Workspace node_modules (read-only): specs resolve @playwright/test and
       # @exam/* through the pnpm symlink farm, whose RELATIVE targets need both
-      # /app/packages (above) and /app/node_modules mounted. The historical
-      # in-container `npm install` cannot be used anymore: apps/e2e/package.json
-      # declares pnpm `workspace:*` devDependencies (since d91e401e) and npm
-      # aborts with EUNSUPPORTEDPROTOCOL — which silently killed the whole
-      # Docker E2E path because run.sh redirected the installer's output.
+      # /app/packages (above) and /app/node_modules mounted. An in-container
+      # `npm install` cannot replace them: apps/e2e/package.json declares pnpm
+      # `workspace:*` devDependencies and npm aborts with EUNSUPPORTEDPROTOCOL.
       - ./node_modules:/app/node_modules:ro
       - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
       # ui-governance-1.spec.ts INTENTIONALLY imports web-side authorities

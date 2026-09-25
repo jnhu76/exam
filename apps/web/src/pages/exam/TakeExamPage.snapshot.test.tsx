@@ -643,10 +643,9 @@ describe("P3-FSM-0 TakeExamPage behaviors over the snapshot read path", () => {
 });
 describe("P3-MOD-P0-3 submit-freeze UI proof", () => {
   it("save execution seam reads derived canSave, keeps the control disabled, and skips the API call when the snapshot is non-editable", async () => {
-    // The card requires: "view.canSave === false => save endpoint is not
-    // called", and explicitly says "disabled control alone is not
-    // sufficient proof". The page guards the save execution seam at
-    // TakeExamPage.tsx:289 with `if (!viewRef.current?.canSave) return;`.
+    // Requirement: "view.canSave === false => save endpoint is not called",
+    // and a disabled control alone is not sufficient proof. The page guards the
+    // save execution seam with `if (!viewRef.current?.canSave) return;`.
     //
     // Prove the guard: render with a submitted/non-editable snapshot,
     // then drive the autosave path by typing into the (disabled) input

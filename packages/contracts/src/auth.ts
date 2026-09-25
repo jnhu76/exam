@@ -67,11 +67,9 @@ export type LoginResponse = z.infer<typeof LoginResponseSchema>;
  *
  * `capabilities` mirrors {@link LoginResponseSchema}: the authoritative union
  * of every active role assignment's preset, resolved fresh on each request
- * from `user_role_assignments` (RBAC-M10-E). Including it on `/me` (and on
- * `PATCH /auth/me/profile`) closes the session-restore / profile-update gap
- * where `AuthContext` previously lost capabilities and the frontend had to
- * re-derive visibility from `presetFor(user.role)` — a primary-role projection
- * that hid secondary-role capabilities from navigation.
+ * from `user_role_assignments`. Clients must never re-derive visibility from
+ * the primary role (`presetFor(user.role)`): that projection hides
+ * secondary-role capabilities from navigation.
  */
 export const MeResponseSchema = z.object({
   id: z.string().uuid(),
@@ -89,7 +87,6 @@ export type MeResponse = z.infer<typeof MeResponseSchema>;
 
 /**
  * Request schema for updating the authenticated user's own profile.
- * Phase 1 supports editing the display name only.
  */
 export const UpdateProfileRequestSchema = z.object({
   name: z.string().min(1).max(100),

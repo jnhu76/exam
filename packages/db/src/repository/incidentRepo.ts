@@ -101,8 +101,7 @@ export interface InsertInterruptionLinkInput {
  * One committed row per `(organization_id, operation_id)` on the
  * `exam_incident_events_org_operation_unique` arbiter. commandType and
  * payload ride along so the caller classifies completion with the engine's
- * `isMatchingCommittedOperation` — existence alone is never completion
- * (#304 F4A).
+ * `isMatchingCommittedOperation` — existence alone is never completion.
  */
 export interface CommittedIncidentOperation {
   operationId: string;
@@ -114,13 +113,13 @@ export interface CommittedIncidentOperation {
  * Max operation ids bound into ONE probe statement. The bind protocol caps
  * parameters per statement (postgres.js throws client-side at >= 65534, so a
  * single unbounded IN list breaks reconciliation outright once an
- * organization's historical episode count crosses that boundary) (#545).
+ * organization's historical episode count crosses that boundary).
  *
  * Chunks are disjoint and `(organization_id, operation_id)` is unique on the
  * arbiter, so every matching arbiter row enters the map exactly once. Each
  * chunk executes under its own READ COMMITTED statement snapshot, so the
  * union is not a single point-in-time snapshot — and reconciliation does not
- * need one (#304): a match any chunk observed is authoritative durable
+ * need one: a match any chunk observed is authoritative durable
  * completion evidence that safely suppresses delivery; an operation committed
  * after an earlier chunk's snapshot may be absent from the map, and delivery
  * re-validates it through the canonical operation-recovery pre-read (replay /
@@ -324,8 +323,8 @@ export function createIncidentRepo(db: Database) {
   }
 
   /**
-   * Batch probe of the `exam_incident_events_org_operation_unique` arbiter
-   * (#304 F4A). Returns each hit WITH its commandType and canonical payload
+   * Batch probe of the `exam_incident_events_org_operation_unique` arbiter.
+   * Returns each hit WITH its commandType and canonical payload
    * so the caller classifies completion through the engine's
    * `isMatchingCommittedOperation` (same command + same payload): a bare
    * operationId hit is NOT completion — an operation committed under the

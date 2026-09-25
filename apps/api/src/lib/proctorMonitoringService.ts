@@ -35,8 +35,9 @@ import type { ClientEventTimelineRow } from "@exam/db/src/repository/clientEvent
  * timeline row is a display label sourced from client events or audit logs —
  * provenance lives in `source`, not in `kind`.
  *
- * NAMING: "proctor" here is the monitoring DOMAIN, not a standalone role.
- * Phase 2.1 keeps Admin-only access; a formal Proctor role is Phase 3.
+ * NAMING: "proctor" here is the monitoring DOMAIN, not a role check — who may
+ * reach these routes is owned by the route entries (ROUTE_PERMISSION_REGISTRY
+ * proctorAccess + requireScopedCapability), not by this module.
  */
 
 /**

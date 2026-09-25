@@ -149,7 +149,7 @@ describe("MisconductMarkRequestPayloadSchema (canonical, durable)", () => {
     ).toThrow();
   });
 
-  // ── Review J5-I1C0 PR #261 P1-2: canonical notes trim ──────────────
+  // ── Canonical notes trim ────────────────────────────────────────────
   // Without `.trim()`, a `notes: "  x  "` payload would persist with
   // surrounding whitespace while the wire request and the domain
   // canonicalizer both produced "x" — three representations of one

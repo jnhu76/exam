@@ -29,7 +29,7 @@ export interface WorkerHeartbeatRow {
 }
 
 /**
- * Creates a repository for the `worker_heartbeats` table (P5-0).
+ * Creates a repository for the `worker_heartbeats` table.
  *
  * Worker heartbeats are PostgreSQL-backed liveness records that allow the
  * diagnostics surface to determine worker liveness without process-local

@@ -22,11 +22,10 @@ export type AttemptCommandReceiptOutcome = "applied" | "no_change";
  * Discriminated-union input for
  * {@link createAttemptCommandReceiptRepo.insertReceipt}. The `commandType`
  * discriminates the branch, and each branch binds BOTH the `requestPayload`
- * and the `resultPayload` to that command at compile time (review J5-I1C0 PR
- * #261 P2-1) — a `force_submit` row carrying a `misconduct_mark` payload is a
- * TypeScript error, not a runtime `as` cast. The domain canonicalizer already
- * binds the request side; this input extends the same binding to the stored
- * result.
+ * and the `resultPayload` to that command at compile time — a `force_submit`
+ * row carrying a `misconduct_mark` payload is a TypeScript error, not a
+ * runtime `as` cast. The domain canonicalizer already binds the request side;
+ * this input extends the same binding to the stored result.
  *
  * Shared fields (`attemptId`, `operationId`, ...) are factored into a base so
  * the union stays readable; the discriminator narrows the payload pair.
@@ -93,18 +92,17 @@ function assertPayloadMatchesCommandType(
 }
 
 /**
- * Tenant-scoped repository for the durable Attempt command receipt table
- * (J5-I1C Slice 1 / J5-I1C0 audit §6.2, §9).
+ * Tenant-scoped repository for the durable Attempt command receipt table.
  *
  * Every method filters by `ctx.organizationId` (fail closed on cross-org rows).
  * operationId scope is PER ORGANIZATION: the {@link findByOperationId} lookup
  * is the cross-command conflict arbiter and MUST NOT pre-filter by
  * `commandType` or `attemptId` — the single `UNIQUE(organization_id,
  * operation_id)` constraint is what makes a `force_submit` reusing a
- * `misconduct_mark` operationId conflict enforceable (audit §3.2/§4.5).
+ * `misconduct_mark` operationId conflict enforceable.
  *
  * This repository only owns the atomic insert + lookups. Unique-violation race
- * recovery (translating a 23505 into replay/conflict) belongs to the Slice 2/3
+ * recovery (translating a 23505 into replay/conflict) belongs to the command
  * orchestrators, NOT here: `insertReceipt` deliberately surfaces the PG error
  * so the orchestrator can match the real constraint name.
  */

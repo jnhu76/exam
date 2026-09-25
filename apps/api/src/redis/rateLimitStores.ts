@@ -190,7 +190,6 @@ export class LocalRateLimitStore implements RateLimitStoreShape {
 
     this.entries.set(key, entry);
     if (this.entries.size > this.cacheSize) {
-      // Map preserves insertion order; evict the oldest entry.
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) this.entries.delete(oldest);
     }

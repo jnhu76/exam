@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { CONFIRMED_SURFACES } from "./surface-vocabulary";
 
 /**
- * Structural tests for the semantic surface recipe layer (UI-SURFACE-1).
+ * Structural tests for the semantic surface recipe layer.
  *
  * The recipes are plain CSS classes in recipes.css (imported via main.tsx so
  * they bypass the Tailwind content scanner, mirroring the typography recipe

@@ -117,10 +117,9 @@ function toExportRow(row: AuditLogRowWithActor): Record<string, unknown> {
 }
 
 /**
- * Fastify plugin that registers the audit routes:
- *   - `GET /admin/audit-logs`            — bounded keyset search (cursor)
- *   - `GET /admin/audit-logs/export`     — bounded CSV export of the SAME query
- *   - `GET /admin/audit-log/actions`     — active action vocabulary for the UI
+ * Fastify plugin that registers the audit read surfaces. The CSV export is a
+ * second serialization of the SAME search query; the action list projects the
+ * active audit policy vocabulary.
  */
 const auditRoutes: FastifyPluginAsync = async (fastify) => {
   /**

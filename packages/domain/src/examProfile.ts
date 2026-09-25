@@ -44,10 +44,10 @@ export type ExamProfileTimingMode = AuthoringTimingMode;
  * latent/unenforced dimensions (see the M2 design §5/§6).
  */
 export interface ExamProfilePolicyDefaults {
-  // Phase A (#291): the timing mode is a copied default. Profiles may carry
-  // only the authoring modes (never `timed_sync`); `durationMinutes` is null
-  // for deadline/untimed profiles and the copy-on-apply semantics below make
-  // that null overwrite a stale target value.
+  // The timing mode is a copied default. Profiles may carry only the authoring
+  // modes (never `timed_sync`); `durationMinutes` is null for deadline/untimed
+  // profiles and the copy-on-apply semantics below make that null overwrite a
+  // stale target value.
   timingMode: AuthoringTimingMode;
   durationMinutes: number | null;
   latestStartOffsetMinutes: number | null;

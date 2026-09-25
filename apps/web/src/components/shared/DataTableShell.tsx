@@ -7,18 +7,13 @@ import {
 import type { TableArchetype } from "@/table/tableTiers";
 
 /**
- * Production-safe mobile eligibility (issue 457 C2, extended by issue 601 Phase F):
- * management-list and log-diagnostic archetypes with an explicit mobile slot
- * participate in the CSS viewport switch. Other archetypes safely fall back
- * to desktop/scroll at every width. Extracted as a pure function for direct
- * unit testing.
+ * Production-safe mobile eligibility: management-list and log-diagnostic
+ * archetypes with an explicit mobile slot participate in the CSS viewport
+ * switch. Other archetypes fall back to desktop/scroll at every width.
  *
- * The issue 457 freeze (management-list only) is superseded by Phase F evidence:
- * RecoveryQueuePage and ProctorRecoveryPage — log-diagnostic — both shipped
- * hand-rolled `md`-breakpoint card lists, i.e. the product needed a mobile
- * representation the authority refused to provide. Converging them onto
- * MobileRecordList under this eligibility replaces the page-local second
- * implementation instead of preserving the bypass.
+ * log-diagnostic is included because its pages carry mobile card lists; this
+ * function is the single decider, so no page may keep a page-local card list
+ * as a bypass.
  */
 export function isMobileRepresentationAllowed(
   archetype: TableArchetype,
@@ -61,13 +56,12 @@ export function DataTableShell({
    * Title-band metadata — a count/context line that belongs WITH the title,
    * rendered in the band's trailing (right-aligned) slot. This is the frozen
    * baseline position for a data view's summary line; a lone count is not a
-   * toolbar and must not open a controls band of its own (issue 601 Phase F
-   * corrective: the pre-Phase-F shell put it here).
+   * toolbar and must not open a controls band of its own.
    */
   meta?: ReactNode;
   /** The data-view toolbar (DataToolbar) — rendered as the shell's band below
    * the title, inside the surface. One composition for search/filter/action
-   * controls and the table (issue 601 Phase F). A toolbar band exists only
+   * controls and the table. A toolbar band exists only
    * when the dataset has dataset-scoped controls: a page-scoped action belongs
    * in the PageHeader. */
   toolbar?: ReactNode;

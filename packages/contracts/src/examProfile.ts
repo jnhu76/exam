@@ -18,11 +18,11 @@ import {
 // exam is COPY-ON-APPLY: the exam materializes concrete typed columns and never
 // reads the profile again at runtime.
 //
-// Validation layering (M2 design §16/§17): shape/range lives here; the ADR-013
-// interruption cross-field caps rule is enforced by the route via
-// `normalizeInterruptionPolicyConfiguration` (the shared leaf rule in
+// Validation layering (docs/contracts/exam-profile-templates.md): shape/range
+// lives here; the ADR-013 interruption cross-field caps rule is enforced by the
+// route via `normalizeInterruptionPolicyConfiguration` (the shared leaf rule in
 // `@exam/domain`). Profiles own NO schedule/scores/questions, so the canonical
-// M1 exam-policy validator is NOT applied to profiles — it still runs on the
+// exam-policy validator is NOT applied to profiles — it still runs on the
 // materialized exam authoring request after profile application.
 
 /** A persisted exam policy profile (API response shape; ISO date strings). */

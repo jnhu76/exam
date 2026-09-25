@@ -1,14 +1,14 @@
 /**
- * P4-C1 whole-application authorization-route regression lock.
+ * Whole-application authorization-route regression lock.
  *
- * Purpose (P4-R0 P4-G-08): a PERMANENT structural assertion that the entire
+ * Purpose: a PERMANENT structural assertion that the entire
  * production route composition — not just an enumerated M10-B/C/D subset —
  * carries zero legacy `requireRole` route preHandlers and zero legacy
  * `requirePermission` route consumers, and that every protected runtime route
  * is gated by exactly one accepted capability/ownership gate.
  *
  * Why a separate whole-app test: `routeRegistryConformance.test.ts` registers
- * only the 17 M10-A/B/C/D route plugins (an enumerated subset) and asserts
+ * only the enumerated M10-A/B/C/D route plugins and asserts
  * per-route metadata against `ROUTE_PERMISSION_REGISTRY`. It does NOT capture
  * the full runtime tree (auth/self/public/proctor-monitoring/client-events).
  * A future route added under the apiSurface composition with a `requireRole`
@@ -376,53 +376,9 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     const nonProtectedCount = capturedRoutes.filter(
       (r) => categorize(r) !== "protected",
     ).length;
-    // REC-I6-I1 (ADR-014): 10 Admin incident routes added by the incident
-    // persistence Job (create/list/get + investigate/notes/severity/resolve/
-    // dismiss + action/attempt/interruption links) — 106 primary = 92
-    // protected + 14 non-protected. J4-I1C adds 3 Admin proctor-assignment
-    // routes → 109 primary = 95 protected + 14 non-protected. J5-I1A adds 3
-    // Admin Recovery Center read routes (queue + aggregate detail + attempt
-    // operations context) → 112 primary = 98 protected + 14 non-protected.
-    // J5-I1B4 adds the Exam Recovery Context read route → 113 primary = 99
-    // protected + 14 non-protected. P7-C1 adds 2 public Launchpad routes
-    // (status + bootstrap) → 115 primary = 99 protected + 16 non-protected.
-    // P7-M2 adds 5 exam policy profile routes (list/create/get/update/delete,
-    // all capability-gated via the reused Exam authoring permissions) →
-    // 120 primary = 104 protected + 16 non-protected. P7-E2B adds the two
-    // backup-evidence read routes (GET /system/backups + GET
-    // /system/restore-readiness, capability-gated) → 122 primary = 106
-    // protected + 16 non-protected. P7-E3 adds GET + PUT /system/ops-policy
-    // (view + Admin-only intent manage) → 124 primary = 108 protected + 16
-    // non-protected. P7-CLOSE adds GET /system/retention-readiness
-    // (capability-gated, Admin + Maintainer) → 125 primary = 109 protected
-    // + 16 non-protected. Issue 182 adds GET /questions/tags (tag-filter
-    // vocabulary, capability-gated via QuestionView) → 126 primary = 110
-    // protected + 16 non-protected. Issue 286 adds the 3 Teacher-to-Course
-    // assignment routes (POST/GET /admin/users/:userId/course-assignments +
-    // POST …/:courseId/revoke, Admin-only flat gates) → 129 primary = 113
-    // protected + 16 non-protected. Issue 296 adds the 3 Grader-to-Exam
-    // assignment routes (POST/GET /admin/users/:userId/exam-assignments +
-    // POST …/:examId/revoke, Admin-only flat gates) → 132 primary = 116
-    // protected + 16 non-protected.
-    // Issue 298 adds 5 capability-gated read/projection routes (audit search
-    // keyset migration stays on the existing route; NEW: audit-logs export,
-    // audit-log actions, permission-registry, users/:id/effective-authority)
-    // → 142 primary = 123 protected + 19 non-protected.
-    // #429 CORRECTIVE-3: the whole-app composition switched from
-    // registerApiRoutes to the apiSurface plugin, which also owns the
-    // liveness probe — GET /api/health (public) joined the composition →
-    // 143 primary = 123 protected + 20 non-protected.
-    // issue 292 adds the Admin admission-queue visibility route
-    // (GET /admin/exams/:examId/admissions, ExamView + exam scope) →
-    // 144 primary = 124 protected + 20 non-protected.
-    // issue 303 adds the 2 Proctor Recovery Center read routes (GET
-    // /admin/proctor/incidents assignment-filtered worklist + GET
-    // /admin/incidents/:incidentId/detail assignment_scoped narrow detail,
-    // both IncidentView) → 146 primary = 126 protected + 20 non-protected.
-    // #547 adds the public deployment readiness gate GET /api/ready →
-    // 147 primary = 126 protected + 21 non-protected.
-    // This is a regression anchor, not a
-    // hard-coded PASS: if a route is added/removed the counts move and the
+    // Regression anchor, not a hard-coded PASS: the counts below are the
+    // current size of the whole-app composition (the apiSurface plugin is its
+    // owner). If a route is added/removed the counts move and the
     // failure message names the delta so the regression is triaged, not
     // silently swallowed.
     expect(

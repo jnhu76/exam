@@ -1,5 +1,5 @@
 /**
- * J5-I1A1 — Admin Recovery Center incident queue (contract §5.4).
+ * Admin Recovery Center incident queue (contract §5.4).
  *
  * Conformance-focused HTTP tests for `GET /admin/recovery/incidents`:
  *  - Admin-only authorization (`IncidentRecoveryView` granted ONLY to Admin);

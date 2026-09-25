@@ -1,13 +1,13 @@
 /**
  * Same-tab pending misconduct-mark authority.
  *
- * Mirrors {@link pendingForceSubmitAuthority}. A misconduct mark is now an
+ * Mirrors {@link pendingForceSubmitAuthority}. A misconduct mark is an
  * operationId-keyed durable command: a lost response after the server
  * committed must NOT cause a blind retry to mint a NEW operationId (the
  * server would treat the retry as a fresh append receipt + a second audit
- * row). The fix is to freeze the command before the first POST and reuse the
- * SAME operationId + severity + notes on every retry until a confirmed
- * outcome (success or definitive rejection) arrives.
+ * row). Freeze the command before the first POST and reuse the SAME
+ * operationId + severity + notes on every retry until a confirmed outcome
+ * (success or definitive rejection) arrives.
  *
  * Scope: SAME-TAB persistence via sessionStorage. At most ONE pending
  * misconduct mark per (organizationId, actorId). Cross-tab parity is

@@ -18,7 +18,7 @@ export interface ProcessResult {
 }
 
 /**
- * The email outbox worker service (P5-0).
+ * The email outbox worker service.
  *
  * Claims due rows from PostgreSQL using `FOR UPDATE SKIP LOCKED` and drives
  * each through a sender. The claim is atomic: selected rows are immediately
@@ -32,8 +32,10 @@ export interface ProcessResult {
  * Contract guarantees:
  *  - One email's failure NEVER blocks another (each is processed in its own
  *    try/catch).
- *  - The worker never affects the originating business transaction (it only
- *    touches `email_outbox` rows, long after the business commit).
+ *  - The worker never writes business tables; it touches `email_outbox` (and
+ *    its own `worker_heartbeat` liveness row), long after the business commit.
+ *  - Every finalize is ownership-fenced: losing the fence is reported as
+ *    `ownershipLost`, never as success (the new owner retries the row).
  *  - Time is injected (`now`), so retry arithmetic is deterministic and
  *    testable — no raw wall-clock reads.
  *  - SMTP is never called inside the claim transaction.

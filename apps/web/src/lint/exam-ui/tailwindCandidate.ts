@@ -5,9 +5,9 @@
  * from a className) into its structural regions WITHOUT fully validating it as
  * Tailwind, and WITHOUT damaging bracket/parenthesis contents.
  *
- * Why this exists: the prior `stripVariants()` in `no-arbitrary-typography.ts`
- * peeled variant prefixes with `indexOf(":")` in a loop and had NO bracket
- * awareness. It corrupted arbitrary values that contain colons inside brackets:
+ * Why this exists: peeling variant prefixes with `indexOf(":")` in a loop, with
+ * no bracket awareness, corrupts arbitrary values that contain colons inside
+ * brackets:
  *
  *   text-[length:11px]   → peeled the inner ":11px]" off as a "variant"
  *   [&>span]:text-lg     → mangled the arbitrary descendant variant

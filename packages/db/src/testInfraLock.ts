@@ -1,20 +1,17 @@
 /**
- * ADR-007 Phase 6D — test-infra advisory lock for heavy DDL/migration lifecycle.
+ * Test-infra advisory lock for heavy DDL/migration lifecycle (ADR-007).
  *
  * TEST-ONLY module. Never imported by production code.
  *
- * Problem it solves (BUG-FLAKE-001 physical-DB-lifecycle sub-class):
- *   Under `@exam/db` coverage, up to 13 Vitest test files run in parallel
- *   against the same PostgreSQL instance. Several of them execute heavy DDL /
- *   migration lifecycle in their setup/teardown:
- *     - `testWorkerDatabase.test.ts`  → `CREATE DATABASE` + `migratePostgres`
- *     - `seed.test.ts` / `demo-seed.test.ts` / `testCleanup.test.ts` /
- *       `testIsolation.test.ts` → `CREATE SCHEMA` + `migratePostgres`
- *   With no coordination, these heavy operations contend on the same PG engine
- *   (catalog locks, connection slots, IO). Under v8 coverage instrumentation
- *   the timing amplification can push a single `CREATE DATABASE` / migrate past
- *   the default 5s testTimeout — manifesting as the
- *   `ensureDatabaseExists > creates the database if missing` flake.
+ * Problem it solves: under `@exam/db` coverage, several Vitest test files run
+ * in parallel against the same PostgreSQL instance and execute heavy DDL /
+ * migration lifecycle in their setup/teardown:
+ *   - `testWorkerDatabase.test.ts`  → `CREATE DATABASE` + `migratePostgres`
+ *   - `seed.test.ts` / `demo-seed.test.ts` / `testCleanup.test.ts` /
+ *     `testIsolation.test.ts` → `CREATE SCHEMA` + `migratePostgres`
+ * With no coordination these heavy operations contend on the same PG engine
+ * (catalog locks, connection slots, IO), and a single `CREATE DATABASE` /
+ * migrate can exceed the default 5s testTimeout.
  *
  * Mitigation:
  *   Wrap ONLY the heavy test-infra lifecycle sections (database ensure/drop,
@@ -32,10 +29,9 @@
  *
  * PostgreSQL advisory locks are DATABASE-LOCAL, not cluster-wide: a
  * `pg_advisory_lock` key only coordinates among sessions connected to the SAME
- * database. Test-infra callers historically locked while connected to
- * different databases (`exam_test` for schema lifecycle, `postgres` for
- * database lifecycle, worker DBs for worker-database lifecycle), so their
- * locks never coordinated with each other even though the key matched.
+ * database (`exam_test` for schema lifecycle, `postgres` for database
+ * lifecycle, worker DBs for worker-database lifecycle), so locks taken on
+ * different databases never coordinate even though the key matches.
  * `withTestInfraLifecycleLock` therefore normalizes every caller onto ONE
  * coordination database via {@link resolveTestInfraCoordinationUrl}
  * (TEST_ADMIN_DATABASE, default `postgres`) before acquiring the lock.
@@ -52,7 +48,6 @@
  *   - Does NOT enable `fileParallelism: true` for apps/api.
  *   - Does NOT change default `maxWorkers`.
  *   - Does NOT lock ordinary business queries.
- *   - Does NOT claim BUG-FLAKE-001 is globally closed.
  *   - Does NOT change production code paths.
  */
 
@@ -137,17 +132,13 @@ export function resolveTestInfraCoordinationUrl(
  * `pg_advisory_lock(bigint)` takes a single 64-bit key; the value is treated
  * as signed in the C boundary, so we keep it within int64 range.
  *
- * ONE key is a deliberate design decision, re-affirmed 2026-08-26: Phase 6D's
- * purpose was to serialize ALL heavy DDL/migration against the PostgreSQL
- * engine (catalog contention), so CREATE/DROP DATABASE and schema migration
- * must NOT run concurrently. A temporary resource-class key split
- * (`schema` vs `database`) was withdrawn the same day: its motivating queue
- * load was itself a symptom of binding worker databases to `VITEST_WORKER_ID`
- * (worker-instance ids are unbounded by maxWorkers) instead of
- * `VITEST_POOL_ID` (execution slots, ≤ maxWorkers). After the identity fix,
- * the measured queue collapsed to max wait 58ms / total hold 1.4s on the
- * 16-file probe — no split needed; "budget absorbs cross-class contention"
- * was never a concurrency-control argument anyway.
+ * ONE key is a deliberate design decision: the lock exists to serialize ALL
+ * heavy DDL/migration against the PostgreSQL engine (catalog contention), so
+ * CREATE/DROP DATABASE and schema migration must NOT run concurrently. A
+ * resource-class key split (`schema` vs `database`) would reintroduce exactly
+ * that cross-class contention; the queue load that once motivated a split came
+ * from binding worker databases to `VITEST_WORKER_ID` (unbounded) instead of
+ * `VITEST_POOL_ID`, which the scope resolver now forbids.
  */
 const TEST_INFRA_LIFECYCLE_LOCK_NAME = "exam_test_infra_lifecycle";
 
@@ -213,9 +204,6 @@ async function releaseAdvisoryLock(
   await sql.unsafe("SELECT pg_advisory_unlock($1)", [key.toString()]);
 }
 
-/**
- * Options for {@link withTestInfraLifecycleLock}.
- */
 export interface TestInfraLifecycleLockOptions {
   /**
    * Environment used to resolve `TEST_ADMIN_DATABASE` when normalizing
@@ -241,10 +229,8 @@ export interface TestInfraLifecycleLockOptions {
  * until the lock is free — this is the serialization point across workers),
  * runs `fn`, and always releases the lock in `finally` (even on throw). ALL
  * heavy test-infra lifecycle — CREATE/DROP DATABASE, CREATE SCHEMA,
- * migrations — serializes on this ONE key: that is the Phase 6D engine-level
- * guarantee (heavy DDL never fights migration traffic on the catalog), and it
- * is cheap to keep now that the queue load itself is gone (see the lock-name
- * docstring for the withdrawn split).
+ * migrations — serializes on this ONE key: heavy DDL never fights migration
+ * traffic on the catalog.
  *
  * PostgreSQL advisory locks are database-local. The `adminUrl` is normalized
  * via {@link resolveTestInfraCoordinationUrl} so ALL callers — regardless of

@@ -1,20 +1,11 @@
 /**
- * Email Delivery Worker — P5-0 independent process entrypoint.
+ * Email Delivery Worker — independent process entrypoint (`node
+ * dist/workers/emailDeliveryWorker.js`).
  *
- * This worker is a standalone Node.js process that:
- * 1. Resolves the default organization from PostgreSQL at startup.
- * 2. Claims due email outbox rows atomically (FOR UPDATE SKIP LOCKED).
- * 3. Sends each claimed row through the configured EmailSender.
- * 4. Persists a PostgreSQL heartbeat after each poll cycle.
- * 5. Handles graceful shutdown on SIGTERM/SIGINT.
- *
- * It does NOT:
- * - Import or start Fastify.
- * - Construct an authenticated Admin context or JWT.
- * - Use HTTP, Redis, or any process-local shared state.
- * - Depend on bundler auto-discovery of files not imported by the server.
- * - Auto-create the initial organization. Bootstrap-admin is the single source
- *   of truth for first organization + first Admin creation.
+ * It does NOT import or start Fastify, does NOT use HTTP or Redis, holds no
+ * process-local shared state, and never auto-creates the initial organization:
+ * `bootstrap-admin` is the single source of truth for first organization + first
+ * Admin creation.
  *
  * Build entry: `node dist/workers/emailDeliveryWorker.js`
  * Package script: `pnpm --filter @exam/api worker:email`
@@ -184,7 +175,6 @@ export async function main(): Promise<void> {
   let sender: EmailSender | undefined;
 
   try {
-    // Run migrations (the worker needs the latest schema)
     log("info", "running migrations");
     await migratePostgres(db);
 

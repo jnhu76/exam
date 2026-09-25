@@ -1,7 +1,7 @@
 /**
- * Runtime request context augmentation (RBAC-M10-E).
+ * Runtime request context augmentation.
  *
- * The authoritative runtime authority for a human actor is now derived from
+ * The authoritative runtime authority for a human actor is derived from
  * their ACTIVE `user_role_assignments` rows, not from `users.role`. This
  * interface extends the legacy {@link RequestContext} (in `@exam/domain`,
  * which is a leaf package and CANNOT depend on `@exam/authz`) with the two
@@ -19,11 +19,8 @@
  *
  * `permissions` (the legacy `Permission[]` slot on RequestContext) is kept as
  * a documented NON-authoritative compatibility field. It is `[]` on every
- * runtime context; zero production authorization decisions read it. The dead
- * legacy `requirePermission` decorator that read it was removed in P4-C1
- * (zero route consumers, read only the always-empty `ctx.permissions`); see
- * docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md. The field itself is
- * retained as a compatibility surface because it is part of the base
+ * runtime context; zero production authorization decisions read it. The field
+ * itself is retained as a compatibility surface because it is part of the base
  * `RequestContext` in the `@exam/domain` leaf package, and every resolver /
  * system-actor / auth context still initializes it to `[]`.
  */

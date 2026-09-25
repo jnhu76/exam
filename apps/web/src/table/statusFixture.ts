@@ -3,7 +3,7 @@ import { statusMeta, type StatusMeta } from "@/lib/statusMeta";
 import { statusLabelKey } from "@/lib/statusMetaUtils";
 
 /**
- * Status column width authority fixture (issue 445 P3-Corrective §7.1 K1).
+ * Status column width authority fixture.
  *
  * The status column token (8.5rem) is VOCABULARY-BOUND: it is derived from the
  * widest legal StatusBadge across the full statusMeta × SUPPORTED_LOCALES
@@ -13,11 +13,11 @@ import { statusLabelKey } from "@/lib/statusMetaUtils";
  * turns the structural test red until the token is revisited.
  *
  * The per-glyph width is a MEASURED product constant (Chromium, Noto Sans CJK
- * SC 12px badge text, issue 445 P3-Corrective Appendix M): the widest badge
- * (the offline status label, iconPolicy=show) renders 100.02px. Every character is
- * estimated at the CJK advance (an over-estimate for ASCII), so the estimator
- * is a safe upper bound. The runtime half of the two-level gate renders the
- * real badge in a real status column in E2E.
+ * SC 12px badge text): the widest badge (the offline status label,
+ * iconPolicy=show) renders 100.02px. Every character is estimated at the CJK
+ * advance (an over-estimate for ASCII), so the estimator is a safe upper bound.
+ * The runtime half of the two-level gate renders the real badge in a real
+ * status column in E2E.
  */
 export const STATUS_GLYPH_WIDTH_PX = 12.4;
 export const STATUS_ICON_WIDTH_PX = 14;

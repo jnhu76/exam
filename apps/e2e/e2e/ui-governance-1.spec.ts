@@ -25,7 +25,7 @@ import i18n, {
 } from "../../web/src/i18n/index";
 
 /**
- * UI-GOVERNANCE-1 (issue #461) — the durable #439 V1–V4 browser closure gates.
+ * UI governance browser closure gates.
  *
  * Every gate asserts DOM geometry in real Chromium with the built product CSS
  * (getBoundingClientRect / scrollWidth / computed style / matchMedia) —
@@ -35,8 +35,7 @@ import i18n, {
  *       inside the contract actions column (6rem fine / 7.5rem coarse), the
  *       actions cell never colliding with the status cell.
  *   V2  ResultPage detail-comparison — owned entirely by
- *       table-contract-2.spec.ts (desktop/narrow/overflow regimes); the
- *       former roomy-viewport duplicate here was rationalized by #615.
+ *       table-contract-2.spec.ts (desktop/narrow/overflow regimes).
  *   V3  Column content semantics — long CJK identity and long unbroken token
  *       wrap safely inside primary-text cells; machine identifiers
  *       middle-truncate in the locked 7.5rem short-id column with the full

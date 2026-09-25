@@ -22,7 +22,7 @@ import { AppIcon } from "./AppIcon";
 import { DataTablePagination } from "./DataTablePagination";
 
 /**
- * AppIcon stroke authority vs the CSS cascade (issue 577 VAA2-B1 regression gate).
+ * AppIcon stroke authority vs the CSS cascade (#577 B1 regression gate).
  *
  * The B1 failure class is: the SVG presentation attribute is correct
  * (`stroke-width="2.25"`) but the COMPUTED stroke is wrong, because an
@@ -30,7 +30,7 @@ import { DataTablePagination } from "./DataTablePagination";
  * — author CSS beats presentation attributes at every specificity. Asserting
  * the JSX attribute (AppIcon.test.tsx) cannot see this class of defect.
  *
- * Surface (issue 577 review-fix-1 MAJOR-2): the gate covers EVERY author
+ * Surface (#577): the gate covers EVERY author
  * stylesheet under web src — the full superset of the main.tsx CSS import
  * closure — not only index.css. A future recipe stylesheet declaring a broad
  * stroke selector fails this gate exactly like index.css would. It is
@@ -41,7 +41,7 @@ import { DataTablePagination } from "./DataTablePagination";
  * IS the computed value. It also proves the primitive-internal optical rule
  * still reaches the icons those primitives own (R2).
  *
- * Ancestry ownership (issue #601 Step 1): data-slot scoping alone does NOT
+ * Ancestry ownership (#601): data-slot scoping alone does NOT
  * prove ownership — `[data-slot="pagination"] svg` also matches a
  * consumer-supplied AppIcon rendered inside the primitive (the real
  * DataTablePagination / row-action-menu ancestry). Every stroke-width

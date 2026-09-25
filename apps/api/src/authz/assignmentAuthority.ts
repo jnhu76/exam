@@ -46,12 +46,14 @@ import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAs
 import type { UserRoleAssignmentRow } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 
 /**
- * Closed, assignable role set mirror (kept here to avoid a circular import on
- * the DB schema's `ASSIGNABLE_ROLES`). MUST stay in sync with
- * `packages/db/src/schema/pg.ts` `ASSIGNABLE_ROLES` and the DB CHECK
- * constraint `role IN ('Admin','Teacher','Proctor','Grader','Candidate',
- * 'Maintainer')`. System is intentionally excluded — it is synthetic and
- * non-assignable. Maintainer was added by P7-E2A (ADR-017 D2).
+ * Assignable role set — mirrors the DB schema's `ASSIGNABLE_ROLES`, kept as
+ * code-local constants so this module does not import the DB schema. System is
+ * excluded because it is synthetic and non-assignable (see `@exam/authz`
+ * `catalog.ts` `Role`).
+ *
+ * AUTHORITY: `packages/db/src/schema/pg.ts` (`ASSIGNABLE_ROLES` plus the
+ * `user_role_assignments_role_check` / `staff_invitations_role_check`
+ * constraints) defines which roles may be assigned.
  */
 const ASSIGNABLE_ROLE_KEYS: readonly RoleKey[] = [
   AuthzRole.Admin,

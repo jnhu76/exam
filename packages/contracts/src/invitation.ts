@@ -5,14 +5,14 @@ import { passwordField } from "./passwordPolicy.js";
 import { requiredEmailField } from "./emailField.js";
 import { AssignableRoleSchema } from "./user.js";
 
-// ── Staff invitations (#297) ──────────────────────────────────────
+// ── Staff invitations ──────────────────────────────────────
 
 /**
  * Roles an Admin may invite: the assignable set MINUS Candidate. Candidates
  * have their own creation/import flow; invitations create staff membership
- * only. The literal tuple is compile-checked against the assignable set so
- * the two cannot drift (adding a new assignable role here is an explicit,
- * reviewed decision, not a silent widening).
+ * only. The tuple is compile-checked to be a subset of the assignable set (a
+ * typo or a removed role fails to compile); excluding Candidate is a reviewed
+ * decision, not a compile error.
  */
 export const STAFF_INVITATION_ROLES = [
   "Admin",
@@ -118,7 +118,7 @@ export type AcceptInvitationResponse = z.infer<
   typeof AcceptInvitationResponseSchema
 >;
 
-// ── Email password reset (#297) ───────────────────────────────────
+// ── Email password reset ───────────────────────────────────
 
 /**
  * Request body for POST /auth/password-reset/request. Deliberately username-

@@ -40,7 +40,10 @@ export interface CreateNotificationInput {
   dedupeKey?: string | null;
 }
 
-/** Result of an idempotent insert: the existing row when the dedupe key hit. */
+/**
+ * Result of an idempotent insert: `row` is the new row, or the existing row on
+ * a dedupe-key hit.
+ */
 export interface InsertResult {
   row: NotificationRow;
   /** True iff a NEW row was inserted (false = dedupe-key reuse). */
@@ -62,7 +65,7 @@ export interface ListResult {
 }
 
 /**
- * Creates a repository for the `notifications` Inbox table (P5-N1).
+ * Creates a repository for the `notifications` Inbox table.
  *
  * All queries are scoped to `(organizationId, recipientUserId)`. The recipient
  * is passed per-method (never inferred from ctx) so a system reader cannot

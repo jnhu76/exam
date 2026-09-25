@@ -9,7 +9,6 @@ import { OpsPolicyVersionConflictError } from "@exam/domain";
 /** PostgreSQL unique-violation code (first-create race on the org index). */
 const PG_UNIQUE_VIOLATION = "23505";
 
-/** The operational policy INTENT row (P7-E3). */
 export type OperationalPolicyRow = {
   id: string;
   organizationId: string;
@@ -45,7 +44,7 @@ function row(
 }
 
 /**
- * Operational policy INTENT repository (P7-E3, ADR-017 D9).
+ * Operational policy INTENT repository (ADR-017 D9).
  *
  * One typed, versioned row per organization. Writes are CAS-protected
  * (optimistic concurrency): the caller must echo the version it read; a

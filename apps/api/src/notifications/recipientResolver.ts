@@ -6,9 +6,7 @@ import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { resolveCandidateResultVisibility } from "@exam/exam-engine";
 
-// P5-N1-I2 Slice 5 — recipient composition for result_published fan-out.
-//
-// Authority: P5-N1-R0 §10 (frozen composition rule).
+// Recipient composition for result_published fan-out.
 //
 // For a manual publish of exam E, a recipient is every Candidate enrolled in E
 // whose score-strategy-selected authoritative attempt (enrollment.finalAttemptId)
@@ -74,7 +72,6 @@ export async function resolveResultPublishedRecipients(
   }
 
   // Step 3: compose with resolveCandidateResultVisibility; keep only visible results.
-  // Track which candidateProfile each surviving attempt belongs to.
   const surviving: { candidateId: string; attempt: ExamAttempt }[] = [];
   for (const e of withAttempt) {
     const attempt = attemptById.get(e.finalAttemptId!);

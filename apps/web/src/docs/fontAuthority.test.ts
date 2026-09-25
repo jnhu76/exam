@@ -4,21 +4,21 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Primary-font truth coherence (issue 577 M1 / Corrective B, R3).
+ * Primary-font truth coherence (#577 M1).
  *
  * Runtime truth: the primary UI family is self-hosted HarmonyOS Sans SC
  * (Regular/Medium/Bold linked in index.html). Noto Sans CJK SC is a
  * name-in-stack fallback only — no Noto sans webfont is loaded. All four
  * carriers (index.html, index.css token + comment, DESIGN.md, ui-system.md)
  * must tell this same story; a doc that re-elevates Noto to "the loaded
- * self-hosted sans" is the exact drift class that survived commit b73c94cb.
+ * self-hosted sans" is exactly the drift class this gate catches.
  *
- * Bundled-source authority (issue #601 Step 1): the generated @font-face
+ * Bundled-source authority (#601): the generated @font-face
  * declarations must not list a host `local(...)` source before (or instead
  * of) the bundled WOFF2 — a host with HarmonyOS Sans SC installed would
  * otherwise silently replace the bundled binary, and the same `font-weight`
- * renders with a different optical weight per host (the #601 Phase-A
- * finding). Regeneration after a cn-font-split re-run goes through
+ * renders with a different optical weight per host. Regeneration after a
+ * cn-font-split re-run goes through
  * scripts/fonts/bundled-font-sources.mjs.
  */
 
@@ -66,8 +66,8 @@ export function fontTruthViolations(files: {
       v.push(
         `${name} does not name HarmonyOS Sans SC as the primary UI family`,
       );
-    // A doc claiming Noto Sans CJK SC is the self-hosted/loaded primary is
-    // the stale pre-b73c94cb story.
+    // A doc claiming Noto Sans CJK SC is the self-hosted/loaded primary tells
+    // the superseded story.
     if (/self-hosted\s+`?Noto Sans CJK SC`?/.test(doc))
       v.push(`${name} still claims Noto Sans CJK SC is self-hosted/loaded`);
     if (/Noto Sans CJK SC.*preloaded/.test(doc))

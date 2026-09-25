@@ -147,7 +147,7 @@ export function createClientEventRepo(db: Database) {
      * projection before responding, so only non-sensitive fields reach the
      * proctor view.
      *
-     * INVARIANT (#544): ordering authority is the server-owned `receivedAt`
+     * INVARIANT: ordering authority is the server-owned `receivedAt`
      * with `id` as the deterministic tiebreaker — never the client-asserted
      * `occurredAt`, which a malicious client can set to any instant to
      * hijack the timeline head/tail or pagination. Backed by
@@ -219,12 +219,13 @@ export function createClientEventRepo(db: Database) {
     /**
      * Deletes client events for the context's organization whose server-owned
      * `receivedAt` is strictly older than `cutoff`. THE retention primitive
-     * for `client_events` (#544): fixed 30-day horizon owned by the
-     * application-level retention executor, not a per-tenant setting.
+     * for `client_events`: the horizon is owned by the application-level
+     * retention executor (`CLIENT_EVENT_RETENTION_DAYS`), not a per-tenant
+     * setting.
      *
      * Boundary semantics: `receivedAt < cutoff` deletes; `receivedAt == cutoff`
      * and newer are kept (strict inequality — a cutoff computed as
-     * `now - 30d` retains exactly the 30-day-old row).
+     * `now - horizon` retains exactly the horizon-old row).
      *
      * Idempotent and restart-safe by construction (pure convergence delete).
      * Backed by `client_events_org_received_at_idx`. Never touches any other

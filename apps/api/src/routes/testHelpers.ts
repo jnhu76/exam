@@ -41,23 +41,6 @@ import {
   type ApiTestDatabaseHandle,
 } from "./testDatabase.js";
 
-// ── (migrate-cache removed in PR cleanup) ─────────────────────────
-// (e.g. exam.test.ts
-// has 4 describe blocks each calling buildTestApp), each call used to CREATE
-// SCHEMA + run all 7 Drizzle migrations. Those ~84ms migrate calls were
-// redundant: every build within the same process gets the same fresh schema.
-//
-// This module-level cache records the first migrated schema+connection per
-// process and reuses it for subsequent builds. Between builds the schema is
-// TRUNCATE-reset (RESTART IDENTITY CASCADE, preserving migration metadata),
-// so each build still sees a clean business-data slate — exactly the same
-// post-migrate state the original CREATE SCHEMA + migrate provided.
-//
-// Probed savings: ~232ms/build (467ms fresh → 235ms cached) for multi-build
-// files. Risk: none for intra-file builds that create a fresh ctx each time.
-// Files that share a ctx across builds (e.g. a beforeAll ctx reused in
-// multiple it blocks) are NOT affected because they call buildTestApp once.
-
 /**
  * Module-level flag: has the business-data reset for the CURRENT test file
  * already run?
@@ -85,9 +68,8 @@ import {
 let fileBusinessDataReset = false;
 
 /**
- * Roles that exist in the broader Phase 3 vocabulary but are not assignable
- * through the Phase 1 role-assignment surface. Used for negative fixtures that
- * prove users.role is not authority.
+ * Roles that are not assignable through the role-assignment surface. Used for
+ * negative fixtures that prove users.role is not authority.
  */
 export const UNSUPPORTED_ROLES = [
   "SuperAdmin",
@@ -183,13 +165,12 @@ export async function buildTestApp(
   let resolvedSchemaName = opts?.schemaName;
   let isolatedCleanup: (() => Promise<void>) | undefined;
 
-  // Phase 3B opt-in: when the caller did not pass an explicit schemaName AND
-  // the environment selected worker-database mode, use the per-worker
-  // database adapter instead of legacy per-file schema isolation. The worker
-  // DB is already migrated by the adapter (Drizzle tracks applied migrations
-  // in `drizzle.__drizzle_migrations`, so re-running is a no-op).
+  // When the caller did not pass an explicit schemaName AND the environment
+  // selected worker-database mode, use the per-worker database adapter instead
+  // of legacy per-file schema isolation. The worker DB is already migrated by
+  // the adapter (Drizzle tracks applied migrations in
+  // `drizzle.__drizzle_migrations`, so re-running is a no-op).
   //
-  // RESET BOUNDARY (deliberate choice): we do NOT call adapter.resetPostgres()
   // RESET BOUNDARY: we do NOT call adapter.resetPostgres() on every buildTestApp
   // call. Several API test files (e.g. auth.test.ts, user.test.ts) build the
   // app MORE THAN ONCE per file — a shared `ctx` in beforeAll plus additional
@@ -305,7 +286,7 @@ async function finishBuildTestApp(args: {
   await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(authzScopedPlugin);
-  // Email sender is built from runtime config (M3). Tests that need to drive
+  // Email sender is built from runtime config. Tests that need to drive
   // transport selection stub env + resetRuntimeConfigForTest before building.
   await app.register(emailPlugin);
   if (opts?.rateLimit) {

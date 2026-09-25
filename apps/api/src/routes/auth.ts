@@ -63,10 +63,11 @@ import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { loadAssignmentAuthority } from "../authz/assignmentAuthority.js";
 
 /**
- * Fastify plugin that registers authentication routes.
- *
- * Provides login, logout, current-user retrieval, and password change
- * for the internal default organization. Registration is disabled in Phase 1.
+ * Fastify plugin that registers the authentication and public identity-
+ * lifecycle routes (login/logout, current-user read and self-service profile /
+ * password, invitation acceptance, email password reset) for the internal
+ * default organization. Self-service registration is not a product capability;
+ * POST /register exists only to answer it with an explicit refusal.
  */
 /**
  * Login-capable roles (RBAC runtime activation) — derived from the
@@ -74,7 +75,6 @@ import { loadAssignmentAuthority } from "../authz/assignmentAuthority.js";
  * authority for "this role may log in" (the permission registry exposes the
  * same projection to clients), so this gate cannot drift from it and no
  * second role list may be introduced here.
- * P7-E2A (ADR-017 D2): Maintainer is a login-capable built-in role.
  */
 const ASSIGNABLE_LOGIN_ROLES = new Set<string>(
   Object.values(ROLE_PRESETS)
@@ -105,9 +105,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * POST /register — always returns 403.
      *
-     * Registration is disabled in Phase 1; this endpoint exists
-     * to return a clear "registration disabled" error to any client
-     * that attempts self-service account creation.
+     * Self-service registration is not a product capability; the endpoint
+     * exists so a client that attempts account creation gets an explicit
+     * refusal.
      */
     async (request, reply) => {
       return reply
@@ -133,8 +133,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
      * POST /login — authenticate a user and issue an auth-token cookie.
      *
      * Resolves the default organization, verifies credentials, and
-     * signs a JWT stored in an httpOnly cookie. Only Admin and
-     * Candidate roles are supported in Phase 1.
+     * signs a JWT stored in an httpOnly cookie. Any role whose preset grants
+     * `loginAllowed` may log in; an unknown or non-login-capable primary role is
+     * rejected with the same generic AUTH_INVALID_CREDENTIALS.
      */
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
@@ -238,9 +239,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       );
       if (!authority.ok) {
         if (authority.reason === "no_active_assignments") {
-          // Record the login failure for audit (mirrors the legacy
-          // non_login_role audit shape). The response stays generic so it
-          // does not leak the no-assignment reason to the client.
+          // Record the login failure for audit. The response stays generic so
+          // it does not leak the no-assignment reason to the client.
           const noAssignmentCtx: RequestContext = {
             actorId: user.id,
             organizationId: user.organizationId,
@@ -335,12 +335,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       // `{ ok:false, reason:"dual_admin_maintainer" }` above (401 here, 503 on
       // the authenticated-request path) — it can no longer reach this branch.
 
-      // RBAC runtime activation: only the 6 assignable human roles
-      // (Admin/Maintainer/Teacher/Proctor/Grader/Candidate) may log in. System
-      // is the synthetic non-login actor; any other/unknown role string
-      // (SuperAdmin, legacy future roles, garbage) is rejected. ADR §System
-      // Actor Policy. The check is against the authoritative primaryRole, not
-      // users.role.
+      // RBAC runtime activation: only roles whose preset grants `loginAllowed`
+      // may log in (ASSIGNABLE_LOGIN_ROLES is derived from ROLE_PRESETS — no
+      // role list is maintained here). System is the synthetic non-login
+      // actor; any unknown role string (SuperAdmin, garbage) is rejected.
+      // ADR §System Actor Policy. The check is against the authoritative
+      // primaryRole, not users.role.
       if (!ASSIGNABLE_LOGIN_ROLES.has(primaryRole)) {
         const blockedCtx: RequestContext = {
           actorId: user.id,
@@ -534,8 +534,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * GET /me — return the currently authenticated user's profile.
      *
-     * Requires a valid auth-token cookie. Returns user id, username,
-     * name, role, and organizationId, or 404 if the user no longer exists.
+     * Requires a valid auth-token cookie. The response shape is owned by
+     * MeResponseSchema; 404 if the user no longer exists.
      */
     async (request, reply) => {
       const userRepo = createUserRepo(fastify.db);
@@ -664,8 +664,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * PATCH /me/profile — update the authenticated user's own profile.
      *
-     * Phase 1 supports editing the display name only. Returns the updated
-     * user profile, or 404 if the user record is missing.
+     * The request schema accepts `name` only. Returns the updated user
+     * profile, or 404 if the user record is missing.
      */
     async (request, reply) => {
       const parsed = UpdateProfileRequestSchema.safeParse(request.body);

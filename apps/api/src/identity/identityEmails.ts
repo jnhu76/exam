@@ -1,7 +1,7 @@
-// Identity lifecycle Email renderers (#297).
+// Identity lifecycle Email renderers.
 //
 // Pure functions over structured payloads, following the
-// `renderGradeNotificationEmail` content boundary (P5-N1-I2): server-generated
+// `renderGradeNotificationEmail` content boundary: server-generated
 // zh-CN copy, a single trusted absolute link, and NO secret other than the
 // token link itself — the raw token exists only in the delivered body, never
 // in audit payloads or application logs. There is deliberately NO template
@@ -16,7 +16,7 @@ export interface StaffInvitationEmailPayload {
   /**
    * Invited staff role. INVARIANT: this is the closed `StaffInvitationRole`
    * contract enforced by `CreateStaffInvitationRequestSchema` at the wire
-   * boundary — the renderer has no raw-string fallback path (C6 F-14).
+   * boundary — the renderer has no raw-string fallback path.
    */
   role: StaffInvitationRole;
   /** Absolute acceptance URL from `buildInviteAcceptLink`. */
@@ -38,7 +38,7 @@ export interface PasswordResetEmailPayload {
  * labels (`admin.users.roleLabels`) so email copy and UI copy agree; kept
  * local because server Email copy cannot import the web app's i18n.
  * Typed as the closed role contract so a missing label is a compile error
- * and the raw role key can never reach the rendered Email (C6 F-14).
+ * and the raw role key can never reach the rendered Email.
  */
 export const STAFF_ROLE_LABELS_ZH: Record<StaffInvitationRole, string> = {
   // i18n-copy-allow: server-rendered — Email/Inbox copy rendered server-side; independent localization boundary, never routed through web i18n

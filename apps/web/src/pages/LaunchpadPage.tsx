@@ -18,7 +18,7 @@ import type {
 } from "@exam/contracts";
 
 /**
- * Launchpad first-install page (P7-C1).
+ * Launchpad first-install page.
  *
  * Initial installation ONLY: creates the first Admin and the internal
  * default organization via POST /api/launchpad/bootstrap. NOT signup, NOT

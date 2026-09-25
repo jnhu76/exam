@@ -171,7 +171,7 @@ export function hasSubjectiveQuestions(questions: QuestionSnapshot[]): boolean {
 /**
  * Returns true when any question in the snapshot requires manual grading.
  *
- * P3-L0-2C authoritative classification seam (exam-protocol.md §1.1, §1.4):
+ * P3-L0-2C authoritative classification seam (docs/architecture/exam-runtime.md §1.1, §1.4):
  * `text_response` is the canonical manual-graded QuestionType —
  * `gradingMode = manual` is derived from `QuestionType`, NOT from
  * `standardAnswer`. The protocol explicitly states
@@ -194,22 +194,20 @@ export function requiresManualGrading(questions: QuestionSnapshot[]): boolean {
 }
 
 /**
- * P3-L0-2D canonical per-question manual-grading predicate.
+ * Per-question manual-grading predicate (protocol §1.4).
  *
- * Single semantic authority (protocol §1.4) for whether ONE question
- * requires manual grading. This is the per-question counterpart of
- * {@link requiresManualGrading}; the manual-grading completion path and the
- * freeze-barrier classification both consult it so question selection can
- * never diverge from lifecycle classification.
+ * Single semantic authority for whether ONE question requires manual grading,
+ * and the per-question counterpart of {@link requiresManualGrading}: the
+ * manual-grading completion path and the freeze-barrier classification both
+ * consult it so question selection can never diverge from lifecycle
+ * classification.
  *
- * Replaces the deprecated `standardAnswer == null` heuristic in the manual
- * grading module (Defect B): a `text_response` question may legally carry a
- * non-null `standardAnswer` (a reference answer used as grader guidance), so
- * `standardAnswer` MUST NOT decide whether the question is in the manual
- * grading queue.
+ * A `text_response` question may legally carry a non-null `standardAnswer` (a
+ * reference answer used as grader guidance), so `standardAnswer` MUST NOT
+ * decide whether the question is in the manual grading queue.
  *
- * The parameter is narrowed to the parts the predicate reads so the write
- * boundary (#437) can reuse the same authority during validation, before a
+ * The parameter is narrowed to the parts the predicate reads so the question
+ * write boundary can reuse the same authority during validation, before a
  * full QuestionSnapshot exists.
  */
 export function isManualGradedQuestion(

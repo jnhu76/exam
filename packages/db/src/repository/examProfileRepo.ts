@@ -1,9 +1,8 @@
-// ── P7-M2: exam policy profile repository ─────────────────────────
-//
 // Organization-scoped CRUD for `exam_policy_profiles`. A profile is ordinary
-// authoring data — no locks, no versioning, no lifecycle state machine (M2
-// design §28/§29). Deletion is a hard delete: exams materialize profile values
-// at creation (copy-on-apply), so no Exam depends on a profile row.
+// authoring data — no locks, no versioning, no lifecycle state machine
+// (docs/contracts/exam-profile-templates.md). Deletion is a hard delete: exams
+// materialize profile values at creation (copy-on-apply), so no Exam depends on
+// a profile row.
 
 import type { Database } from "../types.js";
 import { examPolicyProfiles } from "../schema/pg.js";

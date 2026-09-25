@@ -4,21 +4,18 @@
  *
  * Flags suspected hand-rolled complex interaction primitives OUTSIDE
  * components/ui/. The goal is to catch regressions against the forbidden
- * hand-builds documented in docs/standards/ui-system.md §Forbidden dependencies:
- * DatePicker / Calendar grids, Dialog/Modal, Select/Combobox, Popover,
- * DropdownMenu, Tooltip, Tabs, FocusTrap.
+ * hand-builds listed in docs/standards/ui-system.md §Forbidden dependencies
+ * (that list is maintained there, not here).
  *
- * NOT wired into CI by default — its co-occurrence heuristics still carry
- * known findings (verified against the current tree); run manually:
+ * NOT wired into CI — run it manually:
  *   node scripts/check-frontend-primitives.mjs
  * (scripts/check-frontend-primitives.test.mjs smoke-proves executability.)
  *
- * Design rules (per governance §10):
- * - Must not flag legitimate business components (row expanders, toggle
- *   states that drive a plain `aria-expanded` on a non-modal element).
- * - Scan scope = shared business-UI authority (scripts/lib/ui-scan-roots.mjs)
- *   plus an explicit lib/hooks delta — never components/ui/.
- * - Allow-list path fragments for known-safe business patterns.
+ * Rules it must keep: never flag legitimate business components (row
+ * expanders, toggle states that drive a plain `aria-expanded` on a non-modal
+ * element); scan scope = shared business-UI authority
+ * (scripts/lib/ui-scan-roots.mjs) plus the explicit lib/hooks delta, never
+ * components/ui/.
  *
  * Exit codes: 0 = clean, 1 = findings.
  */
@@ -60,11 +57,7 @@ const SCAN_DIRS = [...businessUiDirs, ...EXTRA_SCAN_DIRS];
 // Path fragments that mark a file as known-safe (business component, not a
 // hand-rolled primitive). Add here only when a finding is reviewed and is a
 // legitimate business pattern.
-const ALLOW_PATH_FRAGMENTS = [
-  // Row-expander / detail-disclosure toggles are business state, not popovers.
-  // (No path fragment yet — handled by the aria-expanded-on-non-modal rule
-  // below instead.)
-];
+const ALLOW_PATH_FRAGMENTS = [];
 
 // A finding is: { file, line, col, rule, snippet }
 function ruleMatches(text) {

@@ -12,11 +12,8 @@
  * allowlist (see `e2eReset.ts`): pointing this at the dev `exam` database
  * or a vitest `exam_test*` database fails loudly instead of wiping it.
  *
- * Demo accounts produced (passwords identical):
- *   candidate1 / candidate123 = in_progress / resume
- *   candidate2 / candidate123 = available   / start
- *   candidate3 / candidate123 = resumable   / resume
- *   candidate4 / candidate123 = graded      / view_result
+ * Produced demo accounts and their expected status/action are owned by
+ * `demo-seed.ts` and documented in docs/contracts/mock-data.md.
  *
  * Usage:
  *   pnpm --filter @exam/db db:seed:e2e

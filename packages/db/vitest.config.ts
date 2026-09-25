@@ -16,15 +16,13 @@ for (const [key, value] of Object.entries(envVars)) {
   if (process.env[key] === undefined) process.env[key] = value;
 }
 
-// Worker cap — Issue #463, calibrated 2026-09-05 (resource cap = 3):
-// @exam/db retains file parallelism but caps concurrent workers because
-// DB-backed tests share a single test-infra lifecycle advisory lane.
-// Issue #463 measurements showed the throughput knee remains approximately
-// flat as machine CPU count rises (2–20 CPU profiles), while CPU-derived
-// worker counts deepen the lifecycle queue and cause 5s test-body timeouts.
-// The cap is resource admission control, not package serialization.
-// Reserving one scheduling unit (availableParallelism - 1) leaves room for
-// PostgreSQL and the OS on low-core hosts.
+// Worker cap — resource admission control, not package serialization:
+// @exam/db keeps file parallelism but caps concurrent workers because
+// DB-backed tests share a single test-infra lifecycle advisory lane. The
+// throughput knee stays approximately flat as machine CPU count rises, while
+// CPU-derived worker counts deepen the lifecycle queue and cause test-body
+// timeouts. Reserving one scheduling unit (availableParallelism - 1) leaves
+// room for PostgreSQL and the OS on low-core hosts.
 const DB_TEST_WORKER_CAP = 3;
 const maxWorkers = Math.min(
   DB_TEST_WORKER_CAP,
@@ -49,9 +47,8 @@ export default defineConfig(({ mode }) => ({
     // `{ timeout }` applies to TEST bodies only — hooks default to the 10s
     // global hookTimeout. Every lifecycle hook that queues on the shared
     // test-infra DDL advisory lock declares its own explicit numeric timeout
-    // at the call site (PR #242 rule): 30_000 for repository bootstrap,
-    // 120_000 for full-migration beforeAll (enforced by scripts/check-db-config.mjs
-    // Guard 5); an unrelated broken hook must still surface at the 10s default
-    // instead of being masked by a raised budget.
+    // at the call site (enforced by scripts/check-db-config.mjs Guard 5): an
+    // unrelated broken hook must still surface at the 10s default instead of
+    // being masked by a raised budget.
   },
 }));

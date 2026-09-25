@@ -25,17 +25,16 @@ export function decorateApiRouteStubs(app: FastifyInstance): void {
   Object.assign(authenticate, { _isAuthenticate: true });
   app.decorate("authenticate", authenticate);
   app.decorate("requireRole", () => async () => {});
-  // requireCapability (Phase 3 capability gate, RBAC runtime activation) —
-  // no-op stub so OpenAPI generation can register flipped routes.
+  // No-op requireCapability stub so OpenAPI generation can register routes
+  // gated by the capability preHandler.
   app.decorate("requireCapability", () => {
     const h: AuthzPreHandler = async () => {};
     h.authz = { kind: "flat", permission: "exam.view" };
     return h;
   });
-  // requireScopedCapability (RBAC-M10-finish resource-aware gate, P4-2A) —
-  // no-op stub so OpenAPI generation can register routes that adopted the
-  // scoped gate (grading-details / grade-question). Same rationale as the
-  // requireCapability stub above.
+  // No-op requireScopedCapability stub so OpenAPI generation can register
+  // routes that adopted the scoped gate (grading-details / grade-question).
+  // Same rationale as the requireCapability stub above.
   app.decorate("requireScopedCapability", () => {
     const h: AuthzPreHandler = async () => {};
     h.authz = {
@@ -46,17 +45,13 @@ export function decorateApiRouteStubs(app: FastifyInstance): void {
     };
     return h;
   });
-  // requireScoreCapability (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1) — no-op
-  // stub so OpenAPI generation can register the score route, which now uses
-  // the dedicated score-capability gate (own/all arbitration). Same rationale
-  // as the requireScopedCapability stub above.
+  // No-op requireScoreCapability stub so OpenAPI generation can register the
+  // score route (own/all arbitration). Same rationale as above.
   app.decorate("requireScoreCapability", () => async () => {});
-  // Candidate-runtime capability gates (RBAC-M10-A archetypes A/B/C-D) — no-op
-  // stubs so OpenAPI generation can register the 10 candidate runtime routes
-  // that now use the dedicated candidate-context / exam-eligibility /
-  // own-attempt gates. Each attaches a stub `.authz` matching its kind so the
-  // route registers cleanly (the spec is driven by route `schema.security` /
-  // `schema["x-role"]`, not the preHandler — same rationale as above).
+  // No-op candidate-runtime capability stubs (candidate-context /
+  // exam-eligibility / own-attempt). Each attaches a stub `.authz` matching its
+  // kind so the route registers cleanly (the spec is driven by route
+  // `schema.security` / `schema["x-role"]`, not the preHandler).
   app.decorate("requireCandidateContext", (permission: PermissionKey) => {
     const h: AuthzPreHandler = async () => {};
     h.authz = { kind: "candidate_context", permission };

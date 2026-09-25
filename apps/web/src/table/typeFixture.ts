@@ -2,7 +2,7 @@ import i18n, { SUPPORTED_LOCALES } from "@/i18n";
 import { AssignableRoleSchema } from "@exam/contracts";
 
 /**
- * Type column width authority fixture (issue #590).
+ * Type column width authority fixture.
  *
  * The type column token (7.25rem) is VOCABULARY-BOUND: it is derived from the
  * widest legal badge across the bounded enumerated-label families rendered in
@@ -15,9 +15,9 @@ import { AssignableRoleSchema } from "@exam/contracts";
  * family grows the fixture and turns the structural test red until the token
  * is revisited.
  *
- * Issue #590 recorded two nonconforming `type` consumers as its follow-up;
- * issue #598 moved both out of this role instead of widening this token, so
- * the families above stay the complete derivation universe:
+ * The two former `type` consumers outside these families now have their own
+ * roles instead of widening this token, so the families above stay the
+ * complete derivation universe:
  *   - audit-log action labels → the dedicated grammar-class role
  *     `action-label`, derived from the action registry × locales by
  *     actionLabelFixture.ts (its raw action-key compatibility path renders

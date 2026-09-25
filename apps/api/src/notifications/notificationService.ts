@@ -15,23 +15,23 @@ import {
 import { renderGradeNotificationEmail } from "./gradeNotificationEmail.js";
 import { renderExamAssignedEmail } from "./examAssignedEmail.js";
 
-// P5-N1-I2 — channel-neutral NotificationService.
+// Channel-neutral NotificationService.
 //
 // The service composes the Inbox repository + Email outbox repository inside
 // the caller's transaction. SMTP is NOT called here — the worker drains the
-// outbox asynchronously (P5-0). Per ADR-011 + P5-N1-R0 §17:
+// outbox asynchronously. Per ADR-011:
 //   - Inbox row is REQUIRED (failure rolls back the publication transaction)
 //   - Email outbox row is REQUIRED when a normalized recipient email exists
 //     (failure rolls back the publication transaction)
 //   - The outbox row insert therefore THROWS on failure; a best-effort
 //     (swallow-and-continue) insert would silently break that atomicity.
 
-/** Dedupe key for the Inbox row (recipient-scoped). P5-N1-R0 §11.2. */
+/** Dedupe key for the Inbox row (recipient-scoped). */
 function inboxDedupeKey(examId: string): string {
   return `result_published:${examId}`;
 }
 
-/** Dedupe key for the outbox row (recipient-scoped). P5-N1-R0 §11.2. */
+/** Dedupe key for the outbox row (recipient-scoped). */
 function outboxDedupeKey(examId: string, recipientUserId: string): string {
   return `result_published:${examId}:${recipientUserId}`;
 }

@@ -1,5 +1,5 @@
 /**
- * Deterministic exponential-backoff retry policy for the email outbox (M3).
+ * Deterministic exponential-backoff retry policy for the email outbox.
  *
  *   nextRetryAt = now + baseSeconds * 2 ** (attempts - 1)
  *

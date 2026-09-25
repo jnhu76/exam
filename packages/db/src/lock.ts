@@ -5,7 +5,7 @@ import type { Database } from "./types.js";
  * Identifies a family of organization-scoped advisory locks.
  *
  * All authority-mutation seams MUST use the SAME kind: the Admin↔Maintainer
- * exclusion post-condition (P7-E2A, ADR-017 D14) and the last-effective-Admin
+ * exclusion post-condition (ADR-017 D14) and the last-effective-Admin
  * post-condition are only race-safe when every authority mutation for an
  * organization serializes on one lock. Adding a second kind for a second
  * invariant would let two concurrent mutations run under different locks and

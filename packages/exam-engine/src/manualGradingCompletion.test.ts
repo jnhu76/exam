@@ -66,7 +66,7 @@ const noneResolution: SubmitInterruptionResolution = {
  *     manual grader, leaving the attempt permanently stuck or excluding the
  *     score from reconciliation.
  *
- * Required invariants (exam-protocol.md §3.3, §4.2, §1.4):
+ * Required invariants (docs/architecture/exam-runtime.md §3.3, §4.2, §1.4):
  *
  *   final score for a mixed attempt
  *       = sum(objective auto-graded earned scores from submitted_answers

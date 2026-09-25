@@ -428,7 +428,7 @@ describe("isTestDbIsolationEnabled", () => {
 
 describe(
   "getIsolatedTestDb — single critical section per setup",
-  // Queue-participant hang protection (PR #242 rule, see
+  // Queue-participant hang protection (queue budget rule, see
   // docs/standards/test-flakes.md): the setup acquires the shared
   // test-infra DDL lock and can queue behind sibling heavy sections.
   { timeout: 30_000 },

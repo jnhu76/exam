@@ -40,7 +40,7 @@ describe("canonical force_submit payload", () => {
     );
   });
 
-  // ── Review J5-I1C0 PR #261 P2-2: unified errors ─────────────────────
+  // ── Unified errors ──────────────────────────────────────────────────
   // AGENTS.md mandates the `packages/domain/src/errors.ts` error hierarchy
   // over `throw new Error()`. The canonicalizers must raise ValidationError
   // (HTTP 400, code VALIDATION_ERROR) so a future caller that skips the wire

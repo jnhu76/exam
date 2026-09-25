@@ -1,14 +1,10 @@
 /**
  * Own-attempt capability preHandler (RBAC-M10-A, archetype C/D).
  *
- * Resource-aware authorization for the candidate own-attempt routes:
- *
- *   GET /attempts/:id                                  (AttemptViewOwn)
- *   GET /candidate/attempts/:attemptId/take            (AttemptViewOwn)
- *   POST /attempts/:attemptId/answers/:questionId      (AttemptAnswerSave)
- *   POST /attempts/:attemptId/submit                   (AttemptSubmit)
- *   POST /attempts/:attemptId/heartbeat                (AttemptHeartbeatSend)
- *   POST /attempts/:attemptId/restore                  (AttemptRestore)
+ * Resource-aware authorization for the candidate own-attempt routes — the
+ * registry entries declaring `runtimeAuthz.kind: "own_attempt"`
+ * (`authz/routeRegistry.ts` owns the route → capability pairing and the
+ * `resourceIdKey` each route uses).
  *
  * The authorization decision is **capability + ownership**, never role-name
  * (directive §6.1). A principal is authorized iff, in order:

@@ -20,10 +20,11 @@ import type { WizardState } from "./wizardState";
 import { WIZARD_CODE_DEFAULTS } from "./wizardState";
 
 /**
- * Step 2 — exam policy fields. Renders the 10 profile-safe, runtime-enforced
- * dimensions ONLY. Latent control flags (shuffle / tab-detect / copy-paste /
- * queue / IP / lockdown) are deliberately NOT shown: they are not enforced
- * today and must not be marketed as exam controls in the new product entry.
+ * Step 2 — exam policy fields. Renders the profile-safe, runtime-enforced
+ * dimensions ONLY (the authoritative list is PROFILE_POLICY_FIELDS).
+ * Latent control flags (shuffle / tab-detect / copy-paste / queue / IP /
+ * lockdown) are deliberately NOT shown: they are not enforced, and must not be
+ * presented as exam controls.
  *
  * When a profile is selected, each field shows a provenance badge
  * (来自「模板名」 / 已自定义) and a 恢复模板值 button to drop the override.

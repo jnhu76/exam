@@ -74,8 +74,8 @@ export function createExamRepo(db: Database) {
         .orderBy(asc(exams.openAt), asc(exams.id));
     },
     /**
-     * Exams restricted to the given course ids with pagination (issue #286
-     * LIST scope filter). Filtering happens in SQL BEFORE limit/offset and
+     * Exams restricted to the given course ids with pagination (LIST scope
+     * filter). Filtering happens in SQL BEFORE limit/offset and
      * BEFORE the total count — never post-pagination. An EMPTY course-id set
      * yields `{ items: [], total: 0 }` by contract (never unfiltered).
      * Ordering matches the generic listPaginated (createdAt, id) so the two
@@ -131,7 +131,7 @@ export function createExamRepo(db: Database) {
       return rows[0] ?? null;
     },
     /**
-     * Candidate exam-eligibility chain (RBAC-M10-A, archetype B).
+     * Candidate exam-eligibility chain (archetype B).
      *
      * Single query that loads the exam→course→organization authorization chain
      * AND the candidate profile (by `userId === ctx.actorId`) AND that

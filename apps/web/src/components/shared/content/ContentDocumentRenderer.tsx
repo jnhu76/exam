@@ -44,8 +44,9 @@ function InlineRun({ inline }: { inline: ContentInline }) {
     case "inlineMath":
       return <MathRenderer latex={inline.latex} displayMode={false} />;
     default:
-      // Unknown inline node: dropped silently is unsafe to read; render its
-      // absence explicitly through the fail-safe boundary at the block level.
+      // Unknown inline node (corrupt data only — the write boundary rejects
+      // it): render nothing. The block-level fail-safe covers unknown BLOCK
+      // types; raw HTML is never a fallback.
       return null;
   }
 }

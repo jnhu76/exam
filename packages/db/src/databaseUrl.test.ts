@@ -105,7 +105,7 @@ describe("resolveDatabaseUrl — test-like modes", () => {
   });
 
   it("a DB_HOST_PORT override flows into the constructed LOCAL test URL (owner test)", () => {
-    // PR #322 review P1-3: changing DB_HOST_PORT in .env once makes pnpm test
+    // Changing DB_HOST_PORT in .env once makes pnpm test
     // follow — no manual "keep the test URL in sync" step.
     expect(
       resolveDatabaseUrl(env({ APP_MODE: "test", DB_HOST_PORT: "25432" })),

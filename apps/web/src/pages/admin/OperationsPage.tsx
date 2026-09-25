@@ -31,16 +31,16 @@ import { Database, HeartPulse, MemoryStick } from "lucide-react";
 const HEALTH_REFRESH_MS = 15_000;
 
 /**
- * P7-E2C — Operations surface (Admin business-owner summary + Application
- * Maintainer detail).
+ * Operations surface (Admin business-owner summary + Application Maintainer
+ * detail).
  *
- * Renders the operational control-plane truth: overall health, backup
- * posture (latest / latest VERIFIED / last failure / status counts), restore
- * readiness (drill evidence, automated vs operator-declared), and the
- * operational diagnostics projection (DB latency, Redis, scanners, email
- * worker). The business-integrity diagnostics block is rendered ONLY when
- * the backend includes it (Admin holds system.business_integrity.view;
- * Maintainer never receives it — the field is absent, not zeroed).
+ * Renders the operational control-plane truth: overall health, backup posture
+ * (latest / latest VERIFIED / last failure / status counts), restore readiness
+ * (drill evidence, automated vs operator-declared), and the operational
+ * diagnostics projection (DB latency, Redis, scanners, email worker). The
+ * business-integrity diagnostics block renders ONLY when the backend includes
+ * it — the field is absent, not zeroed, for a caller without the capability
+ * (who holds it is owned by the @exam/authz presets).
  *
  * Truthfulness rules:
  *   - no verified backup → "NO EVIDENCE / NOT VERIFIED", never a green state;
@@ -51,10 +51,10 @@ export function OperationsPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { formatDateTime, formatDuration } = useProductDateTime();
-  // P7-E3 (ADR-017 D9): Admin is the SOLE policy-intent owner. The page is
-  // shared with the Maintainer observation plane, so the edit control is
-  // capability-gated (backend remains authoritative; this prevents a
-  // Maintainer from reaching the draft form and a dead 403-on-save).
+  // ADR-017 D9: operational policy INTENT is the Admin owner's decision, not the
+  // Maintainer observation plane, so the edit control is capability-gated
+  // (backend remains authoritative; this prevents a Maintainer from reaching the
+  // draft form and a dead 403-on-save).
   const canManagePolicy =
     user !== null && can(user, Permission.SystemOpsPolicyManage);
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
@@ -111,7 +111,6 @@ export function OperationsPage() {
     return () => clearInterval(timer);
   }, [loadAll]);
 
-  /** P7-E3: Admin saves the operational policy INTENT (CAS versioned). */
   async function savePolicy() {
     const current = policy?.policy;
     if (!policyDraft) return;
@@ -356,7 +355,7 @@ export function OperationsPage() {
         )}
       </PageSection>
 
-      {/* ── Operational policy intent (P7-E3, ADR-017 D9) ── */}
+      {/* ── Operational policy intent (ADR-017 D9) ── */}
       <PageSection title={t("ops.policy.title")} contentClassName="space-y-3">
         <p className="type-secondary">{t("ops.policy.intentNote")}</p>
         {policy === null ? (
@@ -708,10 +707,7 @@ export function OperationsPage() {
   );
 }
 
-/**
- * Maps a compliance status to the statusMeta key (P7-E3). The compliance
- * vocabulary is presented through the StatusBadge authority.
- */
+/** Compliance status → StatusBadge vocabulary (the status presentation authority). */
 function complianceBadgeKey(status: string): string {
   switch (status) {
     case "SATISFIED":

@@ -146,7 +146,7 @@ export function trackExamEvent(
     const existing = pending.get(key);
     if (existing) {
       existing.count += 1;
-      return; // folded into the pending coalesced event
+      return;
     }
     const entry: PendingCoalesced = {
       name,

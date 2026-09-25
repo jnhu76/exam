@@ -18,7 +18,8 @@ export interface RouteTitleRule {
 
 /**
  * Static mapping from route paths to i18n keys. Exported for the routed-page
- * completeness gate (issue 490) — the only sanctioned external consumer.
+ * completeness gate (pageMetaCoverage.test.ts) — the only sanctioned external
+ * consumer.
  */
 export const staticRouteTitleKeys = new Map<string, string>([
   [routes.login, "pageMeta.static.login"],
@@ -55,8 +56,8 @@ export const staticRouteTitleKeys = new Map<string, string>([
 
 /**
  * Regex-based title key rules for dynamic routes containing IDs. Exported for
- * the routed-page completeness gate (issue 490); rules must stay mutually
- * exclusive (the gate proves it against every routed pattern).
+ * the routed-page completeness gate (pageMetaCoverage.test.ts); rules must stay
+ * mutually exclusive (the gate proves it against every routed pattern).
  */
 export const dynamicRouteTitleKeys: RouteTitleRule[] = [
   {

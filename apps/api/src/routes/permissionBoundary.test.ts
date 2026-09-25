@@ -33,8 +33,7 @@ import { eq } from "drizzle-orm";
 /**
  * Fail-fast type-narrowing helper. Used in zero-write fixtures to prove the
  * deterministic fixture was actually created — fixture absence MUST fail the
- * test rather than silently returning (RBAC-M10-B PR190 REVIEW CORRECTIVE 1,
- * Finding 1).
+ * test rather than silently returning.
  */
 function requireDefined<T>(
   value: T | null | undefined,
@@ -121,9 +120,8 @@ describe("permission boundary", () => {
 
     // M10-B: 7 capability-migrated routes — unauthenticated denied.
     //
-    // The prior implementation only asserted `matrix.toHaveLength(7)` without
-    // executing any HTTP request, so the test was vacuous
-    // (RBAC-M10-B PR190 REVIEW CORRECTIVE 2). This table drives a real
+    // The assertion must execute a REAL HTTP request per route: asserting only
+    // `matrix.toHaveLength(7)` would be vacuous. This table drives a real
     // `ctx.app.inject()` per route and asserts 401 on each, replacing the
     // seven duplicate single-route tests that covered the same ground.
     //
@@ -408,7 +406,6 @@ describe("permission boundary", () => {
     // ScoreExport has an audit-log write side effect; we verify that
     // denied requests do not produce audit entries.
     //
-    // RBAC-M10-B PR190 REVIEW CORRECTIVE 1, Finding 1:
     // Every fixture is created deterministically via direct schema inserts.
     // No test relies on incidental seed/baseline data. Each test fails fast
     // (requireDefined) if fixture creation somehow did not produce a row,
@@ -657,20 +654,20 @@ describe("permission boundary", () => {
 
   // ─────────────────── M10-C: identity & role-assignment ────────────────────
   //
-  // M10-C migrates 10 routes from legacy requireRole(["Admin"]) to flat
-  // capability gates (Permission.UserView / UserCreate / UserUpdate /
-  // UserPasswordReset / UserDelete / UserRoleAssign). All six permissions are
-  // Admin-only in the current role presets, so this block proves:
+  // M10-C: identity & role-assignment authority over the routes in the tables
+  // below (flat capability gates: UserView / UserCreate / UserUpdate /
+  // UserPasswordReset / UserDelete / UserRoleAssign — all Admin-only in the
+  // role presets), so this block proves:
   //
-  //   1. unauthenticated → 401 on all 10 routes
-  //   2. Candidate → 403 on all 10 routes
-  //   3. Teacher / Proctor / Grader → 403 on all 10 routes
+  //   1. unauthenticated → 401 on every listed route
+  //   2. Candidate → 403 on every listed route
+  //   3. Teacher / Proctor / Grader → 403 on every listed route
   //   4. System login path unavailable (System is non-login)
   //   5. denied mutations leave zero business write (user row, password hash,
   //      account status, users.role, role-assignment rows, primary assignment)
   //   6. denied mutations leave zero audit write
   //   7. successful primary-assignment mutations still sync users.role
-  //      (compatibility invariant preserved — runtime authority unchanged)
+  //      (compatibility invariant — users.role is a cache, not the authority)
   //   8. Admin reaches the handler (capability decision = allow) on read routes
   //
   // Same non-vacuity discipline as M10-B: every fixture is created via direct
@@ -952,7 +949,7 @@ describe("permission boundary", () => {
     // The System preset is `loginAllowed: false` and `assignable: false`
     // (packages/authz/src/presets.ts). Two distinct boundaries prevent a
     // System principal from reaching any M10-C handler, and each requires
-    // its own test (CodeRabbit review on PR #191):
+    // its own test:
     //
     //   1. AUTHENTICATION BOUNDARY — a forged JWT whose actorId has no
     //      matching active user row is rejected by the `authenticate`
@@ -1209,7 +1206,7 @@ describe("permission boundary", () => {
       const { user } = await insertTargetUserWithAssignment();
       const before = await readUser(user.id);
       requireDefined(before, "PATCH deny: user must exist before");
-      // CodeRabbit PR #191 review: assert unchanged route-specific audit
+      // Assert unchanged route-specific audit
       // count (user.update) scoped to (org, targetType=user, targetId).
       const auditRepo = createAuditLogRepo(ctx.db);
       const auditBefore = await auditRepo.listPaginatedFiltered(
@@ -1245,7 +1242,7 @@ describe("permission boundary", () => {
       const { user } = await insertTargetUserWithAssignment("Candidate");
       const before = await readUser(user.id);
       requireDefined(before, "reset-password deny: user must exist before");
-      // CodeRabbit PR #191 review: assert unchanged route-specific audit
+      // Assert unchanged route-specific audit
       // count (candidate.password_reset) scoped to (org, targetType=user,
       // targetId).
       const auditRepo = createAuditLogRepo(ctx.db);
@@ -1285,7 +1282,7 @@ describe("permission boundary", () => {
       requireDefined(beforeUser, "DELETE deny: user must exist before");
       const beforeAssignments = await readAssignmentsForUser(user.id);
       expect(beforeAssignments.some((a) => a.id === assignment.id)).toBe(true);
-      // CodeRabbit PR #191 review: assert unchanged route-specific audit
+      // Assert unchanged route-specific audit
       // count (user.delete) scoped to (org, targetType=user, targetId).
       const auditRepo = createAuditLogRepo(ctx.db);
       const auditBefore = await auditRepo.listPaginatedFiltered(
@@ -1353,13 +1350,13 @@ describe("permission boundary", () => {
     });
 
     it("PATCH /role-assignments/:assignmentId denied — promote-to-primary branch never runs, no audit", async () => {
-      // CodeRabbit PR #191 review: the prior payload `{ isPrimary: false }`
-      // hit the no-op throw branch at roleAssignments.ts (neither
-      // `isPrimary===true` nor `isActive===false`). The denial held only
-      // because the capability gate fires first — the test would also
-      // pass with an empty payload. Switch to the REAL promote branch
-      // (`isPrimary: true` against a secondary assignment) so the test
-      // would fail if the gate ever let an unauthorized principal reach
+      // Mutation-proof payload: a no-op payload (e.g. `{ isPrimary: false }`)
+      // hits the throw branch at roleAssignments.ts (neither
+      // `isPrimary===true` nor `isActive===false`), so the denial would hold
+      // even if the capability gate were removed — the test would pass with an
+      // empty payload. This drives the REAL promote branch
+      // (`isPrimary: true` against a secondary assignment) so the test fails
+      // if the gate ever lets an unauthorized principal reach
       // a state-changing promote operation.
       const { user, assignment: primaryAssignment } =
         await insertTargetUserWithAssignment("Candidate");

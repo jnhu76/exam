@@ -47,9 +47,6 @@ export async function createPostgresDatabase(
   return { sql, db };
 }
 
-/**
- * Options for {@link migratePostgres}.
- */
 export interface MigratePostgresOptions {
   /**
    * PostgreSQL schema to store the `__drizzle_migrations` tracking table.

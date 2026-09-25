@@ -9,14 +9,11 @@ import { isMobileRepresentationAllowed } from "@/components/shared/DataTableShel
 import type { TableArchetype } from "@/table/tableTiers";
 
 /**
- * DataWorkbench — a single, continuous, compact data shell
- * (UI-TABLE-KOI-COMPACT-1 — "Koi Compact Data Workbench").
+ * DataWorkbench — a single, continuous, compact data shell.
  *
  * Unlike DataTableShell pages (which render toolbar / table / pagination as
  * separated stacked surfaces), the workbench renders ONE bordered surface whose
  * toolbar → table header → table body → footer are regions of the same shell.
- * It is the visual authority for the Question Management page; other admin
- * pages keep using DataTableShell directly.
  *
  * Composition (all regions stay mounted; only the table body swaps):
  *

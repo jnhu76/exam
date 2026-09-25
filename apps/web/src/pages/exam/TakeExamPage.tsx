@@ -46,13 +46,13 @@ import { useAttemptRestore } from "@/exam/useAttemptRestore";
 
 type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
 import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
-// P3-FSM-0: transient UI state reducer is the single source of truth for the
+// The transient UI state reducer is the single source of truth for the
 // saving/submitting lifecycle. The backend CandidateTakeSnapshot remains the
 // business truth source; this reducer only owns UI phases (L0 §7.3).
 import { transientReducer, type TransientState } from "@/exam/transientReducer";
-// P3-FSM-0: deriveTakeExamView drives every business-derived UI decision from
-// the authoritative CandidateTakeSnapshot returned by the P3-PROTO-2 endpoint.
-// No frontend reconstruction of isEditable / canSave / answerSource / lock
+// deriveTakeExamView drives every business-derived UI decision from the
+// authoritative CandidateTakeSnapshot returned by the take endpoint. No
+// frontend reconstruction of isEditable / canSave / answerSource / lock
 // state is permitted.
 import { deriveTakeExamView } from "@/exam/deriveTakeExamView";
 import {
@@ -205,10 +205,9 @@ export function TakeExamPage() {
   const [answers, setAnswers] = useState<Map<string, unknown>>(new Map());
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
-  // P3-FSM-0: submit/save UI lifecycle now flows through transientReducer.
-  // `isSubmitting` is derived from transientState; `submittingRef` still
-  // guards against re-entrant submit handlers within the same tick (the
-  // reducer state update is async, so the ref is the synchronous guard).
+  // `isSubmitting` is derived from transientState; `submittingRef` guards
+  // re-entrant submit handlers within the same tick (the reducer state update
+  // is async, so the ref is the synchronous guard).
   const [transientState, setTransientState] = useState<TransientState>("idle");
   const isSubmitting = transientState === "submitting";
   const [isFlushing, setIsFlushing] = useState(false);
@@ -252,14 +251,13 @@ export function TakeExamPage() {
 
   /**
    * Fetches the authoritative CandidateTakeSnapshot from
-   * GET /api/candidate/attempts/:attemptId/take (P3-PROTO-2).
+   * GET /api/candidate/attempts/:attemptId/take.
    *
    * This is the THROWING primitive. It is shared by the page's own loader
    * (which catches and sets `loadError`) and by the restore hook (which MUST
-   * observe real failures so it can surface a recovery state). Splitting
-   * fetch from apply is required because the previous monolithic loader
-   * swallowed its own error, making the hook's reload-failure branch
-   * unreachable (PR 219 review finding 4).
+   * observe real failures so it can surface a recovery state). Splitting fetch
+   * from apply is required: a loader that swallows its own error makes the
+   * hook's reload-failure branch unreachable.
    */
   const fetchSnapshot = useCallback(
     (id: string): Promise<CandidateTakeSnapshot> =>
@@ -432,7 +430,7 @@ export function TakeExamPage() {
     [],
   );
 
-  // Route/snapshot binding (PR 219 review finding 1): the view MUST NOT be
+  // Route/snapshot binding: the view MUST NOT be
   // derived from a snapshot whose attemptId disagrees with the current route
   // param. On a route change the old snapshot lingers for one render; if we
   // derived the view unconditionally, the restore hook could be called with
@@ -500,7 +498,7 @@ export function TakeExamPage() {
     reconciliationInFlightRef.current = null;
   }
 
-  // P3-FSM-0: the view is derived PURELY from the authoritative snapshot.
+  // The view is derived PURELY from the authoritative snapshot.
   // This is the single business-view derivation seam (L0 §7.2). Every
   // business-derived UI decision must read from `view`, never reconstruct
   // isEditable/canSave/answerSource/lock/visibility from raw fields.
@@ -555,7 +553,7 @@ export function TakeExamPage() {
   /**
    * Updates local answer state and schedules a versioned save.
    *
-   * P3-FSM-0 authority guard: the save callback checks viewRef.current.canSave
+   * Authority guard: the save callback checks viewRef.current.canSave
    * at execution time (after the debounce window). A snapshot that becomes
    * non-saveable between schedule and execution is honored — no save request
    * is issued.
@@ -594,7 +592,7 @@ export function TakeExamPage() {
       if (saveStale()) {
         return;
       }
-      // P3-FSM-0: execution-time authority guard. The current view is read
+      // Execution-time authority guard. The current view is read
       // from the ref so the latest snapshot (which may have been reloaded
       // during the debounce window) decides whether to save. This is the
       // authoritative seam — disabled controls alone are NOT sufficient.
@@ -738,7 +736,7 @@ export function TakeExamPage() {
       await api.post(`/api/attempts/${attemptId}/submit`);
       setTransientState((s) => transientReducer(s, { type: "SUBMIT_SUCCESS" }));
       trackExamEvent("submit_success", {}, { attemptId });
-      // P3-FSM-0 Step 8: reload the authoritative snapshot so the locked /
+      // Reload the authoritative snapshot so the locked /
       // submitted view is reconstructed from backend truth, then navigate.
       // The snapshot endpoint runs deadline reconciliation and returns the
       // frozen view; the result page will fetch its own authoritative data.
@@ -1075,7 +1073,6 @@ export function TakeExamPage() {
     );
   }
 
-  // Map the snapshot question to QuestionRenderer's expected prop shape.
   // This is mechanical field-name mapping only (id/prompt/options/score) —
   // it does NOT derive isEditable / answerSource / lock / visibility.
   const rendererQuestion = {
@@ -1331,7 +1328,7 @@ export function TakeExamPage() {
                 onChange={(answer) =>
                   saveAnswer(currentQuestionView.id, answer)
                 }
-                // P3-FSM-0 Step 6: per-question disabled state comes from the
+                // Per-question disabled state comes from the
                 // derived view (L0 §7.2), not a recalculated lock flag.
                 disabled={currentQuestionView.disabled}
               />

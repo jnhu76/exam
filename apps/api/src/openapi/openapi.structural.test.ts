@@ -389,11 +389,11 @@ describe("OpenAPI structural baseline — security & x-role metadata", () => {
     },
   );
 
-  // P7-RBAC-REMEDIATION F-02: every route whose runtime gate is in the
+  // Every route whose runtime gate is in the
   // Maintainer preset MUST declare x-role including "Maintainer", so OpenAPI
-  // metadata cannot drift from the runtime capability authority (previously
-  // /system/health and /system/diagnostics were documented Admin-only while
-  // Maintainer was authorized at runtime).
+  // metadata cannot drift from the runtime capability authority (the failure
+  // mode being guarded: /system/health and /system/diagnostics documented
+  // Admin-only while Maintainer was authorized at runtime).
   it.each([
     ["get", "/api/system/health"],
     ["get", "/api/system/diagnostics"],

@@ -20,8 +20,8 @@
  *      owner (`candidateProfiles.userId`) equals the actor → allow.
  *   4. Otherwise deny as 403 PERMISSION_DENIED.
  *
- * The principal's effective permission set is resolved from the role preset
- * (`presetAllows`, the same single source `requireCapability` consults) — NOT
+ * The principal's effective capability set is read from the authenticated
+ * `ctx.capabilities` union (the same source `requireCapability` consults) — NOT
  * from a role-string branch. If a principal ever holds both grants, the
  * `ScoreAllView` path wins (it is strictly broader).
  *

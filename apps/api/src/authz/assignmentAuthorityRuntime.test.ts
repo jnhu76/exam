@@ -1,6 +1,6 @@
 /**
  * RBAC-M10-E — assignment-backed runtime authority: ADVERSARIAL INTEGRATION
- * MATRIX (spec §12 E1–E16, real HTTP routes).
+ * MATRIX (real HTTP routes).
  *
  * These tests prove the runtime flip end-to-end against real Fastify routes:
  *

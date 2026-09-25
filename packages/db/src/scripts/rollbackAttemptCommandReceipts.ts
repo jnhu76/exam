@@ -1,6 +1,5 @@
 /**
- * Guarded rollback core for the `attempt_command_receipts` table
- * (J5-I1C Slice 1 / J5-I1C0 audit §8 Slice 1, §10).
+ * Guarded rollback core for the `attempt_command_receipts` table.
  *
  * Lives in the db package (not api) so it can be imported by db-layer tests
  * without a reverse package dependency. The api script
@@ -8,42 +7,42 @@
  * with env resolution + the `--confirm` flag.
  *
  * The migration runner is forward-only; this is the executable, opt-in,
- * pre-activation guard. Semantics (audit §10):
+ * pre-activation guard:
  *
  *   - table absent            → success / no-op
  *   - table present, 0 rows   → allowed; DROP the table
  *   - table present, rows > 0 → fail closed (throw); preserve all receipt data
  *
- * 0028 owns TWO schema effects (review J5-I1C0 PR #261 P1-1): the receipt
- * table AND the `users_org_id_unique` composite-FK target index on `users`.
- * The rollback must own the full 0028 effect lifecycle — dropping only the
- * table leaves a leftover index that makes a re-deploy of 0028 fail with
- * `duplicate relation`. After a clean table drop the rollback therefore also
- * drops `users_org_id_unique`, but ONLY when it can prove the index is exactly
- * the one 0028 created and nothing else depends on it; otherwise it fails
- * closed and leaves both effects in place (manual repair).
+ * 0028 owns TWO schema effects: the receipt table AND the `users_org_id_unique`
+ * composite-FK target index on `users`. The rollback must own the full 0028
+ * effect lifecycle — dropping only the table leaves a leftover index that makes
+ * a re-deploy of 0028 fail with `duplicate relation`. After a clean table drop
+ * the rollback therefore also drops `users_org_id_unique`, but ONLY when it can
+ * prove the index is exactly the one 0028 created and nothing else depends on
+ * it; otherwise it fails closed and leaves both effects in place (manual
+ * repair).
  *
- * The count check, the table DROP, and the index DROP share ONE transaction,
- * so a non-empty table (or a fail-closed index state) leaves everything
- * intact. The table DROP is a plain `DROP TABLE IF EXISTS`; the index DROP is
- * a plain `DROP INDEX IF EXISTS` — no CASCADE (audit §10).
+ * The count check, the table DROP, and the index DROP share ONE transaction, so
+ * a non-empty table (or a fail-closed index state) leaves everything intact.
+ * The table DROP is a plain `DROP TABLE IF EXISTS`; the index DROP is a plain
+ * `DROP INDEX IF EXISTS` — no CASCADE.
  *
  * Concurrency (why the LOCK comes FIRST): the count and the DROP in one
  * transaction are NOT by themselves race-safe. If the count ran before an
  * ACCESS EXCLUSIVE lock, a concurrent command could commit its first receipt
- * between the count and the DROP, and the DROP would then destroy the
- * committed receipt while the rollback reports success. The transaction
- * therefore acquires `LOCK TABLE ... IN ACCESS EXCLUSIVE MODE` before any
+ * between the count and the DROP, and the DROP would then destroy the committed
+ * receipt while the rollback reports success. The transaction therefore
+ * acquires `LOCK TABLE ... IN ACCESS EXCLUSIVE MODE` before any
  * snapshot-establishing read: the lock serializes against every concurrent
- * insert, so the count cannot miss a receipt that commits before the DROP.
- * A missing table raises SQLSTATE 42P01 from the LOCK itself, which is
- * detected and treated as the absent no-op — no prior `to_regclass()` query
- * fixes an old snapshot before the lock is held.
+ * insert, so the count cannot miss a receipt that commits before the DROP. A
+ * missing table raises SQLSTATE 42P01 from the LOCK itself, which is detected
+ * and treated as the absent no-op — no prior `to_regclass()` query fixes an old
+ * snapshot before the lock is held.
  *
  * After activation (the first receipt row is written), a destructive DROP is
- * prohibited: it would silently destroy durable command-receipt evidence. Use
- * a data-preserving rollback (mark deprecated / add a CHECK blocking new
- * writes) instead.
+ * prohibited: it would silently destroy durable command-receipt evidence. Use a
+ * data-preserving rollback (mark deprecated / add a CHECK blocking new writes)
+ * instead.
  */
 
 import { sql } from "drizzle-orm";
@@ -81,9 +80,6 @@ function isUndefinedTableError(err: unknown): boolean {
   return false;
 }
 
-/**
- * Result of {@link rollbackAttemptCommandReceipts}.
- */
 export interface AttemptCommandReceiptRollbackResult {
   /** Row count observed before the DROP (0 when the table was absent). */
   rowCount: number;
@@ -180,14 +176,13 @@ async function verifyUsersOrgIdUniqueIndex(
   // non-empty set means a newer migration depends on the index and the
   // rollback must not drop it.
   //
-  // Resolve the referenced attnums by NAME via pg_attribute (review J5-I1C0
-  // PR #261 P2-3): `users` physical column order is id (attnum 1) then
-  // organization_id (attnum 2), so the composite FK
-  // `(organization_id, actor_id) → users(organization_id, id)` carries
-  // confkey = [2, 1], NOT [1, 2]. Hardcoding `con.confkey = ARRAY[1, 2]` (the
-  // previous code) never matched the real 0028 FK, so the in-use branch was
-  // dead. The name-based resolution below is robust to physical column
-  // reordering and matches a FK whose referenced columns are exactly
+  // Resolve the referenced attnums by NAME via pg_attribute: `users` physical
+  // column order is id (attnum 1) then organization_id (attnum 2), so the
+  // composite FK `(organization_id, actor_id) → users(organization_id, id)`
+  // carries confkey = [2, 1], NOT [1, 2]. Hardcoding
+  // `con.confkey = ARRAY[1, 2]` never matched the real 0028 FK, so the in-use
+  // branch was dead. The name-based resolution below is robust to physical
+  // column reordering and matches a FK whose referenced columns are exactly
   // (organization_id, id) in that referenced order.
   const dependents = (await tx.execute(
     sql`SELECT con.conname

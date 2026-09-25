@@ -109,7 +109,7 @@ export function createOrganizationRepo(db: Database) {
     },
     /**
      * Returns true when the internal default organization (slug "default")
-     * exists. This is the P7-C1 launchpad FIRST-INSTALL gate only: once the
+     * exists. This is the launchpad FIRST-INSTALL gate only: once the
      * default organization exists the installation is considered initialized
      * and launchpad bootstrap is refused. It is deliberately NOT
      * `activeAdminCount == 0` (removing the last Admin must not reopen

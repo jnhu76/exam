@@ -555,8 +555,6 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(400)
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
-      // `let`: with a selected profile the merged authoring input is re-parsed
-      // after profile-default injection (P7-M2 §20 Option A).
       let data = parsed.data;
       const repo = createExamRepo(fastify.db);
       const course = await createCourseRepo(fastify.db).findById(
@@ -702,7 +700,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         data = reparsed.data;
       }
 
-      // P7-M2 canonical guard (design §20), Phase A adjustment (#291):
+      // Canonical guard (design §20):
       // after the canonical parse a timed_window exam always carries
       // `durationMinutes` (profile-supplied or caller-sent; the schema refine
       // rejects the no-profile omission). deadline/untimed legitimately
@@ -759,7 +757,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       // P2D-J5a legacy compatibility: if a client omits `resultPublicationMode`
       // but sends the legacy `controlFlags.showResultImmediately` flag, derive
       // the mode from the legacy flag. `data.resultPublicationMode` already
-      // carries the profile default when the caller omitted the mode (P7-M2);
+      // carries the profile default when the caller omitted the mode;
       // an explicitly sent legacy flag is explicit request input and wins over
       // the profile default.
       const resolvedResultPublicationMode = resolveResultPublicationMode(
@@ -767,7 +765,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         data.resultPublicationMode ?? "immediate",
       );
 
-      // P7-M1: canonical cross-field policy validation on create (design §21).
+      // Canonical cross-field policy validation on create (design §21).
       // Runs on the exact merged policy that will be persisted (profile
       // defaults already materialized), so authoring rejects invalid
       // combinations early. Publish revalidates the whole policy again as the
@@ -873,7 +871,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /**
-     * Update an existing exam by ID. ADR-005 Slice 2 §3.7 + construction hard
+     * Update an existing exam by ID. ADR-005 §3.7 + construction hard
      * rule: draft = full edit; published = schedule fields only (openAt/closeAt);
      * other states rejected. Lock -> reconcile -> guard -> mutate in ONE tx so a
      * stale persisted status cannot be acted on.
@@ -977,7 +975,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           if (data.openAt) updateData.openAt = new Date(data.openAt);
           if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
 
-          // P2D-J5a: coerce resultPublicationMode from the legacy flag when
+          // Coerce resultPublicationMode from the legacy flag when
           // the caller set controlFlags.showResultImmediately but not the
           // mode. Mirrors the create-handler shim.
           if (data.resultPublicationMode !== undefined) {
@@ -1063,7 +1061,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             }
           }
 
-          // P7-M1: canonical cross-field policy validation on draft update
+          // Canonical cross-field policy validation on draft update
           // (design §21). Published updates are schedule-only (guarded above)
           // and excluded. For draft, validate the FULL merged policy that will
           // result from this patch, so an invalid combination is rejected at
@@ -1279,16 +1277,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /**
-     * Close an open exam (open -> closed). ADR-005 Slice 1.
+     * Close an open exam (open -> closed). ADR-005.
      *
      * Construction hard rule: lock -> reconcile -> unresolved guard -> assert
      * -> mutate -> audit. The engine `closeExam` is idempotent for `closed`,
      * so we detect the no-op case (reconciled status already `closed`) and
-     * suppress the duplicate audit (review decision #2).
+     * suppress the duplicate audit.
      *
      * Close is rejected with EXAM_CLOSE_NOT_ALLOWED / details.reason =
-     * UNRESOLVED_ATTEMPTS_EXIST when active/in-flight attempts remain
-     * (review decision #3), so scores/export stay semantically valid after.
+     * UNRESOLVED_ATTEMPTS_EXIST when active/in-flight attempts remain, so
+     * scores/export stay semantically valid after.
      */
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
@@ -1376,7 +1374,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Unpublish a published exam (published -> draft). ADR-005 Slice 2 §3.2.
+   * Unpublish a published exam (published -> draft). ADR-005 §3.2.
    *
    * Stale-state protection: lock -> reconcile first; if reconciliation advanced
    * the exam to `open` (openAt already passed), reject — a live exam cannot be
@@ -1437,7 +1435,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   /**
-   * Extend an open exam's closeAt (open -> open). ADR-005 Slice 2 §3.4.
+   * Extend an open exam's closeAt (open -> open). ADR-005 §3.4.
    *
    * Stale-state protection: lock -> reconcile first; if reconciliation advanced
    * the exam to `closed` (closeAt already passed), reject — a dead exam cannot
@@ -1524,7 +1522,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Cancel an exam abnormally (published/open -> canceled). ADR-005 Slice 4.
+   * Cancel an exam abnormally (published/open -> canceled). ADR-005.
    *
    * Construction hard rule: lock -> reconcile -> unresolved guard -> assert
    * -> mutate -> audit in one transaction. The unresolved guard (open with
@@ -1640,8 +1638,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /**
-     * Archive an exam (published/closed/canceled -> archived). P2B-J2 follow-up
-     * #3: brought under the ADR-005 construction hard rule so it is consistent
+     * Archive an exam (published/closed/canceled -> archived).
+     * Brought under the ADR-005 construction hard rule so it is consistent
      * with close/unpublish/extend/cancel — lock -> reconcile -> assert ->
      * mutate inside ONE transaction, with 404 for a missing exam, 409 for an
      * invalid transition, idempotent already-archived behavior (no duplicate

@@ -5,7 +5,7 @@ import type { SaveAnswerRejectReason } from "./attempt.js";
  * compatibility catalog for top-level `error.message` (message contract
  * D0.5/D0.11 Zone B). It is not a localization framework: browser-visible
  * known semantics resolve through Web i18n, and locale-parameterized
- * lookup machinery has no legitimate consumer (removed by #413 C4).
+ * lookup machinery has no legitimate consumer.
  */
 export const errorMessages = {
   AUTH_REQUIRED: "请先登录",

@@ -1,10 +1,9 @@
 /**
  * System actor identity (SYSTEM-M1).
  *
- * Replaces the hardcoded `role: "Admin"` synthetic contexts in the deadline +
- * heartbeat scanners with a real `System` role (ADR §System Actor Policy).
  * System is non-login, non-assignable, and never a `users.role` row; it exists
- * only as an in-memory {@link RequestContext} for background work.
+ * only as an in-memory {@link RequestContext} for background work
+ * (ADR §System Actor Policy).
  *
  * Note on `permissions`: {@link RequestContext.permissions} is typed as the
  * legacy `@exam/domain` `Permission[]` (SCREAMING_SNAKE). The System role's

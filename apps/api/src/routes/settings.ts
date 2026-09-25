@@ -170,7 +170,9 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
    * PATCH /admin/settings/branding
    *
    * Creates or updates branding settings for the current organization.
-   * Admin-only. Records an audit log entry on success.
+   * Admin-only. The `branding.update` audit row is written best-effort, per the
+   * audit policy registry — a failed audit write never blocks the settings
+   * write.
    */
   fastify.patch(
     "/admin/settings/branding",

@@ -135,15 +135,15 @@ export const users = pgTable(
     role: text("role").notNull(),
     isActive: boolean("is_active").notNull(),
     /**
-     * Optional notification recipient email (P5-N1 §13).
+     * Optional notification recipient email.
      *
-     * NOT used for login. NOT unique. NOT verified. The first V1 consumer is
+     * NOT used for login. NOT unique. NOT verified. The V1 consumer is
      * the `result_published` Inbox + Email outbox integration. The contract
      * layer normalizes (trim-only, case-preserved) and maps blank input to null.
      */
     email: text("email"),
     /**
-     * #325 (S1): durable per-user credential epoch — the revocation
+     * Durable per-user credential epoch — the revocation
      * authority for JWT auth. Login signs the current epoch into the JWT;
      * authentication accepts a token only when its claim matches this
      * column. Logout / password change / password reset advance it, so all
@@ -203,10 +203,10 @@ export const courses = pgTable(
   },
   (table) => [
     uniqueIndex("courses_org_code_unique").on(table.organizationId, table.code),
-    // Composite-FK target for teacher_course_assignments (issue #286 —
-    // mirrors the exams_org_id_unique convention added for
-    // exam_proctor_assignments): PostgreSQL requires a unique on the
-    // referenced (organization_id, id) pair. Additive index; no column edits.
+    // Composite-FK target for teacher_course_assignments (mirrors the
+    // exams_org_id_unique convention for exam_proctor_assignments):
+    // PostgreSQL requires a unique on the referenced (organization_id, id)
+    // pair.
     uniqueIndex("courses_org_id_unique").on(table.organizationId, table.id),
   ],
 );
@@ -222,12 +222,12 @@ export const questions = pgTable(
       .references(() => courses.id),
     type: text("type").notNull(),
     content: text("content").notNull(),
-    // #301 B′ dual-mode content authority. NULL → Plain (`content` is the
+    // Dual-mode content authority. NULL → Plain (`content` is the
     // authority); non-null → Rich (the document is the authority and
     // `content` is the server-derived plainTextProjection). Nullable so the
-    // migration adds the column without touching historical rows.
+    // schema admits the plain default.
     contentDocument: jsonb("content_document").$type<ContentDocumentV1>(),
-    // #301 author-defined answer input mode for text_response. NULL → plain
+    // Author-defined answer input mode for text_response. NULL → plain
     // (legacy rows and plain-default); CHECK guards the stored value while
     // staying null-safe for the plain default.
     answerMode: text("answer_mode").$type<ContentMode>(),
@@ -246,12 +246,9 @@ export const questions = pgTable(
     // (isManualGradedQuestion), NOT from answer nullness — the write boundary
     // rejects null standardAnswer for auto-graded types (protocol §1.4).
     standardAnswer: jsonb("standard_answer").$type<unknown>(),
-    // P3-L0-1: rubric authoring/editing source (dual-layer). text_response
-    // requires non-empty at publish (P3-L0-5); objective questions are null.
-    // Copied into QuestionSnapshot.rubric at attempt creation. Nullable so
-    // the migration adds the column without backfilling historical rows.
-    // Drizzle columns are nullable by default (no .notNull()); matches the
-    // convention used by `standardAnswer` above.
+    // Rubric authoring/editing source (dual-layer). text_response
+    // requires non-empty at publish; objective questions are null.
+    // Copied into QuestionSnapshot.rubric at attempt creation.
     rubric: text("rubric"),
     attachments: jsonb("attachments").$type<Attachment[]>().notNull(),
     score: doublePrecision("score").notNull(),
@@ -281,12 +278,12 @@ export const exams = pgTable(
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id),
-    // #542: typed against the domain lifecycle vocabulary; the DB-side value
+    // Typed against the domain lifecycle vocabulary; the DB-side value
     // set is enforced by `exams_status_check` (drift between the two is
     // caught by the status-contract test, not by this marker).
     status: text("status").$type<ExamStatus>().notNull(),
     timingMode: text("timing_mode").notNull(),
-    // #291 Phase A: null duration = deadline/untimed (no personal limit);
+    // Null duration = deadline/untimed (no personal limit);
     // null closeAt = untimed (open-ended). Per-mode invariants are owned by
     // the canonical exam-policy validator.
     durationMinutes: integer("duration_minutes"),
@@ -298,7 +295,7 @@ export const exams = pgTable(
       withTimezone: true,
       mode: "date",
     }),
-    // #291 Phase B: durable synchronized-start authority. Null = the operator
+    // Durable synchronized-start authority. Null = the operator
     // has not triggered the sitting (timed_sync only; other modes stay null).
     // Written exactly once by the canonical sync-start command; the column
     // carries no CHECK — per-mode legality is owned by the canonical
@@ -321,13 +318,13 @@ export const exams = pgTable(
     // ADR-005 Slice 3: candidate runtime timing policy. null = disabled.
     latestStartOffsetMinutes: integer("latest_start_offset_minutes"),
     minSubmitAfterStartMinutes: integer("min_submit_after_start_minutes"),
-    // P2D-J5a: result publishing policy. Authoritative visibility field;
+    // Result publishing policy. Authoritative visibility field;
     // legacy controlFlags.showResultImmediately remains as a deprecated input.
     resultPublicationMode: text("result_publication_mode")
       .$type<ResultPublicationMode>()
       .notNull()
       .default("immediate"),
-    // P2D-J5a: server time authority instant of the first publish-results call.
+    // Server time authority instant of the first publish-results call.
     // Null until manual publish; idempotent re-publish does not update it.
     resultsPublishedAt: timestamp("results_published_at", {
       withTimezone: true,
@@ -369,7 +366,7 @@ export const exams = pgTable(
       "exams_interruption_time_policy_check",
       sql`${table.interruptionTimePolicy} IN ('strict', 'bounded_grace', 'operator_incident')`,
     ),
-    // #542: persistence integrity backstop for the exam lifecycle vocabulary.
+    // Persistence integrity backstop for the exam lifecycle vocabulary.
     // The semantic transition authority is EXAM_VALID_TRANSITIONS +
     // examCommands; this only bounds the stored value set.
     check(
@@ -399,19 +396,20 @@ export const exams = pgTable(
 );
 
 /**
- * Exam policy profiles — P7-M2 organization-owned authoring templates.
+ * Exam policy profiles — organization-owned authoring templates.
  *
  * A profile is an EDITABLE AUTHORING CONVENIENCE, NOT execution authority
- * (P7-M2 design: copy-on-apply). Applying a profile to an exam copies its
- * typed values into the ordinary `exams` columns; the published Exam row is
- * the immutable execution authority and is never resolved through a profile
- * again. Typed columns instead of a `policy_defaults jsonb` blob so the
- * small known set is SQL-visible, migration-readable, and auditable.
+ * (copy-on-apply; see docs/contracts/exam-profile-templates.md). Applying a
+ * profile to an exam copies its typed values into the ordinary `exams`
+ * columns; the published Exam row is the immutable execution authority and is
+ * never resolved through a profile again. Typed columns instead of a
+ * `policy_defaults jsonb` blob so the small known set is SQL-visible,
+ * migration-readable, and auditable.
  *
  * Excluded from profiles (by design): courseId, openAt/closeAt,
  * passingScore/totalScore, questionIds/snapshot, lifecycle status,
- * title/description, timingMode + questionSelectionMode (fixed Phase-1
- * literals), and ALL control_flags (latent/unenforced — see P7-M1 §13).
+ * title/description, timingMode + questionSelectionMode (fixed literals), and
+ * ALL control_flags (latent/unenforced).
  */
 export const examPolicyProfiles = pgTable(
   "exam_policy_profiles",
@@ -420,7 +418,7 @@ export const examPolicyProfiles = pgTable(
     organizationId: organizationId().references(() => organizations.id),
     name: text("name").notNull(),
     description: text("description").notNull(),
-    // #291 Phase A: profiles carry the timing mode they default to (never
+    // Profiles carry the timing mode they default to (never
     // timed_sync); null duration for deadline/untimed profiles.
     timingMode: text("timing_mode")
       .$type<ExamProfileTimingMode>()
@@ -513,7 +511,7 @@ export const examEnrollments = pgTable(
     candidateId: text("candidate_id")
       .notNull()
       .references(() => candidateProfiles.id),
-    // #542: typed against the domain vocabulary; DB value set enforced by
+    // Typed against the domain vocabulary; DB value set enforced by
     // `exam_enrollments_status_check` (drift caught by the status-contract test).
     status: text("status").$type<EnrollmentStatus>().notNull(),
     attemptCount: integer("attempt_count").notNull(),
@@ -529,7 +527,7 @@ export const examEnrollments = pgTable(
       table.examId,
       table.candidateId,
     ),
-    // #542: persistence integrity backstop for the enrollment vocabulary
+    // Persistence integrity backstop for the enrollment vocabulary
     // (`blocked` is a reserved ENROLLMENT_VALID_TRANSITIONS target with no
     // current writer — it stays a legal stored value by explicit design).
     check(
@@ -555,10 +553,10 @@ export const examAttempts = pgTable(
       .notNull()
       .references(() => candidateProfiles.id),
     attemptNo: integer("attempt_no").notNull(),
-    // #542: typed against the domain vocabulary; DB value set enforced by
+    // Typed against the domain vocabulary; DB value set enforced by
     // `exam_attempts_status_check` (drift caught by the status-contract test).
     // The value set includes the reserved not_started/queued/voided targets;
-    // `grading` is NOT in the set (historical intermediate, removed in #542).
+    // `grading` is NOT in the set.
     status: text("status").$type<AttemptStatus>().notNull(),
     questionSnapshot: jsonb("question_snapshot")
       .$type<QuestionSnapshot[]>()
@@ -582,16 +580,15 @@ export const examAttempts = pgTable(
     gradingStatus: text("grading_status")
       .$type<GradingStatus>()
       .default("auto_graded"),
-    // P3-L0-1: frozen answer snapshot written once in the submit transaction
-    // (L0 §4.1). Null for attempts that predate the column or were never
-    // submitted. Read exclusively by grading/result paths; never by the
-    // candidate take endpoint draft-answer branch.
+    // Frozen answer snapshot written once in the submit transaction.
+    // Null for attempts that predate the column or were never submitted. Read
+    // exclusively by grading/result paths; never by the candidate take
+    // endpoint draft-answer branch.
     submittedAnswers: jsonb(
       "submitted_answers",
     ).$type<SubmittedAnswersSnapshot | null>(),
-    // P3-L0-1: why the attempt was submitted ('manual' | 'deadline').
-    // Null for legacy rows (treated as unknown). New submit paths must
-    // populate this; backfill of historical rows is out of scope (P3-L0-4).
+    // Why the attempt was submitted. Null for legacy rows (treated as
+    // unknown); every submit path populates it.
     submissionReason: text("submission_reason"),
     interruptionPolicySnapshotVersion: integer(
       "interruption_policy_snapshot_version",
@@ -669,20 +666,18 @@ export const examAttempts = pgTable(
         (${table.status} != 'disrupted' AND ${table.currentInterruptionId} IS NULL AND ${table.interruptedAt} IS NULL)
       `,
     ),
-    // #542: persistence integrity backstop for the attempt lifecycle
-    // vocabulary. The semantic transition authority is the engine's
-    // TRANSITION_TABLE + locked commands; this only bounds the stored value
-    // set. It is NOT a transition machine. Reserved targets
-    // (not_started/queued/voided) stay legal; `grading` is not (fossil
-    // removed in #542 — a fail-closed preflight in migration 0043 stops the
-    // upgrade if any legacy row still carries it).
+    // Persistence integrity backstop for the attempt lifecycle vocabulary.
+    // The semantic transition authority is the engine's TRANSITION_TABLE +
+    // locked commands; this only bounds the stored value set. It is NOT a
+    // transition machine. Reserved targets (not_started/queued/voided) stay
+    // legal; `grading` is not.
     check(
       "exam_attempts_status_check",
       sql`${table.status} IN ('not_started', 'queued', 'in_progress', 'disrupted', 'submitted', 'graded', 'voided')`,
     ),
-    // #542: scoring-pipeline label (P2D-J2), orthogonal to `status`. Null-safe
-    // by CHECK semantics: legacy rows predating the 0004 backfill may be NULL
-    // and are classified at read time (grading.ts), never rewritten.
+    // Scoring-pipeline label, orthogonal to `status`. Null-safe by CHECK
+    // semantics: legacy rows may be NULL and are classified at read time
+    // (grading.ts), never rewritten.
     check(
       "exam_attempts_grading_status_check",
       sql`${table.gradingStatus} IN ('auto_graded', 'pending_manual', 'fully_graded')`,
@@ -940,8 +935,8 @@ export const attemptInterruptionEvents = pgTable(
 );
 
 /**
- * Attempt grading entries — the materialized per-question grading workset
- * (P3-L0-2E). One durable row per frozen question per attempt, created at
+ * Attempt grading entries — the materialized per-question grading workset.
+ * One durable row per frozen question per attempt, created at
  * submit-freeze time from `submitted_answers` + the frozen `QuestionSnapshot`.
  *
  * This is the single durable grading truth. The manual grading queue reads
@@ -1052,7 +1047,6 @@ export const importJobLogs = pgTable(
   ],
 );
 
-/** Audit logs table — records user actions for compliance and debugging. */
 export const auditLogs = pgTable(
   "audit_logs",
   {
@@ -1147,7 +1141,7 @@ export const clientEvents = pgTable(
 );
 
 /**
- * Email outbox — a durable PostgreSQL-backed queue for email delivery (P5-0).
+ * Email outbox — a durable PostgreSQL-backed queue for email delivery.
  *
  * The outbox pattern: business transactions only INSERT rows here; the
  * in-process loop plugin (`emailOutboxLoop`) claims due rows and sends
@@ -1193,11 +1187,10 @@ export const emailOutbox = pgTable(
       mode: "date",
     }),
     /**
-     * Optional link to the Inbox notification that triggered this Email
-     * (P5-N1-I2). Identity-flow Emails (staff invitation, password reset)
-     * keep this null; operational Emails (result_published ->
-     * grade_notification) set it so an Email can be traced back to its
-     * Inbox row.
+     * Optional link to the Inbox notification that triggered this Email.
+     * Identity-flow Emails (staff invitation, password reset) keep this null;
+     * operational Emails (result_published -> grade_notification) set it so
+     * an Email can be traced back to its Inbox row.
      */
     notificationId: text("notification_id").references(() => notifications.id),
     /**
@@ -1272,7 +1265,7 @@ export const emailOutbox = pgTable(
 
 /**
  * Worker heartbeats — PostgreSQL-backed liveness for background worker
- * processes (P5-0). The email worker updates its heartbeat after each
+ * processes. The email worker updates its heartbeat after each
  * successful poll cycle. The API diagnostics surface reads these records
  * to determine worker liveness without process-local shared state, HTTP
  * RPC, or Redis.
@@ -1313,29 +1306,30 @@ export const workerHeartbeats = pgTable(
 );
 
 /**
- * Backup-run evidence ledger (P7-E2B).
+ * Backup-run evidence ledger.
  *
  * Durable, truthful records of backup mechanism executions, written by the
- * typed operator evidence CLI at the P7-C scripts' natural checkpoints.
+ * typed operator evidence CLI at the backup scripts' checkpoints.
  * This is NOT a scheduler, NOT a generic event store, NOT a settings table —
  * it is the evidence projection the product reads to answer "last backup",
- * "last VERIFIED backup", "last failure", "RPO posture" (E3).
+ * "last VERIFIED backup", "last failure", "RPO posture".
  *
- * SUCCESS semantics (ADR-017 D10, P7-E1 §12.4):
+ * SUCCESS semantics (ADR-017 D10):
  *   `succeeded` requires artifact produced + readable + verification passed
  *   + durable evidence committed. A run whose verification never happened is
  *   `pending`/`abandoned` — never success. `pg_dump exit 0` alone is not
  *   success; `file exists` alone is not success.
  *
  * Idempotency / duplicate-run invariant (D10 #2): at most ONE `succeeded`
- * row per (organization, operation_id) — enforced by the partial unique
- * index `backup_runs_org_operation_succeeded_unique`. A retry whose
- * completion would contradict an existing success is recorded as `failed`
- * with reason `duplicate_operation_conflict` (fail closed).
+ * row per (organization, operation_id) — enforced by the partial unique index
+ * `backup_runs_org_operation_succeeded_unique`. A retry whose completion
+ * would contradict an existing success is recorded as `failed` with reason
+ * `duplicate_operation_conflict` (fail closed).
  *
- * Secrets: the ledger NEVER stores credentials, host paths, or the backup
- * destination URL. `artifact_label` is a safe reference (file name /
- * operator-provided label) suitable for display.
+ * Secrets: no column exists for credentials, host paths, or the backup
+ * destination URL; `artifact_label` is a display-safe reference (file name /
+ * operator label). Operator-supplied free text (`failure_reason`, event
+ * `detail`) carries only what the operator wrote.
  */
 export const backupRuns = pgTable(
   "backup_runs",
@@ -1404,11 +1398,12 @@ export const backupRuns = pgTable(
 );
 
 /**
- * Append-only transition log for backup runs (P7-E2B). One row per evidence
+ * Append-only transition log for backup runs. One row per evidence
  * transition (started / succeeded / failed / abandoned / duplicate_rejected),
- * carrying the sanitized detail of that transition. Enables forensic answers
- * for crash/idempotency analysis ("the retry closed the previous running
- * attempt as abandoned") without overloading the run row.
+ * carrying the caller-supplied detail of that transition (the operator reason
+ * for failures). Enables forensic answers for crash/idempotency analysis
+ * ("the retry closed the previous running attempt as abandoned") without
+ * overloading the run row.
  */
 export const backupRunEvents = pgTable(
   "backup_run_events",
@@ -1436,7 +1431,7 @@ export const backupRunEvents = pgTable(
 );
 
 /**
- * Operational policy INTENT (P7-E3, ADR-017 D9).
+ * Operational policy INTENT (ADR-017 D9).
  *
  * The typed, audited record of the Admin's DESIRED operational objectives:
  * recovery point objective (RPO), retention objective, and restore-drill
@@ -1444,26 +1439,23 @@ export const backupRunEvents = pgTable(
  * infrastructure (host cron / scripts remain the execution authority; the
  * product renders DESIRED vs OBSERVED vs STATUS and nothing else).
  *
- * This is NOT a generic settings store: the fields are typed with safe
- * ranges (CHECK constraints), the row is versioned for optimistic
+ * This is NOT a generic settings store: the fields are typed with safe ranges
+ * (the CHECK constraints below own them), the row is versioned for optimistic
  * concurrency (CAS), and every change is audited with a reason. One row per
- * organization (Phase 1 single-tenant); absence = NOT_CONFIGURED.
+ * organization; absence = NOT_CONFIGURED.
  *
- * Sole intent owner: Admin (system.ops.policy.manage). Maintainer reads the
- * intent (system.ops.policy.view) and never modifies it.
+ * Sole intent owner: Admin; Maintainer reads the intent and never modifies it
+ * (permission codes and role mapping are owned by the authz presets).
  */
 export const backupOperationalPolicy = pgTable(
   "backup_operational_policy",
   {
     id: id(),
     organizationId: organizationId().references(() => organizations.id),
-    /** Desired RPO in seconds (safe range 5 minutes .. 7 days). */
     desiredRpoSeconds: integer("desired_rpo_seconds").notNull(),
-    /** Desired RTO in seconds (nullable: NOT_CONFIGURED for legacy rows). Safe range 30s .. 48h when non-null. */
+    /** Desired RTO in seconds (null = NOT_CONFIGURED). */
     desiredRtoSeconds: integer("desired_rto_seconds"),
-    /** Desired backup retention objective in days (1 .. 3650). */
     desiredRetentionDays: integer("desired_retention_days").notNull(),
-    /** Desired restore-drill cadence in days (1 .. 365). */
     desiredDrillCadenceDays: integer("desired_drill_cadence_days").notNull(),
     /** Optimistic-concurrency version (CAS on every update). */
     version: integer("version").notNull().default(1),
@@ -1499,7 +1491,7 @@ export const backupOperationalPolicy = pgTable(
 );
 
 /**
- * Restore-drill evidence (P7-E2B). Records restore-readiness drills: the
+ * Restore-drill evidence. Records restore-readiness drills: the
  * deterministic deployment drills (automated) and operator-recorded drills
  * (operator_declared). The read projection distinguishes the two — a declared
  * success is never rendered as automated proof. Restore itself remains
@@ -1546,7 +1538,7 @@ export const restoreDrillRuns = pgTable(
 );
 
 /**
- * Host-side retention evidence (P7-CLOSE P7-3b). Records automated
+ * Host-side retention evidence. Records automated
  * retention/expire operations executed by the Host Operator outside Exam RBAC.
  * This is EVIDENCE only — Exam never performs retention. Success means: the
  * retention operation succeeded AND repository/chain verification succeeded,
@@ -1622,11 +1614,11 @@ export const retentionRuns = pgTable(
 );
 
 /**
- * Roles assignable to a user via the RBAC-M8 role-assignment surface.
- * `System` is excluded (synthetic, non-assignable). `SuperAdmin` is not defined
- * (no ADR). Phase 1 `users.role` still only carries Admin/Candidate; the
- * assignment table is the path to the broader Phase 3 set. P7-E2A (ADR-017 D2
- * amendment of ADR-010) adds `Maintainer` — the application-side System
+ * Roles assignable to a user via the role-assignment surface. `System` is
+ * excluded (synthetic, non-assignable) and there is no `SuperAdmin` role.
+ * This tuple is the executable authority; `AssignableRoleSchema`
+ * (@exam/contracts) and the table-level CHECK are its mirrors. ADR-017 D2
+ * (amending ADR-010) adds `Maintainer` — the application-side System
  * Operations Owner preset (operational observation only).
  */
 export const ASSIGNABLE_ROLES = [
@@ -1643,16 +1635,16 @@ export const ASSIGNABLE_ROLES = [
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 /**
- * User role assignments (RBAC-M7). Multi-role: a user may hold several role
+ * User role assignments. Multi-role: a user may hold several role
  * rows per organization, exactly one of which is the primary active role.
- * `users.role` is kept in sync with the primary active assignment during the
- * migration window (ADR § compatibility cache). The primary-uniqueness rule
- * (≤1 primary active per user/org) is enforced BOTH at the application layer
- * (userRoleAssignmentRepo `assign` / `assignWithinTransaction` /
- * `ensurePrimaryAssignment` transactional demotion) AND by the
- * `user_role_assignments_active_primary_unique` partial unique index, which
- * the runtime resolver (RBAC-M10-E) also fail-closes on. The table-level
- * check constrains `role` to the assignable set as a direct-write guard.
+ * `users.role` is kept in sync with the primary active assignment as a
+ * COMPATIBILITY cache. The primary-uniqueness rule (≤1 primary active per
+ * user/org) is enforced BOTH at the application layer (userRoleAssignmentRepo
+ * `assign` / `assignWithinTransaction` / `ensurePrimaryAssignment`
+ * transactional demotion) AND by the
+ * `user_role_assignments_active_primary_unique` partial unique index, on which
+ * the runtime assignment authority also fail-closes. The table-level check
+ * constrains `role` to the assignable set as a direct-write guard.
  */
 export const userRoleAssignments = pgTable(
   "user_role_assignments",
@@ -1674,7 +1666,7 @@ export const userRoleAssignments = pgTable(
       table.userId,
       table.role,
     ),
-    // RBAC-M10-E: DB-level backstop for the ≤1 active-primary-per-(org,user)
+    // DB-level backstop for the ≤1 active-primary-per-(org,user)
     // invariant. The app layer demotes prior primaries transactionally; this
     // partial unique index makes concurrent-insert corruption reject at the DB
     // (23505) rather than only fail-closed in the resolver.
@@ -1689,20 +1681,21 @@ export const userRoleAssignments = pgTable(
 );
 
 /**
- * Notification Inbox — the first-class PostgreSQL Inbox surface (P5-N1).
+ * Notification Inbox — the first-class PostgreSQL Inbox surface.
  *
  * The Inbox is the authoritative in-product notification channel. It is
  * scoped per (organization, recipient user) and supports stable list
  * ordering, unread count, mark-read, and idempotent fan-out via a recipient-
- * scoped dedupe key. Email outbox rows (P5-N1-I2) link back to a notification
- * via `email_outbox.notification_id`.
+ * scoped dedupe key. Email outbox rows link back to a notification via
+ * `email_outbox.notification_id`.
  *
- * V1 only writes rows of `type = "result_published"`. Every V1 notification
- * is actionable (action_path NOT NULL); future informational types that lack
- * a navigation target must introduce an explicit migration + contract change.
- * The schema intentionally does NOT carry severity / resource_type /
- * resource_id / archived_at / invalidated_at columns — they have no V1 reader
- * or writer and are deferred (P5-N1-R0 §12, §22).
+ * Written types are exactly the ones with operational wiring in the
+ * notification policy/dispatch surface (see `NOTIFICATION_TYPES` in
+ * @exam/domain). Every notification is actionable (action_path NOT NULL); a
+ * future informational type without a navigation target must introduce an
+ * explicit migration + contract change. The schema intentionally does NOT
+ * carry severity / resource_type / resource_id / archived_at / invalidated_at
+ * columns — they have no reader or writer.
  */
 export const notifications = pgTable(
   "notifications",
@@ -2129,7 +2122,7 @@ export const examProctorAssignments = pgTable(
 );
 
 /**
- * Teacher-to-Course assignments (issue #286) — the scoped-authority carrier
+ * Teacher-to-Course assignments — the scoped-authority carrier
  * for Teacher@Course. Episode semantics mirror exam_proctor_assignments
  * (monotonic active → revoked, one-active-per-triple partial unique) WITHOUT
  * the operation-receipt machinery: course assignment is an Admin
@@ -2225,7 +2218,7 @@ export const teacherCourseAssignments = pgTable(
       name: "teacher_course_assignments_revoked_by_fk",
     }),
     // Composite FK to courses(organization_id, id) — requires the
-    // courses_org_id_unique index added above (issue #286 §3A).
+    // courses_org_id_unique index added above.
     foreignKey({
       columns: [table.organizationId, table.courseId],
       foreignColumns: [courses.organizationId, courses.id],
@@ -2318,7 +2311,7 @@ export const graderExamAssignments = pgTable(
       name: "grader_exam_assignments_revoked_by_fk",
     }),
     // Composite FK to exams(organization_id, id) — exams_org_id_unique
-    // already exists (issue #296).
+    // already exists.
     foreignKey({
       columns: [table.organizationId, table.examId],
       foreignColumns: [exams.organizationId, exams.id],
@@ -2390,7 +2383,7 @@ export const examProctorAssignmentEvents = pgTable(
 );
 
 /**
- * Durable attempt command receipt (J5-I1C Slice 1 / J5-I1C0 audit §6.2).
+ * Durable attempt command receipt.
  *
  * One shared append-only table for the two dangerous Attempt commands
  * (`force_submit`, `misconduct_mark`), arbitrated by the single
@@ -2404,7 +2397,7 @@ export const examProctorAssignmentEvents = pgTable(
  * — never re-derived from the live attempt). The persistent `outcome` column
  * is restricted to ('applied', 'no_change'); the HTTP layer may surface a
  * third wire disposition `idempotent_replay`, but it is NEVER written here and
- * NEVER mutates an existing receipt (audit §3.3).
+ * NEVER mutates an existing receipt.
  *
  * Shape mirrors `exam_proctor_assignment_events` (canonical jsonb + outcome +
  * actor) and the unified-arbiter discipline of `exam_incident_events` (one
@@ -2489,22 +2482,21 @@ export const attemptCommandReceipts = pgTable(
 );
 
 /**
- * #292 — durable exam admission membership (requireQueue runtime).
+ * Durable exam admission membership (requireQueue runtime).
  *
- * PROCESS MEMORY IS NOT PRODUCT STATE: this table replaces the legacy
- * process-local `examQueues` map as the ONLY admission authority. Each row
- * is one admission membership; lifecycle facts are timestamps, never a
- * stored status enum:
+ * PROCESS MEMORY IS NOT PRODUCT STATE: admission authority lives only in this
+ * table, never in process-local state. Each row is one admission membership;
+ * lifecycle facts are timestamps, never a stored status enum:
  *
- *   waiting   = admitted_at IS NULL (not yet released by the batch schedule)
+ *   waiting   = admitted_at IS NULL (not released by the batch schedule)
  *   admitted  = admitted_at NOT NULL AND consumed_at IS NULL
  *   consumed  = consumed_at NOT NULL (attempt started; consumed_attempt_id set)
  *
  * admitted_at is the MATERIALIZED admission fact — written once by the CAS in
  * reconcileAdmission on the candidate's first authoritative interaction after
- * their eligibility boundary, NOT the theoretical release instant (#549:
+ * their eligibility boundary, NOT the theoretical release instant:
  * disconnected candidates legitimately keep admitted_at NULL until they poll
- * or start; nothing may interpret it as an SLA/ordering/deadline authority).
+ * or start; nothing may interpret it as an SLA/ordering/deadline authority.
  *
  * INVARIANT: at most one ACTIVE membership per (organization, exam,
  * candidate) — the partial unique index carries it at the DB, not in
@@ -2577,7 +2569,7 @@ export const examAdmissions = pgTable(
 
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 /**
- * Staff invitations (#297) — pending-membership facts for email-invited staff.
+ * Staff invitations — pending-membership facts for email-invited staff.
  *
  * The invited person has NO user row until acceptance succeeds; this table IS
  * the pending state. `users.is_active` is therefore never overloaded with
@@ -2642,7 +2634,7 @@ export const staffInvitations = pgTable(
 );
 
 /**
- * Password-reset tokens (#297) — single-use, expiring email-reset tokens for
+ * Password-reset tokens — single-use, expiring email-reset tokens for
  * an EXISTING user. At most one unconsumed token per user exists (partial
  * unique index); issuing a new token consumes the previous open token in the
  * same transaction (newest-token-wins). Consumption additionally requires the

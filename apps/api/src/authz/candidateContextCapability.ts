@@ -1,9 +1,9 @@
 /**
  * Candidate-context capability preHandler (RBAC-M10-A, archetype A).
  *
- * Authorization for the candidate-context list route:
- *
- *   GET /candidate/exams     (ExamTake)
+ * Authorization for the candidate-context list route whose registry entry
+ * declares `runtimeAuthz.kind: "candidate_context"` (authz/routeRegistry.ts owns
+ * the route → capability pairing; presets.ts owns preset membership).
  *
  * This route supplies no existing attempt resource and no specific exam — it
  * is a candidate-context list (directive §4 archetype A). The required
@@ -14,12 +14,12 @@
  *     → server-resolved candidate profile
  *     → query constrained to that profile/context
  *
- * The authorization decision is the route permission (ExamTake, held only by
- * the Candidate preset) plus the organization anchor implicit in the
- * authenticated ctx. There is **no resource resolver** — the query is scoped to
- * the candidate profile in the handler (`enrollmentRepo.findByCandidate`),
- * which is retained as defense-in-depth (directive §6.6). A generic attempt
- * resolver is not appropriate because no attempt exists (directive §4.A).
+ * The authorization decision is the route permission (ExamTake) plus the
+ * organization anchor implicit in the authenticated ctx. There is **no
+ * resource resolver** — the query is scoped to the candidate profile in the
+ * handler (`enrollmentRepo.findByCandidate`), which is retained as
+ * defense-in-depth (directive §6.6). A generic attempt resolver is not
+ * appropriate because no attempt exists (directive §4.A).
  *
  * This preserves the existing public contract: a Candidate with no candidate
  * profile row (or no enrollments) still receives 200 + empty list — the legacy

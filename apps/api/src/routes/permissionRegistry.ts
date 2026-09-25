@@ -33,8 +33,8 @@ const idParamsSchema = z.object({ id: z.string().uuid() });
  *     `deriveAssignmentAuthority` kernel and returns the assignment rows.
  *
  * Read gates use `user.view`, matching the other user-read surfaces — viewing
- * authority must not require the ability to change it. The presets currently
- * grant both only to Admin, so this does not move the access matrix.
+ * authority must not require the ability to change it. Which presets hold that
+ * capability (and every other) is owned by ROLE_PRESETS in @exam/authz.
  */
 export const permissionRegistryRoutes: FastifyPluginAsync = async (fastify) => {
   /**

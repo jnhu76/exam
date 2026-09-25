@@ -102,11 +102,9 @@ export async function main(): Promise<void> {
         `Failed to close the connection: ${(err as Error).message}\n`,
       );
       // On the success path exitCode is never set, so its default is
-      // `undefined` (NOT 0). The loose `=== 0` guard therefore missed the
-      // close-failure-after-success case and let the process exit 0, masking a
-      // resource-close failure as success. Treat undefined as 0 here so a
-      // close failure always surfaces as non-zero, while preserving any
-      // already-set non-zero code from an earlier failure path.
+      // `undefined` (NOT 0). Treat undefined as 0 here so a close failure
+      // always surfaces as non-zero, while preserving any already-set non-zero
+      // code from an earlier failure path.
       if (process.exitCode === undefined || process.exitCode === 0) {
         process.exitCode = 1;
       }

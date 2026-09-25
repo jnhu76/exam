@@ -70,25 +70,19 @@ const userListResponseSchema = z.object({
 const okResponseSchema = z.object({ ok: z.literal(true) });
 
 /**
- * Staff-management list contract (GET /users). P7-RBAC-REMEDIATION F-03: the
- * prior hardcoded staff-role subset made Teacher/Proctor/Grader users
- * invisible in the admin list (created but unmanageable via the UI), and
- * listing by `users.role` alone let candidate volume crowd staff out of
- * pagination. The list is now sourced from
+ * Staff-management list contract (GET /users). The list is sourced from
  * `listStaffPaginated` (repository level): staff membership = an ACTIVE
- * assignment with any of the six assignable roles except Candidate (so
+ * assignment with any of the assignable roles except Candidate (so
  * Candidate-primary + staff-secondary users stay visible), OR a stale
- * staff-valued `users.role` compatibility cache (zero-primary fallback, F-06 —
- * a staff account never vanishes from management). `users.role` never widens
+ * staff-valued `users.role` compatibility cache (zero-primary fallback, so a
+ * staff account never vanishes from management). `users.role` never widens
  * authority (authority = the union of active assignment presets); `System` is
  * non-assignable and `SuperAdmin` is not defined, so neither can match.
  *
  * Fastify plugin that registers user management routes (list, create, update,
  * delete, password-reset). Gates use capability-based authorization
- * (RBAC-M10-C). All six target permissions (UserView, UserCreate, UserUpdate,
- * UserPasswordReset, UserDelete, and indirectly UserRoleAssign via the
- * assignment surface) are Admin-only in the current permission presets, so the
- * migration from legacy requireRole(["Admin"]) is access-matrix-neutral.
+ * (RBAC-M10-C); which presets hold the target permissions is owned by
+ * ROLE_PRESETS in @exam/authz.
  */
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(

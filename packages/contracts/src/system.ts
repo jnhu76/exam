@@ -67,9 +67,8 @@ export type InfrastructureStatus = z.infer<typeof InfrastructureStatusSchema>;
 
 /**
  * Worker status extends {@link InfrastructureStatus} with `unknown`, used when
- * the diagnostics layer cannot determine whether a worker is running (e.g.
- * there is no resident email worker in M3 — `processDueEmails` is
- * manually-triggered, so its running state is unknown).
+ * the diagnostics layer cannot determine the worker's state: no
+ * `email-delivery` heartbeat row exists yet, or the heartbeat read failed.
  */
 export const WorkerStatusValues = [
   ...InfrastructureStatusValues,
@@ -229,7 +228,7 @@ export const DiagnosticsResponseSchema = z.object({
 /** Type for the system diagnostics response. */
 export type DiagnosticsResponse = z.infer<typeof DiagnosticsResponseSchema>;
 
-// ── Backup evidence (P7-E2B) ─────────────────────────────────────
+// ── Backup evidence ──────────────────────────────────────────────
 
 /**
  * A backup-run evidence record as exposed by the read projection. The
@@ -279,7 +278,7 @@ export type BackupEvidenceResponse = z.infer<
   typeof BackupEvidenceResponseSchema
 >;
 
-// ── Restore-readiness evidence (P7-E2B) ──────────────────────────
+// ── Restore-readiness evidence ───────────────────────────────────
 
 /**
  * A restore-drill evidence record. Two orthogonal dimensions: `result` is
@@ -318,7 +317,7 @@ export type RestoreReadinessResponse = z.infer<
   typeof RestoreReadinessResponseSchema
 >;
 
-// ── Host-side retention evidence (P7-CLOSE P7-3b) ───────────────
+// ── Host-side retention evidence ─────────────────────────────────
 
 /**
  * A host-side retention evidence record. Success means: retention operation
@@ -359,7 +358,7 @@ export type RetentionReadinessResponse = z.infer<
   typeof RetentionReadinessResponseSchema
 >;
 
-// ── Operational policy intent (P7-E3, ADR-017 D9) ─────────────────
+// ── Operational policy intent (ADR-017 D9) ───────────────────────
 
 /**
  * Safe-range bounds for the Admin's operational policy intent. Typed

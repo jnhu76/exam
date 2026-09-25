@@ -772,12 +772,10 @@ export const SETTINGS = {
     SMTP_PASSWORD: stringLeaf("", { secret: true }),
   },
   emailWorker: {
-    // INVARIANT (#351 shutdown budget contract): EMAIL_WORKER_SHUTDOWN_
-    // TIMEOUT_MS is one term of the deployment budget hierarchy —
-    //   compose stop_grace_period (45s)
-    //     > email loop drain (this, 8s) + audit drain (10s)
-    //       + DB pool close (10s) + bounded exit assist (2s).
-    // Do not raise it without raising stop_grace_period.
+    // #351 shutdown budget contract: this leaf is one term of the graceful-
+    // shutdown budget bounded by the container's stop_grace_period. Do not
+    // raise it without raising that budget (see docker-compose.yml; enforced by
+    // scripts/repository-contract/deployment-topology-contract.mjs).
     EMAIL_WORKER_POLL_INTERVAL_MS: posIntLeaf(5000),
     EMAIL_WORKER_BATCH_SIZE: posIntLeaf(20),
     EMAIL_WORKER_LOCK_TIMEOUT_MS: posIntLeaf(300000),

@@ -18,56 +18,11 @@
  * #320; its reintroduction is an ADR-011 topology change that must update
  * this guard first.
  *
- * This guard fails fast if:
- *   - the production compose file loses the `app` or `db` service;
- *   - a dedicated `email-worker` service reappears (#320 CONVERGE removed
- *     it; the outbox loop is in-process);
- *   - the `app` service stops forwarding an application runtime env key the
- *     runtime consumes, or a Compose fallback default drifts from the
- *     semantic default (verified generically from the settings model by
- *     scripts/repository-contract/config-contract.mjs — #367/#370; this
- *     file no longer carries an Email-specific membership table);
- *   - the #351 shutdown budget contract breaks: `app` must declare an
- *     explicit `stop_grace_period` that strictly dominates the serial
- *     graceful-shutdown worst case (email loop drain + audit drain + DB
- *     pool close), or a stuck email send ends in SIGKILL (exit 137);
- *   - the production compose file accepts a default database password
- *     (POSTGRES_PASSWORD must use `${...:?...}` required-expansion on db
- *      and app) — P6-007;
- *   - the `redis` service is NOT behind a profile (it must be optional) —
- *     P6-010;
- *   - the `redis` service accepts an unauthenticated production instance
- *     when the profile IS enabled: REDIS_PASSWORD must stay OPTIONAL at
- *     Compose expansion (empty default — a bare `docker compose up` needs
- *     no Redis configuration), the redis command must carry a
- *     container-startup guard that fails the container without a non-empty
- *     REDIS_PASSWORD, the server must run with `--requirepass`, and the
- *     healthcheck must authenticate — P7 review P1-1 / ADR-001 security
- *     considerations.
- *   - there is exactly ONE production/operator Docker Compose entry point:
- *     `docker-compose.yml`. No production PITR/backup/restore/production
- *     variant Compose file may exist. Optional PostgreSQL capabilities such
- *     as PITR are database configuration (postgres-enable-pitr.sh), not an
- *     alternate Docker topology. Development/test Compose files
- *     (docker-compose.dev.yml, docker-compose.test*.yml) are development
- *     infrastructure and are explicitly ALLOWED.
- *   - `docker-compose.build.yml` is ALLOWED as the single source-build MODE
- *     override (it cannot run standalone — it defines no db service and
- *     must only carry build/image/pull_policy keys for app). It is a mode
- *     of the one entry point, not a second
- *     production topology; the structural rules are in
- *     assertBuildVariant().
- *   - ONE topology authority per lifecycle (#498 baseline hardening):
- *     docker-compose.yml (operator), docker-compose.build.yml (source-build
- *     mode), docker-compose.dev.yml (local dependencies), and
- *     docker-compose.test.yml (Docker E2E — the ONLY test variant). The
- *     retired docker-compose.test.override.yml must not reappear: host
- *     ports are EXAM_PORT/DB_HOST_PORT/REDIS_HOST_PORT configuration of the
- *     same file.
- *   - scripts/e2e/run.sh pins the single E2E topology file and must not
- *     take a caller-controlled COMPOSE_FILE; no active doc/script may teach
- *     the retired override workflow (COMPOSE_FILE layering, APP_PORT as an
- *     E2E host-port authority, or references to the override file).
+ * The rules this file enforces are stated at their own sites below: service
+ * presence and the email-worker ban, the single Compose entry point and its
+ * build-mode override, the shutdown-budget contract, the readiness
+ * healthcheck, DB/Redis credential expansion, Redis auth at container startup,
+ * operator-doc drift, and the retired test-override workflow.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -148,10 +103,8 @@ try {
   // If the root cannot be read, the compose read above already failed.
 }
 
-// docker-compose.build.yml structural rules (see header). It is a pure
-// build-mode override of the ONE entry point: only app, only
-// build/image/pull_policy keys — no ports, environment, volumes, command,
-// or entrypoint (topology belongs to docker-compose.yml alone).
+// docker-compose.build.yml structural rules — enforced by assertBuildVariant()
+// below (build-mode override of the ONE entry point).
 try {
   assertBuildVariant(readFileSync(join(ROOT, ALLOWED_BUILD_VARIANT), "utf-8"));
 } catch (err) {
@@ -210,7 +163,7 @@ if (!servicesBlock) {
 } else {
   const serviceNames = topLevelKeys(servicesBlock);
 
-  // P6-010: Redis is OPTIONAL (ADR-001). The required MVP topology is
+  // Redis is OPTIONAL (ADR-001). The required MVP topology is
   // app + db (#320 CONVERGE: the email outbox loop runs in-process in the
   // app container). The `redis` service may be present (as an opt-in
   // profile) but is NOT required.
@@ -236,7 +189,7 @@ if (!servicesBlock) {
     );
   }
 
-  // P6-010: if a `redis` service is present, it MUST be behind a profile
+  // If a `redis` service is present, it MUST be behind a profile
   // so a bare `docker compose up` does not start it and the API does NOT
   // depend on its health.
   if (serviceNames.includes("redis")) {
@@ -253,15 +206,15 @@ if (!servicesBlock) {
             "optional in the implemented MVP).",
         );
       }
-      // P7 review P1-1: when the profile IS enabled, production Redis owns
+      // When the profile IS enabled, production Redis owns
       // the shared rate-limit state, so it must never run open — but the
       // password guard lives at container startup, keeping Redis optional
-      // at Compose parse time (P7 review P1).
+      // at Compose parse time.
       assertRedisAuth(redisBlock);
     }
   }
 
-  // P6-007: the `app` service must NOT accept a default database password.
+  // The `app` service must NOT accept a default database password.
   // The DATABASE_URL line must reference POSTGRES_PASSWORD via required
   // Compose expansion (`${POSTGRES_PASSWORD:?...}`), not a fallback.
   if (serviceNames.includes("app")) {
@@ -342,7 +295,7 @@ if (!servicesBlock) {
     }
   }
 
-  // P6-007: the `db` service must require POSTGRES_PASSWORD too.
+  // The `db` service must require POSTGRES_PASSWORD too.
   if (serviceNames.includes("db")) {
     const dbBlock = extractServiceBlock(servicesBlock, "db");
     if (dbBlock) {
@@ -351,13 +304,11 @@ if (!servicesBlock) {
   }
 }
 
-// ── Dockerfile pnpm pin: packageManager parity (retired test-docker-config) ─
+// ── Dockerfile pnpm pin: packageManager parity ──────────────────────────────
 // The image must build with the SAME pnpm the repo declares — a drift between
 // package.json#packageManager and the Dockerfile corepack pin would ship an
 // image whose toolchain differs from CI/dev (reproducible-build contract).
-// This migrates the retired test-docker-config.mjs pin check onto the
-// deployment oracle; the fresh-install source build still catches a broken
-// pin at build time.
+// The fresh-install source build also catches a broken pin at build time.
 {
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   const packageManager = pkg.packageManager;
@@ -875,7 +826,7 @@ function escapeRegExp(s) {
 }
 
 /**
- * P6-007: assert that a service block references POSTGRES_PASSWORD via
+ * Assert that a service block references POSTGRES_PASSWORD via
  * Compose required-expansion (`${POSTGRES_PASSWORD:?...}`) and NOT via a
  * fallback default. Used on the `app` service, whose DATABASE_URL
  * composition embeds POSTGRES_PASSWORD.
@@ -915,7 +866,7 @@ function assertRequiredPostgresPassword(block, serviceName) {
 }
 
 /**
- * P6-007: assert that the `db` service requires POSTGRES_PASSWORD via
+ * Assert that the `db` service requires POSTGRES_PASSWORD via
  * required-expansion. The db service sets the password directly (not via
  * DATABASE_URL), so we just check the POSTGRES_PASSWORD line within the
  * db service block (indented under `environment:`).
@@ -973,7 +924,7 @@ function assertReadinessHealthcheck(appNoComments) {
 }
 
 /**
- * P6-010: assert that a service does NOT depend on redis health. Redis is
+ * Assert that a service does NOT depend on redis health. Redis is
  * optional in the implemented MVP (ADR-001); the API must not gate its
  * startup on Redis health.
  */
@@ -1141,10 +1092,10 @@ function assertShutdownBudgetContract(appNoComments, appEnvNoComments) {
 }
 
 /**
- * P7 review P1-1: an ENABLED production Redis must be authenticated. Redis
+ * An ENABLED production Redis must be authenticated. Redis
  * stays optional at Compose parse time — the password is checked at
  * CONTAINER STARTUP, not expansion, so a bare `docker compose up` (redis
- * profile inactive) needs no Redis configuration (P7 review P1). The redis
+ * profile inactive) needs no Redis configuration. The redis
  * service must:
  *   - keep REDIS_PASSWORD OPTIONAL at Compose expansion (`${REDIS_PASSWORD:-}`
  *     empty default; `${REDIS_PASSWORD:?...}` required-expansion is

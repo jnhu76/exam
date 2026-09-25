@@ -319,11 +319,10 @@ export function ProctorRecoveryPage() {
 /**
  * Incident creation through the canonical scoped incident route
  * (`POST /admin/exams/:examId/incidents`). The exam select is populated from
- * /admin/proctor/exams: Admin receives the organization-wide
- * compatibility-superset collection; a Proctor receives active-assignment-
- * filtered exams. ONE operationId per dialog session (reused on retry),
- * indeterminate outcomes keep the dialog in the retry state instead of
- * pretending success.
+ * /admin/proctor/exams, whose collection scope (org-wide vs active proctor
+ * assignments) is derived server-side — never by the client (ADR-015). ONE
+ * operationId per dialog session (reused on retry), indeterminate outcomes keep
+ * the dialog in the retry state instead of pretending success.
  */
 function CreateIncidentButton({
   open,

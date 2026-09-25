@@ -1,24 +1,22 @@
 /**
- * System-only incident creation from heartbeat-disruption episodes (#304).
+ * System-only incident creation from heartbeat-disruption episodes,
+ * authority ADR-014 §8 Gate A.
  *
- * FROZEN AUTHORITY (ADR-014 §8 Gate A + EXAM-304 freeze F1–F10/F4A):
- * - internal-only seam (F9): the command rejects every non-System context and
- *   every System actor id other than `system:incident-detector`; no HTTP
- *   surface may select System identity;
- * - `operationId` = deterministic UUID-v5 of the interruption episode id
- *   (F4): the existing `exam_incident_events_org_operation_unique
- *   (organization_id, operation_id)` arbiter is the SOLE dedupe authority —
- *   one episode ⇒ at most one System-created incident; a later episode is a
- *   distinct source fact (F5, PER_EPISODE); never process memory, no second
- *   fingerprint/claim authority;
- * - incident + interruption evidence link commit as ONE command transaction
- *   (F4A): operation committed ⟺ the System link exists; a human-created
- *   incident or human link neither satisfies, cancels, nor replaces this
- *   completion;
- * - creation-only (F6): no time grant, no punishment, no
- *   `source=system_incident` write; human resolve/dismiss stays terminal (F7);
- * - audit reuses canonical `incident.created` with the detector actor
- *   identity (F8); no `incident.system_created` action exists.
+ * - internal-only seam: the command rejects every non-System context and every
+ *   System actor id other than `system:incident-detector`; no HTTP surface may
+ *   select System identity;
+ * - `operationId` = deterministic UUID-v5 of the interruption episode id: the
+ *   `exam_incident_events_org_operation_unique (organization_id, operation_id)`
+ *   arbiter is the SOLE dedupe authority — one episode ⇒ at most one
+ *   System-created incident; a later episode is a distinct source fact (per
+ *   episode); never process memory, no second fingerprint/claim authority;
+ * - incident + interruption evidence link commit as ONE command transaction:
+ *   operation committed ⟺ the System link exists; a human-created incident or
+ *   human link neither satisfies, cancels, nor replaces this completion;
+ * - creation-only: no time grant, no punishment, no `source=system_incident`
+ *   write; human resolve/dismiss stays terminal;
+ * - audit reuses canonical `incident.created` with the detector actor identity;
+ *   no `incident.system_created` action exists.
  */
 import { createHash } from "node:crypto";
 import type { RequestContext } from "@exam/domain";

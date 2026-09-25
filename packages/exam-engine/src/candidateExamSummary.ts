@@ -49,7 +49,7 @@ export function deriveCandidateExamState(
   } = input;
 
   const beforeWindow = now < exam.openAt;
-  // Untimed exams (#291 Phase A) have no closeAt — never after-window.
+  // Untimed exams have no closeAt — never after-window.
   const afterWindow = exam.closeAt !== null && now >= exam.closeAt;
   const attemptsUsed = enrollment?.attemptCount ?? 0;
   const maxAttemptsExhausted =

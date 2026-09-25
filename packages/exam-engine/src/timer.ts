@@ -74,19 +74,19 @@ export function isAttemptDeadlineExpired(
 }
 
 /**
- * The synchronized-deadline equation for `timed_sync` exams (#291 Phase B,
- * Model A freeze in docs/contracts/timed-sync-semantics.md):
+ * The synchronized-deadline equation for `timed_sync` exams (Model A freeze in
+ * docs/contracts/timed-sync-semantics.md):
  *
  *   syncDeadline = null when the operator has not triggered the sitting;
  *   otherwise min(syncStartedAt + durationMinutes, closeAt).
  *
- * Canonical owner of the sitting's shared base deadline. The operator start
- * command (B2) persists T0 (`exam.syncStartedAt`); attempt start copies the
- * value into `attempt.deadlineAt`, so every consumer below the start seam
- * keeps flowing through the existing `computeEffectiveDeadline` kernel —
- * there is no sync branch in reconciliation or the scanner. Pure function of
- * the durable exam row: a restart reconstructs the same deadline without
- * process-local state.
+ * Canonical owner of the sitting's shared base deadline. The decision-gated
+ * operator start persists T0 (`exam.syncStartedAt`); attempt start copies the
+ * value into `attempt.deadlineAt`, so every consumer below the start seam keeps
+ * flowing through the existing `computeEffectiveDeadline` kernel — there is no
+ * sync branch in reconciliation or the scanner. Pure function of the durable
+ * exam row: a restart reconstructs the same deadline without process-local
+ * state.
  *
  * A triggered sync exam without `durationMinutes` fails closed: degrading to
  * null would model an endless sitting whose attempts never auto-submit.

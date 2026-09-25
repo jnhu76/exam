@@ -258,10 +258,9 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "atomic",
     "privileged_mutation",
     "low",
-    // J5-I1C Slice 2: metadata now carries the operationId the receipt was
-    // committed under (audit links to operation identity — J5-I1C0 §2.1
-    // "operationId in audit evidence"). `reason` is required by the
-    // operation-aware contract (J5-R0 §8.1) and always canonical-trimmed.
+    // Metadata carries the operationId the receipt was committed under, so the
+    // audit row links to the operation identity. `reason` is part of the
+    // operation-aware contract and is always canonical-trimmed.
     z
       .object({
         operationId: z.string().uuid(),
@@ -269,8 +268,8 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
-  // REC-I4-I3B2: the old POST /extend-time route was cut. The action is retained
-  // verbatim (ADR "NO rename") but deprecated — no production emitter remains.
+  // Retained verbatim for audit-vocabulary compatibility (ADR: NO rename); no
+  // production emitter remains.
   [AuditAction.AttemptExtendTime]: definition(
     "deprecated",
     "atomic",
@@ -302,12 +301,10 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "atomic",
     "privileged_mutation",
     "low",
-    // J5-I1C Slice 3: metadata now carries the operationId the receipt was
-    // committed under (audit links to operation identity — J5-I1C0 §2.1
-    // "operationId in audit evidence", mirroring the force-submit Slice 2
-    // upgrade). `severity` + `notes` are the canonical misconduct payload
-    // (notes trimmed 1..1000 by the contract/domain canonicalizer); both are
-    // REQUIRED — every applied mark writes them atomically with the receipt.
+    // Metadata carries the operationId the receipt was committed under, so the
+    // audit row links to the operation identity. `severity` + `notes` are the
+    // canonical misconduct payload (notes trimmed 1..1000 by the canonicalizer);
+    // both are required and written in the same transaction as the receipt.
     z
       .object({
         operationId: z.string().uuid(),
@@ -342,8 +339,8 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "low",
     changedFieldsPayload,
   ),
-  // P7-E2A (ADR-017 D7): the email test side effect is audited under its own
-  // action with a masked recipient (never the verbatim address).
+  // ADR-017 D7: the email test side effect is audited under its own action with
+  // a masked recipient (never the verbatim address).
   [AuditAction.SystemEmailTest]: definition(
     "active",
     "best_effort",
@@ -355,9 +352,9 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
-  // P7-E3 (ADR-017 D9): Admin's operational policy INTENT change — atomic
-  // with the write, carrying the desired values + reason. P7-CLOSE added
-  // desiredRtoSeconds (nullable: NULL = RTO objective not configured).
+  // ADR-017 D9: Admin's operational policy INTENT change — atomic with the
+  // write, carrying the desired values + reason. `desiredRtoSeconds` is nullable:
+  // NULL means no RTO objective is configured.
   [AuditAction.OpsPolicyUpdated]: definition(
     "active",
     "atomic",
@@ -463,9 +460,9 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "best_effort",
     "domain_state",
     "low",
-    // P7-M2: optional provenance only (design §15). The profile is NOT
-    // runtime authority — the Exam row already contains the applied concrete
-    // values. sourceProfileId/sourceProfileName are never resolved at runtime.
+    // Optional provenance only: the Exam row already contains the applied
+    // concrete values, so sourceProfileId/sourceProfileName are never resolved at
+    // runtime and are NOT runtime authority.
     z
       .object({
         sourceProfileId: identifier.optional(),
@@ -560,8 +557,8 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "domain_state",
     "burst",
   ),
-  // P7-M2 exam policy profiles — ordinary authoring data (editable templates,
-  // NOT execution authority). Best-effort durability mirrors course/question
+  // Exam policy profiles — ordinary authoring data (editable templates, NOT
+  // execution authority). Best-effort durability mirrors course/question
   // authoring mutations; profiles carry no secrets.
   [AuditAction.ExamProfileCreate]: definition(
     "active",
@@ -641,7 +638,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
     "low",
   ),
   [AuditAction.UserDelete]: definition("active", "atomic", "authority", "low"),
-  // #297 staff invitation lifecycle. Payloads carry the invitation id, the
+  // Staff invitation lifecycle. Payloads carry the invitation id, the
   // invited email, and the role — never the raw token (only its hash exists
   // server-side, and that is not part of any audit payload either).
   [AuditAction.UserInvited]: definition(
@@ -956,7 +953,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
       .strict(),
   ),
 
-  // ── Teacher-to-Course assignment audit actions (issue #286) ──
+  // ── Teacher-to-Course assignment audit actions ──
   // Atomic compliance facts written ONLY when the assignment state change
   // actually applies (outcome=applied). Deliberately NO operationId — teacher
   // course assignment is a Admin config surface without the live-exam race
@@ -996,7 +993,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
       .strict(),
   ),
 
-  // ── Grader-to-Exam assignments (issue #296) ──
+  // ── Grader-to-Exam assignments ──
   // Atomic compliance facts written ONLY when the assignment state change
   // actually applies (outcome=applied). Deliberately NO operationId — grader
   // exam assignment is an Admin config surface without the live-exam race

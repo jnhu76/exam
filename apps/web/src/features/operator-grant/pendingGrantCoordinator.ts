@@ -1,5 +1,5 @@
 /**
- * REC-I4-C1 — Cross-tab pending grant coordinator.
+ * Cross-tab pending grant coordinator.
  *
  * Coordinates operator time-grant commands across browser tabs using:
  *   - localStorage  — durable shared authority (survives refresh, cross-tab)
@@ -122,13 +122,14 @@ function createDefaultDeps(): CoordinatorDependencies {
     tabId = createContextSafeUuid();
   }
 
-  // Fail-closed dependency contract (REC-I4-C1): the cross-tab authority
+  // Fail-closed dependency contract: the cross-tab authority
   // depends on a shared atomic lock + durable shared storage. Without Web
   // Locks the read-check-write is not atomic, and without localStorage the
-  // "shared" authority is per-tab — both silently destroy the C1 invariant
-  // (two tabs minting different operationIds). We therefore throw instead of
-  // degrading; the throw is surfaced to callers as a CoordinationUnavailable
-  // Result so the page can refuse to send a grant that could duplicate.
+  // "shared" authority is per-tab — both silently destroy the one-command
+  // invariant (two tabs minting different operationIds). We therefore throw
+  // instead of degrading; the throw is surfaced to callers as a
+  // CoordinationUnavailable Result so the page can refuse to send a grant
+  // that could duplicate.
   //
   // BroadcastChannel stays best-effort: the `storage` event is a backup
   // cross-tab notification channel, so a missing BroadcastChannel does not
@@ -342,8 +343,8 @@ export class PendingGrantCoordinator {
   /**
    * Atomically acquires a SEND lease for a retry, under the same Web Lock as
    * reserve / clearConfirmed / releaseIndeterminate. This is the ONLY valid
-   * way to (re)send a frozen command on a retry path — `getCurrent` no longer
-   * grants send authority by itself.
+   * way to (re)send a frozen command on a retry path — `getCurrent` does not
+   * grant send authority.
    *
    * Inside the lock:
    *   1. Read the authority; fail closed if absent.

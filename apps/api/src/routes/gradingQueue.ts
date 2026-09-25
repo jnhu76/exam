@@ -35,10 +35,7 @@ import {
 } from "../audit/auditWriter.js";
 
 /**
- * Registers the admin manual-grading queue routes (P2D-J3 / P3-L0-2E Slice 3):
- * - GET  /admin/grading-queue
- * - GET  /admin/attempts/:attemptId/grading-details
- * - POST /admin/attempts/:attemptId/grade-question
+ * Registers the admin manual-grading queue routes.
  *
  * Admin is org-wide. Issue #296: Grader actors are assignment-scoped — the
  * queue LIST filters to their active grader_exam_assignments exams in SQL
@@ -47,9 +44,9 @@ import {
  * missing assignment → 404 anti-enumeration). Handlers mirror
  * attempts.admin.ts: validate -> ensureTargetOrg -> command/repo -> audit.
  *
- * Slice 3 ownership: the manual grading queue, grading-details view, and
- * manual-score write path are ALL sourced from the durable
- * `attempt_grading_entries` workset. The queue reads
+ * Ownership: the manual grading queue, grading-details view, and manual-score
+ * write path are ALL sourced from the durable `attempt_grading_entries`
+ * workset. The queue reads
  * `WHERE grading_mode='manual' AND status='pending_manual'`; manual scoring
  * flips `pending_manual → completed_manual` on the SAME entry; the public
  * response shape is preserved as a presentation projection over those entries.
@@ -59,7 +56,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
    * GET /admin/grading-queue - lists attempts that have at least one pending
    * manual grading entry, with pagination and optional exam filter.
    *
-   * Slice 3: the work source is `attempt_grading_entries` filtered to
+   * The work source is `attempt_grading_entries` filtered to
    * `grading_mode='manual' AND status='pending_manual'`, NOT
    * `exam_attempts.gradingStatus` or any `questionSnapshot` rescan. Attempt
    * lifecycle state alone cannot fabricate queue work.
@@ -148,7 +145,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
    * GET /admin/attempts/:attemptId/grading-details - returns the attempt's
    * manual-mode questions with their current grading-entry state.
    *
-   * Slice 3: the question universe is projected from the frozen
+   * The question universe is projected from the frozen
    * `questionSnapshot` (presentation only — content/type/maxScore/expected
    * question IDs). The per-question grading state and candidate answer come
    * from the authoritative `attempt_grading_entries` rows, NOT from a legacy
@@ -196,7 +193,6 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       if (!attempt) {
         throw new NotFoundError("Attempt not found");
       }
-      // Load exam + candidate identity for display.
       const exam = await gradingQueueRepo.findExamById(ctx, attempt.examId);
       const candidate = await gradingQueueRepo.findCandidateWithUser(
         ctx,
@@ -275,7 +271,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
    * one manual grading entry. Transactional with a row lock on the attempt.
    * Audit: grading.score_entered.
    *
-   * Slice 3: the command updates the SAME `attempt_grading_entries` row that
+   * The command updates the SAME `attempt_grading_entries` row that
    * the freeze barrier materialized (pending_manual → completed_manual). It
    * fails closed when no entry exists and rejects attempts to score an
    * auto-graded entry. The route pre-fetches attempt/exam metadata for audit
@@ -347,18 +343,16 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Attempt grading context not found");
       }
 
-      // P3-FORMAL-P0-D2: the pre-tx enrollment pre-fetch that previously fed
-      // `enrollmentId` into gradeQuestion is removed. The capability minted
-      // inside the transaction carries enrollment identity (proven by the
-      // canonical seam), so gradeQuestion + finalizeTerminalGrading no longer
-      // take an enrollmentId argument.
+      // The capability minted inside the transaction carries enrollment
+      // identity (proven by the canonical seam), so gradeQuestion +
+      // finalizeTerminalGrading take no enrollmentId argument and this route
+      // never pre-fetches enrollment for the command.
 
       const result = await executeInTransaction(fastify.db, async (tx) => {
-        // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA
-        // capability via the canonical seam, and thread the SAME instances +
-        // capability into gradeQuestion → finalizeTerminalGrading. Switched
-        // from granular adapters to createExamEngineRepos so one object pair
-        // flows from mint to consumer (HR-6: exact repo object identity).
+        // Build the engine repo pair once, mint the EA capability via the
+        // canonical seam, and thread the SAME instances + capability into
+        // gradeQuestion → finalizeTerminalGrading so one object pair flows
+        // from mint to consumer (HR-6: exact repo object identity).
         const txAttemptRepo = createAttemptRepo(tx);
         const txEnrollmentRepo = createEnrollmentRepo(tx);
         const txEntryRepo = createAttemptGradingEntryRepo(tx);

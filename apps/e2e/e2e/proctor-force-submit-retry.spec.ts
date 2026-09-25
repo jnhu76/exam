@@ -1,11 +1,8 @@
 /**
- * J5-I1C Slice 2 re-review P1-1 / P1-2 / P2-3 — Force-submit lost-response
- * retry identity E2E.
+ * Force-submit lost-response retry identity E2E.
  *
  * Drives the REAL ProctorDashboard force-submit flow + the real server
- * force-submit endpoint. Proves the production fix for the reviewer's
- * "lost response" scenario end-to-end, with the evidence the re-review
- * demanded:
+ * force-submit endpoint, proving the contract end-to-end:
  *
  *   1. Admin clicks 强制交卷; the server COMMITS the operation (applied), but
  *      the response is masked as a 5xx via page.route — the UI classifies it

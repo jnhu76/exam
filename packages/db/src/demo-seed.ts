@@ -293,7 +293,7 @@ export async function seedDemo(
     }
   }
 
-  // P7-E2A (ADR-017 D14): demo-seed must never leave committed state with an
+  // ADR-017 D14: demo-seed must never leave committed state with an
   // actor holding both active Admin and active Maintainer assignments. Fail
   // loudly instead of silently producing the forbidden combination.
   const exclusionViolations =
@@ -655,7 +655,7 @@ export async function seedDemo(
         score: q.score,
         gradingRule: q.gradingRule as GradingRule,
         order: i,
-        // P3-L0-1: demo-seed only creates objective questions; rubric is null.
+        // demo-seed only creates objective questions; rubric is null.
         // Historical seeded snapshots predate the rubric field and are not
         // migrated — readers normalize missing to null.
         rubric: null,
@@ -1147,9 +1147,9 @@ export async function seedDemo(
     ],
     startedAt: ts(-10 * 60_000),
     // deadlineAt must stay in the future for the whole E2E run; the accelerated
-    // deadline scanner (DEADLINE_SCAN_INTERVAL_MS=5000 in docker-compose.test.yml)
+    // deadline scanner (interval owned by docker-compose.test.yml)
     // otherwise auto-submits this attempt. exam1.closeAt is ts(24h), so ts(2h)
-    // is safely inside the window. (The heartbeat scanner may still flip this
+    // is inside the window. (The heartbeat scanner may still flip this
     // to `disrupted` since lastActivityAt is not refreshed at runtime; the
     // demo-seed-accounts E2E keeps it alive via the heartbeat/restore API.)
     deadlineAt: ts(2 * HOUR),
@@ -1176,10 +1176,10 @@ export async function seedDemo(
     ],
     startedAt: ts(-20 * 60_000),
     // deadlineAt must stay in the future for the whole E2E run, otherwise the
-    // deadline scanner (DEADLINE_SCAN_INTERVAL_MS=5000 in docker-compose.test.yml)
+    // deadline scanner (interval owned by docker-compose.test.yml)
     // auto-submits this disrupted attempt → graded, breaking the demo-seed
     // contract (candidate3 = resumable/resume). exam1.closeAt is ts(24h), so
-    // ts(2h) is safely inside the window and well past any suite duration.
+    // ts(2h) is inside the window and well past any suite duration.
     deadlineAt: ts(2 * HOUR),
     lastActivityAt: ts(-8 * 60_000),
   });

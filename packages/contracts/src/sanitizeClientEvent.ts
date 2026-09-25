@@ -42,9 +42,9 @@ function isDenylisted(key: string): boolean {
 /**
  * Deep-clones a metadata value while redacting any key whose name matches the
  * denylist. Arrays and primitives are preserved verbatim; non-serializable
- * values (functions, symbols) are dropped. Total: never throws — on any
- * unexpected shape it returns the input value or `{}` so it cannot crash the
- * calling logger.
+ * values (functions, symbols) are dropped. This walk is not itself total — a
+ * hostile value (getter, proxy) can still throw; totality is provided by the
+ * {@link sanitizeClientEvent} wrapper.
  *
  * @param value - the value to sanitize (object, array, or primitive).
  * @param depth - current nesting depth (internal).

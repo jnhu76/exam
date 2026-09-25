@@ -23,17 +23,15 @@ export type CandidateResultVisibility =
   | { visible: false; hiddenReason: CandidateResultHiddenReason };
 
 /**
- * Canonical candidate result visibility authority (issue #324).
+ * Canonical candidate result visibility authority.
  *
  * Grading completion is NOT candidate result visibility. An attempt may be
  * fully graded (durable score/passed/finalScore all committed) while the
  * exam's publication policy still hides the result from the candidate. Every
- * candidate-facing projection — the score detail endpoint, attempt
- * load/start/submit/restore responses, the take snapshot, and the candidate
- * exam list/detail summaries — must apply THIS decision, never a route-local
+ * candidate-facing projection must apply THIS decision, never a route-local
  * copy of it.
  *
- * Two-stage gate (P2D-J5a semantics, lifted from the score route):
+ * Two-stage gate (P2D-J5a semantics):
  *
  *   1. resultReady — is the result computable? Requires status=graded AND all
  *      score fields present AND grading is no longer pending manual scoring.
@@ -73,8 +71,8 @@ export function resolveCandidateResultVisibility(
   // gradingStatus semantics: 'pending_manual' always means not-ready.
   // 'auto_graded' counts as ready UNLESS the exam mode is after_grading
   // (which demands 'fully_graded'). A null gradingStatus defaults to
-  // 'auto_graded' — the DB column default and the migration 0004 backfill
-  // both say legacy terminal rows were auto-graded. See the function doc.
+  // 'auto_graded' — legacy terminal rows were classified as auto-graded at
+  // read time. See the function doc.
   const gradingStatus = attempt.gradingStatus ?? "auto_graded";
   if (gradingStatus === "pending_manual") {
     return { visible: false, hiddenReason: "not_graded" };

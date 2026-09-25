@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ADR current-status uniqueness contract (#614 G5 guard 2).
+ * ADR current-status uniqueness contract.
  *
  * Relation checked: each ADR under docs/adr/ exposes exactly ONE unambiguous
  * CURRENT status at the document level. Two document-level marker shapes are

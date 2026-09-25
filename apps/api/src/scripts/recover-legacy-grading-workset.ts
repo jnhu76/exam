@@ -185,7 +185,7 @@ async function recoverInTx(
   }
 
   // 3. A 'fully_graded' lifecycle label on a non-graded attempt is the same
-  //    contradictory class. NULL / auto_graded / pending_manual are realignable.
+  //    contradictory class. Every other grading_status is realignable.
   if (attempt.gradingStatus === "fully_graded") {
     throw new Error(
       `recover: attempt ${attemptId} carries grading_status='fully_graded' ` +

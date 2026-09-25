@@ -287,7 +287,7 @@ describe("ProctorDashboardPage", () => {
   });
 
   it("does NOT POST force-submit from the hydrated banner for a user without AttemptForceSubmit", async () => {
-    // Defense-in-depth (CodeRabbit round-4): the banner hydrates from
+    // Defense-in-depth: the banner hydrates from
     // sessionStorage regardless of capabilities (dismiss must stay available
     // to clear a stale local command), but its destructive retry must never
     // POST without the capability. A Maintainer with a stale pending record

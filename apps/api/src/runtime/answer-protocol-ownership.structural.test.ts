@@ -240,12 +240,11 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
     expect(prepModule).toMatch(/assertAttemptRepository/);
   });
 
-  // RED proof — EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 §3.
-  // Before the authority-surface corrective, mintMutationContext was publicly
-  // importable from the @exam/exam-engine barrel via the wildcard re-export of
-  // attemptMutationContext.ts. After the corrective, the standalone authority
-  // module is deleted and the mint is private to the preparation owner.
-  // This test verifies the corrected state: no public mint surface remains.
+  // Negative lock: no public mint surface may exist. mintMutationContext was
+  // publicly importable from the @exam/exam-engine barrel via a wildcard
+  // re-export; the corrected state keeps the mint private to the preparation
+  // owner, so the barrel must not re-export attemptMutationContext.ts and the
+  // standalone module must not exist.
   it("EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 RED — mintMutationContext is NOT publicly importable (corrected)", () => {
     const barrel = readFileSync(
       resolve(REPO_ROOT, "packages/exam-engine/src/index.ts"),

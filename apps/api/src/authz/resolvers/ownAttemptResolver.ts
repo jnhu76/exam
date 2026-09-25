@@ -1,12 +1,10 @@
 /**
  * Own-attempt resource resolver (RBAC-M10-A, archetype C/D).
  *
- * Implements ADR §Resource Resolver Matrix row `own_attempt`:
- *
- *   own_attempt -> attempt -> candidate + exam | resolveOwnAttemptScope |
- *                  attempt.view_own / attempt.start / attempt.answer.save /
- *                  attempt.submit / attempt.heartbeat.send / attempt.restore
- *                  | source of truth: attempt ownership
+ * Implements the ADR §Resource Resolver Matrix row `own_attempt` (the matrix is
+ * the authority for the permission set and for "source of truth: attempt
+ * ownership"; the route → capability pairing is owned by
+ * authz/routeRegistry.ts).
  *
  * **Responsibility:** validates the resource chain (attempt→exam→course→org),
  * verifies the organization anchor, and returns **ownership facts**
@@ -16,9 +14,10 @@
  * The own-attempt capability preHandler (ownAttemptCapability.ts) compares
  * `ownerUserId === ctx.actorId` and maps non-owner to HTTP 404 (anti-enumeration).
  *
- * Integrity rules honored (resolver.ts top-of-file): full parent chain loaded;
- * explicit organization anchor (ADR §3.4); deny-on-inconsistency (ADR §22.1);
- * never fail open; operational errors surface as `resolver_error` (ADR §3.9).
+ * Integrity rules honored (`@exam/authz` `resolver.ts`): full parent chain
+ * loaded; explicit organization anchor (ADR §3.4); deny-on-inconsistency
+ * (ADR §22.1); never fail open; operational errors surface as `resolver_error`
+ * (ADR §3.9).
  */
 import type { FastifyBaseLogger } from "fastify";
 import type { Database, TenantContext } from "@exam/db/src/types.js";

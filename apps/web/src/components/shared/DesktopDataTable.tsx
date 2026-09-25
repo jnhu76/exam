@@ -26,19 +26,18 @@ import { BookOpen } from "lucide-react";
  * overflow default (recipes.css) plus the column's semantic geometry in the
  * allocation authority (table/columnAllocation.ts); overflow and priority are
  * single-source declarations the table derives DOM attributes from —
- * headers/cells never repeat them (P3 §18).
+ * headers/cells never repeat them.
  *
  * TanStack stays a row/header model only: no column-size state, no header
  * sizing calls, no inline widths. Width authority is columnAllocation.ts
- * exclusively, consumed through useColumnAllocation (P3-Corrective §5.5,
- * superseded by issue 601 Phase F).
+ * exclusively, consumed through useColumnAllocation.
  */
 export interface DataViewColumnMeta {
   /** The semantic column role — drives CSS width/wrap/alignment. */
   role: DataTableColumnRole;
   /** Optional overflow override (role default otherwise). */
   overflow?: ColumnOverflow;
-  /** Optional priority override (role default otherwise). Metadata only. */
+  /** Optional priority override (role default otherwise). */
   priority?: ColumnPriority;
 }
 

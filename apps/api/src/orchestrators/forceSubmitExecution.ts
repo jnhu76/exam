@@ -89,7 +89,7 @@ import {
 
 /**
  * Input of {@link forceSubmitWithOperationRaceRecovery}. `reason` has already
- * passed the wire schema (required, trimmed, 1..500 — J5-R0 §8.1) when the
+ * passed the wire schema (`ForceSubmitRequestPayloadSchema`) when the
  * orchestrator is called; the orchestrator still re-canonicalizes it so the
  * durable request identity comes from the single domain canonicalizer, not a
  * third hand-written trim in the route/orchestrator/repo layers.
@@ -98,7 +98,7 @@ import {
  * `ctx.actorId`, the single server-context authority. Letting callers pass an
  * independent `actorId` would allow receipt.actorId and audit.actorId to
  * diverge while still satisfying the composite `(organization_id, actor_id)`
- * FK, which is a contract hole the type system must close (review P2-2).
+ * FK, which is a contract hole the type system must close.
  */
 export interface ForceSubmitOperationInput {
   attemptId: string;

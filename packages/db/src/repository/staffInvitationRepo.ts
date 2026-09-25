@@ -8,7 +8,7 @@ import { staffInvitations, type AssignableRole } from "../schema/pg.js";
 import { now, resolveOrganizationId } from "./baseRepo.js";
 
 /**
- * Staff invitation row — the `staff_invitations` select shape (#297).
+ * Staff invitation row — the `staff_invitations` select shape.
  * Lifecycle status is never stored; derive with
  * `computeStaffInvitationStatus` (@exam/domain/identity) at read time.
  */
@@ -40,7 +40,7 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 /**
- * Creates a repository for the `staff_invitations` table (#297).
+ * Creates a repository for the `staff_invitations` table.
  *
  * The invitation IS the pending-membership state: the invited person has no
  * user row until acceptance succeeds. All methods are org-scoped through the

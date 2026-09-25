@@ -4,37 +4,27 @@ import { resolveOrganizationId } from "./baseRepo.js";
 import type { Database, TenantContext } from "../types.js";
 
 /**
- * P7-S2 Phase 7 — read-only attempt-integrity anomaly detection.
+ * Read-only attempt-integrity anomaly detection.
  *
  * Detects durable attempt shapes that the CURRENT runtime cannot produce
- * (proven by the P7-S2 crash-atomicity suite: submit freeze, workset
+ * (proven by the crash-atomicity suite: submit freeze, workset
  * materialization, grading classification, and terminalization all commit in
- * ONE transaction). These rows can only exist via legacy versions, old bugs,
- * manual SQL, or backfill scripts:
+ * ONE transaction). Such rows can only exist via older versions, bugs, manual
+ * SQL, or backfill scripts; the anomaly predicates themselves live with the
+ * queries below.
  *
- *  - `submitted_not_terminalized`: `status='submitted' AND
- *    grading_status='auto_graded'` — the submit freeze committed but terminal
- *    grading never ran (submit+grade are one transaction today). The
- *    documented canonical repair is a re-invocation of the production
- *    submit+grade orchestrator, which grades a `submitted` attempt
- *    idempotently without re-submitting.
+ *  - `submitted_not_terminalized` — the submit freeze committed but terminal
+ *    grading never ran. The documented canonical repair is a re-invocation of
+ *    the production submit+grade orchestrator, which grades a `submitted`
+ *    attempt idempotently without re-submitting.
  *
- *  - `submitted_workset_mismatch`: `status='submitted'` with a grading
- *    workset entry count that differs from the frozen `question_snapshot`
- *    length — the workset must be materialized at the submit freeze barrier.
+ *  - `submitted_workset_mismatch` — the grading workset does not match the
+ *    frozen `question_snapshot` length; the workset must be materialized at
+ *    the submit freeze barrier.
  *
  * Strictly READ-ONLY: this repo never mutates rows and never repairs.
- * Detection output carries enough identity (attempt/exam/enrollment ids,
- * timestamps, expected vs actual counts) for a human or a later canonical
+ * Detection output carries enough identity for a human or a later canonical
  * repair command.
- *
- * Counting model (P7-S2 merge-review fix): the anomaly PREDICATES run inside
- * SQL over the FULL candidate set (`status='submitted'` for the tenant), so
- * the reported counts are exact totals no matter how many anomalies exist.
- * The `limit` (default 100) bounds only the returned anomaly SAMPLE, which is
- * ordered by attempt id (stable) so the sample is deterministic. The workset
- * entry count is a scalar subquery evaluated per candidate attempt — the DB
- * never aggregates the tenant's whole grading-entry history into Node.
  */
 export interface AttemptIntegrityAnomaly {
   kind: "submitted_not_terminalized" | "submitted_workset_mismatch";

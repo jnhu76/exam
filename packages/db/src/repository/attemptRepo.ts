@@ -31,8 +31,8 @@ export function createAttemptRepo(db: Database) {
 
   /**
    * Batch-loads attempts by id, scoped to the tenant. Empty input returns [].
-   * Used by the result_published recipient composition (P5-N1-I2) to avoid an
-   * N+1 over enrollments. Returns at most one row per requested id; missing
+   * Used by the result_published recipient composition to avoid an N+1 over
+   * enrollments. Returns at most one row per requested id; missing
    * ids are simply absent from the result (no error).
    */
   async function findByIds(
@@ -182,14 +182,14 @@ export function createAttemptRepo(db: Database) {
       return rows[0] ?? null;
     },
     /**
-     * Own-attempt ownership chain (RBAC-M10-A, archetype C/D).
+     * Own-attempt ownership chain (archetype C/D).
      *
      * Extends {@link findAuthorizationChain} with the attempt's candidate +
      * candidate-user identity, so the own-attempt capability preHandler can
      * authorize `attempt.candidateProfile.userId === actorId` without role-name
-     * branching. Source of truth per ADR §Candidate Own-Scope Policy + §Resource
-     * Resolver Matrix: `own_attempt -> attempt -> candidate + exam`; the
-     * ownership fact is `candidateProfiles.userId`.
+     * branching. Source of truth per ADR-010 §Candidate Own-Scope Policy +
+     * §Resource Resolver Matrix: `own_attempt -> attempt -> candidate + exam`;
+     * the ownership fact is `candidateProfiles.userId`.
      *
      * The resolver (ownAttemptResolver.ts) validates the chain and org anchor.
      * The capability preHandler (ownAttemptCapability.ts) compares
@@ -424,21 +424,19 @@ export function createAttemptRepo(db: Database) {
      *   OR
      *   (attempt.deadlineAt IS NOT NULL AND attempt.deadlineAt <= now)
      *
-     * REACHABILITY BOUNDARY (P0-C1): the `exam.closeAt <= now` arm is the
-     * DEFENSIVE recovery coverage for schema-admissible NULL `deadlineAt`
-     * rows — NOT evidence of a Phase-1 timing mode in which active attempts
-     * normally carry a NULL deadline. The reachable-domain invariant
-     * (ACTIVE-DEADLINE-001) is that every protocol-reachable active attempt
-     * has a non-null `deadlineAt`; ordinary production always writes one at
-     * attempt creation. Discovery therefore agrees with the canonical
-     * `isAttemptDeadlineExpired` seam over BOTH domains so that a legacy /
-     * corrupt / historical NULL row whose exam window has closed cannot stay
-     * active forever — but that row is a defensive-recovery state, not a
-     * valid protocol timing state.
+     * REACHABILITY BOUNDARY: the `exam.closeAt <= now` arm is the DEFENSIVE
+     * recovery coverage for schema-admissible NULL `deadlineAt` rows — NOT
+     * evidence of a timing mode in which active attempts normally carry a NULL
+     * deadline. The reachable-domain invariant (ACTIVE-DEADLINE-001) is that
+     * every protocol-reachable active attempt has a non-null `deadlineAt`;
+     * ordinary production always writes one at attempt creation. Discovery
+     * therefore agrees with the canonical `isAttemptDeadlineExpired` seam over
+     * BOTH domains so that a legacy / corrupt / historical NULL row whose exam
+     * window has closed cannot stay active forever — but that row is a
+     * defensive-recovery state, not a valid protocol timing state.
      *
      * The OR-with-exam-closeAt arm also catches an attempt whose per-attempt
-     * deadlineAt is still in the future but whose exam window has closed — the
-     * divergence bug fixed alongside this query (P0-B).
+     * deadlineAt is still in the future but whose exam window has closed.
      *
      * This query is CANDIDATE DISCOVERY ONLY. The authoritative expiry
      * decision is `isAttemptDeadlineExpired` (exam-engine), re-evaluated by
@@ -446,9 +444,6 @@ export function createAttemptRepo(db: Database) {
      * read. A candidate returned here MUST NOT be auto-submitted without that
      * under-lock recheck (it may have been extended, reconciled, or be a stale
      * snapshot).
-     *
-     * Renamed from listExpirableByDeadline to reflect its candidate-discovery
-     * role, not protocol authority.
      */
     async listDeadlineCandidates(
       ctx: TenantContext | RequestContext,

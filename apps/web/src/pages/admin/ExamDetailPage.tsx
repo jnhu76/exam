@@ -280,7 +280,7 @@ export function ExamDetailPage() {
   }
 
   // Single-source column declarations: the desktop table and the mobile card
-  // list both derive from this array (issue 457 / issue 601 Phase F).
+  // list both derive from this array.
   const columns = useMemo<DataViewColumnDef<EnrollmentItem>[]>(
     () => [
       {
@@ -377,7 +377,6 @@ export function ExamDetailPage() {
     }
   }
 
-  /** Closes the exam (open -> closed). ADR-005 Slice 1. */
   async function handleClose() {
     if (!id || closing) return;
     setClosing(true);
@@ -392,7 +391,7 @@ export function ExamDetailPage() {
     }
   }
 
-  /** Unpublishes the exam (published -> draft). ADR-005 Slice 2 §3.2. */
+  /** Unpublish: published -> draft (ADR-005 §3.2). */
   async function handleUnpublish() {
     if (!id || unpublishing) return;
     setUnpublishing(true);
@@ -428,7 +427,7 @@ export function ExamDetailPage() {
     }
   }
 
-  /** Extends the open exam's closeAt (open -> open). ADR-005 Slice 2 §3.4. */
+  /** Extend keeps the exam open: open -> open (ADR-005 §3.4). */
   async function handleExtend() {
     if (!id || extending) return;
     setExtending(true);
@@ -463,7 +462,7 @@ export function ExamDetailPage() {
     }
   }
 
-  /** Cancels the exam (published/open → canceled). Documented Phase 2 op (ADR-005). */
+  /** Cancel: published/open → canceled (ADR-005 §3.5). */
   async function handleCancel() {
     if (!id || canceling) return;
     setCanceling(true);
@@ -742,12 +741,11 @@ export function ExamDetailPage() {
             />
           </div>
 
-          {/* The shell IS the data surface (issue 601 Phase F convergence):
-              the section heading moves into its title band and the
-              dataset-scoped action into its toolbar band, so the table no
-              longer loses 44px to a second border+padding. The shell stays
-              mounted for the empty state too, so the dataset-scoped action is
-              available whether or not the list has rows. */}
+          {/* The shell IS the data surface (docs/standards/ui-system.md
+              §Surface and elevation): heading and dataset-scoped action live in
+              its own bands. The shell stays mounted for the empty state too, so
+              the dataset-scoped action is available whether or not the list has
+              rows. */}
           <DataTableShell
             title={t("admin.examDetail.enrollment.title")}
             toolbar={

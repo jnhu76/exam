@@ -1,19 +1,16 @@
 /**
  * Gate: current architecture/construction docs must not contain framing that
- * would mislead a future agent into thinking:
- *   - Ant Design is the current/recommended UI stack
- *   - the rejected A/B/C table-direction lab is an approved production direction
- *   - business pages may use raw Tailwind color palettes
- *   - font-bold is a valid way to build hierarchy
+ * would mislead a future agent about the UI stack — Ant Design as
+ * current/recommended, the rejected A/B/C table-direction lab as approved, raw
+ * Tailwind palettes in business pages, or font-bold as a hierarchy tool. The
+ * patterns and their messages are the MISLEADING table below.
  *
- * Scans active docs (docs/architecture/frontend.md, docs/standards/ui-system.md,
- * docs/SPEC.md, README.md, AGENTS.md, CONTEXT.md). docs/archive/** is excluded
- * (archived history; the ant-removal audit separately confirms archive mentions
- * frame Ant as forbidden/purged).
+ * Scans DEFAULT_TARGETS below; docs/archive/** is excluded (archived history,
+ * separately covered by scripts/check-ant-residue.mjs and
+ * docs/archive/frontend/ant-removal-audit.md).
  *
- * STALE_UI_DOCS_TARGETS_OVERRIDE (comma-separated paths) replaces the default
- * target list — test-only escape hatch used by check-stale-ui-docs.test.mjs
- * (same pattern as MIGRATIONS_DIR_OVERRIDE in the migration-journal checker).
+ * STALE_UI_DOCS_TARGETS_OVERRIDE (comma-separated paths) replaces the target
+ * list so check-stale-ui-docs.test.mjs can drive the scanner on a fixture.
  */
 import { readdir, readFile, stat } from "node:fs/promises";
 import { relative } from "node:path";

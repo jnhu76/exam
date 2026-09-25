@@ -124,7 +124,7 @@ const ALLOWLIST: { path: string; reason: string }[] = [
   {
     path: "apps/api/src/routes/attempts/__tests__/attempts.testHelpers.ts",
     reason:
-      "Test/factory helpers extracted from attempts.test.ts during the attempts test split (shared exam/attempt fixture generation: openAt/closeAt, createdAt/updatedAt stamps); never asserts business-time authority of the server.",
+      "Shared exam/attempt fixture generation for the attempts suites (openAt/closeAt, createdAt/updatedAt stamps); never asserts business-time authority of the server.",
   },
   {
     path: "packages/exam-engine/src/answerProtocol.ts",

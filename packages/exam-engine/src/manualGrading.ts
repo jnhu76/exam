@@ -17,8 +17,10 @@ export interface GradeQuestionResult {
   fullyGraded: boolean;
   /**
    * Recomputed attempt total (objective + manual) and pass/fail, present only
-   * once the attempt becomes fully graded. Re-grading re-derives these from the
-   * full entry set, so repeated calls are idempotent.
+   * once the attempt becomes fully graded.
+   *
+   * Manual grading completion is one-way: a repeated call for an already
+   * completed question (or a graded attempt) is rejected, not replayed.
    */
   totalScore?: number;
   passed?: boolean;
@@ -27,10 +29,10 @@ export interface GradeQuestionResult {
 /**
  * Completes one pending manual grading entry for an attempt and, when the
  * last manual-graded question has been scored, invokes the canonical terminal
- * grading closure (P3-FORMAL-P0-A) to project the attempt total + enrollment
+ * grading closure to project the attempt total + enrollment
  * result in the SAME transaction.
  *
- * Ownership split (P3-FORMAL-P0-A convergence contract):
+ * Ownership split (convergence contract):
  *
  *   - This command owns: completing the pending_manual entry
  *     (`pending_manual → completed_manual`), exactly one per call.
@@ -105,7 +107,7 @@ export async function gradeQuestion(
   // gradeQuestion is the command that completes a pending_manual entry while
   // the attempt is submitted + pending_manual; it REJECTS score-revision /
   // re-grade attempts. Lifecycle guards run BEFORE any workset lookup or score
-  // mutation so a rejected call cannot touch truth. exam-protocol.md §3.3:
+  // mutation so a rejected call cannot touch truth. docs/architecture/exam-runtime.md §3.3:
   // submitted(pending_manual) → graded(fully_graded) is one-way; post-terminal
   // score revision is not part of the current protocol.
   if (attempt.status !== "submitted") {
@@ -122,7 +124,7 @@ export async function gradeQuestion(
     );
   }
 
-  // Slice 3 authoritative workset lookup. The materialized entry is the sole
+  // Authoritative workset lookup. The materialized entry is the sole
   // manual-work authority — fail closed when it is missing (no lazy create,
   // no legacy fallback) and authorize grading purely from its gradingMode.
   const entry = await worksetRepo.findByAttemptAndQuestion(
@@ -188,7 +190,7 @@ export async function gradeQuestion(
   const fullyGraded = remainingPending === 0;
 
   if (fullyGraded) {
-    // P3-FORMAL-P0-A: the workset is now fully terminal (every manual entry
+    // The workset is now fully terminal (every manual entry
     // has just been completed_manual; auto entries were completed_auto at
     // submit-freeze). Delegate terminal projection to the canonical closure,
     // which is shared with the auto path. The closure validates the
@@ -197,10 +199,10 @@ export async function gradeQuestion(
     //
     // `gradeQuestion` does NOT write enrollment state directly — it goes
     // through finalizeTerminalGrading, the single canonical writer. This
-    // closes the pre-repair gap where manual terminal left
-    // enrollment.finalScore NULL/stale.
+    // keeps the canonical closure the single enrollment writer on the manual
+    // path.
     //
-    // P3-FORMAL-P0-D2: the caller-minted capability is threaded through; the
+    // The caller-minted capability is threaded through; the
     // closure asserts transaction affinity at its entry.
     const closed = await finalizeTerminalGrading(
       enrollmentRepo,

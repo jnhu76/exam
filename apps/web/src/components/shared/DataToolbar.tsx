@@ -3,16 +3,14 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /**
- * Semantic width tier for one toolbar filter control (issue 458, P3 §C toolbar).
- * Exactly two tiers exist — never a third, never a page-owned px:
+ * Semantic width tier for one toolbar filter control
+ * (docs/standards/ui-system.md "frozen semantic roles"): `narrow` for short
+ * closed enums, `wide` for entity selectors and exact-text filters. Exactly
+ * two tiers exist — never a third, never a page-owned px.
  *
- *   narrow = 9rem    short closed enums (status / type selects)
- *   wide   = 11.25rem entity selectors (tag/person/course) and free-text
- *                     filter inputs that are not the main search
- *
- * Search sizing belongs to DataToolbar's search slot (w-72 / lg:w-80) and
- * date sizing belongs to DatePicker (self-owned 10rem) — neither migrates
- * into these tiers.
+ * The concrete widths live on the tiers (`ToolbarFilter` classes); search and
+ * date sizing are owned by DataToolbar's search slot / DatePicker respectively
+ * and never migrate into these tiers.
  */
 export type ToolbarFilterSize = "narrow" | "wide";
 
@@ -56,9 +54,7 @@ export function ToolbarFilter({
  * actions); page-scoped actions (create, import, page refresh, navigation) stay
  * in the PageHeader. A count/summary is not a control — it belongs in the
  * data-view footer (DataViewFooter) or, when it belongs with the title, in the
- * shell's title-band `meta` slot; the former `summary` slot is retired
- * (issue 601 Phase F convergence: it was a second, parallel count authority
- * with one production consumer).
+ * shell's title-band `meta` slot.
  *
  * Default accessible label resolves from `common.toolbar.dataLabel`; explicit
  * prop wins.

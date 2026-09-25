@@ -20,8 +20,7 @@ import {
 } from "../lib/responsive";
 
 /**
- * Admin responsive baseline (Issue #306 closeout — the Admin half deferred
- * after PR #410 landed the Candidate half). Deterministic geometry assertions
+ * Admin responsive baseline (#306). Deterministic geometry assertions
  * at the 390x844 contract viewport:
  *
  *   - critical Admin flows: login, mobile drawer navigation, list toolbar,

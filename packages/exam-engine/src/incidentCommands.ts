@@ -732,7 +732,6 @@ export async function linkIncidentAction(
     throw new ValidationError("misconduct_mark action links are deferred");
   }
 
-  // Validate action type
   if (!VALID_ACTION_TYPES.includes(input.actionType)) {
     throw new ValidationError(`Invalid action type: ${input.actionType}`);
   }
@@ -886,7 +885,6 @@ export async function linkIncidentAttempt(
     );
   }
 
-  // Validate relationship type
   if (!VALID_RELATIONSHIP_TYPES.includes(input.relationshipType)) {
     throw new ValidationError(
       `Invalid relationship type: ${input.relationshipType}`,
@@ -1149,7 +1147,6 @@ async function versionBumpCommand(
     );
   }
 
-  // Check expectedVersion
   if (locked.version !== input.expectedVersion) {
     throw new IncidentVersionConflictError(undefined, {
       expectedVersion: input.expectedVersion,
@@ -1164,7 +1161,6 @@ async function versionBumpCommand(
     );
   }
 
-  // Check allowed source status
   if (!(deps.allowedStatuses as readonly string[]).includes(locked.status)) {
     throw new InvalidStateTransitionError(
       `Cannot transition incident from status: ${locked.status}`,

@@ -50,7 +50,8 @@ describe("renderGradeNotificationEmail", () => {
 
   it("bodyText contains the absolute link (caller combines origin)", () => {
     // The renderer emits the link as provided; the caller (NotificationService)
-    // is responsible for prepending PUBLIC_WEB_ORIGIN via buildAbsoluteResultLink.
+    // is responsible for prepending PUBLIC_WEB_ORIGIN via
+    // buildAbsoluteNotificationLink.
     // For the bodyText we accept either the site-relative path or an absolute
     // URL; the contract is "the link is present and identifiable".
     const out = renderGradeNotificationEmail(payload);

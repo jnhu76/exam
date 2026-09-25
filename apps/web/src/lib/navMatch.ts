@@ -1,19 +1,17 @@
 /**
- * Route → navigation-destination authority (#494 corrective-1).
+ * Route → navigation-destination authority.
  *
  * The single explicit mechanism answering "current pathname → which sidebar
  * destination is current?". A destination represents a ROUTE FAMILY: its
  * exact route plus routed descendants that semantically belong to it (e.g.
- * /admin/exams/:id/edit resolves to the 考试管理 destination). The previous
- * mechanism relied on React Router NavLink's exact/prefix `end` semantics —
- * exact destinations worked, but routed descendants (exams/:id/edit,
- * recovery/incidents/:id, questions/new, …) resolved to ZERO current
- * destinations.
+ * /admin/exams/:id/edit resolves to the 考试管理 destination).
  *
  * Matching is segment-exact against explicit patterns (the same matcher the
- * admin route-capability table uses) — never React Router prefix accidents:
- * a naive prefix rule would make /admin/questions/import match BOTH 题目管理
- * and 题目导入, violating exactly-one-current.
+ * admin route-capability table uses) — never React Router prefix semantics,
+ * which cannot express route families: NavLink `end` resolves descendants to
+ * ZERO current destinations, and a naive prefix rule would make
+ * /admin/questions/import match BOTH 题目管理 and 题目导入, violating
+ * exactly-one-current.
  *
  * This is the ONE current-route authority: AppSidebar derives every link's
  * current state from {@link matchNavDestination}(location.pathname). No

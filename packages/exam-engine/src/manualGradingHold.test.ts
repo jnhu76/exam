@@ -47,7 +47,7 @@ import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 /**
  * P3-L0-2C — Manual-Grading Hold Lifecycle Closure (RED tests).
  *
- * Proves the protocol invariant (exam-protocol.md §3.3, §4.2):
+ * Proves the protocol invariant (docs/architecture/exam-runtime.md §3.3, §4.2):
  *
  *   pure objective:      in_progress → submitted → graded + auto_graded
  *   text_response/mixed: in_progress → submitted + pending_manual

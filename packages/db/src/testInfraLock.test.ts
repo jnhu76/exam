@@ -208,12 +208,11 @@ describe("testInfraLock — key derivation", () => {
   });
 
   it("is the ONLY lifecycle key (single shared key, no resource-class variants)", () => {
-    // One key is the Phase 6D engine guarantee re-affirmed 2026-08-26: ALL
-    // heavy DDL/migration (CREATE/DROP DATABASE included) serializes against
-    // each other, so physical DB DDL can never fight migration traffic on the
-    // catalog. The withdrawn resource-class split had no variants to begin
-    // with once the queue load itself was traced back to the worker-identity
-    // root cause (VITEST_WORKER_ID → VITEST_POOL_ID).
+    // INVARIANT: ONE key for ALL heavy DDL/migration (CREATE/DROP DATABASE
+    // included) so physical DB DDL can never fight migration traffic on the
+    // catalog. A resource-class split would reintroduce that race; the queue
+    // load it was meant to relieve traced back to worker identity
+    // (VITEST_WORKER_ID → VITEST_POOL_ID), not to key contention.
     const key = getTestInfraLifecycleLockKey();
     expect(key).toBe(getTestInfraLifecycleLockKey());
     expect(key).not.toBe(0n);
@@ -516,12 +515,11 @@ PG_DESCRIBE(
   { timeout: 30_000 },
   () => {
     it("hosts the lock on the caller-resolved coordination DB, not a process.env re-read (round-3 authority regression)", async () => {
-      // Reproduces the CodeRabbit round-2 finding against the round-3 fix:
-      // setupWorkerTestDatabase resolves adminUrl from ITS env
-      // (TEST_ADMIN_DATABASE=injected), and the lock helper must host the
-      // advisory lock on that SAME database. The old implementation silently
-      // re-read process.env.TEST_ADMIN_DATABASE below the seam, so a divergent
-      // ambient value moved the lock onto a different database — and advisory
+      // Authority regression: setupWorkerTestDatabase resolves adminUrl from
+      // ITS env (TEST_ADMIN_DATABASE=injected), and the lock helper must host
+      // the advisory lock on that SAME database. Re-reading
+      // process.env.TEST_ADMIN_DATABASE below the seam would let a divergent
+      // ambient value move the lock onto a different database — and advisory
       // locks are database-local, i.e. coordination silently broke.
       //
       // The injected authority is a UNIQUE disposable database: no sibling

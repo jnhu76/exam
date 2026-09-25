@@ -38,9 +38,6 @@ describe("data table column-contract migration", () => {
       // DesktopDataTable renders the contract primitives internally), or
       // (c) via <DataTableSurface columns={...}> which owns the allocation
       // colgroup for contract-direct tables.
-      // UI-TOKEN-TABLE-FOUNDATION-1: QuestionPage migrated to pattern (b).
-      // #601 Phase F: contract-direct consumers use pattern (c) so the shared
-      // allocator owns the colgroup.
       const usesDirectContract =
         source.includes("<DataTableColumns") ||
         source.includes("<DataTableSurface");

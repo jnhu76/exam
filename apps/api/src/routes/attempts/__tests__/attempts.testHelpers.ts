@@ -24,9 +24,9 @@ export const DEFAULT_CONTROL_FLAGS = {
 } as const;
 
 /**
- * Builds a create-exam payload from partial overrides, filling in the same
- * defaults the original attempts.test.ts used (timed_window, manual selection,
- * a 1h-past openAt / 24h-future closeAt window, unlimited retakes, etc.).
+ * Builds a create-exam payload from partial overrides, filling in the shared
+ * attempt-route fixture defaults (timed_window, manual selection, a past openAt
+ * / future closeAt window, unlimited retakes, etc.).
  */
 export function buildExamPayload(
   overrides: Partial<{
@@ -84,9 +84,8 @@ export function buildExamPayload(
 
 /**
  * Enrolls the shared fixture's candidate profile into the given exam via the
- * admin enrollment API. Extracted verbatim from the original attempts.test.ts
- * outer-describe helper (which closed over `ctx` and `candidateProfileId`);
- * here those are passed explicitly so shared-fixture test files can reuse it.
+ * admin enrollment API. `ctx` and `candidateProfileId` are explicit parameters
+ * (not closure state) so every shared-fixture test file can reuse the call.
  */
 export async function enrollCandidateForExam(
   ctx: TestContext,
@@ -140,11 +139,11 @@ export interface SharedAttemptFixture {
 }
 
 /**
- * Reproduces the original `attempts.test.ts` outer `beforeAll` setup verbatim:
- * builds the test app (examRoutes + attemptRoutes), seeds a course, a
- * single_choice question, a fill_blank question, a candidate profile, then
- * creates + publishes + enrolls an exam. Call once per shared-fixture file's
- * outer `beforeAll`; pair with `ctx.cleanup()` in `afterAll`.
+ * Builds the shared attempt-route fixture: the test app (examRoutes +
+ * attemptRoutes), a course, a single_choice question, a fill_blank question, a
+ * candidate profile, then a published + enrolled exam. Call once per
+ * shared-fixture file's outer `beforeAll`; pair with `ctx.cleanup()` in
+ * `afterAll`.
  */
 export async function buildSharedAttemptFixture(): Promise<SharedAttemptFixture> {
   const ctx = await buildTestApp(async (fastify) => {

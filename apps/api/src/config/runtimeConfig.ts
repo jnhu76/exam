@@ -167,9 +167,8 @@ export interface HeartbeatConfig {
   /** Whole seconds derived from timeoutMs; heartbeat/scanner use this. */
   heartbeatTimeoutSeconds: number;
   /**
-   * P7-E closeout (E0 P2-2): the deadline scanner interval, resolved through
-   * the canonical loader (DEADLINE_SCAN_INTERVAL_MS) — the plugin no longer
-   * reads process.env directly.
+   * Deadline scanner interval (DEADLINE_SCAN_INTERVAL_MS), falling back to the
+   * heartbeat scan interval when unset.
    */
   deadlineScanIntervalMs: number;
 }
@@ -197,7 +196,7 @@ export interface SmtpConfig {
 /**
  * Email runtime config (M3). Disabled by default so a bare deployment sends
  * nothing, needs no SMTP secret, and touches no network. See
- * `docs/architecture/email-config.md`.
+ * `docs/operations/email-config.md`.
  */
 export interface EmailConfig {
   enabled: boolean;
@@ -221,11 +220,9 @@ export interface EmailConfig {
 }
 
 /**
- * Email delivery worker runtime configuration (P5-0).
- *
- * All parameters are read from environment variables with sensible defaults.
- * The worker uses these for poll interval, batch size, lock timeout, heartbeat
- * stale threshold, and shutdown behavior.
+ * Email delivery worker runtime configuration. Env names and defaults are
+ * owned by `settings.ts` (`emailWorker` group); the cross-field lease guard is
+ * applied below.
  */
 export interface EmailWorkerConfig {
   pollIntervalMs: number;
@@ -489,10 +486,10 @@ function resolveEmailConfig(
   // or misconfigured env says so. This prevents tests from accidentally
   // constructing a real nodemailer transport (and potentially sending real
   // mail via POST /api/email/test) when a dev .env with EMAIL_TRANSPORT=smtp
-  // leaks into the test runtime. See docs/architecture/email-config.md §6.
+  // leaks into the test runtime. See docs/operations/email-config.md §6.
   if (opts.isTestLike && transport === "smtp") {
-    // TODO: replace with the app logger once one is available at config-load
-    // time. Using stderr directly keeps this side-effect free of fastify.
+    // WHY: config resolution runs before the fastify app (and its logger)
+    // exists, so this diagnostic writes to stderr and stays fastify-free.
     process.stderr.write(
       "[runtimeConfig] EMAIL_TRANSPORT=smtp ignored in test/e2e/ci mode; forcing 'fake' to prevent real SMTP/network use in tests.\n",
     );
@@ -539,10 +536,6 @@ function resolveEmailConfig(
   };
 }
 
-/**
- * Resolve the email delivery worker configuration (P5-0) from resolved
- * settings, enforcing the P7-S2-D lease sanity guard.
- */
 function resolveEmailWorkerConfig(
   s: ResolvedSettings,
   email: EmailConfig,
@@ -601,15 +594,14 @@ function resolveEmailWorkerConfig(
     batchSize: s.emailWorker.EMAIL_WORKER_BATCH_SIZE,
     lockTimeoutMs,
     heartbeatStaleThresholdMs: s.emailWorker.EMAIL_WORKER_HEARTBEAT_STALE_MS,
-    // INVARIANT (#351 shutdown budget contract): this default is one term of
-    // the deployment budget hierarchy —
-    //   container stop grace (compose stop_grace_period, 45s)
-    //     > email loop drain (this, 8s) + audit drain (10s) + DB pool close (10s)
-    //     > each individual component budget.
-    // Do not raise it without raising stop_grace_period in docker-compose.yml.
+    // #351 shutdown budget contract: this value is one term of a hierarchy
+    // bounded by the container's stop_grace_period. Raising it without raising
+    // that budget turns a stuck in-flight email send into SIGKILL (exit 137).
+    // Terms and enforcement: docker-compose.yml stop_grace_period +
+    // scripts/repository-contract/deployment-topology-contract.mjs.
     shutdownTimeoutMs: s.emailWorker.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS,
-    // Concurrency is fixed at 1 for Phase 1 (single worker instance).
-    // The config field exists for forward compatibility.
+    // Fixed at 1: no consumer reads this field today (single worker instance).
+    // It exists so the shape does not change when a multi-worker mode lands.
     concurrency: 1,
   };
 }
@@ -700,13 +692,14 @@ export function loadRuntimeConfig(
     tenancy: {
       mode: s.app.DEPLOYMENT_MODE,
       defaultTenantSlug: "default",
-      // Phase 1: internal default organization only.
-      // Not a current multi-tenant runtime mode; always false in Phase 1.
+      // Single-tenant product boundary (docs/SPEC.md §2.8.1 / §3.1): one
+      // internal default organization, no tenant switcher, no SuperAdmin
+      // product path — both flags are structurally false, never env-derived.
       exposeTenantSwitcher: false,
       exposeSuperAdmin: false,
     },
     auth: {
-      // Phase 1: no SuperAdmin product path; always false.
+      // Same boundary: no SuperAdmin product path exists.
       exposeSuperAdmin: false,
     },
     rateLimit: {
@@ -756,10 +749,9 @@ export function resetRuntimeConfigForTest(): void {
  * Build a minimal, non-sensitive subset of config for the frontend.
  * NEVER include secrets, internal rate-limit details, or security policy.
  *
- * Phase 1: does NOT emit SuperAdmin / tenant-switcher / multiTenant fields.
- * Those are Phase 4 platformization capabilities, not current features, so
- * they are omitted entirely (not emitted as `false`) to avoid implying the
- * capability exists.
+ * Multi-tenant / SuperAdmin capability fields are omitted entirely rather than
+ * emitted as `false`, so the frontend cannot infer a capability that does not
+ * exist (docs/SPEC.md §2.8.1 / §3.1).
  */
 export function buildPublicConfig() {
   const config = getRuntimeConfig();

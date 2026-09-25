@@ -21,11 +21,9 @@ export type ApiErrorTranslateFn = typeof i18n.t;
  * Zone A): the active Web i18n instance is the presentation authority for
  * browser-visible known semantics; the server registry is NOT consulted.
  *
- * The catalog covers every registry code: all of them have first-party
- * browser-reachable producers (audited against apps/api + packages/domain),
- * so this is the Zone A authority catalog, not a mirror of unused entries.
- * Codes added to the server registry later resolve through the unknown-code
- * fallback chain until mapped here — forward compatible by design.
+ * The Record is keyed by ErrorCode, so the compiler forces a mapping for every
+ * registry code. Codes added to the server registry later resolve through the
+ * unknown-code fallback chain until mapped here — forward compatible by design.
  */
 const ERROR_CODE_KEYS: Record<ErrorCode, keyof typeof zhCN.errors.codes> = {
   AUTH_REQUIRED: "authRequired",

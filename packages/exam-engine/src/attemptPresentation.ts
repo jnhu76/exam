@@ -1,7 +1,7 @@
 import type { ControlFlags, QuestionSnapshot } from "@exam/domain";
 
 /**
- * #294 — injectable RNG seam. Returns a number in [0, 1). Production uses
+ * Injectable RNG seam. Returns a number in [0, 1). Production uses
  * Math.random; tests inject a fixed sequence so permutations are proven
  * deterministically instead of by probability.
  */
@@ -27,7 +27,7 @@ const CHOICE_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * #294 — materialize the per-attempt presentation order from the published
+ * Materialize the per-attempt presentation order from the published
  * exam snapshot. Called ONLY at new-attempt creation; resume/restore replay
  * the frozen `attempt.questionSnapshot` and never call this again.
  *

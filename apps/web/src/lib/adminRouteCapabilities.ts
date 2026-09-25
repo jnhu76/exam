@@ -1,12 +1,12 @@
 /**
- * P4-C2 centralized admin-console route → capability contract.
+ * Centralized admin-console route → capability contract.
  *
  * This is the SINGLE source of truth for "which capability grants page access
  * to a given /admin/* route". It is consulted by:
  *   - {@link AdminLayout} (per-route capability guard at the shell boundary);
  *   - the frontend route-guard tests.
  *
- * Authority rule (P4-R0 §8.3 / task §5.2):
+ * Authority rule:
  *   - Page access is a centralized route-level capability guard (this module).
  *   - Per-action gating within a page (e.g. ExamDetailPage's many buttons) uses
  *     the per-action `can(user, permission)` helper directly — NOT a duplicate
@@ -18,8 +18,7 @@
  * {@link can} in `capabilities.ts`.
  *
  * Each entry's capability is derived from the page's primary backend read
- * endpoint + the existing sidebar capability + the frozen P4 role matrix
- * (P4-R0 §12), never guessed.
+ * endpoint + the existing sidebar capability, never guessed.
  */
 import { Permission, type PermissionKey } from "@exam/authz";
 import type { MeResponse } from "@exam/contracts";
@@ -50,19 +49,9 @@ export interface AdminRouteCapability {
  * pattern specificity (longest static-prefix match wins, then parameterized),
  * not by array order.
  *
- * The mappings mirror the frozen P4 role matrix (P4-R0 §12) and the sidebar
- * visibility predicates in `capabilities.ts`:
- *   dashboard / system        → SystemHealthView / SystemDiagnosticsView
- *   courses*                  → CourseView / Create / Update
- *   questions*                → QuestionView / Create / Update / Import
- *   exams* / results          → ExamView / Create / Update / ScoreAllView
- *   grading-queue*            → GradingQueueView / GradingDetailView
- *   proctor*                  → ExamRoomView
- *   users / candidates        → UserView / CandidateView
- *   candidate-fields*         → CandidateFieldView
- *   settings                  → SettingsView
- *   audit-logs / import-logs  → AuditLogView
- *   attempts/:id              → AttemptTimelineView (admin attempt detail)
+ * Entries mirror the sidebar visibility predicates in `capabilities.ts`;
+ * role→capability membership is owned by the presets in `packages/authz`
+ * (never re-derived per page).
  */
 export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
   // Index — redirects to the actor's landing path; no capability gate.
@@ -74,8 +63,8 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     capability: Permission.SystemBusinessSummaryView,
     label: "dashboard",
   },
-  // P7-E2C: Operations surface (health / diagnostics / backup / restore
-  // readiness) — Admin + Maintainer.
+  // Operational surface (health / diagnostics / backup / restore readiness);
+  // membership follows the operational presets, not a role label.
   {
     pattern: "operations",
     capability: Permission.SystemHealthView,
@@ -173,7 +162,7 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     label: "proctor-workspace",
   },
 
-  // Proctor Recovery Center (J6, #303) — Proctor-facing incident work
+  // Proctor Recovery Center — Proctor-facing incident work
   // surface, gated on the backend assignment-scoped incident read
   // capability. Per-incident scoping is enforced server-side (404 for
   // unassigned exams); this gate is only the shell boundary.
@@ -249,7 +238,7 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     label: "attempt-detail",
   },
 
-  // Recovery Center (J5-I1B) — Admin-only read surfaces (contract §5.4/§6.3).
+  // Recovery Center — incident-recovery read surfaces (contract §5.4/§6.3).
   {
     pattern: "recovery",
     capability: Permission.IncidentRecoveryView,
@@ -275,10 +264,8 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
 /**
  * Pattern-segment precision for match ranking. Static segments outrank
  * parameter segments; a pattern with more static segments is more specific.
- * Used by {@link matchAdminRoute} to pick the best match (e.g.
- * "questions/import" must win over "questions/:id/edit" cannot match "import"
- * as :id because :id/edit requires the /edit suffix, but "exams/:id" must NOT
- * swallow "exams/new" — handled by static-prefix-then-specificity).
+ * Used by {@link matchAdminRoute} to pick the best match (e.g. "exams/new"
+ * must win over "exams/:id").
  */
 function patternPrecision(pattern: string): {
   segmentCount: number;

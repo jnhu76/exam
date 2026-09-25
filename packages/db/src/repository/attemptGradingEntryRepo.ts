@@ -24,7 +24,7 @@ type AttemptGradingEntrySelect = (typeof attemptGradingEntries)["$inferSelect"];
 
 /**
  * Input shape for bulk-inserting grading workset entries at submit-freeze
- * time (P3-L0-2E). One entry per frozen question.
+ * time. One entry per frozen question.
  */
 export interface AttemptGradingEntryBulkInsertInput {
   attemptId: string;
@@ -54,7 +54,7 @@ export interface ManualScoreUpdateInput {
 }
 
 /**
- * Creates the attempt-grading-entry repository (P3-L0-2E). This is the single
+ * Creates the attempt-grading-entry repository. This is the single
  * durable grading truth surface. All grading queue, manual scoring, and
  * terminal aggregation reads/writes flow through here.
  *
@@ -157,13 +157,13 @@ export function createAttemptGradingEntryRepo(db: Database) {
      * unique (attemptId, questionId) constraint, scoped to the tenant. Must be
      * called inside a transaction holding the attempt row lock.
      *
-     * Slice 3 authoritative manual-score write path: the manual grading command
-     * reads the entry first (fail-closed when missing, reject when gradingMode
-     * != manual, reject when status != pending_manual per Slice 3C) and then
-     * calls this to UPDATE the SAME entry. No second row is ever created. The
-     * command guarantees the entry is pending when this is called.
+     * Authoritative manual-score write path: the manual grading command reads
+     * the entry first (fail-closed when missing, reject when gradingMode !=
+     * manual, reject when status != pending_manual) and then calls this to
+     * UPDATE the SAME entry. No second row is ever created. The command
+     * guarantees the entry is pending when this is called.
      *
-     * Slice 4 defense-in-depth: the WHERE clause additionally constrains
+     * Defense-in-depth: the WHERE clause additionally constrains
      * `grading_mode = 'manual'` AND `status = 'pending_manual'`. The engine
      * guard remains the primary state-machine authority, but the SQL layer now
      * refuses to overwrite a `completed_manual` entry or complete an `auto`
@@ -241,7 +241,7 @@ export function createAttemptGradingEntryRepo(db: Database) {
       ctx: TenantContext | RequestContext,
       options: {
         examId?: string;
-        /** Assigned-exam scope filter (issue #296). Empty array = assigned to
+        /** Assigned-exam scope filter. Empty array = assigned to
          * nothing → zero rows BY CONTRACT (applied BEFORE pagination). */
         examIds?: string[];
         limit?: number;
@@ -261,7 +261,7 @@ export function createAttemptGradingEntryRepo(db: Database) {
         conditions.push(eq(examAttempts.examId, options.examId));
       }
       if (options.examIds) {
-        // Issue #296: scope filter BEFORE pagination. An empty scope is the
+        // scope filter BEFORE pagination. An empty scope is the
         // zero-rows contract, never "no filter" (explicit `false` beats any
         // driver quirk around `IN ()`).
         if (options.examIds.length === 0) {
@@ -314,7 +314,7 @@ export function createAttemptGradingEntryRepo(db: Database) {
       ctx: TenantContext | RequestContext,
       options: {
         examId?: string;
-        /** Assigned-exam scope filter (issue #296). Empty array = zero total
+        /** Assigned-exam scope filter. Empty array = zero total
          * BY CONTRACT — list and count MUST agree on the same filter. */
         examIds?: string[];
       } = {},

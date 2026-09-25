@@ -76,8 +76,8 @@ export function shouldEnrollmentComplete(
   ) {
     return true;
   }
-  // Untimed exams (#291 Phase A) have no close cutoff — only the retake
-  // rules above can complete the enrollment.
+  // Untimed exams have no close cutoff — only the retake rules above can
+  // complete the enrollment.
   if (exam.closeAt !== null && now >= exam.closeAt) {
     return true;
   }
@@ -126,18 +126,18 @@ export async function readGradingSnapshot(
  * Computes the grading result by delegating to the domain-gradeAnswers function.
  * Returns a ScoreResult with per-question scores, total, and pass/fail.
  *
- * P3-L0-2 (ADR-008): grading reads the frozen `submitted_answers` snapshot,
- * NOT the mutable draft `answers` column. A submitted attempt's score is
- * derived from exactly the answer set captured under the submit lock. The
- * snapshot's `{ questionId, value }` entries are mapped to the minimal
- * AnswerRecord shape gradeAnswers expects (version/savedAt are irrelevant
- * to scoring — only questionId + answer matter).
+ * ADR-008: grading reads the frozen `submitted_answers` snapshot, NOT the
+ * mutable draft `answers` column. A submitted attempt's score is derived from
+ * exactly the answer set captured under the submit lock. The snapshot's
+ * `{ questionId, value }` entries are mapped to the minimal AnswerRecord shape
+ * gradeAnswers expects (version/savedAt are irrelevant to scoring — only
+ * questionId + answer matter).
  *
- * TODO(P3-L0-4): once the backfill script populates submitted_answers for
- * all historical submitted/graded attempts, drop the draft fallback and
- * require submitted_answers strictly. Until then, legacy attempts with a
- * NULL submitted_answers column fall back to draft answers so they remain
- * gradeable during the migration window.
+ * COMPATIBILITY: rows persisted before the freeze column existed may still have
+ * a NULL `submitted_answers` (see apps/api/src/scripts/backfill-submitted-answers.ts);
+ * those fall back to draft answers so they remain gradeable. The fallback is
+ * not a second scoring authority — remove it only when no reachable row can
+ * have a NULL snapshot.
  */
 export function computeGradingResult(
   attempt: ExamAttempt,
@@ -163,7 +163,7 @@ export function computeGradingResult(
 }
 
 /**
- * Canonical terminal grading closure (P3-FORMAL-P0-A).
+ * Canonical terminal grading closure.
  *
  * One seam closes the terminal projection for both auto and manual grading.
  * It is provenance-agnostic: it does NOT know (and must not know) whether the
@@ -171,26 +171,13 @@ export function computeGradingResult(
  * from `gradeQuestion` completing the last pending manual entry. Its sole
  * precondition is an authoritative terminal grading workset, which
  * {@link aggregateGradingEntries} validates up front (exact entry count,
- * question-universe match, per-entry terminal status: `auto→completed_auto`,
- * `manual→completed_manual`, non-null in-range earnedScore). If any entry is
- * not terminal, the aggregator throws before any projection is written.
+ * question-universe match, per-entry terminal status, non-null in-range
+ * earnedScore). If any entry is not terminal, the aggregator throws before any
+ * projection is written.
  *
- * The closure performs exactly:
- *
- *   1. load attempt; reject if missing
- *   2. validate the submitted → graded state-machine transition is legal
- *      (no graded/voided/canceled attempts; an attempt awaiting manual work
- *      still passes — see the manual-path note below)
- *   3. load entries + aggregate via the single canonical scorer (this is the
- *      authority for terminality: a non-terminal workset throws here)
- *   4. write Attempt terminal projection (status, gradingResult, score,
- *      passed, gradedAt, gradingStatus — fully_graded once the workset is
- *      terminal under both modes)
- *   5. lock Enrollment `FOR UPDATE` (same caller transaction)
- *   6. select enrollment result via {@link shouldSelectAttempt}
- *   7. evaluate enrollment completion via {@link shouldEnrollmentComplete}
- *   8. write Enrollment projection (status, finalScore, finalPassed,
- *      finalAttemptId) when selected
+ * The closure writes the Attempt terminal projection (status, gradingResult,
+ * score, passed, gradedAt, gradingStatus) and then the Enrollment projection
+ * (status, finalScore, finalPassed, finalAttemptId when selected).
  *
  * Manual-path note: `gradeQuestion` completes the last pending manual entry
  * (setting it to `completed_manual`) BEFORE calling this closure. By the time
@@ -204,21 +191,20 @@ export function computeGradingResult(
  *
  * The caller MUST hold the attempt row lock (`findByIdForUpdate`) for the
  * duration of this call so the read-aggregate-write + enrollment lock is
- * atomic against concurrent grading calls. `gradeQuestion` and the auto
- * paths (`submitAndGradeAttempt`, `autoSubmitAndGrade`, admin force-submit,
+ * atomic against concurrent grading calls. `gradeQuestion` and the auto paths
+ * (`submitAndGradeAttempt`, `autoSubmitAndGrade`, admin force-submit,
  * `deadlineReconciliation`) all wrap this in a transaction holding that lock.
  *
  * Idempotency vs. retry vs. historical inconsistency:
  *   - Transaction retry (40001/40P01): re-execution re-reads the attempt; if
- *     the prior attempt committed, the transition guard at step 2 fires
+ *     the prior attempt committed, the transition guard fires
  *     (`graded → grade` is not legal) and the caller's idempotent wrapper
  *     returns the committed result. Retry therefore never observes a
  *     half-closed committed state.
  *   - Pre-existing inconsistent historical rows (attempt graded but
- *     enrollment stale/NULL from the pre-repair manual path) are NOT repaired
- *     by this closure: the transition guard rejects `graded` attempts rather
- *     than re-projecting. Such rows require a separate data-repair follow-up
- *     (out of scope for P3-FORMAL-P0-A; reported in the final report).
+ *     enrollment stale/NULL) are NOT repaired by this closure: the transition
+ *     guard rejects `graded` attempts rather than re-projecting. Such rows
+ *     require a separate data-repair path.
  *
  * @returns true if the attempt was newly transitioned to graded by this call;
  *   false if it was already graded (caller-treated as idempotent no-op).
@@ -282,15 +268,10 @@ export async function finalizeTerminalGrading(
     passed: aggregated.passed,
     gradedAt: now,
     // gradingStatus is the authoritative scoring-LIFECYCLE label, established
-    // at the submit/freeze barrier. Three reaching states are possible:
-    //   - AutoGraded (pure-objective auto path): preserved as-is.
-    //   - PendingManual reaching closure via the manual path: by this point
-    //     gradeQuestion has completed the last pending manual entry, so the
-    //     lifecycle advances to FullyGraded.
-    //   - undefined (legacy column predating P3-L0-2C): classified via the
-    //     canonical text_response classifier (Defect B prevention).
-    // The closure itself is mode-agnostic; it derives the lifecycle label
-    // from the attempt's pre-closure gradingStatus, not from a caller flag.
+    // at the submit/freeze barrier: it advances PendingManual → FullyGraded
+    // here, is preserved otherwise, and is classified on rows persisted before
+    // the column existed. The closure derives it from the attempt's pre-closure
+    // gradingStatus, never from a caller flag.
     gradingStatus:
       attempt.gradingStatus === GradingStatus.PendingManual
         ? GradingStatus.FullyGraded
@@ -365,7 +346,7 @@ export async function finalizeTerminalGrading(
  * {@link finalizeTerminalGrading}. The terminal-workset precondition is
  * enforced inside the closure by {@link aggregateGradingEntries}.
  *
- * P3-L0-2C terminal guard (unchanged): an attempt awaiting manual grading
+ * Terminal guard: an attempt awaiting manual grading
  * must NOT be advanced to `graded` through the automatic finalization path.
  * Fail closed — only `gradeQuestion` (manual completion) may close a
  * pending_manual attempt, and it does so by completing the last pending
@@ -419,7 +400,7 @@ export async function finalizeGrading(
  * ScoreResult (re-read or snapshot-backed so the response reflects committed
  * truth; an already-graded attempt replays its persisted result).
  *
- * P3-FORMAL-P0-D2: the caller MUST mint the transaction-affine capability via
+ * The caller MUST mint the transaction-affine capability via
  * `lockEnrollmentAndAttempt` in the same transaction before calling this. The
  * capability is the EA protocol authority threaded through to
  * {@link finalizeTerminalGrading}. Terminal scoring flows through the SAME
@@ -454,16 +435,15 @@ export async function gradeAttemptIdempotent(
     };
   }
 
-  // P3-L0-2C: an attempt awaiting manual grading holds at `submitted`. The
-  // automatic idempotent grading path must NOT advance it to `graded`; it
+  // ADR-008: an attempt awaiting manual grading holds at `submitted` and the
+  // automatic idempotent grading path must NOT advance it to `graded`. It
   // returns the partial auto-graded score (objective questions only) without
-  // finalizing, so the manual-grading queue remains authoritative. Branches
-  // on the established gradingStatus — no question-type rescan here.
+  // finalizing, so the manual-grading queue stays authoritative. Branches on
+  // the established gradingStatus — no question-type rescan here.
   //
-  // This partial score is a RESPONSE shape only (never persisted); it is the
-  // one remaining use of `computeGradingResult` in the grading pipeline, and
-  // it does NOT flow into terminal persistence. Slice 4 forbids any
-  // production terminal path from using its output as a score authority.
+  // This partial score is a RESPONSE shape only (never persisted) and does NOT
+  // flow into terminal persistence: no production terminal path may use its
+  // output as a score authority.
   if (snapshot.attempt.gradingStatus === GradingStatus.PendingManual) {
     const partial = computeGradingResult(snapshot.attempt, snapshot.exam, now);
     return {

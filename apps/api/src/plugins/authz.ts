@@ -8,7 +8,7 @@
  * (`createAttemptResolver` / `createExamResolver`). The decorator is the
  * accepted request-path wiring seam for resource-aware authorization
  * (`docs/adr/ADR-010-scoped-rbac-architecture.md` §3.9, §Resource Resolver
- * Matrix; precedent: `plugins/tenant.ts` onRoute pattern).
+ * Matrix).
  *
  * Routes opt in by replacing `fastify.requireCapability(perm)` with
  * `fastify.requireScopedCapability(perm, resolverKey, resourceIdKey)` in their
@@ -207,14 +207,12 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
     teacherCourseGate: teacherAssignmentGate,
   });
   fastify.decorate("requireScoreCapability", () => {
-    // P4-C1: attach an introspection-only `_isScoreCapability: true` tag so the
-    // whole-app route regression lock can classify this gate as a protected
-    // capability/ownership gate. Unlike the other resource-aware gates this
-    // decorator does not attach `.authz` metadata (the dedicated score gate is
-    // documented in P4-V0 §7.2 / §8 as "80 metadata gates + 1 dedicated score
-    // gate = 81"); the tag closes that introspection gap without changing any
-    // runtime authorization decision. Production-neutral, mirrors the
-    // `_isAuthenticate` / `_isRequireRole` tag convention.
+    // Introspection-only `_isScoreCapability: true` tag so the whole-app route
+    // regression lock can classify this gate as a protected capability gate.
+    // Unlike the other resource-aware gates this decorator attaches no `.authz`
+    // metadata, so the tag closes the classification gap without changing any
+    // runtime authorization decision. Mirrors the `_isAuthenticate` /
+    // `_isRequireRole` tag convention.
     const preHandler = (
       request: FastifyRequest,
       reply: FastifyReply,

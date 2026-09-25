@@ -1,4 +1,4 @@
-// Identity lifecycle policy constants (#297).
+// Identity lifecycle policy constants.
 //
 // Fixed constants, not env knobs: TTLs for credential-grade tokens are a
 // security policy, not a deployment tuning surface. Changing them is a code

@@ -282,9 +282,8 @@ export const QuestionSchema = z.object({
   difficulty: z.number().int().min(1).max(5),
   tags: z.array(z.string()),
   gradingRule: GradingRuleSchema,
-  // P3-L0-1: rubric dual-layer — authoring/editing source on the live row.
-  // text_response requires non-empty at publish (enforced in P3-L0-5);
-  // objective questions carry null.
+  // Rubric dual-layer: authoring/editing source on the live row.
+  // text_response requires non-empty at publish; objective questions carry null.
   rubric: z.string().nullable().default(null),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

@@ -235,24 +235,11 @@ export function ProctorDashboardPage() {
   const [extendTarget, setExtendTarget] = useState<CandidateStatusItem | null>(
     null,
   );
-  // Operator time-grant dialog state machine (REC-I4-I3B2 + review P1-3/P1-4).
-  //
-  //   draft        — dialog open, operationId minted, fields still editable.
-  //                  Submitting freezes a PendingTimeGrant and moves to
-  //                  `submitting`.
-  //   submitting   — a frozen command is in flight; fields are read-only.
-  //   indeterminate— the request failed without a confirmed outcome (network
-  //                  drop / 5xx where commit status is unknown). The frozen
-  //                  command is RETAINED and reused verbatim on retry so the
-  //                  same operationId cannot silently mint a duplicate grant.
-  //                  It is also persisted through the shared coordinator
-  //                  authority in localStorage so a refresh / navigation cannot
-  //                  lose the pending identity.
-  //
-  // A confirmed outcome (granted / idempotent_replay / terminal), a confirmed
-  // rejection (4xx with a known code), or an idempotency conflict clears the
-  // frozen command. An indeterminate command for one attempt blocks opening a
-  // grant dialog for a different attempt until it is resolved or discarded.
+  // Operator time-grant dialog state machine (see {@link GrantDialogState}).
+  // The frozen command is persisted through the shared coordinator authority
+  // (localStorage) so a refresh / navigation cannot lose the pending identity.
+  // An indeterminate command for one attempt blocks opening a grant dialog for
+  // a different attempt until it is resolved or discarded.
   const [grantState, setGrantState] = useState<GrantDialogState>(() => ({
     phase: "draft",
     operationId: createContextSafeUuid(),
@@ -265,14 +252,14 @@ export function ProctorDashboardPage() {
   const [flagging, setFlagging] = useState(false);
   const [misconductTarget, setMisconductTarget] =
     useState<CandidateStatusItem | null>(null);
-  // J5-I1C Slice 3 (review P1): misconduct is an operationId-keyed durable
-  // command (J5-R0 §8.2). The FULL command — operationId + severity + notes —
-  // is frozen on first submit and replayed verbatim on every retry. Rebuilding
-  // severity/notes from editable state on a retry would reuse the same
-  // operationId with a drifted payload, which the server correctly rejects as
-  // IDEMPOTENCY_CONFLICT (or worse, silently mutates the mark). The frozen
-  // command is also persisted in sessionStorage so a refresh / navigation
-  // cannot lose the pending identity. See {@link MisconductDialogState}.
+  // Misconduct is an operationId-keyed durable command (J5-R0 §8.2). The FULL
+  // command — operationId + severity + notes — is frozen on first submit and
+  // replayed verbatim on every retry. Rebuilding severity/notes from editable
+  // state on a retry would reuse the same operationId with a drifted payload,
+  // which the server correctly rejects as IDEMPOTENCY_CONFLICT (or worse,
+  // silently mutates the mark). The frozen command is also persisted in
+  // sessionStorage so a refresh / navigation cannot lose the pending identity.
+  // See {@link MisconductDialogState}.
   const [misconductState, setMisconductState] = useState<MisconductDialogState>(
     () => ({
       phase: "draft",
@@ -285,11 +272,11 @@ export function ProctorDashboardPage() {
   const [forceSubmitting, setForceSubmitting] = useState(false);
 
   /**
-   * Force-submit retry-identity state (J5-I1C Slice 2 review P1-2 + re-review
-   * P1-1). A force-submit is an operationId-keyed durable command; a lost
-   * response after the server committed must NOT cause a retry to mint a NEW
-   * operationId, or the effect is applied twice. The frozen command is
-   * persisted in sessionStorage (same-tab) and reused verbatim on retry.
+   * Force-submit retry-identity state (J5-R0 §8.2). A force-submit is an
+   * operationId-keyed durable command; a lost response after the server
+   * committed must NOT cause a retry to mint a NEW operationId, or the effect
+   * is applied twice. The frozen command is persisted in sessionStorage
+   * (same-tab) and reused verbatim on retry.
    *
    *   idle          — no command in flight.
    *   submitting    — a frozen command is in flight.
@@ -308,7 +295,7 @@ export function ProctorDashboardPage() {
    * both reconstruct `indeterminate` (fail-safe: retry is always an
    * idempotent-safe replay of the same operationId).
    *
-   * Page-level recovery (re-review P1-1): the frozen command is hydrated from
+   * Page-level recovery: the frozen command is hydrated from
    * sessionStorage on mount and whenever `user` changes, and surfaced via a
    * PAGE-LEVEL banner that is independent of the candidate's live status. The
    * server commits the operation but the response is lost; by the next status
@@ -344,7 +331,7 @@ export function ProctorDashboardPage() {
 
   /**
    * Hydrates the force-submit pending authority from sessionStorage on mount /
-   * user change (re-review P1-1). On a CONFIRMED-in-session command restores
+   * user change. On a CONFIRMED-in-session command restores
    * it as `indeterminate` so the page-level banner shows it (independent of
    * the candidate's live status). On a DAMAGED record surfaces a toast and
    * leaves the slot empty. This runs synchronously during render-time state
@@ -363,13 +350,13 @@ export function ProctorDashboardPage() {
     }
     if (result.kind === "corrupt") {
       // A damaged pending record must be surfaced — silently treating it as
-      // "no pending" would hide a stuck global slot (P2-2). The record was
+      // "no pending" would hide a stuck global slot. The record was
       // already cleared by the authority; surface a one-shot toast.
       toast.error(t("admin.proctorDashboard.forceSubmit.corruptCleared"));
       setForceSubmitState({ phase: "idle" });
       return;
     }
-    // Re-review P2: never downgrade a stronger in-session fact. Storage alone
+    // Never downgrade a stronger in-session fact. Storage alone
     // reconstructs `indeterminate`, but when the session ALREADY knows the
     // outcome was confirmed (cleanup_failed) — or a POST is still in flight
     // (submitting) — for the SAME operationId, keep the stronger state: the
@@ -418,8 +405,8 @@ export function ProctorDashboardPage() {
     };
   }, [loadStatus]);
 
-  // REC-I4-C1: subscribe to cross-tab authority changes so this tab's dialog
-  // state stays in sync when another tab reserves or clears a pending command.
+  // Subscribe to cross-tab authority changes so this tab's dialog state stays
+  // in sync when another tab reserves or clears a pending command.
   useEffect(() => {
     const coordinator = getPendingGrantCoordinator();
     const unsubscribe = coordinator.subscribe((event) => {
@@ -464,17 +451,17 @@ export function ProctorDashboardPage() {
       // Block THIS dialog and restore the recovery banner from durable
       // authority. The React state may have drifted to idle via page reload or
       // other UI state bugs — as long as the durable authority exists the
-      // banner must be visible (P2 fix: a confirmed + cleanup-failure record
+      // banner must be visible (a confirmed + cleanup-failure record
       // that was hidden blocked later operations with no recovery path).
       //
-      // Phase reconstruction is fail-safe (re-review P1): the durable record
-      // does NOT carry the server outcome. The same bytes can mean a
-      // lost-response (indeterminate — retry REQUIRED) or a confirmed outcome
-      // whose cleanup failed (cleanup_failed — dismiss only). Only the
-      // in-session React state knows "confirmed": keep cleanup_failed when it
-      // already holds that fact for the SAME operationId, otherwise
-      // reconstruct as indeterminate so the banner keeps the retry entry
-      // (replaying the same operationId is always idempotent-safe).
+      // Phase reconstruction is fail-safe: the durable record does NOT carry
+      // the server outcome. The same bytes can mean a lost-response
+      // (indeterminate — retry REQUIRED) or a confirmed outcome whose cleanup
+      // failed (cleanup_failed — dismiss only). Only the in-session React state
+      // knows "confirmed": keep cleanup_failed when it already holds that fact
+      // for the SAME operationId, otherwise reconstruct as indeterminate so the
+      // banner keeps the retry entry (replaying the same operationId is always
+      // idempotent-safe).
       setForceSubmitBlockedReason(
         t("admin.proctorDashboard.forceSubmit.blockedPending"),
       );
@@ -507,7 +494,7 @@ export function ProctorDashboardPage() {
    * existing pending command for the SAME attempt verbatim (a retry), else
    * mints ONE operationId for the whole user action. Persists the command
    * BEFORE the POST and VERIFIES the write — if persistence fails the POST is
-   * SUPPRESSED (fail-closed, re-review P1-2: the retry-identity contract
+   * SUPPRESSED (fail-closed: the retry-identity contract
    * includes refresh recovery, so an unpersisted command cannot be safely
    * retried). Classifies the outcome as before.
    */
@@ -515,7 +502,7 @@ export function ProctorDashboardPage() {
     command: PendingForceSubmitCommand,
     options: { fromDialog: boolean },
   ): Promise<void> {
-    // Defense-in-depth (CodeRabbit round-4): the card buttons are capability-
+    // Defense-in-depth: the card buttons are capability-
     // gated, but the hydrated-command retry path (page-level banner) bypasses
     // the card. Never POST without the capability; dismiss stays available so
     // a stale local command can still be cleared.
@@ -527,9 +514,9 @@ export function ProctorDashboardPage() {
       command,
       createdAt: Date.now(),
     };
-    // Fail-closed persistence (re-review P1-2). Persist BEFORE the POST and
-    // verify the write; if the durable copy cannot be trusted, do NOT send —
-    // a lost response would otherwise lose the operationId forever.
+    // Fail-closed persistence. Persist BEFORE the POST and verify the write; if
+    // the durable copy cannot be trusted, do NOT send — a lost response would
+    // otherwise lose the operationId forever.
     const saved = savePendingForceSubmit(authority);
     if (!saved.ok) {
       toast.error(t("admin.proctorDashboard.forceSubmit.persistenceFailed"));
@@ -553,7 +540,7 @@ export function ProctorDashboardPage() {
       });
       const cleared = clearPendingForceSubmit(user.organizationId, user.id);
       if (!cleared.ok) {
-        // P2 fix: the outcome is CONFIRMED, but the stale authority must not
+        // The outcome is CONFIRMED, but the stale authority must not
         // be hidden — it blocks later force-submits with no recovery path if
         // left in sessionStorage while the UI shows idle. Transition to
         // cleanup_failed so the page-level banner shows the stale record and
@@ -575,7 +562,7 @@ export function ProctorDashboardPage() {
       }
       const cleared = clearPendingForceSubmit(user.organizationId, user.id);
       if (!cleared.ok) {
-        // P2 fix: same as the success path — the rejection is CONFIRMED but
+        // Same as the success path — the rejection is CONFIRMED but
         // the stale authority must not be hidden. Transition to cleanup_failed
         // so the page-level banner offers a dismiss affordance.
         toast.warning(t("admin.proctorDashboard.forceSubmit.cleanupFailed"));
@@ -611,14 +598,13 @@ export function ProctorDashboardPage() {
             attemptId,
             operationId: createContextSafeUuid(),
             reason: t("admin.proctorDashboard.forceSubmit.reason"),
-            // Target identity frozen at mint time (review P1-2): the pending
-            // authority must know which exam/candidate it belongs to, so a
-            // recovery surface on a DIFFERENT exam page can identify the
-            // command instead of offering a contextless destructive retry.
-            // The candidate snapshot must NEVER be empty — the loader treats
-            // an empty label as corrupt and clears the record, destroying the
-            // operation identity this save is meant to protect (re-review
-            // P1); fall back to a stable non-empty label when the candidate
+            // Target identity frozen at mint time: the pending authority must
+            // know which exam/candidate it belongs to, so a recovery surface on
+            // a DIFFERENT exam page can identify the command instead of offering
+            // a contextless destructive retry. The candidate snapshot must NEVER
+            // be empty — the loader treats an empty label as corrupt and clears
+            // the record, destroying the operation identity this save is meant to
+            // protect; fall back to a stable non-empty label when the candidate
             // left the polling projection while the dialog was open.
             examId,
             candidateName:
@@ -667,7 +653,7 @@ export function ProctorDashboardPage() {
   async function handleGrantTime() {
     // Defense-in-depth: the card extend button is capability-gated, but the
     // dialog retry re-enters here after hydration; never POST without the
-    // capability (CodeRabbit round-4).
+    // capability.
     if (
       !extendTarget?.attemptId ||
       !user ||
@@ -1096,10 +1082,10 @@ export function ProctorDashboardPage() {
 
   /**
    * Handles misconduct flag for a candidate. Fail-closed durable command
-   * (J5-I1C Slice 3, review P1): the FULL frozen command — operationId +
-   * severity + notes — is persisted BEFORE the first POST and the write
-   * VERIFIED; if persistence fails the POST is SUPPRESSED (an unpersisted
-   * identity would be lost on reload and a later retry would mint a duplicate).
+   * (J5-R0 §8.2): the FULL frozen command — operationId + severity + notes — is
+   * persisted BEFORE the first POST and the write VERIFIED; if persistence fails
+   * the POST is SUPPRESSED (an unpersisted identity would be lost on reload and
+   * a later retry would mint a duplicate).
    *
    * On a retry (`indeterminate`) the frozen command is replayed VERBATIM — it
    * is never rebuilt from editable state, so the same operationId cannot drift
@@ -1113,7 +1099,7 @@ export function ProctorDashboardPage() {
   async function handleFlagMisconduct() {
     // Defense-in-depth: the card flag button and the banner-retry dialog are
     // capability-gated at the affordance, but the handler re-enters after
-    // hydration; never POST without the capability (CodeRabbit round-4).
+    // hydration; never POST without the capability.
     if (
       !user ||
       !examId ||
@@ -1336,13 +1322,13 @@ export function ProctorDashboardPage() {
       />
 
       {/*
-        Page-level pending force-submit banner (re-review P1-1 + P2 fix).
-        Independent of the candidate's live status: the server may have
-        committed the operation but the response was lost, and by the next
-        status poll the attempt is already submitted/graded — so the candidate
-        card no longer renders a force-submit button. Without this page-level
-        banner the pending command (a global per-admin slot) would become
-        unreachable and block every later force-submit.
+        Page-level pending force-submit banner. Independent of the candidate's
+        live status: the server may have committed the operation but the response
+        was lost, and by the next status poll the attempt is already
+        submitted/graded — so the candidate card no longer renders a
+        force-submit button. Without this page-level banner the pending command
+        (a global per-admin slot) would become unreachable and block every later
+        force-submit.
 
         Two phases render the banner:
         - `indeterminate`: outcome unknown (network drop / 5xx). Offers retry
@@ -1353,13 +1339,12 @@ export function ProctorDashboardPage() {
           pointless since the server already committed. A record reconstructed
           from storage alone is always `indeterminate`, never this phase.
 
-        Exam-scope guard (review P1-2): the pending command targets the exam
-        stored in its identity. When that is NOT the current page's exam, the
-        banner must identify the target (exam + candidate) and must NOT offer
-        the destructive retry — retrying here would force-submit the OTHER
-        exam's candidate from a page that gives no context. Instead: identify,
-        navigate back to the owning exam, or dismiss (clearing the global
-        slot is always safe).
+        Exam-scope guard: the pending command targets the exam stored in its
+        identity. When that is NOT the current page's exam, the banner must
+        identify the target (exam + candidate) and must NOT offer the destructive
+        retry — retrying here would force-submit the OTHER exam's candidate from a
+        page that gives no context. Instead: identify, navigate back to the owning
+        exam, or dismiss (clearing the global slot is always safe).
       */}
       {(forceSubmitState.phase === "indeterminate" ||
         forceSubmitState.phase === "cleanup_failed") && (
@@ -1440,14 +1425,14 @@ export function ProctorDashboardPage() {
         </div>
       )}
 
-      {/* Misconduct page-level recovery banner (review P1). Mirrors the
-          force-submit banner: a pending misconduct command (indeterminate) or a
-          confirmed-but-uncleaned record (cleanup_failed) stays reachable even
-          after the target candidate card disappears from the live projection.
-          Without this banner a lost response whose target graded before the next
-          poll would leave the pending command unreachable (the global per-admin
-          pending slot would block every later misconduct mark). cleanup_failed
-          is dismiss-only (the POST is pointless on a confirmed outcome). */}
+      {/* Misconduct page-level recovery banner. Mirrors the force-submit banner:
+          a pending misconduct command (indeterminate) or a confirmed-but-uncleaned
+          record (cleanup_failed) stays reachable even after the target candidate
+          card disappears from the live projection. Without this banner a lost
+          response whose target graded before the next poll would leave the pending
+          command unreachable (the global per-admin pending slot would block every
+          later misconduct mark). cleanup_failed is dismiss-only (the POST is
+          pointless on a confirmed outcome). */}
       {(misconductState.phase === "indeterminate" ||
         misconductState.phase === "cleanup_failed") && (
         <div
@@ -1693,10 +1678,10 @@ export function ProctorDashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Misconduct dialog (J5-I1C Slice 3, review P1). Controlled Dialog so the
-          retry state is rendered inside; inputs are frozen read-only once a
-          command is frozen (submitting / indeterminate / cleanup_failed) so a
-          retry cannot drift the payload under the same operationId. */}
+      {/* Misconduct dialog (J5-R0 §8.2). Controlled Dialog so the retry state is
+          rendered inside; inputs are frozen read-only once a command is frozen
+          (submitting / indeterminate / cleanup_failed) so a retry cannot drift
+          the payload under the same operationId. */}
       <Dialog
         open={misconductDialogOpen}
         onOpenChange={(open) => {
@@ -1785,9 +1770,9 @@ export function ProctorDashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Force-submit confirmation dialog (J5-I1C Slice 2 review P1-2).
-          Controlled Dialog (like the time-grant dialog) so opening is driven by
-          React state, and the retry state is rendered inside the dialog. */}
+      {/* Force-submit confirmation dialog (J5-R0 §8.2). Controlled Dialog (like
+          the time-grant dialog) so opening is driven by React state, and the
+          retry state is rendered inside the dialog. */}
       <Dialog
         open={forceSubmitTargetAttemptId !== null}
         onOpenChange={(open) => {
@@ -1971,10 +1956,10 @@ export function ProctorDashboardPage() {
                           variant="outline"
                           onClick={() => {
                             if (!user) return;
-                            // Honor the pending authority (J5-I1C Slice 3): an
-                            // unresolved command for THIS attempt is restored so
-                            // the retry replays the same operationId; one for a
-                            // DIFFERENT attempt blocks the dialog.
+                            // Honor the pending authority: an unresolved command
+                            // for THIS attempt is restored so the retry replays
+                            // the same operationId; one for a DIFFERENT attempt
+                            // blocks the dialog.
                             const pending = loadPendingMisconduct(
                               user.organizationId,
                               user.id,

@@ -75,8 +75,8 @@ function useProfileSummaryLabels(): ProfileSummaryLabels {
 
 /**
  * Admin page listing organization-owned exam policy profiles. Profiles are
- * reusable authoring templates (P7-M2); applying one to an exam is
- * copy-on-apply, so editing/deleting a profile never affects existing exams.
+ * reusable authoring templates; applying one to an exam is copy-on-apply, so
+ * editing/deleting a profile never affects existing exams.
  */
 export function ExamProfilePage() {
   const { t } = useTranslation();

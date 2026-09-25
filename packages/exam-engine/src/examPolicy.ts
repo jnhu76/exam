@@ -31,8 +31,7 @@ import {
  * Control flags the runtime cannot enforce. Product vocabulary (wire/domain/
  * DB) is retained for historical-row compatibility, but activation is rejected
  * by the canonical validator. Order is normative: conflict findings are emitted
- * in this order. (detectTabSwitch/disableCopyPaste/restrictIp/requireLockdown;
- * #295 gates requireLockdown implementation — this list only stops promising.)
+ * in this order. The list only stops authoring from promising a capability.
  */
 const UNSUPPORTED_CONTROL_FLAGS = [
   "detectTabSwitch",
@@ -49,8 +48,8 @@ const UNSUPPORTED_CONTROL_FLAGS = [
  * shape (defaulting to `strict` / `null` caps, matching
  * `normalizeInterruptionPolicyConfiguration` and the DB column defaults).
  *
- * P7-M2 will feed this same projection from `profile defaults + exam overrides`
- * — runtime consumers never depend on a mutable profile row.
+ * Profile defaults are materialized into the exam row at authoring
+ * (copy-on-apply) — runtime consumers never depend on a mutable profile row.
  */
 export function resolveExamPolicy(exam: Exam): ResolvedExamPolicy {
   const interruptionTimePolicy: InterruptionTimePolicy =
@@ -189,7 +188,7 @@ export function validateExamPolicy(
 
   // ── Unsupported control flags: activation is rejected canonically. ──
   // detectTabSwitch/disableCopyPaste/restrictIp/requireLockdown have NO
-  // runtime enforcement (#516 product truthfulness): a persisted field, an
+  // runtime enforcement (product truthfulness): a persisted field, an
   // API-accepted value, or a client hint is not a capability, so authoring
   // may not promise them. This is the ONE activation gate — create, draft
   // update, and publish revalidation all funnel through validateExamPolicy.
@@ -217,7 +216,7 @@ export function validateExamPolicyForExam(exam: Exam): ExamPolicyConflict[] {
 }
 
 /**
- * Phase A timing-mode matrix (#291) — the ONE authority for which
+ * Timing-mode matrix — the ONE authority for which
  * (timingMode, durationMinutes, closeAt, interruptionTimePolicy) combinations
  * are legal. Pure; emits at most one `EXAM_TIMING_MODE_INVALID` conflict
  * naming every implicated field.
@@ -230,9 +229,8 @@ export function validateExamPolicyForExam(exam: Exam): ExamPolicyConflict[] {
  *                 exceed the global closeAt
  *   untimed       duration null, closeAt null (open-ended), strict only —
  *                 there is no deadline to compensate
- *   timed_sync    product activation deferred pending the B2 decision;
- *                 the mode core and #292 durable admission runtime already
- *                 exist
+ *   timed_sync    decision-gated: the canonical validator rejects it
+ *                 (timeline frozen in docs/contracts/timed-sync-semantics.md)
  */
 function validateTimingModeMatrix(
   timing: ResolvedExamPolicy["timing"],
@@ -304,8 +302,8 @@ function validateTimingModeMatrix(
     return [];
   }
 
-  // timed_sync — product activation remains deferred pending the B2
-  // decision; the mode core and #292 durable admission runtime already exist.
+  // timed_sync activation is decision-gated: reject it canonically rather than
+  // letting an authoring path persist a mode the runtime does not activate.
   return invalid(["timingMode"], "timed_sync is not supported yet");
 }
 

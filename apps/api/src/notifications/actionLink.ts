@@ -2,13 +2,11 @@ import { isNotificationActionPath } from "@exam/contracts";
 
 // Notification action-link builders + render-time combiner.
 //
-// Authority: P5-N1-R0 §16 (result_published), extended additively for
-// `exam_assigned` under #402/#299. The design is command-specific trusted
-// builders, NOT a generic whitelist URL-security framework: there is one
-// builder per notification type, each producing exactly one canonical path
-// shape, and the shared regex + validator live in @exam/contracts so the
-// builders, the write-time assertion, and the render-time revalidation all
-// use the same single source of truth.
+// The design is command-specific trusted builders, NOT a generic whitelist
+// URL-security framework: there is one builder per notification type, each
+// producing exactly one canonical path shape, and the shared regex + validator
+// live in @exam/contracts so the builders, the write-time assertion, and the
+// render-time revalidation all use the same single source of truth.
 
 /**
  * Builds the canonical result-published action path:

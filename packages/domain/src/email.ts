@@ -1,5 +1,5 @@
 /**
- * Email domain types (M3/P5-0 — Email Outbox + Delivery Runtime).
+ * Email domain types — Email Outbox + Delivery Runtime.
  *
  * This module is the single source of truth for the email abstraction shared
  * across `@exam/db` (outbox persistence) and `@exam/api` (senders, worker,
@@ -41,12 +41,10 @@ export type EmailOutboxStatus =
  * Logical category of an outbox row. Used for filtering / observability only —
  * it does not affect send behavior.
  *
- * A value is added exactly when a production writer starts emitting it and
- * removed when no production writer remains (#300 audit): the `email_outbox`
- * `type` column is plain text with no CHECK constraint, so the union only
- * constrains NEW rows; historical rows keep their persisted value. Current
- * writers: `grade_notification` (result_published), `exam_notification`
- * (exam_assigned), `staff_invitation`, `password_reset`.
+ * A value is added when a production writer starts emitting it and removed
+ * when no production writer remains: the `email_outbox` `type` column is plain
+ * text with no CHECK constraint, so this union only constrains NEW rows;
+ * historical rows keep their persisted value.
  */
 export type EmailType =
   | "password_reset"

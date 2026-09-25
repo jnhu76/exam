@@ -104,7 +104,7 @@ export interface IncidentAggregateExamSummary {
   id: string;
   title: string;
   status: string;
-  /** Exam closeAt — null for untimed exams (#291 Phase A): no upper bound. */
+  /** Exam closeAt — null for untimed exams: no upper bound. */
   closeAt: Date | null;
 }
 
@@ -261,8 +261,8 @@ export interface IncidentAggregate {
   /**
    * Status-derived action candidates ONLY (ADR-014 §3). The repo computes
    * exactly the status machine; the ROUTE layer is the place that filters
-   * them down to the caller's final allowed set (J5-R0 §6.2: action
-   * eligibility = capability + resource scope + status; J5-R0 §6.3: the wire
+   * them down to the caller's final allowed set (contract §7: action
+   * eligibility = capability + resource scope + status; the wire
    * `allowedActions` is the per-caller intersection, never the raw status
    * candidates). The route additionally applies the incident-shape filter
    * (an anchored Incident never exposes `link_attempt`).
@@ -277,7 +277,7 @@ export interface IncidentAggregate {
   snapshotAt: Date;
 }
 
-// ── Proctor Incident Detail types (#303, narrow read projection) ──
+// ── Proctor Incident Detail types (narrow read projection) ──
 
 /**
  * Narrow incident detail for the Proctor Recovery Center — a strict subset of
@@ -362,7 +362,7 @@ export interface ExamRecoveryContext {
     title: string;
     status: string;
     timingMode: string;
-    /** Null for untimed exams (#291 Phase A): open-ended, no closeAt. */
+    /** Null for untimed exams: open-ended, no closeAt. */
     closeAt: Date | null;
   };
   incidentStats: {
@@ -457,7 +457,7 @@ export interface AttemptOperationsContext {
 
 export function createRecoveryRepo(db: Database) {
   /**
-   * listIncidentQueue — Admin Recovery Center queue (J5-I1A §5.4).
+   * listIncidentQueue — Admin Recovery Center queue (contract §5.4).
    *
    * - Org-wide scope, ordered `(created_at DESC, id DESC)`.
    * - Keyset pagination via opaque cursor parsed at the API boundary; the repo
@@ -718,7 +718,7 @@ export function createRecoveryRepo(db: Database) {
             `RECOVERY_AGG_PARENT_BROKEN: incident ${incident.id} exam ${incident.examId}`,
           );
         }
-        // #291 Phase A: closeAt is nullable (untimed exams are open-ended).
+        // closeAt is nullable (untimed exams are open-ended).
         // Null is projected as-is; the route derives the effective deadline
         // through the canonical seam, which maps closeAt=null → null.
 
@@ -1117,7 +1117,7 @@ export function createRecoveryRepo(db: Database) {
     );
   }
 
-  // ── Proctor Incident Detail (#303, narrow read projection) ──
+  // ── Proctor Incident Detail (narrow read projection) ──
 
   /**
    * Narrow incident detail for the Proctor Recovery Center.
@@ -1132,8 +1132,8 @@ export function createRecoveryRepo(db: Database) {
    *   - attemptSummaries (Admin linked-attempt status aggregation)
    *   - activeProctors (Admin proctor assignment visibility)
    *
-   * F3 corrective (human-gate 2026-09-12): these fields are Admin-only
-   * read authority; projecting them here would violate the authority freeze.
+   * These fields are Admin-only read authority; projecting them here would
+   * violate the authority freeze.
    *
    * Snapshot consistency: the whole read (incident + dimensions) runs inside
    * one read-only REPEATABLE READ transaction, matching getIncidentAggregate.
@@ -2282,7 +2282,7 @@ export function deriveStatusActionCandidates(
  * - `force_submit`: `voided` is the only truly invalid state (the Admin
  *   force-submit route; `submitted` rows are recovered to `graded`, and
  *   `grading`/`graded` are idempotent no-ops).
- * - `misconduct_mark`: allowed on ANY attempt status (§16).
+ * - `misconduct_mark`: allowed on ANY attempt status (no status excluded).
  *
  * These are status-derived candidates ONLY. The route layer further filters
  * by the caller's capabilities (attempt.time.grant / attempt.force_submit /

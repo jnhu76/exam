@@ -1,58 +1,18 @@
 /**
  * exam-ui ESLint plugin — visual-authority rules for the Exam frontend.
  *
- * Namespace: `exam-ui/*`. Registered as a local plugin in apps/web/eslint.config.ts.
+ * Namespace: `exam-ui/*`. Registered as a local plugin in
+ * apps/web/eslint.config.ts, which is also the authority for which rules are
+ * wired.
  *
- * Rules:
- *   - exam-ui/prefer-inline-error-banner
- *   - exam-ui/no-business-shadow
- *   - exam-ui/no-arbitrary-typography
- *   - exam-ui/no-typography-authority-conflict (RECON-1 §12; exported, wired in C7)
- *   - exam-ui/no-arbitrary-inline-typography (RECON-1 §15; exported, wired in C6)
- *   - exam-ui/no-heavy-font-weight (UI-PRODUCT-FINISH-CLOSURE-1; forbids
- *     font-semibold always and font-bold outside large metrics)
- *   - exam-ui/no-recipe-recomposition (UI-STABILIZATION-GOAL-1 #305; forbids
- *     the byte-exact raw stacks text-sm+text-muted-foreground, text-xs+
- *     text-muted-foreground, and bare tabular-nums that replicate
- *     type-secondary / type-metadata / type-numeric)
- *
- * Retired (UI-FIELD-ERROR-AUTHORITY-CLOSURE-1, §8): `exam-ui/prefer-field-error`
- * is no longer wired. Its structural recipe (`<p> + text-destructive + text-size`)
- * could not deterministically distinguish FieldError ownership from DOMAIN_WARNING,
- * CONTROL_STATE_FEEDBACK, or INLINE_OPERATION_ERROR roles (4/4 remaining hits
- * were false-semantic-overlap; no sound NARROW detector existed). FieldError
- * remains the canonical semantic authority for "form field validation error";
- * its ownership is enforced by semantic migration review and the authority
- * component tests, not a structural lint proxy.
- *
- * Retired (UI-MIGRATE-N-W3, §12-§13): `exam-ui/no-raw-typography` and
- * `exam-ui/no-raw-surface-recipe` are no longer wired. Each detected a raw
- * recomposition of a semantic recipe (`type-section-title` /
- * `surface-content`) via primitive utility tokens, but after the proven
- * same-role migrations in W3 every remaining hit was false-semantic-overlap:
- *
- *   - no-raw-typography (text-{base,lg} + font-{semibold,bold}) — 4/4
- *     remaining hits were TOPBAR_TITLE / QUESTION_TITLE /
- *     RUNTIME_STATUS_TITLE / OVERLAY_DEADLINE_TITLE, none SECTION_TITLE;
- *   - no-raw-surface-recipe (bg-card + border + rounded-lg/rounded) — 1/1
- *     remaining hit was a SIDEBAR_SURFACE, not a PAGE_CONTENT_SECTION.
- *
- * No sound NARROW AST boundary could distinguish the owner role from these
- * distinct roles: element types appear in both owner and non-owner shapes
- * (PageSection and QuestionHeader both use <h2>; surface-content regions
- * and the sidebar both use rounded-lg), and no role/aria landmark owns the
- * distinction (contrast prefer-inline-error-banner, which narrows soundly on
- * the authority-owned `role="alert"`). This is the same unsoundness that
- * retired prefer-field-error. The `type-section-title` / `surface-content`
- * recipes and the authoritative components (PageSection / FormSection /
- * DataTableShell / StatsCard) remain canonical; ownership is enforced by
- * semantic migration review and the recipe authority tests, not by a
- * structural lint proxy.
- *
- * Scope: business / feature source under apps/web/src (pages, components/shared,
- * components/exam, components/settings, components/question). components/ui
- * (generated shadcn primitives) and components/layout (topbar elevation) are
- * excluded in the flat config.
+ * Every rule here is structural and diagnostic-only (no autofix). Where a
+ * structural proxy cannot distinguish the owning role from a look-alike role,
+ * no rule is written: `prefer-field-error`, `no-raw-typography` and
+ * `no-raw-surface-recipe` were retired for exactly that reason (PageSection and
+ * QuestionHeader both use <h2>; the sidebar and surface-content both use
+ * rounded-lg). Those recipes and their authority components stay canonical and
+ * are enforced by semantic review + the recipe authority tests, NOT by a lint
+ * proxy. Do not reintroduce a structural rule for them.
  */
 import type { ESLint } from "eslint";
 import preferInlineErrorBanner from "./rules/prefer-inline-error-banner";

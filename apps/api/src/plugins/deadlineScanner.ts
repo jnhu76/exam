@@ -119,9 +119,8 @@ export async function scanDeadlineCandidates(
   return { submittedCount, failedCount };
 }
 
-// SYSTEM-M1: system actor context built by the shared @exam/authz factory
-// (role=System, actorId=system:deadline-scanner). Replaces the prior
-// role:"Admin" synthetic context. Scanner code never reads ctx.permissions.
+// System actor context from the shared @exam/authz factory (role=System,
+// actorId from SYSTEM_ACTOR_IDS). Scanner code never reads ctx.permissions.
 function createSystemContext(organizationId: string): RequestContext {
   return createSystemRequestContext(organizationId, SYSTEM_ACTOR_ID);
 }
@@ -206,10 +205,10 @@ export async function autoSubmitAndGrade(
       return false;
     }
 
-    // ADR-005 Slice 3: deadline scanner bypasses minSubmitAfterStartMinutes
-    // (source = deadline_scanner). P3-L0-2: record submissionReason='deadline'
-    // so the frozen submitted_answers carries the deadline-trigger marker.
-    // P3-L0-2E: submitAttempt owns grading workset materialization.
+    // The scanner bypasses minSubmitAfterStartMinutes (ADR-005) and marks the
+    // submission source/reason so the frozen submitted_answers carry the
+    // deadline-trigger marker. Grading workset materialization is owned by
+    // submitAttempt, not by this caller.
     const gradingWorksetRepo = createGradingWorksetRepoAdapter(
       createAttemptGradingEntryRepo(tx),
       ctx,
@@ -262,9 +261,9 @@ export async function autoSubmitAndGrade(
       resolution,
     });
 
-    // Slice 4: gradeAttemptIdempotent now takes the tx-scoped workset repo so
-    // it can aggregate from the entries submitAttempt just materialized.
-    // P3-FORMAL-P0-D2: the capability is the EA protocol authority.
+    // Grade in the same transaction from the workset entries submitAttempt just
+    // materialized; `cap` is the EA (enrollment+attempt) protocol authority
+    // minted under the lock above.
     await gradeAttemptIdempotent(
       exams,
       enrollments,
@@ -338,8 +337,7 @@ export async function scanDatabaseForExpiredAttempts(
 
 const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
   const config = getRuntimeConfig();
-  // P7-E closeout (E0 P2-2): the interval resolves through the canonical
-  // loader — no direct process.env read at plugin registration.
+  // Plugin config reads go through the canonical loader, never process.env.
   const scanIntervalMs = config.heartbeat.deadlineScanIntervalMs;
   deadlineScannerMetrics.scanIntervalMs = scanIntervalMs;
   // #547: WARMING grace origin — recorded once, at registration.

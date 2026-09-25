@@ -27,7 +27,7 @@ export interface QuestionListFilters {
   /** Case-insensitive substring search over question `content` (trimmed). */
   search?: string;
   /**
-   * Restrict the listing to these course ids (issue #286 LIST scope filter).
+   * Restrict the listing to these course ids (LIST scope filter).
    * Applied in SQL BEFORE pagination/count — callers pass the actor's active
    * Teacher assignment set (an EMPTY array here yields zero rows by contract).
    * Combined with `courseId` by intersection at the call site.
@@ -45,7 +45,7 @@ export function createQuestionRepo(db: Database) {
   return {
     ...repo,
     /**
-     * Authorization chain for the question scope resolver (issue #286):
+     * Authorization chain for the question scope resolver:
      * question → course → organization, org-scoped. Mirrors
      * examRepo.findAuthorizationChain; a null course id surfaces through the
      * resolver as a broken parent chain (never silently allowed).
@@ -151,12 +151,12 @@ export function createQuestionRepo(db: Database) {
     /**
      * Returns the distinct set of tag strings used by questions in the
      * tenant, sorted ascending. Backs the admin tag-filter vocabulary
-     * endpoint (issue 182). The jsonb_array_elements argument is guarded by a
+     * endpoint. The jsonb_array_elements argument is guarded by a
      * CASE at the expansion site, so a legacy non-array tags value cannot
      * break the listing regardless of planner qual placement; null and empty
      * elements are excluded so the vocabulary only contains real tags.
      *
-     * Issue #286: `courseIds` (when provided) restricts the vocabulary to
+     * `courseIds` (when provided) restricts the vocabulary to
      * questions under those courses — SQL-side BEFORE aggregation, so a
      * Teacher's vocabulary never reveals out-of-scope tags. An EMPTY array
      * yields an empty vocabulary by contract (never the org-wide set).

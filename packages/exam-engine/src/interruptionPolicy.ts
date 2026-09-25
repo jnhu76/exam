@@ -135,9 +135,9 @@ export interface EvaluateInterruptionPolicyInput {
   decisionNow: Date;
   /** The attempt's locked current deadlineAt (before any adjustment). */
   beforeDeadline: Date | null;
-  /** The exam's locked closeAt — the hard upper bound for any grant. Null
-   *  for untimed exams (#291 Phase A), which can never carry a bounded_grace
-   *  snapshot, so a null here fails closed in the bounded branch. */
+  /** The exam's locked closeAt — the hard upper bound for any grant. Null for
+   *  untimed exams, which can never carry a bounded_grace snapshot, so a null
+   *  here fails closed in the bounded branch. */
   examCloseAt: Date | null;
   /** Sum of committed bounded_grace added_seconds for this attempt. */
   priorBoundedGraceAddedSeconds: number;

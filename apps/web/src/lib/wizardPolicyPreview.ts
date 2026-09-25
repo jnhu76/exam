@@ -1,9 +1,9 @@
-// ── P7-M: wizard resolved-policy preview (THIN WRAPPER, NO MIRROR) ──
+// ── Wizard resolved-policy preview (THIN WRAPPER, NO MIRROR) ──
 //
-// Authority: the user's P7-M review decision — the frontend MUST NOT
-// re-implement profile resolution precedence. We reuse the pure domain
-// resolver `applyExamProfileDefaults` from `@exam/domain` for BOTH the
-// backend create path and this frontend preview, so the two cannot drift.
+// Authority: the frontend MUST NOT re-implement profile resolution precedence.
+// We reuse the pure domain resolver `applyExamProfileDefaults` from
+// `@exam/domain` for BOTH the backend create path and this frontend preview,
+// so the two cannot drift.
 //
 // This module is a thin adapter: it locates the selected profile, calls the
 // domain resolver with the wizard's explicit overrides, and returns the
@@ -15,7 +15,7 @@
 //                              when no profile is selected)
 //   - property present (any) → explicit override; explicit `null` is a real
 //                              semantic value ("disabled") and is preserved
-// This mirrors the M2 route's `rawBody[field] !== undefined` contract exactly.
+// This mirrors the exam-create route's `rawBody[field] !== undefined` contract.
 
 import {
   applyExamProfileDefaults,
@@ -46,7 +46,6 @@ export interface WizardPolicyPreview {
   profileName: string | null;
 }
 
-/** The set of profile-safe fields, for iteration. */
 export const PROFILE_POLICY_FIELDS = [
   "timingMode",
   "durationMinutes",

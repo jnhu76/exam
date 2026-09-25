@@ -1,43 +1,17 @@
 #!/usr/bin/env node
 /**
- * Config contract gate (#370): profile-specific binding contracts over the
- * ONE application semantic settings model.
+ * Config contract gate: profile-specific binding contracts over the ONE
+ * application semantic settings model.
  *
  * This script is NOT a semantic authority. Membership, defaults,
  * requiredness, and binding classes are READ from
  * apps/api/src/config/settings.ts (imported directly — Node >=23.6 strips
  * erasable type syntax, and the module is dependency-free by design, so
- * this gate runs in a fresh checkout before any build). What this gate
- * owns is the per-topology binding relations:
- *
- *   Consumption — every non-delegated settings leaf is actually consumed
- *     by the runtimeConfig policy facade (an unconsumed leaf is dead
- *     semantic weight, not a feature); and settings.ts is imported only by
- *     runtimeConfig (+ its own tests), keeping one consumption seam.
- *
- *   Docker production — docker-compose.yml binds every leaf according to
- *     its semantic supply class (operator forward / required expansion /
- *     derived origin / fixed identity / dev-only absence). Literal
- *     Compose fallbacks may only mirror the semantic default exactly.
- *
- *   Docker test — the E2E stack pins PUBLIC_WEB_ORIGIN to the
- *     in-container origin (http://localhost:3000): the e2e browser shares
- *     the app container's network namespace (network_mode: service:app),
- *     so it never uses the host-published EXAM_PORT.
- *
- *   CI — the verify/coverage jobs provide the required DB/auth env; the
- *     e2e job binds PUBLIC_WEB_ORIGIN to the same single origin the
- *     browser navigates (E2E_BASE_URL).
- *
- *   Local/WSL — run-wsl.sh binds PUBLIC_WEB_ORIGIN INSIDE launch_api to
- *     each API process's own port (serial AND per-shard; #365), and
- *     projects that same runner-selected port onto BOTH bind-port
- *     authorities (APP_PORT + DEV_API_PORT; #565 — e2e mode resolves the
- *     bind as APP_PORT ?? DEV_API_PORT, so an unprojected APP_PORT lets a
- *     developer .env / stray shell export own the shard port).
- *
- *   Test discipline — production-guard tests mutate process.env only via
- *     vi.stubEnv (unreliable manual mutation once leaked config states).
+ * this gate runs in a fresh checkout before any build). What this gate owns
+ * is the per-topology binding relations; each section below states its own
+ * relation and failure mode (consumption seam, Docker production bindings,
+ * Docker test origin, CI env, CI artifact identity, WSL port projection,
+ * test env isolation, client-IP trust wiring).
  *
  * Profiles are independent BY DESIGN: nothing here compares values ACROSS
  * topologies (CI may differ from WSL may differ from Docker). Only each

@@ -176,16 +176,11 @@ function useSummaryLabels(): ProfileSummaryLabels {
 }
 
 /**
- * P7-M exam creation wizard. A 5-step product flow:
- *   1. 基本信息 (title/course + profile picker)
- *   2. 考试策略 (10 profile-safe fields with override UX)
- *   3. 题目与分数 (manual question picker)
- *   4. 时间安排 (open/close)
- *   5. 检查并创建 (resolved-policy preview → create draft)
+ * Exam creation wizard — a guided multi-step flow that creates a Draft Exam;
+ * publishing stays on the exam detail page.
  *
- * Latent control flags are NOT shown (P7-M truthfulness: only enforced
- * dimensions surface in the new product entry). Wizard creates a Draft Exam;
- * the existing publish action remains on the exam detail page.
+ * Latent control flags are NOT shown (truthfulness rule: only enforced
+ * dimensions surface in this entry).
  */
 export function ExamCreatePage() {
   const { t } = useTranslation();
@@ -203,8 +198,6 @@ export function ExamCreatePage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
-  // Auto-calc totalScore from the selected questions (mirrors the legacy
-  // ExamConfigForm behavior); the user may switch to manual entry.
   const [manualTotalScore, setManualTotalScore] = useState(false);
   // The 及格分 default (60) follows the auto-calculated 总分 until the user
   // edits it explicitly (see the auto-calc effect below).
@@ -413,9 +406,9 @@ export function ExamCreatePage() {
   const hasQuestions = state.questionIds.length > 0;
 
   // Auto-calc totalScore from the selected questions whenever the selection
-  // changes (mirrors the legacy ExamConfigForm behavior). The publish gate
-  // requires totalScore === sum(question scores); auto-calc prevents
-  // avoidable publish-time 400s. The user may switch to manual entry.
+  // changes. The publish gate requires totalScore === sum(question scores);
+  // auto-calc prevents avoidable publish-time 400s. The user may switch to
+  // manual entry.
   useEffect(() => {
     if (!hasQuestions || manualTotalScore || computedTotal <= 0) return;
     setState((s) => {
@@ -559,7 +552,7 @@ export function ExamCreatePage() {
         </FieldGroup>
       )}
 
-      {/* Step 2 — policy fields (10 profile-safe, enforced dimensions only) */}
+      {/* Step 2 — policy fields (profile-safe, enforced dimensions only) */}
       {state.step === 2 && (
         <WizardPolicyFields
           state={state}
@@ -573,11 +566,10 @@ export function ExamCreatePage() {
       {/* Step 3 — questions + scores */}
       {state.step === 3 && (
         <FieldGroup>
-          {/* The shell IS the data surface (issue 601 Phase F convergence):
-              wrapping it in a padded, bordered FormSection cost the table 44px
-              of region and drew a second border. The section heading moves into
-              the shell's title band, the count into its meta slot and the
-              dataset-scoped picker action into its toolbar band. */}
+          {/* The shell IS the data surface (docs/standards/ui-system.md
+              §Surface and elevation): heading, count and the dataset-scoped
+              picker action live in the shell's own bands, never in a second
+              bordered wrapper. */}
           <DataTableShell
             archetype="embedded-picker"
             title={t("admin.examWizard.steps.questions")}

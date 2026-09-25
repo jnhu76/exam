@@ -1,20 +1,20 @@
 /**
  * Tier primitives — the density vocabulary negotiated per archetype
- * (#454 P3-Corrective §C/§5.4). The negotiation stays container-driven and
- * pure. #601 Phase F: the negotiated tier is the region's density signal
- * (`data-table-tier`, read by probes and E2E); it no longer feeds a
- * table-width floor — column width is the allocator's two-state rule over
- * Σ semantic minima vs the measured box (table/columnAllocation.ts), and
- * whether a table fills its container is the archetype's decision.
+ * (docs/standards/ui-system.md §Table archetypes). The negotiation stays
+ * container-driven and pure. The negotiated tier IS the region's density signal
+ * (`data-table-tier`, read by probes and E2E); it does not feed a table-width
+ * floor — column width is the allocator's two-state rule over Σ semantic minima
+ * vs the measured box (table/columnAllocation.ts), and whether a table fills its
+ * container is the archetype's decision.
  */
 
 export type DataTableTier = "compact" | "standard" | "wide";
 
 /**
- * Closed table archetype vocabulary (issue 445 P3-Corrective §C). Pages
- * declare the archetype; the shell derives the effective tier from the
- * measured container width. `embedded-picker` is the tier-less composition:
- * allocation still governs it, with floor 0.
+ * Closed table archetype vocabulary (docs/standards/ui-system.md §Table
+ * archetypes). Pages declare the archetype; the shell derives the effective tier
+ * from the measured container width. `embedded-picker` is the tier-less
+ * composition: allocation still governs it, with floor 0.
  */
 export type TableArchetype =
   | "management-list"
@@ -31,7 +31,6 @@ export const TIER_MIN_WIDTH_PX: Record<DataTableTier, number> = {
 
 const TIER_ORDER: DataTableTier[] = ["compact", "standard", "wide"];
 
-/** Per-archetype tier bounds (P3-Corrective §C / §5.4). */
 export const ARCHETYPE_TIER_BOUNDS: Record<
   Exclude<TableArchetype, "embedded-picker">,
   { min: DataTableTier; max: DataTableTier }

@@ -13,7 +13,7 @@ import { routes } from "@/lib/routes";
 import { resolvedRouteEntries } from "@/test/routeExtraction";
 
 /**
- * Routed-page pageMeta completeness gate (issue 490).
+ * Routed-page pageMeta completeness gate.
  *
  * The route inventory is extracted from App.tsx by the shared #455
  * route-aware AST parser — the single router parser owner; this gate does not
@@ -46,7 +46,7 @@ const routedPageByRoute = new Map(
   routedEntries.map((entry) => [entry.route, entry.page]),
 );
 
-/** Replaces `:param` segments with a representative safe ID (issue 490 §23). */
+/** Replaces `:param` segments with a representative safe ID. */
 function concretizeRoute(route: string): string {
   return route
     .split("/")

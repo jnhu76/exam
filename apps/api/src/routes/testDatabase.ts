@@ -1,26 +1,15 @@
 /**
- * ADR-007 Phase 3B — API test database adapter (opt-in worker-database).
+ * API test database adapter (opt-in worker-database).
  *
- * Single chokepoint that selects between the legacy per-file schema path
- * (`testIsolation.ts`) and the new per-worker database path
- * (`testWorkerDatabase.ts`), based on `TEST_DB_ISOLATION`.
- *
- * Default behavior is UNCHANGED: when `TEST_DB_ISOLATION` is unset or any
- * value other than `worker-database`, the legacy per-file schema isolation
- * runs exactly as before. Only an explicit
- * `TEST_DB_ISOLATION=worker-database` opts into the worker-DB path.
+ * Single chokepoint that selects between the per-file schema path
+ * (`testIsolation.ts`) and the per-worker database path
+ * (`testWorkerDatabase.ts`), based on `TEST_DB_ISOLATION` (see
+ * `isWorkerDatabaseMode` for the opt-in rule and docs/standards/testing.md §2
+ * for the environment-variable contract).
  *
  * Lifecycle side effects happen ONLY inside `setupApiTestDatabaseFromEnv`,
  * never at import time. The adapter is test-only and refuses to run in
- * production (delegates to the Phase 3A production guard on the worker path).
- *
- * Non-goals of this PR:
- *   - Does NOT enable `fileParallelism: true` or change `maxWorkers`.
- *   - Does NOT remove the legacy `file-schema` fallback.
- *   - Does NOT remove `testIsolation.ts` or `setupIsolatedTestDb`.
- *   - Does NOT introduce Redis / BullMQ.
- *   - Does NOT modify production schema / migrations / CI.
- *   - Does NOT claim BUG-FLAKE-001 is fixed.
+ * production (the worker path delegates to the production guard).
  */
 
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
@@ -70,11 +59,10 @@ export interface ApiTestDatabaseHandle {
  * Read whether the worker-DB opt-in is active. Pure, no side effects.
  *
  * IMPORTANT: this is EXPLICIT opt-in only — it returns true when
- * `TEST_DB_ISOLATION` is set to the literal string `"worker-database"`.
- * It deliberately does NOT honor the Phase 2A resolver's
- * `worker-database` *default* (when the env var is unset). Phase 3B's
- * non-goal is "do not force all tests onto worker-DB by default"; the
- * adapter must only switch when a developer/CI explicitly opts in.
+ * `TEST_DB_ISOLATION` is set to the literal string `"worker-database"`, and it
+ * deliberately does NOT honor the resolver's `worker-database` default for an
+ * unset variable. The adapter must only switch when a developer/CI explicitly
+ * opts in.
  */
 export function isWorkerDatabaseMode(env: ResolverEnv = process.env): boolean {
   const raw = env.TEST_DB_ISOLATION;
@@ -85,18 +73,17 @@ export function isWorkerDatabaseMode(env: ResolverEnv = process.env): boolean {
  * Resolve the API test database for the current environment.
  *
  * - `TEST_DB_ISOLATION=worker-database` (explicit opt-in) → per-worker
- *   PostgreSQL database via Phase 3A helper. `schemaName` is `undefined`.
- * - Otherwise (default, including `file-schema` and unset) → legacy per-file
- *   schema isolation, EXACTLY the pre-Phase-3B behavior.
+ *   PostgreSQL database via the worker helper. `schemaName` is `undefined`.
+ * - Otherwise → per-file schema isolation.
  *
- * In legacy mode the adapter still respects the isolation-enabled rules of
+ * In per-file mode the adapter still respects the isolation-enabled rules of
  * `isTestDbIsolationEnabled()` (evaluated against the passed-in `env`, so the
  * adapter is fully testable): when isolation is disabled
  * (`TEST_DB_ISOLATION=0`), no per-file schema is created and the returned
- * `schemaName` is `undefined` — exactly like the pre-Phase-3B disabled path.
+ * `schemaName` is `undefined`.
  *
  * @param namespace stable logical name for the caller (e.g. `"api"`,
- *   `"security-rbac"`). Passed to the legacy path for schema naming; ignored
+ *   `"security-rbac"`). Passed to the per-file path for schema naming; ignored
  *   by the worker-DB path (isolation is database-level, not schema-level).
  */
 export async function setupApiTestDatabaseFromEnv(options?: {
@@ -116,14 +103,11 @@ export async function setupApiTestDatabaseFromEnv(options?: {
     return wrapWorkerHandle(worker);
   }
 
-  // Legacy path — bit-for-bit the previous behavior of the security files.
-  // Whether a per-file schema is created follows the SAME rules as
-  // `isTestDbIsolationEnabled()`, but evaluated against the `env` the caller
-  // passed in (defaults to `process.env`) so the adapter is fully testable.
-  // The value is trimmed for consistency with `isWorkerDatabaseMode()`.
-  //   - unset / "" / "file-schema" / "1" / "true" → enabled, fresh schema/call
-  //   - "0" / any other literal                    → disabled, schemaName
-  //     undefined, caller connects to the base DB's default schema.
+  // Per-file schema path. Whether a per-file schema is created follows the
+  // SAME rules as `isTestDbIsolationEnabled()`, evaluated against the `env`
+  // the caller passed in (defaults to `process.env`) so the adapter is fully
+  // testable. The value is trimmed for consistency with
+  // `isWorkerDatabaseMode()`; an unrecognized value is treated as disabled.
   // Note: "file-schema" is treated as ENABLED. It is the documented legacy
   // mode name (see docs/archive/dev/test-suite-taxonomy.md); without this it would
   // fall through to the disabled branch and silently run tests on the shared
@@ -173,9 +157,9 @@ function wrapWorkerHandle(worker: WorkerDatabaseHandle): ApiTestDatabaseHandle {
  * schema, so there is no cross-file mutable state to truncate. Tests that
  * need within-file resets keep using their existing helpers.
  *
- * `schemaName` may be `undefined` when legacy isolation is explicitly disabled
+ * `schemaName` may be `undefined` when isolation is explicitly disabled
  * (`TEST_DB_ISOLATION=0`); callers then connect to the base DB's default
- * schema, exactly like the pre-Phase-3B disabled path.
+ * schema.
  */
 interface LegacyIsoLike {
   schemaName: string | undefined;

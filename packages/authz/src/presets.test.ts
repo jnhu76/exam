@@ -80,7 +80,7 @@ describe("ADR-014 — Incident permission matrix", () => {
     expect(proctorPerms.has(Permission.IncidentInvestigate)).toBe(true);
     // Terminal judgment stays Admin-only.
     expect(proctorPerms.has(Permission.IncidentResolve)).toBe(false);
-    // Recovery Center read is Admin-only (J5-R0).
+    // Recovery Center read is Admin-only.
     expect(proctorPerms.has(Permission.IncidentRecoveryView)).toBe(false);
   });
 

@@ -1,9 +1,10 @@
 /**
  * Gate: high font-weight (600/700) must not leak into roles that should stay
- * light. Weight hierarchy: body/input/table-cell/search/badge/button/nav/labels
- * stay 400–500; 600 is forbidden entirely (no semibold face ships); 700 is
- * allowed ONLY via an approved typography recipe (type-metric / type-metric-hero
- * for numeric emphasis), never as a raw font-bold utility on general text.
+ * light. 600 is forbidden entirely — no semibold face ships — and 700 is
+ * allowed only through an approved typography recipe (e.g. type-metric /
+ * type-metric-hero for numeric emphasis), never as a raw font-bold utility on
+ * general text. The weight allowed per role is owned by
+ * docs/standards/ui-system.md §Fonts and §Typography recipes.
  *
  * This script flags raw `font-bold` / `font-semibold` utilities in business UI.
  * (The eslint exam-ui/no-heavy-font-weight rule covers this at the AST level for

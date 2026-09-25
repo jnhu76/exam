@@ -1,13 +1,13 @@
 /**
  * Canonical payload + replay/conflict helpers for the durable Attempt command
- * receipt (J5-I1C Slice 1 / J5-I1C0 audit §4.5, §8).
+ * receipt.
  *
  * The two dangerous Attempt commands (`force_submit`, `misconduct_mark`) share
  * one `attempt_command_receipts` table arbitrated by
  * `UNIQUE(organization_id, operation_id)`. Replay/conflict is decided by
  * comparing the canonical `request_payload` of the incoming command against the
- * stored receipt row (audit §4.5). These helpers implement that comparison in
- * ONE place so the future orchestrators (Slices 2/3) do not hand-roll
+ * stored receipt row. These helpers implement that comparison in ONE place so
+ * the orchestrators do not hand-roll
  * `JSON.stringify(a) === JSON.stringify(b)` per command.
  *
  * The equality primitive here is the canonical jsonb comparison: object-key
@@ -15,14 +15,12 @@
  * preserved, null/undefined semantics preserved. It is the same rule as the
  * `payloadsEqual` in `@exam/exam-engine` incident/time-grant commands; this
  * module is the leaf-node (no internal dependency) home so both the engine and
- * the future api orchestrators can import it without a cycle.
+ * the api orchestrators can import it without a cycle.
  *
- * Pure domain types (the canonical command union, request/result payload
- * interfaces, and the per-command input/payload maps) live in `./types.ts`,
- * the single source of truth for domain types (review J5-I1C0 PR #261 P2-1).
- * This module re-exports them so existing deep-path imports
- * (`from "./attemptCommandPayload.js"`) keep working; new callers should import
- * them from `@exam/domain` directly.
+ * The canonical command union, request/result payload interfaces, and the
+ * per-command input/payload maps live in `./types.ts`, the single source of
+ * truth for domain types; they are re-exported below so this module stays the
+ * one import surface for receipt logic.
  *
  * The `@exam/contracts` Zod schemas (`ForceSubmitRequestPayloadSchema`,
  * `MisconductMarkRequestPayloadSchema`, `AttemptCommandTypeSchema`) are the
@@ -138,14 +136,10 @@ export function canonicalizeMisconductPayload(input: {
 // ── Command → input / payload type binding (compile-time) ──────────
 //
 // The per-command INPUT and PAYLOAD maps (`AttemptCommandInputByType`,
-// `AttemptCommandPayloadByType`) are the compile-time binding between a
-// command type and its payload shapes. They live in `./types.ts` (the domain
-// type authority) and are imported above; the canonicalizer table below
-// indexes them so `canonicalizeAttemptCommandRequest` dispatches WITHOUT any
-// type assertion — the command→input→payload binding is structural, not cast
-// (overnight hardening: the previous loose union + casts let both wrong
-// combinations compile and silently canonicalize to a different command's
-// identity).
+// `AttemptCommandPayloadByType`) live in `./types.ts` (the domain type
+// authority) and are imported above; the canonicalizer table below indexes
+// them so `canonicalizeAttemptCommandRequest` dispatches without any type
+// assertion.
 
 /**
  * Per-command canonicalizer table. Indexing this by a command type `C` yields
@@ -188,10 +182,10 @@ export type AttemptCommandReplayDecision =
 
 /**
  * Pure replay/conflict classifier for a stored receipt against an incoming
- * command (audit §4.5, §8 Domain conflict helper). The orchestrator slices use
- * this to decide, after the pre-read or after a 23505 race recovery, whether a
- * stored receipt is a replay (return its `result_payload` verbatim) or a
- * conflict (409 IDEMPOTENCY_CONFLICT).
+ * command (audit §4.5, §8 Domain conflict helper). Callers use this after the
+ * pre-read or after a 23505 race recovery to decide whether a stored receipt
+ * is a replay (return its `result_payload` verbatim) or a conflict
+ * (409 IDEMPOTENCY_CONFLICT).
  *
  * Frozen rules:
  *   - commandType differs                                          → conflict

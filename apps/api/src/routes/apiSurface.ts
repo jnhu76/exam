@@ -66,7 +66,7 @@ const apiSurfacePlugin: FastifyPluginAsync = async (api) => {
   // transitions. When the HANDLER runs, the body carries only the gate
   // answer — no dependency names, latency, or error detail. The route stays
   // under the default /api rate-limit policy (the anti-amplification bound;
-  // the Compose healthcheck's 2/min cadence can never self-429).
+  // the Compose healthcheck cadence can never self-429).
   //
   // TWO 503 SHAPES (deliberate; both mean "not ready" to a probe):
   //   1. handler reached → {status:"not_ready"} (the gate body);
