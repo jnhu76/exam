@@ -19,6 +19,7 @@ import candidateRoutes from "./candidate.js";
 import candidateFieldRoutes from "./candidateField.js";
 import attemptRoutes from "./attempts.js";
 import { exportRoutes } from "./export.js";
+import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 
@@ -183,6 +184,70 @@ describe("CSV export integration", () => {
     expect(body).toContain("100");
     expect(body).toContain("及格");
     expect(body).toContain(`Candidate ${gradedUsername}`);
+  });
+
+  // #613 GAP-03: the denial side (no audit row on denied export) is covered
+  // by permissionBoundary.test.ts; this is the missing positive evidence —
+  // a successful authorized export persists its export_scores audit row.
+  it("persists an export_scores audit row for a successful authorized export", async () => {
+    const auditedExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Audit Export Exam",
+      courseCode: "AUD103",
+      courseName: "Audit Export Course",
+      questionContent: "Is audit durable?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, auditedExamId);
+    const auditedUsername = `audit-export-cand-${uniquePrefix()}`;
+    await submitExamAsCandidate(
+      ctx.app,
+      ctx.adminToken,
+      ctx.org.id,
+      auditedExamId,
+      auditedUsername,
+    );
+
+    const { body } = await exportResultsCsvAsAdmin(
+      ctx.app,
+      ctx.adminToken,
+      auditedExamId,
+    );
+    expect(body).toContain(`Candidate ${auditedUsername}`);
+
+    // INVARIANT: export_scores is a synchronous sensitive-read audit — the
+    // row is committed before the CSV response returns, so it is queryable
+    // immediately. The exam is unique to this test, so exactly one row is
+    // expected for this action/target pair.
+    const requestContext = {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const { total, items } = await createAuditLogRepo(
+      ctx.db,
+    ).listPaginatedFiltered(requestContext, 1, 50, {
+      action: "export_scores",
+      targetId: auditedExamId,
+    });
+    expect(total).toBe(1);
+    expect(items[0]).toMatchObject({
+      auditLog: {
+        action: "export_scores",
+        targetType: "exam",
+        targetId: auditedExamId,
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        metadata: { format: "csv" },
+      },
+      actorName: ctx.admin.name,
+    });
   });
 
   it("CSV escaping handles commas and quotes in candidate name", async () => {
