@@ -16,7 +16,7 @@ import {
   spawnApiServer,
   waitUntil,
   type SpawnedApiServer,
-} from "./restartProcessHarness.js";
+} from "../testing/restartProcessHarness.js";
 
 /**
  * #326 — REAL API process-boundary restart + cross-deadline recovery.

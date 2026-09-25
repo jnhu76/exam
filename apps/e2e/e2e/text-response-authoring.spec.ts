@@ -34,13 +34,17 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
  *     → edit round-trips rubric + reference answer
  *     → API assembles an exam with the UI-authored question, publishes it
  *     → candidate (enrolled) starts, sees the prompt, does NOT see rubric /
- *       reference, answers multiline plain text, submits
+ *       reference (UI leak guard), answers multiline plain text, submits
  *     → admin Grading Queue UI shows the attempt (queue → detail discovery
- *       through the real page, not a known-id API jump); admin sees the
- *       frozen rubric and frozen reference answer and the frozen candidate
- *       answer
+ *       through the real page, not a known-id API jump)
  *     → admin completes manual grading → graded + fully_graded
  *     → final score identity
+ *
+ * The take-body leak guard and the grading-details frozen-field receipts are
+ * API-owned (routes/attempts/candidate-take-text-response.test.ts,
+ * gradingQueue.test.ts) and are deliberately not duplicated over the wire
+ * here; the frozen rubric/reference RENDERING in the grading detail page is
+ * owned by manual-grading.spec.ts.
  *
  * Question authoring, the list-page type filter, candidate answering, and
  * grading-queue discovery are all UI-driven. Exam assembly / enrollment /
@@ -305,10 +309,10 @@ test.describe("P2 text_response authoring + product loop", () => {
     expect(enrollRes.status()).toBeLessThan(300);
 
     // The frozen snapshot authority is the attempt's questionSnapshot (copied
-    // at publish time), not the exam detail endpoint. It is asserted below
-    // via the grading-details projection once the candidate has started +
-    // submitted — that projection reads the frozen rubric / reference answer
-    // and proves the UI-authored values were frozen at publish.
+    // at publish time), not the exam detail endpoint. The browser-visible
+    // proof is the take page below (it renders the prompt but never the
+    // rubric / reference answer); the wire-level projection is owned by the
+    // API leak-guard suites.
 
     // ── Candidate: sees prompt, NOT rubric/reference; answers; submits. ──
     await candidateLogin(page, candidate);
@@ -328,6 +332,8 @@ test.describe("P2 text_response authoring + product loop", () => {
 
     // The prompt is visible; rubric / reference text must NOT appear. The
     // markers below are unique to the grader's rubric / reference answer.
+    // (The wire-level take-body leak guard for text_response is owned by
+    // routes/attempts/candidate-take-text-response.test.ts.)
     const section = page.getByTestId("take-question-section");
     await expect(section.getByText(Q_CONTENT_EDITED)).toBeVisible();
     await expect(section.getByText("评分标准")).toHaveCount(0);
@@ -337,25 +343,6 @@ test.describe("P2 text_response authoring + product loop", () => {
 
     await answerTextResponse(page, CANDIDATE_ANSWER);
     await waitForSaveSaved(page);
-
-    // Authoritative take API (API-level leak guard, not just UI).
-    const candidateToken = await candidateApiToken(request, candidate);
-    const takeRes = await request.get(
-      `${BASE_URL}/api/candidate/attempts/${attemptIdAuth}/take`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(takeRes.status()).toBe(200);
-    const takeBody = await takeRes.json();
-    const takeQ = takeBody.questions[0];
-    expect(takeQ).not.toHaveProperty("rubric");
-    expect(takeQ).not.toHaveProperty("standardAnswer");
-    expect(takeQ).not.toHaveProperty("gradingMode");
-    // Serialized-body leak guard: the rubric and reference-answer text must
-    // not appear anywhere in the candidate payload. Use markers that are
-    // UNIQUE to the rubric / reference answer and do NOT appear in the
-    // candidate's own draft answer (which legitimately shares the topic).
-    expect(JSON.stringify(takeBody)).not.toContain("评分标准");
-    expect(JSON.stringify(takeBody)).not.toContain("三方面论述");
 
     await submitExam(page);
 
@@ -382,46 +369,12 @@ test.describe("P2 text_response authoring + product loop", () => {
       { timeout: 10_000 },
     );
 
-    // ── Admin grading: frozen rubric + reference + candidate answer visible;
-    // grading completes the attempt to graded + fully_graded. ──────────────
-    const detailsRes = await adminGet(
-      request,
-      adminToken,
-      `/api/admin/attempts/${attemptIdAuth}/grading-details`,
-    );
-    expect(detailsRes.status()).toBe(200);
-    const details = await detailsRes.json();
-
-    // Grader authority: the attempt's frozen snapshot carries the UI-authored
-    // rubric + reference answer, plus the candidate's frozen answer. Asserting
-    // on the parsed question object avoids newline-escaping ambiguity.
-    const graded = (details.questions ?? []).find(
-      (q: { questionId?: string; originalQuestionId?: string }) =>
-        (q.questionId ?? q.originalQuestionId) === questionId,
-    ) as
-      | {
-          questionId?: string;
-          rubric?: string;
-          standardAnswer?: string;
-          candidateAnswer?: string;
-          entry?: unknown;
-        }
-      | undefined;
-    expect(graded, "expected the essay in grading-details").toBeTruthy();
-    // Runtime truthy guard above; narrow for the typed assertions below.
-    const gradedQ = graded as {
-      rubric?: string;
-      standardAnswer?: string;
-      candidateAnswer?: string;
-      entry?: unknown;
-    };
-    expect(gradedQ.rubric).toBe(RUBRIC_EDITED);
-    expect(gradedQ.standardAnswer).toBe(REFERENCE);
-    expect(gradedQ.candidateAnswer).toBe(CANDIDATE_ANSWER);
-
-    // The pending-manual entry has not been graded yet.
-    expect(gradedQ.entry).toBeNull();
-
+    // ── Admin grading: the queue discovery above is the grader's real
+    // workflow; completing the pending entry closes the attempt. The
+    // frozen-snapshot receipts (UI-authored rubric / reference answer /
+    // candidate answer on grading-details) are owned by gradingQueue.test.ts
+    // and routes/attempts/candidate-take-text-response.test.ts and are
+    // deliberately not re-asserted over the wire here. ──────────────────────
     const gradeScore = ESSAY_SCORE;
     const gradeRes = await adminPost(
       request,
@@ -435,6 +388,7 @@ test.describe("P2 text_response authoring + product loop", () => {
     // attempt as graded + fully_graded (mirrors manual-grading.spec's terminal
     // verification). There is no plain GET /api/admin/attempts/:id; the take
     // snapshot carries attemptStatus + gradingStatus as the live truth.
+    const candidateToken = await candidateApiToken(request, candidate);
     const takeAfter = await request.get(
       `${BASE_URL}/api/candidate/attempts/${attemptIdAuth}/take`,
       { headers: { Cookie: `auth-token=${candidateToken}` } },

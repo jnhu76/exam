@@ -2,9 +2,10 @@
  * Rollback CLI (rollback-incident-tables.ts) — URL parsing + controlled error
  * path (ADR-014 §14, P2-D).
  *
- * Unit tests cover `parseDatabaseName` (query params, trailing slash,
- * percent-encoding, malformed URLs). Subprocess tests spawn the real CLI via
- * tsx and assert the full contract: clear stderr, nonzero exit, connection
+ * Unit-level `parseDatabaseName` coverage lives with the guard owner
+ * (packages/db/src/scripts/destructiveDbNameGuard.test.ts). Subprocess tests
+ * spawn the real CLI via tsx and assert the full contract: clear stderr,
+ * nonzero exit, connection
  * closed when opened, no unhandledRejection. The PG-dependent subprocess tests
  * run against isolated test schemas (search_path via URL options), so they
  * never touch dev/test database state outside their own schema.
@@ -26,7 +27,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { parseDatabaseName } from "@exam/db";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import {
   addSearchPathToUrl,
@@ -111,41 +111,9 @@ function runCli(
   });
 }
 
-describe("parseDatabaseName", () => {
-  it("excludes query params (sslmode=require)", () => {
-    expect(
-      parseDatabaseName(
-        "postgres://exam:exam@localhost:15432/exam_test?sslmode=require",
-      ),
-    ).toBe("exam_test");
-  });
-
-  it("handles a trailing slash", () => {
-    expect(
-      parseDatabaseName("postgres://exam:exam@localhost:15432/exam_test/"),
-    ).toBe("exam_test");
-  });
-
-  it("uses the final non-empty pathname segment", () => {
-    expect(
-      parseDatabaseName("postgres://exam:exam@localhost:15432/a/b/exam_test"),
-    ).toBe("exam_test");
-  });
-
-  it("percent-decodes the database name", () => {
-    expect(
-      parseDatabaseName("postgres://exam:exam@localhost:15432/exam_%74est"),
-    ).toBe("exam_test");
-  });
-
-  it("returns an empty string when no path segment exists", () => {
-    expect(parseDatabaseName("postgres://exam:exam@localhost:15432/")).toBe("");
-  });
-
-  it("throws on a malformed URL", () => {
-    expect(() => parseDatabaseName("not a url")).toThrow();
-  });
-});
+// `parseDatabaseName` unit coverage is owned by
+// packages/db/src/scripts/destructiveDbNameGuard.test.ts (the guard's home);
+// the subprocess tests below still exercise the parse stage end-to-end.
 
 describe("rollback CLI — controlled error path (no DB needed)", () => {
   it("refuses to run without --confirm (exit 2, stderr)", async () => {

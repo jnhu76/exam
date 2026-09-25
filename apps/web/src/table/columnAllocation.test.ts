@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { DataTableColumnRole } from "@/components/shared/DataTableContract";
 import {
@@ -13,6 +16,8 @@ import {
   type ColumnAllocation,
 } from "./columnAllocation";
 import { calibratedFloorPx, isCompressibleRole } from "./roleCalibration";
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 /** The QuestionPage-shaped declaration set. */
 const QUESTION_ROLES = [
@@ -375,6 +380,15 @@ describe("actions pointer bound", () => {
   it("fine/coarse constants stay the UI-ACTION-CAPACITY-1 bound", () => {
     expect(ACTIONS_MIN_FINE).toBe(96);
     expect(ACTIONS_MIN_COARSE).toBe(120);
+  });
+
+  it("keeps the density-tier selector out of the CSS (the removed per-page model)", () => {
+    // The actions-density model (prop + data-actions-density CSS tiers) was
+    // replaced by this allocator's single width authority. Neither the model
+    // nor its CSS hook may return; this is the only CSS-side check left —
+    // the tsx-side removal scan lives in table-layout.test.tsx.
+    const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
+    expect(tableCss).not.toContain("data-actions-density");
   });
 
   it("uses the coarse-pointer actions floor and basis", () => {

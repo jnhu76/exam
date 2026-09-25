@@ -322,6 +322,12 @@ describe("Teacher@Course scope matrix (issue #286)", () => {
     expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
   });
 
+  it("GET /courses/:id — in-scope Course A returns 200 pre-revocation (positive control)", async () => {
+    const res = await tGet(`/api/courses/${courseAId}`);
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { id: string }).id).toBe(courseAId);
+  });
+
   // ── Questions ──
 
   it("LIST /questions — only Course A questions; explicit Course B filter is empty", async () => {

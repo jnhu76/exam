@@ -8,11 +8,7 @@ import {
   submitExam,
   adminApiToken,
   adminPost,
-  candidateApiToken,
-  getCandidateResult,
 } from "../lib/flow";
-
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 /**
  * fill_blank is an AUTO-GRADED objective question type (gradingEngine
@@ -23,8 +19,13 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
  *
  * This spec exercises the canonical supported flow: seed a fill_blank with an
  * exact-mode standard answer, answer it in the take UI, let the answer save
- * protocol persist it, submit, and verify auto-grading + immediate result
- * publication over both browser and server truth.
+ * protocol persist it, submit, and verify the browser renders the auto-graded
+ * result immediately.
+ *
+ * Wire-level grading receipts (persisted attempt.answers, totalScore/passed
+ * on the result endpoint) are owned by
+ * routes/attempts/protocol-consistency.test.ts and the scores suites and are
+ * deliberately not duplicated here.
  */
 test.describe("fill_blank question E2E", () => {
   test("login → start → fill blank answer → save → submit → auto-graded result", async ({
@@ -83,41 +84,16 @@ test.describe("fill_blank question E2E", () => {
       candidateIds: [seeded.candidateIds[0]],
     });
 
-    // Browser truth: answer the fill_blank and let the save protocol persist.
+    // Browser flow: answer the fill_blank and let the save protocol persist.
     await candidateLogin(page, seeded.candidate);
     await startExamFromList(page, examId);
     await answerFillBlank(page, "绿色");
     await waitForSaveSaved(page);
     await submitExam(page);
 
-    // Server truth: submit used the saved answer, and grading matched it
-    // against the exact-mode standardAnswer ("红色|绿色").
-    const resultUrl = new URL(page.url());
-    const attemptId = resultUrl.pathname.split("/").filter(Boolean)[1]!;
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-
-    const attemptRes = await request.get(
-      `${BASE_URL}/api/attempts/${attemptId}`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(attemptRes.ok()).toBeTruthy();
-    const attempt = (await attemptRes.json()) as {
-      status: string;
-      answers: Array<{ questionId: string; answer: unknown }>;
-    };
-    expect(attempt.status).toBe("graded");
-    expect(attempt.answers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ questionId: fbQuestionId, answer: "绿色" }),
-      ]),
-    );
-
-    const result = await getCandidateResult(request, candidateToken, attemptId);
-    expect(result.showResultImmediately).toBe(true);
-    expect(result.totalScore).toBe(100);
-    expect(result.passed).toBe(true);
-
-    // Browser truth: result page renders the graded score immediately.
+    // Browser truth: submit used the saved answer, and grading matched it
+    // against the exact-mode standardAnswer ("红色|绿色") — the result page
+    // renders the graded score immediately.
     await expect(page.getByText("已通过")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("result-total-score")).toHaveText("100");
     await expect(page.getByTestId("result-status-message")).toHaveCount(0);

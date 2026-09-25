@@ -1,9 +1,9 @@
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
 import postgres from "postgres";
 import { eq, sql } from "drizzle-orm";
+import { quoteIdent } from "./sqlIdent.js";
 import {
   sanitizeSchemaName,
-  quoteIdent,
   buildSchemaName,
   addSearchPathToUrl,
   stripOptionsFromUrl,

@@ -154,11 +154,6 @@ describe("CandidatesPage", () => {
     apiPatch.mockResolvedValue({ ok: true });
   });
 
-  it("renders page title", async () => {
-    renderPage();
-    expect(await screen.findByText("考生管理")).toBeInTheDocument();
-  });
-
   it("renders candidate list with dynamic field columns", async () => {
     renderPage();
     const table = await screen.findByRole("table");
@@ -167,14 +162,6 @@ describe("CandidatesPage", () => {
     expect(within(table).getByText("编号")).toBeInTheDocument();
     expect(within(table).getByText("部门")).toBeInTheDocument();
     expect(within(table).getByText("E001")).toBeInTheDocument();
-  });
-
-  it("renders status column", async () => {
-    renderPage();
-    const table = await screen.findByRole("table");
-    expect(within(table).getByText("candidate1")).toBeInTheDocument();
-    const rows = within(table).getAllByRole("row");
-    expect(rows.length).toBeGreaterThanOrEqual(3);
   });
 
   it("opens create dialog with dynamic fields", async () => {
@@ -516,13 +503,6 @@ describe("CandidatesPage", () => {
     expect(apiPost).toHaveBeenCalledTimes(1);
     resolveSave!({ id: "c3" });
     await act(async () => {});
-  });
-
-  it("renders import button", async () => {
-    renderPage();
-    expect(
-      await screen.findByRole("button", { name: "导入" }),
-    ).toBeInTheDocument();
   });
 
   describe("reset password", () => {

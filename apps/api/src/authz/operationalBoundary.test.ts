@@ -21,6 +21,7 @@ import { eq } from "drizzle-orm";
  *   - Maintainer cannot perform business mutations (force-submit, time grant,
  *     misconduct, result publish);
  *   - Maintainer never receives business-integrity diagnostics (D8);
+ *   - operational responses never echo secrets or host paths (P7-E);
  *   - POST /email/test no longer rides the diagnostics view capability (D7);
  *   - Admin behavior unchanged (compatibility);
  *   - Admin + Maintainer on the same actor is rejected server-side (D14).
@@ -210,6 +211,24 @@ describe("P7-E2A Operational RBAC Boundary", () => {
       expect(body.integrity).toBeDefined();
       expect(typeof body.integrity.submittedNotTerminalized).toBe("number");
     });
+
+    it("all operational responses are free of secrets and host paths", async () => {
+      const urls = [
+        "/api/system/health",
+        "/api/system/diagnostics",
+        "/api/system/backups",
+        "/api/system/restore-readiness",
+        "/api/system/ops-policy",
+      ];
+      for (const url of urls) {
+        const res = await asAdmin("GET", url);
+        expect(res.statusCode, `GET ${url}`).toBe(200);
+        const text = JSON.stringify(res.json());
+        expect(text).not.toMatch(
+          /postgresql:\/\/|PGPASSWORD|SMTP_PASSWORD|JWT_SECRET|REDIS_PASSWORD|\/var\/lib|\/mnt\//i,
+        );
+      }
+    });
   });
 
   describe("Maintainer business denial", () => {
@@ -229,6 +248,14 @@ describe("P7-E2A Operational RBAC Boundary", () => {
       ["GET", "/api/admin/recovery/incidents"],
       ["GET", "/api/roles/assignable"],
       ["GET", "/api/exam-profiles"],
+      [
+        "GET",
+        "/api/admin/attempts/00000000-0000-4000-8000-000000000001/export",
+      ],
+      [
+        "GET",
+        "/api/admin/attempts/00000000-0000-4000-8000-000000000001/export/csv",
+      ],
     ] as const)("%s %s → 403", async (method, url) => {
       const res = await asMaintainer(method, url);
       expect(res.statusCode, `${method} ${url}`).toBe(403);
@@ -306,6 +333,13 @@ describe("P7-E2A Operational RBAC Boundary", () => {
           proctorUserId: "some-user",
         },
       ],
+      [
+        "PATCH",
+        "/api/exams/00000000-0000-4000-8000-000000000001",
+        { title: "Denied" },
+      ],
+      ["POST", "/api/exams/00000000-0000-4000-8000-000000000001/publish", {}],
+      ["DELETE", "/api/exams/00000000-0000-4000-8000-000000000001", undefined],
     ] as const)("%s %s → 403", async (method, url, payload) => {
       const res = await asMaintainer(method, url, payload);
       expect(res.statusCode, `${method} ${url}`).toBe(403);

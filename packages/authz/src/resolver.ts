@@ -6,12 +6,10 @@
  * §Scope Resolver Performance (§22.2), and cross-cutting invariant §3.4
  * (Organization Anchor).
  *
- * This module defines the **contract**. Only the two context-only resolvers
- * (`resolveSystemScope`, `resolveOrganizationScope`) are implemented here — they
- * read no DB. The resource-aware resolvers (attempt/exam/course/candidate/
- * own_attempt/own_score/grading) are **interfaces** that RBAC-M10 / PROCTOR-M1 /
- * GRADING-M1 implement behind their own tests, against the integrity rules
- * documented below.
+ * This module defines the **contract**. The resource-aware resolvers
+ * (attempt/exam/course/candidate/own_attempt/own_score/grading) are
+ * **interfaces** that RBAC-M10 / PROCTOR-M1 / GRADING-M1 implement behind
+ * their own tests, against the integrity rules documented below.
  *
  * ─── Integrity rules every resource resolver MUST implement (ADR §22.1, §3.4) ───
  *
@@ -110,15 +108,6 @@ export interface DeniedScope {
   detail?: string;
 }
 
-/** The full deny-reason vocabulary (regression-tested; consumed by enforcement jobs). */
-export const DENY_REASONS: readonly DenyReason[] = [
-  "organization_mismatch",
-  "broken_parent_chain",
-  "resource_not_found",
-  "ownership_mismatch",
-  "resolver_error",
-];
-
 /** Type guard: a resolution result is a denial. Accepts unknown so callers
  *  passing a loosely-typed value still narrow correctly. */
 export function isScopeDenied(r: unknown): r is DeniedScope {
@@ -127,26 +116,6 @@ export function isScopeDenied(r: unknown): r is DeniedScope {
     r !== null &&
     (r as { denied?: unknown }).denied === true
   );
-}
-
-// ───────────────────────── Context-only resolvers (pure, no DB) ─────────────────────────
-
-/**
- * Resolves the system scope (infra / diagnostics / cross-cutting system work).
- * No resource, no DB read — the scope is implied by the request being system-scoped.
- */
-export function resolveSystemScope(_ctx: ResolverContext): ResolvedScope {
-  return { scope: Scope.System };
-}
-
-/**
- * Resolves the organization scope — the actor's own tenant boundary.
- * Anchored to `ctx.organizationId`; Phase 3 is single-tenant, but the anchor
- * is explicit so Phase 4 multi-tenant cannot accidentally ship without it
- * (ADR §3.4).
- */
-export function resolveOrganizationScope(ctx: ResolverContext): ResolvedScope {
-  return { scope: Scope.Organization, organizationId: ctx.organizationId };
 }
 
 // ───────────────────────── Resource resolver interface (ADR §6) ─────────────────────────

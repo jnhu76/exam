@@ -426,7 +426,10 @@ export interface AttemptScopeRow {
   organizationId: string;
 }
 
-export async function validateScopeQuadruple(
+// Module-private scope authority: all three link commands funnel every
+// linked referent through this check; the rejections are proven at the
+// command boundary (linkIncidentAction/Attempt/Interruption suites).
+async function validateScopeQuadruple(
   incident: {
     organizationId: string;
     examId: string;

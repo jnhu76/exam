@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import parser from "@typescript-eslint/parser";
+import type { TSESTree } from "@typescript-eslint/utils";
 import { CONFIRMED_RECIPES } from "./typography-vocabulary";
+import { collectClassNameTokens } from "@/lint/exam-ui/classNameUtils";
 
 /**
  * Structural tests for the semantic typography recipe layer (UI-RECIPE-1A).
@@ -86,6 +89,45 @@ function extractRule(css: string, name: string): string {
   return css.slice(bodyStart, i - 1);
 }
 
+/**
+ * Collect every static className token applied anywhere in a source file.
+ * Recipes are claimed through class application, not prose: a mention inside
+ * a comment or import must NOT satisfy the consumer checks below.
+ */
+function classNameTokensIn(src: string): string[] {
+  const ast = parser.parse(src, {
+    ecmaFeatures: { jsx: true },
+    ecmaVersion: "latest",
+    sourceType: "module",
+  }) as TSESTree.Program;
+  const tokens: string[] = [];
+  visit(ast, (node) => {
+    if (
+      node.type === "JSXAttribute" &&
+      node.name.type === "JSXIdentifier" &&
+      node.name.name === "className"
+    ) {
+      tokens.push(...collectClassNameTokens(node.value).map((t) => t.value));
+    }
+  });
+  return tokens;
+}
+
+function visit(node: TSESTree.Node, cb: (n: TSESTree.Node) => void): void {
+  cb(node);
+  for (const key of Object.keys(node)) {
+    const val = (node as unknown as Record<string, unknown>)[key];
+    if (Array.isArray(val)) {
+      for (const item of val) {
+        if (item && typeof item === "object" && "type" in item)
+          visit(item as TSESTree.Node, cb);
+      }
+    } else if (val && typeof val === "object" && "type" in val) {
+      visit(val as TSESTree.Node, cb);
+    }
+  }
+}
+
 describe("migrated consumers use semantic recipes (UI-RECIPE-1A §E)", () => {
   const consumers: Array<{ file: string; recipe: string; reason: string }> = [
     {
@@ -111,16 +153,16 @@ describe("migrated consumers use semantic recipes (UI-RECIPE-1A §E)", () => {
   ];
 
   it.each(consumers)(
-    "$file references $recipe ($reason)",
+    "$file applies $recipe as a className token ($reason)",
     ({ file, recipe }) => {
       const src = readFileSync(
         join(HERE, "..", file.split("/").join("/")),
         "utf8",
       );
       expect(
-        src.includes(recipe),
-        `${file} should use the ${recipe} semantic recipe`,
-      ).toBe(true);
+        classNameTokensIn(src),
+        `${file} should apply the ${recipe} semantic recipe as a class`,
+      ).toContain(recipe);
     },
   );
 });

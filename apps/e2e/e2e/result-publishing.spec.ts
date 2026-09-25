@@ -2,7 +2,6 @@ import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import {
   candidateLogin,
-  candidateApiToken,
   startExamFromList,
   answerTrueFalse,
   answerTextResponse,
@@ -10,7 +9,6 @@ import {
   submitExam,
   adminApiToken,
   publishResultsApi,
-  getCandidateResult,
   gradeQuestionApi,
 } from "../lib/flow";
 import { loginAsTeacher } from "../lib/login";
@@ -21,14 +19,26 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 /**
  * P2D-J5 — Result publishing policy, candidate-facing visibility (real flow).
  *
- * Two scenarios, each isolated with its own seeded exam + unique candidate:
- *   A. `immediate` — candidate sees the result right after submit, no admin action.
- *   B. `manual`    — candidate sees a pending state until the admin publishes;
- *      after publish the candidate sees the result.
+ * Each scenario seeds its own exam + unique candidate and proves what the
+ * candidate's browser shows across the publish transition:
+ *   A. `immediate`    — result renders right after submit, no admin action.
+ *   B. `manual`       — pending state until the admin publishes; the graded
+ *                       score leaks through NO candidate UI surface before it.
+ *   C. `after_grading` (mixed exam) — hidden until final manual grading,
+ *                       auto-released on fully_graded.
+ *   D. `manual` (mixed exam) — hidden state SURVIVES full grading until the
+ *                       explicit publish.
+ *   M12 — a Teacher publishes through the capability-gated ExamDetailPage
+ *                       control (mutation travels through the browser UI).
+ *   P5-N1 — the publication surfaces an Inbox notification whose click-through
+ *                       lands on the result page.
  *
- * Visibility changes are driven by the publish action, never by timeout or
- * implicit state mutation. Both scenarios use objective true_false questions
- * (auto-graded on submit), so no manual grading is involved.
+ * Visibility changes are driven by real publish/grade actions, never by
+ * timeout or implicit state mutation. Wire-level receipt bodies (getCandidateResult
+ * flags/reasons, attempt/list score fields, publish alreadyPublished,
+ * notification totals) are owned by apps/api/src/routes/resultPublishing.test.ts,
+ * candidateResultVisibility.test.ts and notifications.test.ts and are
+ * deliberately not duplicated here.
  */
 test.describe("result publishing policy (P2D-J5)", () => {
   test("Scenario A — immediate publish: candidate sees result after submit", async ({
@@ -53,14 +63,6 @@ test.describe("result publishing policy (P2D-J5)", () => {
     await expect(page.getByTestId("result-total-score")).toHaveText("100");
     // The pending/hidden state must NOT render.
     await expect(page.getByTestId("result-status-message")).toHaveCount(0);
-
-    // Confirm the result belongs to the correct exam/attempt over the API.
-    const resultUrl = new URL(page.url());
-    const attemptId = resultUrl.pathname.split("/").filter(Boolean)[1]!;
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-    const result = await getCandidateResult(request, candidateToken, attemptId);
-    expect(result.showResultImmediately).toBe(true);
-    expect(result.totalScore).toBe(100);
   });
 
   test("Scenario B — manual publish: candidate hidden until admin publishes", async ({
@@ -95,43 +97,9 @@ test.describe("result publishing policy (P2D-J5)", () => {
     ).toBeVisible();
     await expect(page.getByTestId("result-total-score")).toHaveCount(0);
 
-    // Confirm via API: hidden with the pending_publish reason.
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-    const beforePublish = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(beforePublish.showResultImmediately).toBe(false);
-    expect(beforePublish.hiddenReason).toBe("pending_publish");
-
     // ── Before publish: no score-derived facts on ANY candidate surface ────
-    // (#324) The attempt is fully graded (score committed in the DB), yet the
-    // candidate must not observe it through the attempt-load API, the exam
-    // list/detail summaries, or the list/start UI pages.
-    const beforeAttempt = await request.get(
-      `${BASE_URL}/api/attempts/${attemptId}`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(beforeAttempt.status()).toBe(200);
-    const beforeAttemptBody = await beforeAttempt.json();
-    expect(beforeAttemptBody.score).toBeUndefined();
-    expect(beforeAttemptBody.passed).toBeUndefined();
-
-    const beforeList = await request.get(`${BASE_URL}/api/candidate/exams`, {
-      headers: { Cookie: `auth-token=${candidateToken}` },
-    });
-    const beforeListEntry = (
-      (await beforeList.json()) as Array<{
-        examId: string;
-        bestScore?: number;
-        bestScorePercent?: number;
-      }>
-    ).find((entry) => entry.examId === seeded.examId);
-    expect(beforeListEntry).toBeDefined();
-    expect(beforeListEntry!.bestScore).toBeUndefined();
-    expect(beforeListEntry!.bestScorePercent).toBeUndefined();
-
+    // (#324) The candidate UI must not observe the graded score through the
+    // exam list card or the start page summary.
     await page.goto(`${BASE_URL}/exam/list`);
     const beforeCard = page.getByTestId(`exam-card-${seeded.examId}`);
     await expect(beforeCard).toBeVisible({ timeout: 15_000 });
@@ -144,7 +112,8 @@ test.describe("result publishing policy (P2D-J5)", () => {
     // view (the original flow asserts on a reload of THIS page).
     await page.goto(`${BASE_URL}/exam/${attemptId}/result`);
 
-    // ── Admin publishes results ─────────────────────────────────────────────
+    // ── Admin publishes results (the mutation driver; receipt/idempotency
+    // shapes are owned by resultPublishing.test.ts) ─────────────────────────
     const adminToken = await adminApiToken(request);
     const publishRes = await publishResultsApi(
       request,
@@ -152,12 +121,6 @@ test.describe("result publishing policy (P2D-J5)", () => {
       seeded.examId,
     );
     expect(publishRes.status()).toBe(200);
-    const publishBody = (await publishRes.json()) as {
-      ok: boolean;
-      alreadyPublished: boolean;
-    };
-    expect(publishBody.ok).toBe(true);
-    expect(publishBody.alreadyPublished).toBe(false);
 
     // ── After publish: candidate re-opens the result and now sees it ────────
     await page.reload();
@@ -168,39 +131,8 @@ test.describe("result publishing policy (P2D-J5)", () => {
     await expect(page.getByText("已通过")).toBeVisible();
     await expect(page.getByTestId("result-status-message")).toHaveCount(0);
 
-    // Confirm via API: now visible with the full score.
-    const afterPublish = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(afterPublish.showResultImmediately).toBe(true);
-    expect(afterPublish.totalScore).toBe(100);
-
-    // (#324) Every other candidate surface restores consistently: the
-    // attempt-load API returns score/passed, the exam list summary carries
-    // bestScore, and both UI pages render the published score.
-    const afterAttempt = await request.get(
-      `${BASE_URL}/api/attempts/${attemptId}`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    const afterAttemptBody = await afterAttempt.json();
-    expect(afterAttemptBody.score).toBe(100);
-    expect(afterAttemptBody.passed).toBe(true);
-
-    const afterList = await request.get(`${BASE_URL}/api/candidate/exams`, {
-      headers: { Cookie: `auth-token=${candidateToken}` },
-    });
-    const afterListEntry = (
-      (await afterList.json()) as Array<{
-        examId: string;
-        bestScore?: number;
-        bestScorePercent?: number;
-      }>
-    ).find((entry) => entry.examId === seeded.examId);
-    expect(afterListEntry!.bestScore).toBe(100);
-    expect(afterListEntry!.bestScorePercent).toBe(100);
-
+    // (#324) Every candidate UI surface restores consistently: the exam list
+    // card and the start page now render the published score.
     await page.goto(`${BASE_URL}/exam/list`);
     const afterCard = page.getByTestId(`exam-card-${seeded.examId}`);
     await expect(afterCard).toBeVisible({ timeout: 15_000 });
@@ -210,18 +142,6 @@ test.describe("result publishing policy (P2D-J5)", () => {
     await expect(page.getByText("最高成绩: 100/100")).toBeVisible({
       timeout: 15_000,
     });
-
-    // Idempotent re-publish is a no-op (visibility already flipped).
-    const rePublishRes = await publishResultsApi(
-      request,
-      adminToken,
-      seeded.examId,
-    );
-    expect(rePublishRes.status()).toBe(200);
-    const rePublishBody = (await rePublishRes.json()) as {
-      alreadyPublished: boolean;
-    };
-    expect(rePublishBody.alreadyPublished).toBe(true);
   });
 
   // ── P3 result visibility ────────────────────────────────────────
@@ -291,45 +211,25 @@ test.describe("result publishing policy (P2D-J5)", () => {
     request,
   }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
-    const { seeded, attemptId, essayQuestionId } = await seedAndSubmitMixedExam(
+    const { attemptId, essayQuestionId } = await seedAndSubmitMixedExam(
       page,
       request,
       `after-grading-${suffix}`,
       "after_grading",
     );
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
     const adminToken = await adminApiToken(request);
 
-    // ── Before final manual grading: pending_manual → result hidden ────────
-    // INV-R3: the objective partial score (10) must NOT leak.
-    const takeSubmitted = await request.get(
-      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(takeSubmitted.status()).toBe(200);
-    const takeSubmittedBody = await takeSubmitted.json();
-    expect(takeSubmittedBody.attemptStatus).toBe("submitted");
-    expect(takeSubmittedBody.gradingStatus).toBe("pending_manual");
+    // ── Before final manual grading: pending_manual → result page HIDDEN ────
+    // INV-R3 browser half: the hidden state renders; the objective partial
+    // score (10) leaks nowhere in the candidate UI.
+    await expect(page.getByTestId("result-status-message")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("result-total-score")).toHaveCount(0);
 
-    const beforeGrade = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(beforeGrade.showResultImmediately).toBe(false);
-    // The attempt is still 'submitted' (not yet 'graded'), so the result is not
-    // yet computable and the contract labels it 'not_started' (the historical
-    // label covering any pre-graded lifecycle state — see the visibility
-    // authority resolveCandidateResultVisibility). The invariant that
-    // matters: result HIDDEN, no
-    // partial score leaked while manual grading is pending.
-    expect(beforeGrade.hiddenReason).toBe("not_started");
-    // No score/pass leaked while manual grading is pending.
-    expect(beforeGrade.totalScore).toBeUndefined();
-    expect(beforeGrade.passed).toBeUndefined();
-
-    // ── Admin completes the final manual entry (15/20) ─────────────────────
-    // Real grading endpoint; no helper hides the transition.
+    // ── Admin completes the final manual entry (15/20) via the real grading
+    // endpoint. Receipt/visibility shapes are owned by
+    // candidateResultVisibility.test.ts and are not re-asserted here.
     const gradeRes = await gradeQuestionApi(
       request,
       adminToken,
@@ -339,29 +239,8 @@ test.describe("result publishing policy (P2D-J5)", () => {
       "partial credit",
     );
     expect(gradeRes.status()).toBe(200);
-    const gradeBody = (await gradeRes.json()) as {
-      gradingStatus: string;
-      fullyGraded: boolean;
-      totalScore?: number;
-      passed?: boolean;
-    };
-    // Authoritative internal state: graded + fully_graded, score 10+15=25.
-    expect(gradeBody.gradingStatus).toBe("fully_graded");
-    expect(gradeBody.fullyGraded).toBe(true);
-    expect(gradeBody.totalScore).toBe(25);
-    expect(gradeBody.passed).toBe(true);
 
     // ── after_grading AUTO-releases on fully_graded (no publish-results) ────
-    const afterGrade = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(afterGrade.showResultImmediately).toBe(true);
-    expect(afterGrade.totalScore).toBe(25);
-    expect(afterGrade.passed).toBe(true);
-
-    // Candidate UI reflects the same released result.
     await page.reload();
     await expect(page.getByTestId("result-total-score")).toBeVisible({
       timeout: 15_000,
@@ -382,20 +261,19 @@ test.describe("result publishing policy (P2D-J5)", () => {
       `manual-mixed-${suffix}`,
       "manual",
     );
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
     const adminToken = await adminApiToken(request);
 
-    // ── pending_manual: hidden (objective partial score 10 must not leak) ──
-    const beforeGrade = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(beforeGrade.showResultImmediately).toBe(false);
-    expect(beforeGrade.totalScore).toBeUndefined();
-    expect(beforeGrade.passed).toBeUndefined();
+    // ── pending_manual: the result page renders the hidden state; the
+    // objective partial score (10) leaks nowhere in the candidate UI. ──
+    await expect(page.getByTestId("result-status-message")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("result-total-score")).toHaveCount(0);
 
-    // ── Admin completes final manual grading (15/20) ───────────────────────
+    // ── Admin completes final manual grading (15/20) via the real endpoint.
+    // INV-R2 (fully_graded + computed score stays hidden until publish) is
+    // owned at the API layer by candidateResultVisibility.test.ts; the browser
+    // claim below is that the hidden state SURVIVES grading until publish. ──
     const gradeRes = await gradeQuestionApi(
       request,
       adminToken,
@@ -405,56 +283,24 @@ test.describe("result publishing policy (P2D-J5)", () => {
       "partial credit",
     );
     expect(gradeRes.status()).toBe(200);
-    const gradeBody = (await gradeRes.json()) as {
-      gradingStatus: string;
-      fullyGraded: boolean;
-      totalScore?: number;
-      passed?: boolean;
-    };
-    // INV-R2 core: fully_graded + score computed internally...
-    expect(gradeBody.gradingStatus).toBe("fully_graded");
-    expect(gradeBody.fullyGraded).toBe(true);
-    expect(gradeBody.totalScore).toBe(25);
-    expect(gradeBody.passed).toBe(true);
 
-    // ...but the CANDIDATE result is still hidden (manual needs explicit
-    // publish-results; grading completion does NOT release the result).
-    const afterGradeHidden = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(afterGradeHidden.showResultImmediately).toBe(false);
-    expect(afterGradeHidden.hiddenReason).toBe("pending_publish");
-    expect(afterGradeHidden.totalScore).toBeUndefined();
-    expect(afterGradeHidden.passed).toBeUndefined();
-
-    // Candidate UI still shows the hidden/pending state, no score.
+    // The candidate result is still hidden after grading (manual needs
+    // explicit publish-results; grading completion does NOT release it).
     await page.reload();
     await expect(page.getByTestId("result-status-message")).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.getByTestId("result-total-score")).toHaveCount(0);
 
-    // ── Explicit publish-results via the real endpoint ─────────────────────
+    // ── Explicit publish-results via the real endpoint (mutation driver). ──
     const publishRes = await publishResultsApi(
       request,
       adminToken,
       seeded.examId,
     );
     expect(publishRes.status()).toBe(200);
-    expect((await publishRes.json()).ok).toBe(true);
 
-    // ── Candidate result now visible; score identity unchanged (25) ────────
-    const afterPublish = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(afterPublish.showResultImmediately).toBe(true);
-    expect(afterPublish.totalScore).toBe(25);
-    expect(afterPublish.passed).toBe(true);
-
+    // ── Candidate result now visible with the unchanged score (25). ──
     await page.reload();
     await expect(page.getByTestId("result-total-score")).toBeVisible({
       timeout: 15_000,
@@ -474,12 +320,12 @@ test.describe("result publishing policy (P2D-J5)", () => {
  * product interface, then logged in through the real /login UI) clicks the
  * capability-gated Publish Results control on ExamDetailPage. The publication
  * mutation MUST travel through the browser UI — the publish-results API is NOT
- * called directly for the publication step.
+ * called for the publication step.
  *
- * API use is allowed here only for fixture setup (seedExam) and for verifying
- * the authoritative frozen score via the candidate result API after the browser
- * publication. The Publish Results action itself is performed through the
- * rendered ExamDetailPage control + its confirmation dialog.
+ * API use is allowed here only for fixture setup (seedExam). The publication
+ * itself is performed through the rendered ExamDetailPage control + its
+ * confirmation dialog; publish receipt/idempotency shapes are owned by
+ * resultPublishing.test.ts and are not re-verified over the wire here.
  */
 test.describe("M12: Teacher browser publication E2E", () => {
   test("Teacher publishes results through the ExamDetailPage UI; candidate sees the frozen score only after", async ({
@@ -512,16 +358,6 @@ test.describe("M12: Teacher browser publication E2E", () => {
       page.getByText("成绩正在审核中，将在公布后可见"),
     ).toBeVisible();
     await expect(page.getByTestId("result-total-score")).toHaveCount(0);
-
-    // Confirm via API: hidden with pending_publish.
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-    const beforePublish = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(beforePublish.showResultImmediately).toBe(false);
-    expect(beforePublish.hiddenReason).toBe("pending_publish");
 
     // ── 5. Log in through the browser as Teacher ──
     // Teacher created via the SUPPORTED product interface (POST /api/users),
@@ -567,23 +403,10 @@ test.describe("M12: Teacher browser publication E2E", () => {
       "Publish Results action disappears after successful publication",
     ).toHaveCount(0, { timeout: 15_000 });
 
-    // Confirm via API: resultsPublishedAt is now set (the mutation committed).
-    const adminToken = await adminApiToken(request);
-    const publishRes = await publishResultsApi(
-      request,
-      adminToken,
-      seeded.examId,
-    );
-    expect(publishRes.status()).toBe(200);
-    const publishBody = (await publishRes.json()) as {
-      alreadyPublished: boolean;
-    };
-    expect(publishBody.alreadyPublished).toBe(true);
-
     // ── 10-11. Candidate re-enters the result surface → sees frozen score ──
     // The browser is currently the Teacher's session; log back in as the
     // Candidate to verify the candidate-facing result UI (the publication
-    // must flip candidate visibility, not just the admin/API view).
+    // must flip candidate visibility, not just the admin view).
     await candidateLogin(page, seeded.candidate);
     await expect(page).toHaveURL(/\/exam\/list(?:$|[/?#])/);
     await page.goto(`${BASE_URL}/exam/${attemptId}/result`);
@@ -593,16 +416,6 @@ test.describe("M12: Teacher browser publication E2E", () => {
     await expect(page.getByTestId("result-total-score")).toHaveText("100");
     await expect(page.getByText("已通过")).toBeVisible();
     await expect(page.getByTestId("result-status-message")).toHaveCount(0);
-
-    // Confirm the frozen score + pass result via the authoritative candidate API.
-    const afterPublish = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(afterPublish.showResultImmediately).toBe(true);
-    expect(afterPublish.totalScore).toBe(100);
-    expect(afterPublish.passed).toBe(true);
   });
 });
 
@@ -610,18 +423,20 @@ test.describe("M12: Teacher browser publication E2E", () => {
  * P5-N1: result_published Inbox notification E2E.
  *
  * Extends the M12 publication flow with the Inbox steps:
- *   Admin/Teacher manual publish (API)
- *     -> candidate Inbox notification committed (verified via API)
+ *   Admin manual publish (API, the mutation driver)
  *     -> candidate browser sees unread badge
- *     -> opens panel, marks read
- *     -> clicks the notification, navigates to the authoritative result page
+ *     -> opens panel, clicks the notification
+ *     -> navigates to the authoritative result page
  *
- * This proves the P5-N1 architecture end-to-end (P5-N1-R0 §25.8 / §21 DoD):
- * one real product event — authorized result publication — flows through
- * result state mutation -> Inbox row -> candidate reads + navigates.
+ * This proves the P5-N1 browser composition (P5-N1-R0 §25.8 / §21 DoD): a real
+ * product event — authorized result publication — surfaces in the candidate's
+ * Inbox and its click-through lands on the result. Notification row shape,
+ * totals and idempotent re-publish are owned by
+ * apps/api/src/routes/notifications.test.ts and resultPublishing.test.ts and
+ * are deliberately not re-verified over the wire here.
  */
 test.describe("P5-N1: result_published Inbox notification", () => {
-  test("manual publish commits an Inbox notification; candidate sees badge, reads, navigates", async ({
+  test("manual publish surfaces the Inbox notification; candidate reads it and navigates", async ({
     page,
     request,
   }) => {
@@ -641,16 +456,7 @@ test.describe("P5-N1: result_published Inbox notification", () => {
       .split("/")
       .filter(Boolean)[1]!;
 
-    // ── 2. Confirm no Inbox notification exists before publish ──
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-    const beforeList = await request.get(`${BASE_URL}/api/notifications`, {
-      headers: { Cookie: `auth-token=${candidateToken}` },
-    });
-    expect(beforeList.status()).toBe(200);
-    const beforeBody = (await beforeList.json()) as { total: number };
-    const beforeTotal = beforeBody.total;
-
-    // ── 3. Publish results via the Admin API (authoritative mutation) ──
+    // ── 2. Publish results via the Admin API (the mutation driver) ──
     const adminToken = await adminApiToken(request);
     const publishRes = await publishResultsApi(
       request,
@@ -658,42 +464,8 @@ test.describe("P5-N1: result_published Inbox notification", () => {
       seeded.examId,
     );
     expect(publishRes.status()).toBe(200);
-    const publishBody = (await publishRes.json()) as {
-      alreadyPublished: boolean;
-    };
-    expect(publishBody.alreadyPublished).toBe(false);
 
-    // ── 4. Inbox notification was committed atomically (API check) ──
-    const afterList = await request.get(`${BASE_URL}/api/notifications`, {
-      headers: { Cookie: `auth-token=${candidateToken}` },
-    });
-    expect(afterList.status()).toBe(200);
-    const afterBody = (await afterList.json()) as {
-      total: number;
-      items: Array<{
-        type: string;
-        actionPath: string | null;
-        readAt: string | null;
-      }>;
-    };
-    expect(afterBody.total).toBe(beforeTotal + 1);
-    const notif = afterBody.items.find(
-      (i) => i.actionPath === `/exam/${attemptId}/result`,
-    );
-    expect(notif).toBeDefined();
-    expect(notif!.type).toBe("result_published");
-    expect(notif!.readAt).toBeNull();
-
-    // Unread-count reflects the new notification.
-    const countRes = await request.get(
-      `${BASE_URL}/api/notifications/unread-count`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(countRes.status()).toBe(200);
-    const countBody = (await countRes.json()) as { count: number };
-    expect(countBody.count).toBeGreaterThanOrEqual(1);
-
-    // ── 5. Candidate browser shows the unread badge ──
+    // ── 3. Candidate browser shows the unread badge ──
     // The candidate is still on the result page from the submit flow;
     // navigate to the exam list to see the notification bell.
     await page.goto(`${BASE_URL}/exam/list`);
@@ -702,7 +474,7 @@ test.describe("P5-N1: result_published Inbox notification", () => {
       timeout: 15_000,
     });
 
-    // ── 6. Open the panel, mark read by clicking the notification ──
+    // ── 4. Open the panel, mark read by clicking the notification ──
     await page.getByTestId("notification-bell").click();
     const panel = page.getByTestId("notification-panel");
     await expect(panel).toBeVisible({ timeout: 10_000 });
@@ -711,29 +483,12 @@ test.describe("P5-N1: result_published Inbox notification", () => {
     await expect(item).toBeVisible({ timeout: 10_000 });
     await item.click();
 
-    // ── 7. Navigation lands on the authoritative result page ──
+    // ── 5. Navigation lands on the authoritative result page ──
     await expect(page).toHaveURL(
       new RegExp(`/exam/${attemptId}/result(?:$|[/?#])`),
     );
     await expect(page.getByTestId("result-total-score")).toBeVisible({
       timeout: 15_000,
     });
-
-    // ── 8. Idempotency: re-publishing does not create a duplicate row ──
-    const republishRes = await publishResultsApi(
-      request,
-      adminToken,
-      seeded.examId,
-    );
-    expect(republishRes.status()).toBe(200);
-    const republishBody = (await republishRes.json()) as {
-      alreadyPublished: boolean;
-    };
-    expect(republishBody.alreadyPublished).toBe(true);
-    const recheckList = await request.get(`${BASE_URL}/api/notifications`, {
-      headers: { Cookie: `auth-token=${candidateToken}` },
-    });
-    const recheckBody = (await recheckList.json()) as { total: number };
-    expect(recheckBody.total).toBe(afterBody.total); // unchanged
   });
 });

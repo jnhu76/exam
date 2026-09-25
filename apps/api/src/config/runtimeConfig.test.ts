@@ -125,42 +125,9 @@ describe("runtimeConfig", () => {
     resetRuntimeConfigForTest();
   });
 
-  describe("deployment mode", () => {
-    it("defaults to singleTenant when DEPLOYMENT_MODE is not set", () => {
-      delete process.env.DEPLOYMENT_MODE;
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.mode).toBe("singleTenant");
-    });
-
-    it("accepts DEPLOYMENT_MODE=singleTenant", () => {
-      process.env.DEPLOYMENT_MODE = "singleTenant";
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.mode).toBe("singleTenant");
-    });
-
-    it("rejects DEPLOYMENT_MODE=multiTenant at startup (Phase 1 single-tenant only)", () => {
-      process.env.DEPLOYMENT_MODE = "multiTenant";
-      resetRuntimeConfigForTest();
-      expect(() => getRuntimeConfig()).toThrow(
-        /Phase 1.*singleTenant|singleTenant.*Phase 1/,
-      );
-    });
-
-    it("multiTenant error message does not leak that it is a runnable mode", () => {
-      process.env.DEPLOYMENT_MODE = "multiTenant";
-      resetRuntimeConfigForTest();
-      try {
-        getRuntimeConfig();
-        throw new Error("expected throw");
-      } catch (e) {
-        const msg = String((e as Error).message);
-        expect(msg).toMatch(/Phase 1/);
-        expect(msg).toMatch(/singleTenant/);
-      }
-    });
-  });
+  // DEPLOYMENT_MODE resolution + multiTenant fail-fast is owned by the
+  // "DEPLOYMENT_MODE fail-fast" describe below (strictly stronger: trims,
+  // invalid values, and no-leak assertions).
 
   describe("apiReference", () => {
     it("uses /_dev/api-reference as uiPath; the spec path is only derived in the public projection", () => {
@@ -176,23 +143,13 @@ describe("runtimeConfig", () => {
       expect(config.apiReference.staticCSP).toBe(true);
     });
 
-    it("is disabled in production even with API_DOCS_ENABLED=true", () => {
-      process.env.NODE_ENV = "production";
-      process.env.JWT_SECRET = "test-secret";
-      process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
-      process.env.CORS_ORIGIN = "https://example.com";
-      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
-      process.env.API_DOCS_ENABLED = "true";
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.apiReference.enabled).toBe(false);
-    });
-
     // Regression: this gate previously broke when the test runner leaked a
     // stale APP_MODE (e.g. APP_MODE=test from the CI test command), because
     // parseAppMode honors APP_MODE over NODE_ENV. The gate must engage based
     // on the explicit production env, regardless of what the runner leaves in
     // process.env between tests. See beforeEach clean-baseline isolation.
+    // (The #569 matrix establishes production via explicit APP_MODE; this row
+    // is the NODE_ENV-fallback composition the matrix cannot express.)
     it("engages the production gate even when APP_MODE is unset (clean baseline)", () => {
       process.env.NODE_ENV = "production";
       process.env.JWT_SECRET = "test-secret";
@@ -205,24 +162,6 @@ describe("runtimeConfig", () => {
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.isProduction).toBe(true);
-      expect(config.apiReference.enabled).toBe(false);
-    });
-
-    it("is enabled when API_DOCS_ENABLED=true and not production", () => {
-      process.env.NODE_ENV = "test";
-      process.env.TEST_DATABASE_URL = "postgresql://t:t@h:5432/test_db";
-      process.env.API_DOCS_ENABLED = "true";
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.apiReference.enabled).toBe(true);
-    });
-
-    it("is disabled when API_DOCS_ENABLED is not set", () => {
-      delete process.env.API_DOCS_ENABLED;
-      process.env.NODE_ENV = "test";
-      process.env.TEST_DATABASE_URL = "postgresql://t:t@h:5432/test_db";
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
       expect(config.apiReference.enabled).toBe(false);
     });
   });
@@ -506,27 +445,6 @@ describe("runtimeConfig", () => {
         /Invalid APP_MODE/,
       );
     });
-
-    it("production missing CORS_ORIGIN throws", () => {
-      expect(() =>
-        loadRuntimeConfig({
-          APP_MODE: "production",
-          JWT_SECRET: "s",
-          DATABASE_URL: "postgresql://x",
-        }),
-      ).toThrow(/CORS_ORIGIN is required/);
-    });
-
-    it("production CORS_ORIGIN comma list works", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "production",
-        JWT_SECRET: "s",
-        DATABASE_URL: "postgresql://x",
-        CORS_ORIGIN: "https://a.com,https://b.com",
-        PUBLIC_WEB_ORIGIN: "https://a.com",
-      });
-      expect(config.cors.origin).toEqual(["https://a.com", "https://b.com"]);
-    });
   });
 
   describe("CORS origin fail-fast", () => {
@@ -683,27 +601,8 @@ describe("runtimeConfig", () => {
     });
   });
 
-  describe("boolean parsing", () => {
-    it("COOKIE_SECURE true in production mode", () => {
-      process.env.APP_MODE = "production";
-      process.env.JWT_SECRET = "prod-secret";
-      process.env.DATABASE_URL = "postgresql://p:p@h:5432/prod";
-      process.env.CORS_ORIGIN = "https://example.com";
-      process.env.PUBLIC_WEB_ORIGIN = "https://example.com";
-      delete process.env.COOKIE_SECURE;
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.authSecret.cookieSecure).toBe(true);
-    });
-
-    it("COOKIE_SECURE respects explicit true in dev", () => {
-      process.env.APP_MODE = "development";
-      process.env.COOKIE_SECURE = "true";
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.authSecret.cookieSecure).toBe(true);
-    });
-  });
+  // COOKIE_SECURE boolean parsing is owned by the
+  // "cookie secure authority matrix (#568)" describe below.
 
   describe("cookie secure authority matrix (#568)", () => {
     const PROD = {
@@ -1150,16 +1049,8 @@ describe("runtimeConfig", () => {
       });
       expect(config.cors.origin).toBe("http://only");
     });
-
-    it("production missing CORS_ORIGIN still throws", () => {
-      expect(() =>
-        loadRuntimeConfig({
-          APP_MODE: "production",
-          JWT_SECRET: "s",
-          DATABASE_URL: "postgresql://x",
-        }),
-      ).toThrow(/CORS_ORIGIN is required/);
-    });
+    // "production missing CORS_ORIGIN still throws" is owned by the
+    // "CORS origin fail-fast" describe above.
   });
 
   describe("DEPLOYMENT_MODE fail-fast", () => {
@@ -1242,39 +1133,10 @@ describe("runtimeConfig", () => {
   });
 
   describe("rate limit positive integer validation", () => {
-    it("APP_MODE=e2e disables rate limiting for deterministic browser tests", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "e2e",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
-        RATE_LIMIT_MAX: "1",
-        RATE_LIMIT_WINDOW_MS: "60000",
-      });
-      expect(config.rateLimit.enabled).toBe(false);
-      expect(config.rateLimit.max).toBe(1);
-      expect(config.rateLimit.timeWindow).toBe(60000);
-    });
-
-    it("production keeps rate limiting enabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "production",
-        DATABASE_URL: "postgresql://p:p@h:5432/proddb",
-        JWT_SECRET: "production-secret",
-        CORS_ORIGIN: "https://example.com",
-        PUBLIC_WEB_ORIGIN: "https://example.com",
-      });
-      expect(config.rateLimit.enabled).toBe(true);
-    });
-
-    it("valid string number works", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "development",
-        ...DEV_DB,
-        RATE_LIMIT_MAX: "200",
-        RATE_LIMIT_WINDOW_MS: "120000",
-      });
-      expect(config.rateLimit.max).toBe(200);
-      expect(config.rateLimit.timeWindow).toBe(120000);
-    });
+    // Enable/disable per mode is owned by the #567 matrix below; value
+    // forwarding by its "RATE_LIMIT_MAX / RATE_LIMIT_WINDOW_MS are
+    // forwarded" row. This describe owns only the numeric-validation
+    // contract for RATE_LIMIT_MAX itself.
 
     it("undefined falls back to defaults", () => {
       const config = loadRuntimeConfig({ APP_MODE: "development", ...DEV_DB });

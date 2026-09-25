@@ -115,22 +115,10 @@ describe("API input validation (Zod schema boundary)", () => {
     expect(body.error.code).toBe("VALIDATION_ERROR");
   });
 
-  it("exam creation rejects closeAt before openAt", async () => {
-    // P7-M1: the canonical policy validator now rejects an inverted window at
-    // create (previously it was only caught at publish). The test name was
-    // always correct; the assertion now matches it.
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: {
-        ...baseExamPayload(),
-        openAt: "2026-06-02T00:00:00Z",
-        closeAt: "2026-06-01T00:00:00Z",
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-  });
+  // Inverted-window and passingScore>totalScore create rejections are owned by
+  // examPolicyValidation.test.ts (:69 inverted window with EXAM_WINDOW_INVALID
+  // field code; :89 score invariant) and the exam.test.ts passing-score
+  // boundary matrix.
 
   it("exam creation rejects durationMinutes <= 0", async () => {
     const res = await ctx.app.inject({
@@ -140,38 +128,6 @@ describe("API input validation (Zod schema boundary)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
-  });
-
-  it("create rejects passingScore > totalScore", async () => {
-    const examRes = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: {
-        ...baseExamPayload(),
-        passingScore: 200,
-        totalScore: 100,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(examRes.statusCode).toBe(400);
-  });
-
-  it("publish rejects closeAt before openAt", async () => {
-    // P7-M1: an inverted window is now rejected at create, so this case cannot
-    // reach publish through the route. Publish still revalidates the whole
-    // policy (engine unit test in examPolicy.test.ts proves the publish guard);
-    // here we assert the create-time rejection that prevents the bad draft.
-    const examRes = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: {
-        ...baseExamPayload(),
-        openAt: "2026-06-02T00:00:00Z",
-        closeAt: "2026-06-01T00:00:00Z",
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(examRes.statusCode).toBe(400);
   });
 
   it("question creation rejects empty content", async () => {

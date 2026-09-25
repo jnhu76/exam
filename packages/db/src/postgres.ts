@@ -2,7 +2,7 @@ import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
-import { quoteIdent } from "./testIsolation.js";
+import { quoteIdent } from "./sqlIdent.js";
 import { schema } from "./schema/pg.js";
 
 /** Returns true if the URL uses the `postgresql://` or `postgres://` scheme. */

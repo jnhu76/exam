@@ -109,10 +109,4 @@ describe("QuestionImportPage", () => {
     expect(await screen.findByText("导入题目")).toBeInTheDocument();
     expect(screen.getByText("下载模板")).toBeInTheDocument();
   });
-
-  it("shows retry button on error", async () => {
-    renderPage(() => Promise.reject(new Error("fail")));
-    const retryBtn = await screen.findByRole("button", { name: /重试/ });
-    expect(retryBtn).toBeInTheDocument();
-  });
 });

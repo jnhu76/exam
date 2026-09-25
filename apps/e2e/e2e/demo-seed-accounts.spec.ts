@@ -431,16 +431,18 @@ test.describe("demo seed candidate accounts", () => {
         await ensureInProgressAttempt(request, token);
       }
       const summaries = await getCandidateSummariesByApi(request, token);
+      // The summaries call is the locator for the card under test; the
+      // availability/primaryAction derivation itself is owned by
+      // candidate-start.test.ts (§CandidateExamSummary derivation) and is not
+      // re-asserted here — the UI contract below is what this spec proves.
       const summary = findExpectedSummary(summaries, expected);
-      expect(summary.availabilityStatus).toBe(expected.availabilityStatus);
-      expect(summary.primaryAction).toBe(expected.primaryAction);
 
       await loginViaUi(page, expected.username, CANDIDATE_PASSWORD);
       await expectUiSummary(page, summary, expected);
     });
   }
 
-  test("exhausted 2/2 returns 409 and has no start action", async ({
+  test("exhausted 2/2 shows 次数已用完 and no start action", async ({
     page,
     request,
   }) => {
@@ -468,29 +470,9 @@ test.describe("demo seed candidate accounts", () => {
     await startAndSubmit(request, candidateToken, examId);
     await startAndSubmit(request, candidateToken, examId);
 
-    const summaries = await getCandidateSummariesByApi(request, candidateToken);
-    const summary = summaries.find((item) => item.examId === examId);
-    expect(summary).toEqual(
-      expect.objectContaining({
-        availabilityStatus: "max_attempts_exhausted",
-        primaryAction: "view_result",
-        attemptsUsed: 2,
-        maxAttempts: 2,
-      }),
-    );
-
-    const reject = await apiCall(
-      request,
-      "POST",
-      `/api/attempts/${examId}/start`,
-      undefined,
-      candidateToken,
-    );
-    expect(reject.status).toBe(409);
-    expect(reject.body.error).toEqual(
-      expect.objectContaining({ code: "MAX_ATTEMPTS_REACHED" }),
-    );
-
+    // The exhausted-state derivation and the 409 MAX_ATTEMPTS_REACHED
+    // wire contract are owned by candidate-start.test.ts; the browser claim
+    // is that the card renders the exhausted state with no start affordance.
     await loginViaUi(page, candidate.username, candidate.password);
     const card = page.getByTestId(`exam-card-${examId}`);
     await expect(card).toBeVisible({ timeout: 15_000 });

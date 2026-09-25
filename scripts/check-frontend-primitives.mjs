@@ -30,6 +30,13 @@ import { BUSINESS_UI_ROOTS } from "./lib/ui-scan-roots.mjs";
 const ROOT = new URL("../apps/web/src", import.meta.url).pathname;
 const REPO = new URL("..", import.meta.url).pathname;
 
+// Test seam (same pattern as STALE_UI_DOCS_TARGETS_OVERRIDE): when set, scan
+// exactly this directory instead of the governed scope, so
+// check-frontend-primitives.test.mjs can prove on a throwaway fixture that
+// the scanner DETECTS a violation rather than merely exiting. Unset in
+// development and CI — the governed scope is then the only scan target.
+const SCAN_ROOT_OVERRIDE = process.env.CHECK_FRONTEND_PRIMITIVES_SCAN_ROOT;
+
 // Base scope: the shared governed-business-UI authority, mapped to
 // apps/web/src-relative dirs. components/ui stays excluded — it is the one
 // place complex primitives are allowed to live.
@@ -147,8 +154,10 @@ async function walk(dir) {
 async function main() {
   const allFindings = [];
 
-  for (const d of SCAN_DIRS) {
-    const dir = join(ROOT, d);
+  const scanDirs = SCAN_ROOT_OVERRIDE
+    ? [SCAN_ROOT_OVERRIDE]
+    : SCAN_DIRS.map((d) => join(ROOT, d));
+  for (const dir of scanDirs) {
     let exists = true;
     try {
       const s = await stat(dir);
@@ -172,7 +181,7 @@ async function main() {
 
   if (allFindings.length === 0) {
     console.log("✓ No handwritten UI primitives found outside components/ui/.");
-    console.log(`  (Scanned: ${SCAN_DIRS.join(", ")})`);
+    console.log(`  (Scanned: ${SCAN_ROOT_OVERRIDE ?? SCAN_DIRS.join(", ")})`);
     process.exit(0);
   }
 

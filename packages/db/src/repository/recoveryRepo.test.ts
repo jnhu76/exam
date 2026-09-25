@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import type {
   AttemptStatus,
   AttemptTimeAdjustment,
+  EnrollmentStatus,
   InterruptionTimePolicy,
+  MisconductFlag,
   RequestContext,
 } from "@exam/domain";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -111,66 +113,21 @@ async function createFixture(db: Database, suffix: string): Promise<Fixture> {
     createdAt: now,
     updatedAt: now,
   });
-  await db.insert(schema.exams).values({
-    id: examId,
-    organizationId,
-    title: `Recovery Exam ${suffix}`,
-    description: "",
-    courseId,
-    status: "open",
-    timingMode: "timed_window",
-    durationMinutes: 60,
-    openAt: now,
-    closeAt: EXAM_CLOSE_AT,
-    passingScore: 60,
-    totalScore: 100,
-    questionSelectionMode: "manual",
-    questionIds: [],
-    questionSnapshot: [],
-    controlFlags: {
-      shuffleQuestions: false,
-      shuffleOptions: false,
-      detectTabSwitch: false,
-      disableCopyPaste: false,
-      requireQueue: false,
-      batchSize: 10,
-      batchInterval: 3,
-      restrictIp: false,
-      requireLockdown: false,
-      showResultImmediately: true,
-    },
-    retakePolicy: "unlimited",
-    scoreStrategy: "highest",
-    maxAttempts: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(schema.examEnrollments).values({
-    id: enrollmentId,
-    organizationId,
-    examId,
-    candidateId,
-    status: "started",
-    attemptCount: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(schema.examAttempts).values({
-    id: attemptId,
-    organizationId,
-    examId,
-    enrollmentId,
-    candidateId,
-    attemptNo: 1,
-    status: "in_progress",
-    questionSnapshot: [],
-    answers: [],
-    startedAt: now,
-    deadlineAt: ATTEMPT_DEADLINE_AT,
-    lastActivityAt: now,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await insertExam(
+    db,
+    { organizationId, courseId },
+    { id: examId, title: `Recovery Exam ${suffix}`, createdAt: now },
+  );
+  await insertEnrollment(
+    db,
+    { organizationId, examId, candidateId },
+    { id: enrollmentId, createdAt: now },
+  );
+  await insertAttempt(
+    db,
+    { organizationId, examId, enrollmentId, candidateId },
+    { id: attemptId, createdAt: now },
+  );
   await db.insert(schema.examProctorAssignments).values({
     id: randomUUID(),
     organizationId,
@@ -234,6 +191,133 @@ async function insertIncident(
     version: 1,
     createdAt: opts.createdAt,
     updatedAt: opts.createdAt,
+  });
+  return id;
+}
+
+interface InsertExamOptions {
+  id?: string;
+  title?: string;
+  createdAt?: Date;
+}
+
+/**
+ * Inserts an exam with the canonical recovery-test shape (open timed_window,
+ * closeAt EXAM_CLOSE_AT). Callers that must reference the row before awaiting
+ * pass an explicit id; otherwise one is generated.
+ */
+async function insertExam(
+  db: Database,
+  seed: { organizationId: string; courseId: string },
+  opts: InsertExamOptions = {},
+): Promise<string> {
+  const id = opts.id ?? randomUUID();
+  const now = opts.createdAt ?? new Date("2026-01-01T00:00:00.000Z");
+  await db.insert(schema.exams).values({
+    id,
+    organizationId: seed.organizationId,
+    title: opts.title ?? "Recovery Exam",
+    description: "",
+    courseId: seed.courseId,
+    status: "open",
+    timingMode: "timed_window",
+    durationMinutes: 60,
+    openAt: now,
+    closeAt: EXAM_CLOSE_AT,
+    passingScore: 60,
+    totalScore: 100,
+    questionSelectionMode: "manual",
+    questionIds: [],
+    questionSnapshot: [],
+    controlFlags: {
+      shuffleQuestions: false,
+      shuffleOptions: false,
+      detectTabSwitch: false,
+      disableCopyPaste: false,
+      requireQueue: false,
+      batchSize: 10,
+      batchInterval: 3,
+      restrictIp: false,
+      requireLockdown: false,
+      showResultImmediately: true,
+    },
+    retakePolicy: "unlimited",
+    scoreStrategy: "highest",
+    maxAttempts: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return id;
+}
+
+interface InsertEnrollmentOptions {
+  id?: string;
+  status?: EnrollmentStatus;
+  attemptCount?: number;
+  createdAt?: Date;
+}
+
+async function insertEnrollment(
+  db: Database,
+  seed: { organizationId: string; examId: string; candidateId: string },
+  opts: InsertEnrollmentOptions = {},
+): Promise<string> {
+  const id = opts.id ?? randomUUID();
+  const now = opts.createdAt ?? new Date("2026-01-01T00:00:00.000Z");
+  await db.insert(schema.examEnrollments).values({
+    id,
+    organizationId: seed.organizationId,
+    examId: seed.examId,
+    candidateId: seed.candidateId,
+    status: opts.status ?? "started",
+    attemptCount: opts.attemptCount ?? 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return id;
+}
+
+interface InsertAttemptOptions {
+  id?: string;
+  attemptNo?: number;
+  status?: AttemptStatus;
+  /** Defaults to ATTEMPT_DEADLINE_AT; pass null explicitly for no deadline. */
+  deadlineAt?: Date | null;
+  score?: number;
+  misconduct?: MisconductFlag | null;
+  createdAt?: Date;
+}
+
+async function insertAttempt(
+  db: Database,
+  seed: {
+    organizationId: string;
+    examId: string;
+    enrollmentId: string;
+    candidateId: string;
+  },
+  opts: InsertAttemptOptions = {},
+): Promise<string> {
+  const id = opts.id ?? randomUUID();
+  const now = opts.createdAt ?? new Date("2026-01-01T00:00:00.000Z");
+  await db.insert(schema.examAttempts).values({
+    id,
+    organizationId: seed.organizationId,
+    examId: seed.examId,
+    enrollmentId: seed.enrollmentId,
+    candidateId: seed.candidateId,
+    attemptNo: opts.attemptNo ?? 1,
+    status: opts.status ?? "in_progress",
+    questionSnapshot: [],
+    answers: [],
+    startedAt: now,
+    deadlineAt:
+      opts.deadlineAt === undefined ? ATTEMPT_DEADLINE_AT : opts.deadlineAt,
+    score: opts.score,
+    lastActivityAt: now,
+    misconduct: opts.misconduct ?? null,
+    createdAt: now,
+    updatedAt: now,
   });
   return id;
 }
@@ -712,8 +796,6 @@ describe("recovery incident queue repository", () => {
     const cand2User = randomUUID();
     const cand3 = randomUUID();
     const cand3User = randomUUID();
-    const att2 = randomUUID();
-    const att3 = randomUUID();
     await db.insert(schema.users).values([
       {
         id: cand2User,
@@ -756,72 +838,36 @@ describe("recovery incident queue repository", () => {
         updatedAt: now,
       },
     ]);
-    await db.insert(schema.examEnrollments).values([
+    const enr2 = await insertEnrollment(db, {
+      organizationId: alpha.organizationId,
+      examId: alpha.examId,
+      candidateId: cand2,
+    });
+    const enr3 = await insertEnrollment(db, {
+      organizationId: alpha.organizationId,
+      examId: alpha.examId,
+      candidateId: cand3,
+    });
+    const att2 = await insertAttempt(
+      db,
       {
-        id: randomUUID(),
         organizationId: alpha.organizationId,
         examId: alpha.examId,
+        enrollmentId: enr2,
         candidateId: cand2,
-        status: "started",
-        attemptCount: 1,
-        createdAt: now,
-        updatedAt: now,
       },
+      { attemptNo: 2 },
+    );
+    const att3 = await insertAttempt(
+      db,
       {
-        id: randomUUID(),
         organizationId: alpha.organizationId,
         examId: alpha.examId,
+        enrollmentId: enr3,
         candidateId: cand3,
-        status: "started",
-        attemptCount: 1,
-        createdAt: now,
-        updatedAt: now,
       },
-    ]);
-    // Look up the enrollments we just created so the FK on exam_attempts is satisfied.
-    const enrolls = await db
-      .select({
-        id: schema.examEnrollments.id,
-        candidateId: schema.examEnrollments.candidateId,
-      })
-      .from(schema.examEnrollments)
-      .where(eq(schema.examEnrollments.examId, alpha.examId));
-    const enr2 = enrolls.find((e) => e.candidateId === cand2)!;
-    const enr3 = enrolls.find((e) => e.candidateId === cand3)!;
-    await db.insert(schema.examAttempts).values([
-      {
-        id: att2,
-        organizationId: alpha.organizationId,
-        examId: alpha.examId,
-        enrollmentId: enr2.id,
-        candidateId: cand2,
-        attemptNo: 2,
-        status: "in_progress",
-        questionSnapshot: [],
-        answers: [],
-        startedAt: now,
-        deadlineAt: ATTEMPT_DEADLINE_AT,
-        lastActivityAt: now,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: att3,
-        organizationId: alpha.organizationId,
-        examId: alpha.examId,
-        enrollmentId: enr3.id,
-        candidateId: cand3,
-        attemptNo: 3,
-        status: "in_progress",
-        questionSnapshot: [],
-        answers: [],
-        startedAt: now,
-        deadlineAt: ATTEMPT_DEADLINE_AT,
-        lastActivityAt: now,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
+      { attemptNo: 3 },
+    );
     // Exam-wide incident (no anchor attempt); link att2 + att3 as affected.
     const incidentId = await insertIncident(db, alpha, {
       examId: alpha.examId,
@@ -922,39 +968,9 @@ describe("recovery incident queue repository", () => {
         updatedAt: now,
       },
     ]);
-    await db.insert(schema.exams).values({
+    await insertExam(db, alpha, {
       id: revokeExamId,
-      organizationId: alpha.organizationId,
       title: "Revoke Test Exam",
-      description: "",
-      courseId: alpha.courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: EXAM_CLOSE_AT,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
     });
     await db.insert(schema.examProctorAssignments).values([
       {
@@ -1197,70 +1213,18 @@ describe("recovery incident queue repository", () => {
 
   it("fails closed when an anchored incident's attempt belongs to a different exam", async () => {
     const repo = createRecoveryRepo(db);
-    const now = new Date("2026-01-01T00:00:00.000Z");
     // Second exam + enrollment + attempt in alpha org.
-    const exam2 = randomUUID();
-    await db.insert(schema.exams).values({
-      id: exam2,
-      organizationId: alpha.organizationId,
-      title: "Alpha Exam Two",
-      description: "",
-      courseId: alpha.courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: EXAM_CLOSE_AT,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const enr2 = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: enr2,
+    const exam2 = await insertExam(db, alpha, { title: "Alpha Exam Two" });
+    const enr2 = await insertEnrollment(db, {
       organizationId: alpha.organizationId,
       examId: exam2,
       candidateId: alpha.candidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    const att2 = randomUUID();
-    await db.insert(schema.examAttempts).values({
-      id: att2,
+    const att2 = await insertAttempt(db, {
       organizationId: alpha.organizationId,
       examId: exam2,
       enrollmentId: enr2,
       candidateId: alpha.candidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
     // Incident anchored to alpha.examId but pointing at an attempt of exam2 —
     // the composite FK (org, attempt_id) is satisfied, so this corruption is
@@ -1523,35 +1487,26 @@ describe("recovery incident aggregate detail repository", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const enrollmentId2 = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: enrollmentId2,
+    const enrollmentId2 = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       candidateId: candidateId2,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    await db.insert(schema.examAttempts).values({
-      id: attemptId2,
-      organizationId: fx.organizationId,
-      examId: fx.examId,
-      enrollmentId: enrollmentId2,
-      candidateId: candidateId2,
-      attemptNo: 2,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      // Graded score — projected by the aggregate (Task 7a additive field).
-      score: 88.5,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await insertAttempt(
+      db,
+      {
+        organizationId: fx.organizationId,
+        examId: fx.examId,
+        enrollmentId: enrollmentId2,
+        candidateId: candidateId2,
+      },
+      {
+        id: attemptId2,
+        attemptNo: 2,
+        // Graded score — projected by the aggregate (additive field).
+        score: 88.5,
+      },
+    );
 
     // Create an exam-wide incident (no anchor attempt) and link both attempts
     // as members, plus one action link and one interruption link.
@@ -1837,40 +1792,11 @@ describe("recovery incident aggregate detail repository", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await db.insert(schema.exams).values({
-      id: foreignExamId,
-      organizationId: foreignOrgId,
-      title: "Foreign Exam",
-      description: "",
-      courseId: foreignCourseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: EXAM_CLOSE_AT,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await insertExam(
+      db,
+      { organizationId: foreignOrgId, courseId: foreignCourseId },
+      { id: foreignExamId, title: "Foreign Exam", createdAt: now },
+    );
     const id = await insertIncident(db, fx, {
       examId: foreignExamId,
       createdAt: new Date("2027-05-01T00:00:00.000Z"),
@@ -1902,68 +1828,17 @@ describe("recovery incident aggregate detail repository", () => {
     const repo = createRecoveryRepo(db);
     const now = new Date("2026-01-01T00:00:00.000Z");
     // A second exam + attempt in fx org (so the membership FK is satisfied).
-    const exam2 = randomUUID();
-    await db.insert(schema.exams).values({
-      id: exam2,
-      organizationId: fx.organizationId,
-      title: "Agg Exam Two",
-      description: "",
-      courseId: fx.courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: EXAM_CLOSE_AT,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const enr2 = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: enr2,
+    const exam2 = await insertExam(db, fx, { title: "Agg Exam Two" });
+    const enr2 = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: exam2,
       candidateId: fx.candidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    const att2 = randomUUID();
-    await db.insert(schema.examAttempts).values({
-      id: att2,
+    const att2 = await insertAttempt(db, {
       organizationId: fx.organizationId,
       examId: exam2,
       enrollmentId: enr2,
       candidateId: fx.candidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
     // Exam-wide incident on fx.examId but with a membership pointing at att2
     // (which belongs to exam2) — the composite FK is satisfied, so this
@@ -2500,72 +2375,20 @@ describe("recovery incident aggregate detail repository", () => {
 
   it("fails closed when an action link's attempt belongs to a different exam", async () => {
     const repo = createRecoveryRepo(db);
-    const now = new Date("2026-01-01T00:00:00.000Z");
     // attemptId2 is a same-org attempt on fx.examId belonging to candidateId2.
     // Point an action link at an attempt of a DIFFERENT exam to break the
     // scope quadruple: build that attempt via a second exam.
-    const exam2 = randomUUID();
-    await db.insert(schema.exams).values({
-      id: exam2,
-      organizationId: fx.organizationId,
-      title: "Agg Action Exam Two",
-      description: "",
-      courseId: fx.courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: EXAM_CLOSE_AT,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const enr2 = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: enr2,
+    const exam2 = await insertExam(db, fx, { title: "Agg Action Exam Two" });
+    const enr2 = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: exam2,
       candidateId: fx.candidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    const att2 = randomUUID();
-    await db.insert(schema.examAttempts).values({
-      id: att2,
+    const att2 = await insertAttempt(db, {
       organizationId: fx.organizationId,
       examId: exam2,
       enrollmentId: enr2,
       candidateId: fx.candidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
     const t = new Date("2028-01-01T00:00:00.000Z");
     const id = await insertIncident(db, fx, {
@@ -3205,45 +3028,34 @@ describe("recovery attempt operations context repository", () => {
   }> {
     const now = new Date("2026-01-01T00:00:00.000Z");
     const candidate = await createCandidate(now);
-    const enrollmentId = randomUUID();
-    const attemptId = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
+    const enrollmentId = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       candidateId: candidate.candidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    await db.insert(schema.examAttempts).values({
-      id: attemptId,
-      organizationId: fx.organizationId,
-      examId: fx.examId,
-      enrollmentId,
-      candidateId: candidate.candidateId,
-      attemptNo: 1,
-      status: overrides.status ?? "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt:
-        overrides.deadlineAt === null
-          ? null
-          : (overrides.deadlineAt ?? ATTEMPT_DEADLINE_AT),
-      lastActivityAt: now,
-      misconduct: overrides.misconduct
-        ? {
-            flaggedAt: now,
-            flaggedBy: fx.actorId,
-            notes: "test misconduct flag",
-            severity: "serious",
-          }
-        : null,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const attemptId = await insertAttempt(
+      db,
+      {
+        organizationId: fx.organizationId,
+        examId: fx.examId,
+        enrollmentId,
+        candidateId: candidate.candidateId,
+      },
+      {
+        ...(overrides.status !== undefined && { status: overrides.status }),
+        ...(overrides.deadlineAt !== undefined && {
+          deadlineAt: overrides.deadlineAt,
+        }),
+        misconduct: overrides.misconduct
+          ? {
+              flaggedAt: now,
+              flaggedBy: fx.actorId,
+              notes: "test misconduct flag",
+              severity: "serious",
+            }
+          : null,
+      },
+    );
     return { ...candidate, enrollmentId, attemptId };
   }
 
@@ -3363,40 +3175,11 @@ describe("recovery attempt operations context repository", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await db.insert(schema.exams).values({
-      id: foreignExamId,
-      organizationId: foreignOrgId,
-      title: "Foreign Exam",
-      description: "",
-      courseId: foreignCourseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: EXAM_CLOSE_AT,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await insertExam(
+      db,
+      { organizationId: foreignOrgId, courseId: foreignCourseId },
+      { id: foreignExamId, title: "Foreign Exam", createdAt: now },
+    );
     return { foreignOrgId, foreignExamId };
   }
 
@@ -3923,33 +3706,16 @@ describe("recovery attempt operations context repository", () => {
     // at it — the org-scoped exam lookup cannot resolve the parent.
     const { foreignOrgId, foreignExamId } = await insertForeignOrgExam();
     const candidate = await createCandidate(now);
-    const enrollmentId = randomUUID();
-    const attemptId = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
+    const enrollmentId = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       candidateId: candidate.candidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    await db.insert(schema.examAttempts).values({
-      id: attemptId,
+    const attemptId = await insertAttempt(db, {
       organizationId: fx.organizationId,
       examId: foreignExamId,
       enrollmentId,
       candidateId: candidate.candidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
     try {
       await expect(
@@ -4002,33 +3768,16 @@ describe("recovery attempt operations context repository", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const foreignEnrollmentId = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: foreignEnrollmentId,
+    const foreignEnrollmentId = await insertEnrollment(db, {
       organizationId: foreignOrgId,
       examId: fx.examId,
       candidateId: fx.candidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    const attemptId = randomUUID();
-    await db.insert(schema.examAttempts).values({
-      id: attemptId,
+    const attemptId = await insertAttempt(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       enrollmentId: foreignEnrollmentId,
       candidateId: fx.candidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
     try {
       await expect(
@@ -4097,33 +3846,16 @@ describe("recovery attempt operations context repository", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const enrollmentId = randomUUID();
-    const attemptId = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
+    const enrollmentId = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       candidateId: foreignCandidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    await db.insert(schema.examAttempts).values({
-      id: attemptId,
+    const attemptId = await insertAttempt(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       enrollmentId,
       candidateId: foreignCandidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
     try {
       await expect(
@@ -4209,33 +3941,16 @@ describe("recovery attempt operations context repository", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const enrollmentId = randomUUID();
-    const attemptId = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
+    const enrollmentId = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       candidateId: brokenCandidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    await db.insert(schema.examAttempts).values({
-      id: attemptId,
+    const attemptId = await insertAttempt(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       enrollmentId,
       candidateId: brokenCandidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
     try {
       await expect(
@@ -4530,8 +4245,6 @@ describe("recovery exam recovery context repository", () => {
     // A second attempt (submitted) for distribution variety — fresh candidate.
     const candidateUserId = randomUUID();
     const candidateId = randomUUID();
-    const enrollmentId = randomUUID();
-    const attemptId2 = randomUUID();
     await db.insert(schema.users).values({
       id: candidateUserId,
       organizationId: fx.organizationId,
@@ -4551,32 +4264,25 @@ describe("recovery exam recovery context repository", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
-      organizationId: fx.organizationId,
-      examId: fx.examId,
-      candidateId,
-      status: "completed",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.insert(schema.examAttempts).values({
-      id: attemptId2,
-      organizationId: fx.organizationId,
-      examId: fx.examId,
-      enrollmentId,
-      candidateId,
-      attemptNo: 1,
-      status: "submitted",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const enrollmentId = await insertEnrollment(
+      db,
+      {
+        organizationId: fx.organizationId,
+        examId: fx.examId,
+        candidateId,
+      },
+      { status: "completed" },
+    );
+    await insertAttempt(
+      db,
+      {
+        organizationId: fx.organizationId,
+        examId: fx.examId,
+        enrollmentId,
+        candidateId,
+      },
+      { status: "submitted" },
+    );
 
     const ctx = await repo.getExamRecoveryContext(fx.ctx, fx.examId);
     expect(ctx).not.toBeNull();
@@ -4813,23 +4519,16 @@ describe("recovery proctor incident detail repository (#303)", () => {
     // enrollment is unique per (org, exam, candidate), so the second attempt
     // reuses the fixture's enrollment — exactly how the canonical start path
     // produces attemptNo 2.
-    sameExamAttemptId = randomUUID();
-    await db.insert(schema.examAttempts).values({
-      id: sameExamAttemptId,
-      organizationId: fx.organizationId,
-      examId: fx.examId,
-      enrollmentId: fx.enrollmentId,
-      candidateId: fx.candidateId,
-      attemptNo: 2,
-      status: "submitted",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+    sameExamAttemptId = await insertAttempt(
+      db,
+      {
+        organizationId: fx.organizationId,
+        examId: fx.examId,
+        enrollmentId: fx.enrollmentId,
+        candidateId: fx.candidateId,
+      },
+      { attemptNo: 2, status: "submitted" },
+    );
 
     // A SECOND exam in the same org, plus an attempt on it. The composite FK
     // `(organization_id, attempt_id) → exam_attempts` accepts this row because
@@ -4847,67 +4546,21 @@ describe("recovery proctor incident detail repository (#303)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await db.insert(schema.exams).values({
-      id: crossExamId,
-      organizationId: fx.organizationId,
-      title: "Cross exam",
-      description: "",
-      courseId: crossCourseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: EXAM_CLOSE_AT,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const crossEnrollmentId = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: crossEnrollmentId,
+    await insertExam(
+      db,
+      { organizationId: fx.organizationId, courseId: crossCourseId },
+      { id: crossExamId, title: "Cross exam", createdAt: now },
+    );
+    const crossEnrollmentId = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: crossExamId,
       candidateId: fx.candidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    crossExamAttemptId = randomUUID();
-    await db.insert(schema.examAttempts).values({
-      id: crossExamAttemptId,
+    crossExamAttemptId = await insertAttempt(db, {
       organizationId: fx.organizationId,
       examId: crossExamId,
       enrollmentId: crossEnrollmentId,
       candidateId: fx.candidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
 
     // Same exam, DIFFERENT candidate — the candidate leg of the quadruple.
@@ -4932,33 +4585,16 @@ describe("recovery proctor incident detail repository (#303)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const otherEnrollmentId = randomUUID();
-    await db.insert(schema.examEnrollments).values({
-      id: otherEnrollmentId,
+    const otherEnrollmentId = await insertEnrollment(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       candidateId: otherCandidateId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
     });
-    otherCandidateAttemptId = randomUUID();
-    await db.insert(schema.examAttempts).values({
-      id: otherCandidateAttemptId,
+    otherCandidateAttemptId = await insertAttempt(db, {
       organizationId: fx.organizationId,
       examId: fx.examId,
       enrollmentId: otherEnrollmentId,
       candidateId: otherCandidateId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: ATTEMPT_DEADLINE_AT,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
     });
   }, 30_000);
 

@@ -160,6 +160,57 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
     });
 
+    it("candidate exam list projects availabilityStatus=available for the reconciled exam", async () => {
+      const examId = await createExamWithTimeWindow(
+        ctx,
+        "Recon Availability Projection",
+        new Date(Date.now() - 60_000),
+        new Date(Date.now() + 86_400_000),
+      );
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: adminCookies(ctx.adminToken),
+      });
+      await enroll(examId);
+
+      const listRes = await ctx.app.inject({
+        method: "GET",
+        url: "/api/candidate/exams",
+        cookies: { "auth-token": candidateToken },
+      });
+      expect(listRes.statusCode).toBe(200);
+      const target = (
+        listRes.json() as Array<{ examId: string; availabilityStatus: string }>
+      ).find((e) => e.examId === examId);
+      expect(target).toBeDefined();
+      expect(target?.availabilityStatus).toBe("available");
+    });
+
+    it("candidate exam list access before openAt leaves the exam published (negative control)", async () => {
+      const examId = await createExamWithTimeWindow(
+        ctx,
+        "Recon Pre-OpenAt",
+        new Date(Date.now() + 86_400_000),
+        new Date(Date.now() + 172_800_000),
+      );
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: adminCookies(ctx.adminToken),
+      });
+      await enroll(examId);
+
+      const listRes = await ctx.app.inject({
+        method: "GET",
+        url: "/api/candidate/exams",
+        cookies: { "auth-token": candidateToken },
+      });
+      expect(listRes.statusCode).toBe(200);
+
+      expect(await getExamStatus(ctx, examId)).toBe("published");
+    });
+
     it("candidate start attempt reconciles published -> open", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,

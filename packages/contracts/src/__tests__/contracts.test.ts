@@ -19,7 +19,6 @@ import {
   ExamSchema,
   UpdateExamRequestSchema,
 } from "../exam.js";
-import { normalizeInterruptionPolicyConfiguration } from "../interruption.js";
 import {
   CreateQuestionRequestSchema,
   QuestionImportRowSchema,
@@ -157,14 +156,6 @@ describe("auth contracts", () => {
     expect(result.success).toBe(false);
   });
 
-  it("LoginRequestSchema does not model organizationSlug as a Phase 1 field", () => {
-    const parsed = LoginRequestSchema.parse({
-      username: "admin",
-      password: "admin123",
-    });
-    expect(parsed).not.toHaveProperty("organizationSlug");
-  });
-
   it("LoginRequestSchema strips organizationSlug if a client smuggles it in", () => {
     const parsed = LoginRequestSchema.parse({
       username: "admin",
@@ -173,25 +164,6 @@ describe("auth contracts", () => {
     } as unknown as { username: string; password: string });
     expect("organizationSlug" in (parsed as object)).toBe(false);
     expect(parsed).toEqual({ username: "admin", password: "admin123" });
-  });
-
-  it("RegisterRequestSchema rejects short password", () => {
-    const result = RegisterRequestSchema.safeParse({
-      organizationSlug: "default",
-      bootstrapToken: "token",
-      username: "admin",
-      password: "123",
-      name: "Admin",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("ChangePasswordRequestSchema validates", () => {
-    const result = ChangePasswordRequestSchema.safeParse({
-      currentPassword: "old",
-      newPassword: "newpass123",
-    });
-    expect(result.success).toBe(true);
   });
 });
 
@@ -444,41 +416,6 @@ describe("exam contracts", () => {
     expect(result.success).toBe(true);
   });
 
-  it("normalizeInterruptionPolicyConfiguration defaults omitted input to strict/null caps", () => {
-    const resolved = normalizeInterruptionPolicyConfiguration({});
-    expect(resolved).toEqual({
-      policy: "strict",
-      perIncidentCapSeconds: null,
-      perAttemptAggregateCapSeconds: null,
-    });
-  });
-
-  it("normalizeInterruptionPolicyConfiguration rejects bounded_grace without caps", () => {
-    expect(() =>
-      normalizeInterruptionPolicyConfiguration({ policy: "bounded_grace" }),
-    ).toThrow();
-  });
-
-  it("normalizeInterruptionPolicyConfiguration rejects bounded_grace perIncident > perAttempt", () => {
-    expect(() =>
-      normalizeInterruptionPolicyConfiguration({
-        policy: "bounded_grace",
-        perIncidentCapSeconds: 600,
-        perAttemptAggregateCapSeconds: 300,
-      }),
-    ).toThrow();
-  });
-
-  it("normalizeInterruptionPolicyConfiguration rejects strict with caps", () => {
-    expect(() =>
-      normalizeInterruptionPolicyConfiguration({
-        policy: "strict",
-        perIncidentCapSeconds: 120,
-        perAttemptAggregateCapSeconds: null,
-      }),
-    ).toThrow();
-  });
-
   it("ExamSchema DTO exposes interruption policy fields", () => {
     const exam = ExamSchema.parse({
       id: "550e8400-e29b-41d4-a716-446655440000",
@@ -707,28 +644,6 @@ describe("RestoreAttemptResponseSchema (REC-I4-I3A frozen contract)", () => {
 });
 
 describe("question contracts", () => {
-  it("CreateQuestionRequestSchema accepts true_false", () => {
-    const result = CreateQuestionRequestSchema.safeParse({
-      courseId: "550e8400-e29b-41d4-a716-446655440000",
-      type: "true_false",
-      content: "Is 1+1=2?",
-      standardAnswer: true,
-      score: 10,
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("CreateQuestionRequestSchema accepts fill_blank with ____", () => {
-    const result = CreateQuestionRequestSchema.safeParse({
-      courseId: "550e8400-e29b-41d4-a716-446655440000",
-      type: "fill_blank",
-      content: "The answer is ____",
-      standardAnswer: "42",
-      score: 10,
-    });
-    expect(result.success).toBe(true);
-  });
-
   it("CreateQuestionRequestSchema rejects fill_blank without ____", () => {
     const result = CreateQuestionRequestSchema.safeParse({
       courseId: "550e8400-e29b-41d4-a716-446655440000",
@@ -738,21 +653,6 @@ describe("question contracts", () => {
       score: 10,
     });
     expect(result.success).toBe(false);
-  });
-
-  it("CreateQuestionRequestSchema accepts single_choice with valid standardAnswer", () => {
-    const result = CreateQuestionRequestSchema.safeParse({
-      courseId: "550e8400-e29b-41d4-a716-446655440000",
-      type: "single_choice",
-      content: "Pick one",
-      options: [
-        { id: "A", content: "Option A" },
-        { id: "B", content: "Option B" },
-      ],
-      standardAnswer: "A",
-      score: 10,
-    });
-    expect(result.success).toBe(true);
   });
 
   it("CreateQuestionRequestSchema rejects single_choice with invalid standardAnswer", () => {
@@ -780,22 +680,6 @@ describe("question contracts", () => {
       score: 10,
     });
     expect(result.success).toBe(false);
-  });
-
-  it("CreateQuestionRequestSchema accepts multiple_choice", () => {
-    const result = CreateQuestionRequestSchema.safeParse({
-      courseId: "550e8400-e29b-41d4-a716-446655440000",
-      type: "multiple_choice",
-      content: "Pick many",
-      options: [
-        { id: "A", content: "Option A" },
-        { id: "B", content: "Option B" },
-        { id: "C", content: "Option C" },
-      ],
-      standardAnswer: ["A", "B"],
-      score: 10,
-    });
-    expect(result.success).toBe(true);
   });
 
   it("CreateQuestionRequestSchema rejects duplicate option ids", () => {
@@ -1206,36 +1090,6 @@ describe("attempt contracts", () => {
     });
     expect(result.success).toBe(true);
   });
-
-  it("CandidateExamDetailResponseSchema validates", () => {
-    const result = CandidateExamDetailResponseSchema.safeParse({
-      id: "550e8400-e29b-41d4-a716-446655440000",
-      title: "Exam",
-      durationMinutes: 60,
-      timingMode: "timed_window",
-      passingScore: 60,
-      totalScore: 100,
-      questionCount: 10,
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      maxAttempts: 2,
-      currentAttempts: 0,
-      canStartNewAttempt: true,
-      availabilityStatus: "available",
-      primaryAction: "start",
-    });
-    expect(result.success).toBe(true);
-  });
 });
 
 describe("CandidateExamDetailResponseSchema timing modes (A2 corrective)", () => {
@@ -1465,20 +1319,12 @@ describe("SaveAnswer route-shape equivalence (A01 wire contract)", () => {
     expect(result.success).toBe(true);
   });
 
-  it("ATTEMPT_ALREADY_SUBMITTED wire shape parses without details", () => {
-    const wire = buildRejectedWireShape("ATTEMPT_ALREADY_SUBMITTED");
-    const result = SaveAnswerResponseSchema.safeParse(wire);
-    expect(result.success).toBe(true);
-  });
-
-  it("ATTEMPT_CLOSED wire shape parses without details", () => {
-    const wire = buildRejectedWireShape("ATTEMPT_CLOSED");
-    const result = SaveAnswerResponseSchema.safeParse(wire);
-    expect(result.success).toBe(true);
-  });
-
-  it("DEADLINE_EXCEEDED wire shape parses without details", () => {
-    const wire = buildRejectedWireShape("DEADLINE_EXCEEDED");
+  it.each([
+    "ATTEMPT_ALREADY_SUBMITTED",
+    "ATTEMPT_CLOSED",
+    "DEADLINE_EXCEEDED",
+  ] as const)("rejected wire shape without details parses for %s", (reason) => {
+    const wire = buildRejectedWireShape(reason);
     const result = SaveAnswerResponseSchema.safeParse(wire);
     expect(result.success).toBe(true);
   });

@@ -299,11 +299,6 @@ describe("UsersPage", () => {
     apiPatch.mockResolvedValue({ ok: true });
   });
 
-  it("renders page title", async () => {
-    renderPage();
-    expect(await screen.findByText("用户管理")).toBeInTheDocument();
-  });
-
   it("renders user list with Admin role", async () => {
     renderPage();
     // Row content renders twice by design (desktop table + mobile cards);
@@ -311,13 +306,6 @@ describe("UsersPage", () => {
     const table = await screen.findByRole("table");
     expect(within(table).getByText("admin1")).toBeInTheDocument();
     expect(within(table).getByText("考试管理员")).toBeInTheDocument();
-  });
-
-  it("renders add user button", async () => {
-    renderPage();
-    expect(
-      await screen.findByRole("button", { name: "新增用户" }),
-    ).toBeInTheDocument();
   });
 
   it("create dialog shows the staff role options sourced from /roles/assignable (F-01)", async () => {

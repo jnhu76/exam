@@ -27,7 +27,7 @@ import {
   spawnApiServer,
   isProcessAlive,
   type SpawnedApiServer,
-} from "../runtime/restartProcessHarness.js";
+} from "../testing/restartProcessHarness.js";
 
 const QUEUE_FLAGS = { requireQueue: true, batchSize: 1, batchInterval: 3600 };
 

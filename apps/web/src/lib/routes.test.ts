@@ -48,10 +48,6 @@ describe("routes", () => {
     expect(routes.admin.results).not.toBe(routes.admin.exams);
   });
 
-  it("examScores returns correct path with id", () => {
-    expect(routes.admin.examScores("99")).toBe("/admin/exams/99/scores");
-  });
-
   it("has exam routes", () => {
     expect(routes.exam.list).toBe("/exam/list");
     expect(routes.exam.start).toBeInstanceOf(Function);

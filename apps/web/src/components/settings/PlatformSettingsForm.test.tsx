@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { PlatformSettingsForm } from "./PlatformSettingsForm";
 
 describe("PlatformSettingsForm", () => {
@@ -56,5 +57,26 @@ describe("PlatformSettingsForm", () => {
     );
 
     expect(screen.getByLabelText("产品标题")).toHaveValue("V2");
+  });
+
+  it("submits the edited fields through onSave", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(<PlatformSettingsForm onSave={onSave} />);
+
+    await user.type(screen.getByLabelText("产品标题"), "新平台");
+    await user.type(screen.getByLabelText("产品副标题"), "新副标题");
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    // react-hook-form hands the values object (plus the submit event) to
+    // onSave; fields left untouched submit as empty strings.
+    const [payload] = onSave.mock.calls[0]!;
+    expect(payload).toEqual({
+      productName: "新平台",
+      productSubtitle: "新副标题",
+      footerText: "",
+      organizationDisplayName: "",
+    });
   });
 });

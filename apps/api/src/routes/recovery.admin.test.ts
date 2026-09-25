@@ -42,6 +42,152 @@ interface SeedResult {
   candidateProfileId: string;
 }
 
+type RecoveryTestDb = Awaited<ReturnType<typeof buildTestApp>>["db"];
+
+type RecoveryExamInsert = typeof schema.exams.$inferInsert;
+type RecoveryAttemptInsert = typeof schema.examAttempts.$inferInsert;
+
+// The four Recovery suites seed the same course→exam→enrollment→attempt chain
+// at ~10 sites, differing only in identity fields and the deadline / status /
+// score values a given test asserts on. These builders keep one authoritative
+// copy of each row shape; per-test overrides stay explicit call arguments.
+function recoveryControlFlags(): RecoveryExamInsert["controlFlags"] {
+  return {
+    shuffleQuestions: false,
+    shuffleOptions: false,
+    detectTabSwitch: false,
+    disableCopyPaste: false,
+    requireQueue: false,
+    batchSize: 10,
+    batchInterval: 3,
+    restrictIp: false,
+    requireLockdown: false,
+    showResultImmediately: true,
+  };
+}
+
+async function insertRecoveryCourse(
+  db: RecoveryTestDb,
+  organizationId: string,
+  name: string,
+  codePrefix: string,
+  now: Date,
+  id: string = randomUUID(),
+): Promise<void> {
+  await db.insert(schema.courses).values({
+    id,
+    organizationId,
+    name,
+    code: `${codePrefix}-${uniquePrefix()}`,
+    description: "",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function insertRecoveryExam(
+  db: RecoveryTestDb,
+  organizationId: string,
+  courseId: string,
+  title: string,
+  now: Date,
+  overrides: { id?: string; closeAt?: Date } = {},
+): Promise<void> {
+  await db.insert(schema.exams).values({
+    id: overrides.id ?? randomUUID(),
+    organizationId,
+    title,
+    description: "",
+    courseId,
+    status: "open",
+    timingMode: "timed_window",
+    durationMinutes: 60,
+    openAt: now,
+    closeAt: overrides.closeAt ?? new Date(now.getTime() + 86_400_000),
+    passingScore: 60,
+    totalScore: 100,
+    questionSelectionMode: "manual",
+    questionIds: [],
+    questionSnapshot: [],
+    controlFlags: recoveryControlFlags(),
+    retakePolicy: "unlimited",
+    scoreStrategy: "highest",
+    maxAttempts: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function insertRecoveryCandidateProfile(
+  db: RecoveryTestDb,
+  organizationId: string,
+  id: string,
+  userId: string,
+  now: Date,
+): Promise<void> {
+  await db.insert(schema.candidateProfiles).values({
+    id,
+    organizationId,
+    userId,
+    fields: {},
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function insertRecoveryEnrollment(
+  db: RecoveryTestDb,
+  organizationId: string,
+  id: string,
+  examId: string,
+  candidateId: string,
+  now: Date,
+): Promise<void> {
+  await db.insert(schema.examEnrollments).values({
+    id,
+    organizationId,
+    examId,
+    candidateId,
+    status: "started",
+    attemptCount: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function insertRecoveryAttempt(
+  db: RecoveryTestDb,
+  organizationId: string,
+  examId: string,
+  enrollmentId: string,
+  candidateId: string,
+  now: Date,
+  overrides: {
+    id?: string;
+    status?: RecoveryAttemptInsert["status"];
+    deadlineAt?: Date;
+    score?: number;
+  } = {},
+): Promise<void> {
+  await db.insert(schema.examAttempts).values({
+    id: overrides.id ?? randomUUID(),
+    organizationId,
+    examId,
+    enrollmentId,
+    candidateId,
+    attemptNo: 1,
+    status: overrides.status ?? "in_progress",
+    questionSnapshot: [],
+    answers: [],
+    startedAt: now,
+    deadlineAt: overrides.deadlineAt ?? new Date(now.getTime() + 3_600_000),
+    score: overrides.score,
+    lastActivityAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let adminToken: string;
@@ -66,83 +212,41 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     const enrollmentId = randomUUID();
     const candidateProfileId = randomUUID();
 
-    await ctx.db.insert(schema.courses).values({
-      id: courseId,
-      organizationId: orgId,
-      name: `${title} course`,
-      code: `RC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.insert(schema.exams).values({
-      id: examId,
-      organizationId: orgId,
-      title,
-      description: "",
+    await insertRecoveryCourse(
+      ctx.db,
+      orgId,
+      `${title} course`,
+      "RC",
+      now,
       courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
+    );
+    await insertRecoveryExam(ctx.db, orgId, courseId, title, now, {
+      id: examId,
     });
-    await ctx.db.insert(schema.candidateProfiles).values({
-      id: candidateProfileId,
-      organizationId: orgId,
-      userId: ctx.candidate.id,
-      fields: {},
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
-      organizationId: orgId,
+    await insertRecoveryCandidateProfile(
+      ctx.db,
+      orgId,
+      candidateProfileId,
+      ctx.candidate.id,
+      now,
+    );
+    await insertRecoveryEnrollment(
+      ctx.db,
+      orgId,
+      enrollmentId,
       examId,
-      candidateId: candidateProfileId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.insert(schema.examAttempts).values({
-      id: attemptId,
-      organizationId: orgId,
+      candidateProfileId,
+      now,
+    );
+    await insertRecoveryAttempt(
+      ctx.db,
+      orgId,
       examId,
       enrollmentId,
-      candidateId: candidateProfileId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: new Date(now.getTime() + 3_600_000),
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+      candidateProfileId,
+      now,
+      { id: attemptId },
+    );
     await ctx.db.insert(schema.examIncidents).values({
       id: incidentId,
       organizationId: orgId,
@@ -184,49 +288,22 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.insert(schema.courses).values({
-      id: otherCourseId,
-      organizationId: otherOrgId,
-      name: "Other Course",
-      code: `OC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.insert(schema.exams).values({
-      id: otherExamId,
-      organizationId: otherOrgId,
-      title: "Foreign Org Exam",
-      description: "",
-      courseId: otherCourseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await insertRecoveryCourse(
+      ctx.db,
+      otherOrgId,
+      "Other Course",
+      "OC",
+      now,
+      otherCourseId,
+    );
+    await insertRecoveryExam(
+      ctx.db,
+      otherOrgId,
+      otherCourseId,
+      "Foreign Org Exam",
+      now,
+      { id: otherExamId },
+    );
     await ctx.db.insert(schema.examIncidents).values({
       id: otherIncidentId,
       organizationId: otherOrgId,
@@ -511,49 +588,22 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
     const candId = "cand-nonuuid-1";
     const proctorUserId = "user-proctor-nonuuid-1";
 
-    await ctx.db.insert(schema.courses).values({
-      id: courseId,
-      organizationId: ctx.org.id,
-      name: "Non-UUID Course",
-      code: `NU-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.insert(schema.exams).values({
-      id: examId,
-      organizationId: ctx.org.id,
-      title: "Non-UUID Exam",
-      description: "",
+    await insertRecoveryCourse(
+      ctx.db,
+      ctx.org.id,
+      "Non-UUID Course",
+      "NU",
+      now,
       courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    );
+    await insertRecoveryExam(
+      ctx.db,
+      ctx.org.id,
+      courseId,
+      "Non-UUID Exam",
+      now,
+      { id: examId },
+    );
     await ctx.db.insert(schema.users).values([
       {
         id: candUserId,
@@ -578,14 +628,13 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
         updatedAt: now,
       },
     ]);
-    await ctx.db.insert(schema.candidateProfiles).values({
-      id: candId,
-      organizationId: ctx.org.id,
-      userId: candUserId,
-      fields: {},
-      createdAt: now,
-      updatedAt: now,
-    });
+    await insertRecoveryCandidateProfile(
+      ctx.db,
+      ctx.org.id,
+      candId,
+      candUserId,
+      now,
+    );
     await ctx.db.insert(schema.examProctorAssignments).values({
       id: randomUUID(),
       organizationId: ctx.org.id,
@@ -891,49 +940,22 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.insert(schema.courses).values({
-      id: brokenCourseId,
-      organizationId: brokenOrgId,
-      name: "Broken Course",
-      code: `BC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.insert(schema.exams).values({
-      id: brokenExamId,
-      organizationId: brokenOrgId,
-      title: "Broken Foreign Exam",
-      description: "",
-      courseId: brokenCourseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await insertRecoveryCourse(
+      ctx.db,
+      brokenOrgId,
+      "Broken Course",
+      "BC",
+      now,
+      brokenCourseId,
+    );
+    await insertRecoveryExam(
+      ctx.db,
+      brokenOrgId,
+      brokenCourseId,
+      "Broken Foreign Exam",
+      now,
+      { id: brokenExamId },
+    );
     await ctx.db.insert(schema.examIncidents).values({
       id: brokenIncidentId,
       organizationId: ctx.org.id,
@@ -1006,83 +1028,46 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
     aggregateAttemptId = attemptId;
     aggregateCandidateProfileId = candidateProfileId;
 
-    await ctx2.db.insert(schema.courses).values({
-      id: courseId,
-      organizationId: ctx2.org.id,
-      name: "Aggregate Detail Course",
-      code: `ADC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.exams).values({
-      id: aggregateExamId,
-      organizationId: ctx2.org.id,
-      title: "Aggregate Detail Exam",
-      description: "",
+    await insertRecoveryCourse(
+      ctx2.db,
+      ctx2.org.id,
+      "Aggregate Detail Course",
+      "ADC",
+      now,
       courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.candidateProfiles).values({
-      id: candidateProfileId,
-      organizationId: ctx2.org.id,
-      userId: ctx2.candidate.id,
-      fields: {},
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
-      organizationId: ctx2.org.id,
-      examId: aggregateExamId,
-      candidateId: candidateProfileId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.examAttempts).values({
-      id: attemptId,
-      organizationId: ctx2.org.id,
-      examId: aggregateExamId,
+    );
+    await insertRecoveryExam(
+      ctx2.db,
+      ctx2.org.id,
+      courseId,
+      "Aggregate Detail Exam",
+      now,
+      { id: aggregateExamId },
+    );
+    await insertRecoveryCandidateProfile(
+      ctx2.db,
+      ctx2.org.id,
+      candidateProfileId,
+      ctx2.candidate.id,
+      now,
+    );
+    await insertRecoveryEnrollment(
+      ctx2.db,
+      ctx2.org.id,
       enrollmentId,
-      candidateId: candidateProfileId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: new Date(now.getTime() + 3_600_000),
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+      aggregateExamId,
+      candidateProfileId,
+      now,
+    );
+    await insertRecoveryAttempt(
+      ctx2.db,
+      ctx2.org.id,
+      aggregateExamId,
+      enrollmentId,
+      candidateProfileId,
+      now,
+      { id: attemptId },
+    );
     await ctx2.db.insert(schema.examIncidents).values({
       id: aggregateIncidentId,
       organizationId: ctx2.org.id,
@@ -1258,85 +1243,46 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
       createdAt: now,
       updatedAt: now,
     });
-    await ctx2.db.insert(schema.courses).values({
-      id: courseId,
-      organizationId: ctx2.org.id,
-      name: "Effective Deadline Course",
-      code: `EDC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.exams).values({
-      id: examId,
-      organizationId: ctx2.org.id,
-      title: "Effective Deadline Exam",
-      description: "",
+    await insertRecoveryCourse(
+      ctx2.db,
+      ctx2.org.id,
+      "Effective Deadline Course",
+      "EDC",
+      now,
       courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: examCloseAt,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.candidateProfiles).values({
-      id: candidateProfileId,
-      organizationId: ctx2.org.id,
-      userId: candidateUserId,
-      fields: {},
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
-      organizationId: ctx2.org.id,
+    );
+    await insertRecoveryExam(
+      ctx2.db,
+      ctx2.org.id,
+      courseId,
+      "Effective Deadline Exam",
+      now,
+      { id: examId, closeAt: examCloseAt },
+    );
+    await insertRecoveryCandidateProfile(
+      ctx2.db,
+      ctx2.org.id,
+      candidateProfileId,
+      candidateUserId,
+      now,
+    );
+    await insertRecoveryEnrollment(
+      ctx2.db,
+      ctx2.org.id,
+      enrollmentId,
       examId,
-      candidateId: candidateProfileId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.examAttempts).values({
-      id: attemptId,
-      organizationId: ctx2.org.id,
+      candidateProfileId,
+      now,
+    );
+    await insertRecoveryAttempt(
+      ctx2.db,
+      ctx2.org.id,
       examId,
       enrollmentId,
-      candidateId: candidateProfileId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: attemptDeadlineAt,
-      // Graded score — projected by the aggregate (Task 7a additive field).
-      score: 91,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+      candidateProfileId,
+      now,
+      { id: attemptId, deadlineAt: attemptDeadlineAt, score: 91 },
+    );
     await ctx2.db.insert(schema.examIncidents).values({
       id: incidentId,
       organizationId: ctx2.org.id,
@@ -1393,49 +1339,22 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
       createdAt: now,
       updatedAt: now,
     });
-    await ctx2.db.insert(schema.courses).values({
-      id: foreignCourseId,
-      organizationId: foreignOrgId,
-      name: "Agg Broken Course",
-      code: `ABC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx2.db.insert(schema.exams).values({
-      id: foreignExamId,
-      organizationId: foreignOrgId,
-      title: "Agg Broken Foreign Exam",
-      description: "",
-      courseId: foreignCourseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await insertRecoveryCourse(
+      ctx2.db,
+      foreignOrgId,
+      "Agg Broken Course",
+      "ABC",
+      now,
+      foreignCourseId,
+    );
+    await insertRecoveryExam(
+      ctx2.db,
+      foreignOrgId,
+      foreignCourseId,
+      "Agg Broken Foreign Exam",
+      now,
+      { id: foreignExamId },
+    );
     await ctx2.db.insert(schema.examIncidents).values({
       id: brokenIncidentId,
       organizationId: ctx2.org.id,
@@ -1830,83 +1749,46 @@ describe("J5-I1A3 Admin Recovery attempt operations — GET /admin/recovery/atte
     episodeId = randomUUID();
     adjustmentId = randomUUID();
 
-    await ctx3.db.insert(schema.courses).values({
-      id: courseId,
-      organizationId: ctx3.org.id,
-      name: "Attempt Ops Course",
-      code: `AOC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.exams).values({
-      id: examId3,
-      organizationId: ctx3.org.id,
-      title: "Attempt Ops Exam",
-      description: "",
+    await insertRecoveryCourse(
+      ctx3.db,
+      ctx3.org.id,
+      "Attempt Ops Course",
+      "AOC",
+      now,
       courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.candidateProfiles).values({
-      id: candidateProfileId3,
-      organizationId: ctx3.org.id,
-      userId: ctx3.candidate.id,
-      fields: {},
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.examEnrollments).values({
-      id: enrollmentId3,
-      organizationId: ctx3.org.id,
-      examId: examId3,
-      candidateId: candidateProfileId3,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.examAttempts).values({
-      id: attemptId3,
-      organizationId: ctx3.org.id,
-      examId: examId3,
-      enrollmentId: enrollmentId3,
-      candidateId: candidateProfileId3,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: new Date(now.getTime() + 3_600_000),
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+    );
+    await insertRecoveryExam(
+      ctx3.db,
+      ctx3.org.id,
+      courseId,
+      "Attempt Ops Exam",
+      now,
+      { id: examId3 },
+    );
+    await insertRecoveryCandidateProfile(
+      ctx3.db,
+      ctx3.org.id,
+      candidateProfileId3,
+      ctx3.candidate.id,
+      now,
+    );
+    await insertRecoveryEnrollment(
+      ctx3.db,
+      ctx3.org.id,
+      enrollmentId3,
+      examId3,
+      candidateProfileId3,
+      now,
+    );
+    await insertRecoveryAttempt(
+      ctx3.db,
+      ctx3.org.id,
+      examId3,
+      enrollmentId3,
+      candidateProfileId3,
+      now,
+      { id: attemptId3 },
+    );
     // One interruption episode with a detected event (the events table has no
     // event_sequence; occurredAt is the chronological key).
     await ctx3.db.insert(schema.attemptInterruptions).values({
@@ -2158,40 +2040,30 @@ describe("J5-I1A3 Admin Recovery attempt operations — GET /admin/recovery/atte
         createdAt: now,
         updatedAt: now,
       });
-      await ctx3.db.insert(schema.candidateProfiles).values({
-        id: candidateProfileId,
-        organizationId: ctx3.org.id,
-        userId: candidateUserId,
-        fields: {},
-        createdAt: now,
-        updatedAt: now,
-      });
-      await ctx3.db.insert(schema.examEnrollments).values({
-        id: enrollmentId,
-        organizationId: ctx3.org.id,
-        examId: examId3,
-        candidateId: candidateProfileId,
-        status: "started",
-        attemptCount: 1,
-        createdAt: now,
-        updatedAt: now,
-      });
-      await ctx3.db.insert(schema.examAttempts).values({
-        id: attemptId,
-        organizationId: ctx3.org.id,
-        examId: examId3,
+      await insertRecoveryCandidateProfile(
+        ctx3.db,
+        ctx3.org.id,
+        candidateProfileId,
+        candidateUserId,
+        now,
+      );
+      await insertRecoveryEnrollment(
+        ctx3.db,
+        ctx3.org.id,
         enrollmentId,
-        candidateId: candidateProfileId,
-        attemptNo: 1,
-        status,
-        questionSnapshot: [],
-        answers: [],
-        startedAt: now,
-        deadlineAt: new Date(now.getTime() + 3_600_000),
-        lastActivityAt: now,
-        createdAt: now,
-        updatedAt: now,
-      });
+        examId3,
+        candidateProfileId,
+        now,
+      );
+      await insertRecoveryAttempt(
+        ctx3.db,
+        ctx3.org.id,
+        examId3,
+        enrollmentId,
+        candidateProfileId,
+        now,
+        { id: attemptId, status: status },
+      );
     }
     try {
       const submitted = await ctx3.app.inject({
@@ -2259,83 +2131,46 @@ describe("J5-I1A3 Admin Recovery attempt operations — GET /admin/recovery/atte
       createdAt: now,
       updatedAt: now,
     });
-    await ctx3.db.insert(schema.courses).values({
-      id: courseId,
-      organizationId: ctx3.org.id,
-      name: "A3 Deadline Course",
-      code: `A3D-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.exams).values({
-      id: examId,
-      organizationId: ctx3.org.id,
-      title: "A3 Deadline Exam",
-      description: "",
+    await insertRecoveryCourse(
+      ctx3.db,
+      ctx3.org.id,
+      "A3 Deadline Course",
+      "A3D",
+      now,
       courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: examCloseAt,
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.candidateProfiles).values({
-      id: candidateProfileId,
-      organizationId: ctx3.org.id,
-      userId: candidateUserId,
-      fields: {},
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
-      organizationId: ctx3.org.id,
+    );
+    await insertRecoveryExam(
+      ctx3.db,
+      ctx3.org.id,
+      courseId,
+      "A3 Deadline Exam",
+      now,
+      { id: examId, closeAt: examCloseAt },
+    );
+    await insertRecoveryCandidateProfile(
+      ctx3.db,
+      ctx3.org.id,
+      candidateProfileId,
+      candidateUserId,
+      now,
+    );
+    await insertRecoveryEnrollment(
+      ctx3.db,
+      ctx3.org.id,
+      enrollmentId,
       examId,
-      candidateId: candidateProfileId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.examAttempts).values({
-      id: attemptId,
-      organizationId: ctx3.org.id,
+      candidateProfileId,
+      now,
+    );
+    await insertRecoveryAttempt(
+      ctx3.db,
+      ctx3.org.id,
       examId,
       enrollmentId,
-      candidateId: candidateProfileId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: attemptDeadlineAt,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+      candidateProfileId,
+      now,
+      { id: attemptId, deadlineAt: attemptDeadlineAt },
+    );
     try {
       const res = await ctx3.app.inject({
         method: "GET",
@@ -2383,78 +2218,42 @@ describe("J5-I1A3 Admin Recovery attempt operations — GET /admin/recovery/atte
       createdAt: now,
       updatedAt: now,
     });
-    await ctx3.db.insert(schema.courses).values({
-      id: foreignCourseId,
-      organizationId: foreignOrgId,
-      name: "A3 Broken Course",
-      code: `A3BC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.exams).values({
-      id: foreignExamId,
-      organizationId: foreignOrgId,
-      title: "A3 Broken Foreign Exam",
-      description: "",
-      courseId: foreignCourseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await insertRecoveryCourse(
+      ctx3.db,
+      foreignOrgId,
+      "A3 Broken Course",
+      "A3BC",
+      now,
+      foreignCourseId,
+    );
+    await insertRecoveryExam(
+      ctx3.db,
+      foreignOrgId,
+      foreignCourseId,
+      "A3 Broken Foreign Exam",
+      now,
+      { id: foreignExamId },
+    );
     // The attempt row is in the Admin's org but points at the foreign exam —
     // the FK on exam_id is satisfied (the exam row exists); only the org-scoped
     // parent lookup fails.
-    await ctx3.db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
-      organizationId: ctx3.org.id,
-      examId: foreignExamId,
-      candidateId: candidateProfileId3,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx3.db.insert(schema.examAttempts).values({
-      id: attemptId,
-      organizationId: ctx3.org.id,
-      examId: foreignExamId,
+    await insertRecoveryEnrollment(
+      ctx3.db,
+      ctx3.org.id,
       enrollmentId,
-      candidateId: candidateProfileId3,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: new Date(now.getTime() + 3_600_000),
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+      foreignExamId,
+      candidateProfileId3,
+      now,
+    );
+    await insertRecoveryAttempt(
+      ctx3.db,
+      ctx3.org.id,
+      foreignExamId,
+      enrollmentId,
+      candidateProfileId3,
+      now,
+      { id: attemptId },
+    );
     try {
       const res = await ctx3.app.inject({
         method: "GET",
@@ -2508,83 +2307,45 @@ describe("J5-I1B4 Admin Recovery exam context — GET /admin/recovery/exams/:exa
     const enrollmentId = randomUUID();
     const candidateProfileId = randomUUID();
 
-    await ctx4.db.insert(schema.courses).values({
-      id: courseId,
-      organizationId: ctx4.org.id,
-      name: "Exam Ctx Course",
-      code: `ECC-${uniquePrefix()}`,
-      description: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx4.db.insert(schema.exams).values({
-      id: examId4,
-      organizationId: ctx4.org.id,
-      title: "Exam Ctx Exam",
-      description: "",
+    await insertRecoveryCourse(
+      ctx4.db,
+      ctx4.org.id,
+      "Exam Ctx Course",
+      "ECC",
+      now,
       courseId,
-      status: "open",
-      timingMode: "timed_window",
-      durationMinutes: 60,
-      openAt: now,
-      closeAt: new Date(now.getTime() + 86_400_000),
-      passingScore: 60,
-      totalScore: 100,
-      questionSelectionMode: "manual",
-      questionIds: [],
-      questionSnapshot: [],
-      controlFlags: {
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        detectTabSwitch: false,
-        disableCopyPaste: false,
-        requireQueue: false,
-        batchSize: 10,
-        batchInterval: 3,
-        restrictIp: false,
-        requireLockdown: false,
-        showResultImmediately: true,
-      },
-      retakePolicy: "unlimited",
-      scoreStrategy: "highest",
-      maxAttempts: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx4.db.insert(schema.candidateProfiles).values({
-      id: candidateProfileId,
-      organizationId: ctx4.org.id,
-      userId: ctx4.candidate.id,
-      fields: {},
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx4.db.insert(schema.examEnrollments).values({
-      id: enrollmentId,
-      organizationId: ctx4.org.id,
-      examId: examId4,
-      candidateId: candidateProfileId,
-      status: "started",
-      attemptCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx4.db.insert(schema.examAttempts).values({
-      id: randomUUID(),
-      organizationId: ctx4.org.id,
-      examId: examId4,
+    );
+    await insertRecoveryExam(
+      ctx4.db,
+      ctx4.org.id,
+      courseId,
+      "Exam Ctx Exam",
+      now,
+      { id: examId4 },
+    );
+    await insertRecoveryCandidateProfile(
+      ctx4.db,
+      ctx4.org.id,
+      candidateProfileId,
+      ctx4.candidate.id,
+      now,
+    );
+    await insertRecoveryEnrollment(
+      ctx4.db,
+      ctx4.org.id,
       enrollmentId,
-      candidateId: candidateProfileId,
-      attemptNo: 1,
-      status: "in_progress",
-      questionSnapshot: [],
-      answers: [],
-      startedAt: now,
-      deadlineAt: new Date(now.getTime() + 3_600_000),
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+      examId4,
+      candidateProfileId,
+      now,
+    );
+    await insertRecoveryAttempt(
+      ctx4.db,
+      ctx4.org.id,
+      examId4,
+      enrollmentId,
+      candidateProfileId,
+      now,
+    );
     // Two incidents (open/major + resolved/info).
     await ctx4.db.insert(schema.examIncidents).values([
       {

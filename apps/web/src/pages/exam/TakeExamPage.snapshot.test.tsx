@@ -241,53 +241,6 @@ describe("P3-FSM-0 authoritative snapshot read path", () => {
     expect(section).toHaveTextContent("选择一项");
   });
 
-  it("locked authoritative snapshot → question control disabled, no save API call", async () => {
-    const snap = buildSnapshot({
-      attemptStatus: "submitted",
-      isEditable: false,
-      canSave: false,
-      canSubmit: false,
-      lockReason: "submitted",
-      submittedAt: NOW,
-      questions: [
-        {
-          id: "q1",
-          type: "single_choice",
-          prompt: "已提交的题目",
-          promptDocument: null,
-          answerMode: "plain" as const,
-          options: [{ id: "opt-a", content: "A", contentDocument: null }],
-          inputMode: "choice",
-          maxScore: 10,
-          answerValue: "opt-a",
-          answerSource: "submitted",
-        },
-      ],
-    });
-    installTakeRoute(snap);
-    renderPage();
-
-    // Wait for snapshot load.
-    await screen.findByText("已提交的题目");
-
-    // Try every reachable save path: click the option, then wait past the
-    // autosave debounce window. With view.canSave === false, no save request
-    // may be issued.
-    const radio = await screen.findByRole("radio", { name: "A" });
-    expect(radio).toBeDisabled();
-
-    // Even if a save path were reachable, no /answers/ POST may fire.
-    await waitFor(
-      () => {
-        const saveCalls = apiPost.mock.calls.filter(
-          ([p]) => typeof p === "string" && p.includes("/answers/"),
-        );
-        expect(saveCalls).toHaveLength(0);
-      },
-      { timeout: 2500 },
-    );
-  });
-
   it("submitted snapshot's frozen answer is displayed from answerSource='submitted', not substituted", async () => {
     const snap = buildSnapshot({
       attemptStatus: "submitted",
@@ -689,7 +642,7 @@ describe("P3-FSM-0 TakeExamPage behaviors over the snapshot read path", () => {
   });
 });
 describe("P3-MOD-P0-3 submit-freeze UI proof", () => {
-  it("save execution seam reads derived canSave and skips the API call when the snapshot is non-editable", async () => {
+  it("save execution seam reads derived canSave, keeps the control disabled, and skips the API call when the snapshot is non-editable", async () => {
     // The card requires: "view.canSave === false => save endpoint is not
     // called", and explicitly says "disabled control alone is not
     // sufficient proof". The page guards the save execution seam at
@@ -726,6 +679,10 @@ describe("P3-MOD-P0-3 submit-freeze UI proof", () => {
 
     renderPage();
     await screen.findByText("frozen");
+
+    // The control itself must be disabled (INVARIANT half of the contract);
+    // the seam guard below is what actually protects the save endpoint.
+    expect(screen.getByLabelText("第1空答案")).toBeDisabled();
 
     // The input is disabled; even if a save were scheduled by some path,
     // the execution seam must refuse it. Wait through the debounce window.

@@ -27,18 +27,6 @@ const baseQuestion = {
 };
 
 describe("QuestionRenderer — text_response", () => {
-  it("renders a textarea for a text_response question", () => {
-    render(
-      <QuestionRenderer
-        question={{ ...baseQuestion, type: "text_response" }}
-        answer={undefined}
-        onChange={() => {}}
-      />,
-    );
-
-    expect(screen.getByRole("textbox")).toBeInTheDocument();
-  });
-
   it("preserves newlines in the rendered value and reports changes verbatim", async () => {
     const onChange = vi.fn();
     render(

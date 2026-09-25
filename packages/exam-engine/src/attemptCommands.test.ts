@@ -16,11 +16,9 @@ import type {
   AttemptInterruptionEvent,
   AttemptTimeAdjustment,
   QuestionSnapshot,
-  RequestContext,
 } from "@exam/domain";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import {
-  AttemptDeadlineExceedsExamCloseError,
   ExamNotOpenError,
   InvalidStateTransitionError,
   ValidationError,
@@ -965,30 +963,9 @@ describe("attemptCommands", () => {
       expect(result.attemptNo).toBe(2);
     });
 
-    it("copies questionSnapshot from published exam", async () => {
-      const snapshot = makeSnapshot();
-      const exam = makeExam({ questionSnapshot: snapshot });
-      const enrollment = makeEnrollment();
-      const examRepo = {
-        findById: () => exam,
-        findByIdForUpdate: () => exam,
-        update: () => exam,
-      };
-      const enrRepo = makeEnrollmentRepo([enrollment]);
-      const attRepo = makeAttemptRepo();
-
-      const { attempt: result } = await startOrRestoreAttempt(
-        examRepo,
-        enrRepo,
-        attRepo,
-        "exam-1",
-        "cand-1",
-        fixedNow,
-        startDeps,
-      );
-
-      expect(result.questionSnapshot).toEqual(snapshot);
-    });
+    // The former "copies questionSnapshot from published exam" row was a
+    // verbatim re-invocation of the creates-new row above, which already
+    // asserts `result.questionSnapshot` equals `exam.questionSnapshot`.
 
     // #294 §5 — the latent-reality test from BASE (attempt copied published
     // order verbatim even with both flags true) was flipped by the
@@ -1094,45 +1071,11 @@ describe("attemptCommands", () => {
       expect(result.candidateId).toBe("cand-1");
     });
 
-    it("returns existing attempt when findByExamAndCandidateForUpdate finds active attempt", async () => {
-      const exam = makeExam();
-      const enrollment = makeEnrollment({ attemptCount: 1 });
-      const existingAttempt = makeAttempt();
-      const examRepo = {
-        findById: () => exam,
-        findByIdForUpdate: () => exam,
-        update: () => exam,
-      };
-      const attRepo = makeAttemptRepo([existingAttempt]);
-
-      const enrRepo: EnrollmentRepository = {
-        findByExamAndCandidate: () => null,
-        findByExamAndCandidateForUpdate: () => enrollment,
-        create: (input) => ({
-          id: "enr-new",
-          organizationId: input.organizationId,
-          examId: input.examId,
-          candidateId: input.candidateId,
-          status: input.status,
-          attemptCount: input.attemptCount,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }),
-        update: (_id, data) => ({ ...enrollment, ...data }) as ExamEnrollment,
-      };
-
-      const { attempt: result } = await startOrRestoreAttempt(
-        examRepo,
-        enrRepo,
-        attRepo,
-        "exam-1",
-        "cand-1",
-        fixedNow,
-        startDeps,
-      );
-
-      expect(result.id).toBe("attempt-1");
-    });
+    // The former "returns existing attempt when findByExamAndCandidateForUpdate
+    // finds active attempt" row was a duplicate invocation of the
+    // "returns existing in_progress attempt instead of creating new" row (only
+    // the enrollment repo fake shape differed); the ForUpdate-wiring claim is
+    // owned by the "uses findByExamAndCandidateForUpdate" row above.
 
     // ── #324 review P1-3: retake deferral under the enrollment lock ────────
     //

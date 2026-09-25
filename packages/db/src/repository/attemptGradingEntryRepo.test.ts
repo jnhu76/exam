@@ -434,37 +434,8 @@ describe("attemptGradingEntryRepo", () => {
   // transition. These tests prove the SQL UPDATE itself now refuses to touch a
   // row that is not (grading_mode='manual', status='pending_manual'), as
   // defense-in-depth, and that a rejected UPDATE leaves the original row intact.
-
-  it("Slice 4: a pending_manual manual entry can be completed", async () => {
-    const now = new Date();
-    await entryRepo.bulkCreate(ctx, [
-      {
-        attemptId,
-        questionId: "q-s4-pending",
-        gradingMode: "manual",
-        status: "pending_manual",
-        maxScore: 20,
-        earnedScore: null,
-        candidateAnswer: "ans",
-        standardAnswer: null,
-        correct: null,
-      },
-    ]);
-    const updated = await entryRepo.completeManualEntry(ctx, {
-      attemptId,
-      questionId: "q-s4-pending",
-      earnedScore: 15,
-      maxScore: 20,
-      comment: "ok",
-      gradedBy: "grader-s4",
-      gradedAt: now,
-      now,
-    });
-    expect(updated).not.toBeNull();
-    expect(updated!.status).toBe("completed_manual");
-    expect(updated!.earnedScore).toBe(15);
-    expect(updated!.gradedBy).toBe("grader-s4");
-  });
+  // (The positive pending_manual → completed_manual path is covered by the
+  // "flips pending_manual to completed_manual" test above.)
 
   it("Slice 4: a completed_manual entry cannot be overwritten (returns null)", async () => {
     const now = new Date();

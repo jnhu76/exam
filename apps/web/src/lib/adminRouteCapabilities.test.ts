@@ -8,6 +8,20 @@ import {
   matchAdminRoute,
   routeCapabilityForPath,
 } from "@/lib/adminRouteCapabilities";
+import { resolvedRouteEntries } from "@/test/routeExtraction";
+
+/**
+ * Collapses `:param` segments to a positional shape. React Router matching is
+ * positional and {@link matchAdminRoute} only compares static-vs-param per
+ * segment, so a param NAME difference (`:id` vs `:incidentId`) never changes
+ * which pattern matches — coverage integrity must not depend on it either.
+ */
+function positionalShape(pattern: string): string {
+  return pattern
+    .split("/")
+    .map((segment) => (segment.startsWith(":") ? ":" : segment))
+    .join("/");
+}
 
 const baseUser = (overrides: Partial<MeResponse> = {}): MeResponse => ({
   id: "00000000-0000-4000-8000-000000000001",
@@ -245,49 +259,25 @@ describe("ADMIN_ROUTE_CAPABILITIES — coverage integrity", () => {
   });
 
   it("every mapped App.tsx /admin/* child route is registered here", () => {
-    // The canonical route list from App.tsx (relative to /admin). This guards
-    // against a new route being added to App.tsx without a capability entry,
-    // which would otherwise be denied-by-default silently.
-    const appRoutes = [
-      "",
-      "dashboard",
-      "system",
-      "diagnostics",
-      "settings",
-      "candidate-fields",
-      "users",
-      "candidates",
-      "courses",
-      "questions",
-      "questions/new",
-      "questions/:id/edit",
-      "questions/import",
-      "exams",
-      "exams/new",
-      "exams/:id",
-      "exams/:id/edit",
-      "exams/:id/scores",
-      "exams/:id/proctor",
-      "proctor",
-      "exams/:id/proctor/monitor",
-      "results",
-      "grading-queue",
-      "grading-queue/:id",
-      "audit-logs",
-      "permissions",
-      "import-logs",
-      "attempts/:id",
-      "recovery",
-      "recovery/incidents/:id",
-      "recovery/attempts/:id",
-      "recovery/exams/:id",
-      "proctor/recovery",
-      "proctor/recovery/incidents/:incidentId",
-    ];
-    const registered = new Set(ADMIN_ROUTE_CAPABILITIES.map((e) => e.pattern));
-    for (const r of appRoutes) {
+    // INVARIANT: a new /admin page route must acquire a capability row, or it
+    // is denied-by-default silently. The route inventory is therefore derived
+    // from App.tsx via the shared #455 AST extraction (the same owner
+    // pageMetaCoverage and navMatch derive from), not hand-copied.
+    const adminRoutes = resolvedRouteEntries()
+      .filter((entry) => entry.route.startsWith("/admin/"))
+      .map((entry) => entry.route.slice("/admin/".length))
+      // The wildcard placeholder page has NO capability row by design: the
+      // deny for unknown /admin/* paths is structural (deny-by-default), so
+      // the map deliberately never registers "*".
+      .filter((relative) => relative !== "*");
+    expect(adminRoutes.length).toBeGreaterThan(0);
+
+    const registered = new Set(
+      ADMIN_ROUTE_CAPABILITIES.map((e) => positionalShape(e.pattern)),
+    );
+    for (const r of adminRoutes) {
       expect(
-        registered.has(r),
+        registered.has(positionalShape(r)),
         `App.tsx route "${r}" not in capability map`,
       ).toBe(true);
     }

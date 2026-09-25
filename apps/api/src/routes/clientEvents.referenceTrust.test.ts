@@ -656,19 +656,15 @@ describe("POST /api/client-events — reference trust boundary (#544)", () => {
     await cleanupEvents([name]);
   });
 
-  it("M3: adversarial 50-event batch with 50 distinct attemptIds and 50 distinct examIds — batch reference loading is O(1) queries", async () => {
-    // This test proves the MAJOR-3 corrective: the reference normalizer
-    // uses batched repository methods so the DB query count is fixed at 3
-    // round trips regardless of how many distinct IDs appear in the batch.
+  it("M3: adversarial 50-event batch with 50 distinct malformed attemptIds and examIds is fully accepted and NULLed", async () => {
+    // Scale variant of the T2d/T7 trust class: a large batch whose references
+    // are all malformed (non-UUID) and distinct. The batch must be accepted in
+    // full and every reference NULLed — no existence oracle, no per-ID
+    // rejection, no length blowup.
     //
-    // We construct a batch of 50 events, each claiming a unique attemptId
-    // and a unique examId. All references should be NULLed (the actor does
-    // not own any of these), but the event should still be accepted.
-    //
-    // The test verifies:
-    // 1. All 50 events are accepted (status 200, accepted: 50)
-    // 2. All references are NULLed (no ownership chain provable)
-    // 3. The evidence loader makes at most 3 DB round trips (batch methods)
+    // Query-count behavior (batched reference loading) is owned structurally by
+    // the loader implementation and its own tests; nothing is asserted about it
+    // here.
 
     const BATCH_SIZE = 50;
     const eventNames: string[] = [];
@@ -694,11 +690,11 @@ describe("POST /api/client-events — reference trust boundary (#544)", () => {
 
     const { status, body } = await postEvents(attackerToken, events);
 
-    // 1. All 50 events accepted — no existence oracle.
+    // All 50 events accepted — no existence oracle.
     expect(status).toBe(200);
     expect(body.accepted).toBe(BATCH_SIZE);
 
-    // 2. All references NULLed — the actor does not own any of these.
+    // All references NULLed — the actor does not own any of these.
     for (const name of eventNames) {
       const rows = await storedEventsByName(name);
       expect(rows).toHaveLength(1);
@@ -707,15 +703,6 @@ describe("POST /api/client-events — reference trust boundary (#544)", () => {
       expect(rows[0]!.questionId).toBeNull();
       expect(rows[0]!.userId).toBe(attackerUserId);
     }
-
-    // 3. The evidence loader uses batch methods (O(1) queries).
-    //    If the old per-ID loop were used, this would issue 50+50+50 queries.
-    //    The batch methods issue exactly 3 queries. We verify this
-    //    structurally: the loadReferenceEvidence function calls exactly 3
-    //    repository methods (findOwnAttemptChains, findCandidateEligibilityChains,
-    //    findByIdsForSnapshot) regardless of batch size.
-    //    This is a structural proof — the methods accept arrays and execute
-    //    single WHERE IN (...) queries each.
 
     // Cleanup.
     await cleanupEvents(eventNames);

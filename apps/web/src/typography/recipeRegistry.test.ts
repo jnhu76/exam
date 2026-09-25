@@ -7,7 +7,11 @@ import {
   RECIPE_NAMES,
   getRecipeAuthority,
 } from "./recipeRegistry";
-import { CONFIRMED_RECIPES, isConfirmedRecipe } from "./typography-vocabulary";
+import {
+  CONFIRMED_RECIPES,
+  FONT_FAMILY_ROLES,
+  isConfirmedRecipe,
+} from "./typography-vocabulary";
 
 /**
  * Recipe registry authority + CSS drift tests
@@ -28,21 +32,20 @@ const RECIPES_CSS = readFileSync(join(HERE, "recipes.css"), "utf8");
 const VOCAB_MD = readFileSync(join(HERE, "typography-vocabulary.md"), "utf8");
 
 describe("recipe registry — internal well-formedness", () => {
-  it("recipe names are unique and in canonical order", () => {
-    expect(RECIPE_NAMES).toEqual([
-      "page-title",
-      "page-description",
-      "section-title",
-      "body",
-      "secondary",
-      "metadata",
-      "reading",
-      "long-response",
-      "metric",
-      "metric-hero",
-      "numeric",
-      "code",
-    ]);
+  it("recipe names are unique", () => {
+    // Uniqueness is the registry's own invariant (each name maps to exactly
+    // one .type-* CSS class); the concrete name sequence lives in
+    // recipeRegistry.ts and is not re-listed here.
+    expect(new Set(RECIPE_NAMES).size).toBe(RECIPE_NAMES.length);
+  });
+
+  it("keeps font.reading and font.serif as distinct roles (reading != serif)", () => {
+    expect(FONT_FAMILY_ROLES).toContain("font.reading");
+    expect(FONT_FAMILY_ROLES).toContain("font.serif");
+    expect(FONT_FAMILY_ROLES).toContain("font.ui");
+    expect(FONT_FAMILY_ROLES).toContain("font.mono");
+    // Distinct entries — serif is not aliased onto reading.
+    expect(new Set(FONT_FAMILY_ROLES).size).toBe(FONT_FAMILY_ROLES.length);
   });
 
   it("every recipe owns at least one property", () => {

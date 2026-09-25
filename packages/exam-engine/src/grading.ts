@@ -414,61 +414,18 @@ export async function finalizeGrading(
 }
 
 /**
- * Grades an attempt end-to-end: reads the grading snapshot, then finalizes
- * via the canonical grading-entry aggregator. Returns the persisted ScoreResult
- * (re-read from the attempt so the response reflects committed truth).
+ * Grades an attempt end-to-end idempotently: reads the grading snapshot, then
+ * finalizes via the canonical grading-entry aggregator. Returns the
+ * ScoreResult (re-read or snapshot-backed so the response reflects committed
+ * truth; an already-graded attempt replays its persisted result).
  *
  * P3-FORMAL-P0-D2: the caller MUST mint the transaction-affine capability via
  * `lockEnrollmentAndAttempt` in the same transaction before calling this. The
  * capability is the EA protocol authority threaded through to
- * {@link finalizeTerminalGrading}.
- *
- * Note: `gradeAttempt` is retained for test compatibility; production callers
- * use {@link gradeAttemptIdempotent}. Both flow terminal scoring through the
- * SAME {@link finalizeGrading} → {@link aggregateGradingEntries} authority —
- * there is no second score-computation path.
+ * {@link finalizeTerminalGrading}. Terminal scoring flows through the SAME
+ * {@link finalizeGrading} → {@link aggregateGradingEntries} authority — there
+ * is no second score-computation path.
  */
-export async function gradeAttempt(
-  examRepo: ExamRepository,
-  enrollmentRepo: EnrollmentRepository,
-  attemptRepo: AttemptRepository,
-  gradingWorksetRepo: GradingWorksetRepository,
-  capability: LockedEnrollmentAttemptIdentity,
-  now: Date,
-): Promise<ScoreResult> {
-  const snapshot = await readGradingSnapshot(
-    examRepo,
-    enrollmentRepo,
-    attemptRepo,
-    capability.attemptId,
-  );
-  if (!snapshot) {
-    throw new ValidationError("Attempt not found");
-  }
-
-  await finalizeGrading(
-    enrollmentRepo,
-    attemptRepo,
-    gradingWorksetRepo,
-    capability,
-    snapshot.exam,
-    now,
-  );
-
-  // Build the response ScoreResult from the now-committed attempt state.
-  const graded = await attemptRepo.findById(capability.attemptId);
-  if (!graded) {
-    throw new ValidationError("Attempt not found after grading");
-  }
-  return {
-    attemptId: graded.id,
-    totalScore: graded.score ?? 0,
-    passed: graded.passed ?? false,
-    questionResults: graded.gradingResult ?? [],
-    gradedAt: graded.gradedAt ?? now,
-  };
-}
-
 export async function gradeAttemptIdempotent(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,

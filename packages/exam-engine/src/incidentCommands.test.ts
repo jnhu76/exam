@@ -716,98 +716,6 @@ describe("incidentCommands — linkIncidentInterruption", () => {
   });
 });
 
-describe("incidentCommands — scope quadruple validation", () => {
-  it("rejects cross-organization attempt", async () => {
-    const { validateScopeQuadruple } = await import("./incidentCommands.js");
-    const incident = {
-      organizationId: ORG_ID,
-      examId: EXAM_ID,
-      attemptId: null,
-      candidateId: null,
-    };
-    const target = {
-      examId: EXAM_ID,
-      candidateId: null,
-      organizationId: "other-org",
-    };
-    await expect(
-      validateScopeQuadruple(incident, target, ATTEMPT_ID, ORG_ID),
-    ).rejects.toThrow(ValidationError);
-  });
-
-  it("rejects cross-exam attempt", async () => {
-    const { validateScopeQuadruple } = await import("./incidentCommands.js");
-    const incident = {
-      organizationId: ORG_ID,
-      examId: EXAM_ID,
-      attemptId: null,
-      candidateId: null,
-    };
-    const target = {
-      examId: "other-exam",
-      candidateId: null,
-      organizationId: ORG_ID,
-    };
-    await expect(
-      validateScopeQuadruple(incident, target, ATTEMPT_ID, ORG_ID),
-    ).rejects.toThrow(ValidationError);
-  });
-
-  it("rejects anchored attempt mismatch", async () => {
-    const { validateScopeQuadruple } = await import("./incidentCommands.js");
-    const incident = {
-      organizationId: ORG_ID,
-      examId: EXAM_ID,
-      attemptId: "anchored-attempt",
-      candidateId: null,
-    };
-    const target = {
-      examId: EXAM_ID,
-      candidateId: null,
-      organizationId: ORG_ID,
-    };
-    await expect(
-      validateScopeQuadruple(incident, target, "different-attempt", ORG_ID),
-    ).rejects.toThrow(ValidationError);
-  });
-
-  it("rejects candidate mismatch when incident.candidateId is set", async () => {
-    const { validateScopeQuadruple } = await import("./incidentCommands.js");
-    const incident = {
-      organizationId: ORG_ID,
-      examId: EXAM_ID,
-      attemptId: null,
-      candidateId: "candidate-A",
-    };
-    const target = {
-      examId: EXAM_ID,
-      candidateId: "candidate-B",
-      organizationId: ORG_ID,
-    };
-    await expect(
-      validateScopeQuadruple(incident, target, ATTEMPT_ID, ORG_ID),
-    ).rejects.toThrow(ValidationError);
-  });
-
-  it("accepts matching scope quadruple", async () => {
-    const { validateScopeQuadruple } = await import("./incidentCommands.js");
-    const incident = {
-      organizationId: ORG_ID,
-      examId: EXAM_ID,
-      attemptId: null,
-      candidateId: null,
-    };
-    const target = {
-      examId: EXAM_ID,
-      candidateId: null,
-      organizationId: ORG_ID,
-    };
-    await expect(
-      validateScopeQuadruple(incident, target, ATTEMPT_ID, ORG_ID),
-    ).resolves.toBeUndefined();
-  });
-});
-
 describe("incidentCommands — required string normalization (fail closed)", () => {
   it("addIncidentNote rejects empty/whitespace body with no event", async () => {
     const incident = makeIncident({ version: 3 });
@@ -1169,6 +1077,69 @@ describe("incidentCommands — link scope authority (fail-closed lookupAttempt)"
       ).rejects.toThrow(ValidationError);
       expect(lookupAttempt).toHaveBeenCalledWith(ATTEMPT_ID);
       expect(repo.insertActionLink).not.toHaveBeenCalled();
+    });
+
+    it("rejects a force_submit target that does not match the incident anchor (400)", async () => {
+      // Anchor-mismatch branch of the scope quadruple, proven at the command
+      // boundary (the deleted helper-only describe covered the same branch).
+      const repo = makeRepo({
+        findById: vi
+          .fn()
+          .mockResolvedValue(
+            makeIncident({ attemptId: "anchored-attempt", candidateId: null }),
+          ) as never,
+      });
+      await expect(
+        linkIncidentAction(
+          repo,
+          ctx(),
+          randomUUID(),
+          {
+            operationId: randomUUID(),
+            actionType: "force_submit",
+            actionId: "different-attempt",
+          },
+          deps({
+            lookupAttempt: vi.fn().mockResolvedValue({
+              examId: EXAM_ID,
+              candidateId: CANDIDATE_ID,
+              organizationId: ORG_ID,
+            }),
+          }),
+        ),
+      ).rejects.toThrow(/does not match incident anchor/);
+      expect(repo.insertActionLink).not.toHaveBeenCalled();
+    });
+
+    it("links a force_submit whose scope quadruple matches (applied)", async () => {
+      // The acceptance branch of the scope quadruple, proven at the command
+      // boundary (the deleted helper-only describe covered the same branch).
+      const incident = examWideIncident();
+      const repo = makeRepo({
+        findById: vi.fn().mockResolvedValue(incident) as never,
+      });
+      const result = await linkIncidentAction(
+        repo,
+        ctx(),
+        incident.id,
+        {
+          operationId: randomUUID(),
+          actionType: "force_submit",
+          actionId: ATTEMPT_ID,
+        },
+        deps({ lookupForceSubmitAudit: vi.fn().mockResolvedValue(true) }),
+      );
+
+      expect(result.outcome).toBe("applied");
+      expect(repo.insertActionLink).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          incidentId: incident.id,
+          actionType: "force_submit",
+          actionId: ATTEMPT_ID,
+          attemptId: ATTEMPT_ID,
+        }),
+      );
     });
   });
 

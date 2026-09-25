@@ -8,7 +8,7 @@ import {
   type MatrixRoute,
   type MatrixVerdict,
   type PermissionMatrixFixture,
-} from "./permissionMatrix.helpers.js";
+} from "./__tests__/permissionMatrix.helpers.js";
 
 const EXAM_ID = "00000000-0000-4000-8000-0000000000ee";
 const ATTEMPT_ID = "00000000-0000-4000-8000-0000000000aa";

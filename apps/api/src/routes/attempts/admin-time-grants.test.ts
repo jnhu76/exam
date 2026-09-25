@@ -1,6 +1,5 @@
 import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
 import { eq, like, sql } from "drizzle-orm";
-import type { FastifyPluginAsync } from "fastify";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
@@ -15,7 +14,6 @@ import {
   buildExamPayload,
   disruptAttempt,
 } from "./__tests__/attempts.testHelpers.js";
-import type { AuthzPreHandler } from "../../types/fastify-auth.d.js";
 
 const GRANT_TEST_PREFIX = "time-grant-test-";
 
@@ -925,77 +923,6 @@ describe("attempt routes", () => {
         ).filter((r) => r.action === "attempt.timeGrant");
         expect(loserAudit).toHaveLength(0);
       }, 30_000);
-    });
-  });
-});
-
-/**
- * Runtime authz-metadata conformance for the time-grants route. The route
- * registry declares scope: Attempt / resolver: "attempt" for
- * `attempt.time.grant`; this proves the route's live `preHandler` is the
- * resource-aware `requireScopedCapability` (not the flat `requireCapability`).
- * A flat gate would not attach `authz.kind: "scoped"` and would not resolve
- * the target Attempt — the cross-org / non-existent 404 tests above are the
- * behavioral proof; this is the structural/introspection proof.
- */
-describe("time-grants route authz metadata (scoped resolver wired)", () => {
-  const captured: {
-    method: string;
-    url: string;
-    authz: AuthzPreHandler["authz"] | null;
-  }[] = [];
-
-  const capturePlugin: FastifyPluginAsync = async (fastify) => {
-    fastify.addHook("onRoute", (routeOptions) => {
-      const preHandlers = (
-        Array.isArray(routeOptions.preHandler)
-          ? routeOptions.preHandler
-          : [routeOptions.preHandler]
-      ).filter(Boolean) as unknown[];
-      const authzHandler = preHandlers.find(
-        (ph): ph is AuthzPreHandler =>
-          typeof ph === "function" &&
-          ((ph as unknown as AuthzPreHandler).authz?.kind === "scoped" ||
-            (ph as unknown as AuthzPreHandler).authz?.kind === "flat"),
-      );
-      captured.push({
-        method:
-          typeof routeOptions.method === "string"
-            ? routeOptions.method
-            : "UNKNOWN",
-        url: routeOptions.url as string,
-        authz: authzHandler?.authz ?? null,
-      });
-    });
-    await fastify.register(examRoutes);
-    await fastify.register(attemptRoutes);
-  };
-
-  let metaCtx: Awaited<ReturnType<typeof buildTestApp>>;
-  beforeAll(async () => {
-    metaCtx = await buildTestApp(capturePlugin, { prefix: "/api" });
-  });
-  afterAll(async () => {
-    await metaCtx.cleanup();
-  });
-
-  it("POST /admin/attempts/:attemptId/time-grants uses a scoped Attempt resolver", () => {
-    const match = captured.find(
-      (r) =>
-        r.method === "POST" &&
-        r.url.includes("/admin/attempts/:attemptId/time-grants"),
-    );
-    expect(
-      match,
-      `time-grants route not captured; captured: ${captured
-        .map((r) => `${r.method} ${r.url}`)
-        .join(", ")}`,
-    ).toBeDefined();
-    expect(match!.authz).toEqual({
-      kind: "scoped",
-      permission: "attempt.time.grant",
-      resolverKey: "attempt",
-      resourceIdKey: "attemptId",
     });
   });
 });

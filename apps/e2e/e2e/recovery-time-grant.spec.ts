@@ -1,53 +1,34 @@
 /**
  * Recovery Attempt Detail: operator time grant — real browser vertical.
  *
- * Seeds an `operator_incident` exam (the canonical grant seam), starts a
- * real attempt, then grants time from the Recovery Attempt Detail operations
- * UI. The grant is confirmed against the REAL recovery aggregate: exactly one
- * new operator adjustment (+N seconds) and the effective deadline shifted by
- * exactly N seconds (server-side computation is the authority — the client
- * never derives deadlines).
+ * Proves the browser composition of the Recovery Attempt Detail time-grant
+ * flow on an in_progress attempt: the action renders for the operator, the
+ * confirmation dialog names the operator consequence (为 … 的第 1 次答题延长
+ * 10 分钟), the minutes + reason fields are filled, and the success toast
+ * surfaces after confirming.
  *
- * The lost-response / reload / same-operationId replay PROTOCOL is owned by
- * the shared PendingGrantCoordinator (unit tests + cross-tab-pending-grant
- * E2E) and the RecoveryAttemptDetailPage component tests; this spec only
- * proves the Recovery caller + authoritative aggregate effect end-to-end.
+ * The wire-level facts are owned at the API layer and are deliberately not
+ * duplicated here: adjustment-ledger rows, effective-deadline arithmetic and
+ * idempotent replay by routes/attempts/admin-time-grants.test.ts. The
+ * lost-response / reload / same-operationId replay PROTOCOL is owned by the
+ * shared PendingGrantCoordinator (unit tests + cross-tab-pending-grant E2E)
+ * and the RecoveryAttemptDetailPage component tests.
  */
 import { test, expect } from "@playwright/test";
 import { seedExam, type SeededExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
-import {
-  adminApiToken,
-  candidateLoginApi,
-  candidateStartAttempt,
-} from "../lib/flow";
-
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-
-async function adminGet(
-  request: import("@playwright/test").APIRequestContext,
-  token: string,
-  path: string,
-) {
-  const res = await request.get(`${BASE_URL}${path}`, {
-    headers: { Cookie: `auth-token=${token}` },
-  });
-  expect(res.ok(), `GET ${path} → ${res.status()}`).toBe(true);
-  return res.json();
-}
+import { candidateLoginApi, candidateStartAttempt } from "../lib/flow";
 
 test.describe("Recovery attempt time grant", () => {
   test.describe.configure({ mode: "serial" });
 
   let seeded: SeededExam;
-  let adminToken: string;
   let attemptId: string;
 
   test.beforeAll(async ({ request }) => {
     seeded = await seedExam(request, `time-grant-${Date.now()}`, {
       interruptionTimePolicy: "operator_incident",
     });
-    adminToken = await adminApiToken(request);
     const candidateToken = await candidateLoginApi(
       request,
       seeded.candidate.username,
@@ -60,20 +41,9 @@ test.describe("Recovery attempt time grant", () => {
     );
   });
 
-  test("grants 10 minutes from the operations UI; ledger + effective deadline move by exactly 600s", async ({
+  test("grants 10 minutes from the operations UI with a required reason and success toast", async ({
     page,
-    request,
   }) => {
-    const before = (await adminGet(
-      request,
-      adminToken,
-      `/api/admin/recovery/attempts/${attemptId}`,
-    )) as {
-      attempt: { effectiveDeadlineAt: string };
-      timeAdjustments: Array<{ source: string; addedSeconds: number }>;
-    };
-    const beforeAdjustments = before.timeAdjustments.length;
-
     await loginAsAdmin(page);
     await page.goto(`/admin/recovery/attempts/${attemptId}`);
     await page.waitForURL("**/admin/recovery/attempts/**", { timeout: 15_000 });
@@ -85,7 +55,7 @@ test.describe("Recovery attempt time grant", () => {
       timeout: 15_000,
     });
 
-    // The grant dialog requires a reason (canonical, trimmed by the server).
+    // The grant dialog names the operator consequence.
     await page.getByRole("button", { name: "延长答题时间" }).click();
     const dialog = page.getByRole("dialog");
     await expect(
@@ -99,31 +69,5 @@ test.describe("Recovery attempt time grant", () => {
     await expect(page.getByText("已延长答题时间").first()).toBeVisible({
       timeout: 15_000,
     });
-
-    // The aggregate reload is authoritative: one new operator adjustment of
-    // exactly 600s, and the effective deadline advanced by exactly 600s.
-    const after = (await adminGet(
-      request,
-      adminToken,
-      `/api/admin/recovery/attempts/${attemptId}`,
-    )) as {
-      attempt: { effectiveDeadlineAt: string };
-      timeAdjustments: Array<{
-        source: string;
-        addedSeconds: number;
-        reasonText: string;
-      }>;
-    };
-    expect(after.timeAdjustments.length).toBe(beforeAdjustments + 1);
-    const operatorAdjustment = after.timeAdjustments.find(
-      (a) => a.source === "operator",
-    );
-    expect(operatorAdjustment).toBeTruthy();
-    expect(operatorAdjustment!.addedSeconds).toBe(600);
-    expect(operatorAdjustment!.reasonText).toBe("网络中断补偿");
-
-    const beforeMs = new Date(before.attempt.effectiveDeadlineAt).getTime();
-    const afterMs = new Date(after.attempt.effectiveDeadlineAt).getTime();
-    expect(afterMs - beforeMs).toBe(600_000);
   });
 });

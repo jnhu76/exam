@@ -73,16 +73,60 @@ describe("考试管理请求状态", () => {
     );
   });
 
-  it("应该显示加载状态", () => {
+  it("应该显示加载状态直到请求完成", async () => {
+    // Deferred handler: the request stays genuinely in flight until the test
+    // resolves it. The loading claim is therefore the full lifecycle — the
+    // loading state renders while pending AND transitions to content on
+    // completion (a hardcoded loading state would fail the second half).
+    let resolveExams: ((response: Response) => void) | undefined;
     server.use(
       http.get("http://localhost:5173/api/exams", () => {
-        return new Promise(() => {});
+        return new Promise<Response>((resolve) => {
+          resolveExams = resolve;
+        });
       }),
     );
 
     renderExamPage();
 
+    // msw interception is async — wait until the deferred handler is invoked
+    // (the request is genuinely in flight), then pin the loading state.
+    await waitFor(() => {
+      expect(resolveExams).toBeDefined();
+    });
     expect(screen.getByText(/加载中/)).toBeInTheDocument();
+
+    resolveExams!(
+      HttpResponse.json({
+        items: [
+          {
+            id: "exam-1",
+            title: "示例考试",
+            status: "draft",
+            openAt: "2030-01-01T00:00:00Z",
+            closeAt: "2030-01-02T00:00:00Z",
+            durationMinutes: 60,
+            passingScore: 60,
+            totalScore: 100,
+            questionIds: [],
+            participantCount: 0,
+            canDelete: true,
+            deleteDisabledReasonCode: null,
+            deleteDisabledReason: null,
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      }),
+    );
+
+    // Resolved → rows render (desktop table + mobile cards), loading gone.
+    await waitFor(() => {
+      expect(screen.getAllByText("示例考试").length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.queryByText(/加载中/)).not.toBeInTheDocument();
   });
 
   it("应该显示错误状态当请求失败时", async () => {

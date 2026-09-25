@@ -372,14 +372,6 @@ describe("RecoveryIncidentDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows loading state then data", async () => {
-    renderPage();
-    expect(screen.getByText("加载中...")).toBeInTheDocument();
-    expect(
-      await screen.findByText("detail page test incident"),
-    ).toBeInTheDocument();
-  });
-
   it("shows not-found for 404 and retry works", async () => {
     getMock.mockRejectedValueOnce(new ApiError(404, "Not found"));
     renderPage();

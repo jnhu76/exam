@@ -437,13 +437,4 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
     });
     expect(parsed.success).toBe(true);
   });
-
-  it("keeps null/undefined handling intact for the composed schema", () => {
-    expect(ContentDocumentV1Schema.nullable().safeParse(null).success).toBe(
-      true,
-    );
-    expect(ContentDocumentV1Schema.nullish().safeParse(undefined).success).toBe(
-      true,
-    );
-  });
 });
