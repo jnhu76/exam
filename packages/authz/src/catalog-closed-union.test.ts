@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Permission, Scope, Role } from "./catalog.js";
 import { AuditAction } from "./auditActions.js";
+import { Role as DomainRole } from "@exam/domain";
 
 describe("RBAC-M1 catalog — closed-union integrity", () => {
   it("every Permission value is a dotted lowercase string (>= 2 segments), unique", () => {
@@ -38,5 +39,18 @@ describe("RBAC-M1 catalog — closed-union integrity", () => {
   it("AuditAction values are unique", () => {
     const values = Object.values(AuditAction);
     expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("the @exam/domain Role mirror agrees with this catalog (derived guard)", () => {
+    // WHY: the role vocabulary has two literal declarations by necessity —
+    // ADR-010 names this catalog the authorization authority, and the package
+    // dependency direction (@exam/authz → @exam/domain, never the reverse)
+    // forbids @exam/domain from re-exporting it. This derived agreement test
+    // is the conformance owner for the mirror; if one side adds/remotes a
+    // role without the other, both this test and the RequestContext/audit
+    // vocabulary drift fail here instead of silently diverging.
+    const catalogRoles = new Set(Object.values(Role));
+    const domainRoles = new Set(Object.values(DomainRole));
+    expect(domainRoles).toEqual(catalogRoles);
   });
 });

@@ -491,7 +491,6 @@ async function runMisconductMarkTransaction(
   // this to PROVE a serialization retry actually happened (distinct txids
   // across attempts) when the primary serializes behind a concurrent winner.
   let primaryAttempt = 0;
-  let primaryCommitted = false;
   try {
     const response = await executeInTransaction(db, async (tx) => {
       // Backend PID/txid evidence is OBSERVER-ONLY (the deterministic race
@@ -630,8 +629,7 @@ async function runMisconductMarkTransaction(
       );
     });
     // executeInTransaction resolved ⇒ the COMMIT was issued and settled. Only
-    // at this point is "committed" a truthful label.
-    primaryCommitted = true;
+    // at this point is "committed" a truthful label for onPrimaryCommitted.
     await observer?.onPrimaryCommitted?.({
       label,
       pid: identity.pid,

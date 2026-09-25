@@ -26,11 +26,18 @@
  *   pnpm --filter @exam/api backfill:submitted-answers
  *
  * Target database is resolved from .env via resolveDatabaseUrlFromEnv (same
- * rule as migrate.ts). Never point this at exam_test or exam_e2e.
+ * rule as migrate.ts). Never point this at exam_test or exam_e2e — the
+ * shared database-name guard (`isForbiddenRepairTarget`) refuses the test
+ * territories and exits non-zero.
  */
 
 import { buildSubmittedAnswersSnapshot } from "@exam/exam-engine";
-import { createDatabase } from "@exam/db";
+import {
+  createDatabase,
+  isForbiddenRepairTarget,
+  parseDatabaseName,
+  refuseRepairTargetMessage,
+} from "@exam/db";
 import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import type {
@@ -231,13 +238,23 @@ async function main() {
   const allowQuarantine = args.has("--allow-quarantine");
 
   const databaseUrl = resolveDatabaseUrlFromEnv(process.env);
-  if (
-    !databaseUrl.includes("/exam") &&
-    !databaseUrl.includes("/exam_") // dev/test/e2e — but this script targets dev
-  ) {
-    process.stderr.write(
-      `Warning: database URL does not look like the dev DB: ${databaseUrl}\n`,
-    );
+
+  // Database-name safety guard: this repair mutates business rows in place,
+  // so the documented "never exam_test or exam_e2e" boundary must fail closed.
+  // URL-based parsing (not string matching) so query params / trailing slashes
+  // cannot confuse the name; the territory rules live in the shared guard.
+  let dbName: string;
+  try {
+    dbName = parseDatabaseName(databaseUrl);
+  } catch (err) {
+    process.stderr.write(`Invalid DATABASE_URL: ${(err as Error).message}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  if (isForbiddenRepairTarget(dbName)) {
+    process.stderr.write(`${refuseRepairTargetMessage(dbName)}\n`);
+    process.exitCode = 2;
+    return;
   }
 
   const conn = await createDatabase(databaseUrl);

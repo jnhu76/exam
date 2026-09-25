@@ -71,6 +71,7 @@ import { getTypeLabelKey } from "@/lib/constants";
 import type {
   AttemptTimelineEvent,
   AttemptTimelineResponse,
+  MisconductFlagDTO,
 } from "@exam/contracts";
 
 /**
@@ -229,14 +230,6 @@ type AttemptResultResponse =
 
 /** Attempt statuses an admin may flag for misconduct. */
 const FLAGGABLE_STATUSES = new Set(["in_progress", "disrupted"]);
-
-/** Misconduct flag DTO (mirrors MisconductFlagDTO in @exam/contracts). */
-interface MisconductFlag {
-  flaggedAt: string;
-  flaggedBy: string;
-  notes: string;
-  severity: "warning" | "serious";
-}
 
 /** Converts an answer value to a display-friendly string. Rich documents (issue 301) collapse to their plain-text projection for the compact table cells — but only when the FROZEN answerMode is rich (issue 301 corrective pass), and only after the document passes the bounded preflight (the projection itself recurses). */
 function formatAnswer(value: unknown, answerMode?: string | null): string {
@@ -436,9 +429,8 @@ export function AttemptDetailPage() {
     status: string;
     examTitle: string;
   } | null>(null);
-  const [liveMisconduct, setLiveMisconduct] = useState<MisconductFlag | null>(
-    null,
-  );
+  const [liveMisconduct, setLiveMisconduct] =
+    useState<MisconductFlagDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Timeline fetch is independent of the result fetch so it can load and

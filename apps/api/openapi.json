@@ -34371,9 +34371,6 @@
           }
         ],
         "x-role": ["Admin"],
-        "x-content-types": {
-          "200": "text/csv"
-        },
         "responses": {
           "200": {
             "description": "Default Response",

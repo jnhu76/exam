@@ -125,8 +125,6 @@ export type RedisMode = "off" | "optional" | "required";
 export interface RedisConfig {
   mode: RedisMode;
   url: string | null;
-  /** `mode !== "off" && url !== null` — kept for backward compatibility. */
-  enabled: boolean;
   keyPrefix: string;
   /** Bounded TCP connect timeout (ms). */
   connectTimeoutMs: number;
@@ -463,7 +461,6 @@ function resolveRedisConfig(s: ResolvedSettings): RedisConfig {
   return {
     mode: mode === "off" || url === null ? "off" : mode,
     url,
-    enabled: mode !== "off" && url !== null,
     keyPrefix: s.redis.REDIS_KEY_PREFIX,
     connectTimeoutMs: s.redis.REDIS_CONNECT_TIMEOUT_MS,
     commandTimeoutMs: s.redis.REDIS_COMMAND_TIMEOUT_MS,

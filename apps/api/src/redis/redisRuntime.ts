@@ -155,7 +155,6 @@ export class RedisRuntime {
       config: {
         mode: "off",
         url: null,
-        enabled: false,
         keyPrefix: "",
         connectTimeoutMs: 0,
         commandTimeoutMs: 0,

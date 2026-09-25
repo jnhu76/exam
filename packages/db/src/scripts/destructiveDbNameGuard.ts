@@ -1,19 +1,27 @@
 /**
- * Strict database-name safety guard for opt-in DESTRUCTIVE rollback scripts
- * (`rollbackAttemptCommandReceipts`, `rollbackIncidentTables`).
+ * Database-name safety guards for the operator scripts that mutate data
+ * outside the normal request path, each with its own contract:
  *
- * The guard is INTENTIONALLY exact-match, not substring: these scripts run
- * `DROP TABLE` / `DROP INDEX`, so a false-accept is a data-loss bug, not a
- * cosmetic one. A prefix/substring rule would admit look-alikes such as
- * `examproduction` (matches `^exam`) or `incident_store` / `decision_db`
- * (contain the letter pair `ci`).
+ * - `isDestructiveRollbackTarget` — opt-in DESTRUCTIVE rollback scripts
+ *   (`rollbackAttemptCommandReceipts`, `rollbackIncidentTables`) that run
+ *   `DROP TABLE` / `DROP INDEX`.
+ * - `isFullResetTarget` — operations that truncate EVERY business table
+ *   (E2E seed `reset`, `resetE2eState`).
+ * - `isForbiddenRepairTarget` — offline repair scripts
+ *   (`backfill-submitted-answers`, `recover-legacy-grading-workset`) that
+ *   must never rewrite the disposable test territories.
  *
- * Adding a new destructive target means extending the allowlist here in one
- * place; both rollback CLI entrypoints import this single source of truth.
+ * All guards are INTENTIONALLY exact-match, not substring: a false-accept is a
+ * data-loss bug, not a cosmetic one. A prefix/substring rule would admit
+ * look-alikes such as `examproduction` (matches `^exam`) or `incident_store` /
+ * `decision_db` (contain the letter pair `ci`).
  *
- * Layering: this lives in `packages/db` so both `apps/api` rollback scripts can
- * import it without a reverse package dependency, and so the pure guard logic
- * is unit-testable at the db package level without spawning a subprocess.
+ * Adding a new guarded script family or target means extending the rules here
+ * in one place; every CLI entrypoint imports this single source of truth.
+ *
+ * Layering: this lives in `packages/db` so the `apps/api` scripts can import
+ * it without a reverse package dependency, and so the pure guard logic is
+ * unit-testable at the db package level without spawning a subprocess.
  */
 
 /**
@@ -119,5 +127,43 @@ export function refuseFullResetMessage(dbName: string): string {
     "to the E2E databases (exam_e2e, exam_e2e_w<N>, exam_ci[_-]<suffix>). " +
     "The dev database (exam), the vitest databases (exam_test*), and E2E " +
     "forensic archives (exam_e2e_w<N>_prior) are never full-reset targets."
+  );
+}
+
+/**
+ * Territory guard for OFFLINE REPAIR scripts (`backfill-submitted-answers`,
+ * `recover-legacy-grading-workset`): they mutate business rows in place, and
+ * their contracts say "never point this at exam_test or exam_e2e" — a repair
+ * run must never rewrite the disposable vitest / E2E / CI territories. Real
+ * deployment databases (whatever the institution named them) and the dev
+ * database stay valid targets, so this is an exact DENYLIST of the documented
+ * test territories — the mirror image of {@link isDestructiveRollbackTarget}'s
+ * allowlist — not a substring heuristic and not a dev-name allowlist.
+ */
+const REPAIR_FORBIDDEN_LITERALS = new Set<string>(["exam_test", "exam_e2e"]);
+
+const REPAIR_FORBIDDEN_PATTERNS = [
+  /^exam_(?:test|e2e)_w\d+$/, // vitest worker-DB isolation
+  /^exam_e2e_w\d+_prior$/, // E2E failure-forensic archives
+  /^exam_ci[_-][A-Za-z0-9_-]+$/, // CI branch databases
+];
+
+/** True iff `dbName` is a forbidden target for offline repair scripts. */
+export function isForbiddenRepairTarget(dbName: string): boolean {
+  if (REPAIR_FORBIDDEN_LITERALS.has(dbName)) return true;
+  return REPAIR_FORBIDDEN_PATTERNS.some((p) => p.test(dbName));
+}
+
+/**
+ * Refusal message for a rejected offline-repair target. Kept here so the two
+ * repair CLI entrypoints cannot drift in their operator-facing wording.
+ */
+export function refuseRepairTargetMessage(dbName: string): string {
+  return (
+    `Refusing to run against database "${dbName}": offline repair mutates ` +
+    "business rows and must never target the vitest / E2E / CI databases " +
+    "(exam_test, exam_e2e, exam_test_w<N>, exam_e2e_w<N>, " +
+    "exam_e2e_w<N>_prior, exam_ci[_-]<suffix>). " +
+    "Point DATABASE_URL at the real data to repair."
   );
 }

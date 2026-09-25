@@ -1759,7 +1759,6 @@ describe("runtimeConfig", () => {
     it("defaults to off when REDIS_URL is unset", () => {
       const config = loadRuntimeConfig(redisEnv());
       expect(config.redis.mode).toBe("off");
-      expect(config.redis.enabled).toBe(false);
       expect(config.redis.url).toBeNull();
     });
 
@@ -1768,7 +1767,6 @@ describe("runtimeConfig", () => {
         redisEnv({ REDIS_URL: "redis://localhost:6379" }),
       );
       expect(config.redis.mode).toBe("optional");
-      expect(config.redis.enabled).toBe(true);
       expect(config.redis.url).toBe("redis://localhost:6379");
     });
 
@@ -1777,7 +1775,6 @@ describe("runtimeConfig", () => {
         redisEnv({ REDIS_MODE: "off", REDIS_URL: "redis://localhost:6379" }),
       );
       expect(config.redis.mode).toBe("off");
-      expect(config.redis.enabled).toBe(false);
     });
 
     it("REDIS_MODE=optional requires REDIS_URL", () => {
@@ -1800,7 +1797,6 @@ describe("runtimeConfig", () => {
         }),
       );
       expect(config.redis.mode).toBe("required");
-      expect(config.redis.enabled).toBe(true);
     });
 
     it("rejects an unknown REDIS_MODE value", () => {
