@@ -31,13 +31,13 @@ import {
 } from "./catalog.js";
 
 export interface RolePreset {
-  /** Stable role key (also the DB `roles.key` seed value). */
+  /** Stable role key. Code constants are the sole role-preset authority (ADR-010 2026-09-25 amendment: the `roles` seed table was never built and is retired). */
   key: RoleKey;
   /** Human label (zh-CN UI may override via i18n; this is the canonical fallback). */
   label: string;
   /** One-line purpose from the ADR. */
   purpose: string;
-  /** Seeded as an immutable system role (is_system = true). Custom = Phase 4. */
+  /** Immutable built-in preset (custom roles remain Phase 4). Authority lives in these code constants, not in DB rows (ADR-010 2026-09-25 amendment). */
   isSystem: boolean;
   /** Whether a human can be assigned this role via user management. */
   assignable: boolean;

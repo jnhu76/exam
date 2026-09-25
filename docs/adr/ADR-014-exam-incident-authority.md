@@ -7,11 +7,15 @@
 This ADR is Accepted and is the binding authority for
 `REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS` (J3).
 
-Runtime implementation remains **NOT STARTED**. Acceptance authorizes J3 to
-implement this contract; it does not itself implement any schema, command,
-route, permission, preset, or UI behavior.
+> **Current status:** the runtime is **IMPLEMENTED** (see the amended status
+> note at the end of this section). The paragraphs between here and that note
+> are the acceptance-time snapshot (2026-08-01) and are retained as history.
 
-The following boundaries remain unchanged by this acceptance:
+At acceptance time (2026-08-01), runtime implementation was NOT STARTED.
+Acceptance authorized J3 to implement this contract; it did not itself
+implement any schema, command, route, permission, preset, or UI behavior.
+
+The following boundaries described the state at acceptance time:
 
 - `grantAttemptTime()` still rejects non-null `incidentId` until J3 implements
   the validated path.

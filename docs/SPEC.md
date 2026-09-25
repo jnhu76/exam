@@ -16,7 +16,7 @@
 题库 → 组卷 → 考试执行 → 答案保存 → 自动批改 → 出分
 ```
 
-Phase 1 当前产品角色为 Admin + Candidate。Teacher / Proctor / Grader 是未来协作与权限模型，不进入 Phase 1 核心路径。考生不限于学生——由机构自己定义考生身份。
+Phase 1 核心路径的角色是 Admin + Candidate；Phase 3 的协作角色（Teacher / Proctor / Grader / Maintainer）已基于 permission + scope 交付并强制（见 §2.4.1）。考生不限于学生——由机构自己定义考生身份。
 
 > **Phase 1 是单租户、多用户系统。** organization 表仅作为内部 default organization 数据归属边界。multiTenant / SuperAdmin / tenant switcher 是 Phase 4 platformization，不属于 Phase 1。"达标放行" / pass-to-proceed 属于 Phase 4 integration。
 
@@ -36,7 +36,7 @@ Phase 1 当前产品角色为 Admin + Candidate。Teacher / Proctor / Grader 是
 > 上述原则是系统**长期不变契约**。但需要明确当前接线深度：
 >
 > - "答卷可恢复"已**产品化**：答案持久化、`disrupted` 自动标记、`restoreAttempt` 后端路由、以及候考人端**自助恢复入口**（`TakeExamPage` REC-I3 restore 流程，ADR-012）均已就绪。心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）在 API 启动时**默认注册并运行**（30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），会真实把超时的 `in_progress` attempt 写为 `disrupted`。
-> - Admin 侧恢复工作台（J5 Recovery Center：事件队列、事件详情、attempt/exam 恢复上下文与操作面板）已交付（2026-08-08，见 `docs/archive/roadmap/recovery-operations-jobs.md`）。**尚未产品化**的是 Proctor 恢复工作台（J6）、系统级 incident 的自动生成、以及心跳调参与超时阈值的生产评估。
+> - Admin 侧恢复工作台（J5 Recovery Center：事件队列、事件详情、attempt/exam 恢复上下文与操作面板）已交付（2026-08-08，见 `docs/archive/roadmap/recovery-operations-jobs.md`）。Proctor 恢复工作台（J6，#303：`/admin/proctor/recovery`）与系统级 incident 的自动生成（#304，ADR-014 §8 Gate A）也已交付；当前投影语义见 `docs/contracts/admin-recovery-center.md` §13.1。**尚未产品化**的是心跳调参与超时阈值的生产评估。
 
 ---
 
@@ -105,10 +105,11 @@ ExamAttempt (答题记录)
 
 - **Admin**：Phase 1 内最高产品角色，可以多个。管理 default organization 内的候选人字段、候选人、课程、题库、考试、分配、成绩与导出。
 - **Candidate**：参加被分配考试并查看自己允许查看的成绩，可以多个。
-- **Teacher**：不进入 Phase 1 核心路径；Phase 3 由 permission + scope 组合为 Teacher-like scoped role。
-- **Proctor**：Phase 2/3 后续能力；Phase 2 提供考试运营工作流，Phase 3 提供角色包与授权边界。
-- **Grader / ContentManager / ResultViewer**：Phase 3 scoped role bundles。
-- **SuperAdmin**：Phase 4 optional multiTenant/platformization；Phase 1 不 seed、不登录、不展示。
+- **Teacher**：已交付的 scoped role（#286）——permission + course scope，能力限定于所分配课程。
+- **Proctor**：已交付的 scoped role（ADR-015 / M11）——permission + exam scope，运行在所分配考试的监考工作流上。
+- **Grader**：已交付的 scoped role（#296）——permission + exam scope。ContentManager / ResultViewer 仍是设计概念，未作为产品角色交付。
+- **Maintainer**：已交付的只读运维观察角色（ADR-017 rev4，P7-E2A）——零业务权限、零写权限，与 Admin 互斥（D14）。
+- **SuperAdmin**：Phase 4 optional multiTenant/platformization；不 seed、不登录、不展示。
 
 ### 2.2 ExamAttempt 模型（核心）
 
@@ -136,7 +137,7 @@ not_started → queued → in_progress → submitted → graded
 | `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startAttempt` 时直接进入 `in_progress`） |
 | `queued` | 排队中（requireQueue 时） | **不作为 attempt 状态建模**：准入是与计时模式正交的独立维度，由 `exam_admissions` 准入记录承载（#292 durable admission runtime，见 exam-runtime.md §3.1.1）；attempt 直接 `in_progress` 起步 |
 | `in_progress` | 正在答题 | **已接线**：`startAttempt` 命令写入 |
-| `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Proctor 恢复工作台（J6）未实现 |
+| `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Admin/Proctor 恢复工作台均已交付（J5 / J6，#303） |
 | `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入。人工批改未完成时 attempt 停留在 `submitted` + `gradingStatus=pending_manual` |
 | `graded` | 批改完成 | **已接线**：终局批改在同一锁定事务内由 `submitted` 直接落 `graded` |
 | `voided` | 已作废（监考员或管理员操作） | **Phase 2+ / planned**：`voidAttempt` command 仅作为目标设计，未提供管控入口 |
@@ -258,17 +259,18 @@ remainingSeconds = deadlineAt - serverNow
 | 参加被分配考试 | - | ✅ |
 | 查看允许展示的本人结果 | - | ✅ |
 
-> **Phase 1 说明**：当前产品角色只有 Admin / Candidate。Teacher-like roles、Proctor、Grader、ContentManager、ResultViewer 均不是 Phase 1 当前角色。
+> **Phase 1 说明（历史）**：Phase 1 的产品角色只有 Admin / Candidate。协作角色在 Phase 3 交付（见下）。
 
-### 2.4.1 Future Roles（Phase 3）
+### 2.4.1 Collaboration Roles（Phase 3，已交付）
 
-Phase 3 才引入基于 permission + scope 的协作角色：
+Phase 3 引入基于 permission + scope 的协作角色。已交付并强制：Teacher（course scope，#286）、Proctor（exam scope，ADR-015）、Grader（exam scope，#296）、Maintainer（只读观察，ADR-017 rev4）。权限目录、角色预设与 scope 语义的可执行权威是 `packages/authz/`（代码常量）与 `docs/architecture/authorization.md`；本节只描述语义模型，不复制权限矩阵。
 
-- Teacher-like roles
-- Proctor
-- Grader
-- ContentManager
-- ResultViewer
+- Teacher-like roles（已交付，course scope）
+- Proctor（已交付，exam scope）
+- Grader（已交付，exam scope）
+- Maintainer（已交付，只读运维观察）
+- ContentManager（未交付——仍是设计概念）
+- ResultViewer（未交付——仍是设计概念）
 
 这些角色通过 Course / Exam / CandidateGroup 等 scope 授权，不是 multiTenant，也不进入 Phase 1 当前矩阵。
 
@@ -592,7 +594,7 @@ SaveAnswerResponse {
 > **实现边界**：上表是恢复能力的**目标合约**。当前实现：
 >
 > - "客户端崩溃 / 网络中断"在 attempt 仍处于 `in_progress` 时可正常恢复（前端在加载 attempt 时拉取服务端答案版本）。
-> - 一旦 attempt 被心跳扫描器置为 `disrupted`，候考人可通过**自助 restore 入口**（`TakeExamPage` REC-I3 流程）恢复答案与剩余时间；Admin 恢复工作台（J5）提供队列、事件详情与操作面板。Proctor 恢复工作台（J6）仍未实现。
+> - 一旦 attempt 被心跳扫描器置为 `disrupted`，候考人可通过**自助 restore 入口**（`TakeExamPage` REC-I3 流程）恢复答案与剩余时间；Admin 恢复工作台（J5）与 Proctor 恢复工作台（J6，`/admin/proctor/recovery`）均提供队列、事件详情与操作面板（#303）。
 > - "服务端重启"路径不依赖前端 UI，已具备能力。
 
 ### 3.6 Question Snapshot：题目快照底座
@@ -972,9 +974,13 @@ exam/
 - `db` repository 必须通过 ctx 访问，不允许裸 SQL
 - `fastify` 只能出现在 `apps/api`
 
-### 5.3 自适应降级
+### 5.3 自适应降级（历史设计草案——未实现）
 
-系统持续自检（CPU / 内存 / DB 响应时间），三档自动切换：
+> **非当前行为**：本节是早期设计草案。系统中不存在自适应降级机制、
+> 三档切换或对应阈值配置；答案保存始终遵循统一的版本化 / 幂等 / 冲突检测
+> 协议（ADR-008）。保留原文仅作为设计历史。
+
+原草案（未实现）：系统持续自检（CPU / 内存 / DB 响应时间），三档自动切换：
 
 | 档位 | 触发条件 | 行为 |
 |------|----------|------|
@@ -1016,11 +1022,14 @@ services:
   db:         # PostgreSQL
 ```
 
-通过 `.env` 配置切换：
+通过部署配置切换：
 
-- `DATABASE_URL` 指向 PostgreSQL 连接字符串
-- `DEGRADATION_THRESHOLDS` 调整降级阈值
-- `AUTH_MODE` 选择认证方式（local / cas / oauth）
+- `DATABASE_URL` 指向 PostgreSQL 连接字符串（部署环境的配置文件，见 `docs/deployment/`）
+
+> 注意：本节历史草稿中的 `DEGRADATION_THRESHOLDS`（自适应降级阈值）与
+> `AUTH_MODE`（local / cas / oauth）两个配置键**不存在于任何实现中**——
+> 系统没有自适应降级机制，认证只有内置的 cookie + argon2 本地认证
+> （§5.3 为历史设计草案，非当前行为）。
 
 ---
 
@@ -1120,15 +1129,15 @@ Phase 1 最小规则：
 
 目标：单部署内多人协作、权限和账号生命周期。
 
-- permission registry
-- built-in role bundles
-- scoped role assignment
-- Teacher-like roles built from permission + scope
-- Course / Exam / CandidateGroup scope
-- Proctor / Grader / ContentManager role bundles
-- staff invitation、SMTP email management、email password reset
-- user activation / deactivation
-- permission audit、audit log search/export UI
+- permission registry（已交付——`packages/authz/` 目录 + 审计）
+- built-in role bundles（已交付——Admin/Teacher/Proctor/Grader/Candidate/Maintainer 代码预设）
+- scoped role assignment（已交付——Proctor→Exam / Teacher→Course / Grader→Exam）
+- Teacher-like roles built from permission + scope（已交付，#286）
+- Course / Exam / CandidateGroup scope（Course/Exam scope 已交付；CandidateGroup 未交付）
+- Proctor / Grader / ContentManager role bundles（Proctor/Grader 已交付；ContentManager 未交付）
+- staff invitation、SMTP email management、email password reset（已交付，#297）
+- user activation / deactivation（已交付）
+- permission audit、audit log search/export UI（已交付）
 
 ### Phase 4: Platformization and Integration
 

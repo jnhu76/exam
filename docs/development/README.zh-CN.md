@@ -81,7 +81,10 @@ Vite 开发服务器会自动把 `/api/*` 请求代理到 API。
 | `pnpm db:seed:demo` | 完整演示数据：5 用户、3 Course、10 Question、4 Exam |
 | `pnpm db:seed:demo:verify` | 验证 demo seed 完整性 |
 
-可在 seed 前通过 `.env` 设置自定义账号信息，完整列表见 `.env.example`。
+可在 seed 前通过 `.env` 设置自定义账号信息（`SEED_ORG_NAME`、
+`SEED_ORG_DISPLAY_NAME`、`SEED_ADMIN_USERNAME`、`SEED_ADMIN_PASSWORD`、
+`SEED_CANDIDATE_*`——完整列表见 `docs/deployment/mvp-deployment-runbook.md`
+的 *Custom seed credentials* 说明；这些不是 `.env.example` 的键）。
 Seed 在 production mode 下会拒绝执行。
 
 ## 运行应用

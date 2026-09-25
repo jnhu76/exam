@@ -4,7 +4,10 @@
 > Recovery semantics are governed by [ADR-012](../../adr/ADR-012-candidate-recovery-contract.md). Interruption detection and time compensation are governed by [ADR-013](../../adr/ADR-013-interruption-time-compensation-policy.md). Both are described in [candidate-recovery.md](./candidate-recovery.md).
 
 ```text
-Last runtime verified against: 1d3a0bd8 + P7-S2 branch (fix/p7-s2-runtime-authority-hardening)
+Last runtime verified against: 1d3a0bd8 (P7-S2 branch,
+fix/p7-s2-runtime-authority-hardening). Point-in-time snapshot; the
+delivery-state table row for incidents was re-verified 2026-09-25 (#614)
+against master b673bb22.
 Recovery contract authority: PR #218 / ADR-012 (amended by P7-S2-B)
 Interruption-policy freeze: ADR-013 / REC-I4-R0
 
@@ -472,7 +475,7 @@ deadline or irreversible attempt transition.
 | Email outbox status | 5 | Yes — describes delivery progress |
 | Interruption episode (implemented) | active/resolved evidence | Yes — identity and evidence, not lifecycle entitlement |
 | Time adjustment (implemented) | append-only positive facts | Yes — deadline provenance, not attempt status |
-| Incident (ADR-014) | 4 | Yes — operational case orthogonal to Attempt; Admin runtime IMPLEMENTED by J3 (CLOSED — PR #242 merged); Proctor scope and recovery UI NOT IMPLEMENTED |
+| Incident (ADR-014) | 4 | Yes — operational case orthogonal to Attempt; Admin runtime IMPLEMENTED by J3 (CLOSED — PR #242 merged); Proctor scope (J4/M11, ADR-015 §13), Recovery Center UIs (J5/J6, #303), and system-generated incidents (#304) IMPLEMENTED |
 
 ---
 

@@ -4,9 +4,11 @@
  * Source of truth: `docs/adr/ADR-010-scoped-rbac-architecture.md`
  * §Permission Catalog v0, §Scope Model v0, §Role Presets.
  *
- * These are the closed, type-safe unions. Unknown strings are a load-time
- * error (ADR Formal Model §5–6): every DB-seeded `permissions` row must map to
- * a {@link PermissionKey}; a typo against the union is a compile error.
+ * These are the closed, type-safe unions and the SOLE built-in permission
+ * authority (ADR-010 2026-09-25 amendment retired the never-built DB seed
+ * half). Unknown strings are prevented by the closed union itself: a typo
+ * against the union is a compile error, and conformance tests guard the
+ * registry surface.
  *
  * Naming: dotted `domain.resource.action` (lowercase). This supersedes the
  * legacy `SCREAMING_SNAKE` keys in `@exam/domain` enums; {@link legacyMap.ts}

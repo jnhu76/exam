@@ -39,9 +39,11 @@ export interface NavFamily {
  * every routed Admin page resolves to exactly one family and that all
  * families are pairwise disjoint.
  *
- * `attempts/:id` (答题详情) belongs to the exams family: its only product
- * entry point is the exam scores page row action (ScoreListPage → 查看详情),
- * and the page header renders `{examTitle} - 答题详情`.
+ * `attempts/:id` (答题详情) belongs to the exams family: its entry points
+ * include the exam scores page row action (ScoreListPage → 查看详情) and the
+ * recovery/proctor surfaces linking to the attempt detail; the page header
+ * renders `{examTitle} - 答题详情`. The family assignment — not an entry-point
+ * enumeration — is the load-bearing fact here.
  */
 export const ADMIN_NAV_FAMILIES: readonly NavFamily[] = [
   { to: "/admin/dashboard", patterns: ["dashboard"] },

@@ -170,8 +170,9 @@ export type EnrollmentStatus =
 /**
  * Exam lifecycle status.
  *
- * Transitions: draft → published → open → closed → archived.
- * Only `draft` exams can be edited.
+ * Transitions: draft → published → open → closed → archived, plus the
+ * abnormal `canceled` path (ADR-005 Slice 4). Only `draft` exams can be
+ * edited.
  */
 export const ExamStatus = {
   Draft: "draft",
@@ -187,10 +188,11 @@ export type ExamStatus = (typeof ExamStatus)[keyof typeof ExamStatus];
 /**
  * Exam timing strategy.
  *
- * - `timed_sync`: all candidates start and end simultaneously (Phase 2).
- * - `timed_window`: each candidate has a fixed duration within an open window (Phase 1).
- * - `deadline`: candidates must submit before a fixed deadline (Phase 2).
- * - `untimed`: no time constraints (Phase 2).
+ * Delivered: `timed_window` (personal duration in an open window),
+ * `deadline` (global cutoff), `untimed` (open-ended) — #291 Phase A.
+ * `timed_sync` (operator-triggered shared clock): mode core implemented,
+ * product activation deferred pending the B2 decision — the canonical
+ * validator rejects it (see docs/contracts/timed-sync-semantics.md).
  */
 export const TimingMode = {
   TimedSync: "timed_sync",

@@ -372,7 +372,7 @@ The clean-target contract fixes the exact-historical-replacement gap: the
 runbook's older `pg_dump --clean --if-exists | psql` path does **not** remove
 objects that exist in the target DB yet are absent from an older dump. The
 C2 restore script enforces `DROP DATABASE ... WITH (FORCE)` (terminates any
-lingering connections; stop the API + worker first per §7.2) +
+lingering connections; stop the API first per §7.2 — there is no separate worker service, #320 CONVERGE) +
 `CREATE DATABASE ... TEMPLATE template0` (a truly empty database) before
 `pg_restore`, so no target-only
 schema/data from the previous database survives — the restored database is a
@@ -740,10 +740,10 @@ events — they preserve the timeline.
 
 If the installation has never been initialized (the internal default
 organization does not exist), navigate to `/launchpad` and complete the
-first-Admin setup form. Set `LAUNCHPAD_SETUP_TOKEN` in `.env` before the
-first `docker compose up`; it is the deployment bootstrap secret (high
-entropy, e.g. `openssl rand -hex 32`). The role is not selectable — the
-server always creates role = Admin.
+first-Admin setup form. Set `LAUNCHPAD_SETUP_TOKEN` in the deployment env
+file (`.env.deploy`) before the first `docker compose up`; it is the
+deployment bootstrap secret (high entropy, e.g. `openssl rand -hex 32`). The
+role is not selectable — the server always creates role = Admin.
 
 Once initialized, `/launchpad` redirects to `/login` (it never renders a
 "completed" page and never reopens). Removing/disabling the last Admin

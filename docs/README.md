@@ -25,7 +25,7 @@ has one authority:
 | Engineering and verification policy | [`docs/standards/`](standards/) and executable repository gates |
 | Current implementation state | [`docs/status/`](status/) plus as-built code/test evidence |
 | Phase boundaries | [`docs/roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) |
-| Current backlog sequencing / disposition | Active roadmap tracker; currently GitHub Issue [#552](https://github.com/jnhu76/exam/issues/552) |
+| Current backlog sequencing / disposition | Active roadmap tracker; currently GitHub Issue [#584](https://github.com/jnhu76/exam/issues/584) |
 | Current task scope / acceptance / non-goals | The OPEN GitHub Issue selected by the current roadmap |
 | Historical evidence | [`docs/archive/`](archive/), Git, closed Issues, and merged PRs |
 
@@ -49,7 +49,7 @@ guidance.
 | [`roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) | Stable phase boundaries and acceptance scope |
 | [`roadmap/current.md`](roadmap/current.md) | Phase-level status summary; intentionally does not duplicate the live Issue queue |
 | [`roadmap/post-mvp-issues.md`](roadmap/post-mvp-issues.md) | Coarse Issue index; live state and ordering remain on GitHub |
-| GitHub Issue [#552](https://github.com/jnhu76/exam/issues/552) | Current production-hardening sequencing authority; High-Assurance remains deferred until this roadmap closes |
+| GitHub Issue [#584](https://github.com/jnhu76/exam/issues/584) | Current execution authority — post-#550 measured-bottleneck + production-deployment closure (successor to the completed [#552](https://github.com/jnhu76/exam/issues/552) production-hardening roadmap); High-Assurance activation is deferred until **this** roadmap closes |
 
 ### Architecture (current implemented design)
 
@@ -82,7 +82,7 @@ guidance.
 | Document | Purpose |
 | --- | --- |
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
-| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-018-operational-observability-window.md`](adr/ADR-018-operational-observability-window.md) | Formal architecture decisions |
+| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-020-http-surface-routing-authority.md`](adr/ADR-020-http-surface-routing-authority.md) | Formal architecture decisions |
 
 Key recovery authority:
 

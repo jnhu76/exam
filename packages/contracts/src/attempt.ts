@@ -477,10 +477,12 @@ export type MarkProctorIncidentResponse = z.infer<
 // ── Attempt Command Receipts (J5-I1C Slice 1) ─────────────────────
 //
 // Durable, operationId-keyed command-receipt contracts for the two dangerous
-// Attempt commands (`force_submit`, `misconduct_mark`). Slice 2 has wired
-// the force-submit route to these shapes; the legacy
-// `FlagMisconductRequestSchema` above remains for the not-yet-activated
-// misconduct route (Slice 3).
+// Attempt commands (`force_submit`, `misconduct_mark`). Both routes are live
+// on these shapes (force submit since J5-I1C Slice 2; misconduct mark via
+// `MisconductMarkWithOperationRequestSchema` below). The legacy
+// `FlagMisconductRequestSchema` above has zero production consumers and is
+// retained only pending the dead-symbol retirement decision (#615) — do not
+// wire it anywhere.
 //
 // See docs/archive/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§6.
 

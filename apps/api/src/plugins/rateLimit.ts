@@ -70,8 +70,10 @@ const rateLimitPlugin: FastifyPluginAsync = async (fastify) => {
         error: Error | null,
         result?: { current: number; ttl: number },
       ) => void,
-      timeWindow = 60_000,
-      max = 100,
+      // Defaults delegate to the config owner (settings leaves); the plugin
+      // always passes both arguments, so these only cover direct calls.
+      timeWindow = getRuntimeConfig().rateLimit.timeWindow,
+      max = getRuntimeConfig().rateLimit.max,
     ): void {
       this.delegate.incr(
         key,

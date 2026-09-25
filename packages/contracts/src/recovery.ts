@@ -15,9 +15,13 @@ import {
 // `@exam/contracts` depends on `@exam/domain`, so the canonical enum value
 // tuples are referenced (via `Object.values(...)`), never hand-copied. The
 // tuple is cast to the KEYOF literal union (not `string`), so `z.infer`
-// produces the exact literal union and `z.enum` stays closed at runtime. The
-// closed `z.enum(...)` shapes then flow into every recovery wire schema below,
-// so a CHECK-constraint value added upstream cannot drift into the contract.
+// produces the exact literal union and `z.enum` stays closed at runtime.
+// The closed `z.enum(...)` shapes flow into the recovery wire schemas that
+// model those fields. NOTE: not every `status: z.string()` below is an enum
+// projection — summary/queue/list schemas deliberately carry loose
+// `z.string()` status fields (display-only passthrough); only the schemas
+// that actually gate on status use the closed enums, so a new CHECK-constraint
+// value does not silently become a contract claim.
 
 type AttemptStatusValue = (typeof AttemptStatus)[keyof typeof AttemptStatus];
 type IncidentStatusValue = (typeof IncidentStatus)[keyof typeof IncidentStatus];
@@ -382,7 +386,9 @@ export const AttemptOperationsContextSchema = z.object({
   // Real per-caller eligibility — caller capability ∩ attempt state ∩
   // resource scope, computed server-side. May be empty when no command is
   // eligible for the given attempt state — that is a computed result, never
-  // "empty because the UI is read-only".
+  // "empty because the UI is read-only". WIRE FACT ONLY: a product surface
+  // renders `allowedActions ∩ <its operational family>` (contract §13.1) —
+  // it must not render this array verbatim as "everything this actor may do".
   allowedActions: z.array(AttemptOperationsAllowedActionSchema),
   snapshotAt: z.string(),
 });

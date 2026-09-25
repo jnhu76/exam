@@ -190,7 +190,7 @@ JOURNAL_B="$(psql_exec "${PROJECT}" "SELECT count(*) FROM drizzle.__drizzle_migr
   echo "[upgrade-flip] FAIL: migration journal changed across upgrade: ${JOURNAL_A} -> ${JOURNAL_B}"; exit 1; }
 [ "$(compose_operator port app 3000 2>/dev/null | sed 's/.*://')" = "${CANARY_OLD}" ] || {
   echo "[upgrade-flip] FAIL: canary port lost after upgrade."; exit 1; }
-stage upgrade-flip "PASS: image swap recreated app/worker; db + probe + journal + invariants intact"
+stage upgrade-flip "PASS: image swap recreated app; db + probe + journal + invariants intact"
 
 # ── [preserve] down (data kept) -> up again ─────────────────────────────
 stage preserve "down WITHOUT deleting data, then up again"

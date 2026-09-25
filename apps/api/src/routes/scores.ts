@@ -23,7 +23,6 @@ import {
   ensureTargetOrg,
   getRequestContext,
 } from "./helpers.js";
-import { resolveTeacherCourseScope } from "./teacherScope.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** Zod schema for route params containing a UUID `id` field. */

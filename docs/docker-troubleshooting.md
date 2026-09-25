@@ -30,7 +30,10 @@ The build downloads packages from `registry.npmjs.org` by default. Override
 with a China registry (e.g. npmmirror):
 
 ```bash
-docker compose build --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+# The base compose stack runs a prebuilt image (EXAM_IMAGE); building THIS
+# checkout requires the build overlay:
+docker compose -f docker-compose.yml -f docker-compose.build.yml build \
+  --build-arg NPM_REGISTRY=https://registry.npmmirror.com
 ```
 
 ### 3. `apt-get` fails during the image build
@@ -40,7 +43,7 @@ The build installs `ca-certificates` (base) and `python3 make g++`
 mirror:
 
 ```bash
-docker compose build \
+docker compose -f docker-compose.yml -f docker-compose.build.yml build \
   --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
   --build-arg DEBIAN_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian \
   --build-arg DEBIAN_SECURITY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian-security
@@ -66,8 +69,10 @@ EXAM_PORT=3001
 Verify instead of guessing:
 
 ```bash
-docker compose ps          # all services running, app healthy
-docker compose logs app    # migrations + 'Server listening'?
+# Always pass the deployment env file: the base compose interpolates
+# required variables (${EXAM_IMAGE:?...}) and aborts without it.
+docker compose --env-file .env.deploy ps          # all services running, app healthy
+docker compose --env-file .env.deploy logs app    # migrations + 'Server listening'?
 curl -i http://localhost:3000/          # expect 200 + text/html
 curl -I http://localhost:3000/assets/   # expect 200 for a built asset
 ```
@@ -81,9 +86,9 @@ check that the container's published port is reachable from the host
 
 ### Windows / WSL2 notes
 
-- Run the Quick Start from inside WSL2 (Ubuntu). `docker compose up -d` works
-  from PowerShell too, but `node scripts/generate-env.mjs` needs Node on the
-  host PATH.
+- Run the Quick Start from inside WSL2 (Ubuntu). `docker compose --env-file
+  .env.deploy up -d` works from PowerShell too, but
+  `node scripts/generate-env.mjs` needs Node on the host PATH.
 - On Windows, Docker Desktop usually exposes `localhost:3000` to the host
   automatically. If not, access the container via the WSL2 IP
   (`ip addr show eth0 | grep inet` inside WSL) or run the browser inside WSL.

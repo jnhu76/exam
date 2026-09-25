@@ -395,10 +395,14 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   resident Email delivery worker drains the outbox asynchronously. The worker
   is now wired as a first-class Compose service in the supported production
   topology (see P6 deployment topology audit). `POST /api/email/test` remains
-  as the synchronous connectivity probe. No password-reset / invitation /
-  registration flows yet.
-- **Gate 0.5 (M10-F post-PR-197 rerun) is PASS** (verified 2026-07-24 on commit
-  `f2a7a80`): the runtime route tree was re-captured via a Fastify `onRoute`
+  as the synchronous connectivity probe. Staff invitation / Email password
+  reset / account lifecycle are implemented (#297 — see *Identity lifecycle*
+  below); standalone self-registration is not a product flow.
+- **Gate 0.5 (M10-F post-PR-197 rerun) is PASS — historical baseline**
+  (verified 2026-07-24 on commit `f2a7a80`; the route counts below are that
+  snapshot, not current inventory — the living authority is
+  `apps/api/src/authz/routeRegistryConformanceWholeApp.test.ts`):
+  the runtime route tree was re-captured via a Fastify `onRoute`
   hook over the full production composition and reconciles exactly — **91
   primary application routes** (131 raw registrations = 91 + 40 auto-generated
   HEAD aliases), **81 capability/ownership-gated** (65 flat + 16
@@ -422,5 +426,8 @@ E2E is **enabled and runs as blocking CI**. The `e2e` job in
 `.github/workflows/ci.yml` (sharded) gates every PR. The three named blocking
 specs (candidate-happy-path, resume-attempt, submit-flush) run and pass.
 `fill-blank-e2e.spec.ts` was re-enabled (post-MVP repository hygiene,
-2026-08-09) and runs the auto-graded fill_blank flow; no E2E specs are
-skipped.
+2026-08-09) and runs the auto-graded fill_blank flow. No E2E spec FILE is
+skipped at the suite level; inside `operations.spec.ts` the evidence-state
+tests individually `test.skip` when the evidence CLI is not mounted in the
+current topology (declared in that file's header), which is a conditional
+test-level skip, not a disabled spec.

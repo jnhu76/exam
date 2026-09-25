@@ -260,7 +260,8 @@ docker compose --env-file .env.deploy exec app \
   --name 'System Admin' --organization-name 'My Organization'
 #
 #    (b) Launchpad first-install page (browser path): set
-#        LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32> in .env BEFORE step 4,
+#        LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32> in the deployment env
+#        file (.env.deploy) BEFORE step 4,
 #        then navigate to http://<host>:<EXAM_PORT>/launchpad and complete
 #        the first-Admin setup form. Once initialized, /launchpad redirects
 #        to /login and never reopens. See backup-and-recovery.md §8.
@@ -454,12 +455,13 @@ docker compose --env-file .env.deploy exec app node dist/scripts/reset-admin-pas
 
 ### Dev/test seed (NOT for production)
 
-The baseline seed is dev/test infrastructure only. It is run by the
-Compose entrypoint when `RUN_SEED=1` (or `RUN_SEED=e2e` for the canonical
-E2E seed) is set **in the `.env` file** (per the shell > `.env.local` >
-`.env` precedence contract — do NOT pass it as a shell-only override, which
-would silently bypass the operator's `.env`). It refuses to run when
-`APP_MODE=production`. For full demo data (courses, questions, exams,
+The baseline seed is dev/test infrastructure only. The container entrypoint
+honors `RUN_SEED=1` (baseline) / `RUN_SEED=e2e` (canonical E2E seed), but the
+**deployment compose file does not forward `RUN_SEED`** — only the dev/test
+topologies set it (`docker-compose.test.yml`, the dev entrypoint). It refuses
+to run when `APP_MODE=production`. For full demo data (courses, questions,
+exams, attempts), use `pnpm db:seed:demo` against the dev DB only — never
+against the production DB. For full demo data (courses, questions, exams,
 attempts), use `pnpm db:seed:demo` against the dev DB only — never against
 the production DB.
 
@@ -935,13 +937,21 @@ and §24 (deferred capabilities). Highlights:
   restoring/failed/retry states and authoritative snapshot reload. The
   Admin operator time-grant action is also productized (REC-I4-I3B2): it uses
   an Attempt-scoped API with a frozen operation ID and authoritative refresh.
-  Admin/Proctor recovery centers, REC-I6 incident authority, and Proctor time
-  grants remain open. (Older P6-era docs list this as not-productized — that
-  predates REC-I3 / REC-I4-I3B2.)
-- Multi-instance deployment is NOT supported (in-process scanners + admission
-  queue assume a single API owner).
-- timed_sync / untimed timing modes NOT implemented (only timed_window).
-- Queue admission (requireQueue + batchSize + batchInterval) NOT operationally wired.
+  The Admin and Proctor Recovery Centers are productized (`/admin/recovery`,
+  `/admin/proctor/recovery`), and the REC-I6 incident authority is live
+  (J3/J4/#303/#304; see `docs/contracts/admin-recovery-center.md` §13.1 for
+  the current projection semantics). Proctor time grants remain Admin-only by
+  design (ADR-015 §13). (Older P6-era docs list recovery as not-productized —
+  that predates REC-I3 / REC-I4-I3B2.)
+- Multi-instance deployment is NOT supported (the in-process scanners assume
+  a single API owner).
+- Timing modes: `timed_window`, `deadline`, and `untimed` are implemented
+  (#291 Phase A); `timed_sync` remains NOT ACTIVATED pending the B2 product
+  decision (the mode core and the admission runtime exist — see
+  `docs/contracts/exam-policy-authority.md` §4).
+- Queue admission (requireQueue + batchSize + batchInterval) is SUPPORTED via
+  the #292 durable admission runtime: fail-closed start gate, restart-safe
+  durable `exam_admissions` rows, atomic membership consume.
 - IP/CIDR exam restrictions, device binding, single-session enforcement NOT implemented.
 - multiTenant / SuperAdmin / organizationSlug login NOT implemented (Phase 4).
 - pass-to-proceed API / service tokens / API keys / webhooks NOT implemented (Phase 4).

@@ -88,9 +88,11 @@ source DB resolver (`packages/db/src/databaseUrl.ts`). An explicit
 | `pnpm db:seed:demo` | Rich demo: 5 users, 3 courses, 10 questions, 4 exams |
 | `pnpm db:seed:demo:verify` | Verify demo seed integrity |
 
-Custom seed credentials can be set in `.env` before seeding (see
-`.env.example` for the full list). The seed refuses to run in
-production mode.
+Custom seed credentials can be set in `.env` before seeding (`SEED_ORG_NAME`,
+`SEED_ORG_DISPLAY_NAME`, `SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD`,
+`SEED_CANDIDATE_*` — see the runbook's *Custom seed credentials* note in
+`docs/deployment/mvp-deployment-runbook.md` for the full list; they are not
+`.env.example` keys). The seed refuses to run in production mode.
 
 ## Running the Application
 

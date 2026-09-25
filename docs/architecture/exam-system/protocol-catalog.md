@@ -4,10 +4,13 @@
 
 ```text
 Last verified against commit:
-cac6b85c425c85ad4077002bc518fca0b50f766f
+b673bb22c3ebed91f9bed86dc20c70c589a68eab (2026-09-25, #614)
 
 Verification scope:
-Current master implementation after merged P5-0 / PR #210.
+Confirmed delivery-state drift families (notification-to-outbox protocol,
+incident/proctor scope status) corrected and re-verified against current
+master. Other protocol entries retain their point-in-time snapshot at
+cac6b85c (P5-0 / PR #210 baseline).
 ```
 
 ## Conventions
@@ -551,13 +554,13 @@ facts; new positive operator decisions use this protocol and
 | **Transaction boundary** | Send happens OUTSIDE the DB transaction; status update is a separate transaction |
 | **Security invariants** | INV-N-001: SMTP never inside a DB transaction. Current semantic is at-least-once (crash after provider acceptance but before markSent may cause duplicate delivery). |
 
-### Business Notification-to-Outbox Protocol (NOT IMPLEMENTED)
+### Business Notification-to-Outbox Protocol (IMPLEMENTED — corrected 2026-09-25, #614)
 
-No production business transaction currently inserts an outbox row atomically. The infrastructure primitives (table, repo, service, worker) exist, but the business protocol that enqueues notification emails is NOT IMPLEMENTED. This is the P5-N1 scope.
+Production business transactions insert outbox rows atomically: `result_published` (P5-N1, PR #213) and `exam_assigned` (#299, ADR-011 §25). The historical "NOT IMPLEMENTED / P5-N1 scope" framing above was the pre-P5-N1 state. Further operational events are appended additively (ADR-011 §25).
 
 ## Protocol: Incident Authority (ADR-014 ACCEPTED — Admin runtime IMPLEMENTED by J3)
 
-Status: IMPLEMENTED — [ADR-014](../../adr/ADR-014-exam-incident-authority.md) (ACCEPTED); J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements the Admin surface (commands, tables, routes, permissions, audit) and is merged on master (PR #242, CLOSED). The entries below are live for Admin. Proctor grants (J4/M11), the recovery-center UI (J5/J6), and system-generated incidents remain NOT IMPLEMENTED. The architecture projection (state diagram, command inventory, permission matrix, sequences) lives in [incident-authority.md](./incident-authority.md).
+Status: IMPLEMENTED — [ADR-014](../../adr/ADR-014-exam-incident-authority.md) (ACCEPTED); J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements the Admin surface (commands, tables, routes, permissions, audit) and is merged on master (PR #242, CLOSED). The entries below are live for Admin. Assigned-Proctor incident authority is live (J4-I1/M11, ADR-015 §13), the Recovery Center UIs are live (J5/J6, #303), and system-generated incidents are live (#304, ADR-014 §8 Gate A). The architecture projection (state diagram, command inventory, permission matrix, sequences) lives in [incident-authority.md](./incident-authority.md).
 
 ### Incident Lifecycle
 

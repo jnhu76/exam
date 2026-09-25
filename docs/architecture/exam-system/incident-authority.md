@@ -16,9 +16,16 @@
 > (`incident.resolve` / `incident.dismiss`, `AttemptTimeGrant`,
 > `AttemptForceSubmit`, `AttemptMisconductMark`) is **NOT** granted to
 > Proctor and remains Admin-only. The Admin **and** Proctor Recovery Center
-> product UIs (J5 / J6) and system-generated incidents remain NOT
-> IMPLEMENTED; the J5-R0 Admin Recovery Center contract is IN REVIEW (see
-> [`../../contracts/admin-recovery-center.md`](../../contracts/admin-recovery-center.md)).
+> product UIs (J5 / J6) are IMPLEMENTED (#303: `/admin/recovery` and
+> `/admin/proctor/recovery`), and system-generated incidents are IMPLEMENTED
+> (#304, ADR-014 §8 Gate A); current projection semantics:
+> [`../../contracts/admin-recovery-center.md`](../../contracts/admin-recovery-center.md)
+> §13.1.
+>
+> Last verified against: b673bb22c3ebed91f9bed86dc20c70c589a68eab
+> (2026-09-25, #614: delivery-state status lines re-verified against current
+> master; the detailed projection below retains its J3/J4-I1 closeout
+> baseline).
 >
 > Authority: [`ADR-014 — Exam Incident Authority`](../../adr/ADR-014-exam-incident-authority.md)
 > (Accepted). This document is the accepted target contract for J3. It provides

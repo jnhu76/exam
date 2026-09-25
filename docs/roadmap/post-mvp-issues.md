@@ -2,14 +2,16 @@
 
 > This is a coarse navigation index only. GitHub is authoritative for live
 > open/closed state. The current sequencing and disposition authority is
-> [#552](https://github.com/jnhu76/exam/issues/552). Do not duplicate an Issue
-> specification here.
+> [#584](https://github.com/jnhu76/exam/issues/584) — the successor to the
+> completed [#552](https://github.com/jnhu76/exam/issues/552) production-
+> hardening roadmap. Do not duplicate an Issue specification here.
 
 ## Program / convergence
 
-- #552 Generic Production Hardening roadmap — **CURRENT EXECUTION AUTHORITY**.
+- #584 Post-#550 measured bottleneck + production deployment closure — **CURRENT EXECUTION AUTHORITY**.
+- #552 Generic Production Hardening roadmap — completed historical execution authority (closed after the #550 capacity re-proof).
 - #516 Generic Runtime Completion — completed historical phase boundary.
-- #320 Dedicated email-worker process boundary — bounded KEEP vs CONVERGE decision.
+- #320 Dedicated email-worker process boundary — bounded KEEP vs CONVERGE decision (CONVERGED; delivery moved in-process, ADR-011 §23).
 
 ## Generic product completion
 
@@ -26,14 +28,16 @@ barrier tracker #302 is closed and likewise not part of the executable queue.
 ## Stabilization / product quality
 
 - #341 Deterministic Simulation Testing experiment for attempt lifecycle races.
-- #305 UI design-system migration completion.
-- #306 Responsive closeout — Candidate-first baseline.
-- #307 Accessibility closeout.
-- #308 Long-text answer + metadata/definition-list components.
+
+The UI design-system migration (#305), responsive closeout (#306),
+accessibility closeout (#307), and long-text/metadata components (#308) are
+**CLOSED** — they are listed for navigation only, not as open work. Current
+UI visual-system authority lives in [`docs/standards/ui-system.md`](../standards/ui-system.md)
+and [`docs/ui/visual-foundation.md`](../ui/visual-foundation.md).
 
 ## High-Assurance exam capabilities
 
-High-Assurance is the next major capability phase **after #552 closes**. It is
+High-Assurance is the next major capability phase **after #584 closes**. It is
 not the current execution lane. The remaining High-Assurance-specific runtime
 sequence is:
 
@@ -72,7 +76,7 @@ idea into implementation authority.
 
 When selecting work:
 
-1. read the live tracker (#552) for the current lane and ordering;
+1. read the live tracker (#584) for the current lane and ordering;
 2. open the selected Issue and treat its current body/checkpoints as the task
    contract;
 3. reconcile that contract with current master before editing;

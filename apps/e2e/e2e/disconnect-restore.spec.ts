@@ -15,7 +15,10 @@ import {
 // client heartbeats), restoreAttempt must:
 //   1. transition disrupted → in_progress
 //   2. preserve previously-saved answers
-//   3. extend deadlineAt forward by the disconnected duration (capped at closeAt)
+//   3. apply the exam's interruptionTimePolicy to the deadline: `strict`
+//      grants nothing (deadlineAt unchanged — what the assertions below
+//      pin); compensation policies move deadlineAt forward by the offline
+//      duration (capped at closeAt)
 //
 // Approach: start + answer via UI, close page (stops heartbeats), wait for
 // heartbeat scanner (HEARTBEAT_TIMEOUT_MS=15s, scan every 5s) to mark
