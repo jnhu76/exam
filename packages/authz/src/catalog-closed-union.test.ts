@@ -46,7 +46,7 @@ describe("RBAC-M1 catalog — closed-union integrity", () => {
     // ADR-010 names this catalog the authorization authority, and the package
     // dependency direction (@exam/authz → @exam/domain, never the reverse)
     // forbids @exam/domain from re-exporting it. This derived agreement test
-    // is the conformance owner for the mirror; if one side adds/remotes a
+    // is the conformance owner for the mirror; if one side adds/removes a
     // role without the other, both this test and the RequestContext/audit
     // vocabulary drift fail here instead of silently diverging.
     const catalogRoles = new Set(Object.values(Role));
