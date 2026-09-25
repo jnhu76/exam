@@ -1,8 +1,7 @@
 import type { DataTableColumnRole } from "@/components/shared/DataTableContract";
 
 /**
- * Hard-floor calibration for the COMPRESSIBLE column roles (issue 601 Phase F
- * convergence).
+ * Hard-floor calibration for the COMPRESSIBLE column roles.
  *
  * `ROLE_GEOMETRY.floor` is the smallest width at which the role's DECLARED
  * representation is still intentionally usable: below it the table takes the
@@ -62,8 +61,8 @@ export const HEADER_TIER_PX = 14;
 /**
  * CJK advance as a fraction of the font size. The product font's full-width
  * glyphs advance 1em; the 1.034 factor is the same conservative over-estimate
- * the status fixture uses (measured 12.4px for 12px badge text, issue 445
- * P3-Corrective Appendix M), so an estimator built on it is an upper bound.
+ * the status fixture uses (measured 12.4px for 12px badge text), so an
+ * estimator built on it is an upper bound.
  */
 export const CJK_ADVANCE_EM = 1.034;
 

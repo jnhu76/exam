@@ -7,10 +7,10 @@ import {
 } from "@/table/roleCalibration";
 
 /**
- * #601 Phase F convergence — the single column-allocation authority.
+ * The single column-allocation authority.
  *
- * Two meanings used to share one number: `min` was simultaneously the hard
- * structural floor, the preferred width and the proportional-growth weight.
+ * Two meanings share one number: the hard structural floor, the preferred
+ * width and the proportional-growth weight.
  * The Data View Geometry Census measured where they diverge — /admin/recovery
  * scrolled horizontally at every viewport while 438px of its region went
  * unused, and the exam-edit inline picker scrolled with its actions column
@@ -62,10 +62,9 @@ export const ACTIONS_MIN_FINE = 96;
 export const ACTIONS_MIN_COARSE = 120;
 
 /**
- * The one table-level expansion cap (× Σbasis). Selected by the #601 Phase F
- * convergence experiment over 1.25 / 1.33 / 1.50 on the representative pages
- * (/admin/exams, questions, users, courses, results, dashboard) — see the
- * census follow-up checkpoint for the measured comparison.
+ * The one table-level expansion cap (× Σbasis). Chosen from a measured
+ * comparison of 1.25 / 1.33 / 1.50 on the representative pages — see the
+ * growth measurements in the module header.
  */
 export const EXPANSION_CAP = 1.33;
 
@@ -87,23 +86,22 @@ export interface RoleGeometry {
 }
 
 /**
- * VALUE geometry — the role's cell-value capacity. These are the #454/#590/#598
- * derived tokens (rem × 16); Phase F moved them out of recipes.css so the
- * allocator is their single consumer. Fixture provenance of the
+ * VALUE geometry — the role's cell-value capacity. These are the derived tokens
+ * (rem × 16); the allocator is their single consumer. Fixture provenance of the
  * vocabulary-bound tokens:
  *
- *   status 136px (8.5rem, #445 P3-Corrective K1) — widest legal badge across
+ *   status 136px (8.5rem) — widest legal badge across
  *     statusMeta × SUPPORTED_LOCALES measures 100.02px (offline, icon); token
  *     content box 104px ≥ 100.02 + slack. See statusFixture.ts.
  *
- *   date-range 232px (14.5rem, #590) — fixed 23-char grammar
+ *   date-range 232px (14.5rem) — fixed 23-char grammar
  *     `YYYY-MM-DD — YYYY-MM-DD` rendered nowrap in the frozen 15px cell font:
  *     widest legal form measures 195.5px; content box 199px ≥ 195.5 + slack.
  *
- *   type 116px (7.25rem, #590) — widest bounded enumerated-label badge across
+ *   type 116px (7.25rem) — widest bounded enumerated-label badge across
  *     the typeFixture.ts families estimates 80px; content box 83px ≥ 80 + slack.
  *
- *   action-label 152px (9.5rem, #598) — @exam/authz AuditAction registry ×
+ *   action-label 152px (9.5rem) — @exam/authz AuditAction registry ×
  *     `admin.audit.filterActions.*` copy; widest derived label estimates
  *     117.2px; content box 119px. Raw machine action keys render through the
  *     truncate-middle presenter channel (ROLE_MACHINE_VALUE_OVERFLOW).

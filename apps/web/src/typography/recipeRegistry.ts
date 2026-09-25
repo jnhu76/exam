@@ -24,10 +24,9 @@
  *   - there is NO `allowedStateOverrides` field: it would record a permission
  *     that cannot take effect at runtime.
  *
- * Resolved contradiction (long-response `min-height`): the Markdown vocabulary
- * previously listed min-height as OWNED, but recipes.css did not declare it and
- * the consumer (GradingDetailPage) uses `min-h-16`. Recorded here as
- * LAYOUT-OWNED — aligning CSS + consumer; the Markdown is corrected in C3.
+ * `long-response` does NOT own `min-height`: recipes.css does not declare it and
+ * the consumer (GradingDetailPage) uses `min-h-16`, so it is recorded as
+ * LAYOUT-OWNED (see `layoutOwnedProperties`).
  */
 import type { RecipeOwnedProperty } from "../lint/exam-ui/cssPropertyResolver";
 

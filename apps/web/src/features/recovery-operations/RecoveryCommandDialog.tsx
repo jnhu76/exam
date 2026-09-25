@@ -14,10 +14,10 @@ import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { CircleAlert } from "lucide-react";
 
 /**
- * J5-I1C1 — controlled dialog shell for ONE Recovery Center dangerous
+ * Controlled dialog shell for ONE Recovery Center dangerous
  * command (attempt / incident / exam operations).
  *
- * Uniform dangerous-command UX per J5-R0 §8.2:
+ * Uniform dangerous-command UX:
  *   - the form (`children`) is rendered read-only once the command is frozen
  *     (`submitting` / `indeterminate`) so a retry can never drift the payload
  *     away from the first POST (a drifted payload under the SAME operationId

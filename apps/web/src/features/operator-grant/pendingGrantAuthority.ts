@@ -1,5 +1,5 @@
 /**
- * REC-I4-C1 — Cross-tab pending grant authority types.
+ * Cross-tab pending grant authority types.
  *
  * Defines the durable authority record that lives in localStorage and is
  * coordinated across tabs via navigator.locks + BroadcastChannel.

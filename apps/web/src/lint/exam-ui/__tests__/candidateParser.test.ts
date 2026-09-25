@@ -5,8 +5,8 @@ import { parseTailwindCandidate } from "../tailwindCandidate";
  * Candidate-parser grammar tests (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §6, §17A).
  *
  * These codify the exact Tailwind v4 syntax subset the repository parser owns,
- * AFTER the bracket-awareness defect in the old `stripVariants()` (which
- * corrupted colons inside `[...]`).
+ * including the bracket-awareness rules: a colon inside `[...]` is value
+ * content, never a variant separator.
  */
 describe("parseTailwindCandidate — named utilities", () => {
   it("parses a plain named utility", () => {

@@ -1,10 +1,10 @@
 /**
- * zh-CN translation catalog (the only supported locale in Phase 2).
+ * zh-CN translation catalog (the only supported locale).
  *
  * Keys are organized by domain. Status labels mirror `statusMeta` /
  * `constants` 1:1 so the UI layer can render them via `t()` while the
- * status *enum* and *tone/icon* metadata stay in `statusMeta.ts` (which now
- * stores `labelKey` instead of a hardcoded Chinese string).
+ * status *enum* and *tone/icon* metadata stay in `statusMeta.ts` (which stores
+ * `labelKey`).
  *
  * Keep keys stable and grouped; do NOT delete a key without grepping usages.
  */
@@ -419,8 +419,8 @@ const zhCN = {
     },
   },
 
-  /** P4-C2 admin-console route guard (403 / Access-Denied) copy. */
-  /** P7-E2C Operations surface copy (Admin business-owner summary +
+  /** Admin-console route guard (403 / Access-Denied) copy. */
+  /** Operations surface copy (Admin business-owner summary +
    *  Application Maintainer detail). */
   ops: {
     title: "运维总览",
@@ -1209,7 +1209,7 @@ const zhCN = {
         "branding.update": "更新品牌",
         "admin.bootstrap": "管理员引导",
         "admin.password_reset.local": "本地重置密码",
-        // #297 identity lifecycle actions.
+        // Identity lifecycle actions.
         "user.invited": "邀请用户",
         "user.invitation_revoked": "撤销邀请",
         "user.invitation_accepted": "接受邀请",
@@ -1224,7 +1224,7 @@ const zhCN = {
         "auth.password_update": "修改密码",
         // Audit export action.
         "audit_log.exported": "导出审计日志",
-        // Assignment lifecycle (ADR-015 / #286 / #296).
+        // Assignment lifecycle (ADR-015).
         "exam.proctor_assigned": "分配监考",
         "exam.proctor_revoked": "撤销监考",
         "course.teacher_assigned": "分配课程教师",
@@ -1233,7 +1233,7 @@ const zhCN = {
         "exam.grader_revoked": "撤销评分员",
         // Grading / score.
         "grading.detail_viewed": "查看评分详情",
-        // Exam policy profiles (P7-M2).
+        // Exam policy profiles.
         "exam_profile.create": "创建策略模板",
         "exam_profile.update": "更新策略模板",
         "exam_profile.delete": "删除策略模板",
@@ -1248,10 +1248,11 @@ const zhCN = {
         "incident.action_linked": "关联处理动作",
         "incident.attempt_linked": "关联答卷",
         "incident.interruption_linked": "关联中断记录",
-        // System operations (P7-E3 / P7-E2A).
+        // System operations.
         "ops.policy.updated": "更新运维策略",
         "system.email.test": "发送测试邮件",
-        // Email outbox worker actions (reserved: declared, not yet emitted).
+        // Email outbox worker actions (lifecycle: reserved — vocabulary
+        // declared with no production emitter).
         "email.outbox_created": "创建发件记录",
         "email.send_failed": "发送邮件失败",
         "email.send_retried": "重试发送邮件",
@@ -2125,7 +2126,7 @@ const zhCN = {
         back: "返回",
         flagMisconduct: "标记违规",
       },
-      /** Timeline-only view for callers without score-read capability (#612). */
+      /** Timeline-only view for callers without score-read capability. */
       shell: {
         title: "答卷详情",
       },
@@ -3001,7 +3002,7 @@ const zhCN = {
       submitting: "登录中...",
       forgotPassword: "忘记密码？",
     },
-    /** Public invitation-acceptance page (#297). */
+    /** Public invitation-acceptance page. */
     invite: {
       description: "您收到了一份成员邀请。请设置您的账号信息以完成激活。",
       usernameLabel: "用户名",
@@ -3021,7 +3022,7 @@ const zhCN = {
       goLogin: "前往登录",
       backToLogin: "返回登录",
     },
-    /** Public forgot-password page (#297). Response is uniform by contract. */
+    /** Public forgot-password page. Response is uniform by contract. */
     forgot: {
       description: "输入您的登录用户名，系统将向该账号绑定的邮箱发送重置链接。",
       usernameLabel: "用户名",
@@ -3033,7 +3034,7 @@ const zhCN = {
         "如果该账号存在且已绑定邮箱，重置链接已发送，请在 60 分钟内完成重置。",
       backToLogin: "返回登录",
     },
-    /** Public password-reset consumption page (#297). */
+    /** Public password-reset consumption page. */
     reset: {
       description: "请设置新的登录密码。重置链接仅可使用一次。",
       passwordLabel: "新密码",
@@ -3057,7 +3058,7 @@ const zhCN = {
   },
 
   /**
-   * Launchpad first-install page copy (P7-C1). Initial installation only —
+   * Launchpad first-install page copy. Initial installation only —
    * creates the first Admin and the internal default organization. NOT
    * signup, NOT login, NOT Admin recovery. Once initialized the page
    * redirects to /login.
@@ -3128,7 +3129,7 @@ const zhCN = {
       maxAttemptsExhausted: "已达到最大考试次数，无法再次开始考试。",
       retakeAvailable: "可重考，当前最高成绩将保留。",
     },
-    // #292 durable admission queue — waiting/readiness truth only.
+    // Durable admission queue — waiting/readiness truth only.
     queue: {
       joining: "正在排队入场...",
       title: "排队入场",
@@ -3148,7 +3149,7 @@ const zhCN = {
     logout: "退出登录",
   },
 
-  /** NotificationBell + Inbox panel copy (P5-N1). */
+  /** NotificationBell + Inbox panel copy. */
   notifications: {
     bell: "通知",
     panelTitle: "通知",

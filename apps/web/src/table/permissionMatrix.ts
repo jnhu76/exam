@@ -8,16 +8,14 @@ import { headerGlyphRun } from "@/table/headerCapacity";
 
 /**
  * Permission-matrix geometry — the named specialized authority for
- * /admin/permissions (issue 601 Phase F convergence).
+ * /admin/permissions.
  *
  * The permission matrix is not a record list: its columns are roles, its rows
  * are capability keys, and its cells are grants. Forcing it into the ordinary
  * DataTable role vocabulary would make that model dishonest (there is no
  * `primary-text` column whose value vocabulary bounds a machine capability key,
  * and no `status` column). What it must NOT do is own ad-hoc geometry at the
- * page — it used to carry a page-local `min-w-[220px]`, which silently clipped
- * the widest registry keys (measured: `course.teacher_assignment.manage`, 32
- * chars ≈ 231px at the mono tier).
+ * page.
  *
  * So the matrix keeps its own semantics HERE, in one named module, and
  * composes the SHARED surface for everything else: TableScrollSurface owns the
@@ -36,9 +34,10 @@ function monoGlyphRun(glyphs: number): number {
 }
 
 /**
- * The capability-key column's floor. It was a page-local 220px minimum; it is
- * now derived from the widest key in the closed @exam/authz catalog, so a new
- * capability key is an explicit geometry review instead of a clipped cell.
+ * The capability-key column's floor: the derived width is `max(220px legacy
+ * floor, widest catalog key + cell chrome)`, so a new catalog key wider than the
+ * current widest grows the column instead of being clipped, while a narrower new
+ * key changes nothing.
  */
 export const MATRIX_KEY_COLUMN_FLOOR_PX = 220;
 

@@ -24,9 +24,9 @@ export default defineConfig({
     // userEvent), not absorbed here. Local default stays 5000ms so devs
     // notice slow tests immediately.
     testTimeout: process.env.CI ? 10_000 : 5_000,
-    // P0-infra: parallelize the web suite. Was `maxWorkers: 1` (serial) since
-    // 8ef3b9e. Raised to 4; each worker gets its own fork so module state is
-    // isolated. If flake reappears, step down to 2 before considering 1 again.
+    // Web suite parallelism. Each worker gets its own fork, so module state is
+    // isolated. If flake reappears, step down to 2 (not 1) and record it in
+    // docs/standards/test-flakes.md before going serial again.
     maxWorkers: 4,
     minWorkers: 2,
     server: {

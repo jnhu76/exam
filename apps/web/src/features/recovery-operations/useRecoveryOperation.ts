@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { createContextSafeUuid } from "@/lib/uuid";
 
 /**
- * J5-I1C1 — generic dangerous-command controller for the Recovery Center
+ * Generic dangerous-command controller for the Recovery Center
  * operations surfaces (attempt / incident / exam).
  *
  * One dangerous command = one frozen operationId. The hook owns the command
@@ -13,7 +13,7 @@ import { createContextSafeUuid } from "@/lib/uuid";
  *   command; a CONFIRMED outcome (2xx success or definitive 4xx rejection)
  *   ends the session; an INDETERMINATE failure (network / 5xx — the server
  *   may or may not have committed) retains the SAME operationId so the retry
- *   is an idempotent replay (J5-R0 §8.2: never mint a new identity for a
+ *   is an idempotent replay (never mint a new identity for a
  *   retry of an unconfirmed dangerous command).
  *
  * Same-tab retry identity: the frozen operationId survives retries for the
