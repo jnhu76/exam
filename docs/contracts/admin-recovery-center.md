@@ -342,11 +342,15 @@ Classification against the §5.2 dimensions (current master):
 | `assignedProctorUserId` | Requires additive read API | needs a join against `exam_proctor_assignments` |
 | `cursor` / `limit` | Requires additive read API | `listByExam` is unbounded; keyset pagination is the J4-I1C pattern to reuse |
 
-### 5.4 Proposed additive queue endpoint (J5-I1A contract, NOT yet existing) — superseded: the endpoint is LIVE (J5-I1A1, PR #252)
+### 5.4 Organization-wide queue endpoint (J5-I1A contract — LIVE since J5-I1A1, PR #252)
 
-Because no organization-wide, multi-filter Incident queue exists on master,
-J5-I1A is contracted to add one. The route name is **frozen** by this contract
-and follows the existing product-query route style (`/admin/proctor/exams`):
+The organization-wide, multi-filter Incident queue below is LIVE
+(J5-I1A1, PR #252); executable owner:
+`GET /admin/recovery/incidents` in `apps/api/src/routes/incidents.admin.ts`,
+projection contract §13.1. The route name is **frozen** by this contract
+and follows the existing product-query route style
+(`/admin/proctor/exams`). (The section's original "proposed, not yet
+existing" framing described pre-J5-I1A1 master and is historical.)
 
 ```text
 GET /admin/recovery/incidents
@@ -777,8 +781,8 @@ that is explicitly mapped to one). Route-local mutation is forbidden.
 | Resolve incident | `POST /admin/incidents/:incidentId/resolve` → `resolveExamIncident()` | `incident.resolve` (Admin sensitive) | `incident` | `open` \| `investigating` | required (`resolutionSummary`) — see §8.1 | **yes** (terminal judgment) | yes + `expectedVersion` | replay / version / invalid-transition | Incident Detail |
 | Dismiss incident | `POST /admin/incidents/:incidentId/dismiss` → `dismissExamIncident()` | `incident.resolve` (Admin sensitive) | `incident` | `open` \| `investigating` | required (`reasonText`) — see §8.1 | **yes** (terminal judgment) | yes + `expectedVersion` | replay / version / invalid-transition | Incident Detail |
 | Grant Attempt time | `POST /admin/attempts/:attemptId/time-grants` → `grantAttemptTime()` | `attempt.time.grant` (Admin) | `attempt` (attemptId) | non-terminal Attempt | per ADR-013 | no | yes | replay / `terminal` | Attempt Operations Context + Incident Detail |
-| Force submit Attempt | `POST /admin/attempts/:attemptId/force-submit` → canonical force-submit | `attempt.force_submit` (Admin) | `attempt` | non-terminal Attempt | optional today — see §8.1 | **yes** | **No** | state-idempotent for `submitted`/`grading`/`graded`; audit written only on a real transition; **no operation receipt** (J5-I1C0) | Attempt Operations Context |
-| Mark Attempt misconduct | `POST /admin/attempts/:attemptId/misconduct` → canonical misconduct mark | `attempt.misconduct.mark` (Admin) | `attempt` | per existing contract | required (`notes`, min 1) | **yes** | **No** | re-flag overwrites the misconduct fact; every call writes a new audit; server cannot distinguish retry from intentional re-mark (J5-I1C0) | Attempt Operations Context |
+| Force submit Attempt | `POST /admin/attempts/:attemptId/force-submit` → canonical force-submit | `attempt.force_submit` (Admin) | `attempt` | non-terminal Attempt | required (`reason`, 1..500) — see §8.1 (landed) | **yes** | yes | receipt-backed (`attempt_command_receipts`): real transition → `applied`, already-submitted/graded → `no_change` (no audit); same-`operationId` retry replays the stored receipt (`disposition: idempotent_replay`) (J5-I1C0, shipped) | Attempt Operations Context |
+| Mark Attempt misconduct | `POST /admin/attempts/:attemptId/misconduct` → canonical misconduct mark | `attempt.misconduct.mark` (Admin) | `attempt` | per existing contract | required (`notes`, min 1) | **yes** | yes | receipt-backed (`attempt_command_receipts`): same-`operationId` retry replays the stored receipt (`disposition: idempotent_replay`); a DIFFERENT `operationId` intentionally re-flags, writes a new receipt + audit (J5-I1C0, shipped) | Attempt Operations Context |
 | Assign Proctor | `POST /admin/exams/:examId/proctors` → `assignProctorToExam()` | `exam.proctor_assignment.manage` (Admin) | `exam` | n/a | per ADR-015 (`reasonCode` in payload only) | no | yes | replay / `no_change` | Exam Recovery Detail |
 | Revoke Proctor | `POST /admin/exams/:examId/proctors/:proctorUserId/revoke` → `revokeProctorFromExam()` | `exam.proctor_assignment.manage` (Admin) | `exam` | n/a | per ADR-015 (`reasonCode` in payload only) | no | yes | replay / `no_change` / 404 | Exam Recovery Detail |
 
@@ -786,15 +790,20 @@ Notes:
 
 - "Allowed states" for Attempt actions is bounded by the canonical command's
   own contract; the UI never widens it.
-- **J5-I1C0 (frozen):** force submit and misconduct mark must complete
-  the operation identity / retry-contract adjudication before they may enter
-  the Recovery Center operations UI (J5-I1C1). Today both are
-  **state-idempotent only**
-  (no `operationId`, no operation receipt); J5-I1C0 adds `operationId`
-  to both — especially misconduct mark, which without
-  server-side operation identity cannot satisfy the "safe retry after network
-  failure" requirement (§8.2). Until J5-I1C0 lands, the UI MUST NOT
-  present them as operationId-replayable.
+- **J5-I1C0 (shipped):** the frozen entry condition for the Recovery Center
+  operations UI (J5-I1C1) — completion of the operation identity /
+  retry-contract adjudication — has since landed (J5-I1C Slice 2). Force
+  submit and misconduct mark both carry `operationId` and
+  write durable `attempt_command_receipts` (the
+  `UNIQUE(organization_id, operation_id)` receipt insert is the cross-command
+  race arbiter; a same-`operationId` retry replays the stored receipt with
+  `disposition: idempotent_replay`). Executable owners:
+  `ForceSubmitWithOperationRequestSchema` /
+  `MisconductMarkWithOperationRequestSchema`
+  (`packages/contracts/src/attempt.ts`) and the force-submit / misconduct
+  orchestrators (`apps/api/src/orchestrators/forceSubmitExecution.ts`,
+  `misconductMarkExecution.ts`). The pre-landing framing ("state-idempotent
+  only, no operationId, no operation receipt") is historical.
 
 ---
 

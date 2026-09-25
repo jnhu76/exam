@@ -449,7 +449,6 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
-        "x-content-types": { "200": "text/csv" },
       },
     },
     async (request, reply) => {

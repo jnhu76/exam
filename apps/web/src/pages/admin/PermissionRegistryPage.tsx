@@ -2,6 +2,12 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { PermissionCategory } from "@exam/authz";
+import type {
+  EffectiveAuthorityResponse,
+  PermissionEntry,
+  PermissionRegistryResponse,
+  RolePresetEntry,
+} from "@exam/contracts";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -19,27 +25,12 @@ import {
 import { TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { PermissionMatrixTable } from "@/components/shared/PermissionMatrixTable";
 
-/** Backend projections (mirror the @exam/contracts response schemas). */
-interface PermissionEntry {
-  key: string;
-  category: string;
-}
-interface RolePresetEntry {
-  key: string;
-  label: string;
-  purpose: string;
-  isSystem: boolean;
-  assignable: boolean;
-  loginAllowed: boolean;
-  defaultScope: string;
-  permissions: string[];
-  sensitivePermissions: string[];
-}
-interface PermissionRegistryResponse {
-  permissions: PermissionEntry[];
-  rolePresets: RolePresetEntry[];
-}
-
+/**
+ * The registry / effective-authority shapes are the @exam/contracts response
+ * types (single owner — no local re-declaration). `UserSummary` /
+ * `UserListResponse` below are the admin users-list projection, which has no
+ * contract type owner.
+ */
 interface UserSummary {
   id: string;
   username: string;
@@ -47,28 +38,6 @@ interface UserSummary {
 }
 interface UserListResponse {
   items: UserSummary[];
-}
-
-interface EffectiveAuthorityResponse {
-  user: { id: string; name: string | null; username: string };
-  authority:
-    | {
-        ok: true;
-        authority: {
-          primaryRole: string;
-          activeRoles: string[];
-          capabilities: string[];
-          assignmentIds: string[];
-        };
-      }
-    | { ok: false; reason: string };
-  assignments: Array<{
-    id: string;
-    role: string;
-    isPrimary: boolean;
-    isActive: boolean;
-    createdAt: string;
-  }>;
 }
 
 /** Canonical category ordering for stable display (mirrors ADR §4.x). */

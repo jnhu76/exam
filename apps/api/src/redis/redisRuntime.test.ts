@@ -73,7 +73,6 @@ function config(overrides: Partial<RedisConfig> = {}): RedisConfig {
   return {
     mode: "optional",
     url: "redis://localhost:6379",
-    enabled: true,
     keyPrefix: "exam:test:unit:",
     connectTimeoutMs: 2000,
     commandTimeoutMs: 1000,
@@ -95,7 +94,7 @@ describe("RedisRuntime lifecycle (P7)", () => {
   it("off mode: stays disabled, no client is created", async () => {
     const client = new FakeClient();
     const runtime = new RedisRuntime({
-      config: config({ mode: "off", url: null, enabled: false }),
+      config: config({ mode: "off", url: null }),
       logger: makeLogger(),
       clientFactory: () => client,
     });

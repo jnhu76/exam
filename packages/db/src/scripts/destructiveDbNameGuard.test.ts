@@ -11,10 +11,12 @@
 import { describe, expect, it } from "vitest";
 import {
   isDestructiveRollbackTarget,
+  isForbiddenRepairTarget,
   isFullResetTarget,
   parseDatabaseName,
   refuseDbNameMessage,
   refuseFullResetMessage,
+  refuseRepairTargetMessage,
 } from "./destructiveDbNameGuard.js";
 
 describe("isDestructiveRollbackTarget — canonical allowlist", () => {
@@ -147,6 +149,44 @@ describe("refuseFullResetMessage", () => {
     expect(msg).toContain('"exam"');
     expect(msg).toMatch(/exam_e2e/);
     expect(msg).toMatch(/forensic/i);
+  });
+});
+
+describe("isForbiddenRepairTarget — offline repair must reject the test territories", () => {
+  it("rejects exam_test and exam_e2e (the documented never-targets)", () => {
+    expect(isForbiddenRepairTarget("exam_test")).toBe(true);
+    expect(isForbiddenRepairTarget("exam_e2e")).toBe(true);
+  });
+
+  it("rejects the vitest worker and E2E forensic families", () => {
+    expect(isForbiddenRepairTarget("exam_test_w0")).toBe(true);
+    expect(isForbiddenRepairTarget("exam_e2e_w3")).toBe(true);
+    expect(isForbiddenRepairTarget("exam_e2e_w0_prior")).toBe(true);
+  });
+
+  it("rejects the CI family", () => {
+    expect(isForbiddenRepairTarget("exam_ci_pr261")).toBe(true);
+    expect(isForbiddenRepairTarget("exam_ci-shard4")).toBe(true);
+  });
+
+  it("accepts the dev database and real deployment names (the repair targets)", () => {
+    expect(isForbiddenRepairTarget("exam")).toBe(false);
+    expect(isForbiddenRepairTarget("exam_production")).toBe(false);
+    expect(isForbiddenRepairTarget("production_db")).toBe(false);
+  });
+
+  it("is exact-match: look-alikes are not forbidden", () => {
+    expect(isForbiddenRepairTarget("exam_tests")).toBe(false);
+    expect(isForbiddenRepairTarget("exam_e2eclone")).toBe(false);
+    expect(isForbiddenRepairTarget("exam_ci")).toBe(false);
+    expect(isForbiddenRepairTarget("")).toBe(false);
+  });
+
+  it("refuseRepairTargetMessage names the rejected database and the forbidden territories", () => {
+    const msg = refuseRepairTargetMessage("exam_test");
+    expect(msg).toContain('"exam_test"');
+    expect(msg).toMatch(/exam_e2e/);
+    expect(msg).toMatch(/exam_ci/);
   });
 });
 
