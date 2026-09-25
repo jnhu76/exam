@@ -2125,6 +2125,10 @@ const zhCN = {
         back: "返回",
         flagMisconduct: "标记违规",
       },
+      /** Timeline-only view for callers without score-read capability (#612). */
+      shell: {
+        title: "答卷详情",
+      },
       live: {
         titleSuffix: "答卷详情",
         statusTitle: "尝试状态",
