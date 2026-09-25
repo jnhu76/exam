@@ -1,8 +1,9 @@
 /**
- * Local script: reset an Admin's password.
+ * Local, break-glass script: reset an Admin's password.
  *
- * Phase 1 does NOT implement email password reset. When an Admin forgets
- * their password, it must be reset locally via this script.
+ * Email self-service reset (`POST /api/auth/password-reset/request`) covers any
+ * active user with an email on file, including Admins; this script is the
+ * offline/local path for when the email channel or the API is unavailable.
  *
  * This script can ONLY reset Admin passwords. Candidate passwords are reset
  * by an Admin through the API (POST /users/:id/reset-password).

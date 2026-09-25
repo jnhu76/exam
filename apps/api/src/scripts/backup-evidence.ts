@@ -20,6 +20,8 @@
  *     fail --operation-id logical:2026-08-12T10 --type logical \
  *       --reason "pg_restore --list rejected the archive" --executor host_script
  *   docker compose exec -T app node dist/scripts/backup-evidence.js \
+ *     cold-import --spool /backups/cold-2026-08-12/evidence.json
+ *   docker compose exec -T app node dist/scripts/backup-evidence.js \
  *     drill --operation-id logical-restore:2026-08-12 --backup-type logical \
  *       --result succeeded --source automated --duration-ms 42000
  *   docker compose exec -T app node dist/scripts/backup-evidence.js \
@@ -119,11 +121,10 @@ export function parseNonNegativeInt(v: string, flag: string): number {
 }
 
 /**
- * Artifact sizes for VERIFIED successes (#351): a real backup artifact is
- * never 0 bytes, and a 0 has historically been the fingerprint of a
- * failed measurement upstream (pg-basebackup.sh `|| true` + `:-0`). The
- * evidence CLI must reject it instead of writing a 0-byte verified-success
- * ledger row.
+ * Artifact sizes for VERIFIED successes (#351 fail-closed contract): a real
+ * backup artifact is never 0 bytes, so a 0-byte verified-success ledger row
+ * would claim evidence no verification ever backed. The evidence CLI must
+ * reject it instead of writing that row.
  */
 export function parseStrictPositiveInt(v: string, flag: string): number {
   const n = Number(v);

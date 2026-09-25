@@ -31,17 +31,15 @@
  *     projection and overwriting on its own success). This mirrors how
  *     force-submit already holds the EA lock.
  *
- *   This is the explicit, recorded exception to the P2C-J4 §17 "no row lock"
- *   property — that property was specifically for the OLD overwrite-only
- *   misconduct flag write (a single best-effort jsonb update, retired with
- *   #615's G4 dead-symbol bundle). Making
- *   misconduct a durable, operationId-keyed command with a receipt + atomic
- *   audit REQUIRES the row lock; the audit's §5.2 step-5 candidate (a)
- *   "plain UPDATE without a lock" was REJECTED by the experiment because it
- *   serialization-fails non-deterministically, and candidate (d) "read-derived
- *   projection" was rejected as a larger read-model change than this slice
- *   needs. The chosen mechanism (candidate (b), `FOR UPDATE`) is the minimal
- *   deterministic one.
+ *   This is the explicit exception to the P2C-J4 §17 "no row lock"
+ *   property: that property was specifically for the old overwrite-only
+ *   misconduct flag write (a single best-effort jsonb update), which no longer
+ *   exists. Making misconduct a durable, operationId-keyed command with a
+ *   receipt + atomic audit REQUIRES the row lock — the audit's §5.2 step-5
+ *   "plain UPDATE without a lock" serialization-fails non-deterministically
+ *   under concurrent marks, and a read-derived projection is a larger
+ *   read-model change than the command needs. The chosen mechanism
+ *   (`FOR UPDATE`) is the minimal deterministic one.
  *
  * Transaction order (frozen by experiment, mirrors force-submit §5.1):
  *   pre-read replay/conflict (non-locking, outside any transaction)
@@ -106,15 +104,14 @@ import {
 
 /**
  * Input of {@link misconductMarkWithOperationRaceRecovery}. `severity` +
- * `notes` have already passed the wire schema (canonical: severity literal,
- * notes trimmed, 1..1000 — J5-I1C0 §4.3) when the orchestrator is called; the
+ * `notes` have already passed the wire schema
+ * (`MisconductMarkRequestPayloadSchema`) when the orchestrator is called; the
  * orchestrator still re-canonicalizes them so the durable request identity
  * comes from the single domain canonicalizer, not a third hand-written trim in
  * the route/orchestrator/repo layers.
  *
  * The receipt actor is NOT part of the command input — it always comes from
- * `ctx.actorId`, the single server-context authority (mirrors force-submit
- * review P2-2).
+ * `ctx.actorId`, the single server-context authority.
  */
 export interface MisconductMarkOperationInput {
   attemptId: string;

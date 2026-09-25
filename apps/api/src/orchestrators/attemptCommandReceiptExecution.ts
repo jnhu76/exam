@@ -14,8 +14,9 @@
  *   - mapping a validated stored receipt to the wire response.
  *
  * The force-submit / misconduct-mark engine flows deliberately stay in their
- * own orchestrator files; a future misconduct orchestrator must NOT depend on
- * a force-submit-named matcher.
+ * own orchestrator files, and the helpers here stay command-agnostic: a
+ * matcher named or shaped after one command must not become the other
+ * command's dependency.
  *
  * See docs/archive/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§5.
  */

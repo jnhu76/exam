@@ -19,7 +19,7 @@
  *   6. refuse a second active Admin unless --force is supplied.
  *
  * The password is ALWAYS explicitly supplied (`--password`). There is no
- * default Admin password. The baseline dev/test seed (`packages/db/seed.ts`)
+ * default Admin password. The baseline dev/test seed (`packages/db/src/seed.ts`)
  * is dev/test infrastructure and MUST NOT be used as the production
  * bootstrap path (see the production-seed refusal guard in `seed.ts`).
  *

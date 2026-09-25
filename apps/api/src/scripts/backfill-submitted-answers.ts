@@ -1,11 +1,11 @@
 /**
- * P3-L0-4: backfill `submitted_answers` for historical attempts.
+ * Backfills `submitted_answers` for historical attempts (offline repair).
  *
- * Scope (per exam-protocol.md §9.2): all attempts with submit semantics —
- * `submitted` / `graded` / `voided` (with non-null `submittedAt`).
- * Attempts without a frozen snapshot are filled by normalizing their draft
- * `answers` against the question snapshot via `buildSubmittedAnswersSnapshot`
- * (the same helper the live submit path uses — P3-L0-2).
+ * Scope: all attempts with submit semantics — `submitted` / `graded` /
+ * `voided` (with non-null `submittedAt`). Attempts without a frozen snapshot
+ * are filled by normalizing their draft `answers` against the question
+ * snapshot via `buildSubmittedAnswersSnapshot` (the same helper the live
+ * submit path uses; semantics in docs/architecture/exam-runtime.md §4.1/§4.2).
  *
  * Preflight (#542): unresolved legacy `status='grading'` rows (historical
  * grading crash residue) FAIL CLOSED — the run refuses to start rather than
