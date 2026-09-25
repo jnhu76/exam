@@ -1,70 +1,30 @@
 /**
  * Recovery Attempt Detail: force submit — real browser vertical.
  *
- * Drives the REAL Recovery Attempt Detail operations UI + the REAL
- * force-submit endpoint: a live attempt is force-submitted with a canonical
- * reason; the receipt disposition is `applied`, exactly ONE force-submit
- * audit exists, and the authoritative reload shows the attempt graded.
+ * Proves the browser composition of the Recovery Attempt Detail force-submit
+ * flow: the action renders for the operator, the confirmation dialog names
+ * the terminal consequence, the reason field is required, and the success
+ * state surfaces after confirming.
  *
- * The lost-response / same-operationId retry PROTOCOL is owned by
- * proctor-force-submit-retry.spec.ts (browser) and the incident-command
- * engine tests; this spec only proves the Recovery caller wiring end-to-end.
+ * The wire-level facts are owned at the API layer and are deliberately not
+ * duplicated here: receipt disposition/audit atomicity by
+ * routes/attempts/admin-force-submit.test.ts, attempt grading by the same
+ * suite and admin-status.test.ts. The lost-response / same-operationId retry
+ * PROTOCOL is owned by proctor-force-submit-retry.spec.ts (browser) and the
+ * incident-command engine tests.
  */
 import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
-import {
-  adminApiToken,
-  candidateLoginApi,
-  candidateStartAttempt,
-} from "../lib/flow";
+import { candidateLoginApi, candidateStartAttempt } from "../lib/flow";
 
 test.describe("Recovery attempt force submit", () => {
-  async function countForceSubmitAudits(
-    request: import("@playwright/test").APIRequestContext,
-    token: string,
-    targetAttemptId: string,
-  ): Promise<number> {
-    const res = await request.get(
-      `/api/admin/audit-logs?action=attempt.forceSubmit&targetId=${targetAttemptId}&pageSize=50`,
-      { headers: { Cookie: `auth-token=${token}` } },
-    );
-    expect(res.ok()).toBe(true);
-    const body = (await res.json()) as {
-      items: Array<{ targetId: string; action: string }>;
-    };
-    return body.items.filter(
-      (i) =>
-        i.action === "attempt.forceSubmit" && i.targetId === targetAttemptId,
-    ).length;
-  }
-
-  async function attemptStatus(
-    request: import("@playwright/test").APIRequestContext,
-    token: string,
-    examId: string,
-    targetAttemptId: string,
-  ): Promise<string> {
-    const res = await request.get(
-      `/api/admin/exams/${examId}/candidates/status`,
-      { headers: { Cookie: `auth-token=${token}` } },
-    );
-    expect(res.ok()).toBe(true);
-    const body = (await res.json()) as {
-      candidates: Array<{ attemptId: string; status: string }>;
-    };
-    const cand = body.candidates.find((c) => c.attemptId === targetAttemptId);
-    expect(cand, "candidate present in status list").toBeTruthy();
-    return cand!.status;
-  }
-
-  test("force submit applies the receipt, writes one audit, and the attempt is graded", async ({
+  test("force-submit dialog opens, names the terminal consequence, and completes", async ({
     page,
     request,
   }) => {
     const unique = `recovery-fs-${Date.now()}`;
     const s = await seedExam(request, unique);
-    const token = await adminApiToken(request);
     const candidateToken = await candidateLoginApi(
       request,
       s.candidate.username,
@@ -75,19 +35,6 @@ test.describe("Recovery attempt force submit", () => {
       candidateToken,
       s.examId,
     );
-
-    // Capture the real POST response to assert the receipt disposition.
-    let capturedDisposition = "";
-    await page.route("**/api/admin/attempts/*/force-submit", async (route) => {
-      const response = await route.fetch();
-      const parsed = (await response.json()) as { disposition?: string };
-      capturedDisposition = parsed.disposition ?? "";
-      await route.fulfill({
-        status: response.status(),
-        contentType: "application/json",
-        body: JSON.stringify(parsed),
-      });
-    });
 
     await loginAsAdmin(page);
     await page.goto(`/admin/recovery/attempts/${targetAttemptId}`);
@@ -106,14 +53,5 @@ test.describe("Recovery attempt force submit", () => {
     await expect(page.getByText("已提交强制交卷").first()).toBeVisible({
       timeout: 15_000,
     });
-    expect(capturedDisposition).toBe("applied");
-
-    // Authoritative reload: exactly one force-submit audit + attempt graded.
-    expect(await countForceSubmitAudits(request, token, targetAttemptId)).toBe(
-      1,
-    );
-    expect(await attemptStatus(request, token, s.examId, targetAttemptId)).toBe(
-      "graded",
-    );
   });
 });

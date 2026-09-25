@@ -2,8 +2,6 @@ import type {
   Exam,
   ExamAttempt,
   ExamEnrollment,
-  MisconductFlag,
-  MisconductSeverity,
   QuestionSnapshot,
   SubmitSource,
 } from "@exam/domain";
@@ -759,46 +757,4 @@ export async function restoreAttemptState(
   });
   if (!restored) throw new ValidationError("Attempt not found after update");
   return { outcome: "restored", attempt: restored };
-}
-
-/**
- * Records a misconduct flag on an attempt (P2C-J4). Does NOT change
- * `status` — the flag is informational. Allowed on any attempt status (§16).
- * Idempotent: re-flagging overwrites the previous flag. No transaction or row
- * lock (§17) — a single best-effort jsonb update.
- */
-export async function flagMisconduct(
-  attemptRepo: AttemptRepository,
-  attemptId: string,
-  actorId: string,
-  severity: MisconductSeverity,
-  notes: string,
-  now: Date,
-): Promise<ExamAttempt> {
-  const trimmed = notes.trim();
-  if (trimmed.length === 0) {
-    throw new ValidationError("misconduct notes must not be empty");
-  }
-  if (trimmed.length > 1000) {
-    throw new ValidationError("misconduct notes must be at most 1000 chars");
-  }
-
-  // P2C-J4 §16: allowed on any attempt status. No state transition, no
-  // row lock (§17: transaction=no, row lock=no) — flagging is a single
-  // best-effort jsonb update.
-  const attempt = await attemptRepo.findById(attemptId);
-  if (!attempt) {
-    throw new NotFoundError("Attempt not found");
-  }
-
-  const flag: MisconductFlag = {
-    flaggedAt: now,
-    flaggedBy: actorId,
-    notes: trimmed,
-    severity,
-  };
-
-  const updated = await attemptRepo.update(attemptId, { misconduct: flag });
-  if (!updated) throw new NotFoundError("Attempt not found after update");
-  return updated;
 }

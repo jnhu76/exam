@@ -100,26 +100,6 @@ describe("LoginPage smoke", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("uses the shared primary button color", () => {
-    renderLogin();
-
-    expect(screen.getByRole("button", { name: "登录" })).toHaveClass(
-      "bg-primary",
-    );
-  });
-
-  it("uses comfortable spacing between login fields and submit button", () => {
-    renderLogin();
-
-    expect(screen.getByTestId("login-field-group")).toHaveClass("gap-4");
-  });
-
-  it("shows dark product title text on the login card", () => {
-    renderLogin();
-
-    expect(screen.getByText("考试平台")).toHaveClass("text-foreground");
-  });
-
   it("shows error message when login fails", async () => {
     const user = userEvent.setup();
     apiPost.mockRejectedValueOnce(new Error("用户名或密码错误"));

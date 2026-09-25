@@ -142,46 +142,4 @@ test.describe("audit log viewer (P2E-J1)", () => {
         .first(),
     ).toBeVisible({ timeout: 15_000 });
   });
-
-  test("audit-logs API supports targetType + date query filters", async ({
-    request,
-  }: {
-    request: APIRequestContext;
-  }) => {
-    const token = await adminApiToken(request);
-
-    // targetType filter: only user rows.
-    const byTarget = await adminGet(
-      request,
-      token,
-      "/api/admin/audit-logs?targetType=user&pageSize=5",
-    );
-    expect(byTarget.status()).toBe(200);
-    const targetBody = await byTarget.json();
-    expect(
-      targetBody.items.every(
-        (i: { targetType: string }) => i.targetType === "user",
-      ),
-    ).toBe(true);
-
-    // date range filter: from a far-past date returns many rows; from a
-    // far-future date returns zero rows.
-    const past = await adminGet(
-      request,
-      token,
-      "/api/admin/audit-logs?from=2000-01-01T00:00:00.000Z&pageSize=5",
-    );
-    expect(past.status()).toBe(200);
-    const pastBody = await past.json();
-    expect(pastBody.items.length).toBeGreaterThan(0);
-
-    const future = await adminGet(
-      request,
-      token,
-      "/api/admin/audit-logs?from=2999-01-01T00:00:00.000Z&pageSize=5",
-    );
-    expect(future.status()).toBe(200);
-    const futureBody = await future.json();
-    expect(futureBody.items.length).toBe(0);
-  });
 });

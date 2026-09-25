@@ -102,9 +102,8 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   Permission.ExamExtend,
   Permission.ExamResultPublish,
   Permission.ExamEnrollmentManage,
-  // Proctor runtime — compat superset (the 4 trap perms + monitoring reads)
+  // Proctor runtime — compat superset (the trap perms + monitoring reads)
   Permission.ExamRoomView,
-  Permission.AttemptStatusView,
   Permission.AttemptTimelineView,
   Permission.AttemptMisconductMark,
   Permission.AttemptTimeGrant,
@@ -204,7 +203,6 @@ const TEACHER_PERMISSIONS: readonly PermissionKey[] = [
 
 const PROCTOR_PERMISSIONS: readonly PermissionKey[] = [
   Permission.ExamRoomView,
-  Permission.AttemptStatusView,
   Permission.AttemptTimelineView,
   // J4-I1D (ADR-015 §13 / ADR-014 §8 target grant): the low-risk incident
   // read/create/investigate set, activated ONLY behind the J4-I1B resolver

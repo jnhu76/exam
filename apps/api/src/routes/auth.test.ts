@@ -1092,3 +1092,40 @@ describe("auth epoch revocation (#325)", () => {
     }
   });
 });
+
+/**
+ * GAP-05 derived agreement guard: the login enforcement set and the preset
+ * `loginAllowed` projection are two independently editable authorities. This
+ * test derives the expected set from the presets and fails the moment either
+ * side drifts — it asserts agreement, not copied values.
+ */
+describe("login role authority agreement (GAP-05)", () => {
+  it("ASSIGNABLE_LOGIN_ROLES equals the loginAllowed preset projection", async () => {
+    const { ASSIGNABLE_LOGIN_ROLES } = await import("./auth.js");
+    const { ROLE_PRESETS } = await import("@exam/authz");
+
+    const loginAllowedByPreset = new Set(
+      Object.entries(ROLE_PRESETS)
+        .filter(([, preset]) => preset.loginAllowed)
+        .map(([role]) => role),
+    );
+
+    expect(
+      ASSIGNABLE_LOGIN_ROLES.size,
+      "enforcement set and preset projection must have the same size",
+    ).toBe(loginAllowedByPreset.size);
+
+    for (const role of loginAllowedByPreset) {
+      expect(
+        ASSIGNABLE_LOGIN_ROLES.has(role),
+        `preset marks ${role} loginAllowed but the login gate does not accept it`,
+      ).toBe(true);
+    }
+    for (const role of ASSIGNABLE_LOGIN_ROLES) {
+      expect(
+        loginAllowedByPreset.has(role),
+        `login gate accepts ${role} but no preset marks it loginAllowed`,
+      ).toBe(true);
+    }
+  });
+});

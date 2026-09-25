@@ -4,7 +4,6 @@ import {
   submitAttempt,
   markDisrupted,
   restoreAttemptState,
-  flagMisconduct,
   type AttemptRepository,
   type EnrollmentRepository,
 } from "./attemptCommands.js";
@@ -29,7 +28,6 @@ import {
   ExamAlreadyPassedError,
   RetakeDeferredError,
 } from "@exam/domain";
-import { MisconductSeverity } from "@exam/domain";
 import type {
   InterruptionEpisodeRepository,
   InterruptionEventRepository,
@@ -2161,92 +2159,6 @@ describe("attemptCommands", () => {
           restoreAttemptState(attempt, attRepo, restoreNow),
         ).rejects.toThrow();
       }
-    });
-  });
-
-  describe("flagMisconduct", () => {
-    const fixedNow = new Date("2025-01-01T10:30:00Z");
-
-    it("records a misconduct flag on an in_progress attempt without changing status", async () => {
-      const attempt = makeAttempt({ status: "in_progress" });
-      const repo = makeAttemptRepo([attempt]);
-
-      const result = await flagMisconduct(
-        repo,
-        "attempt-1",
-        "admin-1",
-        MisconductSeverity.Serious,
-        "looked at phone",
-        fixedNow,
-      );
-
-      expect(result.misconduct).toEqual({
-        flaggedAt: fixedNow,
-        flaggedBy: "admin-1",
-        notes: "looked at phone",
-        severity: "serious",
-      });
-      expect(result.status).toBe("in_progress");
-    });
-
-    it("overwrites a previous flag on re-flag (idempotent upsert)", async () => {
-      const attempt = makeAttempt({ status: "in_progress" });
-      const repo = makeAttemptRepo([attempt]);
-
-      await flagMisconduct(
-        repo,
-        "attempt-1",
-        "admin-1",
-        MisconductSeverity.Warning,
-        "first note",
-        fixedNow,
-      );
-      const later = new Date("2025-01-01T11:00:00Z");
-      const result = await flagMisconduct(
-        repo,
-        "attempt-1",
-        "admin-2",
-        MisconductSeverity.Serious,
-        "updated note",
-        later,
-      );
-
-      expect(result.misconduct).toEqual({
-        flaggedAt: later,
-        flaggedBy: "admin-2",
-        notes: "updated note",
-        severity: "serious",
-      });
-    });
-
-    it("allows flagging a voided attempt (any state per P2C-J4 §16)", async () => {
-      const repo = makeAttemptRepo([makeAttempt({ status: "voided" })]);
-
-      const result = await flagMisconduct(
-        repo,
-        "attempt-1",
-        "admin-1",
-        MisconductSeverity.Warning,
-        "note",
-        fixedNow,
-      );
-
-      expect(result.misconduct?.severity).toBe("warning");
-      expect(result.status).toBe("voided");
-    });
-    it("throws ValidationError for empty notes", async () => {
-      const repo = makeAttemptRepo([makeAttempt()]);
-
-      await expect(
-        flagMisconduct(
-          repo,
-          "attempt-1",
-          "admin-1",
-          MisconductSeverity.Warning,
-          "   ",
-          fixedNow,
-        ),
-      ).rejects.toThrow(ValidationError);
     });
   });
 });

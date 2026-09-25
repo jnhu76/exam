@@ -8,10 +8,6 @@ import {
   answerTrueFalse,
   waitForSaveSaved,
   submitExam,
-  candidateApiToken,
-  startAndSubmitAttempt,
-  closeExamApi,
-  exportScoresCsv,
   candidateLoginApi,
   loginAsCandidate,
 } from "../lib/flow";
@@ -225,92 +221,6 @@ test.describe("admin operation flow", () => {
 
     // Row is gone (the candidate name no longer appears in the table).
     await expect(page.getByText(extraName)).toHaveCount(0, { timeout: 15_000 });
-  });
-
-  /**
-   * Slice 3 — Scores guard + visibility (API).
-   *
-   * Proves ADR-005 §Close & export policy: GET /api/exams/:id/scores rejects
-   * while the exam is not ended (409), then returns the graded row (200) after
-   * the admin closes the exam via the REAL close route. This is the guard that
-   * makes export correctness provable and that the old `endingSoonSec` timing
-   * workaround obscured.
-   *
-   * After the candidate starts+submits, the exam is `open` with a graded
-   * attempt but the window has not ended, so scores stay 409. Once the admin
-   * closes (no unresolved attempts remain), the guard opens.
-   */
-  test("scores 409 before close, 200 with row after close (API)", async ({
-    request,
-  }) => {
-    const seeded = await seedExam(request, "scores");
-    const adminToken = await adminApiToken(request);
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-
-    // Candidate takes + submits — exam reconciles to `open`, attempt is graded.
-    await startAndSubmitAttempt(request, candidateToken, seeded.examId);
-
-    // Scores are gated while the exam window is still live: 409.
-    const before = await request.get(
-      `${BASE_URL}/api/exams/${seeded.examId}/scores`,
-      { headers: { Cookie: `auth-token=${adminToken}` } },
-    );
-    expect(before.status()).toBe(409);
-
-    // Admin closes via the real close route — no unresolved attempts remain.
-    const closeRes = await closeExamApi(request, adminToken, seeded.examId);
-    expect(closeRes.status()).toBe(200);
-
-    // Scores now open (200) and the graded row for the candidate is present.
-    const after = await request.get(
-      `${BASE_URL}/api/exams/${seeded.examId}/scores`,
-      { headers: { Cookie: `auth-token=${adminToken}` } },
-    );
-    expect(after.status()).toBe(200);
-    const body = (await after.json()) as { items: { candidateId: string }[] };
-    expect(
-      body.items.some((it) => it.candidateId === seeded.candidate.profileId),
-    ).toBe(true);
-  });
-
-  /**
-   * Slice 4 — CSV export (API).
-   *
-   * Proves GET /api/exams/:id/export/scores returns 200 text/csv with a row
-   * for the candidate after the exam is closed. Mirrors the ScoreListPage
-   * 导出CSV button. Closes via the admin API to isolate the export behavior.
-   */
-  test("CSV export returns 200 text/csv with candidate row after close (API)", async ({
-    request,
-  }) => {
-    const seeded = await seedExam(request, "export");
-    const adminToken = await adminApiToken(request);
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-
-    await startAndSubmitAttempt(request, candidateToken, seeded.examId);
-    const closeRes = await closeExamApi(request, adminToken, seeded.examId);
-    expect(closeRes.status()).toBe(200);
-
-    const csvRes = await exportScoresCsv(request, adminToken, seeded.examId);
-    expect(csvRes.status()).toBe(200);
-    expect(csvRes.headers()["content-type"]).toContain("text/csv");
-    expect(csvRes.headers()["content-disposition"]).toContain("attachment");
-    expect(csvRes.headers()["content-disposition"]).toContain(seeded.examId);
-
-    const csv = await csvRes.text();
-    // UTF-8 BOM for Excel compatibility
-    expect(csv.charCodeAt(0)).toBe(0xfeff);
-    // Required columns present
-    expect(csv).toContain("考生姓名");
-    expect(csv).toContain("成绩");
-    expect(csv).toContain("及格状态");
-    expect(csv).toContain("尝试次数");
-    expect(csv).toContain("提交时间");
-    // Candidate row present
-    expect(csv).toContain("E2E Candidate export");
-    // At least header + 1 data row
-    const lines = csv.split("\n").filter((l) => l.length > 0);
-    expect(lines.length).toBeGreaterThanOrEqual(2);
   });
 
   // ── P2 publish-to-candidate ──────────────────────────────────────

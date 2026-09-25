@@ -179,30 +179,6 @@ test.describe("P7-E2C operations surface", () => {
     });
   });
 
-  test("Maintainer: diagnostics never contain business-integrity evidence", async ({
-    page,
-    request,
-  }) => {
-    const maintainer = await createMaintainerViaApi(request);
-    const token = (
-      await request.post(`${BASE_URL}/api/auth/login`, {
-        data: { username: maintainer.username, password: MAINTAINER_PASSWORD },
-      })
-    )
-      .headers()
-      ["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
-    expect(token).toBeTruthy();
-    const res = await request.get(`${BASE_URL}/api/system/diagnostics`, {
-      headers: { cookie: `auth-token=${token}` },
-    });
-    expect(res.status()).toBe(200);
-    const body = await res.json();
-    expect(
-      body.integrity,
-      "Maintainer must not receive integrity block",
-    ).toBeUndefined();
-  });
-
   test.skip(!evidenceAvailable(), "evidence CLI not available in this mode");
   test("last backup failed → truthful warning; secret values never rendered", async ({
     page,
@@ -347,35 +323,17 @@ test.describe("P7-E2C operations surface", () => {
       page.getByText("已保存（仅意图记录，不影响基础设施）"),
     ).toBeVisible();
 
-    // The intent is an intent only — the API exposes no infra mutation.
-    const adminToken = await adminApiToken(request);
-    const policyRes = await request.get(`${BASE_URL}/api/system/ops-policy`, {
-      headers: { cookie: `auth-token=${adminToken}` },
-    });
-    expect(policyRes.status()).toBe(200);
-    const policyBody = await policyRes.json();
-    expect(policyBody.policy.desiredRpoSeconds).toBe(300);
-
-    // Maintainer sees the intent read-only (no edit control, PUT denied).
+    // Maintainer sees the intent read-only in the browser: no edit control
+    // renders. (The wire-level denial is owned by opsPolicy.test.ts.)
     const maintainer = await createMaintainerViaApi(request);
-    const mToken = (
-      await request.post(`${BASE_URL}/api/auth/login`, {
-        data: { username: maintainer.username, password: MAINTAINER_PASSWORD },
-      })
-    )
-      .headers()
-      ["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
     await page.context().clearCookies();
-    const mPut = await request.put(`${BASE_URL}/api/system/ops-policy`, {
-      headers: { cookie: `auth-token=${mToken}` },
-      data: {
-        desiredRpoSeconds: 3600,
-        desiredRetentionDays: 30,
-        desiredDrillCadenceDays: 7,
-        version: policyBody.policy.version,
-        reason: "maintainer override",
-      },
-    });
-    expect(mPut.status(), "Maintainer PUT must be denied").toBe(403);
+    await loginViaUi(
+      page,
+      maintainer.username,
+      MAINTAINER_PASSWORD,
+      MAINTAINER_LANDING,
+    );
+    await expect(page.getByTestId("operations-page")).toBeVisible();
+    await expect(page.getByTestId("policy-edit-button")).toHaveCount(0);
   });
 });

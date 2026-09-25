@@ -35,15 +35,19 @@ describe("RBAC-M2 boundary #1 — Admin is a compatibility superset", () => {
   });
 
   it("Admin does NOT hold Candidate own-runtime perms", () => {
-    const [start, save, submit, hb, own] = has(
+    const [take, start, save, submit, restore, hb, own] = has(
       Role.Admin,
+      Permission.ExamTake,
       Permission.AttemptStart,
       Permission.AttemptAnswerSave,
       Permission.AttemptSubmit,
+      Permission.AttemptRestore,
       Permission.AttemptHeartbeatSend,
       Permission.ScoreOwnView,
     );
-    expect([start, save, submit, hb, own]).toEqual([
+    expect([take, start, save, submit, restore, hb, own]).toEqual([
+      false,
+      false,
       false,
       false,
       false,

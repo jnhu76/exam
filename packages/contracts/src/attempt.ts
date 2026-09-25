@@ -398,29 +398,6 @@ export type RestoreAttemptResponse = z.infer<
   typeof RestoreAttemptResponseSchema
 >;
 
-// ── Flag Misconduct (Admin) ──────────────────────────────────────
-
-/**
- * Request body schema for an admin flagging misconduct on an attempt.
- */
-export const FlagMisconductRequestSchema = z.object({
-  severity: MisconductSeverityEnum,
-  notes: z.string().min(1).max(1000),
-});
-
-/** Type for a flag-misconduct request body. */
-export type FlagMisconductRequest = z.infer<typeof FlagMisconductRequestSchema>;
-
-/** Response schema for a flag-misconduct action. */
-export const FlagMisconductResponseSchema = z.object({
-  ok: z.literal(true),
-});
-
-/** Type for a flag-misconduct response. */
-export type FlagMisconductResponse = z.infer<
-  typeof FlagMisconductResponseSchema
->;
-
 // ── Proctor Incident (P3-M9) ────────────────────────────────────
 
 /**
@@ -479,10 +456,7 @@ export type MarkProctorIncidentResponse = z.infer<
 // Durable, operationId-keyed command-receipt contracts for the two dangerous
 // Attempt commands (`force_submit`, `misconduct_mark`). Both routes are live
 // on these shapes (force submit since J5-I1C Slice 2; misconduct mark via
-// `MisconductMarkWithOperationRequestSchema` below). The legacy
-// `FlagMisconductRequestSchema` above has zero production consumers and is
-// retained only pending the dead-symbol retirement decision (#615) — do not
-// wire it anywhere.
+// `MisconductMarkWithOperationRequestSchema` below).
 //
 // See docs/archive/audits/J5-I1C0-DANGEROUS-COMMAND-IDENTITY-REALITY-AUDIT.md §4/§6.
 
@@ -554,8 +528,7 @@ export type ForceSubmitRequestPayload = z.infer<
 /**
  * Canonical request payload for a `misconduct_mark` receipt (audit §4.3/§4.4).
  * `severity` reuses the existing {@link MisconductSeverityEnum}; `notes` is
- * trimmed to a non-empty bounded string (the legacy
- * {@link FlagMisconductRequestSchema} already enforces 1..1000). `.strict()`
+ * trimmed to a non-empty bounded string. `.strict()`
  * rejects unknown fields for the same canonical-identity reason as
  * {@link ForceSubmitRequestPayloadSchema}.
  *
@@ -597,10 +570,9 @@ export type ForceSubmitWithOperationRequest = z.infer<
 >;
 
 /**
- * operationId-carrying misconduct-mark request (audit §4.3). Future shape for
- * `POST /admin/attempts/:attemptId/misconduct`; does NOT replace the legacy
- * {@link FlagMisconductRequestSchema} in this slice. Reuses the existing
- * `severity` + `notes` field constraints. `.strict()` rejects unknown fields.
+ * operationId-carrying misconduct-mark request (audit §4.3). Reuses the
+ * existing `severity` + `notes` field constraints. `.strict()` rejects
+ * unknown fields.
  */
 export const MisconductMarkWithOperationRequestSchema = z
   .object({

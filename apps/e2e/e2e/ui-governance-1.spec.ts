@@ -34,9 +34,9 @@ import i18n, {
  *   V1  UsersPage action capacity — RowActions count-derived representation
  *       inside the contract actions column (6rem fine / 7.5rem coarse), the
  *       actions cell never colliding with the status cell.
- *   V2  ResultPage detail-comparison — score fully visible without scroll at
- *       1280×900 (the constrained sticky-scroll fallback is durable in
- *       table-contract-2.spec.ts "V2 narrow"; this spec owns the roomy case).
+ *   V2  ResultPage detail-comparison — owned entirely by
+ *       table-contract-2.spec.ts (desktop/narrow/overflow regimes); the
+ *       former roomy-viewport duplicate here was rationalized by #615.
  *   V3  Column content semantics — long CJK identity and long unbroken token
  *       wrap safely inside primary-text cells; machine identifiers
  *       middle-truncate in the locked 7.5rem short-id column with the full
@@ -232,76 +232,6 @@ test.describe("UI-GOVERNANCE-1 #439 V1–V4 durable gates", () => {
       // allocator may render it wider (#601 Phase F).
       expect(g.actionsCell.width).toBeGreaterThanOrEqual(118);
     });
-  });
-
-  test("V2 1280×900: ResultPage score fully visible without horizontal scroll", async ({
-    page,
-    request,
-  }) => {
-    const seeded = await seedExam(request, "governance-v2-score", {
-      questionAnswer: true,
-      questionScore: 100,
-      passingScore: 60,
-      resultPublicationMode: "immediate",
-    });
-
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await candidateLogin(page, seeded.candidate);
-    await startExamFromList(page, seeded.examId);
-    await answerTrueFalse(page, true);
-    await waitForSaveSaved(page);
-    await submitExam(page);
-    await page.waitForURL("**/result", { timeout: 15_000 });
-    const shell = page.locator('[data-slot="admin-table-shell"]');
-    await shell.waitFor({ state: "visible" });
-    await waitForSettledLayout(page);
-
-    const g = await shell.evaluate((el) => {
-      const region = el.querySelector<HTMLElement>(
-        '[data-slot="table-scroll-region"]',
-      );
-      const table = el.querySelector('[data-slot="table"]');
-      const scoreHeader = el.querySelector<HTMLElement>(
-        '[data-slot="table-head"][data-column-role="score"]',
-      );
-      const scoreCells = Array.from(
-        el.querySelectorAll<HTMLElement>(
-          '[data-slot="table-cell"][data-column-role="score"]',
-        ),
-      );
-      return {
-        // The region owns the geometry vocabulary (#601 Phase F).
-        archetype: region?.getAttribute("data-table-archetype"),
-        overflowing: region?.getAttribute("data-overflowing"),
-        scrollLeft: region?.scrollLeft ?? -1,
-        regionBox: region?.getBoundingClientRect(),
-        tableBox: table?.getBoundingClientRect(),
-        scoreHeaderVisible: scoreHeader !== null,
-        scoreCellCount: scoreCells.length,
-        scoreCellsVisible: scoreCells.every(
-          (c) => c.getBoundingClientRect().width > 0,
-        ),
-        lastScoreBox: scoreCells.at(-1)?.getBoundingClientRect(),
-      };
-    });
-
-    expect(g.archetype).toBe("detail-comparison");
-    // The score column exists and renders (not merely present in the DOM).
-    expect(g.scoreHeaderVisible).toBe(true);
-    expect(g.scoreCellCount).toBeGreaterThan(0);
-    expect(g.scoreCellsVisible).toBe(true);
-    // No horizontal scroll at the initial state, physically.
-    expect(g.overflowing).toBe("false");
-    expect(g.scrollLeft).toBe(0);
-    // The score rect sits fully inside the visible table container.
-    expect(g.lastScoreBox && g.regionBox).toBeTruthy();
-    expect(g.lastScoreBox!.right).toBeLessThanOrEqual(g.regionBox!.right + TOL);
-    expect(g.lastScoreBox!.left).toBeGreaterThanOrEqual(
-      g.regionBox!.left - TOL,
-    );
-    // The rendered table never exceeds its container.
-    expect(g.tableBox!.width).toBeLessThanOrEqual(g.regionBox!.width + TOL);
-    await assertNoHorizontalOverflow(page);
   });
 
   test("V3 Case A: long CJK identity + unbroken machine token wrap inside primary-text cells", async ({

@@ -70,8 +70,12 @@ import { loadAssignmentAuthority } from "../authz/assignmentAuthority.js";
 /**
  * Login-capable assignable roles (RBAC runtime activation). Static.
  * P7-E2A (ADR-017 D2): Maintainer is a login-capable built-in role.
+ *
+ * Exported only so the derived agreement test (GAP-05, auth.test.ts) can pin
+ * this enforcement set to the `loginAllowed` preset projection in @exam/authz
+ * without a third role list.
  */
-const ASSIGNABLE_LOGIN_ROLES = new Set([
+export const ASSIGNABLE_LOGIN_ROLES = new Set([
   "Admin",
   "Teacher",
   "Proctor",

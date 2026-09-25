@@ -4,6 +4,15 @@
 
 **Accepted** — 2026-08-02
 
+> **Amended 2026-09-25 (#615 G4 dead-symbol retirement):** the
+> `AttemptStatusView` capability (dotted key `attempt.status.view`) was
+> retired from the permission catalog and both preset grants — it had zero
+> enforcing routes (Proctor-scoped attempt reads are enforced by
+> `AttemptTimelineView`). The preset-grant references to
+> `AttemptStatusView` in the sections below are historical decision text
+> from acceptance time; the live grant set is
+> `packages/authz/src/presets.ts`.
+
 This ADR is **Accepted** and is the binding authority contract for
 `M11-PROCTOR-EXAM-ASSIGNMENTS` (J4-I1).
 

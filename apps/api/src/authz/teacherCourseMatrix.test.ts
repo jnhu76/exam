@@ -269,6 +269,53 @@ describe("Teacher@Course scope matrix (issue #286)", () => {
     expect(ids).not.toContain(courseBId);
   });
 
+  it("LIST /courses — scope filters BEFORE pagination (pageSize=1 keeps scoped total)", async () => {
+    // A second in-scope course; Course B stays out of the teacher's scope.
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Matrix Course A2",
+        code: `MA2-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(created.statusCode).toBe(201);
+    const courseA2Id = (created.json() as { id: string }).id;
+    await grantCourse(teacherUserId, courseA2Id);
+
+    const paged = await tGet("/api/courses?page=1&pageSize=1");
+    expect(paged.statusCode).toBe(200);
+    const body = paged.json() as {
+      items: Array<{ id: string }>;
+      total: number;
+    };
+    expect(body.items).toHaveLength(1);
+    expect([courseAId, courseA2Id]).toContain(body.items[0]!.id);
+    // Out-of-scope Course B exists but never inflates the scoped total.
+    expect(body.total).toBe(2);
+
+    // Revoke the extra grant so the revocation test below sees its
+    // single-active-assignment fixture unchanged.
+    const revokedAt = new Date();
+    await ctx.db
+      .update(schema.teacherCourseAssignments)
+      .set({
+        status: "revoked",
+        revokedBy: ctx.admin.id,
+        revokedAt,
+        updatedAt: revokedAt,
+      })
+      .where(
+        and(
+          eq(schema.teacherCourseAssignments.organizationId, ctx.org.id),
+          eq(schema.teacherCourseAssignments.teacherUserId, teacherUserId),
+          eq(schema.teacherCourseAssignments.courseId, courseA2Id),
+          eq(schema.teacherCourseAssignments.status, "active"),
+        ),
+      );
+  });
   it("GET /courses/:id — Course B folds into 404 (anti-enumeration)", async () => {
     const res = await tGet(`/api/courses/${courseBId}`);
     expect(res.statusCode).toBe(404);
@@ -292,6 +339,32 @@ describe("Teacher@Course scope matrix (issue #286)", () => {
     expect(filtered.json().total).toBe(0);
   });
 
+  it("LIST /questions — scope filters BEFORE pagination (pageSize=1 keeps scoped total)", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId: courseAId,
+        type: "true_false",
+        content: "Matrix question A2",
+        standardAnswer: true,
+        score: 100,
+        tags: ["matrix-tag-a"],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const paged = await tGet("/api/questions?page=1&pageSize=1");
+    expect(paged.statusCode).toBe(200);
+    const body = paged.json() as {
+      items: Array<{ id: string }>;
+      total: number;
+    };
+    expect(body.items).toHaveLength(1);
+    // Out-of-scope Course B question exists but never inflates the total.
+    expect(body.total).toBe(2);
+  });
   it("question detail/update/delete on Course B question → 404", async () => {
     expect((await tGet(`/api/questions/${questionBId}`)).statusCode).toBe(404);
     const patched = await tPatch(`/api/questions/${questionBId}`, {
@@ -369,6 +442,34 @@ describe("Teacher@Course scope matrix (issue #286)", () => {
     expect(ids).not.toContain(examBId);
   });
 
+  it("LIST /exams — scope filters BEFORE pagination (pageSize=1 keeps scoped total)", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: `Matrix Exam A2 ${uniquePrefix()}`,
+        courseId: courseAId,
+        durationMinutes: 60,
+        openAt: new Date().toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionAId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const paged = await tGet("/api/exams?page=1&pageSize=1");
+    expect(paged.statusCode).toBe(200);
+    const body = paged.json() as {
+      items: Array<{ id: string }>;
+      total: number;
+    };
+    expect(body.items).toHaveLength(1);
+    // Out-of-scope Course B exam exists but never inflates the total.
+    expect(body.total).toBe(2);
+  });
   it("exam detail — Exam A 200, Exam B 404", async () => {
     expect((await tGet(`/api/exams/${examAId}`)).statusCode).toBe(200);
     const denied = await tGet(`/api/exams/${examBId}`);

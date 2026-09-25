@@ -375,6 +375,45 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
     expect(res.body).not.toContain("auditReferences");
   });
 
+  it("worklist: scope filtering happens BEFORE the limit (cursor walk stays inside the assignment)", async () => {
+    // p1 is assigned exam A only and holds two in-scope incidents (A, A2).
+    // With limit=1 the traversal spans two pages; every returned row stays in
+    // the assignment scope and the unassigned exam's incident never enters
+    // any page (scope predicate gates the whole collection, not the first
+    // page).
+    const page1 = await inject(
+      p1Token,
+      "GET",
+      "/api/admin/proctor/incidents?limit=1",
+    );
+    expect(page1.statusCode).toBe(200);
+    const body1 = page1.json() as {
+      items: Array<{ incident: { id: string } }>;
+      nextCursor: string | null;
+    };
+    expect(body1.items).toHaveLength(1);
+    expect([incidentAId, incidentA2Id]).toContain(body1.items[0]!.incident.id);
+    expect(body1.nextCursor).toBeTruthy();
+
+    const page2 = await inject(
+      p1Token,
+      "GET",
+      `/api/admin/proctor/incidents?limit=1&cursor=${encodeURIComponent(body1.nextCursor!)}`,
+    );
+    expect(page2.statusCode).toBe(200);
+    const body2 = page2.json() as {
+      items: Array<{ incident: { id: string } }>;
+      nextCursor: string | null;
+    };
+    const ids2 = body2.items.map(
+      (i: { incident: { id: string } }) => i.incident.id,
+    );
+    expect(
+      ids2.every((id: string) => [incidentAId, incidentA2Id].includes(id)),
+    ).toBe(true);
+    expect(ids2).not.toContain(incidentUId);
+  });
+
   it("worklist: unassigned Proctor gets an empty collection", async () => {
     const res = await inject(p2Token, "GET", "/api/admin/proctor/incidents");
     expect(res.statusCode).toBe(200);

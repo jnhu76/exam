@@ -124,7 +124,6 @@ export const PERMISSION_METADATA = {
 
   // §4.6 Proctor Runtime
   [Permission.ExamRoomView]: { category: PermissionCategory.Proctor },
-  [Permission.AttemptStatusView]: { category: PermissionCategory.Proctor },
   [Permission.AttemptTimelineView]: { category: PermissionCategory.Proctor },
   [Permission.AttemptMisconductMark]: { category: PermissionCategory.Proctor },
   [Permission.AttemptTimeGrant]: { category: PermissionCategory.Proctor },
