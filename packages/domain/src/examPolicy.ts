@@ -1,16 +1,17 @@
-// ── P7-M1: Resolved Exam Policy (typed value) ──────────────────────
+// ── Resolved Exam Policy (typed value) ────────────────────────────
 //
 // A typed semantic projection of the published Exam row's policy fields.
-// This is a VALUE, not persistence (P7-M1 design §8, §14: existing typed
-// `exams` columns remain the authority; no `resolved_policy` jsonb column).
+// This is a VALUE, not persistence (docs/contracts/exam-policy-authority.md
+// §8, §14: the typed `exams` columns remain the authority; there is no
+// `resolved_policy` jsonb column).
 //
 // The resolver (`resolveExamPolicy`) and the canonical cross-field validator
 // (`validateExamPolicy`) live in `@exam/exam-engine`. This module owns only
 // the policy value types and the stable conflict-identifier codes so they can
 // be consumed by engine, routes, and tests without a back-dependency.
 //
-// Groups reflect real current semantic ownership — not the future P7-M2
-// dimension wishlist. Empty future abstractions are intentionally absent.
+// Groups reflect real current semantic ownership. Abstractions with no
+// current owner or consumer are intentionally absent.
 
 import type {
   QuestionSelectionMode,
@@ -22,12 +23,10 @@ import type {
 import type { ControlFlags, InterruptionTimePolicy } from "./types.js";
 
 /**
- * Timing + schedule policy. Phase A supports `timed_window`, `deadline` and
- * `untimed`; `timed_sync` remains an enum value rejected by the canonical
- * validator pending the B2 product-activation decision (the admission/queue
- * runtime it would build on exists — #292). `durationMinutes` is null for
- * modes without a personal duration (deadline/untimed); `closeAt` is null
- * only for `untimed`.
+ * Timing + schedule policy. Per-mode null invariants are owned by the
+ * canonical exam-policy validator (`validateTimingModeMatrix`):
+ * `durationMinutes` is null for modes without a personal duration
+ * (deadline/untimed); `closeAt` is null only for `untimed`.
  */
 export interface TimingPolicy {
   timingMode: TimingMode;
@@ -39,7 +38,8 @@ export interface TimingPolicy {
 }
 
 /**
- * Question selection policy. `manual` is the only supported mode in Phase 1.
+ * Question selection policy. `manual` is the only mode the publish gate
+ * accepts (`publishExam` rejects other values).
  */
 export interface QuestionSelectionPolicy {
   questionSelectionMode: QuestionSelectionMode;
@@ -97,9 +97,9 @@ export interface ControlFlagPolicy {
  * The resolved policy value — a typed projection of the published Exam row.
  *
  * NOT persistence. Produced by `resolveExamPolicy(exam)` and consumed by the
- * canonical validator. Provides the P7-M2 seam (profile defaults + exam
- * overrides → resolve → validate → publish) without making runtime consumers
- * depend on mutable profile rows.
+ * canonical validator. Profile defaults are materialized into the exam row at
+ * authoring (copy-on-apply) and never re-read at runtime, so this projection
+ * always reflects concrete exam columns.
  */
 export interface ResolvedExamPolicy {
   timing: TimingPolicy;
@@ -116,8 +116,8 @@ export interface ResolvedExamPolicy {
  * validator. Kept domain-internal initially (no public HTTP contract beyond
  * the existing `VALIDATION_ERROR` envelope); routes map these to field errors.
  *
- * Only supported current conflicts are modelled — no codes for unimplemented
- * P7-M2+ dimensions (device binding, admission queue, etc.).
+ * Only conflicts the canonical validator actually emits are modelled; the
+ * rejected dimensions are owned by `@exam/exam-engine` `validateExamPolicy`.
  */
 export const ExamPolicyConflictCode = {
   ExamWindowInvalid: "EXAM_WINDOW_INVALID",

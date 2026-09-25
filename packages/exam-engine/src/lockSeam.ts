@@ -6,8 +6,7 @@ import type {
 } from "./attemptCommands.js";
 
 /**
- * P3-FORMAL-P0-D1C3 / D2 — Canonical attemptId-rooted Enrollment→Attempt lock
- * acquisition seam.
+ * Canonical attemptId-rooted Enrollment→Attempt lock acquisition seam.
  *
  * The symbols below are INTENTIONALLY module-private. Do NOT export either
  * symbol, any alias of either symbol, or any user-defined type predicate that

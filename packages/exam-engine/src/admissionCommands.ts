@@ -206,7 +206,7 @@ async function activePosition(
 }
 
 /**
- * Joins the durable admission queue. Idempotent (Q4): a candidate with an
+ * Joins the durable admission queue. Idempotent: a candidate with an
  * active membership gets that membership back unchanged.
  */
 export async function joinAdmissionQueue(
@@ -292,13 +292,13 @@ export async function previewAdmissionStatus(
 
 /**
  * Demand-driven reconciliation: materializes the durable admitted fact when
- * the derived predicate says the candidate is eligible. Idempotent (Q5):
+ * the derived predicate says the candidate is eligible. Idempotent:
  * the CAS write happens at most once; concurrent reconciliations converge.
  *
  * The release predicate uses the candidate's stable schedule ordinal (count
  * over ALL memberships), not their current UI position among active rows, so
  * another candidate starting cannot move this candidate's batch boundary
- * earlier (batch schedule semantics corrective).
+ * earlier.
  *
  * Returns the (possibly admitted) ACTIVE membership.
  */
@@ -342,7 +342,7 @@ export async function reconcileAdmission(
 }
 
 /**
- * THE START GATE (Q2/Q3/Q6). Called inside the attempt-start transaction
+ * The START GATE. Called inside the attempt-start transaction
  * AFTER the canonical Enrollment lock, ONLY on the new-attempt path —
  * resume/restore of an active attempt never consults admission (queue
  * admission gates START, not re-entry).

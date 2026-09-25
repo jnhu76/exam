@@ -70,9 +70,9 @@ export interface ReconciledAttemptMutationContext {
   readonly checkedAt: Date;
   /**
    * Canonical effective deadline = computeEffectiveDeadline(exam, attempt).
-   * Nullable since Phase A (#291): untimed attempts have no deadline at all —
-   * null means "never expires", NOT "already expired" (the pure save decision
-   * treats a null deadline as no deadline guard).
+   * Nullable: untimed attempts have no deadline at all — null means "never
+   * expires", NOT "already expired" (the pure save decision treats a null
+   * deadline as no deadline guard).
    */
   readonly effectiveDeadline: Date | null;
   readonly [MUTATION_CONTEXT_BRAND]: true;
@@ -120,8 +120,8 @@ function mintReconciledAttemptMutationContext(
 
 /**
  * Auto-submittable attempt states for deadline reconciliation.
- * `not_started`/`queued` never started; `submitted`/`grading`/`graded` are
- * already frozen; `voided` is terminal. Only in-flight states get frozen.
+ * `not_started`/`queued` never started; `submitted`/`graded` are already
+ * frozen; `voided` is terminal. Only in-flight states get frozen.
  *
  * Typed against ExamAttempt["status"] so a future status rename surfaces at
  * compile time instead of silently breaking reconciliation.
@@ -136,7 +136,7 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
 export { computeEffectiveDeadline, isAttemptDeadlineExpired } from "./timer.js";
 
 /**
- * Lazy-triggered deadline reconciliation (P3-L0-3 / ADR-008 §5.3).
+ * Lazy-triggered deadline reconciliation (ADR-008 §5.3).
  *
  * Called at candidate attempt entry points (`/take`, save, submit, resume).
  * No background worker, no scheduled scan — reconciliation happens inline at
@@ -147,7 +147,7 @@ export { computeEffectiveDeadline, isAttemptDeadlineExpired } from "./timer.js";
  * the `effectiveDeadline` (the business-effective time), NOT the wall-clock
  * reconciliation instant.
  *
- * Idempotent: a submitted/grading/graded attempt is returned unchanged — its
+ * Idempotent: a submitted/graded attempt is returned unchanged — its
  * existing `submitted_answers` + `submittedAt` are never rebuilt.
  *
  * Transactional contract (EXAM-558): the caller must pass an EA capability
@@ -257,9 +257,9 @@ export async function ensureAttemptDeadlineReconciled(
     throw new NotFoundError("Attempt not found after reconciliation");
   }
 
-  // Slice 4: finalizeGrading aggregates from the workset. gradingWorksetRepo
+  // finalizeGrading aggregates from the workset. gradingWorksetRepo
   // is the caller's tx-scoped repo (same one submitAttempt materialized into).
-  // P3-FORMAL-P0-D2: the caller-minted capability is threaded through to
+  // The caller-minted capability is threaded through to
   // finalizeGrading → finalizeTerminalGrading (affinity-proven).
   await finalizeGrading(
     enrollmentRepo,
@@ -367,10 +367,9 @@ export async function prepareReconciledAttemptMutation(
   // A plain read would let an in-flight save commit (or reconcile) against
   // deadline authority that is no longer the committed one.
   //
-  // This may re-lock the Exam row the reconciliation seam already locked
-  // (EXAM-558); a same-tx re-lock of a held row is a no-op. Kept
-  // intentionally to preserve the #543 preparation-seam contract;
-  // deduplication is out of scope for #558.
+  // This may re-lock the Exam row the reconciliation seam already locked; a
+  // same-tx re-lock of a held row is a no-op. Kept intentionally so the
+  // deadline decision always serializes on the locked Exam authority.
   const exam = await examRepo.findByIdForUpdate(attempt.examId);
   if (!exam) {
     throw new NotFoundError("Exam not found");

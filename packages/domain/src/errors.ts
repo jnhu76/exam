@@ -125,7 +125,7 @@ export class AdminAlreadyExistsError extends AppError {
 }
 
 /**
- * Operational policy intent version conflict (P7-E3, HTTP 409). The Admin's
+ * Operational policy intent version conflict (HTTP 409). The Admin's
  * intent record was modified concurrently — the client must re-read the
  * current version (CAS) and retry.
  */
@@ -159,13 +159,12 @@ export class ExamNotDraftError extends AppError {
 /**
  * Admin close is not allowed for the requested exam (HTTP 409).
  *
- * ADR-005 Slice 1 §3.3 / review decision #3: `POST /exams/:id/close` is
- * allowed only from `open`. It is rejected for any other status, or for an
- * `open` exam that still has unresolved attempts. The `details.reason`
- * discriminates the two cases:
+ * `POST /exams/:id/close` is allowed only from `open`. It is rejected for any
+ * other status, or for an `open` exam that still has unresolved attempts. The
+ * `details.reason` discriminates the two cases:
  *   - `UNRESOLVED_ATTEMPTS_EXIST` — active/in-flight attempts remain; the
- *     admin must let them finalize (candidate submit, deadline scanner, or a
- *     future force-submit) before close.
+ *     admin must let them finalize (candidate submit, deadline scanner, or
+ *     force-submit) before close.
  *   - omitted — the exam is not in an `open` (or already-`closed`) state.
  */
 export class ExamCloseNotAllowedError extends AppError {
@@ -198,10 +197,10 @@ export class ExamArchiveNotAllowedError extends AppError {
 /**
  * Admin unpublish is not allowed for the requested exam (HTTP 409).
  *
- * ADR-005 Slice 2 §3.2: `POST /exams/:id/unpublish` is allowed only from
- * `published` AND only if, after reconciliation, the exam is still `published`
- * (now < openAt). Stale-state protection: a published exam whose openAt already
- * passed has reconciled to `open` and cannot be rewound to draft.
+ * `POST /exams/:id/unpublish` is allowed only from `published` AND only if,
+ * after reconciliation, the exam is still `published` (now < openAt).
+ * Stale-state protection: a published exam whose openAt already passed has
+ * reconciled to `open` and cannot be rewound to draft.
  */
 export class ExamUnpublishNotAllowedError extends AppError {
   constructor(message = "Exam unpublish is not allowed") {
@@ -212,10 +211,10 @@ export class ExamUnpublishNotAllowedError extends AppError {
 /**
  * Admin extend is not allowed for the requested exam (HTTP 409).
  *
- * ADR-005 Slice 2 §3.4: `POST /exams/:id/extend` is allowed only for an `open`
- * exam whose closeAt has not yet elapsed (after reconciliation). Stale-state
- * protection: an open exam whose closeAt already passed has reconciled to
- * `closed` and cannot be revived by extending closeAt.
+ * `POST /exams/:id/extend` is allowed only for an `open` exam whose closeAt
+ * has not yet elapsed (after reconciliation). Stale-state protection: an open
+ * exam whose closeAt already passed has reconciled to `closed` and cannot be
+ * revived by extending closeAt.
  */
 export class ExamExtendNotAllowedError extends AppError {
   constructor(
@@ -229,8 +228,8 @@ export class ExamExtendNotAllowedError extends AppError {
 /**
  * Admin PATCH is not allowed for the requested exam state (HTTP 409).
  *
- * ADR-005 Slice 2 §3.7: generic PATCH is allowed in `draft` (full edit) and
- * `published` (schedule fields only: openAt/closeAt). It is rejected for
+ * Generic PATCH is allowed in `draft` (full edit) and `published` (schedule
+ * fields only: openAt/closeAt). It is rejected for
  * `open|closed|canceled|archived` — use the dedicated operations instead.
  */
 export class ExamUpdateNotAllowedError extends AppError {
@@ -242,8 +241,8 @@ export class ExamUpdateNotAllowedError extends AppError {
 /**
  * Admin cancel is not allowed for the requested exam (HTTP 409).
  *
- * ADR-005 Slice 4 (cancel-minimal) §3.5: `POST /exams/:id/cancel` is allowed
- * from `published` and from `open` only when no unfinalized attempts remain.
+ * `POST /exams/:id/cancel` is allowed from `published` and from `open` only
+ * when no unfinalized attempts remain.
  * `details.reason = UNRESOLVED_ATTEMPTS_EXIST` (with activeAttemptCount) is set
  * by the route when an open exam still has active attempts. cancel does NOT
  * force-submit; the admin must let attempts resolve first.
@@ -263,9 +262,8 @@ export class ExamCancelNotAllowedError extends AppError {
 /**
  * Scores/export requested for a canceled exam (HTTP 409).
  *
- * ADR-005 Slice 4 (cancel-minimal): until cancellation-marker result/export
- * semantics are implemented, canceled exams MUST NOT expose normal
- * scores/export. Silent export is forbidden.
+ * Until cancellation-marker result/export semantics are implemented, canceled
+ * exams MUST NOT expose normal scores/export. Silent export is forbidden.
  */
 export class ExamCanceledResultsUnavailableError extends AppError {
   constructor(
@@ -278,8 +276,8 @@ export class ExamCanceledResultsUnavailableError extends AppError {
 
 /**
  * Candidate manual submit was attempted before the minimum submit duration
- * elapsed (HTTP 409). ADR-005 Slice 3 §4.4. Only `source === "candidate"`
- * submits are subject to this guard; deadline_scanner/proctor/system bypass.
+ * elapsed (HTTP 409). Only `source === "candidate"` submits are subject to
+ * this guard; deadline_scanner/proctor/system bypass.
  */
 export class AttemptSubmitTooEarlyError extends AppError {
   constructor(
@@ -292,8 +290,8 @@ export class AttemptSubmitTooEarlyError extends AppError {
 
 /**
  * A new attempt start was attempted after the late-entry cutoff (HTTP 409).
- * ADR-005 Slice 3 §4.3. Applies only to creating a NEW attempt; resume/
- * restore of existing attempts is never blocked.
+ * Applies only to creating a NEW attempt; resume/restore of existing attempts
+ * is never blocked.
  */
 export class AttemptLateEntryClosedError extends AppError {
   constructor(
@@ -350,9 +348,9 @@ export class RetakeDeferredError extends AppError {
 }
 
 /**
- * #292 — the candidate has no durable admitted (and not consumed) admission
- * membership for a requireQueue exam. HTTP 409; the wire message matches the
- * legacy queue-conflict contract.
+ * The candidate has no durable admitted (and not consumed) admission
+ * membership for a requireQueue exam. HTTP 409, surfaced as an opaque conflict
+ * so the queue state is the only barrier the caller learns about.
  */
 export class QueueAdmissionRequiredError extends AppError {
   constructor(message = "Queue admission required before starting this exam") {

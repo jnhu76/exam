@@ -142,7 +142,7 @@ export interface GrantAttemptTimeResult {
  *
  * This command performs the ledger insert and deadline update through
  * **caller-supplied transaction-bound repositories**. It is
- * transaction-*compatible*, not atomic by itself: the B2 caller MUST execute
+ * transaction-*compatible*, not atomic by itself: the caller MUST execute
  * it inside `executeInTransaction` so the ledger insert and deadline update
  * commit and roll back together. ADR-013 forbids operator grants from
  * resurrecting `submitted | graded | voided`.
@@ -224,8 +224,8 @@ export async function grantAttemptTime(
     throw new ValidationError("operationId must be a valid UUID");
   }
   // Validate incidentId as a UUID BEFORE any Incident lookup or deadline
-  // reconciliation (P2-E): a malformed identifier must fail closed with a
-  // clean VALIDATION_ERROR, never reach the DB or the audit path.
+  // reconciliation (ordering is binding): a malformed identifier must fail
+  // closed with a clean VALIDATION_ERROR, never reach the DB or the audit path.
   if (input.incidentId != null && !UUID_RE.test(input.incidentId)) {
     throw new ValidationError("incidentId must be a valid UUID");
   }
@@ -445,8 +445,8 @@ export async function grantAttemptTime(
     throw new ValidationError("Calculated deadline is invalid");
   }
 
-  // #291 Phase A: untimed exams have no closeAt to grant against (and can
-  // never carry the operator_incident snapshot policy — canonical matrix).
+  // Untimed exams have no closeAt to grant against (and can never carry the
+  // operator_incident snapshot policy — canonical timing matrix).
   if (exam.closeAt === null) {
     throw new ValidationError(
       "Cannot grant operator time on an exam without closeAt",

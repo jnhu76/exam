@@ -69,8 +69,8 @@ export interface AnswerState {
   attemptStatus: AttemptStatus;
   answers: AnswerRecord[];
   clientSeqMap: Map<string, AnswerRecord>;
-  // Nullable since Phase A (#291): an untimed attempt's canonical effective
-  // deadline is null — no deadline guard applies (null != expired).
+  // Nullable: an untimed attempt's canonical effective deadline is null — no
+  // deadline guard applies (null != expired).
   deadlineAt?: Date | null;
   now?: Date;
 }
@@ -85,7 +85,7 @@ export type ProcessSaveResult = SaveAnswerResponse & {
  * Canonical answer-shape validation/canonicalization seam, supplied by the
  * caller and invoked by the decision core at the CANONICAL precedence point:
  * after the status and effective-deadline guards, before idempotency and
- * version semantics (#301 corrective pass). The caller (API route) binds the
+ * version semantics (#301). The caller (API route) binds the
  * FROZEN QuestionSnapshot into this callback; the engine owns WHEN it runs,
  * so a malformed payload can never change the status/deadline rejection
  * precedence. The returned value replaces the request answer for every
@@ -206,12 +206,11 @@ export function processSaveAnswer(
     };
   }
 
-  // P7-S2-B (ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION): a future
-  // baseVersion is impossible client state and must not be accepted as a
-  // legitimate update based on `currentVersion`. The idempotency-key replay
-  // above already handled same-`clientSeq` replays, so any request reaching
-  // here with `baseVersion > currentVersion` claims a version that does not
-  // exist yet — reject it instead of silently advancing to `currentVersion+1`.
+  // ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION: a baseVersion ahead of the
+  // server cannot denote a legitimate update. The idempotency-key replay above
+  // already handled same-`clientSeq` replays, so any request reaching here with
+  // `baseVersion > currentVersion` claims a version that does not exist yet —
+  // reject it instead of silently advancing to `currentVersion+1`.
   if (request.baseVersion > currentVersion) {
     return {
       accepted: false,
@@ -244,13 +243,12 @@ export function processSaveAnswer(
   };
 }
 
-// ── Save Answer composite action (EXAM-ANSWER-CLOSURE-0) ──────────
+// ── Save Answer composite action ─────────────────────────────────
 //
 // The helpers below are the protocol-state reconstruction + accepted-result
-// application that previously lived in the API route. They are engine-internal:
-// the route now delegates to `saveAnswer`, which owns load → reconstruct →
-// decide (pure `processSaveAnswer`) → apply → persist. `processSaveAnswer`
-// stays a pure, independently-tested decision core.
+// application for `saveAnswer`, which owns load → reconstruct → decide (pure
+// `processSaveAnswer`) → apply → persist. `processSaveAnswer` stays a pure,
+// independently-tested decision core; the API route delegates the whole action.
 
 /**
  * A draft answer row as persisted on `exam_attempts.answers`. Mirrors the
@@ -378,8 +376,7 @@ function applyAcceptedResult(
 }
 
 /**
- * Canonical composite Save Answer protocol action
- * (EXAM-ANSWER-CLOSURE-0 + EXAM-ANSWER-PRECONDITION-CORRECTIVE-0).
+ * Canonical composite Save Answer protocol action (single engine-owned action).
  *
  * Owns the full SAVE_ANSWER action inside the engine:
  *
@@ -525,7 +522,7 @@ export async function saveAnswer(
 
 /**
  * Builds the frozen {@link SubmittedAnswersSnapshot} written to
- * `exam_attempts.submitted_answers` at submit time (P3-L0-2 / ADR-008).
+ * `exam_attempts.submitted_answers` at submit time (ADR-008).
  *
  * Normalizes draft {@link AnswerRecord}s against the attempt's question
  * snapshot: every snapshot question becomes one entry, ordered by the

@@ -1,24 +1,19 @@
 /**
- * Notification domain types (P5-N1 — Notification Inbox + Result-Published).
+ * Notification domain types (Notification Inbox + Result-Published).
  *
  * This module is the leaf-domain source of truth for the Inbox notification
  * abstraction. It lives in `@exam/domain` so it carries no Fastify / Drizzle
  * dependency and can be imported by `@exam/contracts`, `@exam/db`, and
  * `@exam/api` without layering violations.
  *
- * V1+ scope (P5-N1-R0 §7, §22; extended additively for `exam_assigned`
- * under #402/#299):
- *   - NotificationType values: `"result_published"`, `"exam_assigned"`.
- *   - Severity is deferred (info-only; no column, no domain type).
- *   - `NotificationType` and `EmailType` are INDEPENDENT string spaces. The
- *     operational mappings (`result_published -> grade_notification`,
- *     `exam_assigned -> exam_notification`) live in policy code
- *     (`apps/api/src/notifications/policy.ts`) and are tested there — they
- *     are NOT asserted by string equality here.
+ * `NotificationType` and `EmailType` are INDEPENDENT string spaces. The
+ * operational mappings (`result_published -> grade_notification`,
+ * `exam_assigned -> exam_notification`) live in policy code
+ * (`apps/api/src/notifications/policy.ts`) and are tested there — they are NOT
+ * asserted by string equality here.
  *
- * Still-deferred notification types (not implemented): `exam_time_changed`,
- * `exam_cancelled`, `grading_assigned`, `announcement`. Adding them later is
- * additive and does not change any row already persisted under an existing
+ * A type is added additively, exactly when its operational wiring (policy +
+ * dispatch) ships; that never changes rows already persisted under an existing
  * type.
  */
 

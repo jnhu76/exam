@@ -1,19 +1,17 @@
 /**
  * Product roles within the platform.
  *
- * The 7 Phase 3+ role presets (matches `@exam/authz` RoleKey): Admin, Teacher,
- * Proctor, Grader, Candidate, Maintainer are human, login-capable, assignable
- * roles. `System` is a **synthetic, non-login, non-assignable** actor identity
- * used only by background scanners (deadline auto-submit, heartbeat
- * disrupted-scan) — it never originates from a `users.role` row and never
- * appears in user-management UI. See ADR §System Actor Policy.
+ * Mirrors `@exam/authz` `RoleKey` (ADR-010 §Role Presets) — the authoritative
+ * closed set for authorization. This module's `Role` is the domain-side
+ * vocabulary used by `RequestContext.role` and audit.
  *
- * Maintainer (P7-E2A, ADR-017 D2) is the application-side System Operations
- * Owner — operational observation only, zero business permissions.
+ * `System` is a **synthetic, non-login, non-assignable** actor identity used
+ * only by background scanners (deadline auto-submit, heartbeat disrupted-scan)
+ * — it never originates from a `users.role` row and never appears in
+ * user-management UI. See ADR-010 §System Actor Policy.
  *
- * Widening to the full set (RBAC runtime activation) lets Proctor/Grader log
- * in and be gated by `requireCapability`. The login path does not reject any
- * human role; `@exam/authz` RoleKey remains the authoritative closed set.
+ * `Maintainer` (ADR-017 D2) is the application-side System Operations Owner —
+ * operational observation only, zero business permissions.
  */
 export const Role = {
   Admin: "Admin",
@@ -27,11 +25,10 @@ export const Role = {
 export type Role = (typeof Role)[keyof typeof Role];
 
 /**
- * RBAC permission keys.
- *
- * Each key represents a single permission grant that can be assigned to a role.
- * Permissions are grouped by domain: organization, users, question bank, course,
- * exam, proctor, candidate, scores, and system.
+ * Legacy SCREAMING_SNAKE permission keys, superseded as the grantable catalog
+ * by `@exam/authz` `Permission` (ADR-010 §Permission Catalog v0). Retained for
+ * the domain-side `RequestContext.permissions` / audit vocabulary — do not add
+ * new grants here.
  */
 export const Permission = {
   // Organization
@@ -80,8 +77,9 @@ export const QuestionType = {
   MultipleChoice: "multiple_choice",
   FillBlank: "fill_blank",
   TrueFalse: "true_false",
-  // P3-L0-1: independent QuestionType for constructed free-text responses.
-  // Not a fill_blank variant. gradingMode is manual; inputMode is multi_line.
+  // text_response is an independent QuestionType, not a fill_blank variant:
+  // gradingMode=inputMode derivation is owned by
+  // docs/architecture/exam-runtime.md §1.2/§1.3.
   TextResponse: "text_response",
 } as const;
 export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];
@@ -89,15 +87,14 @@ export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];
 /**
  * Exam attempt lifecycle status.
  *
- * Transitions: not_started → queued → in_progress → disrupted | submitted → graded | voided.
+ * Canonical transition table: `attemptStateMachine.ts` `TRANSITION_TABLE`.
  *
  * INVARIANT (#542): `not_started`, `queued`, and `voided` are reserved
  * vocabulary with no current writer (docs/SPEC.md §2.2 target design);
  * `grading` was a historical production intermediate (older code wrote
- * `status='grading'` as a durable step between `submitted` and `graded`;
- * crash between the two writes could leave a residue row). The J2 lifecycle
- * convergence removed that writer; terminal grading now closes
- * `submitted → graded` in one locked transaction, and the durable
+ * `status='grading'` between `submitted` and `graded`; a crash between the two
+ * writes could leave a residue row). That writer is gone: terminal grading
+ * closes `submitted → graded` in one locked transaction, and the durable
  * grading-pipeline state is `gradingStatus` (P2D-J2), orthogonal to this
  * lifecycle. Legacy rows require explicit operator disposition.
  */
@@ -170,16 +167,18 @@ export type EnrollmentStatus =
 /**
  * Exam lifecycle status.
  *
- * Transitions: draft → published → open → closed → archived, plus the
- * abnormal `canceled` path (ADR-005 Slice 4). Only `draft` exams can be
- * edited.
+ * Canonical transition table: `examStateMachine.ts` `EXAM_VALID_TRANSITIONS`
+ * (includes the abnormal `canceled` path from ADR-005).
+ *
+ * Full-field edits are draft-only; a `published` exam accepts schedule fields
+ * (openAt/closeAt) only.
  */
 export const ExamStatus = {
   Draft: "draft",
   Published: "published",
   Open: "open",
   Closed: "closed",
-  // ADR-005 Slice 4 (cancel-minimal): abnormal cancellation. US spelling.
+  // Abnormal cancellation path (ADR-005). US spelling: "canceled".
   Canceled: "canceled",
   Archived: "archived",
 } as const;
@@ -188,11 +187,12 @@ export type ExamStatus = (typeof ExamStatus)[keyof typeof ExamStatus];
 /**
  * Exam timing strategy.
  *
- * Delivered: `timed_window` (personal duration in an open window),
- * `deadline` (global cutoff), `untimed` (open-ended) — #291 Phase A.
- * `timed_sync` (operator-triggered shared clock): mode core implemented,
- * product activation deferred pending the B2 decision — the canonical
- * validator rejects it (see docs/contracts/timed-sync-semantics.md).
+ * `timed_window` (personal duration in an open window), `deadline` (global
+ * cutoff), `untimed` (open-ended). `timed_sync` (operator-triggered shared
+ * clock) is a decision-gated mode: its semantics are frozen in
+ * `docs/contracts/timed-sync-semantics.md`, and
+ * `docs/contracts/exam-policy-authority.md` §4 is the current
+ * admission/timing support authority.
  */
 export const TimingMode = {
   TimedSync: "timed_sync",
@@ -203,11 +203,11 @@ export const TimingMode = {
 export type TimingMode = (typeof TimingMode)[keyof typeof TimingMode];
 
 /**
- * Timing modes that authoring (exams and policy profiles) may select in
- * Phase A (#291). `timed_sync` product activation is deferred to the B2
- * decision — the mode core and the #292 admission runtime it would build on
- * exist; the canonical exam-policy validator rejects the value until
- * activation.
+ * Timing modes authoring (exams and policy profiles) may select.
+ *
+ * `timed_sync` is excluded here and rejected by the canonical exam-policy
+ * validator, so no authoring path can produce it while its activation is
+ * decision-gated.
  */
 export type AuthoringTimingMode = Exclude<TimingMode, "timed_sync">;
 
@@ -404,7 +404,7 @@ export const ExamProctorAssignmentCommandOutcome = {
 export type ExamProctorAssignmentCommandOutcome =
   (typeof ExamProctorAssignmentCommandOutcome)[keyof typeof ExamProctorAssignmentCommandOutcome];
 
-// ── Teacher-to-Course assignment (issue #286) ─────────────────────
+// ── Teacher-to-Course assignment ──────────────────────────────────
 
 /**
  * Teacher-course assignment episode status (monotonic revocation, same
@@ -425,7 +425,7 @@ export const TeacherCourseAssignmentOutcome = {
 export type TeacherCourseAssignmentOutcome =
   (typeof TeacherCourseAssignmentOutcome)[keyof typeof TeacherCourseAssignmentOutcome];
 
-// ── Grader-to-Exam assignment (issue #296) ─────────────────────────
+// ── Grader-to-Exam assignment ──────────────────────────────────────
 
 /**
  * Grader-exam assignment episode status (monotonic revocation, same

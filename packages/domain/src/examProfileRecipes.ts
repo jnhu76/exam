@@ -1,6 +1,4 @@
-// ── P7-M: starter exam profile recipes (truthful authoring defaults) ──
-//
-// Historical closeout evidence: P7-M closeout (`docs/archive/audits/P7-M-CONFIGURABLE-EXAM-MODES-CLOSEOUT.md`).
+// ── Starter exam profile recipes (truthful authoring defaults) ────────
 //
 // A starter recipe is a RECOMMENDED AUTHORING DEFAULT only. It is NOT runtime
 // authority, NOT a second profile kind, and NOT a special id. The UI offers
@@ -9,19 +7,16 @@
 // profile row via POST /api/exam-profiles. No runtime code may branch on
 // `key`.
 //
-// Truthfulness gate (P7-M task §4/§14): every field in `defaults` MUST be a
-// profile-safe dimension the engine actually enforces today (the
-// `ExamProfilePolicyDefaults` subset). We deliberately ship only the two
-// recipes whose promises the current runtime honors end-to-end:
+// Recipes whose names would promise a capability the canonical validator
+// rejects (device binding, lockdown, IP restriction, random question
+// selection, continuous monitoring) are NOT shipped.
 //
-//   basic_quiz       — single attempt, immediate publish, strict interruption
-//   standard_online  — retake allowed, highest score, after-grading publish,
-//                       bounded interruption grace
-//
-// `Controlled` / `Strict` profiles are intentionally NOT shipped: their
-// promised capabilities (queue admission, device binding, lockdown, IP
-// restriction, randomization, continuous monitoring) are unimplemented today
-// and would make the recipe names dishonest. See the closeout doc §10.
+// Truthfulness gate: every field in `defaults` MUST be a profile-safe
+// dimension the engine actually enforces (the `ExamProfilePolicyDefaults`
+// subset). Only recipes whose promises the runtime honors end-to-end are
+// shipped; a recipe name must never promise a capability the canonical
+// validator rejects (see `UNSUPPORTED_CONTROL_FLAGS` in
+// `@exam/exam-engine` `validateExamPolicy`).
 //
 // Language-free: this module carries only a stable identity `key` plus the
 // typed defaults. Display name/description live in the web i18n catalog
@@ -39,7 +34,8 @@ export type StarterProfileRecipeKey = "basic_quiz" | "standard_online";
 /**
  * A starter recipe: stable key + the profile-safe defaults it prefills.
  * `name`/`description` are intentionally absent — they live in i18n.
- * Readonly so `findStarterRecipe` results cannot mutate the shared recipe.
+ * `readonly` is compile-time only: treat the shared recipe as immutable, it is
+ * not runtime-frozen.
  */
 export interface StarterProfileRecipe {
   readonly key: StarterProfileRecipeKey;

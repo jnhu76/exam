@@ -7,8 +7,8 @@ import { assertExamPolicyValid } from "./examPolicy.js";
 export { assertTransition as assertExamTransition } from "./examStateMachine.js";
 
 /**
- * P3-L0-5: placeholder strings that look non-empty but carry no real answer
- * or rubric. CONTEXT.md: "Empty strings like '暂无' do not count as valid."
+ * Placeholder strings that look non-empty but carry no real answer or rubric.
+ * CONTEXT.md: "Empty strings like '暂无' do not count as valid."
  * Trimmed + lowercased before comparison so "  N/A  " matches.
  */
 const PLACEHOLDER_VALUES: ReadonlySet<string> = new Set([
@@ -145,7 +145,7 @@ export async function publishExam(
   // P7-M1: canonical cross-field policy revalidation (design §11). Publish is
   // the authority/freeze boundary and revalidates the WHOLE resolved policy —
   // window ordering, passing<=total, max_attempts sanity, and interruption
-  // caps (ADR-013). Replaces the previously scattered inline guards. Pure;
+  // caps (ADR-013). Pure;
   // resource-integrity checks (standardAnswer/rubric, totalScore==sum) below
   // remain here because they need DB-loaded question facts.
   assertExamPolicyValid(exam);
@@ -269,11 +269,11 @@ export async function openExam(
 /**
  * Transitions an exam from open to closed status, preventing further attempts.
  *
- * ADR-005 Slice 1 / review decision #2: idempotent for `closed` — a `closed`
- * exam returns unchanged (no `InvalidStateTransitionError`). The route layer
- * uses this to detect the idempotent case and suppress the duplicate audit.
- * The unresolved-attempts guard lives at the route layer (it needs the
- * attempt repo); this engine function performs only the status transition.
+ * Idempotent for `closed` — a `closed` exam returns unchanged (no
+ * `InvalidStateTransitionError`). The route layer uses this to detect the
+ * idempotent case and suppress the duplicate audit. The unresolved-attempts
+ * guard lives at the route layer (it needs the attempt repo); this engine
+ * function performs only the status transition.
  */
 export async function closeExam(
   repo: ExamRepository,
@@ -299,12 +299,11 @@ export async function closeExam(
 /**
  * Cancels an exam abnormally (published -> canceled, open -> canceled).
  *
- * ADR-005 Slice 4 (cancel-minimal): the engine performs only the status
- * transition. It does NOT void or force-submit attempts. The unresolved-
- * attempts guard (open with in_progress/disrupted/submitted/grading) lives at
- * the route layer (needs the attempt repo), surfacing as
- * EXAM_CANCEL_NOT_ALLOWED / UNRESOLVED_ATTEMPTS_EXIST. cancel is NOT idempotent
- * (canceled -> canceled is rejected); to settle a canceled exam, archive it.
+ * ADR-005: the engine performs only the status transition. It does NOT void or
+ * force-submit attempts. The unresolved-attempts guard lives at the route layer
+ * (needs the attempt repo), surfacing as EXAM_CANCEL_NOT_ALLOWED /
+ * UNRESOLVED_ATTEMPTS_EXIST. cancel is NOT idempotent (canceled -> canceled is
+ * rejected); to settle a canceled exam, archive it.
  */
 export async function cancelExam(
   repo: ExamRepository,
@@ -325,7 +324,7 @@ export async function cancelExam(
 /**
  * Reverts a published exam back to draft (published -> draft).
  *
- * ADR-005 Slice 2 §3.2: only allowed from `published`. The route layer
+ * ADR-005: only allowed from `published`. The route layer
  * reconciles status by now BEFORE calling this, so a stale `published` exam
  * whose openAt already passed (logically `open`) is rejected at the route as
  * `EXAM_UNPUBLISH_NOT_ALLOWED`. This engine function performs only the
@@ -351,7 +350,7 @@ export async function unpublishExam(
  * Extends an open exam's closeAt by a positive number of minutes
  * (open -> open, only closeAt changes).
  *
- * ADR-005 Slice 2 §3.4: only allowed for `open`. The route layer reconciles
+ * ADR-005: only allowed for `open`. The route layer reconciles
  * first, so a stale `open` exam whose closeAt already passed (logically
  * `closed`) is rejected at the route as `EXAM_EXTEND_NOT_ALLOWED` and cannot
  * be revived. `extendMinutes` must be a positive integer; the new closeAt is
@@ -380,7 +379,7 @@ export async function extendExam(
     );
   }
 
-  // #291 Phase A: untimed exams have no closeAt to extend.
+  // Untimed exams have no closeAt to extend.
   if (exam.closeAt === null) {
     throw new ValidationError("Cannot extend an untimed exam (no closeAt)");
   }
@@ -402,12 +401,12 @@ export interface CheckAndUpdateResult {
 /**
  * Check-on-access auto-transition for exam status.
  * Lazily transitions published→open when now >= openAt, and open→closed when
- * now >= closeAt. Untimed exams (#291 Phase A) never auto-close — they are
- * open-ended until an admin lifecycle command closes/cancels them.
- * timed_sync exams (#291 Phase B) never auto-open: their open transition is
- * the operator's synchronized start command, so an un-triggered sitting stays
- * published no matter how far past openAt the clock runs. closeAt auto-close
- * still applies once the sitting is open.
+ * now >= closeAt. Untimed exams never auto-close — they are open-ended until
+ * an admin lifecycle command closes/cancels them.
+ * `timed_sync` exams never auto-open: their open transition belongs to the
+ * decision-gated operator sitting start (docs/contracts/timed-sync-semantics.md),
+ * so an un-triggered sitting stays published however far past openAt the clock
+ * runs. closeAt auto-close still applies once the sitting is open.
  * Returns the exam (potentially updated) with transition info, or null if not found.
  */
 export async function checkAndUpdateExamStatus(

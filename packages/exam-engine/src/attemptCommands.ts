@@ -196,16 +196,17 @@ export async function startOrRestoreAttempt(
     throw new ExamNotOpenError("Exam is not open");
   }
 
-  // Phase A (#291) admission. openAt gates every mode; closeAt gates only the
-  // close-bound modes (timed_window/deadline) — untimed has no closeAt.
+  // Admission window. openAt gates every mode; closeAt gates only when the
+  // exam carries one (untimed has no closeAt — canonical timing matrix).
   if (now < exam.openAt || (exam.closeAt !== null && now >= exam.closeAt)) {
     throw new ExamNotOpenError("Current time is outside exam open window");
   }
 
-  // #291 Phase B: timed_sync entry is owned by the operator-triggered sitting
-  // (Model A freeze). Before T0 there is no shared clock to join; after the
-  // global deadline a new attempt would be born expired. Both keep the
-  // EXAM_NOT_OPEN (409) contract — the distinction is message-level only.
+  // timed_sync entry is owned by the operator-triggered sitting (Model A
+  // freeze, docs/contracts/timed-sync-semantics.md). Before T0 there is no
+  // shared clock to join; after the global deadline a new attempt would be
+  // born expired. Both keep the EXAM_NOT_OPEN (409) contract — the distinction
+  // is message-level only.
   let syncDeadline: Date | null = null;
   if (exam.timingMode === "timed_sync") {
     if (exam.syncStartedAt === null) {
@@ -319,8 +320,8 @@ export async function startOrRestoreAttempt(
     );
   }
 
-  // ADR-005 Slice 3 §4.3: late-entry cutoff on a NEW attempt only.
-  // #291 Phase B: for timed_sync the buffer is anchored at the operator-
+  // ADR-005: late-entry cutoff on a NEW attempt only.
+  // For timed_sync the buffer is anchored at the operator-
   // triggered sitting start (T0), not at openAt — the buffer is relative to
   // when the sitting actually began. The null-anchor branch is unreachable
   // (the pre-T0 guard above already threw) but keeps the type honest.
@@ -338,7 +339,7 @@ export async function startOrRestoreAttempt(
   }
 
   const attemptNo = enrollment.attemptCount + 1;
-  // #291 deadline model per timing mode. timed_window carries a personal
+  // Deadline model per timing mode. timed_window carries a personal
   // deadline (start instant + duration). timed_sync copies the sitting's
   // SHARED global deadline (derived from the durable T0, never from this
   // candidate's start instant — two starts at different instants resolve to
@@ -378,7 +379,6 @@ export async function startOrRestoreAttempt(
     }
   }
 
-  // Resolve the timing policy snapshot for the new attempt.
   const snapshot = resolveAttemptTimingPolicySnapshotFromExam(exam);
 
   const attempt = await attemptRepo.create({
@@ -436,8 +436,8 @@ export async function startOrRestoreAttempt(
 /**
  * Submits an attempt, transitioning in_progress/disrupted -> submitted.
  *
- * This is the SINGLE authoritative submit/freeze/materialization seam
- * (P3-L0-2E). A successful return guarantees:
+ * This is the SINGLE authoritative submit/freeze/materialization seam.
+ * A successful return guarantees:
  *
  *   - `submitted_answers` is frozen from draft answers
  *   - exactly one grading entry exists per frozen question
@@ -448,7 +448,7 @@ export async function startOrRestoreAttempt(
  * read → validate → write window is serialized against a concurrent
  * deadline-scanner autoSubmit (and admin force-submit) on the same row.
  *
- * ADR-005 Slice 3 §4.4 guard ordering (binding):
+ * ADR-005 guard ordering (binding):
  * 1. Idempotent already-submitted path FIRST: if the attempt is already in a
  *    terminal/post-submit state (submitted/graded), validate the
  *    existing workset for exact consistency and return it as-is. A re-submit
@@ -472,7 +472,7 @@ export async function submitAttempt(
     source?: SubmitSource;
     minSubmitAfterStartMinutes?: number | null;
     /**
-     * P3-L0-2: why the attempt is being submitted. Defaults to `'manual'`
+     * Why the attempt is being submitted. Defaults to `'manual'`
      * (candidate submit). Deadline auto-submit callers pass `'deadline'`.
      * Persisted to `exam_attempts.submission_reason` alongside the frozen
      * `submitted_answers` snapshot.
@@ -509,9 +509,9 @@ export async function submitAttempt(
   const existingEntries = await gradingWorksetRepo.findByAttempt(attemptId);
 
   // 1. Idempotent already-submitted path — runs BEFORE any other check.
-  // P3-L0-2: do NOT rebuild submittedAnswers here — return the existing
+  // Do NOT rebuild submittedAnswers here — return the existing
   // frozen snapshot + reason + submittedAt unchanged (double-submit safety).
-  // P3-L0-2E: validate the existing workset for exact consistency — fail
+  // Validate the existing workset for exact consistency — fail
   // closed on partial, mismatched, or extra entries.
   if (attempt.status === "submitted" || attempt.status === "graded") {
     validateGradingWorksetConsistency(attempt, existingEntries);
@@ -544,7 +544,7 @@ export async function submitAttempt(
     }
   }
 
-  // 4. P3-L0-2E fresh-submit precondition: zero pre-existing grading entries.
+  // 4. Fresh-submit precondition: zero pre-existing grading entries.
   // If entries exist before the authoritative submission freeze, the model is
   // violated — fail closed. Do not merge, fill gaps, or delete-and-rebuild.
   if (existingEntries.length > 0) {
@@ -555,14 +555,14 @@ export async function submitAttempt(
     );
   }
 
-  // 5. P3-L0-2 submit freeze barrier (ADR-008): normalize the locked draft
+  // 5. Submit freeze barrier (ADR-008): normalize the locked draft
   // answers into a clean SubmittedAnswersSnapshot BEFORE the status flip.
   const submittedAnswers = buildSubmittedAnswersSnapshot(
     attempt.answers,
     attempt.questionSnapshot,
   );
 
-  // P3-L0-2C: classify the manual-grading requirement ONCE, at the freeze
+  // Classify the manual-grading requirement ONCE, at the freeze
   // barrier, from the authoritative frozen question snapshot. protocol §1.4
   // — text_response is the manual-grading QuestionType, NOT standardAnswer.
   const gradingStatus = requiresManualGrading(attempt.questionSnapshot)
@@ -582,7 +582,7 @@ export async function submitAttempt(
   });
   if (!submitted) throw new ValidationError("Attempt not found after update");
 
-  // 7. P3-L0-2E: materialize the durable grading workset from frozen truth.
+  // 7. Materialize the durable grading workset from frozen truth.
   // This is the sole workset creation site. Atomic with the submit update
   // within the same caller transaction.
   await materializeGradingWorkset(submitted, gradingWorksetRepo);

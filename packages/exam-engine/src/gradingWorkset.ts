@@ -10,7 +10,7 @@ import { gradeQuestion, isManualGradedQuestion } from "@exam/domain";
 import { payloadsEqual } from "./incidentCommands.js";
 
 /**
- * Repository port for the materialized grading workset (P3-L0-2E). The
+ * Repository port for the materialized grading workset. The
  * exam-engine layer defines this interface so it does not depend on
  * `@exam/db`; the API adapter layer bridges the concrete Drizzle repo to
  * this port.
@@ -21,18 +21,16 @@ import { payloadsEqual } from "./incidentCommands.js";
  */
 export interface GradingWorksetRepository {
   /**
-   * Returns all grading entries for an attempt, scoped to the caller's
-   * tenant. Used by {@link materializeGradingWorkset} for fresh-submit
-   * precondition check, by {@link validateGradingWorksetConsistency} for
-   * idempotent re-entry, by {@link aggregateGradingEntries} for terminal
-   * aggregation, and by {@link gradeQuestion} to read the per-question
-   * manual state.
+   * Returns all grading entries for an attempt, scoped to the caller's tenant.
+   * The pre-submit precondition read, the idempotent-consistency check, the
+   * terminal aggregation, and the per-question manual lookup all share this
+   * authoritative entry set.
    */
   findByAttempt(attemptId: string): Promise<AttemptGradingEntry[]>;
 
   /**
    * Returns the single grading entry for (attemptId, questionId), scoped to
-   * the caller's tenant, or null when no entry exists. Slice 3 authoritative
+   * the caller's tenant, or null when no entry exists. Authoritative
    * manual-work lookup: {@link gradeQuestion} consumes this to fail closed on
    * a missing entry and to authorize grading from the materialized
    * `gradingMode` (NOT from question-type/standardAnswer rescanning).
@@ -168,7 +166,7 @@ export function computeExpectedGradingEntries(
 }
 
 /**
- * Materializes the durable grading workset for a fresh submit (P3-L0-2E).
+ * Materializes the durable grading workset for a fresh submit.
  *
  * Creates exactly one `attempt_grading_entries` row per frozen question via a
  * single atomic bulk insert. This function does NOT check for existing entries
@@ -201,7 +199,7 @@ export async function materializeGradingWorkset(
  * Throws on ANY inconsistency. Does not modify entries, does not fill gaps,
  * does not repair partial state, does not overwrite mismatched rows.
  *
- * Two rule classes, deliberately distinct (EXAM-542-CORRECTIVE-5):
+ * Two rule classes, deliberately distinct (see the manual/lifecycle split below):
  *
  * - Frozen structural consistency — fields whose drift corrupts durable
  *   result truth must equal the canonical derivation on EVERY entry:
@@ -404,8 +402,7 @@ function expectedTerminalStatus(mode: GradingEntryMode): GradingEntryStatus {
 }
 
 /**
- * Aggregates the materialized grading workset into the terminal score result
- * (P3-L0-2E Slice 4).
+ * Aggregates the materialized grading workset into the terminal score result.
  *
  * This is the **single canonical terminal aggregation authority**. Every
  * production path that persists `attempt.score` / `attempt.gradingResult` /
@@ -424,39 +421,17 @@ function expectedTerminalStatus(mode: GradingEntryMode): GradingEntryStatus {
  *   - `submittedAnswers` (re-running the objective grader to fill gaps is
  *     forbidden — the entries already carry the frozen earned score)
  *
- * ## Validation (fail-closed, runs BEFORE any projection)
+ * Validation is fail-closed and runs BEFORE any projection: exact entry count,
+ * question-universe match, no duplicate questionIds (defensive — the DB UNIQUE
+ * already prevents it), per-entry maxScore/mode/terminal-status, and a
+ * non-null in-range earnedScore. Each violation throws a descriptive `Error`
+ * (surfaced as a 500 — these are invariant violations, not user input errors).
  *
- * The workset must be exactly complete and terminal before any score is
- * summed. Each check throws a descriptive `Error` (surfaced as a 500 by the
- * API error handler — these are invariant violations, not user input errors):
- *
- *   1. exact entry count === frozen question count
- *   2. entry questionId set === frozen questionId set (no missing, no extra)
- *   3. no duplicate questionIds within the entry set (defensive — the DB
- *      UNIQUE(attempt_id, question_id) already prevents this; the check exists
- *      so an in-memory fake or a corrupt read cannot silently pass)
- *   4. per entry: `entry.maxScore === frozenQuestion.score`
- *   5. per entry: `entry.gradingMode` matches canonical question semantics
- *      (`isManualGradedQuestion` — text_response → manual; all others → auto).
- *      NOT `standardAnswer == null`.
- *   6. per entry: terminal status (`auto`→`completed_auto`,
- *      `manual`→`completed_manual`). A `pending_manual` entry blocks
- *      aggregation — the caller must not invoke this until all manual work is
- *      complete.
- *   7. per entry: `earnedScore != null` and `0 <= earnedScore <= maxScore`
- *
- * ## Projection (Steps 7-8)
- *
- * Iterates `attempt.questionSnapshot` in **frozen order** (NOT entry DB order)
- * so the final `gradingResult` row order is stable and matches the snapshot.
- * One result row per frozen question. Earned score + candidateAnswer +
- * correctness come from the matching entry; maxScore + standardAnswer come
- * from the frozen snapshot (already mirrored on the entry — both are checked
- * for consistency).
- *
- * @throws {Error} on ANY workset inconsistency (missing/extra/duplicate entry,
- *   mode mismatch, maxScore mismatch, non-terminal status, null/out-of-range
- *   earnedScore).
+ * Projection iterates `attempt.questionSnapshot` in **frozen order** (NOT
+ * entry DB order) so the final `gradingResult` row order is stable. Earned
+ * score + candidateAnswer + correctness come from the matching entry;
+ * maxScore + standardAnswer come from the frozen snapshot (already mirrored on
+ * the entry — both are checked for consistency).
  */
 export function aggregateGradingEntries(
   attempt: ExamAttempt,

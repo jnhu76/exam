@@ -154,10 +154,11 @@ export interface Question {
   tags: string[];
   gradingRule: GradingRule;
   /**
-   * P3-L0-1: rubric authoring/editing source (dual-layer storage).
-   * text_response requires non-empty at publish (P3-L0-5); objective
-   * questions carry null. Copied into QuestionSnapshot.rubric at attempt
-   * creation. Existing rows read via the db repo normalize undefined → null.
+   * Authoring/editing source for the rubric (dual-layer storage).
+   * `text_response` requires a non-empty, non-placeholder value at publish;
+   * objective questions carry null. Copied into QuestionSnapshot.rubric at
+   * attempt creation. Existing rows read via the db repo normalize
+   * undefined → null.
    */
   rubric: string | null;
   createdAt: Date;
@@ -247,8 +248,10 @@ export interface GradingRule {
 /**
  * Runtime control flags for an exam session.
  *
- * Controls shuffle, anti-cheat, queue, IP restriction, lockdown, and
- * result-display behavior. Not all flags are used in Phase 1.
+ * Only some flags have runtime enforcement; flags the runtime cannot honor are
+ * rejected at authoring by the canonical exam-policy validator
+ * (`@exam/exam-engine` `UNSUPPORTED_CONTROL_FLAGS`), so an authorable flag is
+ * not by itself a capability promise.
  */
 export interface ControlFlags {
   shuffleQuestions: boolean;
@@ -263,7 +266,7 @@ export interface ControlFlags {
   showResultImmediately: boolean;
 }
 
-// ── Submit source (ADR-005 Slice 3) ────────────────────────────────
+// ── Submit source (ADR-005) ────────────────────────────────────────
 
 /**
  * Discriminator for who initiated an attempt submit. Used by submitAttempt
@@ -319,10 +322,10 @@ export interface Exam {
   // for a manual-mode exam. Null until the first publish-results call; once
   // set, it is never updated (idempotent re-publish is a no-op on this field).
   resultsPublishedAt: Date | null;
-  // #291 Phase B: durable synchronized-start authority (Model A freeze,
-  // docs/contracts/timed-sync-semantics.md). Server instant
-  // written exactly once by the canonical sync-start command; null = the
-  // operator has not triggered the sitting (timed_sync start is forbidden).
+  // Durable synchronized-start authority for `timed_sync` (Model A freeze,
+  // docs/contracts/timed-sync-semantics.md). Server instant written once by the
+  // decision-gated operator sync-start command; while that command is not
+  // activated the field stays null and a `timed_sync` start is forbidden.
   // Non-timed_sync exams stay permanently null. Never reset (cancel/archive
   // keep it as history).
   syncStartedAt: Date | null;
@@ -456,8 +459,8 @@ export interface ExamAttempt {
   startedAt?: Date;
   submittedAt?: Date;
   gradedAt?: Date;
-  // Null since Phase A (#291): deadline/untimed attempts have no personal
-  // deadline. Undefined = field not set (legacy rows); null = modeled "none".
+  // deadline/untimed attempts have no personal deadline (null = modeled
+  // "none"). Undefined = field not set (legacy rows).
   deadlineAt?: Date | null;
   lastActivityAt?: Date;
   interruptionTimingPolicySnapshot?: AttemptTimingPolicySnapshot;
@@ -466,9 +469,10 @@ export interface ExamAttempt {
   createdAt: Date;
   updatedAt: Date;
   /**
-   * Admin/Proctor misconduct flag (P2C-J4). Null when the attempt has not
-   * been flagged; set via the flag-misconduct command (idempotent re-flag
-   * overwrites). Does not change `status`.
+   * Admin/Proctor misconduct flag (P2C-J4). Null when the attempt has not been
+   * flagged. Written by the flag-misconduct command: replaying the same
+   * operationId returns the stored receipt, while a new operationId overwrites
+   * this projection. Does not change `status`.
    */
   misconduct?: MisconductFlag | null;
   /**
@@ -485,10 +489,8 @@ export interface ExamAttempt {
    */
   submittedAnswers?: SubmittedAnswersSnapshot | null;
   /**
-   * P3-L0-1: why this attempt was submitted. `'manual'` for candidate
-   * submit; `'deadline'` for lazy deadline reconciliation; null for
-   * legacy rows predating the column (treated as unknown). Future
-   * submit paths must populate this.
+   * Why this attempt was submitted. Null for legacy rows predating the column
+   * (treated as unknown). Every submit path must populate it.
    */
   submissionReason?: "manual" | "deadline" | null;
 }
@@ -876,13 +878,13 @@ export interface GraderExamAssignmentResult {
   assignment: GraderExamAssignment;
 }
 
-// ── Attempt Command Receipts (J5-I1C Slice 1) ─────────────────────
+// ── Attempt Command Receipts ───────────────────────────────────────
 //
 // Pure domain types for the durable Attempt command receipt foundation. Per
 // AGENTS.md, domain types live in `types.ts`; the canonicalizers, equality
 // primitive, and replay classifier live in `attemptCommandPayload.ts`. This
 // split keeps the type authority in one place while the logic module stays a
-// leaf consumer of these types (review J5-I1C0 PR #261 P2-1).
+// leaf consumer of these types.
 
 /**
  * The two dangerous Attempt commands sharing one receipt table. This is the
@@ -1029,16 +1031,10 @@ export type BackupVerificationStatus = "verified" | "failed" | "pending";
 export type BackupExecutorType = "host_script" | "deployment_drill";
 
 /**
- * Restore-drill OUTCOME (P7-E2B). Two orthogonal dimensions — `result` is
- * WHAT happened, `source` is WHO proved it:
- *
- *   result: succeeded | failed
- *   source: automated | operator_declared
- *
- * An operator-confirmed successful restore is `succeeded` +
- * `operator_declared`; an operator-recorded failure is `failed` +
- * `operator_declared`. A failed drill NEVER satisfies the drill cadence
- * regardless of source.
+ * Restore-drill OUTCOME. Two orthogonal dimensions — this `result` is WHAT
+ * happened, {@link RestoreDrillSource} is WHO proved it. An operator-confirmed
+ * successful restore is `succeeded` + `operator_declared`; a failed drill
+ * NEVER satisfies the drill cadence regardless of source.
  */
 export type RestoreDrillResult = "succeeded" | "failed";
 
@@ -1062,7 +1058,7 @@ export type BackupRunEventType =
   | "duplicate_rejected";
 
 /**
- * Terminal outcome of a host-side retention run (P7-CLOSE P7-3b).
+ * Terminal outcome of a host-side retention run.
  * `succeeded` means: retention operation succeeded AND repository/chain
  * verification succeeded — not merely that a delete command returned zero.
  */
