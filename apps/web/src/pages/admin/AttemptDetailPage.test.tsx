@@ -5,6 +5,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { AttemptDetailPage } from "./AttemptDetailPage";
 import { permissionsForRole } from "@exam/authz";
+import type { AssignableRole } from "@exam/contracts";
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -44,17 +45,23 @@ vi.mock("@/lib/api", () => ({
   setNavigate: () => {},
 }));
 
-function renderPage(attemptId = "attempt-1") {
+function renderPage(
+  attemptId = "attempt-1",
+  actor: { role: AssignableRole; capabilities: string[] } = {
+    role: "Admin",
+    capabilities: [...permissionsForRole("Admin")],
+  },
+) {
   return render(
     <MemoryRouter initialEntries={[`/admin/attempts/${attemptId}`]}>
       <AuthProvider
         initialUser={{
           id: "1",
-          username: "admin",
-          name: "Admin",
-          role: "Admin",
+          username: "actor",
+          name: "Actor",
+          role: actor.role,
           organizationId: "org1",
-          capabilities: [...permissionsForRole("Admin")],
+          capabilities: actor.capabilities,
         }}
       >
         <BrandProvider>
@@ -501,5 +508,106 @@ describe("AttemptDetailPage", () => {
       severity: "warning",
       notes: "考试作弊记录",
     });
+  });
+
+  // ── #612: capability composition closure ──────────────────────────
+  // Route reachability (attempt.timeline.view) and sub-feature authority are
+  // distinct capabilities. The load-bearing assertion for a Proctor-like set
+  // is NOT merely "button hidden" — it is "button hidden AND the unauthorized
+  // privileged request never emitted".
+
+  const proctorActor: { role: AssignableRole; capabilities: string[] } = {
+    role: "Proctor",
+    capabilities: [...permissionsForRole("Proctor")],
+  };
+
+  function mockTimelineOnly(timeline: { events: unknown[] }) {
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return timeline;
+      }
+      // Any non-timeline GET (i.e. the score read) is a contract violation
+      // for the timeline-only caller — fail loudly instead of returning data.
+      throw new Error(`unexpected privileged request: ${url}`);
+    });
+  }
+
+  it("#612: Proctor-like set renders the timeline shell and never emits the score/export/misconduct requests", async () => {
+    mockTimelineOnly(mockTimelineEvents);
+    renderPage("attempt-1", proctorActor);
+
+    // The timeline surface (the legitimate base page) renders with events.
+    expect(await screen.findByText("答卷时间线")).toBeInTheDocument();
+    expect(await screen.findByText("开始答题")).toBeInTheDocument();
+
+    // The result fetch was never issued — page reachability must not mint a
+    // guaranteed-403 request.
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledTimes(1);
+    });
+    expect(apiGet.mock.calls[0]![0]).toBe(
+      "/api/admin/attempts/attempt-1/timeline",
+    );
+    expect(apiPost).not.toHaveBeenCalled();
+
+    // Privileged affordances are absent alongside their requests.
+    expect(
+      screen.queryByRole("button", { name: "导出CSV" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "导出JSON" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "标记违规" }),
+    ).not.toBeInTheDocument();
+    // The shell keeps navigation (and is not stuck on the result loading state).
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("#612: divergent capability set (score read without export/misconduct) still composes each sub-feature independently", async () => {
+    // A Proctor-LABELED actor whose set additionally holds the score-read
+    // capability: proves composition follows the capability set, not the role
+    // name — timeline + score read held, export + misconduct not.
+    const divergentActor: { role: AssignableRole; capabilities: string[] } = {
+      role: "Proctor",
+      capabilities: ["attempt.timeline.view", "score.all.view"],
+    };
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return mockLiveResult;
+    });
+    renderPage("attempt-1", divergentActor);
+
+    // Score-capable caller: the live status view renders (the authorized
+    // request WAS issued and composed).
+    expect(await screen.findByText("尝试状态")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledWith("/api/scores/attempts/attempt-1");
+    });
+
+    // The un-held sub-features stay absent.
+    expect(
+      screen.queryByRole("button", { name: "导出CSV" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "标记违规" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("#612: Admin keeps the export affordances on the live view", async () => {
+    mockTimelineResult(mockLiveResult, { events: [] });
+    renderPage();
+
+    expect(await screen.findByText("尝试状态")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出CSV" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "导出JSON" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "标记违规" }),
+    ).toBeInTheDocument();
   });
 });

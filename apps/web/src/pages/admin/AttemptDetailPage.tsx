@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { plainTextProjection } from "@exam/domain";
+import { Permission } from "@exam/authz";
 import { resolveRichAnswerDocument } from "@/components/shared/content/richAnswer";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { toast } from "sonner";
 import i18n from "@/i18n";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
+import { can } from "@/lib/capabilities";
 import { downloadFile } from "@/lib/download";
 import { createContextSafeUuid } from "@/lib/uuid";
+import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -274,6 +277,10 @@ async function exportAttempt(
 /** Props for the attempt export buttons (CSV + JSON). */
 interface ExportButtonsProps {
   attemptId: string;
+  /** AttemptExport capability — the buttons render only for callers whose
+   * capability set owns the export endpoints (issue 612). UX truthfulness only;
+   * the backend remains the security authority. */
+  canExport: boolean;
 }
 
 /**
@@ -282,8 +289,9 @@ interface ExportButtonsProps {
  * safe). Reused by both the live and graded attempt views. Labels resolve from
  * `admin.attemptDetail.actions.*` i18n keys.
  */
-function ExportButtons({ attemptId }: ExportButtonsProps) {
+function ExportButtons({ attemptId, canExport }: ExportButtonsProps) {
   const { t } = useTranslation();
+  if (!canExport) return null;
   return (
     <>
       <Button
@@ -427,6 +435,7 @@ export function AttemptDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user: actor } = useAuth();
   const [result, setResult] = useState<VisibleAttemptResult | null>(null);
   const [liveAttempt, setLiveAttempt] = useState<{
     attemptId: string;
@@ -459,8 +468,25 @@ export function AttemptDetailPage() {
     null,
   );
 
+  // Route reachability and sub-feature authority are DISTINCT capabilities
+  // (issue 612): the route gate is attempt.timeline.view (adminRouteCapabilities),
+  // while the score read (score.all.view), attempt export (attempt.export) and
+  // misconduct mark (attempt.misconduct.mark) compose independently of it. A
+  // caller holding only the route capability — the Proctor preset, or any
+  // custom role with a divergent set — gets the timeline shell without the
+  // privileged sub-features and without their guaranteed-403 requests. UX
+  // composition only; the backend remains the security authority.
+  const canReadResult = actor !== null && can(actor, Permission.ScoreAllView);
+  const canExportAttempt =
+    actor !== null && can(actor, Permission.AttemptExport);
+  const canFlagMisconduct =
+    actor !== null && can(actor, Permission.AttemptMisconductMark);
+
   const loadResult = useCallback(async () => {
-    if (!id) return;
+    // INVARIANT: the result fetch is issued only for callers whose capability
+    // set owns it — page reachability alone must not mint a request the
+    // backend is guaranteed to reject.
+    if (!id || !canReadResult) return;
     setIsLoading(true);
     setError(null);
     setResult(null);
@@ -494,7 +520,7 @@ export function AttemptDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [id, t]);
+  }, [id, t, canReadResult]);
 
   useEffect(() => {
     loadResult();
@@ -531,7 +557,9 @@ export function AttemptDetailPage() {
   }, []);
 
   const handleFlag = useCallback(async () => {
-    if (!liveAttempt || !flagCommandIdentity) return;
+    // Capability guard on the callback itself (issue 612): a render regression that
+    // re-shows the flag button must not be able to invoke the command.
+    if (!liveAttempt || !flagCommandIdentity || !canFlagMisconduct) return;
     const notes = flagNotes.trim();
     if (!notes) {
       toast.error(t("admin.attemptDetail.flag.notesRequired"));
@@ -563,8 +591,38 @@ export function AttemptDetailPage() {
     flagSeverity,
     flagNotes,
     setFlagDialog,
+    canFlagMisconduct,
     t,
   ]);
+
+  // Timeline-only shell (issue 612): a caller without the score-read capability
+  // (e.g. the Proctor preset, which legitimately reaches this route via
+  // attempt.timeline.view) still gets the timeline surface; the result view,
+  // export and misconduct sub-features simply do not compose for this caller.
+  // Branches on the capability, never on a role name, so any custom role with
+  // the same divergent set composes identically.
+  if (!canReadResult) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          title={t("admin.attemptDetail.shell.title")}
+          actions={
+            <Button variant="outline" onClick={() => void navigate(-1)}>
+              {t("admin.attemptDetail.actions.back")}
+            </Button>
+          }
+        />
+        <TimelineSection
+          events={timeline}
+          isLoading={timelineLoading}
+          hasError={timelineError}
+          onRetry={loadTimeline}
+          expandedEventId={expandedEventId}
+          onToggleEvent={toggleEvent}
+        />
+      </div>
+    );
+  }
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
@@ -586,7 +644,7 @@ export function AttemptDetailPage() {
           )}`}
           actions={
             <div className="flex gap-2">
-              <ExportButtons attemptId={id!} />
+              <ExportButtons attemptId={id!} canExport={canExportAttempt} />
               <Button variant="outline" onClick={() => void navigate(-1)}>
                 {t("admin.attemptDetail.actions.back")}
               </Button>
@@ -604,13 +662,15 @@ export function AttemptDetailPage() {
                 <span className="type-secondary">{liveMisconduct.notes}</span>
               )}
             </div>
-            <Button
-              variant="outline"
-              className="w-fit"
-              onClick={() => setFlagDialog(true)}
-            >
-              {t("admin.attemptDetail.actions.flagMisconduct")}
-            </Button>
+            {canFlagMisconduct && (
+              <Button
+                variant="outline"
+                className="w-fit"
+                onClick={() => setFlagDialog(true)}
+              >
+                {t("admin.attemptDetail.actions.flagMisconduct")}
+              </Button>
+            )}
           </div>
         </PageSection>
 
@@ -719,7 +779,7 @@ export function AttemptDetailPage() {
         )}`}
         actions={
           <div className="flex gap-2">
-            <ExportButtons attemptId={id!} />
+            <ExportButtons attemptId={id!} canExport={canExportAttempt} />
             <Button variant="outline" onClick={() => void navigate(-1)}>
               {t("admin.attemptDetail.actions.back")}
             </Button>
