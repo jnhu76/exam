@@ -1,16 +1,13 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
 import {
   candidateLogin,
-  candidateApiToken,
   startExamFromList,
   answerTrueFalse,
   answerTextResponse,
   waitForSaveSaved,
   submitExam,
-  adminApiToken,
-  getCandidateResult,
 } from "../lib/flow";
 
 /**
@@ -98,22 +95,6 @@ test.describe("manual grading partial recovery (P1 closeout)", () => {
     const attemptId = resultUrl.pathname.split("/").filter(Boolean)[1]!;
     expect(attemptId).toBeTruthy();
 
-    const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-    const adminToken = await adminApiToken(request);
-
-    // ── Queue: 2 pending manual entries ───────────────────────────────────
-    const queueRes = await request.get(`${baseURL}/api/admin/grading-queue`, {
-      headers: { Cookie: `auth-token=${adminToken}` },
-    });
-    expect(queueRes.status()).toBe(200);
-    const queueBody = await queueRes.json();
-    const queueItem = queueBody.items.find(
-      (i: { attemptId: string }) => i.attemptId === attemptId,
-    );
-    expect(queueItem).toBeDefined();
-    expect(queueItem.pendingQuestionCount).toBe(2);
-
     // ── Admin opens grading detail; both subjective inputs are EMPTY ──────
     await loginAsAdmin(page);
     await page.goto("/admin/grading-queue");
@@ -159,25 +140,6 @@ test.describe("manual grading partial recovery (P1 closeout)", () => {
     ).not.toBeVisible();
     await expect(page.getByTestId(`grading-submit-btn-${q2Id}`)).toBeVisible();
 
-    // ── Attempt still submitted + pending_manual; queue count = 1 ─────────
-    const takeMid = await request.get(
-      `${baseURL}/api/candidate/attempts/${attemptId}/take`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    const takeMidBody = await takeMid.json();
-    expect(takeMidBody.attemptStatus).toBe("submitted");
-    expect(takeMidBody.gradingStatus).toBe("pending_manual");
-
-    const queueMid = await request.get(`${baseURL}/api/admin/grading-queue`, {
-      headers: { Cookie: `auth-token=${adminToken}` },
-    });
-    const queueMidBody = await queueMid.json();
-    const queueMidItem = queueMidBody.items.find(
-      (i: { attemptId: string }) => i.attemptId === attemptId,
-    );
-    expect(queueMidItem).toBeDefined();
-    expect(queueMidItem.pendingQuestionCount).toBe(1);
-
     // ── Reload: first score/comment restored + read-only; second empty ────
     await page.reload();
     await expect(page.getByTestId(`grading-score-input-${q1Id}`)).toHaveValue(
@@ -206,28 +168,8 @@ test.describe("manual grading partial recovery (P1 closeout)", () => {
       timeout: 15_000,
     });
 
-    // ── Terminal: graded + fully_graded; queue item gone ──────────────────
-    const takeFinal = await request.get(
-      `${baseURL}/api/candidate/attempts/${attemptId}/take`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    const takeFinalBody = await takeFinal.json();
-    expect(takeFinalBody.attemptStatus).toBe("graded");
-    expect(takeFinalBody.gradingStatus).toBe("fully_graded");
-
-    const queueFinal = await request.get(`${baseURL}/api/admin/grading-queue`, {
-      headers: { Cookie: `auth-token=${adminToken}` },
-    });
-    const queueFinalBody = await queueFinal.json();
-    expect(
-      queueFinalBody.items.find(
-        (i: { attemptId: string }) => i.attemptId === attemptId,
-      ),
-    ).toBeUndefined();
-
-    // ── Score identity: objective (30) + manual (35 + 0) = 65 ─────────────
-    const result = await getCandidateResult(request, candidateToken, attemptId);
-    expect(result.totalScore).toBe(65);
-    expect(result.passed).toBe(true); // 65 >= 50
+    // ── Completion: the fully-graded toast confirms the terminal state ────
+    // (gradingStatus/queue-projection/score-identity facts are owned by
+    // routes/gradingQueue.test.ts, manualGradingClosure and scores suites.)
   });
 });

@@ -375,6 +375,42 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
     expect(res.body).not.toContain("auditReferences");
   });
 
+  it("worklist: scope filtering happens BEFORE the limit (cursor walk stays inside the assignment)", async () => {
+    // p1 is assigned exam A only and holds two in-scope incidents (A, A2).
+    // Walking the worklist one row at a time must span several pages, and the
+    // unassigned exam's incident must never surface on ANY page — the scope
+    // predicate gates the whole cursor walk, not the first page.
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const url = cursor
+        ? `/api/admin/proctor/incidents?limit=1&cursor=${encodeURIComponent(cursor)}`
+        : "/api/admin/proctor/incidents?limit=1";
+      const res = await inject(p1Token, "GET", url);
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as {
+        items: Array<{ incident: { id: string } }>;
+        nextCursor: string | null;
+      };
+      for (const item of body.items) {
+        seen.push(item.incident.id);
+        expect(
+          [incidentAId, incidentA2Id],
+          `out-of-scope incident ${item.incident.id} leaked into the cursor walk`,
+        ).toContain(item.incident.id);
+      }
+      cursor = body.nextCursor;
+      pages += 1;
+      expect(pages, "cursor walk must terminate").toBeLessThan(10);
+    } while (cursor !== null);
+
+    // limit=1 with two scoped rows actually paginated, and the walk covered
+    // exactly the assignment's incidents — no fewer, no more.
+    expect(pages).toBeGreaterThanOrEqual(2);
+    expect([...seen].sort()).toEqual([incidentAId, incidentA2Id].sort());
+  });
+
   it("worklist: unassigned Proctor gets an empty collection", async () => {
     const res = await inject(p2Token, "GET", "/api/admin/proctor/incidents");
     expect(res.statusCode).toBe(200);

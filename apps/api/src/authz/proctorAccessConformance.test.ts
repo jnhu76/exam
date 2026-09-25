@@ -244,18 +244,14 @@ describe("J4-I1B proctorAccess structural conformance (ADR-015 §8)", () => {
     }
   });
 
-  it("AttemptForceSubmit and AttemptMisconductMark are REMOVED from the Proctor preset (ADR-015 §13)", () => {
-    expect(PROCTOR_PERMISSIONS).not.toContain(Permission.AttemptForceSubmit);
-    expect(PROCTOR_PERMISSIONS).not.toContain(Permission.AttemptMisconductMark);
+  it("Proctor's sensitivePermissions projection excludes the removed dangerous grants (ADR-015 §13)", () => {
+    // Preset-membership absence for these permissions is owned by the
+    // registry-derived admin_only/deferred sweeps above; this pins the
+    // separate sensitive-permission projection.
     expect(ROLE_PRESETS[Role.Proctor].sensitivePermissions).not.toContain(
       Permission.AttemptForceSubmit,
     );
     expect(ROLE_PRESETS[Role.Proctor].sensitivePermissions).not.toContain(
-      Permission.AttemptMisconductMark,
-    );
-    // They remain valid catalog permissions (Admin-only routes keep them).
-    expect(Object.values(Permission)).toContain(Permission.AttemptForceSubmit);
-    expect(Object.values(Permission)).toContain(
       Permission.AttemptMisconductMark,
     );
   });

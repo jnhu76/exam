@@ -5,17 +5,15 @@ import { adminApiToken, adminPost } from "../lib/flow";
 /**
  * #445 V1 geometry regression — UI-ACTION-CAPACITY-1 (#453).
  *
- * Proves the action-capacity contract in the REAL DOM on the two worst legal
- * consumer rows (P3-Corrective §4):
- *   - UsersPage Teacher row: N=3 → [edit icon][kebab(courses, disable)]
- *   - CandidateFields worst row: N=4 → [edit icon][kebab(up, down, delete)]
+ * Proves the action-capacity contract in the REAL DOM on the CandidateFields
+ * worst legal consumer row (N=4 → [edit icon][kebab(up, down, delete)]),
+ * the one capacity claim not owned by ui-governance-1.spec.ts V1 (which owns
+ * the UsersPage teacher row in both pointer modes).
  *
- * INVARIANT asserted in BOTH pointer modes:
- *   MAX_LEGAL_INLINE ≤ actions-column content box
- *   fine:   ≤2 buttons × 32px inside a 6rem (96px) column
- *   coarse: ≤2 buttons × 44px inside a 7.5rem (120px) column
- * and no button ever spills LEFT over the neighbouring status column (the
- * pre-contract UsersPage defect spilled 79px).
+ * INVARIANT:
+ *   fine: ≤2 buttons × 32px inside a 6rem (96px) actions column,
+ *   no button ever spills LEFT over the neighbouring column (the
+ *   pre-contract UsersPage defect spilled 79px).
  */
 
 interface ActionGeometry {
@@ -67,34 +65,6 @@ function expectWithinBounds(
 }
 
 test.describe("row action capacity (fine pointer)", () => {
-  test("UsersPage teacher worst legal set: [edit][kebab] inside 6rem", async ({
-    page,
-    request,
-  }) => {
-    const stamp = Date.now();
-    const teacherName = `E2E Capacity Teacher ${stamp}`;
-    const token = await adminApiToken(request);
-    const created = await adminPost(request, token, "/api/users", {
-      username: `e2e-capacity-teacher-${stamp}`,
-      password: "teacher123",
-      name: teacherName,
-      role: "Teacher",
-    });
-    expect(created.ok()).toBeTruthy();
-
-    await loginAsAdmin(page);
-    await page.goto("/admin/users");
-    const row = page.getByRole("row").filter({ hasText: teacherName }).first();
-    await expect(row).toBeVisible({ timeout: 15_000 });
-
-    const geometry = await probeActionCell(row);
-    expect(geometry.pointerCoarse).toBe(false);
-    // N=3 → exactly [edit][kebab]; every inline control is a 32px icon button
-    // inside the 6rem (96px) actions column, none spilling left.
-    expect(geometry.buttonRects).toHaveLength(2);
-    expectWithinBounds(geometry, { cellWidth: 96, buttonWidth: 32 });
-  });
-
   test("CandidateFields worst row: [edit][kebab(up/down/delete)] inside 6rem", async ({
     page,
     request,
@@ -122,36 +92,5 @@ test.describe("row action capacity (fine pointer)", () => {
     // N=4 → [edit][kebab]; wide tier is retired, the contract width holds.
     expect(geometry.buttonRects).toHaveLength(2);
     expectWithinBounds(geometry, { cellWidth: 96, buttonWidth: 32 });
-  });
-});
-
-test.describe("row action capacity (coarse pointer)", () => {
-  test.use({ hasTouch: true, viewport: { width: 1280, height: 900 } });
-
-  test("UsersPage teacher worst legal set: [edit][kebab] inside 7.5rem", async ({
-    page,
-    request,
-  }) => {
-    const stamp = Date.now();
-    const teacherName = `E2E Capacity Coarse ${stamp}`;
-    const token = await adminApiToken(request);
-    const created = await adminPost(request, token, "/api/users", {
-      username: `e2e-capacity-coarse-${stamp}`,
-      password: "teacher123",
-      name: teacherName,
-      role: "Teacher",
-    });
-    expect(created.ok()).toBeTruthy();
-
-    await loginAsAdmin(page);
-    await page.goto("/admin/users");
-    const row = page.getByRole("row").filter({ hasText: teacherName }).first();
-    await expect(row).toBeVisible({ timeout: 15_000 });
-
-    const geometry = await probeActionCell(row);
-    expect(geometry.pointerCoarse).toBe(true);
-    expect(geometry.buttonRects).toHaveLength(2);
-    // Coarse: 44px icon buttons inside the 7.5rem (120px) actions column.
-    expectWithinBounds(geometry, { cellWidth: 120, buttonWidth: 44 });
   });
 });

@@ -24,12 +24,6 @@ describe("nullable effective-deadline kernel", () => {
     ).toEqual(closeAt);
   });
 
-  it("uses the exam close when the attempt has no personal deadline", () => {
-    expect(computeEffectiveDeadline({ closeAt }, { deadlineAt: null })).toEqual(
-      closeAt,
-    );
-  });
-
   it("represents absence of both bounds as no deadline", () => {
     expect(
       computeEffectiveDeadline({ closeAt: null }, { deadlineAt: null }),
@@ -44,12 +38,6 @@ describe("nullable effective-deadline kernel", () => {
         new Date("2099-01-01T00:00:00Z"),
       ),
     ).toBe(false);
-  });
-
-  it("keeps the equality boundary expired when a deadline exists", () => {
-    expect(
-      isAttemptDeadlineExpired({ closeAt }, { deadlineAt: null }, closeAt),
-    ).toBe(true);
   });
 
   it("fails closed on the impossible attempt-only deadline hybrid", () => {

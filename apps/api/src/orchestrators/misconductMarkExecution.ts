@@ -33,7 +33,8 @@
  *
  *   This is the explicit, recorded exception to the P2C-J4 §17 "no row lock"
  *   property — that property was specifically for the OLD overwrite-only
- *   `flagMisconduct` command (a single best-effort jsonb update). Making
+ *   misconduct flag write (a single best-effort jsonb update, retired with
+ *   #615's G4 dead-symbol bundle). Making
  *   misconduct a durable, operationId-keyed command with a receipt + atomic
  *   audit REQUIRES the row lock; the audit's §5.2 step-5 candidate (a)
  *   "plain UPDATE without a lock" was REJECTED by the experiment because it

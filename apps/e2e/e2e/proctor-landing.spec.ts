@@ -35,7 +35,7 @@ async function createProctor(
   // a Teacher+Proctor user would inherit Teacher's QuestionView and the
   // forbidden-nav assertion below would correctly fail (题目管理 would
   // appear). A pure Proctor user has only Proctor's preset (ExamRoomView +
-  // AttemptStatusView + AttemptTimelineView; AttemptMisconductMark and
+  // AttemptTimelineView; AttemptMisconductMark and
   // AttemptForceSubmit were removed from the preset in J4-I1B, ADR-015 §13),
   // which excludes QuestionView, CourseView, ExamView, ScoreAllView, and
   // every management perm — exactly what the forbidden-nav list asserts.

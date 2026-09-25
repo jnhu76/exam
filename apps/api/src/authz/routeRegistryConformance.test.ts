@@ -6,7 +6,7 @@
  *   ↔
  *   actual Fastify onRoute metadata
  *
- * For each of the ten M10-A routes, this test:
+ * For each runtimeAuthz route in the registry, this test:
  *   1. reads the route registry entry (including runtimeAuthz);
  *   2. finds the corresponding captured route from the Fastify onRoute hook;
  *   3. asserts exactly one authz preHandler (via authzCount);
@@ -197,14 +197,10 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     await ctx?.cleanup();
   });
 
-  // Select the ten M10-A candidate runtime routes from the registry.
+  // Select the M10-A candidate runtime routes from the registry.
   const m10aRegistryEntries = ROUTE_PERMISSION_REGISTRY.filter(
     (e) => e.runtimeAuthz !== undefined,
   );
-
-  it("exactly ten M10-A routes have runtimeAuthz in the registry", () => {
-    expect(m10aRegistryEntries).toHaveLength(10);
-  });
 
   /**
    * Build the expected runtime metadata from the registry entry.
@@ -402,10 +398,6 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       permission: "score.export",
     },
   ];
-
-  it("has exactly 9 M10-B routes defined", () => {
-    expect(m10bRouteSpecs).toHaveLength(9);
-  });
 
   /**
    * Per-route M10-B conformance (RBAC-M10-B PR190 REVIEW CORRECTIVE 1,

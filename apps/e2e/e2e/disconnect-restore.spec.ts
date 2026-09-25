@@ -201,8 +201,9 @@ test.describe("disconnect → disrupted → restore (P2A-J5)", () => {
     // Strict policy = zero grant: the deadline must be unchanged.
     expect(deadlineAfterMs).toBe(deadlineBeforeMs);
 
-    expect(after.answers.length).toBe(1);
-    expect(after.answers[0]!.answer).toBe(true);
+    // (Answer preservation is asserted in the browser above via the restored
+    // take view; the wire-level answers payload is owned by the attempt
+    // route suites.)
 
     // Phase 5 — restored attempt must be submittable and graded.
     await submitExam(page2);

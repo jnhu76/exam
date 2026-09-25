@@ -1658,10 +1658,12 @@ describe("attempt routes", () => {
   // enrollment's recorded finalScore/finalAttemptId from the DB.
   describe("POST /attempts/:attemptId/submit — submit→grade→result for all objective question types", () => {
     let mcPartialQuestionId: string;
+    let mcFullQuestionId: string;
     let tfQuestionId: string;
 
     beforeAll(async () => {
       mcPartialQuestionId = crypto.randomUUID();
+      mcFullQuestionId = crypto.randomUUID();
       tfQuestionId = crypto.randomUUID();
 
       await ctx.db.insert(schema.questions).values({
@@ -1683,6 +1685,31 @@ describe("attempt routes", () => {
         tags: [],
         gradingRule: {
           multiSelectScoring: "partial_half",
+          fillBlankMatchMode: "exact",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await ctx.db.insert(schema.questions).values({
+        id: mcFullQuestionId,
+        organizationId: ctx.org.id,
+        courseId,
+        type: "multiple_choice",
+        content: "Select the even numbers",
+        options: [
+          { id: "a", content: "1" },
+          { id: "b", content: "2" },
+          { id: "c", content: "3" },
+          { id: "d", content: "4" },
+        ],
+        standardAnswer: ["b", "d"],
+        attachments: [],
+        score: 100,
+        difficulty: 1,
+        tags: [],
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
           fillBlankMatchMode: "exact",
         },
         createdAt: new Date(),
@@ -1799,6 +1826,22 @@ describe("attempt routes", () => {
         status: "graded",
         score: 50,
         passed: false, // 50 < passingScore 60
+      });
+    });
+
+    it("grades a fully-correct multiple_choice submit at full score (all_correct_full)", async () => {
+      const { examId } = await buildGradedFlow({
+        title: "MC Full Graded Flow",
+        questionIds: [mcFullQuestionId],
+      });
+      const { submitBody } = await startSaveSubmit(examId, mcFullQuestionId, [
+        "d",
+        "b",
+      ]);
+      expect(submitBody).toMatchObject({
+        status: "graded",
+        score: 100,
+        passed: true,
       });
     });
 

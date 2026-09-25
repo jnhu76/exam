@@ -1,19 +1,15 @@
 /**
  * Recovery Incident Detail operations workflows.
  *
- * Drives the REAL Recovery Incident Detail page operations UI +
- * the REAL incident command routes, asserting against the REAL recovery
- * aggregate API (server snapshot = authority, no client-side optimism):
+ * Drives the REAL Recovery Incident Detail page operations UI and proves the
+ * browser composition: which actions render per status, the required fields
+ * in each terminal-judgment dialog, the success toasts, and the post-reload
+ * action set (resolve/dismiss gone once terminal, append-only note remains).
  *
- *   Workflow A: open → investigate → add note → change severity. Each
- *     command mints ONE operationId; the aggregate reload confirms each
- *     effect (status / notes / severity).
- *   Workflow B: investigating → resolve with the REQUIRED summary → terminal
- *     status; after reload resolve/dismiss are gone from allowedActions
- *     (status-action candidates) while append-only add_note remains.
- *   Dismiss: a second incident is dismissed with a REQUIRED reason.
- *   Version conflict: an investigate against a stale expectedVersion is a
- *     409 INCIDENT_VERSION_CONFLICT surfaced as "reload and retry".
+ * Aggregate/receipt semantics (status transitions, version arithmetic,
+ * allowedActions composition) are owned at the API layer by
+ * routes/incidents.proctorRecovery.test.ts and routes/recovery.admin.test.ts
+ * and are deliberately not duplicated here.
  */
 import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
@@ -35,18 +31,6 @@ async function adminPost(
   expect(res.ok(), `POST ${path} → ${res.status()} ${await res.text()}`).toBe(
     true,
   );
-  return res.json();
-}
-
-async function adminGet(
-  request: import("@playwright/test").APIRequestContext,
-  token: string,
-  path: string,
-) {
-  const res = await request.get(`${BASE_URL}${path}`, {
-    headers: { Cookie: `auth-token=${token}` },
-  });
-  expect(res.ok(), `GET ${path} → ${res.status()}`).toBe(true);
   return res.json();
 }
 
@@ -83,7 +67,7 @@ test.describe("Recovery incident detail operations", () => {
     incidentId = created.incident.id as string;
   });
 
-  test("Workflow A: investigate → add note → change severity, each confirmed by the aggregate", async ({
+  test("Workflow A: investigate → add note → change severity, each confirmed in the UI", async ({
     page,
     request,
   }) => {
@@ -113,14 +97,6 @@ test.describe("Recovery incident detail operations", () => {
     await expect(page.getByText("已开始调查").first()).toBeVisible({
       timeout: 15_000,
     });
-    const afterInvestigate = (await adminGet(
-      request,
-      adminToken,
-      `/api/admin/recovery/incidents/${incidentId}`,
-    )) as { incident: { status: string; version: number } };
-    expect(afterInvestigate.incident.status).toBe("investigating");
-    expect(afterInvestigate.incident.version).toBeGreaterThanOrEqual(2);
-
     // ── Add note ──
     await page.getByRole("button", { name: "添加备注" }).click();
     await page
@@ -134,15 +110,6 @@ test.describe("Recovery incident detail operations", () => {
     await expect(page.getByText("已添加备注").first()).toBeVisible({
       timeout: 15_000,
     });
-    const afterNote = (await adminGet(
-      request,
-      adminToken,
-      `/api/admin/recovery/incidents/${incidentId}`,
-    )) as { notes: Array<{ body: string }> };
-    expect(
-      afterNote.notes.some((n) => n.body === "已联系考生，考生请求继续"),
-    ).toBe(true);
-
     // ── Change severity (major → minor) ──
     await page.getByRole("button", { name: "修改严重程度" }).click();
     const severityDialog = page.getByRole("dialog");
@@ -152,12 +119,6 @@ test.describe("Recovery incident detail operations", () => {
     await expect(page.getByText("已修改严重程度").first()).toBeVisible({
       timeout: 15_000,
     });
-    const afterSeverity = (await adminGet(
-      request,
-      adminToken,
-      `/api/admin/recovery/incidents/${incidentId}`,
-    )) as { incident: { severity: string } };
-    expect(afterSeverity.incident.severity).toBe("minor");
   });
 
   test("Workflow B: resolve requires a summary, reaches terminal status, and reload hides terminal actions", async ({
@@ -192,24 +153,6 @@ test.describe("Recovery incident detail operations", () => {
     await expect(page.getByText("事件已解决").first()).toBeVisible({
       timeout: 15_000,
     });
-    const resolved = (await adminGet(
-      request,
-      adminToken,
-      `/api/admin/recovery/incidents/${incidentId}`,
-    )) as {
-      incident: { status: string; resolutionSummary: string };
-      allowedActions: string[];
-    };
-    expect(resolved.incident.status).toBe("resolved");
-    expect(resolved.incident.resolutionSummary).toBe(
-      "网络已恢复，考生继续作答并正常交卷",
-    );
-    // Terminal: resolve/dismiss are gone from allowedActions; append-only
-    // add_note remains.
-    expect(resolved.allowedActions).not.toContain("resolve");
-    expect(resolved.allowedActions).not.toContain("dismiss");
-    expect(resolved.allowedActions).toContain("add_note");
-
     // Reload the page — the terminal actions are NOT rendered anymore.
     await page.reload();
     await page.waitForURL("**/admin/recovery/incidents/**", {
@@ -257,12 +200,6 @@ test.describe("Recovery incident detail operations", () => {
     await expect(page.getByText("事件已驳回").first()).toBeVisible({
       timeout: 15_000,
     });
-    const dismissed = (await adminGet(
-      request,
-      token,
-      `/api/admin/recovery/incidents/${dismissId}`,
-    )) as { incident: { status: string } };
-    expect(dismissed.incident.status).toBe("dismissed");
   });
 
   test("stale expectedVersion surfaces INCIDENT_VERSION_CONFLICT (reload and retry)", async ({

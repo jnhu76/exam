@@ -52,6 +52,8 @@ describe("gradeQuestion", () => {
     [["a", "c"], ["a", "b"], "partial_half", 0],
     [[], ["a", "b"], "partial_half", 0],
     [["c"], ["a", "b"], "partial_half", 0],
+    // Order-independent full match is the full score under all_correct_full.
+    [["b", "a"], ["a", "b"], "all_correct_full", 10],
     [["a"], ["a", "b"], "all_correct_full", 0],
     // Superset of the standard set contains a wrong selection → 0 even under
     // partial_half. Guards against a "score what overlaps" misimplementation.

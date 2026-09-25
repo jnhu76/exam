@@ -17,27 +17,23 @@
  *      severity Select is disabled and the notes Textarea is disabled with
  *      the frozen value still "A" (read-only — no drift).
  *   3. Retry from the dialog; the SAME operationId + severity + notes are
- *      sent (captured POST bodies); the server answers `idempotent_replay`
- *      with the SAME receipt createdAt — exactly ONE receipt, ONE audit, and
- *      the recovery projection shows the flag.
+ *      sent (captured POST bodies). The wire semantics behind the replay —
+ *      idempotent_replay disposition, exactly-one receipt/audit row, and the
+ *      recovery projection — are owned at the API layer by
+ *      routes/attempts/admin-misconduct.test.ts and its concurrency sibling.
  */
 import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
-import {
-  adminApiToken,
-  candidateLoginApi,
-  candidateStartAttempt,
-} from "../lib/flow";
+import { candidateLoginApi, candidateStartAttempt } from "../lib/flow";
 
 test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1 review P1)", () => {
-  test("commit + masked 5xx → dialog freezes severity+notes → retry replays SAME payload → idempotent_replay", async ({
+  test("commit + masked 5xx → dialog freezes severity+notes → retry replays the SAME payload", async ({
     page,
     request,
   }) => {
     const unique = `proctor-mis-retry-${Date.now()}`;
     const s = await seedExam(request, unique);
-    const token = await adminApiToken(request);
     const candidateToken = await candidateLoginApi(
       request,
       s.candidate.username,
@@ -54,9 +50,6 @@ test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1
       parsed: { disposition?: string; createdAt?: string };
     }
     const captured: CapturedPost[] = [];
-    const firstResponseRef: { value: { createdAt?: string } | null } = {
-      value: null,
-    };
 
     await page.route("**/api/admin/attempts/*/misconduct", async (route) => {
       const postBody = route.request().postDataJSON() as {
@@ -72,9 +65,6 @@ test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1
         // keep parsed empty
       }
       if (captured.length === 0) {
-        firstResponseRef.value = parsed.createdAt
-          ? { createdAt: parsed.createdAt }
-          : null;
         captured.push({ body: postBody, parsed });
         // The server committed; mask the response as a 500 → indeterminate.
         await route.fulfill({
@@ -172,35 +162,5 @@ test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1
     expect(first.body.severity).toBe("warning");
     expect(first.body.notes).toBe("A");
     expect(typeof first.body.operationId).toBe("string");
-    expect(retry.parsed.disposition).toBe("idempotent_replay");
-    expect(firstResponseRef.value?.createdAt).toBeTruthy();
-    expect(retry.parsed.createdAt).toBe(firstResponseRef.value?.createdAt);
-
-    // Belt-and-suspenders: exactly ONE audit row; the recovery projection
-    // shows the flag (a replay writes no new audit).
-    const auditRes = await request.get(
-      `/api/admin/audit-logs?action=attempt.misconductFlagged&pageSize=50`,
-      { headers: { Cookie: `auth-token=${token}` } },
-    );
-    expect(auditRes.ok()).toBe(true);
-    const auditBody = (await auditRes.json()) as {
-      items: Array<{ targetId: string; action: string }>;
-    };
-    const auditCount = auditBody.items.filter(
-      (i) =>
-        i.action === "attempt.misconductFlagged" &&
-        i.targetId === targetAttemptId,
-    ).length;
-    expect(auditCount).toBe(1);
-
-    const projRes = await request.get(
-      `/api/admin/recovery/attempts/${targetAttemptId}`,
-      { headers: { Cookie: `auth-token=${token}` } },
-    );
-    expect(projRes.ok()).toBe(true);
-    const projection = (await projRes.json()) as {
-      attempt: { misconduct: boolean };
-    };
-    expect(projection.attempt.misconduct).toBe(true);
   });
 });

@@ -86,7 +86,6 @@ export const Permission = {
 
   // §4.6 Proctor Runtime
   ExamRoomView: "exam_room.view",
-  AttemptStatusView: "attempt.status.view",
   AttemptTimelineView: "attempt.timeline.view",
   AttemptMisconductMark: "attempt.misconduct.mark",
   AttemptTimeGrant: "attempt.time.grant",

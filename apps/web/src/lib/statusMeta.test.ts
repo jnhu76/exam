@@ -1,4 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { incidentStatusKey } from "@/lib/recovery";
+import {
+  AttemptStatus,
+  ExamStatus,
+  GradingStatus,
+  IncidentStatus,
+} from "@exam/domain";
 import { getStatusMeta, isStatusKey, statusMeta } from "./statusMeta";
 
 describe("statusMeta", () => {
@@ -62,5 +69,43 @@ describe("statusMeta", () => {
 
   it("falls back to unknown metadata for unsupported statuses", () => {
     expect(getStatusMeta("not_a_status")).toEqual(statusMeta.unknown);
+  });
+});
+
+// Derived key-parity guard (#611 G-1): every value of the domain lifecycle
+// vocabularies presented through StatusBadge must resolve to real statusMeta
+// metadata. The vocabularies are DERIVED from @exam/domain — no third copied
+// list — so a status added to (or renamed in) the domain fails here instead of
+// silently rendering the `unknown` fallback badge. Incident statuses map
+// through the explicit `incidentStatusKey` translation rather than identity
+// keys, so their guard pins that mapping instead.
+describe("statusMeta ↔ domain vocabulary parity", () => {
+  const identityVocabularies: Array<[string, Record<string, string>]> = [
+    ["ExamStatus", ExamStatus],
+    ["AttemptStatus", AttemptStatus],
+    ["GradingStatus", GradingStatus],
+  ];
+
+  it.each(identityVocabularies)(
+    "every %s value has a statusMeta entry",
+    (_name, vocabulary) => {
+      const missing = Object.values(vocabulary).filter(
+        (value) => !isStatusKey(value),
+      );
+      expect(
+        missing,
+        "domain status values without statusMeta entries render the unknown fallback badge",
+      ).toEqual([]);
+    },
+  );
+
+  it("every IncidentStatus value maps to non-unknown statusMeta via incidentStatusKey", () => {
+    const fellBack = Object.values(IncidentStatus).filter(
+      (value) => incidentStatusKey(value) === "unknown",
+    );
+    expect(
+      fellBack,
+      "incident statuses whose mapping falls back to unknown",
+    ).toEqual([]);
   });
 });

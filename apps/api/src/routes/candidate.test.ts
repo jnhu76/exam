@@ -170,6 +170,79 @@ describe("candidate routes", () => {
     );
   });
 
+  it("GET /api/candidates — org scope filters BEFORE pagination (foreign org never enters items or total)", async () => {
+    const before = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidates",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(before.statusCode).toBe(200);
+    const scopedTotal = before.json().total as number;
+    expect(scopedTotal).toBeGreaterThan(0);
+
+    // Foreign-org candidate row, inserted directly: the API has no cross-org
+    // creation path, which is exactly the boundary this discriminator pins.
+    const foreignOrgId = crypto.randomUUID();
+    const now = new Date();
+    await ctx.db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "R7 Foreign Org",
+      displayName: "R7 Foreign Org",
+      slug: `r7-foreign-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const foreignUserId = crypto.randomUUID();
+    const foreignUsername = `r7-foreign-candidate-${foreignOrgId.slice(0, 8)}`;
+    await ctx.db.insert(schema.users).values({
+      id: foreignUserId,
+      organizationId: foreignOrgId,
+      username: foreignUsername,
+      passwordHash: "unused",
+      name: "R7 Foreign Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.candidateProfiles).values({
+      id: crypto.randomUUID(),
+      organizationId: foreignOrgId,
+      userId: foreignUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // pageSize=1 returns exactly one in-scope row while the total still
+    // reflects the FULL scoped set; the foreign row moves neither.
+    const paged = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidates?page=1&pageSize=1",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(paged.statusCode).toBe(200);
+    const pagedBody = paged.json();
+    expect(pagedBody.items).toHaveLength(1);
+    expect(pagedBody.total).toBe(scopedTotal);
+    const usernames = (pagedBody.items as Array<{ username: string }>).map(
+      (i) => i.username,
+    );
+    expect(usernames).not.toContain(foreignUsername);
+
+    // Limit-less call agrees with the paged total (count is scope-first, not
+    // page-first).
+    const unpaged = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidates",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(unpaged.json().total).toBe(scopedTotal);
+
+    await ctx.drainAuditWrites();
+    await cleanupOrganizationTestData(ctx.db, foreignOrgId);
+  });
+
   it("allows Teacher to read the candidate list used by enrollment", async () => {
     const res = await ctx.app.inject({
       method: "GET",

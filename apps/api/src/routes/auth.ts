@@ -36,6 +36,7 @@ import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.j
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { PublicBrandingContext, RequestContext, Role } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
+import { ROLE_PRESETS } from "@exam/authz";
 import { mutateWithAuthorityInvariants } from "../authz/adminMaintainerExclusion.js";
 import {
   buildInviteAcceptLink,
@@ -68,17 +69,18 @@ import { loadAssignmentAuthority } from "../authz/assignmentAuthority.js";
  * for the internal default organization. Registration is disabled in Phase 1.
  */
 /**
- * Login-capable assignable roles (RBAC runtime activation). Static.
+ * Login-capable roles (RBAC runtime activation) — derived from the
+ * ROLE_PRESETS `loginAllowed` projection. The preset flag is the single
+ * authority for "this role may log in" (the permission registry exposes the
+ * same projection to clients), so this gate cannot drift from it and no
+ * second role list may be introduced here.
  * P7-E2A (ADR-017 D2): Maintainer is a login-capable built-in role.
  */
-const ASSIGNABLE_LOGIN_ROLES = new Set([
-  "Admin",
-  "Teacher",
-  "Proctor",
-  "Grader",
-  "Candidate",
-  "Maintainer",
-]);
+const ASSIGNABLE_LOGIN_ROLES = new Set<string>(
+  Object.values(ROLE_PRESETS)
+    .filter((preset) => preset.loginAllowed)
+    .map((preset) => preset.key),
+);
 
 /**
  * Reset-request outcomes that did NOT issue a capability. Internal audit
