@@ -14,8 +14,6 @@ import { registerAdminIncidentRoutes } from "./incidents.admin.js";
 import { eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
-import { signJWT } from "@exam/auth/src/session.js";
-import { hashPassword } from "@exam/auth/src/password.js";
 
 const plugin: FastifyPluginAsync = async (fastify, opts) => {
   await fastify.register(candidateRoutes, { prefix: "" });
@@ -121,7 +119,7 @@ describe("admin incident routes — integration", () => {
 
   it("Admin lists incidents by exam", async () => {
     // Create one first
-    await ctx.app.inject({
+    const createRes = await ctx.app.inject({
       method: "POST",
       url: `/api/admin/exams/${examId}/incidents`,
       payload: {
@@ -131,6 +129,8 @@ describe("admin incident routes — integration", () => {
       },
       cookies: { "auth-token": adminToken },
     });
+    expect(createRes.statusCode).toBe(200);
+    const createdId = createRes.json().incident.id as string;
 
     const res = await ctx.app.inject({
       method: "GET",
@@ -140,6 +140,10 @@ describe("admin incident routes — integration", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.incidents.length).toBeGreaterThanOrEqual(1);
+    // The created incident must actually be in the returned list.
+    expect(
+      body.incidents.find((i: { id: string }) => i.id === createdId),
+    ).toBeDefined();
   });
 
   it("rejects invalid incident type with 400", async () => {

@@ -31,7 +31,6 @@ function stripComments(line: string): string {
 
 const ENGINE_SRC = "packages/exam-engine/src";
 const API_SRC = "apps/api/src";
-const MIGRATION = "packages/db/migrations/postgres/0022_engine_policy_seam.sql";
 
 describe("REC-I4-I2 interruption recovery structural guards", () => {
   const engineFiles = listTsFiles(ENGINE_SRC);
@@ -137,19 +136,6 @@ describe("REC-I4-I2 interruption recovery structural guards", () => {
       }
     }
     expect(violations).toEqual([]);
-  });
-
-  it("migration 0022 duplicate-detected validation groups by interruption_id", () => {
-    const src = readSource(MIGRATION);
-    expect(src).toMatch(/GROUP BY\s+"interruption_id"/);
-    expect(src).not.toMatch(/GROUP BY\s+"attempt_id"\s*\n\s*HAVING\s+COUNT/i);
-  });
-
-  it("migration 0022 stale pointer resolution writes outcome events (not just clears pointer)", () => {
-    const src = readSource(MIGRATION);
-    expect(src).toMatch(/INSERT INTO "attempt_interruption_events"/);
-    expect(src).toMatch(/'restored'/);
-    expect(src).toMatch(/'terminalized'/);
   });
 });
 

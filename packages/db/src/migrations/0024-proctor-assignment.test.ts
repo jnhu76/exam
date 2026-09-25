@@ -7,13 +7,12 @@
  *    `exam_proctor_assignments_revocation_shape_check`,
  *    `exam_proctor_assignment_events_command_type_check`,
  *    `exam_proctor_assignment_events_outcome_check`);
- * 2. the one-active partial unique
- *    `exam_proctor_assignments_active_unique`;
- * 3. the idempotency arbiter `exam_proctor_assignment_events_org_operation_unique`;
- * 4. the event → assignment composite parent FK;
- * 5. the plain users(id) FKs (proctor_user_id / assigned_by / revoked_by /
- *    actor_id) and the composite exams FK;
- * 6. the `exams_org_id_unique` index added so the composite exam FK is valid.
+ * 2. the composite exam FK resolving through `exams_org_id_unique`.
+ *
+ * The behavioral enforcement of these objects (one-active 23505 on
+ * `exam_proctor_assignments_active_unique`, the idempotency arbiter, the
+ * parent/user FK rejections) is owned by
+ * `repository/proctorAssignmentRepo.test.ts`.
  *
  * Mirrors the migration-application pattern from `0023-incident-fk-and-rollback.test.ts`.
  */
@@ -160,74 +159,6 @@ describe("0024 proctor-assignment schema contract (ADR-015 §4)", () => {
     expect(eventConstraints).toContain(
       "exam_proctor_assignment_events_outcome_check",
     );
-  });
-
-  it("the frozen revocation-shape CHECK rejects an inconsistent row shape", async () => {
-    // status='revoked' without revoked_at/revoked_by must be rejected.
-    await expect(
-      sql.unsafe(`
-        INSERT INTO "exam_proctor_assignments"
-          ("id", "organization_id", "exam_id", "proctor_user_id", "status", "assigned_by", "assigned_at", "created_at", "updated_at")
-        VALUES ('ep-1', ${s(orgId)}, ${s(examId)}, ${s(proctorId)}, 'revoked', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-      `),
-    ).rejects.toThrow();
-  });
-
-  it("a valid active episode inserts, and a second active episode for the same (org, exam, proctor) violates exam_proctor_assignments_active_unique", async () => {
-    await sql.unsafe(`
-      INSERT INTO "exam_proctor_assignments"
-        ("id", "organization_id", "exam_id", "proctor_user_id", "status", "assigned_by", "assigned_at", "created_at", "updated_at")
-      VALUES ('ep-active-1', ${s(orgId)}, ${s(examId)}, ${s(proctorId)}, 'active', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-    `);
-    await expect(
-      sql.unsafe(`
-        INSERT INTO "exam_proctor_assignments"
-          ("id", "organization_id", "exam_id", "proctor_user_id", "status", "assigned_by", "assigned_at", "created_at", "updated_at")
-        VALUES ('ep-active-2', ${s(orgId)}, ${s(examId)}, ${s(proctorId)}, 'active', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-      `),
-    ).rejects.toThrow(/exam_proctor_assignments_active_unique/);
-  });
-
-  it("the events table operation unique is the idempotency arbiter", async () => {
-    await sql.unsafe(`
-      INSERT INTO "exam_proctor_assignment_events"
-        ("id", "organization_id", "assignment_id", "command_type", "operation_id", "canonical_payload", "outcome", "actor_id", "created_at")
-      VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', ${s(orgId)}, 'ep-active-1', 'assign', '11111111-1111-4111-8111-111111111111', '{}'::jsonb, 'applied', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-    `);
-    await expect(
-      sql.unsafe(`
-        INSERT INTO "exam_proctor_assignment_events"
-          ("id", "organization_id", "assignment_id", "command_type", "operation_id", "canonical_payload", "outcome", "actor_id", "created_at")
-        VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', ${s(orgId)}, 'ep-active-1', 'assign', '11111111-1111-4111-8111-111111111111', '{}'::jsonb, 'applied', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-      `),
-    ).rejects.toThrow(/exam_proctor_assignment_events_org_operation_unique/);
-  });
-
-  it("the event → assignment composite FK rejects an unknown assignment id", async () => {
-    await expect(
-      sql.unsafe(`
-        INSERT INTO "exam_proctor_assignment_events"
-          ("id", "organization_id", "assignment_id", "command_type", "operation_id", "canonical_payload", "outcome", "actor_id", "created_at")
-        VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', ${s(orgId)}, 'no-such-episode', 'assign', '22222222-2222-4222-8222-222222222222', '{}'::jsonb, 'applied', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-      `),
-    ).rejects.toThrow();
-  });
-
-  it("plain users(id) FKs fail closed (no cascade) on unknown users", async () => {
-    await expect(
-      sql.unsafe(`
-        INSERT INTO "exam_proctor_assignments"
-          ("id", "organization_id", "exam_id", "proctor_user_id", "status", "assigned_by", "assigned_at", "created_at", "updated_at")
-        VALUES ('ep-bad-user', ${s(orgId)}, ${s(examId)}, 'no-such-user', 'active', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-      `),
-    ).rejects.toThrow();
-    await expect(
-      sql.unsafe(`
-        INSERT INTO "exam_proctor_assignment_events"
-          ("id", "organization_id", "assignment_id", "command_type", "operation_id", "canonical_payload", "outcome", "actor_id", "created_at")
-        VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', ${s(orgId)}, 'ep-active-1', 'assign', '33333333-3333-4333-8333-333333333333', '{}'::jsonb, 'applied', 'no-such-user', ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-      `),
-    ).rejects.toThrow();
   });
 
   it("the composite exam FK resolves through exams_org_id_unique", async () => {

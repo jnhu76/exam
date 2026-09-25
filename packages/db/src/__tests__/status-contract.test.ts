@@ -321,6 +321,31 @@ describe("EXAM-542 status-contract — DB CHECKs, drift, migration safety", () =
     }
   });
 
+  it("pins the physical type and nullability of free-form content columns", async () => {
+    // Round-trip tests cannot detect a physical type downgrade (e.g.
+    // text → varchar(n) silently truncating); information_schema pins the
+    // physical reality of the current schema.
+    const expectations: Array<[string, string, string]> = [
+      ["questions", "rubric", "text"],
+      ["exam_attempts", "submitted_answers", "jsonb"],
+      ["exam_attempts", "submission_reason", "text"],
+    ];
+    for (const [table, column, dataType] of expectations) {
+      const rows = (await sql`
+        SELECT data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = ${table}
+          AND column_name = ${column}
+      `) as unknown as Array<{ data_type: string; is_nullable: string }>;
+      expect(rows[0], `${table}.${column}`).toBeDefined();
+      expect(rows[0]?.data_type, `${table}.${column} type`).toBe(dataType);
+      expect(rows[0]?.is_nullable, `${table}.${column} nullability`).toBe(
+        "YES",
+      );
+    }
+  });
+
   it("T1: 0043 fails closed on a proven legacy grading crash residue, rewrites nothing, then converges after the supported disposition", async () => {
     // Simulate a 0042-state database: constraints not yet installed.
     await sql.begin(async (tx) => {

@@ -155,7 +155,12 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     limit: number,
     page: number,
   ): Promise<{
-    items: Array<{ id: string; name: string; source: string }>;
+    items: Array<{
+      id: string;
+      name: string;
+      source: string;
+      occurredAt: string;
+    }>;
     total: number;
     totalPages: number;
   }> {
@@ -276,6 +281,11 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     // 2099 event is NOT at position 0; 1970 event is NOT at the tail.
     expect(allNames[0]).toBe("p3_Clast"); // NOT Cfuturo
     expect(allNames[allNames.length - 1]).toBe("p3_Cnormal"); // NOT Cpasto
+
+    // occurredAt survives as ADVISORY display data (T9, #544): the adversarial
+    // claim does not reorder the timeline but is still projected on the row.
+    const futuro = all.items.find((i) => i.name === "p3_Cfuturo")!;
+    expect(futuro.occurredAt).toBe("2099-01-01T00:00:00.000Z");
   });
 
   // P4: irrelevant audit actions — audit rows with non-timeline actions must

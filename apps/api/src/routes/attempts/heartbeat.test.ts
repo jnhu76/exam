@@ -72,6 +72,15 @@ describe("attempt routes", () => {
     });
 
     it("updates lastActivityAt", async () => {
+      const readLastActivityAt = async () => {
+        const rows = await ctx.db
+          .select({ lastActivityAt: schema.examAttempts.lastActivityAt })
+          .from(schema.examAttempts)
+          .where(eq(schema.examAttempts.id, attemptId));
+        return rows[0]?.lastActivityAt ?? null;
+      };
+      const before = await readLastActivityAt();
+
       const res = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${attemptId}/heartbeat`,
@@ -83,6 +92,13 @@ describe("attempt routes", () => {
       const body = res.json();
       expect(body.ok).toBe(true);
       expect(typeof body.serverNow).toBe("string");
+
+      // Read back the persisted column: the heartbeat write (not start, not a
+      // save) is what must advance lastActivityAt.
+      const after = await readLastActivityAt();
+      expect(before).toBeInstanceOf(Date);
+      expect(after).toBeInstanceOf(Date);
+      expect(after!.getTime()).toBeGreaterThan(before!.getTime());
     });
 
     it("marks stale attempts as disrupted during the background scan", async () => {

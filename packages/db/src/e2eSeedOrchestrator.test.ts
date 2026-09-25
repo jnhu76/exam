@@ -37,267 +37,196 @@ function createCapturingLogger(): {
   };
 }
 
-describe("e2eSeedOrchestrator", () => {
-  it("runs migrations by default", async () => {
-    const migrateFn = vi.fn().mockResolvedValue(undefined);
-    const seedFn = vi.fn().mockResolvedValue(undefined);
-    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
-    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
-
-    const { logger, messages } = createCapturingLogger();
-
-    await runE2eSeed(fakeDb, fakeHash, {
-      migrateFn,
-      logger,
-      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
-    });
-
-    expect(migrateFn).toHaveBeenCalledWith(fakeDb);
-    expect(messages).toContain("Running migrations...\n");
-  });
-
-  it("skips migration when skipMigrate=true", async () => {
-    const migrateFn = vi.fn().mockResolvedValue(undefined);
-    const seedFn = vi.fn().mockResolvedValue(undefined);
-    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
-    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
-
-    const { logger, messages } = createCapturingLogger();
-
-    await runE2eSeed(fakeDb, fakeHash, {
-      skipMigrate: true,
-      migrateFn,
-      logger,
-      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
-    });
-
-    expect(migrateFn).not.toHaveBeenCalled();
-    expect(messages).toContain("Skipping migrations (--skip-migrate)\n");
-  });
-
-  it("executes migrate -> seed -> seedDemo -> verify in order", async () => {
-    const order: string[] = [];
-    const migrateFn = vi.fn().mockImplementation(async () => {
+/** Injected workflow steps that record their invocation order. */
+function makeSteps(order: string[]) {
+  return {
+    resetFn: vi.fn().mockImplementation(async () => {
+      order.push("reset");
+    }),
+    migrateFn: vi.fn().mockImplementation(async () => {
       order.push("migrate");
-    });
-    const seedFn = vi.fn().mockImplementation(async () => {
+    }),
+    seedFn: vi.fn().mockImplementation(async () => {
       order.push("seed");
-    });
-    const seedDemoFn = vi.fn().mockImplementation(async () => {
+    }),
+    seedDemoFn: vi.fn().mockImplementation(async () => {
       order.push("seedDemo");
       return FAKE_IDS;
-    });
-    const verifyDemoSeedFn = vi.fn().mockImplementation(async () => {
+    }),
+    verifyDemoSeedFn: vi.fn().mockImplementation(async () => {
       order.push("verify");
       return [];
-    });
+    }),
+  };
+}
+
+describe("e2eSeedOrchestrator", () => {
+  it("runs migrate → seed → seedDemo → verify in order; skipMigrate skips the migrate step", async () => {
+    const order: string[] = [];
+    const steps = makeSteps(order);
+    const { logger, messages } = createCapturingLogger();
 
     await runE2eSeed(fakeDb, fakeHash, {
-      migrateFn,
-      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+      migrateFn: steps.migrateFn,
+      logger,
+      workflow: {
+        seedFn: steps.seedFn,
+        seedDemoFn: steps.seedDemoFn,
+        verifyDemoSeedFn: steps.verifyDemoSeedFn,
+      },
     });
 
     expect(order).toEqual(["migrate", "seed", "seedDemo", "verify"]);
+    expect(messages).toContain("Running migrations...\n");
+    // Demo ids flow from seedDemo into verifyDemoSeed.
+    expect(steps.verifyDemoSeedFn).toHaveBeenCalledWith(fakeDb, FAKE_IDS);
+
+    order.length = 0;
+    const { logger: skipLogger, messages: skipMessages } =
+      createCapturingLogger();
+    await runE2eSeed(fakeDb, fakeHash, {
+      skipMigrate: true,
+      migrateFn: steps.migrateFn,
+      logger: skipLogger,
+      workflow: {
+        seedFn: steps.seedFn,
+        seedDemoFn: steps.seedDemoFn,
+        verifyDemoSeedFn: steps.verifyDemoSeedFn,
+      },
+    });
+    expect(steps.migrateFn).toHaveBeenCalledTimes(1); // only the first run
+    expect(skipMessages).toContain("Skipping migrations (--skip-migrate)\n");
   });
 
-  it("reset=true runs the reset step BEFORE migrate -> seed -> seedDemo -> verify", async () => {
+  it("reset=true truncates before the workflow; the default never touches mutable state", async () => {
     const order: string[] = [];
-    const resetFn = vi.fn().mockImplementation(async () => {
-      order.push("reset");
-    });
-    const migrateFn = vi.fn().mockImplementation(async () => {
-      order.push("migrate");
-    });
-    const seedFn = vi.fn().mockImplementation(async () => {
-      order.push("seed");
-    });
-    const seedDemoFn = vi.fn().mockImplementation(async () => {
-      order.push("seedDemo");
-      return FAKE_IDS;
-    });
-    const verifyDemoSeedFn = vi.fn().mockImplementation(async () => {
-      order.push("verify");
-      return [];
-    });
-
+    const steps = makeSteps(order);
     const { logger, messages } = createCapturingLogger();
 
     await runE2eSeed(fakeDb, fakeHash, {
       reset: true,
-      resetFn,
-      migrateFn,
+      resetFn: steps.resetFn,
+      migrateFn: steps.migrateFn,
       logger,
-      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+      workflow: {
+        seedFn: steps.seedFn,
+        seedDemoFn: steps.seedDemoFn,
+        verifyDemoSeedFn: steps.verifyDemoSeedFn,
+      },
     });
 
     expect(order).toEqual(["reset", "migrate", "seed", "seedDemo", "verify"]);
     expect(messages).toContain("Resetting mutable E2E state...\n");
-  });
 
-  it("default (no reset) never touches mutable state", async () => {
-    const resetFn = vi.fn().mockResolvedValue(undefined);
-    const seedFn = vi.fn().mockResolvedValue(undefined);
-    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
-    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
-
-    const { logger, messages } = createCapturingLogger();
-
+    const untouched = makeSteps([]);
     await runE2eSeed(fakeDb, fakeHash, {
       skipMigrate: true,
-      resetFn,
-      logger,
-      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+      resetFn: untouched.resetFn,
+      workflow: {
+        seedFn: untouched.seedFn,
+        seedDemoFn: untouched.seedDemoFn,
+        verifyDemoSeedFn: untouched.verifyDemoSeedFn,
+      },
     });
-
-    expect(resetFn).not.toHaveBeenCalled();
-    expect(messages).not.toContain("Resetting mutable E2E state...\n");
+    expect(untouched.resetFn).not.toHaveBeenCalled();
   });
 
-  it("stops before migrating when the reset step fails", async () => {
-    const resetFn = vi.fn().mockRejectedValue(new Error("reset refused"));
-    const migrateFn = vi.fn().mockResolvedValue(undefined);
-    const seedFn = vi.fn().mockResolvedValue(undefined);
-    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
-    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
-
+  it("a failed stage stops the workflow at that stage", async () => {
+    // Reset refusal stops before migrate and seed.
+    const resetSteps = makeSteps([]);
+    resetSteps.resetFn.mockRejectedValue(new Error("reset refused"));
     await expect(
       runE2eSeed(fakeDb, fakeHash, {
         reset: true,
-        resetFn,
-        migrateFn,
-        workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+        resetFn: resetSteps.resetFn,
+        migrateFn: resetSteps.migrateFn,
+        workflow: {
+          seedFn: resetSteps.seedFn,
+          seedDemoFn: resetSteps.seedDemoFn,
+          verifyDemoSeedFn: resetSteps.verifyDemoSeedFn,
+        },
       }),
     ).rejects.toThrow("reset refused");
+    expect(resetSteps.migrateFn).not.toHaveBeenCalled();
+    expect(resetSteps.seedFn).not.toHaveBeenCalled();
 
-    expect(migrateFn).not.toHaveBeenCalled();
-    expect(seedFn).not.toHaveBeenCalled();
-  });
-
-  it("stops when baseline seed fails", async () => {
-    const seedFn = vi.fn().mockRejectedValue(new Error("seed boom"));
-    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
-    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
-
+    // Baseline seed failure stops before demo seed and verify.
+    const seedSteps = makeSteps([]);
+    seedSteps.seedFn.mockRejectedValue(new Error("seed boom"));
     await expect(
       runE2eSeed(fakeDb, fakeHash, {
         skipMigrate: true,
-        workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+        workflow: {
+          seedFn: seedSteps.seedFn,
+          seedDemoFn: seedSteps.seedDemoFn,
+          verifyDemoSeedFn: seedSteps.verifyDemoSeedFn,
+        },
       }),
     ).rejects.toThrow("seed boom");
+    expect(seedSteps.seedDemoFn).not.toHaveBeenCalled();
+    expect(seedSteps.verifyDemoSeedFn).not.toHaveBeenCalled();
 
-    expect(seedDemoFn).not.toHaveBeenCalled();
-    expect(verifyDemoSeedFn).not.toHaveBeenCalled();
-  });
-
-  it("stops when demo seed fails", async () => {
-    const seedFn = vi.fn().mockResolvedValue(undefined);
-    const seedDemoFn = vi.fn().mockRejectedValue(new Error("demo boom"));
-    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
-
+    // Demo seed failure stops before verify.
+    const demoSteps = makeSteps([]);
+    demoSteps.seedDemoFn.mockRejectedValue(new Error("demo boom"));
     await expect(
       runE2eSeed(fakeDb, fakeHash, {
         skipMigrate: true,
-        workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
+        workflow: {
+          seedFn: demoSteps.seedFn,
+          seedDemoFn: demoSteps.seedDemoFn,
+          verifyDemoSeedFn: demoSteps.verifyDemoSeedFn,
+        },
       }),
     ).rejects.toThrow("demo boom");
-
-    expect(verifyDemoSeedFn).not.toHaveBeenCalled();
+    expect(demoSteps.verifyDemoSeedFn).not.toHaveBeenCalled();
   });
 
-  it("returns ok=false when verification reports errors", async () => {
-    const seedFn = vi.fn().mockResolvedValue(undefined);
-    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
-    const verifyDemoSeedFn = vi
-      .fn()
-      .mockResolvedValue(["missing candidate1", "missing exam"]);
-
-    const result = await runE2eSeed(fakeDb, fakeHash, {
-      skipMigrate: true,
-      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.errors).toEqual(["missing candidate1", "missing exam"]);
-  });
-
-  it("returns ok=true when verification passes", async () => {
-    const seedFn = vi.fn().mockResolvedValue(undefined);
-    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
-    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
-
-    const result = await runE2eSeed(fakeDb, fakeHash, {
-      skipMigrate: true,
-      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
-    });
-
-    expect(result.ok).toBe(true);
-    expect(result.errors).toEqual([]);
-  });
-
-  it("passes demo ids returned by seedDemo into verifyDemoSeed", async () => {
-    const seedFn = vi.fn().mockResolvedValue(undefined);
-    const seedDemoFn = vi.fn().mockResolvedValue(FAKE_IDS);
-    const verifyDemoSeedFn = vi.fn().mockResolvedValue([]);
-
-    await runE2eSeed(fakeDb, fakeHash, {
-      skipMigrate: true,
-      workflow: { seedFn, seedDemoFn, verifyDemoSeedFn },
-    });
-
-    expect(verifyDemoSeedFn).toHaveBeenCalledWith(fakeDb, FAKE_IDS);
-  });
-
-  it("preserves workflow order across repeated calls", async () => {
-    const order: string[] = [];
-    const migrateFn = vi.fn().mockImplementation(async () => {
-      order.push("migrate");
-    });
-    const seedFn = vi.fn().mockImplementation(async () => {
-      order.push("seed");
-    });
-    const seedDemoFn = vi.fn().mockImplementation(async () => {
-      order.push("seedDemo");
-      return FAKE_IDS;
-    });
-    const verifyDemoSeedFn = vi.fn().mockImplementation(async () => {
-      order.push("verify");
-      return [];
-    });
-
-    const workflow = { seedFn, seedDemoFn, verifyDemoSeedFn };
-
-    await runE2eSeed(fakeDb, fakeHash, { migrateFn, workflow });
-    await runE2eSeed(fakeDb, fakeHash, { migrateFn, workflow });
-
-    expect(order).toEqual([
-      "migrate",
-      "seed",
-      "seedDemo",
-      "verify",
-      "migrate",
-      "seed",
-      "seedDemo",
-      "verify",
+  it("verification errors gate ok=false; a clean verify yields ok=true", async () => {
+    const failing = makeSteps([]);
+    failing.verifyDemoSeedFn.mockResolvedValue([
+      "missing candidate1",
+      "missing exam",
     ]);
+    const failed = await runE2eSeed(fakeDb, fakeHash, {
+      skipMigrate: true,
+      workflow: {
+        seedFn: failing.seedFn,
+        seedDemoFn: failing.seedDemoFn,
+        verifyDemoSeedFn: failing.verifyDemoSeedFn,
+      },
+    });
+    expect(failed.ok).toBe(false);
+    expect(failed.errors).toEqual(["missing candidate1", "missing exam"]);
+
+    const clean = makeSteps([]);
+    const passed = await runE2eSeed(fakeDb, fakeHash, {
+      skipMigrate: true,
+      workflow: {
+        seedFn: clean.seedFn,
+        seedDemoFn: clean.seedDemoFn,
+        verifyDemoSeedFn: clean.verifyDemoSeedFn,
+      },
+    });
+    expect(passed.ok).toBe(true);
+    expect(passed.errors).toEqual([]);
   });
 
-  it("buildE2eSeedOutput reflects default credentials", () => {
+  it("buildE2eSeedOutput reflects default credentials and env-var overrides", () => {
     const output = buildE2eSeedOutput();
     expect(output).toContain("admin");
     expect(output).toContain("admin123");
     expect(output).toContain("candidate");
     expect(output).toContain("candidate123");
     expect(output).toContain("candidate1 / candidate123");
-  });
 
-  it("buildE2eSeedOutput reflects env-var overrides", () => {
     vi.stubEnv("SEED_ADMIN_USERNAME", "myadmin");
     vi.stubEnv("SEED_ADMIN_PASSWORD", "s3cret");
     try {
-      const output = buildE2eSeedOutput();
-      expect(output).toContain("myadmin");
-      expect(output).toContain("s3cret");
-      expect(output).not.toContain("admin      / admin123");
+      const overridden = buildE2eSeedOutput();
+      expect(overridden).toContain("myadmin");
+      expect(overridden).toContain("s3cret");
+      expect(overridden).not.toContain("admin      / admin123");
     } finally {
       vi.unstubAllEnvs();
     }

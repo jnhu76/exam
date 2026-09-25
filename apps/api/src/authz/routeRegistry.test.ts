@@ -119,6 +119,18 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
       filterSpec: "proctor-discoverable-exams",
     });
   });
+
+  it("proctor monitoring reads stay flagged sensitive", () => {
+    // proctor-incident's sensitive flag is pinned above; these two reads are
+    // the remaining sensitive proctor routes (pin formerly duplicated in
+    // proctorMonitoring.crossOrg.test.ts).
+    for (const [method, path] of [
+      ["GET", "/admin/exams/:examId/proctor/attempts"],
+      ["GET", "/admin/attempts/:attemptId/proctor-events"],
+    ] as const) {
+      expect(find(method, path)?.sensitive, `${method} ${path}`).toBe(true);
+    }
+  });
 });
 
 /**

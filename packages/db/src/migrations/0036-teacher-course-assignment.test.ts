@@ -5,12 +5,15 @@
  *
  * 1. named CHECKs (`teacher_course_assignments_status_check`,
  *    `teacher_course_assignments_revocation_shape_check`);
- * 2. the one-active partial unique
- *    `teacher_course_assignments_active_unique`;
- * 3. the composite FK to courses(organization_id, id) and the
- *    `courses_org_id_unique` index added so the composite course FK is valid;
- * 4. the plain users(id) FKs (teacher_user_id / assigned_by / revoked_by);
- * 5. cross-organization course references are impossible (composite FK).
+ * 2. the episode indexes incl. the one-active partial unique
+ *    `teacher_course_assignments_active_unique` and the
+ *    `courses_org_id_unique` composite-FK target;
+ * 3. the plain users(id) FKs (teacher_user_id / assigned_by / revoked_by);
+ * 4. cross-organization course references are impossible (composite FK).
+ *
+ * The behavioral enforcement (one-active 23505, revoke-frees-triple) is owned
+ * by `repository/teacherCourseAssignmentRepo.test.ts`; the frozen
+ * revocation-shape CHECK rejection is asserted below.
  *
  * Mirrors the migration-application pattern from
  * `0024-proctor-assignment.test.ts`.
@@ -178,57 +181,6 @@ describe("0036 teacher-course-assignment schema contract (#286 §3A)", () => {
         VALUES ('tca-1', ${s(orgId)}, ${s(teacherId)}, ${s(courseId)}, 'revoked', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
       `),
     ).rejects.toThrow();
-  });
-
-  it("a valid active episode inserts, and a second active episode for the same (org, teacher, course) violates teacher_course_assignments_active_unique", async () => {
-    await sql.unsafe(`
-      INSERT INTO "teacher_course_assignments"
-        ("id", "organization_id", "teacher_user_id", "course_id", "status", "assigned_by", "assigned_at", "created_at", "updated_at")
-      VALUES ('tca-active-1', ${s(orgId)}, ${s(teacherId)}, ${s(courseId)}, 'active', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-    `);
-    let error: { code?: string; constraint?: string } | null = null;
-    try {
-      await sql.unsafe(`
-        INSERT INTO "teacher_course_assignments"
-          ("id", "organization_id", "teacher_user_id", "course_id", "status", "assigned_by", "assigned_at", "created_at", "updated_at")
-        VALUES ('tca-active-2', ${s(orgId)}, ${s(teacherId)}, ${s(courseId)}, 'active', ${s(adminId)}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))}, ${ts(new Date("2026-01-01T00:00:00.000Z"))})
-      `);
-    } catch (err) {
-      let current: unknown = err;
-      const visited = new Set<unknown>();
-      while (current && !visited.has(current)) {
-        visited.add(current);
-        const e = current as Record<string, unknown>;
-        if (e.code === "23505") {
-          const constraint = String(e.constraint ?? e.constraint_name ?? "");
-          error = { code: "23505", constraint };
-          break;
-        }
-        current = "cause" in e ? e.cause : null;
-      }
-      if (!error) await Promise.reject(err);
-    }
-    expect(error?.code).toBe("23505");
-    expect(error?.constraint).toBe("teacher_course_assignments_active_unique");
-  });
-
-  it("revoking frees the triple for a new active episode (monotonic episode semantics)", async () => {
-    // tca-active-1 from the previous test is the active episode; revoke it.
-    await sql.unsafe(`
-      UPDATE "teacher_course_assignments"
-      SET "status" = 'revoked', "revoked_by" = ${s(adminId)}, "revoked_at" = ${ts(new Date("2026-01-02T00:00:00.000Z"))}, "updated_at" = ${ts(new Date("2026-01-02T00:00:00.000Z"))}
-      WHERE "id" = 'tca-active-1'
-    `);
-    await sql.unsafe(`
-      INSERT INTO "teacher_course_assignments"
-        ("id", "organization_id", "teacher_user_id", "course_id", "status", "assigned_by", "assigned_at", "created_at", "updated_at")
-      VALUES ('tca-active-3', ${s(orgId)}, ${s(teacherId)}, ${s(courseId)}, 'active', ${s(adminId)}, ${ts(new Date("2026-01-02T00:00:00.000Z"))}, ${ts(new Date("2026-01-02T00:00:00.000Z"))}, ${ts(new Date("2026-01-02T00:00:00.000Z"))})
-    `);
-    const count = await sql.unsafe<{ count: string }[]>(`
-      SELECT count(*)::text AS count FROM "teacher_course_assignments"
-      WHERE "organization_id" = ${s(orgId)} AND "teacher_user_id" = ${s(teacherId)}
-    `);
-    expect(Number(count[0]?.count)).toBe(2); // active-1 revoked + active-3 active (tca-1/tca-active-2 were rejected)
   });
 
   it("cross-organization course references are impossible (composite FK on courses(organization_id, id))", async () => {

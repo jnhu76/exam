@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { resolveTestBranchUrl } from "./databaseUrl.js";
+import { quoteIdent } from "./sqlIdent.js";
 import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 
 /**
@@ -23,13 +24,6 @@ export function sanitizeSchemaName(input: string): string {
     cleaned = cleaned.slice(0, 63).replace(/_+$/, "");
   }
   return cleaned;
-}
-
-/**
- * Quote a PostgreSQL identifier safely (double-quote with escaped double-quotes).
- */
-export function quoteIdent(identifier: string): string {
-  return `"${identifier.replace(/"/g, '""')}"`;
 }
 
 /**

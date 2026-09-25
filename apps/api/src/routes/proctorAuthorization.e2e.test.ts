@@ -6,11 +6,13 @@
  * roles) · Proctor P2 (assigned to nothing) · Exam A · Exam B · Attempts and
  * Incidents under both Exams.
  *
- * Covers representative assigned-Proctor read/create/investigate paths
- * (timeline, proctor-events, monitoring, incident create/investigate/notes,
- * severity, evidence links) plus the full denial matrix: cross-Exam 404,
- * dangerous-op 403, revocation / role-loss / role-restore, zero-assignment
- * actor, and the "Admin needs no fake assignment row" invariant.
+ * Covers the assigned-Proctor authority surface that no other suite owns:
+ * assignment-filtered exam discovery, cross-Exam 404 anti-enumeration,
+ * incident create/investigate/notes/severity/evidence links, dangerous-op 403
+ * denials with valid payloads, role-loss 403-vs-401 and role-restore,
+ * zero-assignment actor, and the "Admin needs no fake assignment row"
+ * invariant. (Assigned-Proctor 200 / unassigned-404 / Admin-200 verdicts on
+ * the monitoring reads are owned by proctorScope.test.ts.)
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -236,7 +238,7 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
     await ctx.cleanup();
   });
 
-  describe("assigned-Proctor reads (Exam A)", () => {
+  describe("assignment-filtered exam discovery (Exam A)", () => {
     it("P1 lists Exam A but NOT Exam B", async () => {
       const res = await ctx.app.inject({
         method: "GET",
@@ -249,30 +251,6 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
         .items.map((item: { examId: string }) => item.examId);
       expect(ids).toContain(examA.examId);
       expect(ids).not.toContain(examB.examId);
-    });
-
-    it("P1 reads Exam A monitoring data", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/admin/exams/${examA.examId}/proctor/attempts`,
-        cookies: { "auth-token": p1Token },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("P1 reads the Exam A attempt timeline and proctor-events", async () => {
-      const timeline = await ctx.app.inject({
-        method: "GET",
-        url: `/api/admin/attempts/${examA.attemptId}/timeline`,
-        cookies: { "auth-token": p1Token },
-      });
-      expect(timeline.statusCode).toBe(200);
-      const events = await ctx.app.inject({
-        method: "GET",
-        url: `/api/admin/attempts/${examA.attemptId}/proctor-events?limit=20`,
-        cookies: { "auth-token": p1Token },
-      });
-      expect(events.statusCode).toBe(200);
     });
   });
 
@@ -493,51 +471,9 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
     });
   });
 
-  describe("lifecycle: revocation / role-loss / role-restore", () => {
-    it("revoking P1's assignment makes the next request return 404", async () => {
-      const now = new Date();
-      await ctx.db
-        .update(schema.examProctorAssignments)
-        .set({ status: "revoked", revokedAt: now, revokedBy: ctx.admin.id })
-        .where(
-          and(
-            eq(schema.examProctorAssignments.organizationId, ctx.org.id),
-            eq(schema.examProctorAssignments.id, p1AssignmentId),
-          ),
-        );
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/admin/exams/${examA.examId}/proctor/attempts`,
-        cookies: { "auth-token": p1Token },
-      });
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("restoring the assignment restores access", async () => {
-      const now = new Date();
-      const [restored] = await ctx.db
-        .insert(schema.examProctorAssignments)
-        .values({
-          id: randomUUID(),
-          organizationId: ctx.org.id,
-          examId: examA.examId,
-          proctorUserId: p1UserId,
-          status: "active",
-          assignedBy: ctx.admin.id,
-          assignedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-      p1AssignmentId = restored!.id;
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/admin/exams/${examA.examId}/proctor/attempts`,
-        cookies: { "auth-token": p1Token },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
+  describe("lifecycle: role-loss / role-restore with a retained active assignment", () => {
+    // Revoke→404 / restore→200 on the assignment episode is owned by
+    // proctorScope.test.ts; this file owns the ROLE-loss lifecycle below.
     it("removing the active Proctor ROLE denies access even though the assignment remains (403, not 401)", async () => {
       // Deactivate ONLY the Proctor role assignment and promote the Candidate
       // role to primary (exactly-one-active-primary invariant), so the request

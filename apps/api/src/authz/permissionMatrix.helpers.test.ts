@@ -5,7 +5,7 @@ import {
   buildPermissionMatrixFixture,
   classifyCapabilityVerdict,
   type PermissionMatrixFixture,
-} from "./permissionMatrix.helpers.js";
+} from "./__tests__/permissionMatrix.helpers.js";
 
 describe("classifyCapabilityVerdict", () => {
   it("classifies the explicit capability denial response as denied", () => {
