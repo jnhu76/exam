@@ -31,7 +31,7 @@ export type UserRoleAssignmentRow = {
  * genuine inactive→active transition (changed=true) from an idempotent
  * re-activation of an already-active row (changed=false, NO state mutation).
  * Callers use `changed` to gate audit/sync so a no-op command produces no
- * synthetic side effects (P7-E review P2-1).
+ * synthetic side effects.
  */
 export type ActivationResult = {
   row: UserRoleAssignmentRow;
@@ -54,7 +54,7 @@ function row(
 }
 
 /**
- * Tenant-scoped user-role-assignment repository (RBAC-M7).
+ * Tenant-scoped user-role-assignment repository.
  *
  * Multi-role: a user may hold several role rows per org, exactly one of which
  * is the primary active role. The ≤1-primary-active invariant is enforced
@@ -83,8 +83,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
   }
 
   /**
-   * Lists every ACTIVE assignment for a user, scoped to ctx's org
-   * (RBAC-M10-E). Deliberately returns the full active set — NO `.limit(1)` —
+   * Lists every ACTIVE assignment for a user, scoped to ctx's org.
+   * Deliberately returns the full active set — NO `.limit(1)` —
    * so the assignment-authority resolver can detect multi-primary corruption
    * (multiple `is_primary && is_active` rows for the same user). Inactive rows
    * are excluded by the WHERE clause, not by post-filtering. Ordered by
@@ -131,8 +131,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
   }
 
   /**
-   * Lists every ACTIVE assignment for a BOUNDED set of users in one query
-   * (issue 548): the staff-list read projection consumes this to attach each
+   * Lists every ACTIVE assignment for a BOUNDED set of users in one query:
+   * the staff-list read projection consumes this to attach each
    * target's active role set without a per-row lookup (no N+1). Tenant
    * scoped; inactive rows excluded by the WHERE clause; deterministic
    * (userId, createdAt) order so grouping into per-user role sets is stable.
@@ -167,7 +167,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * ALREADY inside an {@link executeInTransaction} caller MUST use
    * {@link assignWithinTransaction} instead — calling this from inside another
    * transaction would nest a second `executeInTransaction` (savepoint + retry
-   * policy) and is the wrong primitive (RBAC-M10-E P0-3).
+   * policy) and is the wrong primitive.
    */
   async function assign(
     ctx: TenantContext | RequestContext,
@@ -184,7 +184,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
   }
 
   /**
-   * Transaction-aware assignment primitive (RBAC-M10-E P0-3). Writes against a
+   * Transaction-aware assignment primitive. Writes against a
    * caller-supplied transaction handle — NO `executeInTransaction` wrapper, so
    * it composes into a larger atomic unit (user creation + assignment +
    * profile, all in one txn). Callers that are NOT already in a transaction
@@ -241,7 +241,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
 
   /**
    * Invariant-aware "make this role the user's primary active assignment"
-   * (RBAC-M10-E). Unlike a bare upsert, this never tries to create a SECOND
+   * Unlike a bare upsert, this never tries to create a SECOND
    * active primary (which the partial unique index would reject). Flow:
    *
    *   1. demote every existing active primary for the (org, user);
@@ -343,9 +343,6 @@ export function createUserRoleAssignmentRepo(db: Database) {
     return ensurePrimaryAssignmentWithinTransaction(tx, ctx, params);
   }
 
-  /**
-   * Public wrapper for {@link promoteOrAssignPrimaryWithinTransaction}.
-   */
   async function promoteOrAssignPrimary(
     ctx: TenantContext | RequestContext,
     params: { userId: string; role: AssignableRole },
@@ -382,9 +379,6 @@ export function createUserRoleAssignmentRepo(db: Database) {
     return promoteOrAssignPrimaryWithinTransaction(tx, ctx, params);
   }
 
-  /**
-   * Public wrapper for {@link replacePrimaryRoleWithinTransaction}.
-   */
   async function replacePrimaryRole(
     ctx: TenantContext | RequestContext,
     params: { userId: string; role: AssignableRole },
@@ -445,7 +439,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
   /**
    * Promotes the user's first remaining active (non-primary) assignment to
    * primary, if any. Used after the primary is removed/deactivated to keep
-   * the "one primary active role" invariant (RBAC-M7 review #7). No-op if
+   * the "one primary active role" invariant. No-op if
    * there is no other active assignment (the user then has zero primaries,
    * which is allowed — callers re-sync users.role accordingly).
    */
@@ -477,7 +471,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
   /**
    * Deactivates an assignment (keeps the row for audit history). If the
    * deactivated assignment was primary, auto-promotes the next active one
-   * (RBAC-M7 invariant). Transaction-only variant.
+   * Transaction-only variant.
    */
   async function deactivateWithinTransaction(
     tx: TransactionDatabase,
@@ -510,9 +504,9 @@ export function createUserRoleAssignmentRepo(db: Database) {
   /**
    * Reactivates a deactivated assignment (keeps the row for audit history).
    * Activation is IDEMPOTENT: an already-active assignment — primary or
-   * secondary — returns as-is and is NEVER re-demoted (P7-E review P1:
-   * PATCH { isActive: true } on an active primary must not self-demote the
-   * row and orphan the authority). For a genuine reactivation of a row that
+   * secondary — returns as-is and is NEVER re-demoted, so
+   * PATCH { isActive: true } on an active primary cannot self-demote the row
+   * and orphan the authority. For a genuine reactivation of a row that
    * carries the primary flag, the user's OTHER active primaries are demoted
    * first so the ≤1-primary-active partial unique index stays satisfiable
    * (mirrors setPrimaryWithinTransaction) — the reactivated primary becomes
@@ -541,7 +535,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
       // Idempotent: an already-active assignment returns as-is with NO state
       // mutation. changed=false lets the route skip the synthetic role_changed
       // audit + the users.role re-sync (both would record a change that never
-      // happened). P7-E review P1 (never self-demote) + P2-1 (audit truth).
+      // happened), and the row is never self-demoted.
       return { row: row(before[0]!), changed: false };
     }
     if (before[0]!.isPrimary) {
@@ -600,7 +594,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
 
   /**
    * Hard-removes an assignment row. If it was primary, auto-promotes the
-   * next active assignment (RBAC-M7 invariant). Returns the removed row (for
+   * next active assignment. Returns the removed row (for
    * callers that need to re-sync users.role), or null if not found.
    * Transaction-only variant.
    */
@@ -644,7 +638,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
   }
 
   /**
-   * P7-E2A (ADR-017 D14): finds every (org, user) holding BOTH an active
+   * ADR-017 D14: finds every (org, user) holding BOTH an active
    * Admin assignment and an active Maintainer assignment — the forbidden
    * ADMIN ∩ MAINTAINER combination. Returns one entry per violating user,
    * with the active Admin and Maintainer assignment ids for diagnostics.

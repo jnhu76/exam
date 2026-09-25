@@ -9,7 +9,6 @@ import type {
   RetentionRunResult,
 } from "@exam/domain";
 
-/** A retention evidence row (P7-CLOSE P7-3b). */
 export type RetentionRunRow = {
   id: string;
   organizationId: string;
@@ -51,7 +50,7 @@ function retentionRow(r: typeof retentionRuns.$inferSelect): RetentionRunRow {
 }
 
 /**
- * Host-side retention evidence repository (P7-CLOSE P7-3b).
+ * Host-side retention evidence repository.
  *
  * Records EVIDENCE of host-operator retention execution. Exam never performs
  * retention — this is read-only observation of host-side operations. Success
@@ -79,7 +78,7 @@ export function createRetentionEvidenceRepo(db: Database) {
    * long run of recent failures (or unverified runs) must not hide an older
    * verified success, and the recency authority is when the run completed, not
    * when it started. Mirrors the proven `latestSucceededDrill` /
-   * `latestSucceededRun` selection (P7-E review P2-2).
+   * `latestSucceededRun` selection.
    */
   async function latestSucceededRetention(
     ctx: TenantContext | RequestContext,

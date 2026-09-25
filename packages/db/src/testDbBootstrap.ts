@@ -50,7 +50,6 @@ import {
   isDatabaseMissingError,
 } from "./testWorkerDatabase.js";
 
-/** Options for {@link prepareTestDatabase}. */
 export interface PrepareTestDatabaseOptions {
   /**
    * Environment to read (defaults to `process.env`). Tests inject fixtures;
@@ -64,7 +63,7 @@ export interface PrepareTestDatabaseOptions {
   bypassMemo?: boolean;
 }
 
-/** What {@link prepareTestDatabase} did (or found). Pure data; safe to log. */
+/** What {@link prepareTestDatabase} did (or found). */
 export type TestDbBootstrapOutcome =
   | {
       /** The target is an operator-supplied URL and its database is present. */

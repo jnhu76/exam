@@ -1,11 +1,10 @@
 /**
- * ADR-007 Phase 3A — PostgreSQL worker-database prototype.
+ * PostgreSQL worker-database bootstrap (ADR-007).
  *
- * TEST-ONLY module. Provides a per-worker PostgreSQL database bootstrap that
- * is an alternative to the legacy per-file schema isolation in
- * `testIsolation.ts`. It is enabled only when
- * `TEST_DB_ISOLATION=worker-database` AND the Phase 2A resolver derives a
- * non-null database name.
+ * TEST-ONLY module. Provides a per-worker PostgreSQL database bootstrap that is
+ * an alternative to the per-file schema isolation in `testIsolation.ts`. It is
+ * enabled only when `TEST_DB_ISOLATION=worker-database` AND the scope resolver
+ * derives a non-null database name.
  *
  * Lifecycle (all side effects happen inside `setupWorkerTestDatabase`, never
  * at import time):
@@ -17,15 +16,6 @@
  *      migrations`; re-running is a no-op once up to date)
  *   6. return a {@link WorkerDatabaseHandle} with `resetPostgres()` (TRUNCATE)
  *      and `close()`
- *
- * Non-goals of this PR (see ADR-007 + docs/archive/dev/test-ci-parallelism-plan.md):
- *   - Does NOT enable `fileParallelism: true`.
- *   - Does NOT change default `maxWorkers`.
- *   - Does NOT remove the legacy `file-schema` fallback (`testIsolation.ts`).
- *   - Does NOT migrate the whole `@exam/api` suite onto worker databases.
- *   - Does NOT introduce Redis / BullMQ.
- *   - Does NOT modify production schema / migrations.
- *   - Does NOT claim BUG-FLAKE-001 is fixed.
  *
  * Security:
  *   - Database name comes ONLY from the resolver, which validates it matches
@@ -86,11 +76,9 @@ export interface WorkerDatabaseHandle {
    * `RESTART IDENTITY`. Safe to call between tests / test files.
    */
   resetPostgres(): Promise<void>;
-  /** Close the worker pool. Idempotent. */
   close(): Promise<void>;
 }
 
-/** Options for {@link setupWorkerTestDatabase}. */
 export interface SetupWorkerTestDatabaseOptions {
   /** Environment to read (defaults to `process.env`). */
   env?: ResolverEnv;
@@ -205,8 +193,8 @@ function resolveAdminUrl(env: ResolverEnv, baseUrl: string): string {
  * existence check is parameterized (`$1`); the `CREATE DATABASE` identifier
  * is validated + quoted, never raw env.
  *
- * ADR-007 Phase 6D: the existence check + optional `CREATE DATABASE` are wrapped
- * in the cross-process test-infra advisory lock (`withTestInfraLifecycleLock`).
+ * The existence check + optional `CREATE DATABASE` are wrapped in the
+ * cross-process test-infra advisory lock (`withTestInfraLifecycleLock`).
  * Under `@exam/db` coverage, multiple Vitest workers concurrently run
  * `CREATE DATABASE` / `CREATE SCHEMA` / `migratePostgres` against the same PG
  * instance; the lock serializes the heavy catalog DDL so a single CREATE

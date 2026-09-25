@@ -2,28 +2,14 @@
  * Strict database-name safety guard for opt-in DESTRUCTIVE rollback scripts
  * (`rollbackAttemptCommandReceipts`, `rollbackIncidentTables`).
  *
- * The previous guard was a loose regex `/^(exam|.*e2e|.*test|.*ci)/i` that let
- * through names like `examproduction` (`^exam` matches any prefix) or
- * `incident_store` / `decision_db` (`.*ci` matches any name containing the
- * letter pair `ci`). After the guard, the script runs `DROP TABLE` / `DROP
- * INDEX`, so a false-accept is a data-loss bug, not a cosmetic one (review
- * J5-I1C0 PR #261 P1-1).
+ * The guard is INTENTIONALLY exact-match, not substring: these scripts run
+ * `DROP TABLE` / `DROP INDEX`, so a false-accept is a data-loss bug, not a
+ * cosmetic one. A prefix/substring rule would admit look-alikes such as
+ * `examproduction` (matches `^exam`) or `incident_store` / `decision_db`
+ * (contain the letter pair `ci`).
  *
- * This module replaces that regex with an EXACT allowlist of the names a
- * destructive rollback may legitimately target, per AGENTS.md "Local Database
- * Discipline": the canonical three databases (`exam`, `exam_test`, `exam_e2e`)
- * plus the vitest worker-schemas family `exam_test_w<N>` / `exam_e2e_w<N>` and
- * a CI naming pattern `exam_ci[_-]<suffix>`. Everything else is rejected,
- * including the look-alike counterexamples called out in the review:
- *
- *   - `examproduction`         → reject (not the dev db)
- *   - `precision_prod`         → reject (contains "ci" letters only by accident)
- *   - `incident_store`         → reject (contains "ci" letters only by accident)
- *   - `decision_db`            → reject (contains "ci" letters only by accident)
- *
- * The guard is INTENTIONALLY exact-match, not substring. Adding a new
- * destructive target means extending the allowlist here in one place; both
- * rollback CLI entrypoints import this single source of truth.
+ * Adding a new destructive target means extending the allowlist here in one
+ * place; both rollback CLI entrypoints import this single source of truth.
  *
  * Layering: this lives in `packages/db` so both `apps/api` rollback scripts can
  * import it without a reverse package dependency, and so the pure guard logic
@@ -109,12 +95,8 @@ export function refuseDbNameMessage(dbName: string): string {
  * Exact allowlist for FULL-RESET targets — operations that truncate EVERY
  * business table (the E2E seed's `reset` step, `resetE2eState`). Strictly
  * narrower than the rollback allowlist above, because a full reset destroys
- * all rows, not one incident family:
- *
- *   - `exam_e2e`                       — the canonical E2E database (serial
- *                                        path, CI, Docker e2e entrypoint).
- *   - `exam_e2e_w<N>`                  — the WSL parallel-shard worker DBs.
- *   - `exam_ci[_-]<suffix>`            — CI-branch E2E databases.
+ * all rows, not one incident family; only the e2e / CI families below are
+ * admitted.
  *
  * Explicitly NOT full-reset targets: `exam` (human dev data), `exam_test` /
  * `exam_test_w<N>` (vitest territory — the E2E seed has no business wiping

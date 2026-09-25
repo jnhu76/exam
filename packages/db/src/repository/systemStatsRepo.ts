@@ -65,16 +65,13 @@ export function createSystemStatsRepo(db: Database) {
           .where(eq(schema.candidateProfiles.organizationId, orgId))
       ).length;
 
-      // ADR-006: reporting/dashboard day-boundary only — NOT exam business time.
-      // This is allowed under the time-authority allowlist strictly because it is
-      // a non-authoritative reporting bucket, but it has stronger semantics than
-      // baseRepo's storage stamp, so it carries a TODO:
-      //   1. reporting/dashboard only;
-      //   2. NOT used for exam lifecycle / deadline / submit / score-export gate;
-      //   3. NOT authoritative for candidate/admin runtime decisions;
-      //   4. TODO: future cleanup should derive startOfDay from APP_TIMEZONE or
-      //      the organization's timezone explicitly instead of the process wall
-      //      clock + local-date arithmetic.
+      // ADR-006 allowlist — reporting/dashboard day-boundary only, NOT exam
+      // business time. INVARIANT: this bucket stays non-authoritative:
+      //   (1) reporting/dashboard only;
+      //   (2) never gates exam lifecycle / deadline / submit / score-export;
+      //   (3) never decides candidate/admin runtime behaviour.
+      // TODO: derive startOfDay from APP_TIMEZONE or the organization's timezone
+      // instead of the process wall clock + local-date arithmetic.
       const now = new Date();
       const startOfDay = new Date(
         now.getFullYear(),

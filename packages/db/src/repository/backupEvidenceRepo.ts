@@ -14,7 +14,6 @@ import type {
 } from "@exam/domain";
 import { executeInTransaction, hasPostgresErrorCode } from "../types.js";
 
-/** A backup-run evidence row (P7-E2B). */
 export type BackupRunRow = {
   id: string;
   organizationId: string;
@@ -55,7 +54,6 @@ function runRow(r: typeof backupRuns.$inferSelect): BackupRunRow {
   };
 }
 
-/** A restore-drill evidence row (P7-E2B). */
 export type RestoreDrillRow = {
   id: string;
   organizationId: string;
@@ -89,7 +87,7 @@ function drillRow(r: typeof restoreDrillRuns.$inferSelect): RestoreDrillRow {
 }
 
 /**
- * Backup / restore-drill evidence repository (P7-E2B).
+ * Backup / restore-drill evidence repository.
  *
  * Every write is a typed evidence mutation with SUCCESS semantics (ADR-017
  * D10): `succeeded` requires artifact + readability + verification +
@@ -137,7 +135,6 @@ export function createBackupEvidenceRepo(db: Database) {
     },
   ): Promise<BackupRunRow> {
     const orgId = ctx.organizationId;
-    // Close stale running attempts for the same logical run.
     const stale = await tx
       .select()
       .from(backupRuns)
@@ -245,7 +242,7 @@ export function createBackupEvidenceRepo(db: Database) {
        *  spool); defaults to `now`. The RPO projection reads `verifiedAt`, so
        *  a caller with older evidence MUST pass the real completion here and
        *  as `verifiedAt` — importing an old backup with `now` would falsify
-       *  its age (P7-E truthful evidence). */
+       *  its age. */
       completedAt?: Date;
     },
   ): Promise<BackupRunRow> {
@@ -270,7 +267,6 @@ export function createBackupEvidenceRepo(db: Database) {
         if (existingSuccess[0]) {
           const prior = runRow(existingSuccess[0]!);
           if (prior.artifactLabel === params.artifactLabel) {
-            // Idempotent re-completion of the same artifact: no-op.
             return prior;
           }
           // Contradictory duplicate: record the new attempt as failed and
@@ -610,7 +606,7 @@ export function createBackupEvidenceRepo(db: Database) {
       // compliance projection measures recency as `now - completedAt`, so the
       // selection authority must match. NULLS LAST excludes in-progress rows
       // (completedAt is nullable); startedAt then id are a deterministic
-      // tie-breaker. (P7-E review P2-2.)
+      // tie-breaker.
       .orderBy(
         sql`${restoreDrillRuns.completedAt} DESC NULLS LAST`,
         desc(restoreDrillRuns.startedAt),
@@ -640,7 +636,7 @@ export function createBackupEvidenceRepo(db: Database) {
       // completedAt`). Ordering by startedAt instead would pick a drill that
       // started later but COMPLETED earlier as "latest", understating recency
       // and flipping the SATISFIED/NOT_SATISFIED boundary. NULLS LAST +
-      // startedAt/id tie-breaker for determinism. (P7-E review P2-2.)
+      // startedAt/id tie-breaker for determinism.
       .orderBy(
         sql`${restoreDrillRuns.completedAt} DESC NULLS LAST`,
         desc(restoreDrillRuns.startedAt),

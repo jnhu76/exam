@@ -8,7 +8,7 @@ import { passwordResetTokens, users } from "../schema/pg.js";
 import { now, resolveOrganizationId } from "./baseRepo.js";
 
 /**
- * Password-reset token row — the `password_reset_tokens` select shape (#297).
+ * Password-reset token row — the `password_reset_tokens` select shape.
  */
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
 
@@ -36,9 +36,9 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 /**
- * Creates a repository for the `password_reset_tokens` table (#297).
+ * Creates a repository for the `password_reset_tokens` table.
  *
- * LOCK ORDER (canonical, #297 credential lifecycle):
+ * LOCK ORDER (canonical, credential lifecycle):
  *
  *   USER row lock (userRepo.lockBy{Username,Id}WithinTransaction)
  *     → PASSWORD_RESET_TOKEN(S) statements

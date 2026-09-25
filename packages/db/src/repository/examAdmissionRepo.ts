@@ -34,7 +34,7 @@ function toRecord(row: AdmissionSelect): AdmissionRow {
 }
 
 /**
- * #292 — PostgreSQL implementation of the engine's ExamAdmissionRepository.
+ * PostgreSQL implementation of the engine's ExamAdmissionRepository.
  *
  * Correctness is carried by DB mechanics, not application `if`s: the partial
  * unique index owns "one ACTIVE membership per (org, exam, candidate)", the

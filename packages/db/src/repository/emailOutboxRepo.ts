@@ -23,15 +23,15 @@ export interface CreateEmailOutboxInput {
   maxAttempts: number;
   dedupeKey?: string | null;
   /**
-   * Optional Inbox notification that triggered this Email (P5-N1-I2). Set on
+   * Optional Inbox notification that triggered this Email. Set on
    * operational Emails (result_published -> grade_notification); null for
    * identity-flow Emails.
    */
   notificationId?: string | null;
   /**
-   * Optional recipient user link, independent of recipientEmail (P5-N1-I2).
-   * Lets a future recipient-scoped query join without resolving through the
-   * notification. Nullable for identity-flow Emails with no user binding.
+   * Optional recipient user link, independent of recipientEmail. Lets a
+   * recipient-scoped query join without resolving through the notification.
+   * Nullable for identity-flow Emails with no user binding.
    */
   recipientUserId?: string | null;
 }
@@ -54,7 +54,7 @@ export interface ClaimResult {
 }
 
 /**
- * Creates a repository for the `email_outbox` table (P5-0 delivery runtime).
+ * Creates a repository for the `email_outbox` table.
  *
  * The outbox is a persistent email queue: business transactions INSERT rows,
  * and a worker later claims due rows atomically using `FOR UPDATE SKIP LOCKED`.
@@ -101,11 +101,6 @@ export function createEmailOutboxRepo(db: Database) {
     };
   }
 
-  /**
-   * Inserts a new outbox row in `pending` status with `attemptCount = 0` and
-   * no `sentAt` / `nextAttemptAt` / `lastError` / lock fields. Returns the
-   * created row.
-   */
   async function create(
     ctx: EmailRepoContext,
     input: CreateEmailOutboxInput,
@@ -131,7 +126,6 @@ export function createEmailOutboxRepo(db: Database) {
       lastError: null,
       nextAttemptAt: null,
       sentAt: null,
-      // P5-N1-I2: optional notification + recipient user linkage.
       notificationId: input.notificationId ?? null,
       recipientUserId: input.recipientUserId ?? null,
       createdAt: timestamp,

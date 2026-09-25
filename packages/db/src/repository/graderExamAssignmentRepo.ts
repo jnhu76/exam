@@ -23,8 +23,8 @@ export interface RevokeGraderExamAssignmentInput {
 }
 
 /**
- * Tenant-scoped repository for the Grader-to-Exam assignment aggregate
- * (issue #296). Every method filters by `ctx.organizationId` (fail closed
+ * Tenant-scoped repository for the Grader-to-Exam assignment aggregate.
+ * Every method filters by `ctx.organizationId` (fail closed
  * on cross-organization rows); user/exam same-organization consistency is
  * enforced by the route command layer (plain `users(id)` / composite
  * `exams(organization_id, id)` FKs, mirroring the teacher_course_assignments

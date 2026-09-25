@@ -13,8 +13,7 @@ type UserSelect = typeof users.$inferSelect;
  * Creates a repository for grading-queue specific queries that join
  * attempts with exams, candidates, and manual-grading entries.
  *
- * This encapsulates the raw Drizzle queries that were previously in the
- * route handler, keeping the route layer free of schema imports.
+ * Keeps the route layer free of schema imports.
  */
 export function createGradingQueueRepo(db: Database) {
   return {

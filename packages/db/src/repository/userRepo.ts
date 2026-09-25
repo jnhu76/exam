@@ -67,7 +67,7 @@ export function createUserRepo(db: Database) {
   }
 
   /**
-   * LOCK ORDER (#297 credential lifecycle): these row locks are the USER
+   * LOCK ORDER (credential lifecycle): these row locks are the USER
    * node of the canonical order USER → PASSWORD_RESET_TOKEN(S) → credential
    * mutation. Every password-reset issuance, reset consume, and account
    * deactivation transaction must acquire the user row lock FIRST (see
@@ -118,8 +118,8 @@ export function createUserRepo(db: Database) {
 
   /**
    * Batch-loads users by id, scoped to the tenant. Empty input returns [].
-   * Used by the result_published recipient composition (P5-N1-I2) to resolve
-   * userId -> email without an N+1.
+   * Used by the result_published recipient composition to resolve userId ->
+   * email without an N+1.
    */
   async function findByIds(
     ctx: TenantContext | RequestContext,
@@ -156,14 +156,14 @@ export function createUserRepo(db: Database) {
     },
     /**
      * Lists staff users with pagination, scoped to the tenant. The staff
-     * membership filter runs BEFORE pagination (F-03, P7-RBAC-REMEDIATION).
+     * membership filter runs BEFORE pagination.
      *
      * Staff membership is NOT decided by `users.role` (a compatibility cache
      * of the primary active assignment). A user is a staff member iff:
      *   - they hold at least one ACTIVE assignment with a staff role
      *     (Admin/Teacher/Proctor/Grader/Maintainer), OR
      *   - their cached `users.role` is a staff role — the stale zero-primary
-     *     fallback (F-06): when no primary active assignment exists the cache
+     *     fallback: when no primary active assignment exists the cache
      *     keeps its last value, so a historical staff account that lost its
      *     active assignment never vanishes from the management UI.
      *
@@ -236,7 +236,7 @@ export function createUserRepo(db: Database) {
     },
     /**
      * Counts active users who hold ANY ACTIVE role assignment of the given
-     * role, scoped to the tenant (RBAC-M10-E effective authority).
+     * role, scoped to the tenant (effective authority).
      *
      * A user is counted iff:
      *   - their `users` row is active, AND
@@ -298,7 +298,7 @@ export function createUserRepo(db: Database) {
       }
     },
     /**
-     * #325: conditional (CAS) credential-epoch advance — the logout
+     * Conditional (CAS) credential-epoch advance — the logout
      * revocation primitive. Increments `auth_epoch` ONLY when the row's
      * current epoch still equals `expectedEpoch` (the epoch embedded in the
      * presenting token). A stale/revoked token therefore cannot advance the
@@ -330,7 +330,7 @@ export function createUserRepo(db: Database) {
       return rows[0]?.authEpoch ?? null;
     },
     /**
-     * #325: atomically replace the password hash AND advance the credential
+     * Atomically replace the password hash AND advance the credential
      * epoch in one write. Every JWT issued under the previous generation
      * fails closed on the next authenticated request. Used by
      * self-service password change, admin candidate password reset, and the
@@ -355,7 +355,7 @@ export function createUserRepo(db: Database) {
       return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
     },
     /**
-     * #297: unconditionally advance the credential epoch WITHOUT touching the
+     * Unconditionally advance the credential epoch WITHOUT touching the
      * password. Deactivation is a credential-revocation-grade event — every
      * JWT issued before it must fail closed, and re-activation must never
      * resurrect pre-deactivation tokens. Unlike {@link advanceAuthEpochIfCurrent}

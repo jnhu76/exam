@@ -145,7 +145,7 @@ export function createAuditLogQueryRepo(db: Database) {
      * restricted to `actions`, newest first. Used by the merged proctor
      * timeline as the audit PREFIX fetch.
      *
-     * INVARIANT (#544): the admission predicate here (org scope AND target
+     * INVARIANT: the admission predicate here (org scope AND target
      * filters AND action IN (...)) must stay semantically IDENTICAL to
      * `countFilteredByActions` — list admission and count admission are one
      * predicate. The action filter is applied in SQL BEFORE ORDER BY/LIMIT so

@@ -1,5 +1,5 @@
 /**
- * Stateful test scope / datasource resolver (ADR-007 Phase 2A skeleton).
+ * Stateful test scope / datasource resolver.
  *
  * This module is PURE RESOLUTION LOGIC. It must NOT:
  *   - connect to PostgreSQL
@@ -12,29 +12,18 @@
  *
  * It only turns the current test-run environment (env vars set by the runner
  * or the developer) into a single {@link ResolvedTestScope} that the rest of
- * the harness can later bind to a PostgreSQL database, a Redis key prefix, a
- * queue prefix, and a background-worker lifecycle.
- *
- * Non-goals of this PR (see ADR-007 + docs/archive/dev/test-ci-parallelism-plan.md):
- *   - Does NOT open `fileParallelism: true`.
- *   - Does NOT change `maxWorkers` defaults.
- *   - Does NOT create real worker databases (that is Phase 3).
- *   - Does NOT remove the legacy `file-schema` fallback (it is preserved here).
- *   - Does NOT remove the existing per-file schema helper in `testIsolation.ts`.
- *   - Does NOT remove any BUG-FLAKE-001 mitigation.
- *
- * The legacy per-file schema mechanism (`testIsolation.ts`) keeps working
- * unchanged. This resolver only provides a uniform naming surface so future
- * phases can adopt per-worker databases without renaming resources again.
+ * the harness binds to a PostgreSQL database, a Redis key prefix, a queue
+ * prefix, and a background-worker lifecycle.
  *
  * NOTE on the shared env var name `TEST_DB_ISOLATION`: this module and
  * `testIsolation.ts` BOTH read `process.env.TEST_DB_ISOLATION` but interpret it
  * DIFFERENTLY:
  *   - here: `"file-schema" | "worker-database"` (which isolation strategy)
- *   - `testIsolation.ts`: `"1" | "true" | "0"` (enable/disable the helper)
- * The two value sets are disjoint, so there is no current conflict while this
- * resolver is not yet wired into any runner. A future Phase 3 integrator MUST
- * reconcile these before pointing the test factories at this resolver.
+ *   - `testIsolation.ts`: enable/disable of the per-file schema helper
+ *     (`"0"` / `"false"` disable it, anything else enables it)
+ * The two value sets are disjoint, so a value meant for one reader is not a
+ * valid value for the other; changing either interpretation must reconcile
+ * both.
  */
 
 /** Kind of test scope, mirrors ADR-007 §1. */
@@ -66,7 +55,7 @@ export interface ResolvedTestScope {
   dbIsolation: TestDbIsolationMode;
   /**
    * Derived PostgreSQL database name, or `null` when isolation is
-   * `file-schema` (the legacy path does not own a worker database).
+   * `file-schema` (the file-schema path owns no worker database).
    */
   postgresDatabaseName: string | null;
   /** Redis key prefix, always ending with `:`. */
@@ -155,30 +144,25 @@ function readStringStrict(
 /**
  * Resolve the worker id.
  *
- * Resolution order (round-3 contract, 2026-08-27):
+ * Resolution order:
  *   1. `TEST_WORKER_ID` — explicit manual override (wins if set).
  *   2. `VITEST_POOL_ID` — the execution-slot id injected by the Vitest
- *      runner (present in BOTH parallel and serial modes, verified on the
- *      pinned Vitest 4.1.7).
+ *      runner (present in BOTH parallel and serial modes).
  *   3. running under Vitest (`VITEST=true`) without `VITEST_POOL_ID` —
  *      FAIL FAST. Slot-scoped resources REQUIRE the slot id.
  *   4. not under Vitest → `"1"` (serial / standalone-script fallback).
  *
- * `VITEST_WORKER_ID` is deliberately NOT consulted anymore. It is a
- * WORKER-INSTANCE id: unique per created worker, NOT bounded by
- * `maxWorkers`, monotonically increasing across the run ("tracks individual
- * worker instances regardless of the maxWorkers setting", vitest migration
- * guide; empirically it starts at 0). It was the FIRST-LAYER ROOT CAUSE of
- * the 2026-08-26 drifting-timeout audit (docs/standards/test-flakes.md):
- * binding slot-scoped resources (physical DB name, Redis prefix, queue
- * prefix) to instance ids made every test file pay its own CREATE DATABASE +
- * migrate cycle (~13 physical DBs for 16 files at `maxWorkers=2`, ~90 for a
- * full api run) and loaded the shared test-infra DDL advisory-lock queue
- * until sibling hooks starved past their budgets. Re-enabling it as a silent
- * fallback would re-introduce the known bug exactly when the slot id is
- * missing; a clear failure is strictly better. No repository consumer
- * injects only `VITEST_WORKER_ID` (CI sets neither; the real runner always
- * provides `VITEST_POOL_ID`), so no compatibility branch is retained.
+ * `VITEST_WORKER_ID` is deliberately NOT consulted. It is a WORKER-INSTANCE
+ * id: unique per created worker, NOT bounded by `maxWorkers`, monotonically
+ * increasing across the run. Binding slot-scoped resources (physical DB name,
+ * Redis prefix, queue prefix) to instance ids makes every test file pay its own
+ * CREATE DATABASE + migrate cycle and loads the shared test-infra DDL
+ * advisory-lock queue until sibling hooks starve past their budgets.
+ * Re-enabling it as a silent fallback would re-introduce that failure exactly
+ * when the slot id is missing; a clear failure is strictly better. No
+ * repository consumer injects only `VITEST_WORKER_ID` (CI sets neither; the
+ * real runner always provides `VITEST_POOL_ID`), so no compatibility branch is
+ * retained.
  */
 function resolveWorkerId(env: ResolverEnv): string {
   // `TEST_WORKER_ID` takes precedence when set (manual override). An
@@ -381,8 +365,8 @@ interface DeriveNameInput {
 /**
  * Derive the PostgreSQL database name.
  *
- * Returns `null` when isolation is `file-schema` (the legacy path owns no
- * worker database). For dedicated groups, the name is `exam_test_<group>`.
+ * Returns `null` when isolation is `file-schema` (the file-schema path owns
+ * no worker database). For dedicated groups, the name is `exam_test_<group>`.
  * For ordinary groups, it is `exam_test_w{worker}` locally and
  * `exam_test_s{shard}_w{worker}` in CI.
  */
@@ -436,7 +420,7 @@ export function resolveQueuePrefix(scope: ResolvedTestScope): string {
 }
 
 /**
- * Resolve the legacy file-schema fallback. When `TEST_DB_ISOLATION=file-schema`,
+ * Resolve the file-schema fallback. When `TEST_DB_ISOLATION=file-schema`,
  * callers should keep using the existing `testIsolation.ts` per-file schema
  * helper against whatever `TEST_DATABASE_URL` / `DATABASE_URL` points at.
  * This resolver does not derive a worker database in that mode.

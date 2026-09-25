@@ -1,5 +1,5 @@
 /**
- * E2E mutable-state reset (issue #330 root-cause fix, TS side).
+ * E2E mutable-state reset.
  *
  * Contract: `resetE2eState` converges a database toward the canonical E2E
  * baseline by truncating EVERY business table (RESTART IDENTITY CASCADE,

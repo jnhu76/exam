@@ -28,9 +28,8 @@
  *     docker-compose.dev.yml publishes, so the constructed URL can never
  *     contradict the port the dev database actually listens on. The fixed
  *     exam:exam@…/exam credentials mirror the docker-compose.dev.yml dev
- *     contract. This is a derivation, not a guess: the pre-port-ownership
- *     hardcoded fallback was removed precisely because it guessed a port that
- *     did not match the published one.
+ *     contract. The URL is a derivation from DB_HOST_PORT, never a hardcoded
+ *     guess that could contradict the published port.
  */
 
 /** Application runtime mode. APP_MODE is authoritative; NODE_ENV is a fallback. */

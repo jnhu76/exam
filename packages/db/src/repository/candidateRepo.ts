@@ -14,8 +14,8 @@ export function createCandidateRepo(db: Database) {
 
   /**
    * Batch-loads candidate profiles by id, scoped to the tenant. Empty input
-   * returns []. Used by the result_published recipient composition
-   * (P5-N1-I2) to resolve candidateProfile -> userId without an N+1.
+   * returns []. Used by the result_published recipient composition to
+   * resolve candidateProfile -> userId without an N+1.
    */
   async function findByIds(
     ctx: TenantContext | RequestContext,
@@ -57,8 +57,8 @@ export function createCandidateRepo(db: Database) {
       );
     },
     /**
-     * Candidates restricted to the given course scope with pagination
-     * (issue #286 §3F): a candidate is in scope when it has an ENROLLMENT
+     * Candidates restricted to the given course scope with pagination: a
+     * candidate is in scope when it has an ENROLLMENT
      * whose exam's course is one of `courseIds` (EXISTS, SQL-side, applied
      * BEFORE limit/offset and the total count — never post-pagination). An
      * EMPTY course-id set yields `{ items: [], total: 0 }` by contract.

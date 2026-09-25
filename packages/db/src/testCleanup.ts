@@ -18,7 +18,7 @@ async function deleteOrganizationTreeOnce(
     await tx
       .delete(schema.organizationSettings)
       .where(eq(schema.organizationSettings.organizationId, organizationId));
-    // RBAC-M7: assignments deleted before users (no FK reliance on CASCADE
+    // Assignments deleted before users (no FK reliance on CASCADE
     // for explicit org-tree cleanup; users CASCADE would also catch this).
     await tx
       .delete(schema.userRoleAssignments)
@@ -82,7 +82,7 @@ async function deleteExamBusinessData(
   await tx
     .delete(schema.attemptGradingEntries)
     .where(eq(schema.attemptGradingEntries.organizationId, organizationId));
-  // Attempt command receipts (J5-I1C Slice 1): composite-FK
+  // Attempt command receipts: composite-FK
   // (organization_id, attempt_id) → exam_attempts — delete before
   // examAttempts to avoid composite-FK violations (no ON DELETE CASCADE).
   await tx
@@ -124,7 +124,7 @@ async function deleteExamBusinessData(
   await tx
     .delete(schema.courses)
     .where(eq(schema.courses.organizationId, organizationId));
-  // Inbox notifications + Email outbox rows (P5-N1 / #299): notifications
+  // Inbox notifications + Email outbox rows: notifications
   // reference users (recipient_user_id FK, no CASCADE) and email_outbox
   // references notifications (notification_id FK) — both must go before the
   // users delete in deleteOrganizationTreeOnce. Any mutation that creates a
@@ -141,7 +141,7 @@ async function deleteExamBusinessData(
  * Test-only: remove every org-scoped child row for one organization, then the
  * organization row itself. Scoped to a single organizationId, idempotent.
  *
- * OWNERSHIP INVARIANT (do not violate — was the root cause of past CI flakes):
+ * OWNERSHIP INVARIANT (violating it fails FKs and breaks later tests):
  *
  *   cleanupOrganizationTestData DELETES the organization row. It may only be
  *   called for an organization that the current test EXCLUSIVELY OWNS, or from
