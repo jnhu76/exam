@@ -38,7 +38,8 @@ import {
   type StarterProfileRecipeKey,
 } from "@exam/domain";
 
-/** Form state for the profile editor — the 10 profile-safe fields + identity. */
+/** Form state for the profile editor — identity plus the profile-safe fields of
+ * {@link ExamProfilePolicyDefaults}. */
 interface ProfileFormState {
   name: string;
   description: string;
@@ -102,9 +103,9 @@ function formFromProfile(p: ExamProfileDTO): ProfileFormState {
 }
 
 /**
- * Build the POST/PATCH body. For create, every field is explicit. For update,
- * send only the fields that changed (plus name/description). Nullable fields
- * are sent as `null` (explicit), which the PATCH contract treats as "clear".
+ * Build the request body. Every field is explicit; nullable fields are sent as
+ * `null`, which the PATCH contract treats as "clear". All fields are optional,
+ * so the same explicit body is valid for create and update.
  */
 function buildCreateBody(s: ProfileFormState) {
   return {
@@ -125,12 +126,13 @@ function buildCreateBody(s: ProfileFormState) {
 }
 
 /**
- * Create + edit page for exam policy profiles. A profile owns ONLY the 10
- * profile-safe fields (P7-M2). Fields are grouped by user concept, not DB
- * layout. maxAttempts is only meaningful when retakePolicy === "max_attempts";
- * grace caps only when interruptionTimePolicy === "bounded_grace" — those
- * are rendered conditionally to prevent configuring semantically meaningless
- * values. Backend contracts remain authoritative (M1 validator + ADR-013).
+ * Create + edit page for exam policy profiles. A profile owns ONLY the
+ * profile-safe fields of {@link ExamProfilePolicyDefaults}. Fields are grouped
+ * by user concept, not DB layout. maxAttempts is only meaningful when
+ * retakePolicy === "max_attempts"; grace caps only when
+ * interruptionTimePolicy === "bounded_grace" — those are rendered conditionally
+ * to prevent configuring semantically meaningless values. Backend contracts
+ * remain authoritative (docs/contracts/exam-policy-authority.md + ADR-013).
  */
 export function ExamProfileEditPage() {
   const { t } = useTranslation();

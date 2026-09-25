@@ -183,8 +183,8 @@ export function SystemDiagnosticsPage() {
   const handleRefresh = () => {
     // Manual refresh keeps existing data mounted (no full-content blank swap).
     // Only the refresh icon spins; the cards stay visible with their last
-    // values until the new data arrives. Previously this toggled the initial
-    // `isLoading` flag, which could flash the whole main region blank.
+    // values until the new data arrives — toggling the initial `isLoading` flag
+    // here would flash the whole main region blank.
     setIsRefreshing(true);
     Promise.all([loadHealth(), loadDiag()]).finally(() =>
       setIsRefreshing(false),

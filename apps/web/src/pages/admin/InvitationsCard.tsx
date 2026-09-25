@@ -59,7 +59,7 @@ function statusBadgeVariant(status: StaffInvitationDTO["status"]) {
 }
 
 /**
- * Admin staff-invitation panel (issue 297): issue email invitations and manage
+ * Admin staff-invitation panel: issue email invitations and manage
  * pending ones. Rendered inside the user-management page because an
  * invitation IS pending staff membership.
  *
@@ -84,8 +84,8 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
   /**
    * Same display contract as UsersPage: the local i18n `roleLabels` entry
    * wins; the backend assignable-roles catalog decides MEMBERSHIP only. Its
-   * `label` is an English catalog string and must never leak into the UI
-   * (P7 review #5), including in the invite-role dropdown options.
+   * `label` is an English catalog string and must never leak into the UI,
+   * including in the invite-role dropdown options.
    */
   const roleLabel = useCallback(
     (key: string) =>
@@ -239,10 +239,10 @@ export function InvitationsCard({ roles }: { roles: AssignableRoleItem[] }) {
 
   return (
     <>
-      {/* The shell IS the data surface: a bordered+padded PageSection around it
-          cost 44px of region and drew a second border (issue 601 Phase F
-          convergence). The section heading moves into the shell's title band
-          and the section-scoped action into its toolbar band. */}
+      {/* The shell IS the data surface (docs/standards/ui-system.md
+          §Surface and elevation): the section heading and the section-scoped
+          action live in the shell's own title/toolbar bands, never in a second
+          bordered wrapper. */}
       <DataTableShell
         title={t("admin.users.invitations.title")}
         description={t("admin.users.invitations.description")}

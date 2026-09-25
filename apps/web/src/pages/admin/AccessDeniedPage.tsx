@@ -7,25 +7,25 @@ import { adminLandingPath } from "@/lib/capabilities";
 import { useAuth } from "@/hooks/useAuth";
 
 /**
- * P4-C2 403 / Access-Denied page for the admin console.
+ * 403 / access-denied page for the admin console.
  *
  * Rendered by {@link AdminLayout} when an authenticated user with some console
- * capability reaches a `/admin/*` route whose capability they lack (task §5.4).
- * The page renders NO privileged content; it offers a deterministic "back to
- * your permitted console surface" action resolved from the actor's capability
- * union (not from a primary-role string).
+ * capability reaches a `/admin/*` route whose capability they lack. The page
+ * renders NO privileged content; it offers a deterministic "back to your
+ * permitted console surface" action resolved from the actor's capability union
+ * (not from a primary-role string).
  *
- * Security note: this is UX consistency only. The backend remains the
- * authorization authority on every route.
+ * UX consistency only — the backend remains the authorization authority on
+ * every route.
  */
 export function AccessDeniedPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Resolve the actor's permitted default console surface from capabilities
-  // (assignment-backed union), never from a primary-role string. Falls back to
-  // /login only if the actor somehow has no permitted surface.
+  // Resolve the permitted landing surface from the capability union (active
+  // assignments), never from a primary-role string; /login is the fallback only
+  // when the actor has no permitted surface.
   const landing = user ? adminLandingPath(user) : null;
 
   return (

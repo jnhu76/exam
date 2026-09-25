@@ -104,8 +104,8 @@ export function QuestionEditPage() {
           difficulty: q.difficulty,
           tags: q.tags,
           gradingRule: q.gradingRule as QuestionFormData["gradingRule"],
-          // P3-MOD-P2-1C: echo the frozen grading basis; never overwrite with
-          // an empty value on edit.
+          // Echo the frozen grading basis; never overwrite it with an empty
+          // value on edit.
           rubric: q.rubric ?? null,
         });
       } else {
@@ -147,9 +147,10 @@ export function QuestionEditPage() {
     if (!formData || saving) return;
     setSaveError(null);
 
-    // P3-MOD-P2-1C: text_response requires a non-empty rubric before save.
-    // Mirror publish validation (publishExam rejects empty/placeholder rubric)
-    // so the author gets immediate feedback instead of a publish-time failure.
+    // text_response requires a non-empty rubric before save — the empty-string
+    // half of the publish gate (publishExam also rejects placeholder rubrics;
+    // that half stays server-side). Mirrored here so the author gets immediate
+    // feedback instead of a publish-time failure.
     if (
       formData.type === "text_response" &&
       (formData.rubric == null || formData.rubric.trim() === "")

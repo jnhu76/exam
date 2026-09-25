@@ -264,9 +264,8 @@ export function CoursePage() {
         />
 
         <DataTableShell
-          // A lone count is a summary, not a control: it belongs in the title
-          // band (the frozen baseline position), never in a toolbar controls
-          // band of its own (issue 601 Phase F convergence).
+          // A lone count is a summary, not a toolbar control — the title band's
+          // `meta` slot is its owner (docs/standards/ui-system.md §Tables).
           meta={
             <span className="type-secondary">
               {t("admin.courses.count", { count: filteredCourses.length })}

@@ -283,12 +283,6 @@ interface ExportButtonsProps {
   canExport: boolean;
 }
 
-/**
- * Two outline buttons — 导出CSV and 导出JSON — that download the attempt via
- * the shared {@link downloadFile} helper (cookie-authenticated, cross-origin
- * safe). Reused by both the live and graded attempt views. Labels resolve from
- * `admin.attemptDetail.actions.*` i18n keys.
- */
 function ExportButtons({ attemptId, canExport }: ExportButtonsProps) {
   const { t } = useTranslation();
   if (!canExport) return null;
@@ -468,14 +462,13 @@ export function AttemptDetailPage() {
     null,
   );
 
-  // Route reachability and sub-feature authority are DISTINCT capabilities
-  // (issue 612): the route gate is attempt.timeline.view (adminRouteCapabilities),
-  // while the score read (score.all.view), attempt export (attempt.export) and
-  // misconduct mark (attempt.misconduct.mark) compose independently of it. A
-  // caller holding only the route capability — the Proctor preset, or any
-  // custom role with a divergent set — gets the timeline shell without the
-  // privileged sub-features and without their guaranteed-403 requests. UX
-  // composition only; the backend remains the security authority.
+  // Route reachability and sub-feature authority are DISTINCT capabilities: the
+  // route gate is the attempts/:id entry in ADMIN_ROUTE_CAPABILITIES, while each
+  // sub-feature owns its own @exam/authz permission (enforced per endpoint by the
+  // API). A caller holding only the route capability gets the timeline shell
+  // without the privileged sub-features, and without issuing requests the
+  // backend would deny. UX composition only; the backend remains the security
+  // authority.
   const canReadResult = actor !== null && can(actor, Permission.ScoreAllView);
   const canExportAttempt =
     actor !== null && can(actor, Permission.AttemptExport);
@@ -484,8 +477,8 @@ export function AttemptDetailPage() {
 
   const loadResult = useCallback(async () => {
     // INVARIANT: the result fetch is issued only for callers whose capability
-    // set owns it — page reachability alone must not mint a request the
-    // backend is guaranteed to reject.
+    // set owns it — page reachability alone must not mint a request the backend
+    // will deny.
     if (!id || !canReadResult) return;
     setIsLoading(true);
     setError(null);

@@ -60,12 +60,12 @@ interface UserRow {
   id: string;
   username: string;
   name: string;
-  /** Primary role; the API returns the full assignable set (RBAC-M8). */
+  /** Primary role; the API returns the full assignable set. */
   role: AssignableRole;
   /**
-   * The target's ACTIVE role set from user_role_assignments (issue 548) — the
-   * truth for assignment affordances. `role` above is only the primary-role
-   * compatibility cache and must not gate assignment management.
+   * The target's ACTIVE role set from user_role_assignments — the truth for
+   * assignment affordances. `role` above is only the primary-role compatibility
+   * cache and must not gate assignment management.
    */
   activeRoles: AssignableRole[];
   isActive: boolean;
@@ -120,12 +120,10 @@ interface ExamAssignment {
 }
 
 /**
- * Assignable-role item returned by GET /roles/assignable (RBAC-M8). The
- * backend @exam/authz ROLE_PRESETS is the SINGLE source of truth for the
- * assignable role set; this page consumes that authority instead of keeping a
- * parallel hardcoded closed set. P7-RBAC-REMEDIATION F-01: the prior
- * EDITABLE_ROLES array duplicated the backend and GET /roles/assignable had
- * zero frontend consumers — a future role addition would silently diverge the
+ * Assignable-role item returned by GET /roles/assignable. The backend
+ * @exam/authz ROLE_PRESETS is the SINGLE source of truth for the assignable
+ * role set; this page consumes that authority instead of keeping a parallel
+ * hardcoded closed set — a future role addition must not silently diverge the
  * selector. Candidate is excluded from the staff-creation selector because
  * candidates are managed via the dedicated candidate flow.
  */
@@ -162,7 +160,7 @@ export function UsersPage() {
   // Edit-only: true when the editing user's current role is NOT in the
   // assignable catalog (drift / future-compatible state). The dialog then
   // shows the role read-only and PATCH omits `role` — the save can never
-  // silently flip an unmapped role to Admin (P7 review #6).
+  // silently flip an unmapped role to Admin.
   const [roleLocked, setRoleLocked] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -174,11 +172,11 @@ export function UsersPage() {
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentsBusy, setAssignmentsBusy] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
-  // Course option catalog — MUTATION-SUPPORT data only (issue 548
-  // corrective): fetched solely while the assign-new affordance applies, so
-  // the assignment read projection never depends on CourseView/ExamView
-  // surrogate routes. Search is server-side (debounced DataViewSearch) and
-  // pagination is real, so every eligible course is eventually selectable.
+  // Course option catalog — MUTATION-SUPPORT data only: fetched solely while
+  // the assign-new affordance applies, so the assignment read projection never
+  // depends on CourseView/ExamView surrogate routes. Search is server-side
+  // (debounced DataViewSearch) and pagination is real, so every eligible course
+  // is eventually selectable.
   const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
   const [courseTotal, setCourseTotal] = useState(0);
   const [coursePage, setCoursePage] = useState(1);
@@ -209,7 +207,7 @@ export function UsersPage() {
   /** Staff roles selectable in the create/edit dialog (Candidate excluded). */
   const selectableRoles = assignableRoles.filter((r) => r.key !== "Candidate");
 
-  // Actor capability gates (issue 548): affordances are derived from the actor's
+  // Actor capability gates: affordances are derived from the actor's
   // capability set — never from a role label. View decides whether the
   // assignment surface is offered at all; Manage decides whether the
   // assign/revoke controls inside it are mutable (View-without-Manage renders
@@ -225,9 +223,9 @@ export function UsersPage() {
     actor !== null && can(actor, Permission.ExamGraderAssignmentManage);
 
   // The option catalogs load only while the assign-new affordance applies:
-  // actor Manage capability × target active role × target account active
-  // (issue 548 corrective — the canonical write endpoints reject inactive
-  // targets, so the UI must not offer a guaranteed-to-fail mutation).
+  // actor Manage capability × target active role × target account active. The
+  // canonical write endpoints reject inactive targets, so the UI must not offer
+  // a guaranteed-to-fail mutation.
   const courseCatalogApplicable =
     assignmentsUser !== null &&
     canManageTeacherAssignments &&
@@ -240,9 +238,9 @@ export function UsersPage() {
   /**
    * Resolves a role display label: local i18n `roleLabels` wins; a missing
    * key falls back to the generic `unknown` label so an unlocalized backend
-   * catalog label can never leak English into the UI (P7 review #5). Catalog
-   * membership still comes from the backend assignable roles; only the
-   * display fallback is generic (fail-visible instead of leaking the key).
+   * catalog label can never leak English into the UI. Catalog membership still
+   * comes from the backend assignable roles; only the display fallback is
+   * generic (fail-visible instead of leaking the key).
    */
   function roleLabel(key: string) {
     return t(`admin.users.roleLabels.${key}`, {
@@ -259,7 +257,7 @@ export function UsersPage() {
     try {
       const [rolesRes, usersRes] = await Promise.all([
         api.get<{ items: AssignableRoleItem[] }>("/api/roles/assignable"),
-        // Real pagination (issue 548 corrective): every staff target in the
+        // Real pagination: every staff target in the
         // canonical staff-management domain is reachable by paging — no fixed
         // first-page truncation.
         api.get<Page<UserRow>>(
@@ -294,9 +292,9 @@ export function UsersPage() {
     // selectable in the staff dialog (missing from the catalog, or the
     // Candidate compatibility role of a Candidate-primary + staff-secondary
     // user) locks the selector instead of silently selecting Admin — saving
-    // would otherwise flip the role (P7 review #6). selectableRoles (not
-    // assignableRoles) is the membership check: the dialog can only ever
-    // offer roles it can actually render as options.
+    // would otherwise flip the role. selectableRoles (not assignableRoles) is
+    // the membership check: the dialog can only ever offer roles it can actually
+    // render as options.
     if (!user) {
       setRole("Admin");
       setRoleLocked(false);
@@ -369,7 +367,7 @@ export function UsersPage() {
   /**
    * Loads the assignment read projection for the dialog user. This GET is
    * the dialog's only required request: it succeeds or fails independently
-   * of the option catalog (issue 548 corrective). The generation guard
+   * of the option catalog. The generation guard
    * keeps a slow response for a previous target from landing in a dialog
    * opened for another user.
    */
@@ -495,7 +493,7 @@ export function UsersPage() {
 
   /**
    * Loads the grader assignment read projection — independent of the exam
-   * option catalog (issue 548 corrective), with the same stale-response
+   * option catalog, with the same stale-response
    * guard as the teacher dialog.
    */
   async function refreshExamAssignments(user: UserRow) {
@@ -650,9 +648,9 @@ export function UsersPage() {
                 icon: Pencil,
                 onSelect: () => open(user),
               },
-              // issue 548: the target's ACTIVE role membership (assignment truth,
-              // not the primary-role cache) decides eligibility; the ACTOR's
-              // capability decides whether the surface is offered.
+              // The target's ACTIVE role membership (assignment truth, not the
+              // primary-role cache) decides eligibility; the ACTOR's capability
+              // decides whether the surface is offered.
               ...(canViewTeacherAssignments &&
               user.activeRoles.includes("Teacher")
                 ? [
@@ -766,7 +764,7 @@ export function UsersPage() {
         open={dialogOpen}
         onOpenChange={(next) => {
           // Busy close contract: Esc/overlay/X must not change open state
-          // while a save is in flight (issue 548 corrective).
+          // while a save is in flight.
           if (!next && saving) return;
           setDialogOpen(next);
         }}
@@ -866,7 +864,7 @@ export function UsersPage() {
         open={assignmentsUser !== null}
         onOpenChange={(next) => {
           // Busy close contract: no close via Esc/overlay/X while an
-          // assign/revoke request is in flight (issue 548 corrective).
+          // assign/revoke request is in flight.
           if (!next && assignmentsBusy) return;
           if (!next) setAssignmentsUser(null);
         }}
@@ -1047,7 +1045,7 @@ export function UsersPage() {
       <Dialog
         open={examAssignmentsUser !== null}
         onOpenChange={(next) => {
-          // Busy close contract (issue 548 corrective).
+          // Busy close contract.
           if (!next && examAssignmentsBusy) return;
           if (!next) setExamAssignmentsUser(null);
         }}

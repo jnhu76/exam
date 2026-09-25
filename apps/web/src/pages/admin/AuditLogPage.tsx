@@ -468,11 +468,12 @@ export function AuditLogPage() {
                           complete for the whole registry by
                           actionLabelFixture's guard AND by the typed catalog
                           key — deliberately with no raw-key default, so a
-                          forgotten copy can never masquerade as the C6 F-14
-                          compatibility presentation), while a historical /
-                          version-skew key outside the registry keeps that
-                          compatibility channel — never bare unbounded nowrap
-                          text, always the accessible machine presenter. */}
+                          missing copy cannot masquerade as the compatibility
+                          presentation of an unregistered action), while a
+                          historical / version-skew key outside the registry
+                          keeps that compatibility channel — never bare
+                          unbounded nowrap text, always the accessible machine
+                          presenter. */}
                   {isAuditAction(item.action) ? (
                     <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
                       {t(`admin.audit.filterActions.${item.action}`)}

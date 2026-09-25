@@ -77,13 +77,12 @@ const PAGE_SIZE = 20;
  * Admin question management page with server-side search, filtering by course,
  * type, difficulty, and tags, plus pagination.
  *
- * UI-TABLE-KOI-COMPACT-1: the toolbar, table, and pagination are unified into
- * a single continuous DataWorkbench shell (toolbar → header → body → footer
- * are regions of one surface, not three separated cards). DesktopDataTable is
- * the TanStack headless engine with a role-based column contract; the derived
- * MobileRecordList renders the same column declarations below lg (issue 457). Search is SERVER-SIDE over the full dataset (debounced);
- * the workbench shell stays mounted across loading/empty/error transitions —
- * only the table body swaps, so there is no layout jitter.
+ * DesktopDataTable is the TanStack headless engine with a role-based column
+ * contract; the derived MobileRecordList renders the same column declarations
+ * below lg (docs/architecture/frontend.md). Search is SERVER-SIDE over the full
+ * dataset (debounced); the workbench shell stays mounted across
+ * loading/empty/error transitions — only the table body swaps, so there is no
+ * layout jitter.
  */
 export function QuestionPage() {
   const { t } = useTranslation();

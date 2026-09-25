@@ -247,8 +247,7 @@ export function QuestionImportPage() {
       {/* The import inputs are a FORM, not a dataset-scoped toolbar: they
           configure the import (target course, template, file) rather than
           filtering a dataset, so they render as a form section above the
-          preview tables instead of opening a data-view toolbar band
-          (issue 601 Phase F convergence). */}
+          preview tables instead of opening a data-view toolbar band. */}
       <FormSection
         title={t("admin.questionImport.courseLabel")}
         actions={
