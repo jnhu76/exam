@@ -1,16 +1,16 @@
 /**
  * J5-I1D — Recovery Exam Detail: proctor assign/revoke (Workflow F).
  *
- * Drives the REAL Recovery Exam Detail proctor commands (J5-I1C1) + the REAL
- * proctor-assignment endpoints (ADR-015 §16):
+ * Drives the REAL Recovery Exam Detail proctor commands (J5-I1C1): the assign
+ * dialog (userId input + confirmation) completes with a success toast and the
+ * reloaded page lists the proctor; the revoke destructive confirmation names
+ * proctor + exam and completes with a success toast.
  *
- *   assign (userId input, confirmation) → the recovery exam aggregate reload
- *   shows the new activeProctors entry (server truth);
- *   revoke (destructive confirmation naming proctor + exam) → the aggregate
- *   reload shows the proctor gone.
- *
- * A proctor USER is created via the real Admin API (`POST /api/users` with
- * role Proctor — the same path the proctor-landing spec uses).
+ * The wire-level facts (activeProctors projection before/after each command)
+ * are owned by routes/proctorAssignments.admin.test.ts and are deliberately
+ * not duplicated here. A proctor USER is created via the real Admin API
+ * (`POST /api/users` with role Proctor — the same path the proctor-landing
+ * spec uses).
  */
 import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
@@ -35,22 +35,10 @@ async function adminPost(
   return res.json();
 }
 
-async function adminGet(
-  request: import("@playwright/test").APIRequestContext,
-  token: string,
-  path: string,
-) {
-  const res = await request.get(`${BASE_URL}${path}`, {
-    headers: { Cookie: `auth-token=${token}` },
-  });
-  expect(res.ok(), `GET ${path} → ${res.status()}`).toBe(true);
-  return res.json();
-}
-
 test.describe("Recovery exam proctor assignment (J5-I1D)", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("assigns a proctor from the operations UI, then revokes it; aggregate reload is authoritative", async ({
+  test("assigns a proctor from the operations UI, then revokes it; the page reflects both transitions", async ({
     page,
     request,
   }) => {
@@ -86,16 +74,6 @@ test.describe("Recovery exam proctor assignment (J5-I1D)", () => {
     await expect(page.getByText("已指派监考").first()).toBeVisible({
       timeout: 15_000,
     });
-    const afterAssign = (await adminGet(
-      request,
-      token,
-      `/api/admin/recovery/exams/${seeded.examId}`,
-    )) as { activeProctors: Array<{ userId: string; displayName: string }> };
-    const assigned = afterAssign.activeProctors.find(
-      (p) => p.userId === proctorUserId,
-    );
-    expect(assigned).toBeTruthy();
-    expect(assigned!.displayName).toBe(`E2E Recovery Proctor ${stamp}`);
 
     // The reloaded page lists the proctor (`.first()`: the display name may
     // also appear in the assign dialog or elsewhere on the page).
@@ -116,13 +94,5 @@ test.describe("Recovery exam proctor assignment (J5-I1D)", () => {
     await expect(page.getByText("已撤销监考").first()).toBeVisible({
       timeout: 15_000,
     });
-    const afterRevoke = (await adminGet(
-      request,
-      token,
-      `/api/admin/recovery/exams/${seeded.examId}`,
-    )) as { activeProctors: Array<{ userId: string }> };
-    expect(
-      afterRevoke.activeProctors.some((p) => p.userId === proctorUserId),
-    ).toBe(false);
   });
 });

@@ -2,11 +2,15 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import { seedExam, type SeededExam } from "../lib/seed";
 import { candidateLogin, clickExamPrimaryAction } from "../lib/flow";
 
-// P2A-J6 — double-click-start (P2A-J1 atomic startAttempt guard)
+// P2A-J6 — double-click-start (UI layer)
 //
-// Two near-simultaneous start requests for the same enrollment must not
-// create two active attempts. Asserted via parallel API calls and also
-// via UI double-click on the start button.
+// A double-click on the exam start button must not double-fire the start
+// action: the candidate lands on the take page and the enrollment holds
+// exactly one attempt.
+//
+// The wire-level atomicity (two parallel start POSTs → one attempt) is owned
+// by apps/api/src/routes/attempts/candidate-start.test.ts and is deliberately
+// not duplicated here.
 
 const ADMIN_USERNAME = process.env.E2E_ADMIN_USERNAME ?? "admin";
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "admin123";
@@ -64,48 +68,6 @@ async function candidateLoginByApi(
 }
 
 test.describe("double-click start — no duplicate attempts (P2A-J1)", () => {
-  test("two concurrent start requests yield exactly one attempt", async ({
-    request,
-  }) => {
-    const seeded: SeededExam = await seedExam(request, "dbl-api", {
-      questionAnswer: true,
-      questionScore: 100,
-      durationMinutes: 30,
-    });
-
-    const candidateToken = await candidateLoginByApi(
-      request,
-      seeded.candidate.username,
-      seeded.candidate.password,
-    );
-
-    const startUrl = `${BASE_URL}/api/attempts/${seeded.examId}/start`;
-    const headers = {
-      "Content-Type": "application/json",
-      Cookie: `auth-token=${candidateToken}`,
-    };
-    const [r1, r2] = await Promise.all([
-      request.post(startUrl, { headers }),
-      request.post(startUrl, { headers }),
-    ]);
-
-    expect([r1.status(), r2.status()].sort()).toEqual([200, 201]);
-
-    const b1 = (await r1.json()) as { id: string };
-    const b2 = (await r2.json()) as { id: string };
-    const distinctIds = new Set([b1.id, b2.id]);
-    expect(distinctIds.size).toBe(1);
-
-    const adminToken = await adminLogin(request);
-    const attemptCount = await getEnrollmentAttemptCount(
-      request,
-      adminToken,
-      seeded.examId,
-      seeded.candidate.profileId,
-    );
-    expect(attemptCount).toBe(1);
-  });
-
   test("UI double-click on start button does not create a second attempt", async ({
     page,
     request,

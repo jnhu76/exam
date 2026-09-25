@@ -1,40 +1,37 @@
 import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
-import {
-  adminApiToken,
-  candidateLoginApi,
-  candidateStartAttempt,
-} from "../lib/flow";
+import { candidateLoginApi, candidateStartAttempt } from "../lib/flow";
 
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-
+// Admin-persona monitor-page composition. The proctor persona of the same
+// page (forbidden-nav absence, role landing) is owned by proctor-landing
+// spec; route-level authorization (who may call the proctor attempt reads)
+// is owned by apps/api/src/authz/permissionMatrix.proctor.test.ts and
+// apps/api/src/routes/proctorAuthorization.e2e.test.ts and is deliberately
+// not duplicated here.
 test.describe("Proctor Monitoring UI E2E", () => {
   test.describe.configure({ mode: "serial" });
 
   let seeded: ReturnType<typeof seedExam> extends Promise<infer R> ? R : never;
-  let adminToken: string;
-  let candidateToken: string;
-  let attemptId: string;
 
   test.beforeAll(async ({ request }) => {
     const unique = `monitor-ui-${Date.now()}`;
     seeded = await seedExam(request, unique);
 
-    adminToken = await adminApiToken(request);
-    candidateToken = await candidateLoginApi(
+    const candidateToken = await candidateLoginApi(
       request,
       (seeded as any).candidate.username,
       (seeded as any).candidate.password,
     );
-    attemptId = await candidateStartAttempt(
+    // The live in_progress attempt is what the monitor page renders.
+    await candidateStartAttempt(
       request,
       candidateToken,
       (seeded as any).examId,
     );
   });
 
-  test("admin can navigate to monitoring page and see candidate status", async ({
+  test("monitoring page shows active candidate with status and online badge", async ({
     page,
   }) => {
     await loginAsAdmin(page);
@@ -49,19 +46,6 @@ test.describe("Proctor Monitoring UI E2E", () => {
     });
 
     await expect(page.getByText("答题中")).toBeVisible();
-  });
-
-  test("monitoring page shows online status badge for active candidate", async ({
-    page,
-  }) => {
-    await loginAsAdmin(page);
-    await page.goto(`/admin/exams/${(seeded as any).examId}/proctor/monitor`);
-    await page.waitForURL("**/proctor/monitor**", { timeout: 15_000 });
-
-    await expect(
-      page.getByRole("heading", { name: "考试监控", level: 1 }),
-    ).toBeVisible({ timeout: 15_000 });
-
     const statusBadge = page.getByText("在线");
     await expect(statusBadge.first()).toBeVisible({ timeout: 15_000 });
   });
@@ -100,15 +84,5 @@ test.describe("Proctor Monitoring UI E2E", () => {
     await timelineBtn.first().click();
 
     await expect(page.getByText("事件时间线")).toBeVisible({ timeout: 10_000 });
-  });
-
-  test("non-admin candidate cannot access monitoring page", async ({
-    request,
-  }) => {
-    const res = await request.get(
-      `${BASE_URL}/api/admin/exams/${(seeded as any).examId}/proctor/attempts`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(res.status()).toBe(403);
   });
 });

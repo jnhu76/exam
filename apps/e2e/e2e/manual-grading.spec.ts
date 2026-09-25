@@ -1,46 +1,45 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
 import {
   candidateLogin,
-  candidateApiToken,
   startExamFromList,
   answerTrueFalse,
   answerTextResponse,
   waitForSaveSaved,
   submitExam,
-  adminApiToken,
-  getCandidateResult,
 } from "../lib/flow";
 
 /**
- * P3-MOD-P1-2 — Subjective grading end-to-end (real HTTP + browser flow).
+ * P3-MOD-P1-2 — Subjective grading end-to-end (browser loop).
  *
- * Proves the real product loop for a text_response question:
+ * Proves the real product loop for a text_response question at the browser
+ * level:
  *   candidate starts exam
  *     → answers a real text_response (multiline plain text) + objective
  *     → submits
- *     → submitted + pending_manual (authoritative take API)
- *     → durable manual grading queue (backed by pending-manual entry;
- *       objective work absent)
- *     → admin opens grading detail → sees frozen candidate answer, frozen
- *       rubric, and applicable frozen standardAnswer (P1-1 projection)
- *     → admin completes the pending manual entry
- *     → graded + fully_graded; queue item disappears
- *     → final score identity (attempt total == grading-result earned sum)
+ *     → admin grading queue page lists the attempt (durable pending-manual
+ *       row; queue → detail discovery through the real page, not a known-id
+ *       jump)
+ *     → admin grading detail renders the frozen candidate answer, frozen
+ *       rubric and applicable frozen standardAnswer (P1-1 projection)
+ *     → admin completes the pending manual entry through the confirmation
+ *       dialog → "评分已完成" toast
+ *     → reload → the terminal score/comment persist
  *
- * The prior `test.skip` was justified by a Phase 2 baseline premise
- * ("subjective answer runtime / candidate-answer visibility / manual grading
- * workflow are not part of Phase 2 baseline"). That premise is stale: P0
- * CLOSED shipped the text_response runtime, and P3-MOD-P1-1 landed the frozen
- * grading-metadata projection. The skip is removed; the real flow now runs.
+ * Wire-level receipts are owned at the API layer and deliberately not
+ * duplicated here: take attemptStatus/gradingStatus by
+ * routes/attempts/candidate-take-text-response.test.ts, queue composition by
+ * gradingQueue.test.ts, terminal closure by
+ * routes/attempts/manualGradingClosure.test.ts, score identity and the
+ * regrade-409 immutability by scores.test.ts.
  *
  * P1 boundary (preserved): P1 proves "score becomes computed / attempt grading
- * completes". Candidate result visibility is exercised only because the seed
- * uses `immediate` publication — it is NOT a P1 acceptance gate.
+ * completes" at the UI level; candidate result visibility is not a P1
+ * acceptance gate and is owned by result-publishing.spec.ts.
  */
 test.describe("manual grading (P3-MOD-P1-2)", () => {
-  test("candidate submits text_response → admin grades → graded + fully_graded with score identity", async ({
+  test("candidate submits text_response → admin grades via the queue UI → terminal entry persists", async ({
     page,
     request,
   }) => {
@@ -88,44 +87,13 @@ test.describe("manual grading (P3-MOD-P1-2)", () => {
 
     await submitExam(page);
 
-    // Capture the attemptId from the result URL for API checks.
+    // Capture the attemptId from the result URL to target the queue row.
     await page.waitForURL("**/result", { timeout: 15_000 });
     const resultUrl = new URL(page.url());
     const attemptId = resultUrl.pathname.split("/").filter(Boolean)[1]!;
     expect(attemptId).toBeTruthy();
 
-    const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
-
-    // ── Authoritative take API: submitted + pending_manual ───────────────
-    const takeRes = await request.get(
-      `${baseURL}/api/candidate/attempts/${attemptId}/take`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(takeRes.status()).toBe(200);
-    const take = await takeRes.json();
-    expect(take.attemptStatus).toBe("submitted");
-    expect(take.gradingStatus).toBe("pending_manual");
-
-    // ── Admin: grading queue shows durable pending-manual work ───────────
-    const adminToken = await adminApiToken(request);
-    const queueRes = await request.get(`${baseURL}/api/admin/grading-queue`, {
-      headers: { Cookie: `auth-token=${adminToken}` },
-    });
-    expect(queueRes.status()).toBe(200);
-    const queueBody = await queueRes.json();
-    const queueItem = queueBody.items.find(
-      (i: { attemptId: string }) => i.attemptId === attemptId,
-    );
-    expect(queueItem).toBeDefined();
-    expect(queueItem.gradingStatus).toBe("pending_manual");
-    // Only the single text_response is pending-manual work; the objective
-    // question is completed_auto and must NOT inflate the pending count.
-    expect(queueItem.pendingQuestionCount).toBe(1);
-
-    // ── Admin: grading detail shows frozen answer + rubric + reference ──
-    // This is the P1-1 projection proven through the real UI. Navigate via the
-    // queue row (same path a human admin takes).
+    // ── Admin: grading queue page shows the pending-manual row ───────────
     await loginAsAdmin(page);
     await page.goto("/admin/grading-queue");
 
@@ -197,73 +165,5 @@ test.describe("manual grading (P3-MOD-P1-2)", () => {
     await expect(
       page.getByTestId(`grading-score-input-${essayQuestionId}`),
     ).toHaveValue("50");
-
-    // ── Terminal: attempt graded + fully_graded; queue item gone ────────
-    const takeAfter = await request.get(
-      `${baseURL}/api/candidate/attempts/${attemptId}/take`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(takeAfter.status()).toBe(200);
-    const takeAfterBody = await takeAfter.json();
-    expect(takeAfterBody.attemptStatus).toBe("graded");
-    expect(takeAfterBody.gradingStatus).toBe("fully_graded");
-
-    const queueAfter = await request.get(`${baseURL}/api/admin/grading-queue`, {
-      headers: { Cookie: `auth-token=${adminToken}` },
-    });
-    expect(queueAfter.status()).toBe(200);
-    const queueAfterBody = await queueAfter.json();
-    const queueItemAfter = queueAfterBody.items.find(
-      (i: { attemptId: string }) => i.attemptId === attemptId,
-    );
-    expect(queueItemAfter).toBeUndefined();
-
-    // ── Score identity: objective (40) + manual (50) = 90 ───────────────
-    const result = await getCandidateResult(request, candidateToken, attemptId);
-    expect(result.showResultImmediately).toBe(true);
-    expect(result.totalScore).toBe(90);
-    expect(result.passed).toBe(true); // 90 >= 50
-
-    // Score identity (Job Card §8): the admin result view exposes the
-    // per-question earned scores (admin bypasses the publication gate).
-    // Assert attempt.totalScore == SUM(gradingResult question earned) == 90.
-    const adminResultRes = await request.get(
-      `${baseURL}/api/scores/attempts/${attemptId}`,
-      { headers: { Cookie: `auth-token=${adminToken}` } },
-    );
-    expect(adminResultRes.status()).toBe(200);
-    const adminResult = await adminResultRes.json();
-    expect(adminResult.showResultImmediately).toBe(true);
-    expect(adminResult.totalScore).toBe(90);
-    const earnedSum = (
-      adminResult.questionResults as Array<{ score: number }>
-    ).reduce((sum, q) => sum + (q.score ?? 0), 0);
-    expect(earnedSum).toBe(90);
-
-    // ── Strict terminal: ordinary grade-question is rejected (409) ──────
-    // gradeQuestion is one-way; completed_manual / graded+fully_graded are
-    // immutable under the current protocol. Post-terminal revision is not in
-    // scope.
-    const regrade = await request.post(
-      `${baseURL}/api/admin/attempts/${attemptId}/grade-question`,
-      {
-        headers: { Cookie: `auth-token=${adminToken}` },
-        data: {
-          questionId: essayQuestionId,
-          score: 45,
-          comment: "re-grade",
-        },
-      },
-    );
-    expect(regrade.status()).toBe(409);
-
-    // Terminal truth persists — total stays 90, not recomputed to 85.
-    const resultAfterRegrade = await getCandidateResult(
-      request,
-      candidateToken,
-      attemptId,
-    );
-    expect(resultAfterRegrade.totalScore).toBe(90);
-    expect(resultAfterRegrade.passed).toBe(true);
   });
 });

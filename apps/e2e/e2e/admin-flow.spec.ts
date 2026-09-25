@@ -228,8 +228,11 @@ test.describe("admin operation flow", () => {
   // runtime availability — NOT just that a seed fixture is visible. The
   // exam is created as draft, the candidate enrolled, draft-proven
   // un-startable, THEN published via the real endpoint, THEN the candidate
-  // starts it for real through the UI, and the authoritative take snapshot
-  // confirms the in-progress attempt + frozen text_response question.
+  // starts it for real through the UI: the start POST is captured (proving
+  // THIS click created the attempt) and the take page renders the frozen
+  // text_response question. The take-snapshot JSON contract
+  // (attemptStatus/questions) is owned by candidate-take.test.ts and is
+  // deliberately not re-asserted over the wire here.
   //
   // Does NOT use seedExam() (it auto-publishes and hides the transition).
   test("P2 publish-to-candidate: admin publishes an exam and enrolled candidate can start it", async ({
@@ -370,9 +373,8 @@ test.describe("admin operation flow", () => {
       status: string;
     };
     expect(publishedBody.status).toBe("published");
-    // questionSnapshot materialization is proven later via the authoritative
-    // take endpoint (the frozen text_response appears there); the exam detail
-    // response does not project the snapshot by contract.
+    // questionSnapshot materialization is proven browser-side below: the take
+    // page renders the frozen text_response question after the UI start.
 
     // ── 5. Candidate UI: real login, list shows the exam, start enabled. ──
     await loginAsCandidate(page, {
@@ -398,8 +400,9 @@ test.describe("admin operation flow", () => {
       timeout: 15_000,
     });
 
-    // Capture the real start-attempt POST so the attemptId is provably the one
-    // THIS click produced (not a seed/legacy attempt).
+    // Capture the real start-attempt POST so the attempt is provably the one
+    // THIS click produced (not a seed/legacy attempt). Its JSON contract is
+    // owned by candidate-start.test.ts / candidate-take.test.ts.
     const startResponsePromise = page.waitForResponse(
       (res) =>
         res.url().includes("/api/attempts/") &&
@@ -409,8 +412,7 @@ test.describe("admin operation flow", () => {
       { timeout: 15_000 },
     );
     await page.getByTestId("exam-start-btn").click();
-    const startResponse = await startResponsePromise;
-    const attemptId = ((await startResponse.json()) as { id: string }).id;
+    await startResponsePromise;
 
     // Wait for the take page to render this exam's question (UI proof).
     await page.waitForURL((url) => /\/exam\/[^/]+\/take$/.test(url.pathname), {
@@ -419,22 +421,5 @@ test.describe("admin operation flow", () => {
     await expect(page.getByText(questionContent)).toBeVisible({
       timeout: 15_000,
     });
-
-    // ── 7. Authoritative take snapshot: in-progress attempt, frozen question. ──
-    const takeRes = await request.get(
-      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(takeRes.ok()).toBeTruthy();
-    const take = (await takeRes.json()) as {
-      examId: string;
-      attemptStatus: string;
-      questions: Array<{ type: string; prompt: string }>;
-    };
-    expect(take.examId).toBe(examId);
-    expect(take.attemptStatus).toBe("in_progress");
-    expect(take.questions.length).toBe(1);
-    expect(take.questions[0]!.type).toBe("text_response");
-    expect(take.questions[0]!.prompt).toBe(questionContent);
   });
 });

@@ -14,7 +14,10 @@ import {
 
 // P2A-J6 — refresh-during-exam
 //
-// Two-round answer persistence across browser reloads.
+// Two-round answer persistence across browser reloads, at both the UI and
+// wire level. Also owns the resume-attempt UI-restore claim: after a reload
+// the previously-saved answer is re-rendered checked (the radio reflects the
+// server-restored value).
 // Regression for the clientSeqsRef hydration bug:
 //   answer true → reload → clientSeqsRef restored → flip to false →
 //   clientSeq=2 (not 1) → server accepts → reload → false survives →
@@ -134,6 +137,9 @@ test.describe("refresh during exam", () => {
     await page
       .getByTestId("take-question-section")
       .waitFor({ state: "visible" });
+    // The previously-saved answer is restored in the UI (resume-attempt
+    // claim): the radio reflects the server-restored value.
+    await expect(page.getByTestId("true-false-true")).toBeChecked();
     expect(await getAnswer(request, token, attemptId)).toBe(true);
 
     // ── Round 2: flip to false ────────────────────────────────────
@@ -156,6 +162,7 @@ test.describe("refresh during exam", () => {
     await page
       .getByTestId("take-question-section")
       .waitFor({ state: "visible" });
+    await expect(page.getByTestId("true-false-false")).toBeChecked();
     expect(await getAnswer(request, token, attemptId)).toBe(false);
 
     // Still on /take.
