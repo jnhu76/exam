@@ -2,11 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-  ACTIONS_MIN_COARSE,
-  ACTIONS_MIN_FINE,
-  ROLE_GEOMETRY,
-} from "@/table/columnAllocation";
+import { ROLE_GEOMETRY } from "@/table/columnAllocation";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
@@ -26,22 +22,59 @@ function listSourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/** The hex value a `--var: #rrggbb;` definition carries in index.css. */
+function cssHexVar(css: string, name: string): string | null {
+  const m = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(css);
+  return m?.[1] ?? null;
+}
+
 describe("table and color visual-finish authority", () => {
-  it("publishes the refined perceptually-uniform product-blue token system", () => {
-    // UI-TABLE-KOI-COLOR-REFINE-2: structural tokens are now NEUTRAL grey (no
-    // blue cast); the canvas is a light neutral grey so white surfaces read as
-    // a raised layer; borders follow control > shell/header > row > grid.
-    // These are the current authoritative values and MUST stay in sync with
-    // index.css.
+  it("keeps the brand pin and the documented neutral token relationships", () => {
+    // UI-TABLE-KOI-COLOR-REFINE-2: index.css is the palette authority, so
+    // exact neutral values are not re-listed here (a retune must not edit
+    // test + source in lockstep with zero independent signal). What is
+    // governed instead: the one brand pin, the canvas relationship (light
+    // neutral grey, never pure white, so white surfaces read as a raised
+    // layer), and the border lightness ladder control > shell/header >
+    // row/divider > grid, strongest to faintest. The ink floor on --text is
+    // proven by the AAA contrast recompute below.
     expect(indexCss).toContain("--primary: #2563eb");
-    expect(indexCss).toContain("--primary-soft-strong: #dbeafe");
-    expect(indexCss).toContain("--primary-focus: #93c5fd");
-    expect(indexCss).toContain("--bg: #f5f7fa");
-    expect(indexCss).toContain("--text: rgba(0, 0, 0, 0.76)");
-    expect(indexCss).toContain("--border-control: #d1d5db");
-    expect(indexCss).toContain("--border-shell: #dfe3e8");
-    expect(indexCss).toContain("--border-header: #e1e5ea");
-    expect(indexCss).toContain("--border-divider: #edf0f3");
+
+    const bg = cssHexVar(indexCss, "--bg");
+    expect(bg, "--bg must be a hex color").not.toBeNull();
+    expect(bg).not.toBe("#ffffff");
+
+    const control = cssHexVar(indexCss, "--border-control");
+    const shell = cssHexVar(indexCss, "--border-shell");
+    const header = cssHexVar(indexCss, "--border-header");
+    const divider = cssHexVar(indexCss, "--border-divider");
+    const row = cssHexVar(indexCss, "--border-row");
+    const grid = cssHexVar(indexCss, "--border-grid");
+    for (const [name, hex] of [
+      ["--border-control", control],
+      ["--border-shell", shell],
+      ["--border-header", header],
+      ["--border-divider", divider],
+      ["--border-row", row],
+      ["--border-grid", grid],
+    ] as const) {
+      expect(hex, `${name} must be a hex color`).not.toBeNull();
+    }
+    const bright = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      const [r, g, b] = [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+      return 0.299 * r + 0.587 * g + 0.114 * b;
+    };
+    // Control edges are the strongest (darkest) boundary; shell and header
+    // form the middle tier; row and its divider alias are fainter; the
+    // per-cell grid is the faintest.
+    expect(bright(control!)).toBeLessThan(bright(shell!));
+    expect(bright(control!)).toBeLessThan(bright(header!));
+    expect(bright(shell!)).toBeLessThan(bright(row!));
+    expect(bright(header!)).toBeLessThan(bright(row!));
+    expect(bright(row!)).toBeLessThan(bright(grid!));
+    // The divider is the documented alias of the row boundary.
+    expect(bright(divider!)).toBe(bright(row!));
   });
 
   it("keeps primary text ink at or above the AAA floor on white (issue #601 V1)", () => {
@@ -175,21 +208,6 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).not.toMatch(
       /\[data-geometry-state="expanded"\]\s*tr\s*>\s*:last-child[\s\S]*?border-right-width:\s*0/,
     );
-  });
-
-  it("binds the actions column to the icon-only contract width", () => {
-    // issue 445 P3 §4.3: the inline row-action vocabulary is icon-only and
-    // count-bounded, so the actions column's floor is the derived contract
-    // width (6rem fine / 7.5rem coarse) — not a per-page density tier. The
-    // density selectors are gone entirely. #601 Phase F: the width lives in
-    // the allocation authority, not in CSS; a floor is a minimum, not an
-    // exact rendered width (the proportional allocator may widen it).
-    expect(ROLE_GEOMETRY.actions).toEqual({
-      floor: ACTIONS_MIN_FINE,
-      basis: ACTIONS_MIN_FINE,
-    });
-    expect(ACTIONS_MIN_COARSE).toBe(120);
-    expect(tableCss).not.toContain("data-actions-density");
   });
 
   it("keeps column widths out of CSS — the allocator is the single width owner", () => {

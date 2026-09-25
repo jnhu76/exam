@@ -15,11 +15,9 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ACTIONS_MIN_COARSE, ROLE_GEOMETRY } from "@/table/columnAllocation";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, "..");
-const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
 const rowActionsSource = readFileSync(
   join(webRoot, "components", "shared", "RowActions.tsx"),
   "utf8",
@@ -89,12 +87,15 @@ const BUDGET_ALLOWLIST = {
 };
 
 describe("row-action capacity contract", () => {
-  it("removes the actionsDensity model everywhere", () => {
+  it("removes the actionsDensity model from every component", () => {
+    // The numeric actions-width constants are pinned once, in
+    // columnAllocation.test.ts (the allocator — the constants' home); the CSS
+    // half of the removal scan lives there too. This file owns the tsx half:
+    // no page/component may resurrect the prop or the data attribute.
     const offenders = files.filter((path) =>
       /actionsDensity|data-actions-density/.test(readFileSync(path, "utf8")),
     );
     expect(offenders.map((p) => relative(webRoot, p))).toEqual([]);
-    expect(tableCss).not.toContain("data-actions-density");
   });
 
   it("keeps the declaration type a closed vocabulary (no always-inline escape hatch)", () => {
@@ -121,12 +122,6 @@ describe("row-action capacity contract", () => {
       "onSelect",
     ]);
     expect(body).not.toMatch(/overflow|pinned|always.?inline/);
-  });
-
-  it("binds the actions column to the contract width (6rem fine / 7.5rem coarse)", () => {
-    // #601 Phase F: the width authority is the allocator's ROLE_GEOMETRY.
-    expect(ROLE_GEOMETRY.actions).toEqual({ floor: 96, basis: 96 });
-    expect(ACTIONS_MIN_COARSE).toBe(120);
   });
 
   it("uses the typed declaration API at every RowActions call site", () => {

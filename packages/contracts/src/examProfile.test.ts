@@ -5,6 +5,8 @@ import {
   ExamProfileSchema,
 } from "./examProfile.js";
 import { CreateExamRequestSchema } from "./exam.js";
+import { normalizeInterruptionPolicyConfiguration } from "./interruption.js";
+import { STARTER_PROFILE_RECIPES } from "@exam/domain";
 
 describe("CreateExamRequestSchema — P7-M2 profileId + durationMinutes (design §19/§20)", () => {
   const base = {
@@ -246,4 +248,39 @@ describe("ExamProfileSchema response shape", () => {
     });
     expect(result.success).toBe(true);
   });
+});
+
+// P7-M truthfulness gate, runtime half: the starter recipes in @exam/domain
+// are authoring prefills for POST /api/exam-profiles, so every shipped
+// default MUST be a valid profile-create payload. The strict parse owns the
+// field census (an unmodeled recipe field fails here instead of being
+// silently stripped at the wire boundary) plus every range/enum constraint
+// the schema declares; the normalizer owns the ADR-013 caps rule.
+describe("STARTER_PROFILE_RECIPES parse through the profile wire schema", () => {
+  it.each(STARTER_PROFILE_RECIPES.map((r) => [r.key, r.defaults] as const))(
+    "%s defaults are a valid strict CreateExamProfileRequest and survive normalization",
+    (key, defaults) => {
+      const result = CreateExamProfileRequestSchema.strict().safeParse({
+        name: `starter-${key}`,
+        ...defaults,
+      });
+      expect(result.success, `${key} defaults must parse`).toBe(true);
+
+      const normalized = normalizeInterruptionPolicyConfiguration({
+        policy: defaults.interruptionTimePolicy,
+        perIncidentCapSeconds: defaults.interruptionGracePerIncidentSeconds,
+        perAttemptAggregateCapSeconds:
+          defaults.interruptionGracePerAttemptSeconds,
+      });
+      // The normalizer must round-trip the recipe's declared policy — a
+      // recipe whose caps the ADR-013 rule would rewrite (or reject) is
+      // dishonest about the runtime behavior it promises.
+      expect(normalized).toEqual({
+        policy: defaults.interruptionTimePolicy,
+        perIncidentCapSeconds: defaults.interruptionGracePerIncidentSeconds,
+        perAttemptAggregateCapSeconds:
+          defaults.interruptionGracePerAttemptSeconds,
+      });
+    },
+  );
 });
