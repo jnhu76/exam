@@ -2,7 +2,8 @@
  * Pino redaction configuration for sensitive fields.
  *
  * These paths are applied to all Pino log output. The `remove` strategy
- * replaces matched values with `[redacted]`.
+ * deletes matched keys from the serialized output entirely (value recovery
+ * from the log line is impossible, not merely censored).
  */
 export const SENSITIVE_LOG_PATHS = [
   "password",
