@@ -14,17 +14,18 @@ import {
 /**
  * P3-PROTO-1 — Backend State Consistency Tests (L0)
  *
- * Proves the protocol boundary scenarios this file OWNS; the rest of the
- * original matrix lives with its named keepers:
- *   #1  save before submit allowed            → candidate-save-submit.test.ts:439
- *   #3a double submit HTTP idempotency        → candidate-save-submit.test.ts:744 (FIX-2)
- *   #4  save/submit race                      → submitFreezeBarrier.test.ts
- *   #5  refresh after submit                  → candidate-take.test.ts:120 + candidate-save-submit.test.ts:1205
- *   #6  candidate cannot see score before release → scores.test.ts:261
- *   #7  candidate cannot see standardAnswer   → candidate-take.test.ts:334
- *   #11 save after deadline rejected          → candidate-save-submit.test.ts:938
- *   #12 submit after deadline returns existing → candidate-save-submit.test.ts:938
- *   #14 grading queue queries grading entries → gradingQueue.test.ts:348
+ * Owns the protocol boundary scenarios covered by the describe blocks in this
+ * file. The sibling scenarios are owned by these suites — a change here must
+ * not be mirrored into a second copy there:
+ *   save before submit allowed                → candidate-save-submit.test.ts
+ *   double submit HTTP idempotency            → candidate-save-submit.test.ts
+ *   save/submit race                          → submitFreezeBarrier.test.ts
+ *   refresh after submit                      → candidate-take.test.ts,
+ *                                               candidate-save-submit.test.ts
+ *   score hidden before release               → scores.test.ts
+ *   standardAnswer never on the candidate wire → candidate-take.test.ts
+ *   save/submit after deadline                → candidate-save-submit.test.ts
+ *   grading queue reads grading entries       → gradingQueue.test.ts
  */
 describe("P3-PROTO-1: protocol boundary consistency", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -434,11 +435,11 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
   });
 
   // ─── Scenario #11/#12/#14: deadline save/submit + grading queue ─
-  // Owned by candidate-save-submit.test.ts:938 (save after deadline rejected,
-  // submit of saved answers still works) and gradingQueue.test.ts:348
+  // Owned by candidate-save-submit.test.ts (save after deadline rejected,
+  // submit of saved answers still works) and gradingQueue.test.ts
   // (queue excludes attempts whose grading entries are all completed_auto).
 
-  // ─── Scenario #15: future baseVersion rejected (P7-S2-B) ───
+  // ─── Scenario #15: future baseVersion rejected ───
   // ANSWER_BASE_VERSION_MUST_EQUAL_CURRENT_VERSION: a save claiming a
   // baseVersion the server has not issued yet is impossible client state and
   // must be rejected on the wire, not silently accepted as `currentVersion+1`.

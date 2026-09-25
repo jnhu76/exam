@@ -538,7 +538,7 @@ describe("runtimeConfig", () => {
       delete process.env.TEST_DATABASE_URL;
       delete process.env.TEST_DB_URL;
       process.env.DATABASE_URL = "postgresql://e:e@h:5432/e2edb";
-      // PR #322 review P1-3: no explicit test URL → the resolver builds
+      // No explicit test URL → the resolver builds
       // exam_test@localhost:<DB_HOST_PORT>. DATABASE_URL (the dev/e2e DB) is
       // never consulted.
       process.env.DB_HOST_PORT = "25432";
@@ -762,7 +762,7 @@ describe("runtimeConfig", () => {
     });
 
     it("a stale APP_PORT does NOT hijack the dev API (development ignores APP_PORT)", () => {
-      // PR #322 review P1-2: the pre-split `.env` left APP_PORT=3000 behind.
+      // COMPATIBILITY: an upgrade-era `.env` may still carry APP_PORT=3000.
       // In development the API must follow DEV_API_PORT only, so an upgrade
       // user's stale value can never point Vite's proxy at the wrong process.
       const config = loadRuntimeConfig({

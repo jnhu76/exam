@@ -1,5 +1,5 @@
 /**
- * REC-I4-V1 — Operator Grant Concurrency Test Harness (test-only).
+ * Operator Grant Concurrency Test Harness (test-only).
  *
  * This harness contains NO duplicate of the production grant/recovery logic.
  * The deterministic concurrency test calls the SAME production function

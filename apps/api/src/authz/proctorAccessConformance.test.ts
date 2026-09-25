@@ -1,11 +1,11 @@
 /**
- * J4-I1B structural `proctorAccess` conformance test (ADR-015 §8, frozen).
+ * Structural `proctorAccess` conformance test (ADR-015 §8, frozen).
  *
  * The route registry is the enumeration source of truth — the test enumerates
  * EVERY registry entry (not only permissions currently granted to Proctor),
- * because J4-I1B *removes* AttemptForceSubmit/AttemptMisconductMark from the
- * Proctor preset: enumerating only the post-removal preset would silently drop
- * the three admin_only attempt routes from coverage.
+ * because AttemptForceSubmit/AttemptMisconductMark are absent from the Proctor
+ * preset: enumerating only that preset would silently drop the three
+ * admin_only attempt routes from coverage.
  *
  * Per-value checks (applied to every registry entry):
  *   1. every entry declares a valid `proctorAccess` value;
@@ -19,8 +19,8 @@
  *   5. `deferred` → the permission is NOT in the Proctor preset;
  *   6. `not_applicable` → no Proctor-specific invariant.
  *
- * Dedicated assertions: AttemptForceSubmit/AttemptMisconductMark removed from
- * PROCTOR_PERMISSIONS; the 11 incident routes exist in the registry with the
+ * Dedicated assertions: AttemptForceSubmit/AttemptMisconductMark absent from
+ * PROCTOR_PERMISSIONS; the incident routes exist in the registry with the
  * frozen per-route access values.
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
@@ -301,7 +301,7 @@ describe("J4-I1B proctorAccess structural conformance (ADR-015 §8)", () => {
   });
 
   /**
-   * J4-I1C precise registry↔runtime authorization lock for the three
+   * Precise registry↔runtime authorization lock for the three
    * Proctor-assignment routes (ADR-015 §16). The registry is the authorization
    * enumeration source of truth; this proves the RUNTIME gate on each route is
    * not merely "a valid scoped gate" but EXACTLY the registry's declared

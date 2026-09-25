@@ -166,7 +166,7 @@ describe("setupWorkerTestDatabase — input guards (no PG)", () => {
 // PG-integration tests (skipped when PG is not reachable)
 // ---------------------------------------------------------------------------
 
-// Hang-protection budget (docs/standards/test-flakes.md PR #242 rule):
+// Hang-protection budget (queue budget rule, docs/standards/test-flakes.md):
 // `ensureDatabaseExists` acquires the shared lifecycle lock for CREATE
 // DATABASE, so like every other queue participant it gets the 30s budget —
 // a sibling DROP DATABASE long-tail (seconds on WSL2 I/O) is a legitimate

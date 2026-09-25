@@ -90,9 +90,9 @@ describe("RBAC permission matrix — proctor routes", () => {
   });
 
   // J4-I1B (ADR-015 §13): AttemptForceSubmit is REMOVED from the Proctor
-  // preset — force-submit is Admin-only while staying scoped. (J5-I1C Slice 2:
-  // the force-submit request now requires operationId + canonical reason; the
-  // payload is valid so the capability gate, not body validation, decides.)
+  // preset — force-submit is Admin-only while staying scoped. The request
+  // requires operationId + canonical reason, so the payload must be valid for
+  // the capability gate (not body validation) to decide.
   it("Proctor is denied force-submit after J4-I1B (grant removed)", async () => {
     const verdict = await fixture.verdict(
       "Proctor",
@@ -105,9 +105,8 @@ describe("RBAC permission matrix — proctor routes", () => {
 
   // J4-I1B (ADR-015 §13): AttemptMisconductMark is REMOVED from the Proctor
   // preset — misconduct marking is Admin-only while staying scoped. The body
-  // carries the J5-I1C Slice 3 operationId so the request passes schema
-  // validation and reaches the capability gate (a 400 would otherwise mask
-  // the denied verdict).
+  // carries the operationId the schema requires so the request reaches the
+  // capability gate (a 400 would otherwise mask the denied verdict).
   it("Proctor is denied misconduct marking after J4-I1B (grant removed)", async () => {
     const verdict = await fixture.verdict(
       "Proctor",

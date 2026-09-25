@@ -352,15 +352,14 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
   });
 
   it("fails closed when a newer composite FK depends on users_org_id_unique (P2-3)", async () => {
-    // Review J5-I1C0 PR #261 P2-3: the previous confkey probe hardcoded
-    // `con.confkey = ARRAY[1, 2]`, but `users` physical column order is
+    // Mutation proof for the confkey probe: `users` physical column order is
     // id (attnum 1) then organization_id (attnum 2), so the real composite FK
     // `(... org_id, actor_id) → users(organization_id, id)` carries
-    // confkey = [2, 1]. The hardcoded check never matched, so the in-use
-    // branch was dead. This test creates a NEWER table with exactly such a
-    // composite FK (simulating a future migration that reuses the index) and
-    // proves the rollback now actively reports in-use and preserves both the
-    // index AND the (empty) receipt table.
+    // confkey = [2, 1]. A probe hardcoding `con.confkey = ARRAY[1, 2]` never
+    // matches it and leaves the in-use branch dead. This test creates a NEWER
+    // table with exactly such a composite FK (simulating a future migration
+    // that reuses the index) and proves the rollback actively reports in-use
+    // and preserves both the index AND the (empty) receipt table.
     const inUseIso = await setupIsolatedTestDb({
       namespace: "mig0028rb-inuse",
     });

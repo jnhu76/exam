@@ -7,26 +7,25 @@ import { Checkbox } from "./checkbox";
 import { Switch } from "./switch";
 
 /**
- * Primitive-layer contracts from the issue 577 corrective:
+ * Primitive-layer regression contracts:
  *
- * E — checkbox.tsx / switch.tsx carried corrupted class tokens
- *     (`…text-primary-foreground=checked]:bg-primary`): whole tokens that
- *     generate NO CSS, silently dropping the checked text color and the
- *     unchecked switch surface. These tests pin the repaired state selectors
+ * Corrupted class tokens — checkbox.tsx / switch.tsx carried whole tokens that
+ *     generate NO CSS (`…text-primary-foreground=checked]:bg-primary`),
+ *     silently dropping the checked text color and the unchecked switch
+ *     surface. These tests pin the repaired state selectors
  *     (checked / unchecked / disabled / focus-visible) and forbid the
  *     unparseable-fragment shape from returning.
  *
- * D — dead declarations defeated by unlayered recipes (Input/SelectTrigger
+ * Dead declarations — defeated by unlayered recipes (Input/SelectTrigger
  *     rounded-lg, Textarea rounded-md, TableHead/TableCell text-sm,
- *     StatusBadge h-6) were removed; a lower-authority declaration that an
- *     unlayered recipe provably defeats must not come back — it lies about
- *     its own output.
+ *     StatusBadge h-6). A lower-authority declaration that an unlayered recipe
+ *     provably defeats must not come back — it lies about its own output.
  *
- * J — disabled-state ownership: exactly two sanctioned control-family
- *     patterns (explicit semantic colors, or disabled:opacity-50). A third
- *     pattern is a governance failure, not a style choice.
+ * Disabled-state ownership — exactly two sanctioned control-family patterns
+ *     (explicit semantic colors, or disabled:opacity-50). A third pattern is a
+ *     governance failure, not a style choice.
  *
- * K5 — components/ui stays color-safe (semantic tokens only, no raw
+ * Color safety — components/ui stays color-safe (semantic tokens only, no raw
  *     palettes/hex), keeping the gate exemption honest for color.
  */
 
@@ -38,10 +37,10 @@ function readUi(name: string): string {
 }
 
 /**
- * The corrupted-fragment shape (issue 577 m4) was a class token containing `]`
- * with no opening `[` — e.g. `…text-primary-foreground=checked]:bg-primary`:
- * one unparseable token that generates NO CSS. A legit Tailwind arbitrary
- * variant always balances its brackets within the token.
+ * A corrupted class token contains `]` with no opening `[` — e.g.
+ * `…text-primary-foreground=checked]:bg-primary`: one unparseable token that
+ * generates NO CSS. A legit Tailwind arbitrary variant always balances its
+ * brackets within the token.
  */
 function unbalancedBracketTokens(className: string): string[] {
   return className

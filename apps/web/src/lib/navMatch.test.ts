@@ -7,7 +7,7 @@ import {
 import { resolvedRouteEntries } from "@/test/routeExtraction";
 
 /**
- * Route → navigation-destination gate (#494 corrective-1).
+ * Route → navigation-destination gate (#494).
  *
  * The route inventory is extracted from App.tsx by the shared #455 route-aware
  * AST parser (the single router parser owner) — this gate never re-parses
@@ -65,7 +65,7 @@ const EXPECTED_ROUTE_FAMILY: Record<string, string> = {
   "/admin/proctor": "/admin/proctor",
 };
 
-/** Replaces `:param` segments with a representative safe ID (issue 490 §23). */
+/** Replaces `:param` segments with a representative safe ID. */
 function concretize(route: string): string {
   return route
     .split("/")

@@ -1,7 +1,7 @@
 /**
  * Rollback CLI (rollback-attempt-command-receipts.ts) — URL parsing +
- * controlled error path + real-PG lifecycle (J5-I1C Slice 1 audit §10;
- * overnight hardening: mirrors `rollback-incident-tables.test.ts`).
+ * controlled error path + real-PG lifecycle (mirrors
+ * `rollback-incident-tables.test.ts`).
  *
  * Unit-level `parseDatabaseName` coverage lives with the guard owner
  * (packages/db/src/scripts/destructiveDbNameGuard.test.ts). Subprocess tests

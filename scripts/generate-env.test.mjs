@@ -5,7 +5,7 @@
 // A violation of "never rotate" would silently invalidate issued JWTs or
 // break the running PostgreSQL credential, so the contract is test-enforced.
 //
-// Legacy carry-over (PR #322 review P1-1): an install made before the
+// COMPATIBILITY: an install made before the
 // dev/deploy env split (#319) keeps its deployment secrets in the repo-root
 // .env. When .env.deploy is first created, those secrets must be preserved —
 // especially POSTGRES_PASSWORD, whose silent rotation would break the existing
@@ -138,7 +138,7 @@ test("quoted-empty secrets are filled in place (Windows PowerShell style)", () =
   }
 });
 
-// ── PR #322 review P1-1: legacy .env → .env.deploy migration ─────────────
+// ── Legacy .env → .env.deploy migration ──────────────────────────────────
 // A legacy dev .env (pre-split install) carries the deployment secrets. On
 // first .env.deploy creation they must be copied exactly — especially
 // POSTGRES_PASSWORD, which the existing data volume still uses. A second run

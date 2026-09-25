@@ -137,13 +137,12 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
     }
   });
 
-  // UI-TYPOGRAPHY-AUTHORITY-RECON-1 §13/§19: the no-arbitrary-typography
-  // baseline is empty (the former ExamTimer text-[11px] entry was removed in
-  // W4A). This proves a reintroduced arbitrary-typography value is a REAL,
-  // UNSHIELDED error — using an ISOLATED fixture inside the business scope glob
-  // (so it is actually linted) whose filename is NOT in the baseline. Unlike the
-  // prior W4A probe this does NOT rewrite the real ExamTimer.tsx, so a future
-  // legitimate className change there cannot break this test.
+  // The no-arbitrary-typography baseline is empty, so a reintroduced
+  // arbitrary-typography value is a REAL, UNSHIELDED error. This proves it
+  // with an ISOLATED fixture inside the business scope glob (so it is actually
+  // linted) whose filename is NOT in the baseline — unlike a probe that
+  // rewrites a real page, a future legitimate className change there cannot
+  // break this test.
   it("reports a reintroduced arbitrary-typography value (isolated fixture, no baseline shield)", async () => {
     __resetBaselineCacheForTests();
     const { writeFileSync, rmSync } = await import("node:fs");

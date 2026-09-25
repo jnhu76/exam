@@ -207,9 +207,9 @@ function makeRepos(
   };
 }
 
-// Retargeted rows from the deleted test-only `gradeAttempt` wrapper onto the
-// production entry point `gradeAttemptIdempotent` — same finalizeGrading →
-// aggregateGradingEntries path for submitted, non-pending-manual attempts.
+// These rows pin the production entry point `gradeAttemptIdempotent` — the
+// finalizeGrading → aggregateGradingEntries path for submitted,
+// non-pending-manual attempts — not a test-only wrapper.
 describe("gradeAttemptIdempotent — auto command path", () => {
   it("persists question results and marks a passing attempt graded", async () => {
     const repos = makeRepos(makeExam(), makeAttempt(), makeEnrollment());

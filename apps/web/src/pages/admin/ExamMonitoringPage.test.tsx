@@ -90,10 +90,11 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/exam-1/proctor/monitor"]}>
       <Routes>
-        {/* Route param must match the component's useParams<{ id }>() and the
-            real App.tsx route (exams/:id/proctor/monitor). Earlier this used
-            :examId, which left useParams().id undefined and the page never
-            fetched monitoring data. */}
+        {/* HAZARD: the route param must match the component's
+            useParams<{ id }>() and the real App.tsx route
+            (exams/:id/proctor/monitor). A mismatch (e.g. :examId) leaves
+            useParams().id undefined and the page silently never fetches
+            monitoring data — no error, just an empty surface. */}
         <Route
           path="/admin/exams/:id/proctor/monitor"
           element={<ExamMonitoringPage />}

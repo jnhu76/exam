@@ -23,15 +23,15 @@ import { schema } from "@exam/db/src/schema/pg.js";
  * Two responsibilities that candidateOwnership.test.ts does NOT cover:
  *
  * 1. **Runtime metadata conformance:** handled by the sole authority
- *    routeRegistryConformance.test.ts (15 tests, registry ↔ Fastify onRoute).
+ *    `routeRegistryConformance.test.ts` (registry ↔ Fastify onRoute).
  *
  * 2. **Zero-side-effect denial (directive §9.3):** a cross-candidate denial
- *    on each of the 4 mutating routes (start, save-answer, submit, heartbeat,
+ *    on each mutating candidate route (start, save-answer, submit, heartbeat,
  *    restore) leaves no new row in exam_attempts / audit_logs /
  *    attempt_grading_entries and does not bump exam_enrollments.attemptCount.
  *
  * Cross-candidate / cross-org / non-Candidate-role denial is already proven by
- * candidateOwnership.test.ts (re-run as part of this job) — not duplicated here.
+ * candidateOwnership.test.ts — not duplicated here.
  */
 
 const routePlugin: FastifyPluginAsync = async (fastify) => {

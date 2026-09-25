@@ -8,7 +8,7 @@ import { CONFIRMED_RECIPES } from "./typography-vocabulary";
 import { collectClassNameTokens } from "@/lint/exam-ui/classNameUtils";
 
 /**
- * Structural tests for the semantic typography recipe layer (UI-RECIPE-1A).
+ * Structural tests for the semantic typography recipe layer.
  *
  * The recipes are plain CSS classes in recipes.css (imported via main.tsx so
  * they bypass the Tailwind content scanner). CSS utilities cannot be unit-tested

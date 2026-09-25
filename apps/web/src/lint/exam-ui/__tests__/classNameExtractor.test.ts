@@ -8,7 +8,7 @@ import {
 } from "../classNameUtils";
 
 /**
- * Shared static class-extractor tests (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §7, §17B).
+ * Shared static class-extractor tests.
  *
  * These codify `collectClassNameTokens` across every JSX expression form this
  * codebase uses, so individual rules need not repeat incomplete fixtures. The

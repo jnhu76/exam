@@ -1,5 +1,5 @@
 /**
- * Migration 0026 — Recovery Exam aggregate attempt-status index (J5-I1B4 §6.5).
+ * Migration 0026 — Recovery Exam aggregate attempt-status index.
  *
  * Verifies the attempt-status-distribution `GROUP BY status` read path has a
  * supporting index:
@@ -7,10 +7,10 @@
  * 1. `exam_attempts_org_exam_status_idx` exists (pg_indexes);
  * 2. the migration applies cleanly (idempotent re-run via the journal loop).
  *
- * Per plan amendment #8: EXPLAIN evidence is human/audit material only —
- * PostgreSQL may rightly choose a sequential scan on small tables, so this
- * test does NOT assert a specific plan shape. CI asserts index existence +
- * clean migration application only.
+ * EXPLAIN evidence is human/audit material only — PostgreSQL may rightly
+ * choose a sequential scan on small tables, so this test does NOT assert a
+ * specific plan shape. CI asserts index existence + clean migration
+ * application only.
  *
  * Mirrors the migration-application pattern from `0025-recovery-queue-index.test.ts`.
  */

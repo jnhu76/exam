@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// J5-I1C Slice 2 re-review P2-1 — test-only export boundary.
+// Test-only export boundary.
 //
 // The production entry `forceSubmitWithOperationRaceRecovery` requires
 // `audit: { request }`, so "an applied force-submit with no compliance audit"

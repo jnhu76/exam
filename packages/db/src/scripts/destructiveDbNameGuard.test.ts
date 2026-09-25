@@ -1,8 +1,7 @@
 /**
- * Strict destructive-rollback database-name guard tests
- * (review J5-I1C0 PR #261 P1-1).
+ * Strict destructive-rollback database-name guard tests.
  *
- * Freezes the exact allowlist and the counterexamples called out in the review:
+ * Freezes the exact allowlist and its counterexamples:
  * `examproduction`, `precision_prod`, `incident_store`, `decision_db` must all
  * be REJECTED, even though the previous loose regex accepted them. Also covers
  * the canonical dev/test/e2e names, the vitest worker family, the CI family,

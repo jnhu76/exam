@@ -140,10 +140,8 @@ describe("Redis baseline", () => {
     });
   });
 
-  // ioredis keyPrefix isolation and SCAN-based prefix cleanup semantics are
-  // library behavior, not product behavior: the deleted "test prefix
-  // isolation" / "cleanup only current prefix" witnesses exercised ioredis
-  // directly (and an inline re-implementation of the cleanup loop) without
-  // importing any production code. If the scan/delete algorithm in
-  // testRedis.ts is ever productized, pin the real helper — not a copy.
+  // ioredis keyPrefix isolation and SCAN-based prefix cleanup are library
+  // behavior, not product behavior — do not re-add witnesses that exercise
+  // ioredis directly (or re-implement its cleanup loop) without importing
+  // production code.
 });

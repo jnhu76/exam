@@ -1,5 +1,5 @@
 /**
- * REC-I4-V1 — Deterministic PostgreSQL Operator-Grant Concurrency Verification.
+ * Deterministic PostgreSQL Operator-Grant Concurrency Verification.
  *
  * Proves that two concurrent operator-grant commands with the same `operationId`
  * but targeting different Attempts (different Exams, so no row-lock overlap)

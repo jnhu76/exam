@@ -8,7 +8,7 @@
  * (`createAttemptResolver` / `createExamResolver`). The decorator is the
  * accepted request-path wiring seam for resource-aware authorization
  * (`docs/adr/ADR-010-scoped-rbac-architecture.md` §3.9, §Resource Resolver
- * Matrix; precedent: `plugins/tenant.ts` onRoute pattern).
+ * Matrix).
  *
  * Routes opt in by replacing `fastify.requireCapability(perm)` with
  * `fastify.requireScopedCapability(perm, resolverKey, resourceIdKey)` in their

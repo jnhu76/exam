@@ -1,25 +1,23 @@
 /**
- * EXAM-446 / EXAM-519 — Candidate convergence after Proctor force-submit.
+ * Candidate convergence after Proctor force-submit.
  *
- * Origin: #446 empirical probe (PR #518) measured that a Candidate's open
- * TakeExamPage stayed stale/editable forever after a Proctor force-submit —
- * the heartbeat 409 INVALID_STATE_TRANSITION was classified as a generic
- * disconnect and zero authoritative take GETs were issued. Classification B
- * (HTTP reconciliation gap) → #519 implemented HTTP-only reconciliation:
- * a terminal heartbeat/save signal now triggers ONE authoritative re-read of
- * GET /api/candidate/attempts/:attemptId/take, whose frozen snapshot locks
- * the page through the existing view derivation.
+ * INVARIANT: a terminal heartbeat/save signal triggers ONE authoritative
+ * re-read of GET /api/candidate/attempts/:attemptId/take, whose frozen
+ * snapshot locks the page through the existing view derivation. Without it a
+ * Candidate's open TakeExamPage stays stale/editable forever after a Proctor
+ * force-submit — a heartbeat 409 INVALID_STATE_TRANSITION classified as a
+ * generic disconnect issues zero authoritative take GETs.
  *
- * This spec is now the REGRESSION asset for that fix. It asserts:
+ * This spec is the REGRESSION asset for that contract. It asserts:
  *   E1 — save-triggered early convergence: a post-terminal save rejection
  *        (ATTEMPT_ALREADY_SUBMITTED) triggers the re-read and locks the UI.
  *   E2 — heartbeat-only natural convergence: with NO candidate action, the
  *        next real heartbeat (409) triggers the re-read; convergence within
  *        one heartbeat period (≤30s + scheduling tolerance).
- * Both paths keep the B14 hard invariant: a stale post-terminal save can
+ * Both paths keep the hard invariant: a stale post-terminal save can
  * NEVER overwrite the server-frozen truth (verified independently).
  *
- * Mechanics (unchanged from the probe): TWO independent browser contexts
+ * Mechanics: TWO independent browser contexts
  * (A = Candidate real UI, B = Admin real ProctorDashboard force-submit
  * dialog), T0 = the real force-submit commit captured in context B, pure
  * Playwright network hooks (no production instrumentation), and NO candidate

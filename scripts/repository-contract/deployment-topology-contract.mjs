@@ -304,13 +304,11 @@ if (!servicesBlock) {
   }
 }
 
-// ── Dockerfile pnpm pin: packageManager parity (retired test-docker-config) ─
+// ── Dockerfile pnpm pin: packageManager parity ──────────────────────────────
 // The image must build with the SAME pnpm the repo declares — a drift between
 // package.json#packageManager and the Dockerfile corepack pin would ship an
 // image whose toolchain differs from CI/dev (reproducible-build contract).
-// This migrates the retired test-docker-config.mjs pin check onto the
-// deployment oracle; the fresh-install source build still catches a broken
-// pin at build time.
+// The fresh-install source build also catches a broken pin at build time.
 {
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   const packageManager = pkg.packageManager;

@@ -1,5 +1,5 @@
 /**
- * Behavioral regression tests for the E2E mutable-state reset (issue #330).
+ * Behavioral regression tests for the E2E mutable-state reset.
  *
  * Field scenario being frozen here: a worker DB survives a failed E2E run
  * (E2E_KEEP_WORKER_DB_ON_FAILURE retention, or a crash that bypassed

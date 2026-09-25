@@ -30,7 +30,7 @@ function cssHexVar(css: string, name: string): string | null {
 
 describe("table and color visual-finish authority", () => {
   it("keeps the brand pin and the documented neutral token relationships", () => {
-    // UI-TABLE-KOI-COLOR-REFINE-2: index.css is the palette authority, so
+    // index.css is the palette authority, so
     // exact neutral values are not re-listed here (a retune must not edit
     // test + source in lockstep with zero independent signal). What is
     // governed instead: the one brand pin, the canvas relationship (light
@@ -124,7 +124,7 @@ describe("table and color visual-finish authority", () => {
   });
 
   it("renders a low-contrast per-cell grid on every admin table", () => {
-    // UI-TABLE-KOI-COMPACT-1: every admin table draws the Koi low-contrast
+    // Every admin table draws the Koi low-contrast
     // grid directly on <th>/<td> (reliable under border-separate), never on
     // <tr>. Header cells own the tinted fill + stronger header bottom edge;
     // body cells own right + bottom grid lines.

@@ -2,10 +2,10 @@
  * M10-D permission boundary test: organization/system administrative surfaces.
  *
  * Proves:
- *   - 17 routes × 4 non-Admin roles = 68 denial cells (HTTP 403)
- *   - 17 routes unauthenticated = 401
+ *   - every organization/system route × every non-Admin role: 403 denial
+ *   - every such route unauthenticated: 401
  *   - route-specific owner suites prove Admin capability-stage passage
- *   - 8 mutating routes: real non-vacuous zero-write evidence
+ *   - every mutating route: real non-vacuous zero-write evidence
  *   - candidate-field PATCH/DELETE: real fixture, material property change
  *   - candidate import: positive control — Admin same-payload success
  *   - audit absence after awaited transactional mutation boundaries

@@ -641,7 +641,7 @@ describe("REC-I3 — disrupted direct restore", () => {
 
     // Perform a REAL router navigation to the new attempt. React Router
     // reuses the same element instance (only the :attemptId param changes),
-    // which is exactly the race the PR #219 review flagged: the old
+    // which is exactly the race this test guards: the old
     // in-flight restore must not apply to the new page.
     await act(async () => {
       navigate("/exam/exam-new/take/att-new");

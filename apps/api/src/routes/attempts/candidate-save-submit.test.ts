@@ -1433,7 +1433,7 @@ describe("attempt routes", () => {
 
       expect(res.statusCode).toBe(200);
       const body = res.json();
-      // REC-I4-I3A frozen restore response contract: the candidate-safe
+      // Frozen restore response contract: the candidate-safe
       // attempt is nested under `attempt`, and the compensation summary
       // reports the policy + granted seconds.
       expect(body.lifecycle).toBe("restored");
