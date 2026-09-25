@@ -17,8 +17,6 @@ import {
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { reconcileSystemIncidents } from "../orchestrators/systemIncidentDelivery.js";
 
-const DEFAULT_SCAN_INTERVAL_MS = 30_000;
-const DEFAULT_HEARTBEAT_TIMEOUT_MS = 60_000;
 const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.Heartbeat;
 const INCIDENT_DETECTOR_ACTOR_ID = SYSTEM_ACTOR_IDS.IncidentDetector;
 
@@ -241,9 +239,8 @@ export async function scanDatabaseForDisruptedAttempts(
   // authority and threads it through the whole scan; defaulting to
   // fastify.now() keeps call sites that omit it on the authority clock.
   now: Date = fastify.now(),
-  heartbeatTimeoutSeconds: number = Math.floor(
-    DEFAULT_HEARTBEAT_TIMEOUT_MS / 1000,
-  ),
+  heartbeatTimeoutSeconds: number = getRuntimeConfig().heartbeat
+    .heartbeatTimeoutSeconds,
 ): Promise<ScanResult> {
   const db = fastify.db as Database;
   const organizationRepo = createOrganizationRepo(db);
@@ -296,8 +293,7 @@ export async function scanDatabaseForDisruptedAttempts(
  */
 const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
   const config = getRuntimeConfig();
-  const scanIntervalMs =
-    config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS;
+  const scanIntervalMs = config.heartbeat.scanIntervalMs;
   const heartbeatTimeoutSeconds = config.heartbeat.heartbeatTimeoutSeconds;
 
   // #547: WARMING grace origin — recorded once, at registration.

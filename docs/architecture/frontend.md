@@ -2,9 +2,9 @@
 
 > Current as-built authority for the `apps/web` frontend. Describes what is
 > implemented today, not future work. For UI visual-system constraints, see
-> [`docs/standards/ui-system.md`](../standards/ui-system.md). Current UI product
-> work is Issue-tracked via [`docs/roadmap/post-mvp-issues.md`](../roadmap/post-mvp-issues.md)
-> (notably #305–#308); the former `ui-open-items` file is historical evidence only.
+> [`docs/standards/ui-system.md`](../standards/ui-system.md). The UI
+> design-system / responsive / accessibility campaigns (#305–#308) are
+> CLOSED; the former `ui-open-items` file is historical evidence only.
 
 ## Tech stack (frozen)
 
@@ -20,6 +20,10 @@
 | i18n | `i18next` + `react-i18next` |
 | Routing | `react-router` `^7.6.1` (`<BrowserRouter>` + `<Routes>`) |
 | Class composition | `cn()` (clsx + tailwind-merge) |
+| Tables | `@tanstack/react-table` (row/header model only — no column sizing) |
+| Forms | `react-hook-form` + `zod` (`@hookform/resolvers`) |
+| Rich content | `@tiptap/*` (edit surfaces, lazy chunk) + bundled KaTeX (read path) |
+| Dates | `date-fns`; dark mode via `next-themes` |
 | Path alias | `@/` → `apps/web/src/` |
 
 The stack is frozen. Introducing Ant Design / MUI / Chakra / Headless UI or any
@@ -28,10 +32,11 @@ other component framework, or replacing Tailwind, is forbidden. See
 
 ## Frontend package boundaries
 
-`apps/web` declares **only** `@exam/contracts` and `@exam/domain` as workspace
-dependencies. It **must not** import `@exam/db` or any server-side package — all
-data access goes through the API client. Database access is repository-pattern
-server-side (`repo.method(ctx, …)`).
+`apps/web` declares `@exam/contracts`, `@exam/domain`, and `@exam/authz` as
+workspace dependencies (the capability catalog is consumed client-side for
+UX-only nav/capability projection). It **must not** import `@exam/db` or any
+server-side package — all data access goes through the API client. Database
+access is repository-pattern server-side (`repo.method(ctx, …)`).
 
 ## Application shell and layout boundary
 
@@ -52,15 +57,22 @@ via the `layoutGlobs` config).
 
 React Router v7 nested layout routes (`apps/web/src/App.tsx`):
 
-- `/login` → `LoginPage` (no layout).
+- `/login`, `/launchpad` (first-install bootstrap), `/invite/accept`,
+  `/forgot-password`, `/reset-password` (no layout).
 - `/admin` → `<AdminLayout>` layout route; index (`AdminIndexRoute`, redirects by
-  capability) plus child routes: `dashboard`, `system`, `settings`,
-  `candidate-fields`, `users`, `candidates`, `courses`, `questions` (+ new/edit/import),
-  `exams` (+ new/detail/edit/scores/proctor/monitor), `proctor`, `results`,
-  `grading-queue` (+ detail), `audit-logs`, `import-logs`, `attempts/:id`, `*`.
+  capability) plus child routes: `dashboard`, `system`, `operations`,
+  `diagnostics`, `settings`, `candidate-fields`, `users`, `candidates`,
+  `courses`, `questions` (+ new/edit/import), `exams` (+ new/detail/edit/
+  scores/proctor/monitor), `exam-profiles` (+ new/edit), `proctor` (+ monitor),
+  `permissions`, `results`, `grading-queue` (+ detail), `audit-logs`,
+  `import-logs`, `attempts/:id`, `recovery` (+ incidents/attempts/exams detail),
+  `proctor/recovery` (+ incident detail), `*` (capability-denied placeholder).
 - `/exam` → `<ExamLayout>` layout route; child routes: `list`, `settings`,
   `:examId/start`, `:attemptId/take`, `:attemptId/result`, `*`.
 - `*` → redirect to `/login`.
+
+The route table above is descriptive; the executable composition in
+`apps/web/src/App.tsx` is the as-built authority when they disagree.
 
 `AdminIndexRoute` resolves `adminLandingPath(user)` and navigates there. Page
 titles sync to `document.title` via `AppTitle`.

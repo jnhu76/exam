@@ -71,10 +71,10 @@ const okResponseSchema = z.object({ ok: z.literal(true) });
 
 /**
  * Staff-management list contract (GET /users). P7-RBAC-REMEDIATION F-03: the
- * prior hardcoded `PHASE1_SUPPORTED_ROLES = ["Admin","Candidate","Maintainer"]`
- * subset made Teacher/Proctor/Grader users invisible in the admin list (created
- * but unmanageable via the UI), and listing by `users.role` alone let candidate
- * volume crowd staff out of pagination. The list is now sourced from
+ * prior hardcoded staff-role subset made Teacher/Proctor/Grader users
+ * invisible in the admin list (created but unmanageable via the UI), and
+ * listing by `users.role` alone let candidate volume crowd staff out of
+ * pagination. The list is now sourced from
  * `listStaffPaginated` (repository level): staff membership = an ACTIVE
  * assignment with any of the six assignable roles except Candidate (so
  * Candidate-primary + staff-secondary users stay visible), OR a stale

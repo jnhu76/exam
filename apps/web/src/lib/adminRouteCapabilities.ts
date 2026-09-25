@@ -30,8 +30,9 @@ import { can } from "@/lib/capabilities";
  *
  * `capability` is the permission whose presence in `user.capabilities` grants
  * page access. Routes whose capability is `null` are intentionally ungated by
- * a capability (e.g. the `/admin` index, which redirects to the actor's
- * landing path; or the catch-all `*` PlaceholderPage).
+ * a capability (the `/admin` index, which redirects to the actor's landing
+ * path). There is deliberately NO `*` entry: unknown `/admin/*` paths match no
+ * capability row and deny by default — the deny is structural, not listed.
  */
 export interface AdminRouteCapability {
   /** Path pattern relative to `/admin` (e.g. "exams/:id"). `""` = the index. */

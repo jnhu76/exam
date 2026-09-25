@@ -1,6 +1,6 @@
 # Data Authority and Transaction Model
 
-> Normative description of what data is authoritative, who writes it, when it becomes immutable, and which transaction boundaries protect those transitions.
+> Explanatory description of what data is authoritative, who writes it, when it becomes immutable, and which transaction boundaries protect those transitions. Explanatory, not a competing normative authority — binding decisions live in Accepted ADRs and [`../../contracts/`](../../contracts/) (#614 authority split; see [README.md](./README.md)).
 
 ```text
 Last verified against commit:

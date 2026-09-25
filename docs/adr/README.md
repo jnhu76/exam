@@ -191,7 +191,7 @@ unrelated ADR cleanup.
 | [ADR-009](ADR-009-frontend-state-machine-adoption.md) | Frontend state-machine adoption | PROPOSED |
 | [ADR-011](ADR-011-notification-and-email-delivery.md) | Inbox notification and asynchronous Email delivery | ACCEPTED |
 | [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future offline-resilient client | DEFERRED |
-| [ADR-019](ADR-019-content-document-model.md) | Rich-content/document authority model | PROPOSED |
+| [ADR-019](ADR-019-content-document-model.md) | Rich-content/document authority model | ACCEPTED (2026-09-25) |
 
 ## ADR review and optimization order
 
@@ -260,8 +260,8 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-007](ADR-007-stateful-infrastructure-test-isolation.md) | Stateful Infrastructure Test Isolation | ACCEPTED core / later work partly deferred | none | none |
 | [ADR-008](ADR-008-submit-answer-freeze.md) | Submit Answer Freeze Barrier | ACCEPTED | none | none |
 | [ADR-009](ADR-009-frontend-state-machine-adoption.md) | Frontend State Machine Adoption | PROPOSED | none | none |
-| [ADR-010](ADR-010-scoped-rbac-architecture.md) | Scoped RBAC Architecture | ACCEPTED | none | none |
-| [ADR-011](ADR-011-notification-and-email-delivery.md) | Notification Inbox and Email Delivery Architecture | ACCEPTED | none | none |
+| [ADR-010](ADR-010-scoped-rbac-architecture.md) | Scoped RBAC Architecture | ACCEPTED, amended 2026-09-25 (DB-seeding half retired) | none | none |
+| [ADR-011](ADR-011-notification-and-email-delivery.md) | Notification Inbox and Email Delivery Architecture | ACCEPTED, amended (see also the [2026-09-06 corrective amendment](ADR-011-amendment-2026-09-06-delivery-attempt-recovery.md)) | none | none |
 | [ADR-012](ADR-012-candidate-recovery-contract.md) | Candidate Recovery Contract and Threat Model | ACCEPTED | none | none |
 | [ADR-013](ADR-013-interruption-time-compensation-policy.md) | Interruption Detection and Time-Compensation Policy | ACCEPTED | ADR-012's incomplete time-policy direction | none |
 | [ADR-014](ADR-014-exam-incident-authority.md) | Exam Incident Authority | ACCEPTED | none | none |
@@ -269,7 +269,7 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future Offline-Resilient Client Data and Recovery Model | DEFERRED | none | none |
 | [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational Authority and Maintainer Boundary | ACCEPTED through revision 4 | none | none |
 | [ADR-018](ADR-018-operational-observability-window.md) | Operational Observability Window | ACCEPTED | none | none |
-| [ADR-019](ADR-019-content-document-model.md) | Content Document Model | PROPOSED | none | none |
+| [ADR-019](ADR-019-content-document-model.md) | Content Document Model | ACCEPTED (2026-09-25) | none | none |
 | [ADR-020](ADR-020-http-surface-routing-authority.md) | HTTP Surface Routing & Policy Authority | ACCEPTED | none | none |
 
 ## Numbering

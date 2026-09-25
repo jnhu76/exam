@@ -73,8 +73,9 @@ B2 decision — the #292 admission runtime it would build on exists).
 - ✅ Force submit (`POST /admin/attempts/:id/force-submit`,
   `requireCapability(AttemptForceSubmit)`).
 - ✅ Admin operator time grant (`POST /admin/attempts/:id/time-grants`,
-  `requireScopedCapability(AttemptTimeGrant, Attempt)`); Proctor is denied
-  until M11 resource scope is implemented.
+  `requireScopedCapability(AttemptTimeGrant, Attempt)`); under ADR-015 §13 it
+  remains **Admin-only** even after M11 resource-scope delivery, so Proctor has
+  no time-grant path.
 - ✅ Misconduct marking (`POST /admin/attempts/:id/misconduct` +
   `/proctor-incident`, `requireCapability(AttemptMisconductMark)`).
 - ✅ Proctor monitoring: visibility, polling (5s), event timeline, incident logging.
@@ -84,9 +85,10 @@ B2 decision — the #292 admission runtime it would build on exists).
 - ✅ Exam operation audit coverage.
 - ✅ Diagnostics page (DB / Redis / scanner health).
 - ✅ Manual grading queue and detail page (admin route + repo infrastructure;
-  plain-text subjective-answer runtime, candidate-answer detail, and
-  result flow are now CLOSED — PRs #237/#238, 2026-07-31; only
-  rich-text/WYSIWYG answering remains Phase 3/P7).
+  plain-text subjective-answer runtime, candidate-answer detail, and result
+  flow closed in PRs #237/#238, 2026-07-31; rich content plus rich
+  `text_response` answering subsequently shipped under ADR-019 and is now
+  accepted/current).
 - ✅ Result publishing modes (immediate / after_grading / manual).
 - ✅ Client telemetry pipeline (logger → buffer → batch POST → sanitize → DB).
 - ✅ Candidate/admin permission boundary enforced on every route.
@@ -124,8 +126,10 @@ The authorization **infrastructure** is live (not "not started"):
   course selection, publish validation + frozen question snapshot, candidate
   metadata isolation, candidate multiline answering + submission, real Grading
   Queue UI discovery, manual grading + final result, and post-publish live-edit
-  snapshot-freeze proof. Rich-text/WYSIWYG editing and the generic ADR-008
-  final-answer submit barrier (answer-type-independent) remain open.
+  snapshot-freeze proof. Rich-text/WYSIWYG content and rich `text_response`
+  answering subsequently shipped under ADR-019 and are now accepted/current;
+  the generic ADR-008 final-answer submit barrier (answer-type-independent)
+  remains a separate follow-up.
 - ✅ Candidate answering runtime (P0 CLOSED): all MVP question types render,
   save/restore/submit; `deriveTakeExamView` pure function + transient reducer.
 - ✅ Manual grading closeout (P1 CLOSED): grader views frozen submitted answers,
@@ -198,12 +202,13 @@ MVP deployment now has:
 
 - production-safe required configuration;
 - clean database migration and first-Admin bootstrap;
-- app + PostgreSQL + Email worker default topology;
-- optional Redis;
+- app + PostgreSQL default Compose topology (Redis optional) — email outbox
+  delivery runs as an in-process application loop (#320 CONVERGE); there is
+  no separate email-worker service;
 - serialized production migrations;
-- bootstrap-pending Email worker state;
+- bootstrap-pending state in the in-process email delivery loop lifecycle;
 - PostgreSQL Inbox and Email outbox;
-- worker heartbeat and diagnostics;
+- delivery-loop heartbeat and diagnostics;
 - clean production Docker build;
 - repeatable relocated clean-volume Compose smoke evidence.
 
@@ -227,9 +232,11 @@ notification onto the now-stable result-publication transaction (P5-N1).
   grading assignment, announcements) remain deferred pending separate
   evidence.
 - Plain-text `text_response` authoring UI flow and result loop are CLOSED
-  (PRs #237/#238, 2026-07-31). The remaining Phase 3/P7 product tasks are
-  rich-text/WYSIWYG authoring and the generic ADR-008 final-answer submit
-  barrier (Option D follow-up; answer-type-independent).
+  (PRs #237/#238, 2026-07-31). Rich-text/WYSIWYG content and rich
+  `text_response` answering subsequently shipped under ADR-019 and are now
+  accepted/current. In this answer/content family, the remaining follow-up is
+  the generic ADR-008 final-answer submit barrier (Option D;
+  answer-type-independent).
 
 ## Phase 4 — Platformization and Integration: ⬜ NOT STARTED
 
@@ -392,13 +399,18 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
 - **Email runtime business caller (P5-N1 CLOSED)**: The Email delivery runtime
   (P5-0) is closed and P5-N1 is now closed: the first real `result_published`
   business caller (atomic publication → Inbox + outbox) is live, and the
-  resident Email delivery worker drains the outbox asynchronously. The worker
-  is now wired as a first-class Compose service in the supported production
-  topology (see P6 deployment topology audit). `POST /api/email/test` remains
-  as the synchronous connectivity probe. No password-reset / invitation /
-  registration flows yet.
-- **Gate 0.5 (M10-F post-PR-197 rerun) is PASS** (verified 2026-07-24 on commit
-  `f2a7a80`): the runtime route tree was re-captured via a Fastify `onRoute`
+  in-process email delivery loop — registered inside the API application
+  (#320 CONVERGE) — drains the outbox asynchronously. The supported Compose
+  topology is app + PostgreSQL (+ optional Redis) with no separate
+  email-worker service. `POST /api/email/test` remains
+  as the synchronous connectivity probe. Staff invitation / Email password
+  reset / account lifecycle are implemented (#297 — see *Identity lifecycle*
+  below); standalone self-registration is not a product flow.
+- **Gate 0.5 (M10-F post-PR-197 rerun) is PASS — historical baseline**
+  (verified 2026-07-24 on commit `f2a7a80`; the route counts below are that
+  snapshot, not current inventory — the living authority is
+  `apps/api/src/authz/routeRegistryConformanceWholeApp.test.ts`):
+  the runtime route tree was re-captured via a Fastify `onRoute`
   hook over the full production composition and reconciles exactly — **91
   primary application routes** (131 raw registrations = 91 + 40 auto-generated
   HEAD aliases), **81 capability/ownership-gated** (65 flat + 16
@@ -422,5 +434,8 @@ E2E is **enabled and runs as blocking CI**. The `e2e` job in
 `.github/workflows/ci.yml` (sharded) gates every PR. The three named blocking
 specs (candidate-happy-path, resume-attempt, submit-flush) run and pass.
 `fill-blank-e2e.spec.ts` was re-enabled (post-MVP repository hygiene,
-2026-08-09) and runs the auto-graded fill_blank flow; no E2E specs are
-skipped.
+2026-08-09) and runs the auto-graded fill_blank flow. No E2E spec FILE is
+skipped at the suite level; inside `operations.spec.ts` the evidence-state
+tests individually `test.skip` when the evidence CLI is not mounted in the
+current topology (declared in that file's header), which is a conditional
+test-level skip, not a disabled spec.

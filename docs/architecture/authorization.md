@@ -90,17 +90,17 @@ every test run and asserts the primary/protected/non-protected split plus the
 per-addition comment chain. Treat any count in prose (including below) as a
 snapshot — cite the test, not the number.
 
-Current snapshot (as of #296, PR #348, commit `ac79c695`):
+Structural invariants (asserted on every test run, not snapshot numbers):
 
-- **132 primary runtime routes** in the `registerApiRoutes` composition.
-- **116 capability/ownership-gated protected routes**.
-- **16 non-capability routes** (authenticate-only + public + one intentionally
-  disabled public endpoint; the test's intentional closed sets enumerate them
-  exactly).
 - **0 `requireRole` consumers**.
 - **0 `requirePermission` route consumers**.
 - **0 `users.role` authority decisions**.
 - **0 JWT-role authority decisions**.
+
+The exact primary/protected/non-protected route counts live only in the
+whole-app regression lock above — do not copy them into prose; this document
+previously carried a `132/116/16` snapshot that drifted as routes were added
+(removed by #614).
 
 Fastify additionally generates one `HEAD` alias per `GET` route; aliases are
 excluded from the primary application-route count.
@@ -143,8 +143,8 @@ resource gates remain the security authority.
 > **read-only Operational Observer** (system health/diagnostics/backup/
 > restore-readiness/ops-policy views; zero business permissions; zero write
 > permissions). Admin ∩ Maintainer = ∅ is enforced server-side (D14).
-> **ADR-017 revision 4 (PROPOSED)** narrows the Maintainer to an observer (not
-> a controller) and **ADR-018 (PROPOSED)** defines the read-only Observability
+> **ADR-017 revision 4 (ACCEPTED, 2026-08-14)** narrows the Maintainer to an observer (not
+> a controller) and **ADR-018 (ACCEPTED)** defines the read-only Observability
 > Window contract. Admin remains the Exam business owner (考试管理员) and never
 > holds infrastructure execution authority; the Host Operator (not Exam RBAC)
 > performs real infrastructure maintenance.

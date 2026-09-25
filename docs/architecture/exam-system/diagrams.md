@@ -4,10 +4,12 @@
 
 ```text
 Last verified against commit:
-cac6b85c425c85ad4077002bc518fca0b50f766f
+b673bb22c3ebed91f9bed86dc20c70c589a68eab (2026-09-25, #614)
 
 Verification scope:
-Current master implementation after merged P5-0 / PR #210.
+Confirmed delivery-state drift families (P5-N1 notification labels) corrected
+and re-verified against current master. Earlier sections retain their
+point-in-time snapshot at cac6b85c (P5-0 / PR #210 baseline).
 ```
 
 ---
@@ -132,7 +134,7 @@ erDiagram
 
 **Authority**: `packages/db/src/schema/pg.ts`, `packages/domain/src/types.ts`
 **Evidence**: Table definitions in schema.ts mirror the aggregate types. Foreign keys enforce parent-child relationships.
-**Known limitations**: Paper is an implicit composition concept (no table). Result is a projection (no table). Notification Inbox is NOT IMPLEMENTED.
+**Known limitations**: Paper is an implicit composition concept (no table). Result is a projection (no table). Notification Inbox is IMPLEMENTED (P5-N1; live types `result_published` + `exam_assigned`).
 
 ---
 
@@ -189,8 +191,8 @@ flowchart TD
         PR["publishResults()<br/>sets resultsPublishedAt<br/>write-once, idempotent"]
     end
 
-    subgraph Future["12. Future: P5-N1 Notification"]
-        N["NOT IMPLEMENTED<br/>Notification Inbox<br/>+ Email enqueue"]
+    subgraph Future["12. P5-N1 Notification (IMPLEMENTED)"]
+        N["Notification Inbox<br/>+ Email enqueue<br/>(result_published, exam_assigned)"]
     end
 
     subgraph Email["13. Email Worker"]
@@ -231,7 +233,7 @@ flowchart TD
 
 **Authority**: `packages/exam-engine/src/examCommands.ts`, `attemptCommands.ts`, `answerProtocol.ts`, `gradingWorkset.ts`, `grading.ts`, `apps/api/src/routes/attempts.shared.ts`
 **Evidence**: Each step maps to a documented command function. Freeze points are enforced by `buildQuestionSnapshot()`, `buildSubmittedAnswersSnapshot()`.
-**Known limitations**: P5-N1 (Notification Inbox + Email enqueue) is NOT IMPLEMENTED — shown as future/dashed. Teacher/Proctor/Grader are Phase 3 roles. IP/CIDR, device binding, emergency access are NOT IMPLEMENTED.
+**Known limitations**: P5-N1 (Notification Inbox + Email enqueue) is IMPLEMENTED — the diagram node above predates its landing and is retained with the corrected label. Teacher/Proctor/Grader scoped roles are delivered (Teacher→Course #286, Proctor→Exam ADR-015, Grader→Exam #296). IP/CIDR, device binding, emergency access are NOT IMPLEMENTED.
 
 ---
 
@@ -605,4 +607,4 @@ flowchart TB
 
 **Authority**: `apps/api/src/plugins/auth.ts`, `authz.ts`, `packages/exam-engine/src/lockSeam.ts`, `apps/api/src/routes/attempts.shared.ts`
 **Evidence**: Each boundary maps to documented code. `loadAssignmentAuthority` resolves from `user_role_assignments`. `computeAnswerVisibility` always returns hidden.
-**Known limitations**: Teacher resource-scope (Teacher@course) is NOT IMPLEMENTED — capabilities are flat org-wide. IP/CIDR, device binding, emergency access are NOT IMPLEMENTED.
+**Known limitations**: Teacher resource scope (Teacher@course) is ENFORCED (#286) — capability grant alone is insufficient; active course assignment + resource-scope enforcement determine reach. IP/CIDR, device binding, emergency access are NOT IMPLEMENTED.

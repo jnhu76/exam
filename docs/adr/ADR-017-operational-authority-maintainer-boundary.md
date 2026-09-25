@@ -342,6 +342,12 @@ execution authority                     NOT product RBAC authority
    Custom roles remain Phase 4 (unchanged).
    ```
 
+   > **Reconciled 2026-09-25 (#614):** the `role_presets` seed rows referenced
+   > above were never created. Per ADR-010's 2026-09-25 amendment, code
+   > constants (`packages/authz/src/presets.ts`) are the sole built-in
+   > role-preset authority; the Maintainer preset is materialized there. The
+   > Maintainer's addition to the built-in preset set itself is unchanged.
+
    The amendment covers ADR-010's **role preset set**, **role closed
    union**, and **role_presets seed contract** only. Everything else in
    ADR-010 (scope model, capability catalog, resolver semantics) is

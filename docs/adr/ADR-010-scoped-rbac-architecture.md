@@ -3,29 +3,77 @@
 > **Type:** Large Design Job / Grillme / ADR (documentation only)
 > **Phase:** Phase 3 Pre-Implementation
 > **Job card:** `docs/archive/phase3/P3-L2-scoped-rbac-job-card.md`
-> **Status:** Proposed
 > **Date:** 2026-06-30
 > **Branch:** `role-permission`
 
 ## Status
 
-**Accepted — infrastructure implemented.** The capability-based authorization
-model, permission catalog, role presets, scope model, and resolver matrix
-described in this ADR are **implemented and live** (`packages/authz/`,
-`apps/api/src/authz/`). Every production route is capability-gated; legacy
-`requireRole` and `users.role` authority have been removed (M10-A through
-M10-F, all merged). See [`docs/architecture/authorization.md`](../architecture/authorization.md)
-for the implemented model.
+**Accepted — infrastructure implemented** (single current status; the
+authoring-time "Proposed" header marker was removed by the 2026-09-25
+amendment below). The capability-based authorization model, permission
+catalog, role presets, scope model, and resolver matrix described in this ADR
+are **implemented and live** (`packages/authz/`, `apps/api/src/authz/`). Every
+production route is capability-gated; legacy `requireRole` and `users.role`
+authority have been removed (M10-A through M10-F, all merged). See
+[`docs/architecture/authorization.md`](../architecture/authorization.md) for
+the implemented model.
 
-> **What is NOT implemented** is the Phase 3 *product* work built on top of this
-> infrastructure: scoped Teacher/Proctor/Grader role bundles as product roles,
-> resource-relationship assignment (M11), staff invitation, SMTP password reset,
-> and account-lifecycle UI. Those are tracked in
-> [`archive/roadmap/phase3-open-items.md`](../archive/roadmap/phase3-open-items.md).
+> **What was NOT implemented at acceptance time (2026-07, historical):** the
+> Phase 3 *product* work built on top of this infrastructure — scoped
+> Teacher/Proctor/Grader role bundles as product roles, resource-relationship
+> assignment (M11), staff invitation, SMTP password reset, and
+> account-lifecycle UI. These have **since shipped**: M11 scoped carriers are
+> live (Proctor→Exam per ADR-015; Teacher→Course #286; Grader→Exam #296) and
+> staff invitation / Email password reset / account lifecycle are implemented
+> (#297). The original list is retained as acceptance-time history, not a
+> current-state claim.
 >
-> **Gate 0.5 caveat:** the post-PR-197 re-verification (M10-F rerun) is PENDING.
-> The infrastructure is live; the PASS closure verdict is not freshly
-> re-verified. See [`docs/status/implementation-status.md`](../status/implementation-status.md).
+> **Gate 0.5 caveat (resolved):** the post-PR-197 re-verification (M10-F
+> rerun) PASSED on 2026-07-24 (commit `f2a7a80`); see
+> [`docs/status/implementation-status.md`](../status/implementation-status.md)
+> and the P4-V0 closeout evidence.
+
+## Amendment 2026-09-25 — DB-seeding half of the persistence decision retired (#614)
+
+> **Status: ACCEPTED** (recorded human decision, G1 of issues #611/#614).
+
+Required decisions 3 and 4 below chose "**Both**": code constants **and**
+seeded DB rows (`roles` / `permissions` / `role_presets` tables with load-time
+checks). The DB half was **never implemented** — the schema has only
+`user_role_assignments` (`packages/db/src/schema/pg.ts`); no role/permission
+catalog tables exist. This amendment retires the unimplemented DB-seeding half
+and freezes the resulting authority model:
+
+```text
+Permission catalog:      code constants (packages/authz/src/catalog.ts)
+                         = sole built-in permission authority
+Built-in role presets:   code constants (packages/authz/src/presets.ts)
+                         = sole built-in role-preset authority
+User ↔ role assignment:  PostgreSQL user_role_assignments
+                         = assignment authority
+Future custom-role
+persistence:             requires a NEW explicit design decision
+```
+
+Consequences of the retirement:
+
+- Do **not** add a `permissions` table, a `role_presets` table, or a startup
+  DB reconciliation/seed path merely to satisfy the original "Both" wording;
+  the original decision text below is retained as history.
+- The load-time "unknown permission/role string" protection is carried by the
+  closed code unions, compile-time checks, and conformance tests — not by DB
+  rows.
+- This amendment supersedes the seed-related wording in the Data Model's
+  Option C ("seeded as immutable rows") and in ADR-017 D2's role-preset
+  amendment note;
+  ADR-017's Maintainer-preset addition itself remains in force, materialized
+  in the code presets (`packages/authz/src/presets.ts`).
+- Wording elsewhere in this ADR that assumes future custom roles become
+  `is_system = false` DB rows (Option C's "why recommended" rationale and
+  Migration Stage 9) is likewise retained only as history and superseded:
+  any future custom-role persistence model requires a NEW accepted design
+  decision. PostgreSQL's authority over runtime assignments and
+  resource-ownership facts is unchanged.
 
 This ADR is documentation-only — it changes no code by being written. It records
 the architecture decisions that the implementation then realized.
@@ -93,11 +141,11 @@ All load-bearing claims in this ADR cite a file path + line number, an audit sec
 ## Decision Summary
 
 1. **Phase 3 adopts a formal Scoped RBAC model** — actor → role assignment → role → permission → scope → resource resolver → audit action — **not** a role-string gate and **not** a flat permission-list gate.
-2. **Roles are product presets, not authorization hardcoding.** `Admin`, `Teacher`, `Proctor`, `Grader`, `Candidate`, `System` are defined as data (code constants seeded as DB rows), and `users.role` becomes a compatibility cache backed by `user_role_assignments`.
+2. **Roles are product presets, not authorization hardcoding.** `Admin`, `Teacher`, `Proctor`, `Grader`, `Candidate`, `System` are defined as data — code constants in `packages/authz/src/presets.ts`, the sole built-in preset authority (2026-09-25 amendment: the originally planned DB-seeding half was never built and is retired) — and `users.role` becomes a compatibility cache backed by `user_role_assignments`.
 3. **`requireCapability()` replaces `requireRole()` and flat `requirePermission()` for all scoped resources.** Flat permission checks remain allowed only for system-level / non-resource routes.
 4. **Admin is a compatibility superset during migration.** Existing Admin behavior is preserved. Migration is route-by-route behind a shadow mode.
-5. **PostgreSQL is the authorization source of truth.** Redis is explicitly ruled out as an AuthZ authority (§Audit Boundary, §Redis Boundary).
-6. **Custom role UI is deferred, not made impossible.** The backend model supports custom roles; the Admin Console UI for them is Phase 4.
+5. **PostgreSQL is the authorization source of truth for user ↔ role assignments and resource-ownership facts** (`user_role_assignments`, ownership chains). Built-in permission/preset *definitions* are code constants, not DB rows (2026-09-25 amendment). Redis is explicitly ruled out as an AuthZ authority (§Audit Boundary, §Redis Boundary).
+6. **Custom role UI is deferred, not made impossible.** Future custom-role *persistence* is not decided by this ADR — any future custom-role model requires a separate accepted design decision (2026-09-25 amendment).
 7. **RBAC and the domain state machine are two independent checks.** Every runtime state transition requires *both* a permission check and a state-machine legality check, plus an audit event when sensitive (§22.3). This is a global invariant, restated below.
 
 > **Cross-cutting invariant — RBAC does not replace the domain state machine.**
@@ -157,8 +205,8 @@ Audit Action (constant)
 
 1. **Should `users.role` remain?** **Yes, as a compatibility cache.** `users.role` (`packages/db/src/schema/pg.ts:105`, plain `text`, no DB ENUM/CHECK) stays for the Phase 1/2 login path and the last-admin guard (`apps/api/src/routes/user.ts:189-201`). It is *derived* from `user_role_assignments`, not authoritative, once assignments exist.
 2. **Deprecate `users.role`?** **Phase 3: no.** It is read on every authenticate (`auth.ts:84`) and by 5+ handler sites. Removing it is a separate migration (RBAC-M7). Mark it *compatibility-only* in code/docs now.
-3. **Role presets: code, DB, or both?** **Both.** Defined as code constants (source of truth, type-safe) and seeded as immutable DB rows (`role_presets.is_system = true`). Custom roles (Phase 4) are DB-only with `is_system = false`.
-4. **Permissions: code constants, DB rows, or both?** **Both.** Code constants are the closed set (prevents unknown permission strings — job §3.1.5). Seeded as DB rows in `permissions` for queryability and for the future `role_permissions` join. A DB row whose key is not in the code constants is a **load-time error** — this is how unknown permissions are prevented.
+3. **Role presets: code, DB, or both?** **Both.** *(Amended 2026-09-25: the DB-seeding half is retired — code constants are the sole built-in role-preset authority; see the amendment in the Status section. Text below retained as the original decision.)* Defined as code constants (source of truth, type-safe) and seeded as immutable DB rows (`role_presets.is_system = true`). Custom roles (Phase 4) are DB-only with `is_system = false`.
+4. **Permissions: code constants, DB rows, or both?** **Both.** *(Amended 2026-09-25: the DB-seeding half is retired — code constants are the sole built-in permission authority; see the amendment in the Status section. Text below retained as the original decision.)* Code constants are the closed set (prevents unknown permission strings — job §3.1.5). Seeded as DB rows in `permissions` for queryability and for the future `role_permissions` join. A DB row whose key is not in the code constants is a **load-time error** — this is how unknown permissions are prevented.
 5. **Prevent unknown permission strings?** A `Permission` const object (closed union) + a startup self-check that every `permissions` row maps to a known constant. The route registry keys off the union type, so a typo is a compile error.
 6. **Prevent unknown role strings?** Same pattern: `Role` const union + startup check that every `role_presets` row maps to a known key. `users.role` accepts only the union (today enforced only at the app layer via Zod + login rejection at `auth.ts:155` — RBAC-M7 adds a DB CHECK/ENUM).
 7. **Before custom-RBAC UI exists?** Role presets are product defaults assigned via the existing user-management surface (Admin assigns the built-in role). No custom-role editor is shipped in Phase 3. The model *supports* custom roles; the UI for them is Phase 4.
@@ -821,7 +869,7 @@ role_permissions (role_key, permission_key)   -- join
 user_role_assignments (actor_id, role_key, scope_type, scope_resource_id?, is_active, ...)
 ```
 
-- Presets seeded as `is_system = true` immutable rows; permissions seeded from the code constants (closed union, load-time check).
+- Presets seeded as `is_system = true` immutable rows; permissions seeded from the code constants (closed union, load-time check). *(Amended 2026-09-25: the seed half was never built and is retired — code constants are the sole authority; see the amendment in the Status section. The `roles` / `permissions` / `role_permissions` tables were never created.)*
 - `users.role` becomes a derived compatibility cache (backfilled in RBAC-M7) — kept until all readers migrate, then deprecated.
 - Supports scope (`scope_type` + optional `scope_resource_id`) → enables Teacher-by-course, Proctor-by-exam, Grader-by-exam, Candidate own-scope.
 - **Why recommended:** formal RBAC now; custom roles later (Phase 4 just adds `is_system = false` rows + UI). Not a toy string model.

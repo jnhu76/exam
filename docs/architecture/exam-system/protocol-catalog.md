@@ -1,13 +1,16 @@
 # Protocol Catalog
 
-> Normative description of every protocol in the exam system: purpose, actor, preconditions, state transition, writes, transaction boundary, idempotency, and audit.
+> Explanatory catalog of every protocol in the exam system: purpose, actor, preconditions, state transition, writes, transaction boundary, idempotency, and audit. Explanatory, not a competing normative authority — binding decisions live in Accepted ADRs and [`../../contracts/`](../../contracts/) (#614 authority split; see [README.md](./README.md)).
 
 ```text
 Last verified against commit:
-cac6b85c425c85ad4077002bc518fca0b50f766f
+b673bb22c3ebed91f9bed86dc20c70c589a68eab (2026-09-25, #614)
 
 Verification scope:
-Current master implementation after merged P5-0 / PR #210.
+Confirmed delivery-state drift families (notification-to-outbox protocol,
+incident/proctor scope status) corrected and re-verified against current
+master. Other protocol entries retain their point-in-time snapshot at
+cac6b85c (P5-0 / PR #210 baseline).
 ```
 
 ## Conventions
@@ -19,7 +22,7 @@ Each protocol is documented with:
 - **Actor**: Who initiates it
 - **Required capability**: The RBAC permission gate
 - **Current preset actors**: Which role presets grant this capability
-- **Scope status**: flat org-wide / scoped resolver / marked scoped but currently flat
+- **Scope status**: org-wide (Admin-level role) / Teacher@Course scoped and ENFORCED (#286) — capability grant alone is insufficient; active course assignment + resource-scope enforcement determine reach (executable authority: authz preset + API scoped-gate / repository filtering)
 - **Input contract**: The request shape
 - **Preconditions**: What must be true before the protocol runs
 - **Authoritative reads**: What data is read as truth
@@ -70,7 +73,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `question.create` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | `CreateQuestionRequest` (type, content, options, standardAnswer, score, difficulty, tags, gradingRule, rubric?) |
 | **Preconditions** | Actor is authenticated; course exists |
 | **State transition** | None (Question has no lifecycle) |
@@ -87,7 +90,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `question.update` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | `UpdateQuestionRequest` |
 | **Preconditions** | Question exists in actor's organization |
 | **State transition** | None |
@@ -105,7 +108,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `question.delete` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | Question ID |
 | **Preconditions** | Question exists in actor's organization |
 | **State transition** | None |
@@ -125,7 +128,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.create` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | `CreateExamRequest` |
 | **Preconditions** | Actor is authenticated |
 | **State transition** | None (exam is created as `draft`) |
@@ -142,7 +145,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.update` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | `UpdateExamRequest` |
 | **Preconditions** | Exam exists in actor's organization |
 | **State transition** | None (status unchanged) |
@@ -160,7 +163,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.publish` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | Exam ID |
 | **Preconditions** | Exam is in `draft` state; ≥1 question; valid schedule; `timed_window`; manual selection; valid retake policy; totalScore matches question scores; auto-graded questions have non-empty standardAnswer; text_response questions have non-empty rubric |
 | **State transition** | `draft → published` |
@@ -177,7 +180,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.close` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | Exam ID |
 | **Preconditions** | Exam is in `open` state; no unresolved attempts (route-layer guard) |
 | **State transition** | `open → closed` |
@@ -268,7 +271,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.result.publish` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Route** | `POST /exams/:id/publish-results` |
 | **Preconditions** | Exam is `published`, `open`, or `closed` |
 | **State transition** | None (status unchanged; `resultsPublishedAt` is a fact timestamp) |
@@ -289,7 +292,7 @@ Each protocol is documented with:
 | **Actor** | Admin, Teacher |
 | **Required capability** | `exam.enrollment.manage` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **Input contract** | Exam ID, candidate ID list |
 | **State transition** | None (enrollment is created as `assigned`) |
 | **Writes** | `exam_enrollments` rows |
@@ -502,7 +505,7 @@ facts; new positive operator decisions use this protocol and
 | **Actor** | Admin, Teacher |
 | **Required capability** | `score.all.view` |
 | **Current preset actors** | Admin, Teacher |
-| **Scope status** | flat org-wide (Teacher marked scoped but resolver not implemented) |
+| **Scope status** | Teacher@Course scoped — ENFORCED (#286); Admin org-wide |
 | **State transition** | None |
 | **Writes** | None |
 | **Security invariants** | INV-R-001 does NOT apply — Admin/Teacher may see frozen standardAnswer in grading detail. Candidate ownership is NOT required for ScoreAllView. |
@@ -551,13 +554,13 @@ facts; new positive operator decisions use this protocol and
 | **Transaction boundary** | Send happens OUTSIDE the DB transaction; status update is a separate transaction |
 | **Security invariants** | INV-N-001: SMTP never inside a DB transaction. Current semantic is at-least-once (crash after provider acceptance but before markSent may cause duplicate delivery). |
 
-### Business Notification-to-Outbox Protocol (NOT IMPLEMENTED)
+### Business Notification-to-Outbox Protocol (IMPLEMENTED — corrected 2026-09-25, #614)
 
-No production business transaction currently inserts an outbox row atomically. The infrastructure primitives (table, repo, service, worker) exist, but the business protocol that enqueues notification emails is NOT IMPLEMENTED. This is the P5-N1 scope.
+Production business transactions insert outbox rows atomically: `result_published` (P5-N1, PR #213) and `exam_assigned` (#299, ADR-011 §25). The historical "NOT IMPLEMENTED / P5-N1 scope" framing above was the pre-P5-N1 state. Further operational events are appended additively (ADR-011 §25).
 
 ## Protocol: Incident Authority (ADR-014 ACCEPTED — Admin runtime IMPLEMENTED by J3)
 
-Status: IMPLEMENTED — [ADR-014](../../adr/ADR-014-exam-incident-authority.md) (ACCEPTED); J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements the Admin surface (commands, tables, routes, permissions, audit) and is merged on master (PR #242, CLOSED). The entries below are live for Admin. Proctor grants (J4/M11), the recovery-center UI (J5/J6), and system-generated incidents remain NOT IMPLEMENTED. The architecture projection (state diagram, command inventory, permission matrix, sequences) lives in [incident-authority.md](./incident-authority.md).
+Status: IMPLEMENTED — [ADR-014](../../adr/ADR-014-exam-incident-authority.md) (ACCEPTED); J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements the Admin surface (commands, tables, routes, permissions, audit) and is merged on master (PR #242, CLOSED). The entries below are live for Admin. Assigned-Proctor incident authority is live (J4-I1/M11, ADR-015 §13), the Recovery Center UIs are live (J5/J6, #303), and system-generated incidents are live (#304, ADR-014 §8 Gate A). The architecture projection (state diagram, command inventory, permission matrix, sequences) lives in [incident-authority.md](./incident-authority.md).
 
 ### Incident Lifecycle
 

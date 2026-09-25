@@ -50,6 +50,17 @@
 > [`ADR-015`](../adr/ADR-015-proctor-exam-scope-authority.md),
 > [`../architecture/exam-system/incident-authority.md`](../architecture/exam-system/incident-authority.md),
 > [`../archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md`](../archive/audits/M11-I1-PROCTOR-EXAM-ASSIGNMENTS-CLOSEOUT.md).
+>
+> **Current-vs-historical boundary (#614).** This contract mixes a
+> point-in-time reality audit (2026-08-02) with frozen wire/product semantics.
+> Where an "at audit time" claim says a Recovery surface does not exist yet,
+> that is a **historical baseline statement**, superseded by later delivery:
+> §13.1 (and `docs/status/implementation-status.md`) own the CURRENT delivery
+> state — both the Admin Recovery Center (`/admin/recovery`) and the Proctor
+> Operations surface (`/admin/proctor/recovery`) are live product
+> projections. Superseded spots carry explicit markers: §2.1 note (operation
+> identity rows), §2.2 (UI bullets), §5.4 (endpoint existence), §8.1/§8.2
+> (force-submit/misconduct identity), §12 (slice statuses).
 
 ---
 
@@ -116,6 +127,16 @@ sketch in `docs/archive/roadmap/recovery-operations-jobs.md` §7 wished for.
 | Proctor monitoring (assignment-filtered) | `GET /admin/proctor/exams`, `GET /admin/exams/:examId/proctor/attempts`, `GET /admin/attempts/:attemptId/proctor-events` | `ProctorDashboardPage` / `ProctorWorkspacePage` (Admin-side, existing) | out of J5 MVP scope (Proctor-facing is J6) | n/a |
 | Audit timeline (per target) | `auditLogRepo.listByTarget` (repo level) | none in Recovery Center | yes (repo level) | no Admin aggregate read endpoint; UI |
 
+> **Superseded rows (operation identity), corrected 2026-09-25 (#614):** the
+> force-submit and misconduct-mark rows above describe the pre-receipt wire
+> ("no `operationId`", state-idempotent, reason optional). Since J5-I1C Slice
+> 2 both commands require operation identity:
+> `ForceSubmitWithOperationRequestSchema` (`operationId` + required `reason`
+> 1..500) and `MisconductMarkWithOperationRequestSchema` (`operationId` +
+> `severity` + required `notes`; `packages/contracts/src/attempt.ts`). §8.1 /
+> §8.2 carry the same correction. The rows are retained as the audit-time
+> baseline.
+
 ### 2.2 Authority facts frozen by this audit
 
 - The Incident aggregate, its nine canonical commands, the Admin Incident API
@@ -143,10 +164,14 @@ sketch in `docs/archive/roadmap/recovery-operations-jobs.md` §7 wished for.
   anti-enumeration 404 `RESOURCE_NOT_FOUND` (byte-identical to the
   not-found shape); capability denial returns 403 `PERMISSION_DENIED`;
   resolver-infrastructure failure returns 503 `AUTHZ_UNAVAILABLE`.
-- There is **no** Proctor-facing Recovery Center product UI (that is J6, NOT
-  STARTED). The existing `ProctorDashboardPage` / `ProctorWorkspacePage` are
-  Admin-side monitoring pages, not the J6 Proctor Recovery Center.
-- There is **no** Admin Recovery Center product UI (this is J5, NOT STARTED).
+- *(Historical baseline, 2026-08-02 — superseded; see §13.1.)* There is **no**
+  Proctor-facing Recovery Center product UI (that is J6, NOT STARTED). The
+  existing `ProctorDashboardPage` / `ProctorWorkspacePage` are Admin-side
+  monitoring pages, not the J6 Proctor Recovery Center. **Current:** the
+  Proctor Operations surface (`/admin/proctor/recovery`) is live (#303).
+- *(Historical baseline, 2026-08-02 — superseded; see §13.1.)* There is **no**
+  Admin Recovery Center product UI (this is J5, NOT STARTED). **Current:** the
+  Admin Recovery Center (`/admin/recovery`) is live (J5-I1B CLOSED).
 
 ### 2.3 Boundary the audit deliberately draws
 
@@ -317,7 +342,7 @@ Classification against the §5.2 dimensions (current master):
 | `assignedProctorUserId` | Requires additive read API | needs a join against `exam_proctor_assignments` |
 | `cursor` / `limit` | Requires additive read API | `listByExam` is unbounded; keyset pagination is the J4-I1C pattern to reuse |
 
-### 5.4 Proposed additive queue endpoint (J5-I1A contract, NOT yet existing)
+### 5.4 Proposed additive queue endpoint (J5-I1A contract, NOT yet existing) — superseded: the endpoint is LIVE (J5-I1A1, PR #252)
 
 Because no organization-wide, multi-filter Incident queue exists on master,
 J5-I1A is contracted to add one. The route name is **frozen** by this contract
@@ -813,6 +838,13 @@ UI must not pretend the server enforces what the server does not enforce —
 until the force-submit contract change lands, the UI MUST NOT require a reason
 that the server rejects nothing for.
 
+> **Landed (corrected 2026-09-25, #614):** the adjudication above is now
+> implemented — force-submit `reason` is server-required
+> (`z.string().trim().min(1).max(500)`) and the request carries `operationId`
+> (`ForceSubmitWithOperationRequestSchema`, `packages/contracts/src/attempt.ts`).
+> The "optional today" row and this section's pre-landing framing are
+> historical.
+
 ### 8.2 operationId / retry / reload rules (frozen)
 
 These rules apply to every command that carries operation identity today (all
@@ -820,6 +852,13 @@ Incident commands, time grant, Proctor assignment commands). **Force submit and
 misconduct mark are the two exceptions** — they have no `operationId` and are
 state-idempotent only; they are NOT covered by the replay rules below until the
 J5-I1C0 adjudication (see §7 notes) lands.
+
+> **Superseded (corrected 2026-09-25, #614):** the exception above is
+> historical. Since J5-I1C Slice 2, force submit and misconduct mark DO carry
+> operation identity (`ForceSubmitWithOperationRequestSchema` /
+> `MisconductMarkWithOperationRequestSchema` — durable
+> `attempt_command_receipts`, replay rules apply). The frozen rules below now
+> cover them.
 
 ```text
 - operationId is generated client-side
@@ -931,6 +970,11 @@ implementation and must follow the component-insufficiency protocol in
 ---
 
 ## 12. J5 implementation slices (frozen)
+
+> **Status labels below are historical** (frozen at the 2026-08-04 amendment
+> time). All J5 slices have since **CLOSED**, including the read-only UI
+> (J5-I1B); the live delivery state is owned by §13.1 and
+> `docs/status/implementation-status.md`. Retained as the decomposition record.
 
 The J5 work is decomposed so that the read model and read-only UI can be
 reviewed before any operator-action UI ships.
@@ -1046,7 +1090,7 @@ A Proctor may *document* suspected misconduct as an incident; a Proctor may
 NOT apply the misconduct mark to the Attempt. Sharing a button component
 between Admin and Proctor does not change this.
 
-### 13.1 Recovery projection identities and collection scope (#606 D1)
+### 13.1 Recovery projection identities and collection scope (#606 D1) — CURRENT delivery authority for the Recovery surfaces
 
 The two Recovery routes are different WORKFLOW PROJECTIONS, not detailed and
 simplified views of one list:

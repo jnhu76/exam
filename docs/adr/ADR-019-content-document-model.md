@@ -2,7 +2,29 @@
 
 ## Status
 
-PROPOSED (implemented in the `feat/301-content-wysiwyg-v1` branch; pending human acceptance)
+**ACCEPTED** (2026-09-25, issue #614 G3 — the shipped implementation is
+ratified; the authoring-time "PROPOSED … pending human acceptance" marker is
+superseded by this acceptance). Decision history below is preserved.
+
+Implementation evidence at acceptance (master `b673bb22`):
+
+- `packages/db/src/schema/pg.ts` — `exams.questionSnapshot` questions carry
+  `content_document` JSONB (`contentDocument`, `ContentDocumentV1`); null =
+  Plain, `content` remains the plain-text authority.
+- `packages/domain/src/content/contentDocument.ts` — the canonical
+  `ContentDocumentV1` kernel: closed grammar, deterministic/idempotent
+  normalization, structural limits, plain-text projection.
+- `packages/contracts/src/contentDocument.ts` — wire `ContentDocumentV1Schema`
+  with the bounded iterative preflight piped in front of the recursive
+  grammar (§5 hostile-depth protection), compile-time-checked against the
+  kernel.
+- `apps/web/src/components/shared/content/` — pure-React
+  `ContentDocumentRenderer` read path; `RichContentEditor` (Tiptap) behind
+  `RichContentEditorLazy` on edit surfaces only; KaTeX encapsulated with
+  `trust: false`.
+- `packages/contracts/src/score.ts` — grading-details wire carries frozen
+  `contentDocument` + `answerMode` from the QuestionSnapshot; rich answers
+  render only when `answerMode === "rich"` and the payload validates.
 
 ## Metadata
 

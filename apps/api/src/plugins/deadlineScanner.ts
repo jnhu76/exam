@@ -26,7 +26,6 @@ import {
 } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
-const DEFAULT_SCAN_INTERVAL_MS = 30_000;
 const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.DeadlineScanner;
 
 /**
@@ -72,9 +71,12 @@ export const deadlineScannerMetrics = {
   autoSubmitCount: 0,
   failedCount: 0,
   /**
-   * Effective scan interval in milliseconds. Updated at plugin registration.
+   * Effective scan interval in milliseconds. INVARIANT: this is a
+   * pre-registration placeholder (0); the plugin registration writes the
+   * configured interval before the server starts listening, so no request
+   * ever observes the placeholder.
    */
-  scanIntervalMs: DEFAULT_SCAN_INTERVAL_MS,
+  scanIntervalMs: 0,
 };
 
 /**

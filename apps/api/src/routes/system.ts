@@ -928,8 +928,8 @@ async function buildOperationalDiagnostics(
     dbLatency,
     redisStatus,
     heartbeatStatus: {
-      interval: config.heartbeat.scanIntervalMs ?? 30_000,
-      timeout: config.heartbeat.timeoutMs ?? 60_000,
+      interval: config.heartbeat.scanIntervalMs,
+      timeout: config.heartbeat.timeoutMs,
       lastScanAt: heartbeatMetrics.lastScanAt?.toISOString() ?? null,
       disruptedCount: heartbeatMetrics.disruptedCount,
       // #547 stall facts + the same pure classification the operability
@@ -940,7 +940,7 @@ async function buildOperationalDiagnostics(
       activeSince: heartbeatMetrics.activeSince?.toISOString() ?? null,
       stallState: classifyLoopStall(
         heartbeatMetrics,
-        config.heartbeat.scanIntervalMs ?? 30_000,
+        config.heartbeat.scanIntervalMs,
         fastify.now(),
       ),
     },
@@ -967,8 +967,8 @@ async function buildOperationalDiagnostics(
       fastify.now(),
     ),
     config: {
-      heartbeatInterval: config.heartbeat.scanIntervalMs ?? 30_000,
-      heartbeatTimeout: config.heartbeat.timeoutMs ?? 60_000,
+      heartbeatInterval: config.heartbeat.scanIntervalMs,
+      heartbeatTimeout: config.heartbeat.timeoutMs,
       deadlineScanInterval: deadlineScannerMetrics.scanIntervalMs,
     },
   };

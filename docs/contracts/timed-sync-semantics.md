@@ -6,6 +6,14 @@
 > implementation slices until superseded by an Accepted ADR or a later
 > dated amendment in this file. Phase A reality (deadline / untimed) merged
 > via PR #388; this document starts from that baseline.
+>
+> **Current-behavior note (corrected 2026-09-25, #614):** the §1 as-built
+> snapshot below was captured before #292 landed. Since #292 (2026-09-12),
+> queue admission is the **durable** `exam_admissions` runtime — the legacy
+> Phase-2 in-memory admission gate named in §1/§4 no longer exists in the
+> product-reachable start path. [`exam-policy-authority.md`](exam-policy-authority.md)
+> §4 is the current admission/timing support authority; the statements here
+> are the B0 design freeze and its point-in-time baseline.
 
 ## 1. Current truth (as-built @ master `b994d109`)
 
@@ -33,12 +41,17 @@
   fields, and `requireQueue=true` is NOT inert as-built: a legacy Phase 2
   in-memory admission gate (process-local module Map, queue-status route,
   and candidate-start gating in `apps/api/src/routes/attempts.candidate.ts`)
-  is product-reachable for a published `timed_window` exam today —
-  non-durable (queue membership and batch timing reset on restart),
-  single-instance, unaudited. It is not an admission runtime; #292's durable
-  admission design replaces it (premise drift tracked in #394). Redis is
-  adopted for shared rate limiting only (ADR-001); queue Redis adoption
-  remains decision-gated.
+  was product-reachable at this snapshot — non-durable (queue membership and
+  batch timing reset on restart), single-instance, unaudited. It is not an
+  admission runtime; #292's durable admission design replaces it (premise
+  drift tracked in #394). Redis is adopted for shared rate limiting only
+  (ADR-001); queue Redis adoption remains decision-gated.
+  *(Superseded for current behavior, #614: #292 landed the durable
+  `exam_admissions` admission runtime and the in-memory gate was removed —
+  admission is now enforced inside the engine start command against the
+  durable admission row. See [`exam-policy-authority.md`](exam-policy-authority.md)
+  §4. The design rule that `timed_sync` must never fall back to a
+  non-durable gate still stands.)*
 
 ## 2. Candidate models considered
 
@@ -178,6 +191,11 @@ effectiveDeadline  = min(closeAt, attempt.deadlineAt) = syncDeadline
   timed_sync start path must never consult the legacy in-memory admission
   gate (§1) — that gate is #292's to retire or replace (#394), not a
   transitional timed_sync queue.
+  *(Current fact, #614: #292 has landed its durable admission runtime and
+  retired the in-memory gate, so the "must never consult the in-memory gate"
+  constraint is satisfied structurally. `timed_sync` itself remains
+  unactivated pending the B2 decision — see
+  [`exam-policy-authority.md`](exam-policy-authority.md) §4.)*
 - Admission semantics under timed_sync (contract #292 must implement):
   admission is an entry gate only — it never changes the global deadline.
   Candidates admitted after T0 receive less remaining time; queue delay is

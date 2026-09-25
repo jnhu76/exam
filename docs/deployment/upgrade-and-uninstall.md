@@ -52,7 +52,7 @@ read with `--env-file`.
 Single supported flow: **new checkout → `generate-env` re-pin (or manual
 `EXAM_IMAGE`) → `docker compose pull` → `up -d`. Containers migrate
 automatically on start.** All upgrades run against the bundled `db`
-service (the worker's `DATABASE_URL` is composed from `POSTGRES_*` — the
+service (the app's `DATABASE_URL` is composed from `POSTGRES_*` — the
 bundled Postgres is required; external Postgres is not a supported path).
 
 Upgrade prerequisites:
@@ -157,7 +157,7 @@ docker compose --env-file .env.deploy up -d
 ### 2.6 Post-upgrade verification checklist
 
 ```text
-[ ] docker compose --env-file .env.deploy ps      # app + db healthy, worker up
+[ ] docker compose --env-file .env.deploy ps      # app + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
 [ ] curl -s http://localhost:${EXAM_PORT:-3000}/api/health   # {"status":"ok"}
 [ ] Log in as an existing Admin; open a candidate + a recent result.
 [ ] Watch migration logs (first boot):
@@ -255,7 +255,7 @@ Properties of the resulting deployment:
 | Pin re-derivation / explicit override / stale-canonical re-pin | `node --test scripts/generate-env.test.mjs` (derive, explicit-wins, re-pin drift) |
 | Fresh install from nothing (env authority, first migration, bootstrap) | `tests/deployment/fresh-install.sh` (release acceptance gate) |
 | Container recreation with data + journal continuity (`down` → `up`, new container IDs, canary port) | fresh-install gate `[persist]` stage |
-| **Upgrade mechanics**: image-pin swap → `up -d` recreates app/worker, db untouched, probe row + journal + invariants intact, login OK | `tests/deployment/upgrade-uninstall.sh` `[upgrade]`/`[upgrade-flip]` |
+| **Upgrade mechanics**: image-pin swap → `up -d` recreates app, db untouched, probe row + journal + invariants intact, login OK | `tests/deployment/upgrade-uninstall.sh` `[upgrade]`/`[upgrade-flip]` |
 | **Uninstall preserve mode**: `down` keeps PGDATA; re-`up` restores state | `tests/deployment/upgrade-uninstall.sh` `[preserve]` |
 | **Uninstall full removal**: data + env file deleted → fresh DB (0 orgs), fresh bootstrap, old credentials rejected, new login OK | `tests/deployment/upgrade-uninstall.sh` `[delete]` |
 

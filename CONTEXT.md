@@ -1,6 +1,14 @@
 # Exam Platform — Domain Language
 
-Configurable LAN/on-premise exam and assessment platform. Single-tenant, multi-user (Admin + Candidate in Phase 1).
+> **Role: navigational glossary for agents, not a normative authority.**
+> Definitions here paraphrase the owning authorities; when any entry
+> disagrees with its owner (SPEC, Accepted ADRs, `packages/domain`,
+> `packages/contracts`), the owner wins and this file must be reconciled.
+> Do not cite this file as the authority for a domain fact.
+
+Configurable LAN/on-premise exam and assessment platform. Single-tenant,
+multi-user; core-path roles Admin + Candidate with delivered Phase 3
+collaboration roles (Teacher / Proctor / Grader / Maintainer — see SPEC §2.4.1).
 
 ## Question Types
 
@@ -21,7 +29,7 @@ _Avoid_: render mode, display type
 - `single_line` — single-line text input (fill_blank)
 - `multi_line` — multi-line textarea (text_response)
 
-**GradingMode**: How the answer is scored. Derived from QuestionType via `getGradingMode(type)` at the API layer; not stored in DB.
+**GradingMode**: How the answer is scored. Determined by QuestionType (objective types are exact-match; `text_response` is manual). Not a question column; each materialized grading work item persists its mode on `attempt_grading_entries.grading_mode` (`pg.ts`), which is the manual-queue predicate's truth source.
 _Avoid_: scoring mode
 
 - `auto` — system grades by comparing against standardAnswer (single_choice, multiple_choice, true_false, fill_blank)
@@ -107,7 +115,7 @@ _Avoid_: score status, grading phase
 
 **Critical rule**: The manual grading queue's work truth source is the materialized `attempt_grading_entries` (predicate: `grading_mode='manual' AND status='pending_manual'`), NOT `gradingStatus` and NOT an `attemptStatus = 'grading'` query. `gradingStatus` describes the attempt-level scoring lifecycle/display state but cannot manufacture or rebuild queue work items; `gradingStatus = 'pending_manual'` without a matching pending entry does not appear in the queue (ghost-attempt guard). Historical `status='grading'` rows are upgrade/recovery concerns only and are not current manual- or auto-grading workflow states.
 
-**State machine discipline**: All current state changes go through centralized command functions (`submitAttempt`, `resumeAttempt`, `markDisrupted`, `gradeQuestion`, `voidAttempt`). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed current transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state. Historical persisted values are handled by explicit migration/recovery logic rather than by widening the current state machine.
+**State machine discipline**: All current state changes go through centralized command functions (`submitAttempt`, `restoreInterruptedAttempt` — the disruption-restore entry, `markDisrupted`, `gradeQuestion`, `voidAttempt`). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed current transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state. Historical persisted values are handled by explicit migration/recovery logic rather than by widening the current state machine.
 
 > The historical `completeManualGrading` command does not exist in current production code; the one-way pending-only manual completion command is `gradeQuestion` (`packages/exam-engine/src/manualGrading.ts`).
 
@@ -129,7 +137,7 @@ _Avoid_: final answers, locked answers, grading answers
 
 **SubmittedAnswersSnapshot**: The shape of `submitted_answers`: `{ schemaVersion: 1, answers: { questionId: string, value: unknown }[] }`. Derived from draft answers by normalizing against the attempt's frozen question snapshot and stripping protocol metadata.
 
-**submitted_answers_hash**: NOT a DB column in MVP. Hash utilities (`hashSubmittedAnswers()`) exist for testing, backfill verification, and optional audit logging, but idempotency is guaranteed by transactions + status guards + submitted_answers immutability, not by hash comparison.
+**submitted_answers_hash**: NOT a DB column, and no hash utility exists in current code. Idempotency is guaranteed by transactions + status guards + submitted_answers immutability, not by hash comparison.
 
 **submit freeze barrier**: The single-transaction operation that reads `answers`, normalizes them to `SubmittedAnswersSnapshot`, writes to `submitted_answers`, transitions attempt to `submitted`, and rejects any concurrent saveAnswer. Defined in ADR-008.
 _Avoid_: submit lock, answer lock
@@ -157,7 +165,7 @@ _Aavoid_: standard answer visibility, answer release
 **CandidateTakeSnapshot**: The unified response from `GET /candidate/attempts/:attemptId/take`. Contains attempt metadata, derived capabilities (`attemptStatus`, `isEditable`, `canSave`, `canSubmit`, `resultVisibility`, `answerVisibility`, `submittedAt`, `serverRevision`), server time fields (`serverNow`, `effectiveDeadline`), safe questions with `answerValue` (the single answer view for the current state), and `answerSource: 'draft' | 'submitted' | 'none'`. Never contains standardAnswer, rubric, gradingMode, correctOption, teacher notes, or unreleased scores. This is the business truth source for the frontend; the frontend derives its view from this snapshot via a pure function, not from local state.
 _Avoid_: take-exam response, candidate exam DTO
 
-**GradingQuestionDTO**: The question shape returned to the grader during manual scoring. Contains standardAnswer, rubric, gradingMode, and `submittedAnswer` (from `submitted_answers`, not draft).
+**GradingQuestionDTO**: The question shape returned to the grader during manual scoring (`GradingDetailsQuestionSchema` in `packages/contracts/src/score.ts`). Contains standardAnswer, rubric, and `candidateAnswer` (from `submitted_answers`, not draft), plus the frozen `contentDocument` / `answerMode` for rich prompts.
 _Avoid_: grading detail DTO, score question DTO
 
 **ResultDTO**: The result shape returned to the candidate after result release. Contains score and pass status; standardAnswer only if answerVisibility allows.

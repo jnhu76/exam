@@ -1,13 +1,18 @@
 # Domain and Aggregate Model
 
-> Normative description of the exam system's core domain objects, their classification, ownership, and relationships.
+> Explanatory description of the exam system's core domain objects, their
+> classification, ownership, and relationships. Explanatory, not a competing
+> normative authority — binding decisions live in Accepted ADRs and
+> [`../../SPEC.md`](../../SPEC.md) (#614 authority split).
 
 ```text
 Last verified against commit:
-b994d109b7fcb34db8105cb85a2edf9420a9c613
+b673bb22c3ebed91f9bed86dc20c70c589a68eab
 
 Verification scope:
-Current master implementation after merged P5-0 / PR #210.
+2026-09-25 (#614): confirmed drift families re-verified against current master;
+unmarked sections retain their original snapshot (previous marker: b994d109,
+P5-0 / PR #210 baseline).
 ```
 
 ## 1. System Purpose
@@ -41,7 +46,7 @@ exam.enrollment.manage, exam.result.publish
 score.all.view
 ```
 
-**Scope status**: Teacher's `course.create`, `course.update`, `exam.create`, `exam.update`, `exam.publish`, `exam.close`, `exam.enrollment.manage`, `exam.result.publish`, and `score.all.view` are marked scoped in the preset matrix, but the scoped resolver infrastructure (Teacher@course) is **NOT IMPLEMENTED**. Teacher permissions are currently flat org-wide. This is a **known Teacher resource-scope gap** (future M11 work).
+**Scope status**: Teacher@Course resource scope is **ENFORCED** (#286) — `teacher_course_assignments` carriers, per-request scoped capability enforcement (`resolveTeacherCourseScope` / `teacherAccess`), and SQL-side LIST filtering narrow the capabilities above (which are marked scoped in the preset matrix) to assigned courses. Capability grant alone is insufficient; active course assignment + resource-scope enforcement determine reach. Executable authority remains the authz preset + API scoped-gate / repository filtering implementation. (Historical note: before #286 this was flat org-wide — the former "Teacher capability scope gap" / M11 wording is superseded.)
 
 ## 3. Aggregate Catalog
 
@@ -420,13 +425,13 @@ Rubric is absent from the Candidate result contract.
 - A crash after provider acceptance but before `markSent` may cause duplicate delivery.
 - Current semantic is **at-least-once**.
 
-### 11.4 Business notification-to-outbox protocol (NOT IMPLEMENTED)
+### 11.4 Business notification-to-outbox protocol (IMPLEMENTED)
 
-No production business transaction currently inserts an outbox row atomically. The infrastructure primitives (table, repo, service, worker) exist, but the business protocol that enqueues notification emails is **NOT IMPLEMENTED**. This is the P5-N1 scope.
+Production business transactions insert outbox rows atomically: `result_published` (P5-N1, CLOSED, PR #213 — the publication transaction commits the Inbox row and the Email outbox row together) and `exam_assigned` (#299, ADR-011 §25 — each new enrollment commits atomically with its Inbox row and, when the candidate user has an email, one `exam_notification` outbox row). Further operational events remain future scope (ADR-011 §25).
 
-### 11.5 Notification Inbox (NOT IMPLEMENTED)
+### 11.5 Notification Inbox (IMPLEMENTED)
 
-There is no `notifications` table, no `NotificationService`, and no business caller that enqueues notifications.
+The `notifications` table (`pg.ts`), the notification repo/service, and the Inbox API exist (`apps/api/src/routes/notifications.ts`). Operational NotificationType values live: `result_published` and `exam_assigned` (`packages/domain/src/notification.ts`); additional events are appended additively when their wiring ships.
 
 ## 12. Audit and Observability
 
@@ -466,19 +471,19 @@ There is no `notifications` table, no `NotificationService`, and no business cal
 |-----------|--------|-------|
 | Paper | **Implicit/embedded** | Composition is `exam.questionSnapshot` |
 | Result | **Projection** | No table; computed from attempt + exam |
-| Notification | **NOT IMPLEMENTED** | No table, no service |
+| Notification | **IMPLEMENTED** | `notifications` table + repo/service; live types: `result_published`, `exam_assigned` |
 | ExamRoom | **NOT IMPLEMENTED** | Phase 2 planned |
 | QuestionVersion | **NOT IMPLEMENTED** | Snapshots serve this role |
-| Incident | **IMPLEMENTED (J3, CLOSED — PR #242 merged)** | ADR-014 (ACCEPTED) froze the aggregate, lifecycle, and relationships; J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements the tables, commands, Admin API, and audit; see [incident-authority.md](./incident-authority.md). Recovery Center UI (J5), Proctor scope (J4/M11), and system incidents are NOT IMPLEMENTED |
+| Incident | **IMPLEMENTED (J3, CLOSED — PR #242 merged)** | ADR-014 (ACCEPTED) froze the aggregate, lifecycle, and relationships; J3 (`REC-I6-I1-INCIDENT-PERSISTENCE-COMMANDS`) implements the tables, commands, Admin API, and audit; see [incident-authority.md](./incident-authority.md). Proctor scope (J4/M11, ADR-015 §13), the Recovery Center UIs (J5/J6, #303), and system-generated incidents (#304) are IMPLEMENTED |
 
 ## 15. Accepted Limitations
 
 1. **Question deletion**: No referential integrity guard against deleting questions referenced by existing snapshots. Snapshots are copies, so historical attempts are not broken, but the question bank loses the source.
 2. **No question lifecycle**: Questions are always mutable (no publish/archive state).
-3. **Disrupted recovery UI (candidate side)**: **IMPLEMENTED** (REC-I3, PR #219) — the candidate-facing restore flow (`useAttemptRestore()`, restoring/failed/retry surface, authoritative snapshot reload) is live. What remains open is the **operator/proctor** side: the operator time-grant route/permission is implemented (REC-I4-I3B2 CLOSED); the incident authority Admin runtime is implemented (J3 `REC-I6-I1`, CLOSED on master via PR #242 — see [incident-authority.md](./incident-authority.md)); a dedicated recovery center is not implemented (REC-OPS J5/J6), and Proctor incident scope (J4/M11) is not implemented. (P6 closed before REC-I3 landed, so older audits list this as not-productized — that is frozen history.)
+3. **Disrupted recovery UI (candidate side)**: **IMPLEMENTED** (REC-I3, PR #219) — the candidate-facing restore flow (`useAttemptRestore()`, restoring/failed/retry surface, authoritative snapshot reload) is live. The **operator/proctor** side is likewise **IMPLEMENTED**: operator time grant (REC-I4-I3B2 CLOSED), incident authority Admin runtime (J3, PR #242 — see [incident-authority.md](./incident-authority.md)), assigned-Proctor incident scope (J4-I1/M11, ADR-015 §13), the Admin Recovery Center (J5) and Proctor Operations surface (J6, #303), and system-generated incidents (#304). (P6 closed before REC-I3 landed, so older audits list recovery as not-productized — that is frozen history.)
 4. **Email business caller**: **IMPLEMENTED** — the `result_published` publication (P5-N1, CLOSED, PR #213) is the first production caller; additional operational notification types remain P5-N2+ scope.
 5. **Notification Inbox**: **IMPLEMENTED** (P5-N1, CLOSED, PR #213) for `result_published`; additional operational notification types remain P5-N2+ scope.
 6. **`grading` attempt status**: No write path — auto-graded attempts go directly from `submitted` to `graded`. State machine table entries for `grading` are unreachable.
 7. **`not_started` / `queued` / `voided`**: No write path — target design only.
-8. **Teacher resource scope**: Teacher has capabilities but scoped authorization (Teacher@course) is NOT IMPLEMENTED — currently flat org-wide.
+8. **Teacher resource scope**: **ENFORCED** (#286) — `teacher_course_assignments` carriers, per-request scope gate, and SQL-side LIST filtering narrow Teacher capabilities to assigned courses. (Historical note retained: before #286 this was flat org-wide.)
 9. **Candidate answer-key visibility**: Fixed to hidden. Configurable release is NOT IMPLEMENTED.

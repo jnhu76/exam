@@ -118,7 +118,7 @@ pnpm dev             # API :3000，Web :5173
 | --- | --- | --- |
 | Phase 1 — Minimal Deliverable | ✅ 已完成 | Admin + Candidate 可靠考试闭环 |
 | Phase 2 — Exam Operation | ✅ MVP 子集已完成 | 生命周期、恢复、评分、诊断 |
-| Phase 3 — Collaboration / Permissions | ✅ Generic Runtime 已完成 | 授权基础设施与 scoped roles 已具备；当前生产硬化由 [#552](https://github.com/jnhu76/exam/issues/552) 排序，High-Assurance 在其收口后激活 |
+| Phase 3 — Collaboration / Permissions | ✅ Generic Runtime 已完成 | 授权基础设施与 scoped roles 已具备；当前工作由 [#584](https://github.com/jnhu76/exam/issues/584) 排序（已收口的 [#552](https://github.com/jnhu76/exam/issues/552) 硬化路线图的继任者），High-Assurance 在 #584 收口后激活 |
 | P7 — System Readiness | ✅ 已完成 | Hardening、备份 / DR、运维控制、RBAC remediation |
 | Phase 4 — Platformization | ⏳ 未开始 | 多租户、API Key、Webhook 等暂缓 |
 
