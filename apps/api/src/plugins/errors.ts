@@ -11,8 +11,6 @@ import {
   normalizeErrorCode,
 } from "../lib/errorResponse.js";
 
-// Extract Zod issues from a Zod type-provider validation error. The provider
-// wraps each Zod issue under validation[i].params.issue.
 /**
  * Extracts individual `ZodIssue` objects from a Fastify Zod type-provider
  * validation error. The provider wraps each issue under `validation[i].params.issue`.

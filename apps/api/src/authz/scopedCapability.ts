@@ -17,9 +17,8 @@
  * it, so flipping a route from `requireCapability` to `requireScopedCapability`
  * cannot widen access; it only adds the resource-aware layer.
  *
- * ADR §10.3 (legacy stays authoritative during shadow) is unaffected: this
- * preHandler does not run shadow — it is the live capability+resolver gate on
- * routes that have already flipped off `requireRole`.
+ * This preHandler is the live capability+resolver gate; no shadow-mode
+ * evaluation exists in the runtime.
  *
  * Source of truth: `docs/adr/ADR-010-scoped-rbac-architecture.md` §3.9,
  * §Resource Resolver Matrix, §3.4 (organization anchor).
@@ -122,7 +121,7 @@ function resolvedCourseId(resolution: ResolvedScope): string | null {
 
 /** Input to the resource-aware preHandler builder. */
 export interface ScopedCapabilityInput {
-  /** The Phase 3 permission this route requires. */
+  /** The capability this route's gate requires. */
   permission: PermissionKey;
   /** Which registered resolver reduces the resource to a scope. */
   resolverKey: ResourceResolverKey;
@@ -137,7 +136,10 @@ export interface ScopedCapabilityInput {
   resourceIdSource?: "params" | "body";
   /** Resolver lookup (injected; built by the authz plugin from fastify.db). */
   resolvers: ResolverRegistry;
-  /** Flat role-preset predicate (injected; wraps @exam/authz permissionsForRole). */
+  /**
+   * Flat capability predicate (injected; reads the authenticated
+   * `ctx.capabilities` union).
+   */
   presetAllows: PresetAllows;
   /**
    * J4-I1B (ADR-015 §4.3): when `"assignment_scoped"`, Proctor actors must

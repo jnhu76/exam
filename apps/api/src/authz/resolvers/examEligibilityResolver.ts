@@ -1,12 +1,9 @@
 /**
  * Candidate exam-eligibility resource resolver (RBAC-M10-A, archetype B).
  *
- * Implements ADR §Candidate Own-Scope Policy + §Resource Resolver Matrix for
- * the candidate exam-eligibility routes:
- *
- *   GET /candidate/exams/:examId
- *   POST /attempts/:examId/queue
- *   POST /attempts/:examId/start
+ * Implements the ADR §Candidate Own-Scope Policy + §Resource Resolver Matrix for
+ * the candidate exam-eligibility routes — the registry entries declaring
+ * `runtimeAuthz.kind: "exam_eligibility"`.
  *
  * These routes reference an exam (and an enrollment) but NO attempt exists
  * yet, so the own-attempt resolver is inappropriate (directive §4 archetype
@@ -31,9 +28,10 @@
  * inconsistency stays a genuine `organization_mismatch` / `broken_parent_chain`
  * (403) because it is a scope violation, not an existence question.
  *
- * Integrity rules honored (resolver.ts top-of-file): full parent chain loaded;
- * explicit organization anchor (ADR §3.4); deny-on-inconsistency (ADR §22.1);
- * never fail open; operational errors surface as `resolver_error` (ADR §3.9).
+ * Integrity rules honored (`@exam/authz` `resolver.ts`): full parent chain
+ * loaded; explicit organization anchor (ADR §3.4); deny-on-inconsistency
+ * (ADR §22.1); never fail open; operational errors surface as `resolver_error`
+ * (ADR §3.9).
  *
  * Note: state guards (exam availability window, latestStartOffset, queue
  * admission, attempt-count limits) are RUNTIME STATE, not authorization, and

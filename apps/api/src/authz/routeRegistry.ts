@@ -1,20 +1,20 @@
 /**
- * Route permission registry (RBAC-M4).
+ * Route permission registry.
  *
  * Declarative `route → permission → scope → audit` mapping for every route
- * currently gated by `requireCapability(...)` / resource-aware capability gates
- * (`requireScopedCapability` / `requireScoreCapability` / `requireCandidateContext`
- * / `requireExamEligibility` / `requireOwnAttempt`).
+ * gated by `requireCapability(...)` / a resource-aware capability gate
+ * (`requireScopedCapability` / `requireScoreCapability` /
+ * `requireCandidateContext` / `requireExamEligibility` / `requireOwnAttempt`).
  * Source of truth: ADR §Route → Permission → Scope → Audit Registry.
  *
- * **This job does NOT enforce anything.** The registry is metadata + a coverage
- * test. RBAC-M5 (shadow) and RBAC-M10 / PROCTOR-M1 / GRADING-M1 (enforcement)
- * consume it later. Paths use the per-route definition path (not the runtime
- * plugin prefix) — that is the canonical source Fastify registers against.
+ * TEST-ONLY METADATA: no production code reads this registry. It is checked by
+ * `routeRegistryConformance*.test.ts` / `proctorAccessConformance.test.ts`,
+ * which compare the declared mapping against the live Fastify `onRoute`
+ * capture. Paths use the per-route definition path (not the runtime plugin
+ * prefix) — that is the canonical source Fastify registers against.
  *
- * ADR §3.3 List-Route Filter Registry extension is reserved via
- * `SingleResourceSpec | ListResourceSpec`; RBAC-M4 only declares the shape,
- * not the filter implementations (GRADING-M1 is the first consumer).
+ * `SingleResourceSpec | ListResourceSpec` declares the ADR §3.3 list-filter
+ * shape; no consumer reads `filterSpec` yet.
  */
 import {
   Permission,
@@ -111,7 +111,7 @@ export interface RoutePermissionRegistryEntry {
    * It is not the current runtime authorization authority.
    */
   legacyGate: LegacyGate;
-  /** The Phase 3 permission this route will require once enforced. */
+  /** The capability this route's runtime gate requires. */
   permission: PermissionKey;
   /** The scope the capability check resolves against. */
   scope: ScopeType;
@@ -119,7 +119,7 @@ export interface RoutePermissionRegistryEntry {
   resolver: ResolverKey;
   /**
    * Exact runtime authorization strategy for Candidate runtime routes (M10-A).
-   * Present only on the 10 candidate routes; absent on Admin routes.
+   * Present only on candidate runtime entries; absent on Admin routes.
    * The runtime conformance test compares this field against the actual
    * Fastify onRoute metadata to detect strategy drift.
    */
@@ -1378,7 +1378,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 8,
     },
 
-    // ── Exam incidents (ADR-014 routes; registry entries added by J4-I1B) ──
+    // ── Exam incidents (ADR-014 routes) ──
     {
       method: "POST",
       path: "/admin/exams/:examId/incidents",

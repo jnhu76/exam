@@ -65,7 +65,7 @@ function buildCsp(isProduction: boolean, cookieSecure: boolean): string {
     ? "script-src 'self'"
     : "script-src 'self' 'unsafe-inline'";
   // style-src keeps 'unsafe-inline' because shadcn/ui + cmdk emit inline style
-  // attributes at runtime; revisit in Phase2 when we audit runtime style usage.
+  // attributes at runtime; tightening it requires removing those emissions first.
   const styleSrc = "style-src 'self' 'unsafe-inline'";
   const directives = [...baseDirectives, scriptSrc, styleSrc];
   if (cookieSecure) {
@@ -96,10 +96,9 @@ function buildPermissionsPolicy(): string {
 }
 
 /**
- * Registers security-related Fastify hooks and headers: custom JSON body
- * parser, CSRF origin enforcement in production, and response security
- * headers (`X-Content-Type-Options`, `X-Frame-Options`, CSP,
- * Permissions-Policy, HSTS when cookies are secure).
+ * Registers security-related Fastify hooks: the custom JSON body parser (so an
+ * unreadable body stays a client error), CSRF origin enforcement in production,
+ * and the baseline response security headers derived from runtime config.
  */
 export default function setupSecurity(app: FastifyInstance): void {
   const config = getRuntimeConfig();

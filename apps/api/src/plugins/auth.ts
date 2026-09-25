@@ -53,9 +53,10 @@ export function buildAuthPlugin(
      * Pre-handler that authenticates a request via the `auth-token` cookie.
      * Verifies the JWT, loads the user from the database, resolves the
      * assignment-backed authority, and populates `request.ctx`. Replies 401
-     * on missing/invalid token, inactive user, or no active assignment;
-     * 503 AUTHZ_UNAVAILABLE on DB / authority-integrity failure (never 401
-     * for an operational failure — that would hide an authz-system outage).
+     * on missing/invalid token, inactive user, or no active assignment; 503
+     * AUTHZ_UNAVAILABLE on assignment-authority failure (never 401 for an
+     * operational failure — that would hide an authz-system outage). A DB
+     * failure while loading the user row is 500 INTERNAL_ERROR, also never 401.
      */
     const authenticateFn = async (
       request: FastifyRequest,
@@ -125,9 +126,9 @@ export function buildAuthPlugin(
           .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
       }
 
-      // RBAC-M10-E: resolve the authoritative runtime authority from ACTIVE
-      // user_role_assignments. users.role / JWT role are NO LONGER
-      // authoritative — they are compatibility projections only.
+      // RBAC-M10-E: the authoritative runtime authority is resolved from ACTIVE
+      // user_role_assignments. users.role / JWT role are compatibility
+      // projections only — never authority.
       const lookupCtx = {
         actorId: user.id,
         organizationId: user.organizationId,
@@ -238,15 +239,11 @@ export function buildAuthPlugin(
       return handler;
     });
 
-    // NOTE: the dead legacy `requirePermission` decorator was removed in P4-C1.
-    // It had zero route consumers (verified: `rg fastify.requirePermission\(`)
-    // and read only `ctx.permissions`, which is `[]` on every runtime context.
-    // The authoritative capability gate is `requireCapability` below
-    // (`ctx.capabilities`). See docs/archive/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
-    // The legacy `requireRole` decorator is retained solely as the test-fixture
-    // seam for the whole-app zero-requireRole regression lock's negative
-    // control (it lets the conformance test prove the classifier detects a
-    // synthetic role gate); it has zero production route consumers.
+    // The legacy `requireRole` decorator has zero production route consumers;
+    // it is retained solely as the test-fixture seam for the whole-app
+    // zero-requireRole regression lock's negative control (it lets the
+    // conformance test prove the classifier detects a synthetic role gate).
+    // The authoritative capability gate is `requireCapability` below.
 
     /**
      * Returns a pre-handler that checks the authenticated actor's EFFECTIVE

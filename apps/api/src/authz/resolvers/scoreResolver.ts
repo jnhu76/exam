@@ -1,10 +1,8 @@
 /**
  * Score resource resolver (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
  *
- * Implements ADR §Resource Resolver Matrix row `score`:
- *
- *   score -> attempt -> candidate + exam | resolveScoreScope |
- *           score.own.view / score.all.view | source of truth: attempt ownership
+ * Implements the ADR §Resource Resolver Matrix row `score` (the matrix owns the
+ * capability set; authz/routeRegistry.ts owns the route → capability pairing).
  *
  * Unlike the attempt/exam resolvers (which answer only "does this resource
  * resolve under the actor's org anchor?"), the score resolver must also surface
@@ -18,9 +16,10 @@
  * `ownership` block. The score preHandler is the sole consumer; the generic
  * `requireScopedCapability` decorator is not used for the score route.
  *
- * Integrity rules honored (resolver.ts top-of-file): full parent chain loaded;
- * explicit organization anchor (ADR §3.4); deny-on-inconsistency (ADR §22.1);
- * never fail open; operational errors surface as `resolver_error` (ADR §3.9).
+ * Integrity rules honored (`@exam/authz` `resolver.ts`): full parent chain
+ * loaded; explicit organization anchor (ADR §3.4); deny-on-inconsistency
+ * (ADR §22.1); never fail open; operational errors surface as `resolver_error`
+ * (ADR §3.9).
  */
 import type { FastifyBaseLogger } from "fastify";
 import type { Database, TenantContext } from "@exam/db/src/types.js";
