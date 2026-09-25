@@ -96,9 +96,14 @@ function hasStandardAnswer(schema: unknown): boolean {
   return false;
 }
 
+// The generated spec is immutable per test run (route registration is
+// app-global), so one build serves every assertion below — rebuilding the
+// full app per call dominated this suite's wall clock.
+let cachedSpec: (OpenAPISpecDocument & Record<string, unknown>) | undefined;
 async function spec(): Promise<OpenAPISpecDocument & Record<string, unknown>> {
-  return (await generateOpenAPISpec()) as OpenAPISpecDocument &
+  cachedSpec ??= (await generateOpenAPISpec()) as OpenAPISpecDocument &
     Record<string, unknown>;
+  return cachedSpec;
 }
 
 // ─── Route coverage ──────────────────────────────────────────────────
@@ -142,30 +147,6 @@ describe("OpenAPI structural baseline — route coverage", () => {
     }
   });
 
-  it("includes all 10 previously-missing route modules", async () => {
-    const s = await spec();
-    const paths = Object.keys(s.paths ?? {});
-
-    // roleAssignmentRoutes
-    expect(paths).toContain("/api/roles/assignable");
-    expect(paths).toContain("/api/users/{id}/role-assignments");
-    expect(paths).toContain("/api/role-assignments/{assignmentId}");
-
-    // importLogRoutes
-    expect(paths).toContain("/api/admin/import-logs");
-
-    // clientEventRoutes
-    expect(paths).toContain("/api/client-events");
-
-    // proctorMonitoringRoutes
-    expect(paths).toContain("/api/admin/proctor/exams");
-    expect(paths).toContain("/api/admin/exams/{examId}/proctor/attempts");
-    expect(paths).toContain("/api/admin/attempts/{attemptId}/proctor-events");
-
-    // emailRoutes
-    expect(paths).toContain("/api/email/test");
-  });
-
   it("includes correct HTTP methods on newly-added routes", async () => {
     const s = await spec();
     const paths = s.paths as Record<string, Record<string, unknown>>;
@@ -177,6 +158,7 @@ describe("OpenAPI structural baseline — route coverage", () => {
     expect(paths["/api/role-assignments/{assignmentId}"]?.delete).toBeDefined();
     expect(paths["/api/admin/import-logs"]?.get).toBeDefined();
     expect(paths["/api/client-events"]?.post).toBeDefined();
+    expect(paths["/api/admin/proctor/exams"]?.get).toBeDefined();
     expect(
       paths["/api/admin/exams/{examId}/proctor/attempts"]?.get,
     ).toBeDefined();
@@ -342,6 +324,10 @@ describe("OpenAPI structural baseline — security & x-role metadata", () => {
     });
   }
 
+  // Security-scheme ownership: `api:openapi:check` only verifies byte-parity
+  // of the committed openapi.json, so a silent removal of the scheme (or its
+  // rename) would be blessed on regenerate. These assertions are the explicit
+  // property owners.
   it("declares cookieAuth in components.securitySchemes", async () => {
     const s = await spec();
     const schemes = (
