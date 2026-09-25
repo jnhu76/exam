@@ -80,8 +80,7 @@ export function ensureTargetOrg<T extends RequestContext>(
  * response. Handler-level validation fallback sharing the same builder as
  * the global error handler, so both paths emit one identical envelope:
  * registry compatibility top-level message (D0.5 — no per-route override)
- * plus field-level details (field messages remain producer-local Zod text
- * until C2).
+ * plus field-level details (field messages are the producer-local Zod text).
  *
  * @param requestId - The unique request identifier to include in the response.
  * @param error - The Zod validation error to convert.

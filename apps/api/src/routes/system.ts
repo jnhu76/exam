@@ -46,18 +46,11 @@ import { Permission } from "@exam/authz";
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
 /**
- * Builds the email diagnostics status block (P5-0). Never throws: if the outbox
- * query fails, the status degrades to `unavailable` rather than failing the
- * whole diagnostics response. Never exposes SMTP host/user/password,
+ * Builds the email diagnostics status block. Never throws: if the outbox or
+ * heartbeat read fails, the whole status degrades to `unavailable` rather than
+ * failing the diagnostics response. Never exposes SMTP host/user/password,
  * recipient addresses, or email body content — only booleans, a derived
  * status, worker state, and row counts.
- *
- * Status rules:
- * - disabled: `!config.email.enabled`
- * - degraded: enabled and (`outbox.dead > 0` or worker status is
- *   degraded/unavailable)
- * - available: enabled, outbox query succeeded, `dead === 0`
- * - unavailable: enabled but the outbox query threw
  *
  * Worker status is derived from the PostgreSQL heartbeat record:
  * - disabled: email is disabled
@@ -65,6 +58,11 @@ const cookieAuth = [{ cookieAuth: [] }] as const;
  * - available: heartbeat is fresh, lastSuccessAt is non-null, and lastError is null
  * - degraded: heartbeat is stale, or no successful poll has occurred, or
  *   lastError is non-null (including bootstrap_pending)
+ *
+ * The overall status is `degraded` when a dead outbox row exists OR the worker
+ * is degraded/unknown (a never-heartbeated worker is not "available"), and
+ * `available` only when the outbox query succeeded with `dead === 0` and the
+ * worker is available.
  */
 async function buildEmailStatus(
   config: ReturnType<typeof getRuntimeConfig>,
@@ -113,7 +111,6 @@ async function buildEmailStatus(
     const emailRepo = createEmailOutboxRepo(db);
     const heartbeatRepo = createWorkerHeartbeatRepo(db);
 
-    // Read worker heartbeat
     const heartbeat = await heartbeatRepo.findLatestByName("email-delivery");
     const staleThresholdMs = config.emailWorker.heartbeatStaleThresholdMs;
     let workerStatus: "available" | "degraded" | "unknown" = "unknown";
@@ -138,10 +135,8 @@ async function buildEmailStatus(
           : "degraded";
     }
 
-    // Read outbox counts
     const counts = await emailRepo.countByStatus(ctx);
 
-    // Determine oldest pending age
     const allPendingRows = await emailRepo.findDuePending(ctx, now, 1);
     let oldestPendingAge: number | null = null;
     if (allPendingRows.length > 0) {
@@ -300,7 +295,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
    * GET /system/health
    *
    * Returns CPU, memory, DB response time, and an overall status indicator.
-   * Admin-only.
+   * Gated by SystemHealthView (Admin + Maintainer presets).
    */
   fastify.get("/system/health", {
     preHandler: [
@@ -309,8 +304,8 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     ],
     schema: {
       security: cookieAuth,
-      // P7-RBAC-REMEDIATION F-02: runtime gate SystemHealthView is held by BOTH
-      // Admin and Maintainer presets; OpenAPI x-role must agree (was Admin-only).
+      // Runtime gate SystemHealthView is held by BOTH the Admin and Maintainer
+      // presets; the OpenAPI `x-role` list must agree with the preset grants.
       "x-role": ["Admin", "Maintainer"],
       response: { 200: SystemHealthResponseSchema },
     },
@@ -383,10 +378,10 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     ],
     schema: {
       security: cookieAuth,
-      // P7-RBAC-REMEDIATION F-02: runtime gate SystemDiagnosticsView is held by
-      // BOTH Admin and Maintainer presets; OpenAPI x-role must agree (was
-      // Admin-only). The business-integrity `integrity` block is still
-      // Admin-only — gated server-side by SystemBusinessIntegrityView (D8).
+      // Runtime gate SystemDiagnosticsView is held by BOTH the Admin and
+      // Maintainer presets; the OpenAPI `x-role` list must agree with the preset
+      // grants. The business-integrity `integrity` block is Admin-only — gated
+      // server-side by SystemBusinessIntegrityView (ADR-017 D8).
       "x-role": ["Admin", "Maintainer"],
       response: { 200: DiagnosticsResponseSchema },
     },
@@ -407,9 +402,9 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
    *
    * P7-E2B — READ-ONLY backup evidence projection: latest run, latest
    * VERIFIED run, last failure, status counts, and bounded history. The
-   * artifact is referenced by safe label only (no host paths, no
-   * credentials). No write sibling exists: backup.trigger / schedule /
-   * retention are decision-gated (ADR-017 D5) and NOT implemented.
+   * artifact is referenced by safe label only (no host paths, no credentials).
+   * There is no write sibling: ADR-017 D5 keeps backup trigger / schedule /
+   * retention decision-gated.
    *
    * Gated by SystemBackupView (Admin + Maintainer presets).
    */
@@ -668,9 +663,7 @@ async function buildOpsPolicyProjection(
   // RTO is an AUTOMATED succeeded drill (operator-declared is not proof). It is
   // unbounded and ordered by COMPLETION time: a long run of recent failures (or
   // operator-declared successes) must not hide an older automated success, and
-  // the recency/duration authority is completedAt. This replaces a bounded
-  // `listDrills(20).find(...)` that could return UNKNOWN even when a valid
-  // automated success existed just outside the window (P7-CLOSE review P2-3).
+  // the recency/duration authority is completedAt.
   const [latestVerified, latestSuccess, latestAutomatedSuccess] =
     await Promise.all([
       evidence.latestSucceededRun(ctx),
@@ -762,8 +755,7 @@ async function buildOpsPolicyProjection(
   // unbounded: a long run of recent failures must not hide an older
   // success. The latest SUCCEEDED drill — automated or operator-declared,
   // with its source shown — is the recency truth; an older automated
-  // success must not outrank a newer operator-declared success (P7-E
-  // review P2).
+  // success must not outrank a newer operator-declared success.
   const provenDrill = latestSuccess ?? null;
   const drillAgeSeconds =
     provenDrill?.completedAt != null

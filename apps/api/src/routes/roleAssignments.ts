@@ -46,8 +46,9 @@ const assignableRolesResponseSchema = z.object({
  * permission presets, so the migration from legacy requireRole(["Admin"]) is
  * access-matrix-neutral.
  *
- * These routes keep `users.role` synced to the primary active assignment
- * (ADR migration cache). Runtime authority remains users.role until M10-E.
+ * These routes keep `users.role` synced to the primary active assignment.
+ * `users.role` is a compatibility projection only and never runtime authority
+ * (authority = the union of active assignment presets).
  */
 const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
   // ── GET /roles/assignable ───────────────────────────────────────

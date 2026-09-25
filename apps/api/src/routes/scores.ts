@@ -238,8 +238,8 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      // ADR-005 Slice 4 (cancel-minimal): canceled exams never expose normal
-      // scores/export. Runs first so it takes precedence over all other gates.
+      // ADR-005: canceled exams never expose normal scores/export. Runs first
+      // so it takes precedence over all other gates.
       if (exam.status === "canceled") {
         return reply
           .code(409)
@@ -251,7 +251,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
             ),
           );
       }
-      // ADR-005 Slice 1 §Close & export policy: scores are not exposed while
+      // ADR-005 close & export policy: scores are not exposed while
       // unresolved attempts remain, even if the exam window has ended — an
       // admin must not export partial results mid-exam. Checked BEFORE the
       // ended/graded-count guard so the UNRESOLVED signal takes precedence.

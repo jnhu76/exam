@@ -1383,15 +1383,14 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
 
   // ── Proctor Recovery Center (J6, #303) — Proctor Operations projections ──
   //
-  // EXAM-303 authority freeze (F3, human-gate corrective 2026-09-12): these
-  // projections expose ONLY incident-domain truth an assigned Proctor already
-  // holds read authority over. They deliberately OMIT the Admin recovery-only
-  // fields the shared repo carries (time-adjustment ledger/summaries,
-  // auditReferences, activeProctors, execution details of Admin attempt
-  // commands); an action link pointing at an Admin-only action appears as its
-  // incident-domain link metadata only. Mutations keep flowing through the
-  // existing assignment_scoped incident command routes above — zero new
-  // commands, zero new state, canonical audit inherited.
+  // AUTHORITY FREEZE: these projections expose ONLY incident-domain truth an
+  // assigned Proctor already holds read authority over. They deliberately OMIT
+  // the Admin recovery-only fields the shared repo carries (time-adjustment
+  // ledger/summaries, auditReferences, activeProctors, execution details of
+  // Admin attempt commands); an action link pointing at an Admin-only action
+  // appears as its incident-domain link metadata only. Mutations keep flowing
+  // through the existing assignment_scoped incident command routes above —
+  // zero new commands, zero new state, canonical audit inherited.
   //
   // #606: this is the narrow Proctor-OPERATIONS projection, not a
   // Proctor-only collection — an Admin caller legitimately consumes the same
@@ -1569,8 +1568,8 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
   // granted ONLY to Admin (catalog.ts / presets.ts), so the flat
   // `requireCapability` gate is the runtime authority — a Proctor with
   // incident.view + active assignment is STILL denied (proctorAccess:
-  // admin_only per contract §6.3). Contract §6.3 (amended by this PR):
-  // the Recovery aggregate is an org-wide Admin READ MODEL — the same
+  // admin_only per contract §6.3). Contract §6.3: the Recovery aggregate is an
+  // org-wide Admin READ MODEL — the same
   // scope/resolver shape as the queue (§5.4) — so the repo owns ALL
   // fail-closed scope validation (org boundary + full relationship graph)
   // and surfaces broken parent/relationship chains as 503 AUTHZ_UNAVAILABLE,

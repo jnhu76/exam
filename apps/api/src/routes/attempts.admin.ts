@@ -40,10 +40,9 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
    * flag on an attempt (informational; does not change status). Allowed on
    * any attempt status (ADR-014 §16).
    *
-   * J5-I1C Slice 3: the request carries an operationId (client-generated
-   * command identity, J5-R0 §8.2). The execution is a durable,
-   * operationId-keyed command arbitrated by the shared
-   * `attempt_command_receipts` table (the same single
+   * The request carries an operationId (client-generated command identity).
+   * The execution is a durable, operationId-keyed command arbitrated by the
+   * shared `attempt_command_receipts` table (the same single
    * `(organization_id, operation_id)` arbiter as force-submit): the first
    * execution atomically commits receipt + projection + audit; a replay of
    * the same operationId + canonical payload returns the STORED immutable
@@ -51,14 +50,12 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
    * payload / command / attempt) is a 409 IDEMPOTENCY_CONFLICT. The response
    * is the operation receipt — NOT `{ ok: true }`.
    *
-   * Misconduct concurrency (frozen by the J5-I1C0 §8 experiment,
-   * 2026-08-07): the orchestrator takes `exam_attempts FOR UPDATE` inside the
-   * receipt transaction so concurrent marks on the same attempt serialize
-   * deterministically (the recorded §17 exception to the old overwrite-only
-   * no-row-lock property). The append-only receipt table is the authoritative
-   * history; `exam_attempts.misconduct` is the projection of the latest
-   * applied receipt. Audit event: attempt.misconductFlagged (metadata carries
-   * operationId + severity + notes).
+   * Misconduct concurrency: the orchestrator takes `exam_attempts FOR UPDATE`
+   * inside the receipt transaction so concurrent marks on the same attempt
+   * serialize deterministically. The append-only receipt table is the
+   * authoritative history; `exam_attempts.misconduct` is the projection of the
+   * latest applied receipt. Audit event: attempt.misconductFlagged (metadata
+   * carries operationId + severity + notes).
    */
   fastify.post(
     "/admin/attempts/:attemptId/misconduct",
@@ -126,20 +123,18 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
    * in_progress or disrupted attempt, then grades it inside the SAME
    * transaction (no submitted-but-not-graded crash window). A `submitted` row
    * is a terminal no-op: `no_change` receipt with afterStatus === beforeStatus
-   * (frozen J5-I1C0 §4.2 — the command never mutates behind a "no_change"
-   * fact).
+   * (the command never mutates behind a "no_change" fact).
    *
-   * J5-I1C Slice 2: the request carries an operationId (client-generated
-   * command identity, J5-R0 §8.2) and a REQUIRED canonical reason (J5-R0
-   * §8.1). The execution is a durable, operationId-keyed command arbitrated
-   * by the shared `attempt_command_receipts` table: the first execution
-   * atomically commits receipt + mutation + audit; a replay of the same
-   * operationId + canonical payload returns the STORED immutable
-   * result_payload (no re-submit, no re-grade, no new audit); any drift
-   * (different payload / command / attempt) is a 409 IDEMPOTENCY_CONFLICT; a
-   * NEW operationId against an already-terminal attempt leaves a durable
-   * `no_change` receipt. The response is the operation receipt — NOT a
-   * rebuilt Attempt projection (the old LoadAttemptResponse path is retired).
+   * The request carries an operationId (client-generated command identity)
+   * and a REQUIRED canonical reason. The execution is a durable,
+   * operationId-keyed command arbitrated by the shared
+   * `attempt_command_receipts` table: the first execution atomically commits
+   * receipt + mutation + audit; a replay of the same operationId + canonical
+   * payload returns the STORED immutable result_payload (no re-submit, no
+   * re-grade, no new audit); any drift (different payload / command / attempt)
+   * is a 409 IDEMPOTENCY_CONFLICT; a NEW operationId against an
+   * already-terminal attempt leaves a durable `no_change` receipt. The
+   * response is the operation receipt, never a rebuilt Attempt projection.
    * Audit event: attempt.forceSubmit (metadata carries operationId + reason).
    */
   fastify.post(
@@ -432,10 +427,9 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /admin/attempts/:attemptId/export/csv — Export attempt details as a
-   * UTF-8 (BOM) CSV file. Admin-only. `x-content-types` declares the real
-   * `text/csv` media type so the generated OpenAPI documents it correctly
-   * instead of mislabeling it as application/json (the provider default).
-   * Audit event: attempt.exported.
+   * UTF-8 (BOM) CSV file. Admin-only. The OpenAPI `text/csv` media type is
+   * applied by the spec builder's post-transform hook (`fixCsvContentTypes` in
+   * openapi/swagger.ts, which patches this path). Audit event: attempt.exported.
    */
   fastify.get(
     "/admin/attempts/:attemptId/export/csv",

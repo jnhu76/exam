@@ -19,9 +19,7 @@ const idParamsSchema = z.object({ id: z.string().uuid() });
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
 /**
- * Fastify plugin that registers data export routes.
- * Currently exposes `GET /exams/:id/export/scores` for CSV export of
- * graded exam attempt scores.
+ * Fastify plugin that registers the data export routes.
  */
 export const exportRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -62,7 +60,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      // ADR-005 Slice 4 (cancel-minimal): canceled exams never export.
+      // ADR-005: canceled exams never export.
       if (exam.status === "canceled") {
         return reply
           .code(409)
@@ -74,8 +72,8 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
             ),
           );
       }
-      // ADR-005 Slice 1 §Close & export policy: do not export while unresolved
-      // attempts remain, so an admin cannot export partial results mid-exam.
+      // ADR-005 close & export policy: do not export while unresolved attempts
+      // remain, so an admin cannot export partial results mid-exam.
       const unresolvedCount = await attemptRepo.countUnresolvedByExam(
         ctx,
         examId,

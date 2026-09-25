@@ -12,9 +12,11 @@ import { createNotificationRepo } from "@exam/db/src/repository/notificationRepo
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { getRequestContext } from "./helpers.js";
 
-// P5-N1-I3 — Notification Inbox API routes (V1: result_published only).
+// P5-N1-I3 — Notification Inbox API routes. The notification TYPE vocabulary
+// is the domain tuple `NOTIFICATION_TYPES` (@exam/domain), surfaced through
+// NotificationTypeSchema — never enumerated here.
 //
-// Authority: P5-N1-R0 §19 (frozen V1 API contract).
+// Authority: `@exam/contracts/src/notification.ts` (the frozen V1 API surface).
 //
 // All four endpoints are authenticate-only (no requireCapability) — the
 // Inbox is the authenticated user's own. Scope derives from ctx
@@ -56,11 +58,8 @@ function toDTO(row: {
 /**
  * Fastify plugin that registers the candidate Inbox routes.
  *
- * Routes (all authenticate-only, scoped to the actor's own notifications):
- *   GET  /notifications             — paginated list (offset/page)
- *   GET  /notifications/unread-count — bell badge count
- *   POST /notifications/:id/read    — mark one read (idempotent)
- *   POST /notifications/read-all    — mark all unread read
+ * Every route is authenticate-only and scoped to the actor's own
+ * notifications; the recipient is always derived from ctx, never from input.
  */
 const notificationRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(

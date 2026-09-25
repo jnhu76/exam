@@ -32,11 +32,10 @@ function getInputMode(
   }
 }
 
-// computeEffectiveDeadline is re-exported above from @exam/exam-engine and is
-// the ONLY deadline seam used below (L0 §5.1). Since Phase A (#291) it is
-// null-safe: an untimed exam (closeAt null) projects an null effective
-// deadline; a deadline-mode attempt (deadlineAt null) falls back to the exam
-// close.
+// computeEffectiveDeadline (imported above from @exam/exam-engine) is the ONLY
+// deadline seam used below. It is null-safe: an untimed exam (closeAt null)
+// projects a null effective deadline; a deadline-mode attempt (deadlineAt
+// null) falls back to the exam close.
 
 /**
  * Computes answerVisibility — whether standardAnswer/rubric is shown.
@@ -146,7 +145,8 @@ export function buildCandidateTakeSnapshot(
   const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
   const effectiveDeadlineStr = effectiveDeadline?.toISOString() ?? null;
 
-  // Derived capability: isEditable (CONTEXT.md:12, exam-protocol.md §6.1)
+  // Derived capability: isEditable (vocabulary: CONTEXT.md; runtime semantics:
+  // docs/architecture/exam-runtime.md)
   // effectiveDeadline === null means open-ended (no deadline) — always editable
   const isDeadlineExpired =
     effectiveDeadline !== null && now >= effectiveDeadline;
@@ -174,13 +174,11 @@ export function buildCandidateTakeSnapshot(
     }
   }
 
-  // Build answer lookup from draft answers
   const answerMap = new Map<string, unknown>();
   for (const a of attempt.answers) {
     answerMap.set(a.questionId, a.answer);
   }
 
-  // Build submitted answers lookup if available
   const submittedMap = new Map<string, unknown>();
   const submittedAnswers = attempt.submittedAnswers;
   if (submittedAnswers?.answers) {
@@ -206,7 +204,8 @@ export function buildCandidateTakeSnapshot(
     });
   }
 
-  // Build questions with answerSource routing (L0 §6.1)
+  // Build questions with answerSource routing (CandidateTakeSnapshotSchema
+  // in @exam/contracts).
   const questions = attempt.questionSnapshot.map((q) => {
     let answerValue: unknown = null;
     let answerSource: "draft" | "submitted" | "none" = "none";

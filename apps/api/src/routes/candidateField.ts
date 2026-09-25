@@ -266,8 +266,8 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * GET /candidate-fields/template — return import template headers.
      *
-     * Returns the column headers for a candidate import file:
-     * username, password, name, followed by configured custom field names.
+     * Headers are the fixed import columns followed by the configured custom
+     * field names, in the fields' configured sort order.
      */
     async (request) => {
       const ctx = ensureTargetOrg(getRequestContext(request));

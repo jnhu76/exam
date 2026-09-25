@@ -28,9 +28,8 @@ import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 /**
  * OpenAPI security definition for cookie-based authentication.
  *
- * "proctor" in these paths denotes the monitoring domain. P4 grants the
- * Proctor preset only the monitoring capabilities enforced below; Admin
- * remains the compatibility superset.
+ * "proctor" in these paths denotes the monitoring domain, not a role gate;
+ * each route's capability gate below is the authorization authority.
  */
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
