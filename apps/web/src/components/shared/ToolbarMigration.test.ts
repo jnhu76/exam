@@ -2,9 +2,9 @@
  * UI-TOOLBAR-RESPONSIVE-1 structural gates (issue 458).
  *
  * Pins the toolbar control-sizing migration at the SOURCE level:
- *   - migrated pages no longer carry arbitrary px/rem widths on toolbar
- *     filter controls (the exam-ui/no-arbitrary-filter-width lint rule is the
- *     runtime gate; this test pins the migration itself);
+ *   - arbitrary page-owned widths on toolbar filter controls are banned
+ *     continuously by the exam-ui/no-arbitrary-filter-width lint rule (the
+ *     executable owner of that fact — not re-pinned here);
  *   - the semantic vocabulary stays exactly narrow/wide (no third tier);
  *   - search sizing still belongs to DataToolbar, date sizing to DatePicker;
  *   - RecoveryQueue's ownerless bare <input> filters moved to the shared
@@ -40,14 +40,6 @@ describe("toolbar control sizing migration (issue 458)", () => {
     expect(toolbar).toMatch(/w-full sm:w-\[11\.25rem\]/);
     // No third tier sneaks in as a value or a page-facing escape hatch.
     expect(toolbar).not.toMatch(/"medium"|"xl"|"custom"|"compact"/);
-  });
-
-  it.each(migratedPages)("removes arbitrary filter widths from %s", (path) => {
-    const source = read(path);
-    // Filter controls must not carry page-owned arbitrary widths (the lint
-    // rule enforces this continuously; this pins the migration outcome).
-    expect(source).not.toMatch(/<SelectTrigger\b[^>]*\bw-\[[0-9.]+(px|rem)\]/);
-    expect(source).not.toMatch(/<input\b[^>]*\bw-\[[0-9.]+(px|rem)\]/);
   });
 
   it("keeps search sizing owned by DataToolbar and date sizing by DatePicker", () => {

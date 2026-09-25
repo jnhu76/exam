@@ -377,41 +377,38 @@ describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
 
   it("worklist: scope filtering happens BEFORE the limit (cursor walk stays inside the assignment)", async () => {
     // p1 is assigned exam A only and holds two in-scope incidents (A, A2).
-    // With limit=1 the traversal spans two pages; every returned row stays in
-    // the assignment scope and the unassigned exam's incident never enters
-    // any page (scope predicate gates the whole collection, not the first
-    // page).
-    const page1 = await inject(
-      p1Token,
-      "GET",
-      "/api/admin/proctor/incidents?limit=1",
-    );
-    expect(page1.statusCode).toBe(200);
-    const body1 = page1.json() as {
-      items: Array<{ incident: { id: string } }>;
-      nextCursor: string | null;
-    };
-    expect(body1.items).toHaveLength(1);
-    expect([incidentAId, incidentA2Id]).toContain(body1.items[0]!.incident.id);
-    expect(body1.nextCursor).toBeTruthy();
+    // Walking the worklist one row at a time must span several pages, and the
+    // unassigned exam's incident must never surface on ANY page — the scope
+    // predicate gates the whole cursor walk, not the first page.
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const url = cursor
+        ? `/api/admin/proctor/incidents?limit=1&cursor=${encodeURIComponent(cursor)}`
+        : "/api/admin/proctor/incidents?limit=1";
+      const res = await inject(p1Token, "GET", url);
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as {
+        items: Array<{ incident: { id: string } }>;
+        nextCursor: string | null;
+      };
+      for (const item of body.items) {
+        seen.push(item.incident.id);
+        expect(
+          [incidentAId, incidentA2Id],
+          `out-of-scope incident ${item.incident.id} leaked into the cursor walk`,
+        ).toContain(item.incident.id);
+      }
+      cursor = body.nextCursor;
+      pages += 1;
+      expect(pages, "cursor walk must terminate").toBeLessThan(10);
+    } while (cursor !== null);
 
-    const page2 = await inject(
-      p1Token,
-      "GET",
-      `/api/admin/proctor/incidents?limit=1&cursor=${encodeURIComponent(body1.nextCursor!)}`,
-    );
-    expect(page2.statusCode).toBe(200);
-    const body2 = page2.json() as {
-      items: Array<{ incident: { id: string } }>;
-      nextCursor: string | null;
-    };
-    const ids2 = body2.items.map(
-      (i: { incident: { id: string } }) => i.incident.id,
-    );
-    expect(
-      ids2.every((id: string) => [incidentAId, incidentA2Id].includes(id)),
-    ).toBe(true);
-    expect(ids2).not.toContain(incidentUId);
+    // limit=1 with two scoped rows actually paginated, and the walk covered
+    // exactly the assignment's incidents — no fewer, no more.
+    expect(pages).toBeGreaterThanOrEqual(2);
+    expect([...seen].sort()).toEqual([incidentAId, incidentA2Id].sort());
   });
 
   it("worklist: unassigned Proctor gets an empty collection", async () => {
