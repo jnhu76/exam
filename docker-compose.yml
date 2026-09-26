@@ -1,20 +1,20 @@
-# Sole operator entry point (deployment-topology-contract.mjs enforces this).
-# Run with the deployment env file: docker compose --env-file .env.deploy ...
-# (created by node scripts/generate-env.mjs; the dev .env is never read when
+# Sole operator entry point.
+# Run with the deployment env file: docker compose --env-file .env.production ...
+# (created by node scripts/init-production-env.mjs; the dev .env is never read when
 # --env-file is passed). Authoritative state is the ./data bind mounts — see
-# docs/deployment/backup-and-recovery.md.
+# docs/deployment/mvp-deployment-runbook.md.
 # #585 topology: nginx is the ONLY public ingress (host ${EXAM_PORT:-80} ->
 # container 80); app (:3000, API) and web (:4173, static SPA) are internal
 # services on exam-net.
 services:
   app:
     # Operator path: prebuilt semantic image, pinned by EXAM_IMAGE in the
-    # deployment env file (generate-env.mjs derives the default from
+    # deployment env file (init-production-env.mjs derives the default from
     # .release-version — the single version authority). Contributors / PR
     # acceptance build THIS checkout explicitly and run this file against
-    # the local pin (tests/deployment/lib.sh ensure_source_images — #626;
+    # the local pin (docker build --target runner -t exam-local:dev . — #626;
     # a cached registry image can never fake source acceptance).
-    image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}
+    image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/init-production-env.mjs)}
     # #585: the API is an internal service — nginx is the only public
     # ingress. Direct host publishing (the former ${EXAM_PORT:-3000}:3000)
     # moved to the nginx service. Development/test keeps using 3000
@@ -30,14 +30,14 @@ services:
       # Exceptions: APP_TIMEZONE (also drives the db service PGTZ literal)
       # and DEPLOYMENT_MODE keep explicit, parity-guarded literals.
       DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-exam}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/generate-env.mjs)}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/init-production-env.mjs)}
       NODE_ENV: production
       APP_MODE: production
       APP_PORT: 3000
       HOST: 0.0.0.0
       # #585: nginx owns public :80, so the canonical production public
       # origin is http://localhost (no port suffix). Remapped EXAM_PORT or
-      # LAN access must set both explicitly (.env.deploy.example).
+      # LAN access must set both explicitly (.env.production.example).
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
       PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
@@ -55,7 +55,7 @@ services:
       EMAIL_FAKE_MODE: ${EMAIL_FAKE_MODE:-}
       EMAIL_FAKE_DELAY_MS: ${EMAIL_FAKE_DELAY_MS:-}
       # Test/rehearsal-only fake-sender witness (#482): empty in any real
-      # deployment; set by deployment tests to observe fake-send entry.
+      # deployment; lets tests observe that the fake send path was entered.
       EMAIL_FAKE_SEND_ENTERED_FILE: ${EMAIL_FAKE_SEND_ENTERED_FILE:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-}
@@ -78,7 +78,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       # Tunable runtime knobs (defaults live in settings.ts). Forwarded so
-      # operators can override them via .env.deploy without editing Compose.
+      # operators can override them via .env.production without editing Compose.
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-}
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
@@ -114,10 +114,7 @@ services:
     # INVARIANT: stop_grace_period MUST dominate the app's whole
     # graceful-shutdown worst case (email loop drain + audit drain + DB pool
     # close + bounded exit assist, run serially) — or a stuck in-flight email
-    # send turns SIGTERM into SIGKILL (exit 137). The terms and their real
-    # sources are enumerated in scripts/repository-contract/
-    # deployment-topology-contract.mjs (assertShutdownBudgetContract), which
-    # fails when the relation breaks.
+    # send turns SIGTERM into SIGKILL (exit 137).
     stop_grace_period: 45s
 
   web:
@@ -125,9 +122,8 @@ services:
     # apps/web/dist on :4173 (never `vite preview`; web.conf is baked into
     # the web-runner image). Internal service: nginx routes non-API traffic
     # here. The operator pin mirrors EXAM_IMAGE (#321 two-path split):
-    # derived from .release-version; source builds pin it explicitly
-    # (tests/deployment/lib.sh ensure_source_images).
-    image: ${EXAM_WEB_IMAGE:?EXAM_WEB_IMAGE is required (node scripts/generate-env.mjs)}
+    # derived from .release-version; source builds pin it explicitly.
+    image: ${EXAM_WEB_IMAGE:?EXAM_WEB_IMAGE is required (node scripts/init-production-env.mjs)}
     expose:
       - "4173"
     healthcheck:
@@ -173,8 +169,6 @@ services:
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     volumes:
       - ${EXAM_DATA_ROOT:-./data}/postgres:/var/lib/postgresql
-      # Inert unless PITR is enabled via scripts/backup/postgres-enable-pitr.sh.
-      - ${EXAM_WAL_ARCHIVE_HOST_PATH:-${EXAM_DATA_ROOT:-./data}/wal-archive}:/wal-archive
     healthcheck:
       test:
         [

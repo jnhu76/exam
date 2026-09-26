@@ -54,15 +54,15 @@ Exam 是一个面向局域网 / 本地部署、当前采用单租户运行模式
 
 ```bash
 git clone https://github.com/jnhu76/exam.git && cd exam
-node scripts/generate-env.mjs                      # 生成 .env.deploy，并填写必要密钥
-docker compose --env-file .env.deploy up -d        # 拉取预构建镜像并启动 app + db
-docker compose --env-file .env.deploy ps           # 等待 app / db 进入 healthy
+node scripts/init-production-env.mjs                      # 生成 .env.production，并填写必要密钥
+docker compose --env-file .env.production up -d        # 拉取预构建镜像并启动 app + db
+docker compose --env-file .env.production ps           # 等待 app / db 进入 healthy
 ```
 
 初始化第一个 Admin。系统没有公开自助注册入口：
 
 ```bash
-docker compose --env-file .env.deploy exec app \
+docker compose --env-file .env.production exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'

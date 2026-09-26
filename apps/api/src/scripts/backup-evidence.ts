@@ -1,11 +1,10 @@
 /**
  * Local script: record durable backup / restore-drill evidence (P7-E2B).
  *
- * This is the typed operator evidence command between the P7-C backup
- * scripts (host) and the evidence ledger (PostgreSQL). It is invoked by
- * `scripts/backup/*.sh` at their natural checkpoints and by operators
- * recording restore-drill outcomes. It NEVER executes backups, restores, or
- * any infrastructure action — it only records EVIDENCE of what the scripts
+ * This is the typed operator evidence command for the backup/restore
+ * evidence ledger (PostgreSQL), invoked by operators recording backup or
+ * restore-drill outcomes. It NEVER executes backups, restores, or
+ * any infrastructure action — it only records EVIDENCE of what the operator
  * already did.
  *
  * Usage (host, via the app container):

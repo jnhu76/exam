@@ -17,10 +17,10 @@ import { buildTestApp, type TestContext } from "./testHelpers.js";
  * - the route lives under the default /api rate-limit policy, and the Compose
  *   healthcheck cadence (2/min from container loopback) can never self-429.
  *
- * The 503 leg (real DB loss) is proven by the deployment suite
- * (tests/deployment/readiness-gate.sh D2) against a real stopped container —
- * not simulated here; probe classification (throw/hang/redis legs) is unit
- * tested in plugins/operabilityMonitor.test.ts.
+ * The 503 leg (real DB loss) was validated against a real stopped container
+ * during the #547 acceptance — not simulated here; probe classification
+ * (throw/hang/redis legs) is unit tested in
+ * plugins/operabilityMonitor.test.ts.
  */
 describe("GET /api/ready — readiness gate (real app, real DB)", () => {
   let ctx: TestContext;

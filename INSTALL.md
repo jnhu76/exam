@@ -13,7 +13,7 @@ documentation.
 | --- | --- | --- |
 | Docker Engine | ≥ 25.x | Linux host or Docker Desktop |
 | Docker Compose | v2 | Included with Docker Desktop |
-| Node.js | 24.15.x | Only needed for `generate-env.mjs` |
+| Node.js | 24.15.x | Only needed for `init-production-env.mjs` |
 
 The platform is designed for **LAN/on-premise single-instance**
 deployment. Windows and macOS via Docker Desktop are acceptable for
@@ -25,17 +25,17 @@ evaluation; Linux is recommended for production.
 
 ```bash
 git clone <repo-url> exam && cd exam
-node scripts/generate-env.mjs
+node scripts/init-production-env.mjs
 ```
 
-This creates `.env.deploy` from the example template and fills
+This creates `.env.production` from the example template and fills
 `JWT_SECRET` and `POSTGRES_PASSWORD` with random values. Existing
 secrets are never rotated on re-run.
 
 ### 2. Start the stack
 
 ```bash
-docker compose --env-file .env.deploy up -d
+docker compose --env-file .env.production up -d
 ```
 
 This pulls the prebuilt release images and starts the nginx edge, the
@@ -44,7 +44,7 @@ only published service, on `EXAM_PORT`, default 80).
 No local build is required. Watch the startup logs:
 
 ```bash
-docker compose --env-file .env.deploy logs --tail=50 -f app
+docker compose --env-file .env.production logs --tail=50 -f app
 ```
 
 Wait until you see `Server listening at http://0.0.0.0:3000`.
@@ -52,7 +52,7 @@ Wait until you see `Server listening at http://0.0.0.0:3000`.
 ### 3. Verify health
 
 ```bash
-docker compose --env-file .env.deploy ps
+docker compose --env-file .env.production ps
 ```
 
 Expected: `nginx` (running), `app` (healthy), `web` (healthy),
@@ -61,7 +61,7 @@ Expected: `nginx` (running), `app` (healthy), `web` (healthy),
 ### 4. Bootstrap the first Admin
 
 ```bash
-docker compose --env-file .env.deploy exec app \
+docker compose --env-file .env.production exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
@@ -79,9 +79,9 @@ Navigate to `http://localhost` (the nginx edge on `EXAM_PORT`, default
 
 Instead of the CLI, you can use the browser-based Launchpad flow:
 
-1. Set `LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32>` in `.env.deploy`
+1. Set `LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32>` in `.env.production`
    **before** starting the stack.
-2. Start the stack (`docker compose --env-file .env.deploy up -d`).
+2. Start the stack (`docker compose --env-file .env.production up -d`).
 3. Navigate to `http://localhost/launchpad` and complete the form.
 4. Once initialized, `/launchpad` redirects to `/login` and never
    reopens.
@@ -102,7 +102,7 @@ question, and exam to confirm the full flow.
 
 ## LAN Access
 
-For machines on your local network, set these in `.env.deploy` before
+For machines on your local network, set these in `.env.production` before
 starting the stack:
 
 ```bash
@@ -131,12 +131,12 @@ in local in-memory mode.
 To enable:
 
 ```bash
-# Add to .env.deploy:
+# Add to .env.production:
 REDIS_PASSWORD=<secret>
 REDIS_URL=redis://:<same-secret>@redis:6379
 
 # Start with the redis profile:
-docker compose --env-file .env.deploy --profile redis up -d
+docker compose --env-file .env.production --profile redis up -d
 ```
 
 See [`docs/deployment/mvp-deployment-runbook.md`](docs/deployment/mvp-deployment-runbook.md)
@@ -150,7 +150,7 @@ drains to `sent` status without external delivery.
 To enable real email:
 
 ```bash
-# Add to .env.deploy:
+# Add to .env.production:
 EMAIL_ENABLED=true
 EMAIL_TRANSPORT=smtp
 SMTP_HOST=smtp.your-org.internal
@@ -163,8 +163,8 @@ for the full SMTP configuration reference.
 
 ## Troubleshooting
 
-- **Port conflict**: Change `EXAM_PORT` in `.env.deploy`.
-- **Container won't start**: Check `docker compose --env-file .env.deploy logs app`.
+- **Port conflict**: Change `EXAM_PORT` in `.env.production`.
+- **Container won't start**: Check `docker compose --env-file .env.production logs app`.
 - **WSL2 / Docker Desktop issues**: See
   [`docs/docker-troubleshooting.md`](docs/docker-troubleshooting.md).
 - **China mainland mirrors**: Build with `--build-arg NPM_REGISTRY=https://registry.npmmirror.com`.

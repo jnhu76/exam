@@ -57,13 +57,13 @@
 ### Prebuilt image (recommended for operators)
 
 The `app` and `web` services run prebuilt release images pinned by
-`EXAM_IMAGE` / `EXAM_WEB_IMAGE` in `.env.deploy`. The `generate-env.mjs`
+`EXAM_IMAGE` / `EXAM_WEB_IMAGE` in `.env.production`. The `init-production-env.mjs`
 script derives both pins from `.release-version`
 (`ghcr.io/jnhu76/exam{,-web}:vX.Y.Z`).
 
 ```bash
-node scripts/generate-env.mjs
-docker compose --env-file .env.deploy up -d
+node scripts/init-production-env.mjs
+docker compose --env-file .env.production up -d
 ```
 
 ### Source build (contributors / PR acceptance)
@@ -76,7 +76,7 @@ overlay):
 docker build --target runner -t exam-local:dev .
 docker build --target web-runner -t exam-local:web-dev .
 EXAM_IMAGE=exam-local:dev EXAM_WEB_IMAGE=exam-local:web-dev \
-  docker compose --env-file .env.deploy -f docker-compose.yml up -d
+  docker compose --env-file .env.production -f docker-compose.yml up -d
 ```
 
 ### Offline / air-gapped transfer
@@ -95,9 +95,9 @@ docker load < exam-web-image.tar.gz
 
 ## Configuration
 
-Deployment settings live in `.env.deploy` (created by
-`generate-env.mjs`). Development settings live in `.env`. They are
-separate files; no dev tooling reads `.env.deploy`.
+Deployment settings live in `.env.production` (created by
+`init-production-env.mjs`). Development settings live in `.env`. They are
+separate files; no dev tooling reads `.env.production`.
 
 Production-required variables (`docker compose` fails if unset):
 
@@ -143,19 +143,15 @@ source build, contributor verification).
 
 ## Deployment Validation
 
-After first install, run the smoke test described in
-[`mvp-deployment-runbook.md`](mvp-deployment-runbook.md) section 11.
-
-Automated deployment verification suites are in `tests/deployment/`
-(`pnpm test:deployment`); the release-blocking gate is the fresh-install
-acceptance inside the `release` workflow (see
-[`gates.md`](gates.md)).
+The production deployment itself is the acceptance surface:
+`docker compose config` proves interpolation, `up -d` + the runbook §11
+smoke test (`curl /`, `/api/health`, `/api/ready`) prove real HTTP behavior.
+The release workflow builds both images before any irreversible publication
+step; it runs no deployment simulation.
 
 ## Runbooks
 
 | Document | Purpose |
 | --- | --- |
-| [`mvp-deployment-runbook.md`](mvp-deployment-runbook.md) | Complete operator runbook: env, install, bootstrap, email, Redis, scanners, health, backup, upgrade |
-| [`backup-and-recovery.md`](backup-and-recovery.md) | Backup procedures (C1 cold, C2 logical, C3 PITR), restore, evidence ledger |
+| [`mvp-deployment-runbook.md`](mvp-deployment-runbook.md) | Complete operator runbook: env, install, bootstrap, email, Redis, scanners, health, backup/restore, upgrade |
 | [`upgrade-and-uninstall.md`](upgrade-and-uninstall.md) | Version upgrade, rollback, uninstall |
-| [`gates.md`](gates.md) | Deployment gate definitions and evidence |

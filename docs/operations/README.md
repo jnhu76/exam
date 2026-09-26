@@ -10,15 +10,16 @@
 Authoritative state is the PostgreSQL data directory under
 `./data/postgres`. Host persistence is not backup.
 
-| Path | Description | Evidence |
-| --- | --- | --- |
-| C1 cold-filesystem | Stop, copy data dir, restart | `tests/deployment/persistence-and-cold-restore.sh` |
-| C2 logical `pg_dump` | Online backup + clean restore | `tests/deployment/logical-backup-restore.sh` |
-| C3 physical `pg_basebackup` | WAL archive + PITR | `tests/deployment/pitr.sh` |
+The ONE supported mechanism is `pg_dump -Fc` / `pg_restore` via the
+operator tool:
 
-See
-[`backup-and-recovery.md`](../deployment/backup-and-recovery.md) for
-the complete decision tree, scripts, and evidence ledger.
+```bash
+./scripts/db-backup.sh backup  /mnt/nas/exam-$(date +%Y%m%d).dump
+./scripts/db-backup.sh restore /mnt/nas/exam-20260926.dump
+```
+
+Scheduling and retention are operator policy (cron/systemd). See the
+runbook §17 for details.
 
 ## Upgrade and Uninstall
 
@@ -101,8 +102,8 @@ driver / Loki / a custom watcher — none of which is required or bundled
 All logs are pino JSON to stdout. Every request carries a `reqId`.
 
 ```bash
-docker compose --env-file .env.deploy logs -f app          # tail all
-docker compose --env-file .env.deploy logs app | jq 'select(.level >= 40)'  # warn+
+docker compose --env-file .env.production logs -f app          # tail all
+docker compose --env-file .env.production logs app | jq 'select(.level >= 40)'  # warn+
 ```
 
 ## Incident and Recovery
@@ -123,10 +124,10 @@ for the full recovery protocol.
 
 | Issue | Resolution |
 | --- | --- |
-| Port conflict | Change `EXAM_PORT` in `.env.deploy` |
-| Container won't start | `docker compose --env-file .env.deploy logs app` |
+| Port conflict | Change `EXAM_PORT` in `.env.production` |
+| Container won't start | `docker compose --env-file .env.production logs app` |
 | WSL2 / Docker Desktop | See [`docker-troubleshooting.md`](../docker-troubleshooting.md) |
 | China mainland mirrors | Build args: `--build-arg NPM_REGISTRY=... --build-arg DEBIAN_MIRROR=...` |
 | JWT expired / 401 | Check `JWT_SECRET` hasn't changed between restarts |
-| Email not sending | Check `EMAIL_ENABLED=true` and `SMTP_HOST` in `.env.deploy` |
+| Email not sending | Check `EMAIL_ENABLED=true` and `SMTP_HOST` in `.env.production` |
 | Redis connection refused | Redis is optional; only needed with `--profile redis` |

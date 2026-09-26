@@ -122,9 +122,7 @@ Key recovery authority:
 | --- | --- |
 | [`deployment/README.md`](deployment/README.md) | Deployment landing page — topology, image acquisition, configuration |
 | [`deployment/mvp-deployment-runbook.md`](deployment/mvp-deployment-runbook.md) | Complete operator runbook |
-| [`deployment/backup-and-recovery.md`](deployment/backup-and-recovery.md) | Backup procedures and restore evidence |
 | [`deployment/upgrade-and-uninstall.md`](deployment/upgrade-and-uninstall.md) | Upgrade lifecycle and uninstall guide |
-| [`deployment/gates.md`](deployment/gates.md) | Deployment gate definitions |
 
 ### Operations
 

@@ -994,11 +994,11 @@ export interface AttemptCommandPayloadByType {
 // ───────────────────────── Backup / restore-drill evidence (P7-E2B) ─────────────────────────
 
 /**
- * Backup mechanism kinds recorded by the evidence ledger (P7-E2B). Mirrors the
- * P7-C script inventory (`scripts/backup/*`): logical online dump (-Fc),
- * physical base backup (pg_basebackup + pg_verifybackup), cold filesystem
- * copy. `pitr_wal` archiving is a continuous process, not a runnable artifact,
- * and is not a run kind.
+ * Backup mechanism kinds recorded by the evidence ledger (P7-E2B). The
+ * repository-managed backup tooling is the logical online dump (`pg_dump -Fc`,
+ * `scripts/db-backup.sh`); `physical_base` and `cold_filesystem` are legacy
+ * P7-era kinds retained for historical ledger rows. `pitr_wal` archiving is a
+ * continuous process, not a runnable artifact, and is not a run kind.
  */
 export type BackupType = "logical" | "physical_base" | "cold_filesystem";
 

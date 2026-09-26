@@ -3,20 +3,19 @@
 > **Authority:** canonical operator guide for upgrading an existing
 > deployment to a new release and for uninstalling (preserving or deleting
 > data). Companion to
-> [`mvp-deployment-runbook.md`](./mvp-deployment-runbook.md) (first install
-> + operations) and [`backup-and-recovery.md`](./backup-and-recovery.md)
-> (backup/restore contract).
+> [`mvp-deployment-runbook.md`](./mvp-deployment-runbook.md) (first install,
+> operations, and the backup/restore contract via `scripts/db-backup.sh`).
 >
 > **Scope:** LAN/on-premise, single-tenant, single-node Docker Compose
 > deployments (the reference stack). Multi-tenant / cloud / Phase 4 modes
 > are not implemented. Every `docker compose` command below runs against
 > the deployment env file exactly as the runbook documents:
-> `docker compose --env-file .env.deploy ...`.
+> `docker compose --env-file .env.production ...`.
 >
 > **Prebuilt images (#321):** the stack runs `ghcr.io/jnhu76/exam:vX.Y.Z`
 > (API) and `ghcr.io/jnhu76/exam-web:vX.Y.Z` (static SPA, #585), pinned in
-> `.env.deploy` as `EXAM_IMAGE` / `EXAM_WEB_IMAGE` (derived from
-> `.release-version` by `node scripts/generate-env.mjs`; an explicit
+> `.env.production` as `EXAM_IMAGE` / `EXAM_WEB_IMAGE` (derived from
+> `.release-version` by `node scripts/init-production-env.mjs`; an explicit
 > non-canonical value — mirror / offline load — wins). There is no
 > `latest` tag; the semantic pin is the upgrade/rollback authority. Image acquisition (online pull,
 > offline `docker save`/`docker load`) is documented in the runbook §3.
@@ -31,9 +30,8 @@ containers:
 | What | Where | Contents | Survives `down` | Removed by full uninstall (below) |
 |---|---|---|---|---|
 | Data root (`EXAM_DATA_ROOT`, default `./data`) | `data/postgres` | PostgreSQL PGDATA — ALL business data | yes | yes (deleted) |
-| | `data/wal-archive` | PITR WAL archive (inert unless PITR enabled) | yes | yes |
 | | `data/redis` | Redis persistence (`redis` profile only) | yes | yes |
-| Deployment env file | `.env.deploy` | `JWT_SECRET`, `POSTGRES_PASSWORD`, `EXAM_IMAGE` / `EXAM_WEB_IMAGE` pins, `EXAM_PORT`, `TRUSTED_PROXY_CIDRS`, overrides | yes | yes (deleted) |
+| Deployment env file | `.env.production` | `JWT_SECRET`, `POSTGRES_PASSWORD`, `EXAM_IMAGE` / `EXAM_WEB_IMAGE` pins, `EXAM_PORT`, `TRUSTED_PROXY_CIDRS`, overrides | yes | yes (deleted) |
 
 Containers, the `exam-net` network, and the Compose project carry NO state
 (`docker compose down` removes them; PostgreSQL data lives in the bind
@@ -50,7 +48,7 @@ read with `--env-file`.
 
 ### 2.1 Supported path
 
-Single supported flow: **new checkout → `generate-env` re-pin (or manual
+Single supported flow: **new checkout → `init-production-env` re-pin (or manual
 `EXAM_IMAGE`) → `docker compose pull` → `up -d`. Containers migrate
 automatically on start.** All upgrades run against the bundled `db`
 service (the app's `DATABASE_URL` is composed from `POSTGRES_*` — the
@@ -62,10 +60,10 @@ Upgrade prerequisites:
    the TARGET version — upgrade-blocking obligations (mandatory
    intermediate version, `db` image major bump, manual steps) are always
    stated in the release notes.
-2. **Back up the database first** (mandatory): the C2 logical path keeps
-   Postgres online —
-   `scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump`
-   (see backup-and-recovery.md §7). A pre-upgrade backup is the rollback
+2. **Back up the database first** (mandatory): canonical path is
+   `pg_dump -Fc` via the operator tool —
+   `./scripts/db-backup.sh backup /mnt/nas/exam-$(date +%Y%m%d).dump`
+   (see the runbook backup section). A pre-upgrade backup is the rollback
    precondition (§2.4).
 3. Ensure the target image is available: online installs `pull` it
    automatically; air-gapped installs must `docker load` it beforehand
@@ -79,21 +77,27 @@ Upgrade prerequisites:
 git pull                      # master now carries the new .release-version
 # (air-gapped: transfer the checkout + image archive; docker load it)
 
+# 0b. ONE-TIME migration (installs made before the env-file rename):
+#     the deployment env file is now .env.production. Rename the old
+#     .env.deploy BEFORE running init-production-env, or it would create a
+#     fresh file with NEW secrets against the kept PGDATA:
+mv .env.deploy .env.production   # only if .env.production does not exist yet
+
 # 1. Re-pin the image (operator image pin follows .release-version):
-node scripts/generate-env.mjs
+node scripts/init-production-env.mjs
 #   - canonical pin (ghcr.io/jnhu76/exam:vX.Y.Z) -> re-derived to the NEW
 #     version automatically;
 #   - explicit non-canonical value (registry mirror / offline load) ->
-#     update EXAM_IMAGE / EXAM_WEB_IMAGE by hand in .env.deploy.
+#     update EXAM_IMAGE / EXAM_WEB_IMAGE by hand in .env.production.
 
-# 2. Pre-upgrade backup (see backup-and-recovery.md §7).
-scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump
+# 2. Pre-upgrade backup (runbook backup section).
+./scripts/db-backup.sh backup /mnt/nas/exam-$(date +%Y%m%d).dump
 
 # 3. Pull the new pinned image (no-op when already loaded locally):
-docker compose --env-file .env.deploy pull
+docker compose --env-file .env.production pull
 
 # 4. Upgrade (migrations run automatically on app start — see §2.3):
-docker compose --env-file .env.deploy up -d
+docker compose --env-file .env.production up -d
 ```
 
 ### 2.3 What the entrypoint does on upgrade
@@ -125,8 +129,8 @@ docker compose --env-file .env.deploy up -d
 - **`db` image major bumps are breaking upgrades**: the PGDATA is tied to
   the PostgreSQL major version (currently 18). A release that changes the
   `db` image major must announce it and require the dump/restore path
-  (backup-and-recovery.md §7.2) — never boot a newer major against an old
-  PGDATA.
+  (`./scripts/db-backup.sh backup` + `restore` against the new cluster) —
+  never boot a newer major against an old PGDATA.
 
 ### 2.5 Rollback contract
 
@@ -134,23 +138,22 @@ docker compose --env-file .env.deploy up -d
   Rollback = **restore the pre-upgrade DB backup + redeploy the previous
   image tag**:
   ```bash
-  # 1. Restore the pre-upgrade backup (clean target contract):
-  docker compose --env-file .env.deploy stop app
-  scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
-  docker compose --env-file .env.deploy up -d app
+  # 1. Restore the pre-upgrade backup (stops the app, rebuilds the DB,
+  #    restarts, waits for health):
+  ./scripts/db-backup.sh restore /mnt/nas/exam-<date>.dump
 
   # 2. Point EXAM_IMAGE / EXAM_WEB_IMAGE at the previous release — CAREFUL:
   #    a canonical `ghcr.io/jnhu76/exam{,-web}:vX.Y.Z` value follows
-  #    .release-version on the NEXT generate-env run, which would silently
+  #    .release-version on the NEXT init-production-env run, which would silently
   #    revert the rollback. Options:
-  #    - edit .env.deploy AFTER the last generate-env run (edit wins); or
+  #    - edit .env.production AFTER the last init-production-env run (edit wins); or
   #    - pin by digest: EXAM_IMAGE=ghcr.io/jnhu76/exam@sha256:<digest>
-  sed -i 's|^EXAM_IMAGE=.*|EXAM_IMAGE=ghcr.io/jnhu76/exam:v<PREVIOUS>|' .env.deploy
-  sed -i 's|^EXAM_WEB_IMAGE=.*|EXAM_WEB_IMAGE=ghcr.io/jnhu76/exam-web:v<PREVIOUS>|' .env.deploy
+  sed -i 's|^EXAM_IMAGE=.*|EXAM_IMAGE=ghcr.io/jnhu76/exam:v<PREVIOUS>|' .env.production
+  sed -i 's|^EXAM_WEB_IMAGE=.*|EXAM_WEB_IMAGE=ghcr.io/jnhu76/exam-web:v<PREVIOUS>|' .env.production
 
   # 3. Pull + start the previous image:
-  docker compose --env-file .env.deploy pull
-  docker compose --env-file .env.deploy up -d
+  docker compose --env-file .env.production pull
+  docker compose --env-file .env.production up -d
   ```
 - After an upgrade has applied migrations, the OLD binary is only safe
   against the restored pre-upgrade backup (schema from the future may be
@@ -160,11 +163,11 @@ docker compose --env-file .env.deploy up -d
 ### 2.6 Post-upgrade verification checklist
 
 ```text
-[ ] docker compose --env-file .env.deploy ps      # nginx running; app + web + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
+[ ] docker compose --env-file .env.production ps      # nginx running; app + web + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
 [ ] curl -s http://localhost:${EXAM_PORT:-80}/api/health   # {"status":"ok"} (through the nginx edge, #585)
 [ ] Log in as an existing Admin; open a candidate + a recent result.
 [ ] Watch migration logs (first boot):
-    docker compose --env-file .env.deploy logs app | grep -i migrat
+    docker compose --env-file .env.production logs app | grep -i migrat
 [ ] Diagnostics sane: /api/system/diagnostics (db latency, worker heartbeat,
     scanner metrics).
 [ ] For a planned rollback window: keep the pre-upgrade dump until the
@@ -187,10 +190,10 @@ Choose the mode that matches the intent:
 
 ```bash
 # Stop everything (containers + network removed; data + env file kept):
-docker compose --env-file .env.deploy down
+docker compose --env-file .env.production down
 
 # Later, resume:
-docker compose --env-file .env.deploy up -d
+docker compose --env-file .env.production up -d
 ```
 
 Verified properties: `down` keeps `${EXAM_DATA_ROOT}/postgres` intact;
@@ -205,25 +208,24 @@ command after any manual `stop`/`down`.
 ```bash
 # 1. Review what will be lost. If any doubt: back up first (mandatory for
 #    production data):
-scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump
+./scripts/db-backup.sh backup /mnt/nas/exam-final-$(date +%Y%m%d).dump
 
 # 2. Stop and remove the stack:
-docker compose --env-file .env.deploy down
+docker compose --env-file .env.production down
 
-# 3. Delete the data root (default ./data — PGDATA, WAL archive, redis
-#    dir). This is the ONLY step that actually destroys business data:
+# 3. Delete the data root (default ./data — PGDATA, redis dir). This is the ONLY step that actually destroys business data:
 rm -rf "${EXAM_DATA_ROOT:-./data}"
 
 # 4. Delete the deployment env file (secrets: JWT_SECRET, POSTGRES_PASSWORD
 #    — treat the file as a credential):
-rm -f .env.deploy
+rm -f .env.production
 
 # 5. Optional: prune now-orphaned Docker resources:
 docker system prune   # -a --volumes for everything; confirm the prompt
 ```
 
 > **The data root and the env file are coupled.** `POSTGRES_PASSWORD` is
-> baked into an existing PGDATA at cluster creation; `generate-env` fills
+> baked into an existing PGDATA at cluster creation; `init-production-env` fills
 > it only when blank (never rotates). Bootstrapping a kept PGDATA with a
 > regenerated (different) password makes the API unable to authenticate
 > against the existing cluster. Full removal therefore deletes BOTH (steps
@@ -239,9 +241,9 @@ zero remaining state. The Compose project/network are already gone after
 ### 3.3 Verifying a truly fresh state
 
 After full removal, install again (runbook §3):
-`node scripts/generate-env.mjs` derives NEW secrets and the current
+`node scripts/init-production-env.mjs` derives NEW secrets and the current
 `EXAM_IMAGE` / `EXAM_WEB_IMAGE` pins, then
-`docker compose --env-file .env.deploy up -d`.
+`docker compose --env-file .env.production up -d`.
 Properties of the resulting deployment:
 
 - the database has 0 organizations before bootstrap (no rows from the old
@@ -252,20 +254,15 @@ Properties of the resulting deployment:
 
 ---
 
-## 4. Evidence (tested, not advisory)
+## 4. Evidence (direct, not advisory)
 
-| Contract | Where proven |
+The lifecycle contracts in this guide are proven by running the documented
+commands themselves — the real Compose execution IS the acceptance surface:
+
+| Contract | How to prove it |
 |---|---|
-| Pin re-derivation / explicit override / stale-canonical re-pin | `node --test scripts/generate-env.test.mjs` (derive, explicit-wins, re-pin drift) |
-| Fresh install from nothing (env authority, first migration, bootstrap) | `tests/deployment/fresh-install.sh` (release acceptance gate) |
-| Container recreation with data + journal continuity (`down` → `up`, new container IDs, canary port) | fresh-install gate `[persist]` stage |
-| **Upgrade mechanics**: image-pin swap → `up -d` recreates app, db untouched, probe row + journal + invariants intact, login OK | `tests/deployment/upgrade-uninstall.sh` `[upgrade]`/`[upgrade-flip]` |
-| **Uninstall preserve mode**: `down` keeps PGDATA; re-`up` restores state | `tests/deployment/upgrade-uninstall.sh` `[preserve]` |
-| **Uninstall full removal**: data + env file deleted → fresh DB (0 orgs), fresh bootstrap, old credentials rejected, new login OK | `tests/deployment/upgrade-uninstall.sh` `[delete]` |
-
-Run the lifecycle suite locally (release/manual class — PRs run no
-deployment gate):
-
-```bash
-pnpm test:deployment:upgrade
-```
+| Pin re-derivation / explicit override / stale-canonical re-pin | run `node scripts/init-production-env.mjs` twice; the pin follows `.release-version`, explicit overrides are preserved, the file is byte-stable |
+| Preserve mode: `down` keeps PGDATA; re-`up` restores state | §3.1 commands + login with existing credentials |
+| Upgrade mechanics: image-pin swap → `up -d` recreates app, db untouched | §2.2 commands + §2.6 checklist (health, migrations, login) |
+| Full removal: data + env file deleted → fresh DB, fresh bootstrap | §3.2/§3.3 commands + 0-organization bootstrap |
+| Backup/restore round-trip | `./scripts/db-backup.sh backup` → `restore` → app healthy + data present |
