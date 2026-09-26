@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | Docker Engine | ≥ 25.x | Linux 主机或 Docker Desktop |
 | Docker Compose | v2 | Docker Desktop 已包含 |
-| Node.js | 24.15.x | 仅用于运行 `generate-env.mjs` |
+| Node.js | 24.15.x | 仅用于运行 `init-production-env.mjs` |
 
 平台面向 **LAN / 本地部署的单实例运行模式**。Windows 和 macOS 可通过 Docker Desktop 用于评估；生产环境推荐 Linux。
 
@@ -25,23 +25,23 @@
 
 ```bash
 git clone <repo-url> exam && cd exam
-node scripts/generate-env.mjs
+node scripts/init-production-env.mjs
 ```
 
-该命令会基于示例模板生成 `.env.deploy`，并为 `JWT_SECRET` 和 `POSTGRES_PASSWORD`
+该命令会基于示例模板生成 `.env.production`，并为 `JWT_SECRET` 和 `POSTGRES_PASSWORD`
 写入随机值。重复运行不会自动轮换已经存在的密钥。
 
 ### 2. 启动服务
 
 ```bash
-docker compose --env-file .env.deploy up -d
+docker compose --env-file .env.production up -d
 ```
 
 该命令会拉取预构建发布镜像，并启动应用与 PostgreSQL，无需本地构建。
 可以查看启动日志：
 
 ```bash
-docker compose --env-file .env.deploy logs --tail=50 -f app
+docker compose --env-file .env.production logs --tail=50 -f app
 ```
 
 等待日志出现：
@@ -53,7 +53,7 @@ Server listening at http://0.0.0.0:3000
 ### 3. 检查健康状态
 
 ```bash
-docker compose --env-file .env.deploy ps
+docker compose --env-file .env.production ps
 ```
 
 预期看到：`app` 为 healthy，`db` 为 healthy。
@@ -61,7 +61,7 @@ docker compose --env-file .env.deploy ps
 ### 4. 初始化第一个 Admin
 
 ```bash
-docker compose --env-file .env.deploy exec app \
+docker compose --env-file .env.production exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
@@ -78,8 +78,8 @@ docker compose --env-file .env.deploy exec app \
 
 如果不想使用 CLI，也可以通过浏览器完成首次初始化：
 
-1. 在启动服务前，把 `LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32>` 写入 `.env.deploy`。
-2. 执行 `docker compose --env-file .env.deploy up -d`。
+1. 在启动服务前，把 `LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32>` 写入 `.env.production`。
+2. 执行 `docker compose --env-file .env.production up -d`。
 3. 打开 `http://localhost:3000/launchpad` 并完成表单。
 4. 初始化完成后，`/launchpad` 会跳转到 `/login`，不会再次开放。
 
@@ -98,7 +98,7 @@ curl -s http://localhost:3000/api/system/public-config
 
 ## 局域网访问
 
-如果局域网内其他设备需要访问，请在启动服务前设置 `.env.deploy`：
+如果局域网内其他设备需要访问，请在启动服务前设置 `.env.production`：
 
 ```bash
 EXAM_PORT=3000
@@ -120,12 +120,12 @@ Redis 是可选组件。默认关闭时，限流器使用本地内存模式。
 启用方式：
 
 ```bash
-# 加入 .env.deploy：
+# 加入 .env.production：
 REDIS_PASSWORD=<secret>
 REDIS_URL=redis://:<same-secret>@redis:6379
 
 # 使用 redis profile 启动：
-docker compose --env-file .env.deploy --profile redis up -d
+docker compose --env-file .env.production --profile redis up -d
 ```
 
 详情见 [`docs/deployment/mvp-deployment-runbook.md`](docs/deployment/mvp-deployment-runbook.md) 第 10 节。
@@ -137,7 +137,7 @@ docker compose --env-file .env.deploy --profile redis up -d
 开启真实邮件：
 
 ```bash
-# 加入 .env.deploy：
+# 加入 .env.production：
 EMAIL_ENABLED=true
 EMAIL_TRANSPORT=smtp
 SMTP_HOST=smtp.your-org.internal
@@ -149,8 +149,8 @@ SMTP_PASSWORD=<password>
 
 ## 故障排查
 
-- **端口冲突**：修改 `.env.deploy` 中的 `EXAM_PORT`。
-- **容器无法启动**：查看 `docker compose --env-file .env.deploy logs app`。
+- **端口冲突**：修改 `.env.production` 中的 `EXAM_PORT`。
+- **容器无法启动**：查看 `docker compose --env-file .env.production logs app`。
 - **WSL2 / Docker Desktop 问题**：见 [`docs/docker-troubleshooting.md`](docs/docker-troubleshooting.md)。
 - **中国大陆镜像**：构建时可使用 `--build-arg NPM_REGISTRY=https://registry.npmmirror.com`；完整构建参数见 [`Dockerfile`](Dockerfile)。
 

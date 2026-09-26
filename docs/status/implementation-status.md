@@ -268,8 +268,7 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   the declared RTO (3600 s) as **SATISFIED**, with the post-restore invariant
   suite green. Deployment Readiness (real scheduled retention +
   production-volume restore acceptance) is an explicit deployment-site runbook
-  obligation
-  ([`docs/deployment/backup-and-recovery.md`](../deployment/backup-and-recovery.md)).
+  obligation (runbook §17; `scripts/db-backup.sh`).
   ADR-017 revision 4 and ADR-018 are **ACCEPTED** (the PR #314 merge is the
   human acceptance event — an AI-written verdict alone is not acceptance).
   Deferred capabilities are

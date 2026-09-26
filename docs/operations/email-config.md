@@ -128,9 +128,9 @@ EMAIL_TRANSPORT=fake
 EMAIL_FAKE_MODE=failure   # exercises FakeEmailSender retry/error paths
 ```
 
-Tests **never** touch real SMTP, never need a secret. `.env.test.example` ships
-the default block; the fake-failure override is applied by the individual
-retry/error test cases. The full test contract is enforced by the API email
+Tests **never** touch real SMTP, never need a secret. The default fake
+transport requires no configuration; the fake-failure override is applied by
+the individual retry/error test cases. The full test contract is enforced by the API email
 tests (`apps/api/src/routes/email.test.ts`, `apps/api/src/email/*.test.ts`)
 under `docs/adr/ADR-011-notification-and-email-delivery.md`.
 
@@ -286,7 +286,7 @@ app:
   # prebuilt image pinned by EXAM_IMAGE in the deployment env file
   # (image-pinned since #321; building a checkout is an explicit
   # `docker build --target runner` per #626)
-  image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}
+  image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/init-production-env.mjs)}
   restart: unless-stopped   # always-on: auto-restarts on crash/reboot
 ```
 
@@ -371,7 +371,7 @@ pnpm verify
 - **Test-email route:** `apps/api/src/routes/email.ts` (`POST /api/email/test`).
 - **Outbox schema/repo:** `packages/db/src/schema/pg.ts` (`emailOutbox`),
   `packages/db/src/repository/emailOutboxRepo.ts`.
-- **Env template:** `.env.deploy.example` (optional Email block).
+- **Env template:** `.env.production.example` (optional Email block).
 - **Local DB discipline (env-var priority rules):**
   `docs/standards/testing.md` §2 — the `env -u` pattern in §5 of this doc is
   the email-specific application of that contract.

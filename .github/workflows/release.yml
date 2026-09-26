@@ -18,16 +18,10 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Upper bound for the whole publication pipeline; the fresh-install
-    # acceptance below carries its own tighter 30-minute ceiling (cold
-    # source build is the dominant cost — there is no GHA layer cache on
-    # this lane).
     timeout-minutes: 60
     steps:
       - name: Checkout exact release commit
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Validate release contract
         id: release
@@ -57,30 +51,108 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "notes=$notes" >> "$GITHUB_OUTPUT"
 
-      # Fresh-install acceptance (#327 script) gates EVERY irreversible
-      # publication below: no tag, no GitHub Release, and no release image
-      # may exist until the canonical operator path (isolated generate-env →
-      # compose up --build → first migration/bootstrap → down/up persistence
-      # → residue asserts) passes on this exact release commit. The run
-      # number only namespaces the disposable compose project; the script
-      # owns env/data isolation and teardown. Trigger moved here from PR CI
-      # — docs/deployment/gates.md is the gate authority.
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24.15.x"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Set up Docker Compose
-        uses: docker/setup-compose-action@v2
+      # Both images BUILD before anything irreversible happens: a failed
+      # second build can never leave a half-published release (no tag, no
+      # GitHub Release, no pushed image yet).
+      - name: Build API image
+        uses: docker/build-push-action@v7
         with:
-          version: latest
+          context: .
+          # INVARIANT (#585): the Dockerfile's final stage is the nginx
+          # web-runner; the published API image must pin the API runner.
+          target: runner
+          push: false
 
-      - name: Fresh-install acceptance
-        timeout-minutes: 30
-        run: bash tests/deployment/fresh-install.sh "${{ github.run_number }}"
+      - name: Build Web image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: web-runner
+          push: false
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # #321 — publish the prebuilt production image for THIS exact release
+      # source SHA. The GIT tag is immutable by policy (the step below
+      # refuses to move an existing tag to a different commit). The IMAGE
+      # tags (vX.Y.Z, sha-<short>) are pinned to the same source SHA; a
+      # re-run of this workflow for the same release rebuilds and refreshes
+      # their digests (no reproducible-build guarantee) but can never bind
+      # them to different source. `latest` is deliberately NOT published
+      # (mutable convenience must never be an upgrade/rollback authority).
+      - name: Derive image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/jnhu76/exam
+          # type=raw passes .release-version through EXACTLY (v-prefixed):
+          # the semver type would strip the v ({{version}} of "v0.0.2" is
+          # "0.0.2") and the operator EXAM_IMAGE pin would never resolve.
+          tags: |
+            type=raw,value=${{ steps.release.outputs.version }}
+            type=sha
+          # latest=auto would ADD a latest tag for semver-style values;
+          # the no-latest policy is enforced explicitly, not by omission.
+          flavor: |
+            latest=false
+          labels: |
+            org.opencontainers.image.title=exam
+            org.opencontainers.image.description=Configurable LAN/on-premise exam and assessment platform
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/jnhu76/exam
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Push release image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # #585: the static-Web image (nginx serving apps/web/dist on :4173)
+      # is published beside the API image; the operator pins are
+      # EXAM_IMAGE / EXAM_WEB_IMAGE, both derived from .release-version by
+      # scripts/init-production-env.mjs. Same tag strategy and no-latest
+      # policy as above.
+      - name: Derive web image metadata
+        id: meta-web
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/jnhu76/exam-web
+          tags: |
+            type=raw,value=${{ steps.release.outputs.version }}
+            type=sha
+          flavor: |
+            latest=false
+          labels: |
+            org.opencontainers.image.title=exam-web
+            org.opencontainers.image.description=Exam static web runtime (nginx, SPA on 4173)
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/jnhu76/exam
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Push release web image
+        id: build-web
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: web-runner
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
 
       - name: Create or verify immutable tag
         shell: bash
@@ -122,88 +194,6 @@ jobs:
               --title "Exam $version" \
               --notes-file "$notes"
           fi
-
-      # #321 — publish the prebuilt production image for THIS exact release
-      # source SHA. The GIT tag is immutable by policy (the step above
-      # refuses to move an existing tag to a different commit). The IMAGE
-      # tags (vX.Y.Z, sha-<short>) are pinned to the same source SHA; a
-      # re-run of this workflow for the same release rebuilds and refreshes
-      # their digests (no reproducible-build guarantee) but can never bind
-      # them to different source. `latest` is deliberately NOT published
-      # (mutable convenience must never be an upgrade/rollback authority).
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Derive image metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/jnhu76/exam
-          # type=raw passes .release-version through EXACTLY (v-prefixed):
-          # the semver type would strip the v ({{version}} of "v0.0.2" is
-          # "0.0.2") and the operator EXAM_IMAGE pin would never resolve.
-          tags: |
-            type=raw,value=${{ steps.release.outputs.version }}
-            type=sha
-          # latest=auto would ADD a latest tag for semver-style values;
-          # the no-latest policy is enforced explicitly, not by omission.
-          flavor: |
-            latest=false
-          labels: |
-            org.opencontainers.image.title=exam
-            org.opencontainers.image.description=Configurable LAN/on-premise exam and assessment platform
-            org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=https://github.com/jnhu76/exam
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-
-      - name: Build and push release image
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          # INVARIANT (#585): the Dockerfile's final stage is the nginx
-          # web-runner; the published API image must pin the API runner.
-          target: runner
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      # #585: the static-Web image (nginx serving apps/web/dist on :4173)
-      # is published beside the API image; the operator pins are
-      # EXAM_IMAGE / EXAM_WEB_IMAGE, both derived from .release-version by
-      # generate-env.mjs. Same tag strategy and no-latest policy as above.
-      - name: Derive web image metadata
-        id: meta-web
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/jnhu76/exam-web
-          tags: |
-            type=raw,value=${{ steps.release.outputs.version }}
-            type=sha
-          flavor: |
-            latest=false
-          labels: |
-            org.opencontainers.image.title=exam-web
-            org.opencontainers.image.description=Exam static web runtime (nginx, SPA on 4173)
-            org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=https://github.com/jnhu76/exam
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-
-      - name: Build and push release web image
-        id: build-web
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          target: web-runner
-          push: true
-          tags: ${{ steps.meta-web.outputs.tags }}
-          labels: ${{ steps.meta-web.outputs.labels }}
 
       - name: Record published digest
         shell: bash

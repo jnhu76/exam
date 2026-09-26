@@ -60,12 +60,12 @@ the security repo.
 ### Port 80 already in use
 
 The nginx edge maps `${EXAM_PORT:-80}` (#585 — the only published
-service). Change the host port in `.env.deploy`:
+service). Change the host port in `.env.production`:
 
 ```dotenv
 EXAM_PORT=8080
 ```
-(docker compose --env-file .env.deploy ...)
+(docker compose --env-file .env.production ...)
 
 ### The stack is up but the page does not load
 
@@ -74,8 +74,8 @@ Verify instead of guessing:
 ```bash
 # Always pass the deployment env file: the base compose interpolates
 # required variables (${EXAM_IMAGE:?...}) and aborts without it.
-docker compose --env-file .env.deploy ps          # nginx running; app/web/db healthy
-docker compose --env-file .env.deploy logs app    # migrations + 'Server listening'?
+docker compose --env-file .env.production ps          # nginx running; app/web/db healthy
+docker compose --env-file .env.production logs app    # migrations + 'Server listening'?
 curl -i http://localhost/               # expect 200 + text/html (SPA via the edge)
 curl -I http://localhost/assets/        # expect 200 for a built asset
 ```
@@ -91,8 +91,8 @@ check that the container's published port is reachable from the host
 ### Windows / WSL2 notes
 
 - Run the Quick Start from inside WSL2 (Ubuntu). `docker compose --env-file
-  .env.deploy up -d` works from PowerShell too, but
-  `node scripts/generate-env.mjs` needs Node on the host PATH.
+  .env.production up -d` works from PowerShell too, but
+  `node scripts/init-production-env.mjs` needs Node on the host PATH.
 - On Windows, Docker Desktop usually exposes `localhost` (the nginx edge,
   `EXAM_PORT`) to the host
   automatically. If not, access the container via the WSL2 IP

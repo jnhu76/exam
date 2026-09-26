@@ -6,7 +6,7 @@ dist
 .env
 .env.local
 .env.*.local
-.env.deploy
+.env.production
 *.db
 *.db-shm
 *.db-wal
@@ -37,3 +37,4 @@ mutation-campaign-results/
 .tmp/
 gui-test-screenshots/
 apps/e2e/test-results-patrol/
+.zcodeignore

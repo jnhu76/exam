@@ -2,8 +2,8 @@
 
 The machine-consumable seam #547 adds. Everything here is emitted by the
 operability monitor (`apps/api/src/plugins/operabilityMonitor.ts`), pinned by
-unit tests (`operabilityMonitor.test.ts`) and, for the readiness leg, by real
-deployment evidence (`tests/deployment/readiness-gate.sh` D2/D3).
+unit tests (`operabilityMonitor.test.ts`); the readiness leg was additionally
+validated against a real stack during #547 acceptance.
 
 ## 1. Event catalogue
 

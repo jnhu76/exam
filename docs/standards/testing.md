@@ -27,9 +27,8 @@ The CI pipeline (`.github/workflows/ci.yml`) runs on every PR to `master`.
 `static` is the first authority gate. After it passes, `verify-build` produces
 one same-workflow build artifact. Web/API/package coverage and the four E2E
 shards consume the `verify-build` artifact instead of rebuilding the same
-`dist/**` outputs on separate runners. PR CI runs no deployment suite: the
-deployment fresh-install acceptance moved to the `release` workflow
-(§1.6; gate authority in `docs/deployment/gates.md`).
+`dist/**` outputs on separate runners. PR CI runs no deployment suite; the
+production deployment itself is the acceptance surface (§1.6).
 
 ### 1.1 Static Checks
 
@@ -100,16 +99,13 @@ deployment fresh-install acceptance moved to the `release` workflow
 | **Note** | Each package's coverage is independent. `@exam/auth` tests are pure unit tests (no DB). `@exam/db` tests require PostgreSQL. Other packages (domain, contracts, authz, exam-engine, import-export) are pure unit tests. |
 | **Failure attribution** | Check which package failed in the step output |
 
-### 1.6 Deployment Fresh-install (release acceptance)
+### 1.6 Release publication (release workflow)
 
 | Field | Value |
 |-------|-------|
 | **Workflow** | `release` (`.github/workflows/release.yml`) — NOT PR CI |
-| **Command** | `bash tests/deployment/fresh-install.sh "<run number>"` |
-| **Ordering** | After `Validate release contract`; BEFORE immutable tag creation, GitHub Release creation, and release image publication — no irreversible release artifact exists until acceptance passes. |
-| **Build authority** | Every acceptance boot still uses `docker compose ... up --build` against the current checkout. |
-| **Cache** | No GHA BuildKit layer cache on this lane (release runs stay simple); Docker build cache is performance only and cannot replace source-build authority. |
-| **Forbidden shortcut** | Must not consume the `verify-build` artifact or a registry image in place of the Dockerfile build. |
+| **Ordering** | Validate version contract → build API image → build Web image → push both → immutable tag → GitHub Release. Both images build before anything irreversible happens, so a failed second build cannot leave a half-published release. |
+| **No deployment simulation** | The workflow runs no fresh-install/compose simulation; deployment acceptance is the real `docker compose` execution by the operator (runbook §3/§11). |
 
 ### 1.7 E2E (Playwright)
 
@@ -499,10 +495,9 @@ runtime-generated files.
 
 ### 4.4 run.sh Cleanup Contract (issue #256-A)
 
-The local runner owns a strict teardown lifecycle. All cleanup logic lives in
-`scripts/e2e/run-lib.sh` (sourced by `run.sh`) and is unit-tested by
-`scripts/e2e/run-lib.test.mjs` (run via `pnpm test:e2e-runner`, also part of
-`verify:static`).
+The local runner owns a strict teardown lifecycle. All cleanup logic lives
+in `scripts/e2e/run.sh` — the single E2E entrypoint (no separate runner
+library or runner tests).
 
 **Lifecycle (after Playwright shards finish):**
 

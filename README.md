@@ -64,15 +64,15 @@ inbox notifications.
 
 ```bash
 git clone https://github.com/jnhu76/exam.git && cd exam
-node scripts/generate-env.mjs                      # create .env.deploy, fill secrets
-docker compose --env-file .env.deploy up -d        # pull prebuilt image, start app + db
-docker compose --env-file .env.deploy ps           # wait for app (healthy), db (healthy)
+node scripts/init-production-env.mjs                      # create .env.production, fill secrets
+docker compose --env-file .env.production up -d        # pull prebuilt image, start app + db
+docker compose --env-file .env.production ps           # wait for app (healthy), db (healthy)
 ```
 
 Bootstrap the first Admin — there is no public self-register path:
 
 ```bash
-docker compose --env-file .env.deploy exec app \
+docker compose --env-file .env.production exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'

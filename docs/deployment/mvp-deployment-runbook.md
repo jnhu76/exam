@@ -67,17 +67,17 @@ Backups:   operator-supplied pg_dump schedule against the 'pgdata' volume
 
 Deployment and development settings are SEPARATE files:
 
-- `.env.deploy` (from `.env.deploy.example`, filled by
-  `node scripts/generate-env.mjs`) — deployment only. Compose reads it via the
-  explicit `--env-file .env.deploy` flag; passing the flag replaces the default
+- `.env.production` (from `.env.production.example`, filled by
+  `node scripts/init-production-env.mjs`) — deployment only. Compose reads it via the
+  explicit `--env-file .env.production` flag; passing the flag replaces the default
   `.env` as Compose's interpolation file, so the dev `.env` is never read for
   deployment (host shell environment variables can still override individual
   values). Every `docker compose` command in this runbook includes it.
 - `.env` (from `.env.example`) — local development only. No dev tooling
-  (`pnpm dev` / Vite / Drizzle / vitest) ever reads `.env.deploy`, and no
+  (`pnpm dev` / Vite / Drizzle / vitest) ever reads `.env.production`, and no
   deployment secret ever lands in `.env`.
 
-Set the production-required values in `.env.deploy`. The
+Set the production-required values in `.env.production`. The
 bundled `docker-compose.yml` uses Compose `${VAR:?...}` required-expansion
 for the production-required variables below — Compose itself fails to start
 if any is unset. There is NO default database password in production
@@ -87,8 +87,8 @@ if any is unset. There is NO default database password in production
 
 | Variable | Purpose | Validation |
 |---|---|---|
-| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API | required, no default (P6-007) — generate with `node scripts/generate-env.mjs` |
-| `JWT_SECRET` | Signs the `auth-token` cookie JWT | non-empty; no default in production — generate with `node scripts/generate-env.mjs` |
+| `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API | required, no default (P6-007) — generate with `node scripts/init-production-env.mjs` |
+| `JWT_SECRET` | Signs the `auth-token` cookie JWT | non-empty; no default in production — generate with `node scripts/init-production-env.mjs` |
 | `DATABASE_URL` | PostgreSQL connection for the API | composed by Compose from `POSTGRES_*`; set explicitly only when using external Postgres |
 
 ### Optional (with safe defaults)
@@ -133,8 +133,8 @@ For the full annotated leaf list (port/TLS guidance per provider), see
 settings model is the single source.
 
 > **dotenv gotcha:** dotenv does NOT overwrite inherited `process.env`. Stale
-> shell `EMAIL_*` / `SMTP_*` values silently override `.env.deploy`. Use
-> `env -u EMAIL_ENABLED -u SMTP_HOST ... docker compose --env-file .env.deploy up`
+> shell `EMAIL_*` / `SMTP_*` values silently override `.env.production`. Use
+> `env -u EMAIL_ENABLED -u SMTP_HOST ... docker compose --env-file .env.production up`
 > to start cleanly
 > when a stale shell env is suspected.
 
@@ -146,7 +146,7 @@ depends on the deployment topology:
 
 | Topology | `request.ip` | Verdict |
 | --- | --- | --- |
-| Bundled nginx edge (#585 default compose) + `TRUSTED_PROXY_CIDRS` = the Compose bridge subnet | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default — one lookup: `docker network inspect <project>_exam-net` and set the subnet (e.g. `172.19.0.0/16`) in `.env.deploy` |
+| Bundled nginx edge (#585 default compose) + `TRUSTED_PROXY_CIDRS` = the Compose bridge subnet | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default — one lookup: `docker network inspect <project>_exam-net` and set the subnet (e.g. `172.19.0.0/16`) in `.env.production` |
 | Bundled nginx edge WITHOUT `TRUSTED_PROXY_CIDRS` | the edge's bridge IP (all candidates collapse) | Misconfigured — the app cannot trust its only ingress; set the subnet as above |
 | Shared NAT (many candidates behind one egress IP) | the shared IP | Supported with sizing: the whole cohort shares one identity; size `RATE_LIMIT_MAX` by the rule below and stagger logins (the login budget is 10/min/IP) |
 | Reverse proxy WITH trusted client-IP wiring | per-candidate IP | Supported: set `TRUSTED_PROXY_CIDRS` to the proxy's addresses |
@@ -165,8 +165,9 @@ limit and audit identity behind a proxy:
    $remote_addr;`) — this is what the bundled edge does. **Appending**
    (`$proxy_add_x_forwarded_for`) is NOT safe for a directly client-facing
    proxy: the client-supplied chain would sit inside the app's trusted
-   walk, letting a candidate choose its audit/rate-limit identity (pinned
-   by `tests/deployment/nginx-ingress.sh` R3). Append remains correct only
+   walk, letting a candidate choose its audit/rate-limit identity (this
+   replace-not-append contract was validated against a real ingress during
+   #585 acceptance). Append remains correct only
    for CHAINED trusted proxies where every hop in front of the app is
    itself trusted and overwrites. A pass-through proxy that forwards the
    client's header untouched is NOT supported either way.
@@ -211,14 +212,14 @@ budgets.
 # 1. Clone and enter the repository
 git clone <repo-url> exam && cd exam
 
-# 2. Configure the deployment environment. The generator creates .env.deploy
-#    from .env.deploy.example and fills the empty JWT_SECRET and
+# 2. Configure the deployment environment. The generator creates .env.production
+#    from .env.production.example and fills the empty JWT_SECRET and
 #    POSTGRES_PASSWORD with random values (an existing value is never
 #    rotated). To set secrets manually instead:
-#    cp .env.deploy.example .env.deploy, then set both (openssl rand -hex 32).
-node scripts/generate-env.mjs
+#    cp .env.production.example .env.production, then set both (openssl rand -hex 32).
+node scripts/init-production-env.mjs
 
-# 3. (Optional) Enable real Email delivery — edit .env.deploy:
+# 3. (Optional) Enable real Email delivery — edit .env.production:
 # EMAIL_ENABLED=true
 # EMAIL_TRANSPORT=smtp
 # SMTP_HOST=smtp.your-org.internal
@@ -226,19 +227,19 @@ node scripts/generate-env.mjs
 # SMTP_PASSWORD=...
 
 # 4. Pull and start the default stack (nginx + web + app + db) from the
-#    prebuilt release images. Compose runs the images pinned in .env.deploy
+#    prebuilt release images. Compose runs the images pinned in .env.production
 #    as EXAM_IMAGE / EXAM_WEB_IMAGE, which step 2 derived from
 #    .release-version (see "Image acquisition" below). No local build
 #    happens; Redis is NOT started by default (P6-010); see §10 to enable it.
-docker compose --env-file .env.deploy up -d
+docker compose --env-file .env.production up -d
 
 # 5. Watch the API come up (migration runs inside the container entrypoint).
-docker compose --env-file .env.deploy logs --tail=50 -f app
+docker compose --env-file .env.production logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
 # 6. Verify app + db are healthy. The in-process email outbox loop waits for
 #    the first organization to be bootstrapped (step 7).
-docker compose --env-file .env.deploy ps
+docker compose --env-file .env.production ps
 # Expected: nginx (running, publishes EXAM_PORT), app (healthy),
 #           web (healthy), db (healthy)
 #
@@ -256,7 +257,7 @@ docker compose --env-file .env.deploy ps
 ```
 
 `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost` (nginx
-owns public 80); set both in `.env.deploy` to your machine's address for
+owns public 80); set both in `.env.production` to your machine's address for
 LAN access (e.g. `http://192.168.1.5:80`), or to
 `http://localhost:<EXAM_PORT>` when you remap the port.
 
@@ -266,21 +267,21 @@ LAN access (e.g. `http://192.168.1.5:80`), or to
 #    Two equivalent paths share one canonical atomic mutation body:
 #
 #    (a) CLI fallback (operator path):
-docker compose --env-file .env.deploy exec app \
+docker compose --env-file .env.production exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin --password '<STRONG_OPERATOR_PASSWORD>' \
   --name 'System Admin' --organization-name 'My Organization'
 #
 #    (b) Launchpad first-install page (browser path): set
 #        LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32> in the deployment env
-#        file (.env.deploy) BEFORE step 4,
+#        file (.env.production) BEFORE step 4,
 #        then navigate to http://<host>:<EXAM_PORT>/launchpad and complete
 #        the first-Admin setup form. Once initialized, /launchpad redirects
-#        to /login and never reopens. See backup-and-recovery.md §8.
+#        to /login and never reopens.
 
 # 8. The in-process outbox loop detects the new organization, resolves it,
 #    and starts polling without restarting. Verify:
-docker compose --env-file .env.deploy logs --tail=20 app
+docker compose --env-file .env.production logs --tail=20 app
 # Look for: 'resolved default organization',
 #           'in-process email outbox loop started'
 ```
@@ -304,12 +305,12 @@ container).
 ### Image acquisition (#321)
 
 The `app` and `web` services run the **prebuilt release images**
-pinned in `.env.deploy` as `EXAM_IMAGE` / `EXAM_WEB_IMAGE`.
-`node scripts/generate-env.mjs` derives both pins from the repository's
+pinned in `.env.production` as `EXAM_IMAGE` / `EXAM_WEB_IMAGE`.
+`node scripts/init-production-env.mjs` derives both pins from the repository's
 `.release-version` (`ghcr.io/jnhu76/exam{,-web}:vX.Y.Z`); an explicit
 non-canonical pin value wins (private registry mirrors, offline loads),
 while a canonical `ghcr.io/jnhu76/exam{,-web}:vX.Y.Z` pin follows
-`.release-version` on the next generate-env run (the upgrade path). The image is published automatically
+`.release-version` on the next init-production-env run (the upgrade path). The image is published automatically
 by the release workflow (`.github/workflows/release.yml`) when the release
 tag is cut — same commit as the GitHub Release, the enforced-immutable git
 tag, and a `sha-<commit>` alias tag. There is deliberately NO `latest` tag;
@@ -319,7 +320,7 @@ not been published yet, use the source-build path below.
 
 #### Online pull (default)
 
-`docker compose --env-file .env.deploy up -d` pulls the pinned image once
+`docker compose --env-file .env.production up -d` pulls the pinned image once
 (outbound access to ghcr.io at install/upgrade time only); afterwards the
 image is cached locally and the platform runtime has no network dependency.
 
@@ -346,14 +347,14 @@ sha256sum exam-image-vX.Y.Z.tar.gz exam-web-image-vX.Y.Z.tar.gz   # record; veri
 ```
 
 Transfer the archive (plus the repository checkout, for
-`generate-env.mjs`) by removable media, then on the air-gapped host:
+`init-production-env.mjs`) by removable media, then on the air-gapped host:
 
 ```bash
 sha256sum exam-image-vX.Y.Z.tar.gz exam-web-image-vX.Y.Z.tar.gz  # must match
 docker load < exam-image-vX.Y.Z.tar.gz
 docker load < exam-web-image-vX.Y.Z.tar.gz
-node scripts/generate-env.mjs                      # derives the same pins
-docker compose --env-file .env.deploy up -d        # local images, no pull
+node scripts/init-production-env.mjs                      # derives the same pins
+docker compose --env-file .env.production up -d        # local images, no pull
 ```
 
 Keep the loaded references identical to `EXAM_IMAGE` / `EXAM_WEB_IMAGE` —
@@ -363,9 +364,7 @@ Compose matches by reference, not digest.
 
 Contributors and PR acceptance verify THIS checkout by building it
 explicitly and running the canonical operator Compose against the local
-tag; the deployment acceptance suites (`tests/deployment/`) do exactly
-this through `tests/deployment/lib.sh` (`ensure_source_images` + the
-`EXAM_IMAGE` pin):
+pin (`EXAM_IMAGE` / `EXAM_WEB_IMAGE`):
 
 ```bash
 # explicit source builds (both targets), then the canonical operator
@@ -373,7 +372,7 @@ this through `tests/deployment/lib.sh` (`ensure_source_images` + the
 docker build --target runner -t exam-local:dev .
 docker build --target web-runner -t exam-local:web-dev .
 EXAM_IMAGE=exam-local:dev EXAM_WEB_IMAGE=exam-local:web-dev \
-  docker compose --env-file .env.deploy -f docker-compose.yml up -d
+  docker compose --env-file .env.production -f docker-compose.yml up -d
 ```
 
 The explicit builds pin `exam-local:dev` / `exam-local:web-dev`, so no
@@ -398,17 +397,17 @@ db healthy → app entrypoint migrates → API binds + becomes healthy
 
 ```bash
 # Run migrations manually (rarely needed; containers do this automatically)
-docker compose --env-file .env.deploy exec app node dist/scripts/migrate.js
+docker compose --env-file .env.production exec app node dist/scripts/migrate.js
 
 # Inspect the drizzle journal. NOTE: $POSTGRES_USER / $POSTGRES_DB are
 # expanded INSIDE the db container (the postgres image exports them as
 # env vars), not by the host shell — so wrap the psql call in sh -c and
 # run it via 'docker compose exec db'.
-docker compose --env-file .env.deploy exec db sh -c \
+docker compose --env-file .env.production exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM drizzle.__drizzle_migrations;"'
 
 # Inspect table count
-docker compose --env-file .env.deploy exec db sh -c \
+docker compose --env-file .env.production exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'
 ```
 
@@ -431,7 +430,7 @@ bootstrap path.
 # Production first-Admin bootstrap (P6-008). Run once against a fresh
 # migrated database. The password is ALWAYS explicitly supplied; there is
 # no default.
-docker compose --env-file .env.deploy exec app \
+docker compose --env-file .env.production exec app \
   node dist/scripts/bootstrap-admin.js \
   --username admin \
   --password '<STRONG_OPERATOR_PASSWORD>' \
@@ -471,7 +470,7 @@ the Admin via `POST /api/admin/candidates`.
 ### Reset admin password later (without re-seeding)
 
 ```bash
-docker compose --env-file .env.deploy exec app node dist/scripts/reset-admin-password.js
+docker compose --env-file .env.production exec app node dist/scripts/reset-admin-password.js
 ```
 
 ### Dev/test seed (NOT for production)
@@ -495,10 +494,10 @@ against the production DB.
 
 ```bash
 # Normal start (default stack: app + db; Redis is optional — §10)
-docker compose --env-file .env.deploy up -d
+docker compose --env-file .env.production up -d
 
 # Verify
-docker compose --env-file .env.deploy ps
+docker compose --env-file .env.production ps
 # Expected: nginx (running, publishes EXAM_PORT), app (healthy),
 #           web (healthy), db (healthy)
 
@@ -600,7 +599,7 @@ a PostgreSQL heartbeat — so diagnostics are unchanged.
 ```bash
 # The loop starts automatically with 'docker compose up -d'. Verify.
 # Use the native --tail flag (not a pipe) so failure context is preserved.
-docker compose --env-file .env.deploy logs --tail=20 app
+docker compose --env-file .env.production logs --tail=20 app
 # Look for:
 #   'resolved default organization'
 #   'in-process email outbox loop started' (pollIntervalMs, batchSize,
@@ -703,10 +702,10 @@ the password and the authenticated URL:
 #    (URL-encode the password if it contains reserved characters)
 
 # 2. Start the stack with the redis profile:
-docker compose --env-file .env.deploy --profile redis up -d
+docker compose --env-file .env.production --profile redis up -d
 
 # 3. Verify all four services:
-docker compose --env-file .env.deploy ps
+docker compose --env-file .env.production ps
 # Expected: nginx (running, publishes EXAM_PORT), app (healthy),
 #           web (healthy), db (healthy), redis (healthy)
 ```
@@ -773,11 +772,11 @@ production database.
 
 ```bash
 # Graceful shutdown: SIGTERM is propagated to each container.
-docker compose --env-file .env.deploy stop    # stops containers without removing them
+docker compose --env-file .env.production stop    # stops containers without removing them
 # or
-docker compose --env-file .env.deploy down    # stops and removes containers (keeps data)
+docker compose --env-file .env.production down    # stops and removes containers (keeps data)
 # or
-docker compose --env-file .env.deploy down -v # with bind mounts there are no named
+docker compose --env-file .env.production down -v # with bind mounts there are no named
                        # volumes, so -v removes NOTHING extra — data under
                        # ./data/* (PGDATA, Redis dir, backup spools) is
                        # retained either way. Deleting data is an explicit
@@ -816,44 +815,44 @@ exceeded the grace period (budget regression — enforced by
 
 ```bash
 # Restart a single service
-docker compose --env-file .env.deploy restart app
-docker compose --env-file .env.deploy restart db
-docker compose --env-file .env.deploy restart redis       # optional profile; not started by default
+docker compose --env-file .env.production restart app
+docker compose --env-file .env.production restart db
+docker compose --env-file .env.production restart redis       # optional profile; not started by default
                                     # (P6-010 / ADR-001)
 
 # Stuck Email processing recovery
 # The outbox loop recovers abandoned rows at the top of every poll cycle
 # after EMAIL_WORKER_LOCK_TIMEOUT_MS (default 300s). To force immediate
 # recovery, restart the app:
-docker compose --env-file .env.deploy restart app
+docker compose --env-file .env.production restart app
 
 # Dead Email inspection (admin-only via psql). $POSTGRES_USER / $POSTGRES_DB
 # are expanded INSIDE the db container (postgres image env), not by the
 # host shell — wrap in sh -c.
-docker compose --env-file .env.deploy exec db sh -c \
+docker compose --env-file .env.production exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, recipient_user_id, subject, attempt_count, last_error, created_at, last_attempt_at FROM email_outbox WHERE status = '\''dead'\'';"'
 
 # Replay a dead Email (advanced — inspect last_error first)
 # ⚠️  This re-attempts delivery. Confirm the recipient and content first.
-docker compose --env-file .env.deploy exec db sh -c \
+docker compose --env-file .env.production exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "UPDATE email_outbox SET status='\''pending'\'', locked_at=NULL, locked_by=NULL, next_attempt_at=now(), last_error=NULL WHERE id = '\''<UUID>'\'';"'
 
 # Stale loop heartbeat
 # /api/system/diagnostics emailStatus.worker.status=degraded when
 # now - last_poll_at > EMAIL_WORKER_HEARTBEAT_STALE_MS (default 60s).
 # Restart the app:
-docker compose --env-file .env.deploy restart app
+docker compose --env-file .env.production restart app
 
 # Failed migration. Use the native --tail flag instead of a pipe so failure
 # context is preserved.
-docker compose --env-file .env.deploy logs --tail=100 app
+docker compose --env-file .env.production logs --tail=100 app
 # Re-running migrate is idempotent:
-docker compose --env-file .env.deploy exec app node dist/scripts/migrate.js
+docker compose --env-file .env.production exec app node dist/scripts/migrate.js
 # If schema is corrupted, restore from backup (§11 backup/restore) and
 # re-run migrate.
 
 # Admin password reset
-docker compose --env-file .env.deploy exec app node dist/scripts/reset-admin-password.js
+docker compose --env-file .env.production exec app node dist/scripts/reset-admin-password.js
 
 # Candidate interrupted attempt
 # REC-I3 implements direct-entry candidate restore: the Web client calls the
@@ -864,7 +863,7 @@ docker compose --env-file .env.deploy exec app node dist/scripts/reset-admin-pas
 # frozen policy is operator_incident.
 
 # Log / requestId investigation
-docker compose --env-file .env.deploy logs app | jq 'select(.reqId == "<REQ_ID>")'
+docker compose --env-file .env.production logs app | jq 'select(.reqId == "<REQ_ID>")'
 ```
 
 ---
@@ -877,16 +876,16 @@ additionally scrubbed by `sanitizeEmailError`.
 
 ```bash
 # Tail all services
-docker compose --env-file .env.deploy logs -f
+docker compose --env-file .env.production logs -f
 
 # Filter by service
-docker compose --env-file .env.deploy logs -f app
+docker compose --env-file .env.production logs -f app
 
 # Filter by request id (JSON log)
-docker compose --env-file .env.deploy logs app | jq 'select(.reqId == "req-42")'
+docker compose --env-file .env.production logs app | jq 'select(.reqId == "req-42")'
 
 # Filter by log level
-docker compose --env-file .env.deploy logs app | jq 'select(.level >= 40)'   # warn and above
+docker compose --env-file .env.production logs app | jq 'select(.level >= 40)'   # warn and above
 
 # Live diagnostics (admin-only)
 watch -n 5 'curl -s -b "auth-token=<JWT>"
@@ -923,23 +922,23 @@ config                            — heartbeatInterval / heartbeatTimeout / dea
 ```text
 [ ] Read CHANGELOG / release notes for breaking changes (version-skip
     restrictions / db major bumps are always announced there).
-[ ] Back up the database (logical dump — backup-and-recovery.md §7).
+[ ] Back up the database: ./scripts/db-backup.sh backup <path>.dump
 [ ] Pull the new code: git pull.
 [ ] Run pnpm verify:static locally.
-[ ] Re-pin the images: .env.deploy EXAM_IMAGE / EXAM_WEB_IMAGE follow
-    .release-version on the next `node scripts/generate-env.mjs` run
+[ ] Re-pin the images: .env.production EXAM_IMAGE / EXAM_WEB_IMAGE follow
+    .release-version on the next `node scripts/init-production-env.mjs` run
     (canonical ghcr.io/jnhu76/exam{,-web}:vX.Y.Z pins are re-derived;
     explicit mirror values must be updated by hand), then pull both:
-    docker compose --env-file .env.deploy pull.
-[ ] docker compose --env-file .env.deploy up -d (migrate runs on app start).
-[ ] Watch migration logs: docker compose --env-file .env.deploy logs app
+    docker compose --env-file .env.production pull.
+[ ] docker compose --env-file .env.production up -d (migrate runs on app start).
+[ ] Watch migration logs: docker compose --env-file .env.production logs app
     | grep -i migrat.
 [ ] Verify /api/health and /api/system/health; log in as an existing Admin;
     open a candidate + a recent result.
 [ ] Rollback (if needed): restore the pre-upgrade backup + redeploy the
     previous image tags (upgrade-and-uninstall.md §2.5 — canonical
     EXAM_IMAGE / EXAM_WEB_IMAGE pins follow .release-version on the next
-    generate-env run, so edit .env.deploy AFTER it, or pin by digest).
+    init-production-env run, so edit .env.production AFTER it, or pin by digest).
 ```
 
 Migrations are forward-only by default. drizzle-kit does not auto-generate
@@ -993,122 +992,34 @@ and §24 (deferred capabilities). Highlights:
 
 ---
 
-## 17. Backup / export (operator-supplied)
-
-> **Canonical backup & recovery authority:** see
-> [`docs/deployment/backup-and-recovery.md`](./backup-and-recovery.md). That
-> guide documents the supported C1 cold-filesystem backup/restore and
-> relocation procedures in full. The summary below is retained for
-> runbook-local context.
+## 17. Backup / restore (canonical: `pg_dump` / `pg_restore`)
 
 Authoritative state is the PostgreSQL data directory under
-`${EXAM_DATA_ROOT:-./data}/postgres` (a host bind mount since P7-C1; the
-former `pgdata` named volume is gone). **Host persistence is not backup** —
-a copy on the same failing disk is a weak local copy, not disaster recovery.
+`${EXAM_DATA_ROOT:-./data}/postgres` (a host bind mount). **Host persistence
+is not backup** — a copy on the same failing disk is a weak local copy, not
+disaster recovery.
 
-### C1 cold-filesystem backup (validated)
-
-The simplest full backup: stop Exam cleanly, copy the COMPLETE postgres
-directory to an off-host destination, restart. Use the helper scripts,
-which preserve ownership/mode/symlinks and refuse unsafe paths:
-
-```bash
-# Stop Exam first (PostgreSQL must be STOPPED — a live copy is corrupt-prone).
-# The source is the deployment's EXAM_DATA_ROOT (default ./data):
-docker compose --env-file .env.deploy down
-scripts/backup/cold-filesystem-backup.sh \
-  "${EXAM_DATA_ROOT:-./data}" \
-  /mnt/nas/exam-backups/$(date +%Y%m%d)
-docker compose --env-file .env.deploy up -d
-```
-
-Restore into a fresh data root, then start Exam with the same PostgreSQL
-major version and the same DB credentials:
+The ONE supported mechanism is a custom-format dump (`pg_dump -Fc`) restored
+with `pg_restore`, wrapped by the operator tool `scripts/db-backup.sh`
+(runs against the production stack; DB identity is resolved from the running
+db container, not re-parsed from the env file):
 
 ```bash
-scripts/backup/cold-filesystem-restore.sh /mnt/nas/exam-backups/<date> /opt/exam/data-fresh
-EXAM_DATA_ROOT=/opt/exam/data-fresh POSTGRES_PASSWORD=<same> docker compose up -d
-```
+# Backup (online — PostgreSQL stays up; the app may keep running):
+./scripts/db-backup.sh backup /mnt/nas/exam-$(date +%Y%m%d).dump
 
-Both procedures were validated by an automated suite
-(`tests/deployment/persistence-and-cold-restore.sh`) that proves a
-fresh working Exam deployment with identical authoritative state is
-produced from the backup. See backup-and-recovery.md §6.
-
-### pg_dump logical backup and clean restore (validated by C2)
-
-The C2 logical path is the recommended routine backup (PostgreSQL stays
-online). It was validated by an automated suite
-(`tests/deployment/logical-backup-restore.sh`) that proves a fresh
-working Exam with State A is produced from a State-A dump, with State-B-only
-data correctly absent — closing the P7-C0 P2-2/P2-3 gaps. The clean-restore
-contract (DROP + recreate from template0, then `pg_restore`) is enforced by
-`scripts/backup/postgres-logical-restore.sh`. See
-`docs/deployment/backup-and-recovery.md` §7.
-
-```bash
-# Online logical backup (PostgreSQL stays ONLINE; API may be down):
-scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump
-
-# Clean restore (STOP the API first; script requires typing target DB name):
-docker compose --env-file .env.deploy stop app
-scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
-docker compose --env-file .env.deploy up -d app
+# Restore (typed confirmation; stops the app, DROP + CREATE from template0,
+# pg_restore, restarts the app, waits for health):
+./scripts/db-backup.sh restore /mnt/nas/exam-20260926.dump
 
 # P7-E2B — record the restore drill in the product ledger after restart
-# (the restore script prints the exact command with its measured duration):
-docker compose --env-file .env.deploy exec app node dist/scripts/backup-evidence.js drill \
+# (with the measured duration):
+docker compose --env-file .env.production exec app node dist/scripts/backup-evidence.js drill \
   --operation-id logical-restore:$(date +%F) --backup-type logical \
   --result succeeded --source operator_declared --duration-ms <ms>
 ```
 
-The P7-C scripts record durable evidence of every run into the product
-ledger (`backup_runs` etc.) at their natural checkpoints — see
-`backup-and-recovery.md` §0.5. The `postgres-logical-backup.sh` and
-`pg-basebackup.sh` scripts record start/completion automatically (completion
-is a hard gate: a verified artifact whose evidence cannot be recorded fails
-the script loudly rather than silently vanishing from the product view).
-Cold-filesystem backups spool evidence and are imported after restart via
-`backup-evidence.js cold-import --spool <path>`.
-
-The older `pg_dump --clean --if-exists | psql` one-liner is retained below
-for reference, but the clean-target contract above is the supported path
-(`--clean --if-exists` into a dirty target does NOT remove dump-absent
-objects):
-
-```bash
-# Backup (online, consistent). $POSTGRES_USER / $POSTGRES_DB are expanded
-# INSIDE the db container (postgres image env), not by the host shell —
-# wrap pg_dump in sh -c. The dump stream is captured on the host.
-docker compose --env-file .env.deploy exec -T db sh -c \
-  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --clean --if-exists' \
-  > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# Verify backup is non-empty and ends with completion
-ls -lh backup_*.sql
-tail -5 backup_*.sql   # should contain 'PostgreSQL database dump complete'
-
-# Restore (offline — stop the API first to avoid writes during restore).
-# Feed the host-side dump file into the db container's psql.
-# NOTE: --clean --if-exists drops objects present in the dump, but does NOT
-# remove objects that exist in the target DB yet are absent from an older
-# dump. For an EXACT historical replacement, recreate/clean the target
-# database under an explicit restore contract (C2 restore drill).
-docker compose --env-file .env.deploy stop app
-docker compose --env-file .env.deploy exec -T db sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
-  < backup_YYYYMMDD_HHMMSS.sql
-docker compose --env-file .env.deploy up -d app
-```
-
-For larger deployments, prefer the C2 logical backup (`scripts/backup/postgres-logical-backup.sh`,
-which produces a `pg_dump -Fc` artifact and is verified by a clean-restore
-drill) for routine backups. Physical `pg_basebackup`, continuous WAL
-archiving, and PITR are now implemented (P7-C3): see
-[`docs/deployment/backup-and-recovery.md`](backup-and-recovery.md) §8 for
-the pg_basebackup script, the canonical `scripts/backup/postgres-enable-pitr.sh`
-WAL-archiving command (there is no PITR Compose file — PITR is a database
-capability configured via `ALTER SYSTEM`, not an alternate Docker topology),
-the PITR procedure, retention contract, and drill evidence. Schedule backups
-via cron on the Docker host — the platform does not ship a backup scheduler
-(a control plane is a P7-E concern, not started).
+Schedule backups with cron/systemd on the Docker host and copy the dumps
+off-host; retention is operator policy. The platform ships no backup
+scheduler, catalog, or retention engine, and no filesystem-level, physical
+(`pg_basebackup`), or WAL-archive/PITR mechanism.

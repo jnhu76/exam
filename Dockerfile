@@ -100,9 +100,9 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 # ingress (deploy/nginx/edge.conf) routes / -> web:4173 and /api/** ->
 # app:3000. The web config is BAKED in here; the edge config is
 # runtime-mounted by docker-compose.yml. INVARIANT: every build of the API
-# image (tests/deployment/lib.sh, release.yml) pins `target: runner`
-# explicitly — a targetless build would select this final stage and ship
-# nginx as the API.
+# image (release.yml, docker-compose.yml operator source-build path) pins
+# `target: runner` explicitly — a targetless build would select this final
+# stage and ship nginx as the API.
 FROM nginx:1.30.5-alpine3.24 AS web-runner
 
 COPY deploy/nginx/web.conf /etc/nginx/conf.d/default.conf

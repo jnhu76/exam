@@ -23,13 +23,14 @@ Notes:
   `EXAM_PORT` → the nginx edge on container 80 (#585), which routes `/api/**`
   to the API (`app:3000`) and everything else to the static SPA (`web:4173`).
 - Env files own one mode each: `.env` (from `.env.example`) is local
-  development ONLY; `.env.deploy` (from `.env.deploy.example`, filled by
-  `node scripts/generate-env.mjs`) is deployment ONLY and is read via
-  `docker compose --env-file .env.deploy` (the flag replaces the default `.env`
+  development ONLY; `.env.production` (from `.env.production.example`, filled by
+  `node scripts/init-production-env.mjs`) is deployment ONLY and is read via
+  `docker compose --env-file .env.production` (the flag replaces the default `.env`
   as Compose's interpolation file, so the dev `.env` is never read for
   deployment — host shell exports still override individual values). Dev
-  tooling never reads `.env.deploy`. Tests keep their own `.env.test.local`
-  (from `.env.test.example`).
+  tooling never reads `.env.production`. Tests read an optional git-ignored
+  `.env.test.local` (vitest `loadEnv`, mode `test`); unset values resolve
+  automatically — see `docs/standards/testing.md` for the variable set.
 - **Managed WSL E2E topology** (issue #571): The runner
   (`scripts/e2e/run.sh`) sets `COMPOSE_DISABLE_ENV_FILE=1` before any
   Compose invocation, so the developer root `.env` is intentionally ignored by

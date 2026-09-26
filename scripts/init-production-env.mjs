@@ -1,36 +1,36 @@
 #!/usr/bin/env node
-// First-run setup for Docker DEPLOYMENT: create .env.deploy from
-// .env.deploy.example (if missing) and fill empty secrets. Works on
+// First-run setup for Docker DEPLOYMENT: create .env.production from
+// .env.production.example (if missing) and fill empty secrets. Works on
 // Linux/macOS/WSL and Windows PowerShell — the only prerequisite is Node,
 // which the repo already requires.
 //
-//   node scripts/generate-env.mjs
+//   node scripts/init-production-env.mjs
 //
 // The deployment stack is then started explicitly against the file:
-//   docker compose --env-file .env.deploy -f docker-compose.yml up -d
+//   docker compose --env-file .env.production -f docker-compose.yml up -d
 // (source builds — contributors / PR acceptance — are an explicit
 // `docker build --target runner` pinned via EXAM_IMAGE; the operator path
 // never builds)
 //
 // Passing --env-file replaces the default `.env` as Compose's interpolation
 // file (the dev .env is never read for deployment), and no dev tooling ever
-// reads .env.deploy. Development keeps its own .env (cp .env.example .env).
+// reads .env.production. Development keeps its own .env (cp .env.example .env).
 //
 // Secret contract: first run → generate; existing value → preserve. Re-running
-// against an initialized .env.deploy never rotates a secret.
+// against an initialized .env.production never rotates a secret.
 //
 // Legacy carry-over: installs made before the dev/deploy env split (PR #319)
 // kept the deployment secrets (JWT_SECRET / POSTGRES_*) in the repo-root .env.
-// On first creation of .env.deploy, those secrets are preserved — including
+// On first creation of .env.production, those secrets are preserved — including
 // POSTGRES_PASSWORD, which must never be silently rotated (the existing
 // PostgreSQL data volume is still using it). A post-split dev-only .env (no
 // deployment secrets) is ignored and fresh secrets are generated instead.
 // Migration is consult-the-legacy-on-empty only: an explicit value in
-// .env.deploy always wins, and once .env.deploy is set, later runs never
+// .env.production always wins, and once .env.production is set, later runs never
 // re-read the dev .env.
 //
 // Optional arguments: an env-file path to operate on (defaults to repo-root
-// .env.deploy), then optionally a legacy env-file source (defaults to
+// .env.production), then optionally a legacy env-file source (defaults to
 // repo-root .env). The second argument exists so tests can drive the legacy
 // migration hermetically.
 
@@ -42,15 +42,15 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const envPath = process.argv[2]
   ? resolve(process.argv[2])
-  : join(root, ".env.deploy");
+  : join(root, ".env.production");
 const legacyPath = process.argv[3]
   ? resolve(process.argv[3])
   : join(root, ".env");
-const examplePath = join(root, ".env.deploy.example");
+const examplePath = join(root, ".env.production.example");
 
 if (!existsSync(envPath)) {
   copyFileSync(examplePath, envPath);
-  console.log(`Created ${envPath} from .env.deploy.example`);
+  console.log(`Created ${envPath} from .env.production.example`);
 }
 
 // Deployment-owned keys carried over from a legacy dev .env (PR #319 era).
@@ -64,7 +64,7 @@ const PRESERVE_KEYS = ["POSTGRES_USER", "POSTGRES_DB"];
 // release version authority (.release-version) — never independently
 // maintained copies that can silently drift. A canonical pin for THIS
 // repository (ghcr.io/jnhu76/exam{,-web}:vX.Y.Z) FOLLOWS .release-version
-// on re-runs (the upgrade path: git pull → generate-env re-pins the new
+// on re-runs (the upgrade path: git pull → init-production-env re-pins the new
 // version); any other value is an explicit operator override (air-gapped
 // registry mirror, offline docker load) and is preserved exactly like the
 // other keys.
@@ -203,5 +203,5 @@ if (env !== original) {
 }
 
 console.log(
-  "Next: docker compose --env-file .env.deploy -f docker-compose.yml up -d",
+  "Next: docker compose --env-file .env.production -f docker-compose.yml up -d",
 );
