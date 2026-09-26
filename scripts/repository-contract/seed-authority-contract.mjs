@@ -5,11 +5,11 @@
  * Contract:
  *   - packages/db/src/e2eSeedOrchestrator.ts is the ONLY file that may compose
  *     baseline seed + demo seed + demo-seed verification.
- *   - apps/api/src/e2e-seed.ts and packages/db/src/e2e-seed.ts are thin
- *     adapters: they must import runE2eSeed from the orchestrator and must NOT
- *     import seed(), seedDemo(), or verifyDemoSeed() directly.
- *   - Both adapters must close the database connection in a finally block.
- *   - Both adapters must set process.exitCode = 1 on orchestrator failure.
+ *   - apps/api/src/e2e-seed.ts is the thin adapter: it must import runE2eSeed
+ *     from the orchestrator and must NOT import seed(), seedDemo(), or
+ *     verifyDemoSeed() directly.
+ *   - The adapter must close the database connection in a finally block.
+ *   - The adapter must set process.exitCode = 1 on orchestrator failure.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +17,7 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dirname, "../..");
 
 const ORCHESTRATOR = "packages/db/src/e2eSeedOrchestrator.ts";
-const ADAPTERS = ["apps/api/src/e2e-seed.ts", "packages/db/src/e2e-seed.ts"];
+const ADAPTERS = ["apps/api/src/e2e-seed.ts"];
 
 const COMPOSED = [
   /from\s+["']\.\/seed\.js["']/,

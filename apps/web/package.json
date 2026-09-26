@@ -9,8 +9,7 @@
     "lint": "node ../../scripts/check-code-quality.mjs",
     "lint:eslint": "eslint . --max-warnings=0",
     "test": "vitest run",
-    "coverage": "vitest run --coverage",
-    "preview": "vite preview"
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@exam/authz": "workspace:*",

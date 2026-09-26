@@ -37,7 +37,7 @@ ENV_FILE="$ROOT_DIR/.env.production"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 
 [[ -f "$ENV_FILE" ]] || {
-  echo "ERROR: $ENV_FILE not found (create it first: pnpm env:init)" >&2
+  echo "ERROR: $ENV_FILE not found (create it first: node scripts/init-production-env.mjs)" >&2
   exit 1
 }
 [[ "$MODE" == "backup" || -f "$DUMP_FILE" ]] || {

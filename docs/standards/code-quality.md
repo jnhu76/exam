@@ -574,31 +574,40 @@ pnpm exec commitlint --edit "$1"   # Conventional Commits 校验
 
 ## 15. CI Quality Gate
 
-CI 运行三个并行 job，由 `static` job 门控：
+CI 运行六个 job，拓扑为 `static` → `verify-build` → `web-coverage` / `api-coverage` / `package-coverage` / `e2e`（接线以 `.github/workflows/ci.yml` 为权威）：
 
 ### static job (必须先通过)
 
 ```bash
 pnpm verify:static
-# 展开为：
-# pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck
 ```
 
-### verify job (全量测试)
+### build job
 
 ```bash
-pnpm verify
-# 展开为 static + coverage + build：
-# ... && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build
+pnpm build
 ```
 
-### e2e job
+### coverage jobs
 
 ```bash
-pnpm test:e2e
+pnpm --filter @exam/web coverage
+TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage
+pnpm --filter "./packages/*" coverage
 ```
 
-J9 最终增加 smoke：
+### e2e job（分片）
+
+```bash
+pnpm --filter @exam/db db:migrate
+pnpm --filter @exam/api db:seed:e2e
+pnpm --filter @exam/api start
+pnpm --filter @exam/e2e exec playwright test --shard=$SHARD_INDEX/$SHARD_TOTAL
+```
+
+本地等价入口：`pnpm verify`（static + coverage + build）与 `pnpm e2e`（host-native runner）。
+
+冒烟门（candidate happy path）：
 
 ```bash
 pnpm smoke
@@ -656,26 +665,68 @@ PR 不通过 CI，不允许合并。
 
 ## 18. Verify Commands
 
-根目录 `package.json` scripts：
+根目录 `package.json` scripts（唯一权威是根 `package.json`，此处为同步快照）：
 
 ```json
 {
   "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "node scripts/check-code-quality.mjs",
+    "lint:quality": "node scripts/check-code-quality.mjs",
     "lint:copy": "node scripts/check-hardcoded-copy.mjs",
     "lint:arch": "node scripts/check-architecture.mjs",
     "lint:db-config": "node scripts/check-db-config.mjs",
+    "lint:db-journal": "node scripts/db/check-postgres-migration-journal.mjs",
+    "lint:env-contract": "node scripts/repository-contract/config-contract.mjs && node scripts/check-test-time-contract.mjs",
+    "lint:repo-contract": "node scripts/repository-contract/turbo-config-contract.mjs && node scripts/repository-contract/package-script-contract.mjs && node scripts/repository-contract/seed-authority-contract.mjs && node scripts/repository-contract/adr-status-contract.mjs && node scripts/repository-contract/roadmap-tracker-contract.mjs && node scripts/repository-contract/adr-status-uniqueness-contract.mjs && node scripts/repository-contract/docs-router-contract.mjs && node scripts/repository-contract/verification-marker-contract.mjs",
+    "lint:ui-gates": "node scripts/check-ant-residue.mjs && node scripts/check-token-bypass.mjs && node scripts/check-raw-color-usage.mjs && node scripts/check-high-font-weight.mjs && node scripts/check-row-action-icons.mjs && node scripts/check-stale-ui-docs.mjs",
+    "lint:eslint": "pnpm --filter @exam/web lint:eslint",
+    "lint:md": "markdownlint-cli2",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "coverage": "turbo coverage",
+    "db:up": "docker compose -f docker-compose.dev.yml up -d",
+    "db:down": "docker compose -f docker-compose.dev.yml down",
+    "db:reset": "docker compose -f docker-compose.dev.yml down -v && docker compose -f docker-compose.dev.yml up -d",
+    "db:generate": "pnpm --filter @exam/db db:generate",
+    "db:migrate": "pnpm --filter @exam/db db:migrate",
+    "db:push": "pnpm --filter @exam/db db:push",
+    "db:studio": "pnpm --filter @exam/db db:studio",
+    "db:seed": "pnpm --filter @exam/api db:seed",
+    "db:seed:demo": "pnpm --filter @exam/api db:seed:demo",
+    "db:seed:demo:verify": "pnpm --filter @exam/api db:seed:demo:verify",
+    "db:rollback:incidents": "pnpm --filter @exam/api db:rollback:incidents",
+    "db:rollback:attempt-command-receipts": "pnpm --filter @exam/api db:rollback:attempt-command-receipts",
+    "seed:e2e": "pnpm --filter @exam/api db:seed:e2e",
     "test:integration": "turbo test:integration",
     "test:e2e": "turbo test:e2e",
+    "e2e": "bash scripts/e2e/run.sh",
     "smoke": "turbo smoke",
-    "build": "turbo build",
-    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck",
-    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build"
+    "verify": "pnpm verify:static && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build",
+    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm test:copy-guard && pnpm lint:arch && pnpm lint:db-config && pnpm lint:db-journal && pnpm lint:env-contract && pnpm lint:repo-contract && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check && pnpm test:db-journal && pnpm test:stale-ui-docs && pnpm test:ui-scan-roots && pnpm test:frontend-primitives-smoke && pnpm test:repo-contract-guards",
+    "formal:recovery:safety": "node scripts/formal/run-recovery-tlc.mjs safety",
+    "formal:recovery:safety:route": "node scripts/formal/run-recovery-tlc.mjs safety:route",
+    "formal:recovery:safety:submission": "node scripts/formal/run-recovery-tlc.mjs safety:submission",
+    "formal:recovery:liveness": "node scripts/formal/run-recovery-tlc.mjs liveness",
+    "formal:recovery:counterexamples": "node scripts/formal/run-recovery-tlc.mjs counterexamples",
+    "formal:recovery:explore": "node scripts/formal/run-recovery-tlc.mjs explore",
+    "formal:recovery": "node scripts/formal/run-recovery-tlc.mjs all",
+    "formal:operator-grant:server": "node scripts/formal/run-operator-grant-tlc.mjs server",
+    "formal:operator-grant:client": "node scripts/formal/run-operator-grant-tlc.mjs client",
+    "formal:operator-grant:witnesses": "node scripts/formal/run-operator-grant-tlc.mjs witnesses",
+    "formal:operator-grant:counterexamples": "node scripts/formal/run-operator-grant-tlc.mjs counterexamples",
+    "formal:operator-grant:runner-test": "node --test scripts/formal/run-operator-grant-tlc.test.mjs",
+    "formal:operator-grant": "pnpm formal:operator-grant:runner-test && node scripts/formal/run-operator-grant-tlc.mjs all",
+    "test:db-journal": "node --test scripts/db/check-postgres-migration-journal.test.mjs",
+    "prepare": "husky",
+    "test:stale-ui-docs": "node --test scripts/check-stale-ui-docs.test.mjs",
+    "test:ui-scan-roots": "node --test scripts/lib/ui-scan-roots.test.mjs",
+    "test:frontend-primitives-smoke": "node --test scripts/check-frontend-primitives.test.mjs",
+    "test:repo-contract-guards": "node --test scripts/repository-contract/guards.test.mjs",
+    "test:copy-guard": "node --test scripts/check-hardcoded-copy.test.mjs"
   }
 }
 ```

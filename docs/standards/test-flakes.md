@@ -1265,7 +1265,9 @@ turbo 在单次调用里并发调度多个 DB-touching 任务
 
 **根因**: `@exam/db` 与 `@exam/api` 是仅有的两个使用共享 `exam_test` PostgreSQL 实例的 package。`fileParallelism: false` 只消除 *单 package 内* 的文件并行，**不**消除 turbo 在单次调用里跨 package / 跨 task（test vs coverage）的并发。当 `turbo run test coverage`（或任何把 DB-touching 任务放进同一次调度的命令）执行时，多个任务会并发写同一个 `default` 组织及其清理钩子，互相覆盖。
 
-**当前缓解（Option A，现行）**:
+**缓解（Option A，已被 Option B 取代）**:
+
+下述串行分阶段脚本（`test:db` / `test:api` / `coverage:db` / `coverage:api` / `test:nodb` / `coverage:nodb` / `verify:db-tests` / `verify:nodb-tests`）已在 Option B 根因修复落地后从 `package.json` 删除；需要单 package 运行时直接使用 `pnpm --filter @exam/db|@exam/api test|coverage`。现存 `verify` 组成为：静态检查 → `coverage` → `build`。
 
 > 缓解方案建立在 `docs/SPEC.md` §3.1 Organization Data Boundary Guard 定义的"所有业务数据归属于内部 default organization"（§2.8.1 Phase 1 数据归属边界）之上——测试 seed 与 cleanup 同样操作 default 组织，跨任务共享此状态即触发竞争。
 
@@ -1298,7 +1300,7 @@ turbo 在单次调用里并发调度多个 DB-touching 任务
 ```bash
 pnpm --filter @exam/db test
 pnpm --filter @exam/api test
-pnpm verify           # 现在走 verify:nodb-tests → verify:db-tests 串行链
+pnpm verify           # 现行为静态检查 → coverage → build（串行脚本已删除，见上）
 ```
 
 **复发记录**:

@@ -122,7 +122,7 @@ a flake record carries:
 | Field | Notes |
 |---|---|
 | date | observation date |
-| jobContext | `pnpm verify`, `test:api`, CI shard |
+| jobContext | `pnpm verify`, `pnpm coverage`, CI shard |
 | failingTest | file:line |
 | errorSnippet | the failure output |
 | rootCauseHypothesis | state-leak / I/O-contention / auth-amplification / env-missing |
