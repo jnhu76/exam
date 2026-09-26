@@ -28,8 +28,9 @@ Notes:
   `docker compose --env-file .env.production` (the flag replaces the default `.env`
   as Compose's interpolation file, so the dev `.env` is never read for
   deployment — host shell exports still override individual values). Dev
-  tooling never reads `.env.production`. Tests keep their own `.env.test.local`
-  (from `.env.test.example`).
+  tooling never reads `.env.production`. Tests read an optional git-ignored
+  `.env.test.local` (vitest `loadEnv`, mode `test`); unset values resolve
+  automatically — see `docs/standards/testing.md` for the variable set.
 - **Managed WSL E2E topology** (issue #571): The runner
   (`scripts/e2e/run.sh`) sets `COMPOSE_DISABLE_ENV_FILE=1` before any
   Compose invocation, so the developer root `.env` is intentionally ignored by

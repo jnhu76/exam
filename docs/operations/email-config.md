@@ -128,9 +128,9 @@ EMAIL_TRANSPORT=fake
 EMAIL_FAKE_MODE=failure   # exercises FakeEmailSender retry/error paths
 ```
 
-Tests **never** touch real SMTP, never need a secret. `.env.test.example` ships
-the default block; the fake-failure override is applied by the individual
-retry/error test cases. The full test contract is enforced by the API email
+Tests **never** touch real SMTP, never need a secret. The default fake
+transport requires no configuration; the fake-failure override is applied by
+the individual retry/error test cases. The full test contract is enforced by the API email
 tests (`apps/api/src/routes/email.test.ts`, `apps/api/src/email/*.test.ts`)
 under `docs/adr/ADR-011-notification-and-email-delivery.md`.
 
