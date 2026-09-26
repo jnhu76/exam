@@ -22,9 +22,9 @@ export function resolveRootEnvPaths(): string[] {
  *
  * OWNERSHIP (#565): the developer root `.env` is the DEV-profile authority.
  * Managed profiles receive their configuration from their owner — the test
- * runtime (TEST_RUNTIME_ENV + the turbo env contract), the E2E runners'
- * topology projection (run-wsl.sh launch_api / docker-compose.test.yml), the
- * CI workflow, or the deployment environment — and must not import
+ * runtime (TEST_RUNTIME_ENV + the turbo env contract), the E2E runner's
+ * topology projection (run.sh launch_api), the CI workflow, or the
+ * deployment environment — and must not import
  * developer-local files as a second authority. The PR #565 failure class was
  * exactly this pollution: a developer `.env` APP_PORT hijacking the
  * runner-owned WSL E2E shard bind port. dotenv never overrides already-set

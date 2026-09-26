@@ -284,7 +284,8 @@ server (`node dist/server.js`) as a long-lived foreground process, and
 ```yaml
 app:
   # prebuilt image pinned by EXAM_IMAGE in the deployment env file
-  # (image-pinned since #321; building a checkout uses docker-compose.build.yml)
+  # (image-pinned since #321; building a checkout is an explicit
+  # `docker build --target runner` per #626)
   image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}
   restart: unless-stopped   # always-on: auto-restarts on crash/reboot
 ```

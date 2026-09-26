@@ -157,15 +157,14 @@ pnpm lint:ui-gates      # frontend visual authority guards
 
 ## E2E
 
-Two execution modes for Playwright browser tests:
+One canonical host-native runner for Playwright browser tests:
 
-- **WSL / local** (`bash scripts/e2e/run-wsl.sh`) — runs against the
-  dev server + host Chromium. Best for development iteration.
-- **Docker** (`pnpm e2e:docker` → `bash scripts/e2e/run.sh`) — builds and runs the full
-  stack in containers. Best for CI-parity.
+- **Local / CI parity** (`pnpm e2e` → `bash scripts/e2e/run.sh`) — runs the
+  API dev server + host Chromium; Compose owns only the PostgreSQL/Redis
+  dependencies. CI executes the same product contracts with service
+  containers instead of the dev Compose stack.
 
-Both produce the same pass/fail set. See
-[`docs/standards/testing.md`](../standards/testing.md) for the full
+See [`docs/standards/testing.md`](../standards/testing.md) for the full
 E2E guide.
 
 ## Architecture References

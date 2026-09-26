@@ -71,34 +71,31 @@ baseline 的 `candidate2` 用户（不会重复创建），只为它补充 Candi
 ```bash
 # 仅 baseline
 pnpm --filter @exam/api db:seed
-# baseline + demo + 校验（CI E2E 与本地 Docker E2E 都用这一个命令）
+# baseline + demo + 校验（CI E2E 与本地 E2E 都用这一个命令）
 pnpm --filter @exam/api db:seed:e2e
 # 等价根别名
 pnpm seed:e2e
-# 本地 Docker E2E（容器入口 RUN_SEED=e2e 自动跑 db:seed:e2e）
-pnpm e2e:docker
+# 本地 E2E 一键入口（runner 负责迁移 + seed + dev server + Playwright）
+pnpm e2e
 ```
 
-> CI E2E (`.github/workflows/ci.yml`) 与本地 Docker E2E (`scripts/e2e/run.sh` +
-> `docker-compose.test.yml`) 共用同一条 canonical E2E seed 命令；
-> Docker 容器内 `APP_MODE=e2e` 自动禁用 rate-limit 插件。
+> CI E2E (`.github/workflows/ci.yml`) 与本地 E2E (`scripts/e2e/run.sh`) 共用
+> 同一条 canonical E2E seed 命令；`APP_MODE=e2e` 自动禁用 rate-limit 插件。
 
-### Docker E2E 端口与环境污染说明
+### E2E 端口与环境污染说明
 
-`docker-compose.test.yml` 将 app / db / redis 的 host 端口暴露给宿主机（`EXAM_PORT` / `DB_HOST_PORT` / `REDIS_HOST_PORT`，默认 3000 / 5432 / 6379）——端口是配置值，不是拓扑变体。
-`scripts/e2e/run.sh` 在 `docker compose up` 之前会显式检查宿主机 `:3000` /
-`:5432` 是否已被其他进程占用（本地 `pnpm dev`、`pnpm --filter @exam/api start`、
-`docker-compose.dev.yml` 的 db、或其他服务），如果占用就 fail-fast，避免
-“宿主机 500 / 容器内网 200” 这类歧义（最常见原因是宿主机上残留的 dev server
-仍在响应 login，且仍带着 `x-ratelimit-*` headers，但 `APP_MODE` 与 runtimeConfig
-状态可能与 Docker app 不一致）。
+E2E 的依赖栈（`docker-compose.dev.yml`：PostgreSQL / Redis）与本地应用进程的
+host 端口可由 `DB_HOST_PORT` / `REDIS_HOST_PORT` / `DEV_API_PORT` 配置——端口是
+配置值，不是拓扑变体。`scripts/e2e/run.sh` 在启动前会显式检查所用端口是否已被
+其他进程占用（本地 `pnpm dev`、残留 dev server、或其他 worktree 的 dev 栈），
+如果占用就 fail-fast，避免"测试结果指向另一个进程"这类歧义。
 
-不要同时跑两份 stack：开 Docker E2E 前请先停掉：
+不要同时跑两份 stack：开 E2E 前请先停掉：
 
 ```bash
 pnpm db:down
 # 或换端口
-EXAM_PORT=3001 pnpm e2e:docker
+DB_HOST_PORT=25432 REDIS_HOST_PORT=26379 pnpm e2e
 ```
 
 ---

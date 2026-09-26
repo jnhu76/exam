@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# scripts/e2e/run-wsl-lib.test.sh
+# scripts/e2e/run-lib.test.sh
 #
-# Scenario tests for scripts/e2e/run-wsl-lib.sh, driven by
-# run-wsl-lib.test.mjs. Each scenario is self-contained and exits 0 on PASS or
+# Scenario tests for scripts/e2e/run-lib.sh, driven by
+# run-lib.test.mjs. Each scenario is self-contained and exits 0 on PASS or
 # nonzero on FAIL, printing "PASS" / "FAIL: reason" to stdout/stderr.
 #
 # The mjs runner isolates each scenario in a fresh `bash` invocation and may
 # prepend a faked-bin dir to PATH (for the docker-dependent scenarios).
 #
 # Usage:
-#   bash run-wsl-lib.test.sh <scenario_name>
+#   bash run-lib.test.sh <scenario_name>
 #
 # Scenarios (one per tested contract from the issue spec + review):
 #   prefix-guard                 — reject unsafe DB names, accept safe ones
@@ -51,17 +51,17 @@
 
 set -Eeuo pipefail
 
-LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run-wsl-lib.sh"
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run-lib.sh"
 # shellcheck source=/dev/null
 source "$LIB"
 
-# Minimal log/warn/err the library expects (run-wsl.sh defines the real ones).
+# Minimal log/warn/err the library expects (run.sh defines the real ones).
 log()  { :; }   # quiet in tests
 warn() { :; }
 err()  { :; }
 
 # The mjs runner exports FAKE_DOCKER_LOG for docker-dependent scenarios; keep
-# a standalone-safe default so direct `bash run-wsl-lib.test.sh <scenario>`
+# a standalone-safe default so direct `bash run-lib.test.sh <scenario>`
 # invocations do not fail under `set -u` (round-3 review).
 FAKE_DOCKER_LOG="${FAKE_DOCKER_LOG:-/tmp/e2e-fake-docker.log}"
 
@@ -96,7 +96,7 @@ case "$scenario" in
   ordering)
     order_log="$(mktemp)"
     # Spawn a real child in its OWN process group (setsid), mirroring how
-    # run-wsl.sh launches API servers. stop_process_group kills `-$srv` and
+    # run.sh launches API servers. stop_process_group kills `-$srv` and
     # must actually reach the process; without setsid the negative-pid kill
     # would target a nonexistent group and the sleep would run to completion.
     setsid sleep 30 &
@@ -260,8 +260,8 @@ case "$scenario" in
   # (rc=1, stderr names the db) and must never have made the ACTIVE retained
   # name a DROP target — only a pre-existing *_prior slot may be evicted, and
   # it does not exist here. This is the failure that triggers the #330 review
-  # P1-2 ownership contract: run-wsl.sh claims the worker-DB name only AFTER
-  # archive success (pinned structurally in run-wsl-lib.test.mjs), so the
+  # P1-2 ownership contract: run.sh claims the worker-DB name only AFTER
+  # archive success (pinned structurally in run-lib.test.mjs), so the
   # failure-path EXIT cleanup never drops the forensic DB.
   archive-rename-failure-loud)
     rc=0
@@ -312,7 +312,7 @@ case "$scenario" in
 
   # ── 9. Real EXIT trap chain, 4-cell matrix (P2-2) ──────────────────────
   # Subprocesses install the REAL exit_handler from the lib and `exit` with
-  # the frozen code, exactly like run-wsl.sh. This tests the actual trap
+  # the frozen code, exactly like run.sh. This tests the actual trap
   # chain (not just compute_final_exit in isolation): the old handler aborted
   # under `set -e` when compute_final_exit returned 7/70, so the sentinel
   # message was never printed — the pass-fail cell pins that.

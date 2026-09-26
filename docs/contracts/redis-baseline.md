@@ -193,9 +193,10 @@ Redis service added to all compose files (`redis:7-alpine`):
   echo the raw URL — only `host:port` — so credentials cannot leak into
   startup exceptions or logs (P7 review P1-2). dev/test compose files keep
   an unauthenticated instance as an explicit local exception.
-- `docker-compose.dev.yml` (local dev): host port `6379:6379` published so
-  local-run tests (which connect to `redis://localhost:6379`) work.
-- `docker-compose.test.yml` (E2E): host port configurable via `REDIS_HOST_PORT`.
+- `docker-compose.dev.yml` (local dev + E2E dependency stack): host port
+  `6379:6379` published (remappable via `REDIS_HOST_PORT`) so local-run tests
+  and the host-native E2E runner (which connect to `redis://localhost:<port>`)
+  work.
 
 > Operational note: if `docker compose up` reports
 > `Bind for 0.0.0.0:6379 failed: port is already allocated`, a stale container

@@ -57,10 +57,9 @@ async function createNamedCandidate(
  * publish -> create candidate -> enroll. The tests below then drive the
  * admin/candidate UI and API for the part each test is proving.
  *
- * Run isolated (host ports are env configuration of the single
- * docker-compose.test.yml — no override YAML):
- *   COMPOSE_PROJECT_NAME=exam-e2e-p2b EXAM_PORT=3300 DB_HOST_PORT=5433 \
- *     REDIS_HOST_PORT=6380 bash scripts/e2e/run.sh admin-flow
+ * Run isolated (host ports are shell configuration of the runner):
+ *   DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 \
+ *     bash scripts/e2e/run.sh admin-flow
  */
 test.describe("admin operation flow", () => {
   test.describe.configure({ mode: "serial" });

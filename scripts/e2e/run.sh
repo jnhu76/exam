@@ -2,424 +2,498 @@
 
 # scripts/e2e/run.sh
 #
-# 通过 docker compose 一键执行 E2E：
+# WSL/本地一键执行 E2E（不走 Docker app 镜像，直接在宿主跑 api dev server +
+# Playwright）。与 scripts/e2e/run.sh（Docker 模式）互补，失败集合应一致。
 #
-#   构建镜像 → 启动 db / app（带 RUN_SEED=1 自动 seed）→ 健康检查 →
-#   通过 e2e profile 容器跑 Playwright → 收集退出码 → 清理。
+# 为什么需要这个脚本：手动跑 E2E 需要一长串步骤（dev compose → migrate →
+# seed → build web → 同步 api/public → 起 dev server 带 E2E env → playwright），
+# 极易漏步。本脚本固化完整链路，让任何开发者（含 AI agent）一键复现。
 #
-# 严格按照 docker-compose.test.yml 编排：app 镜像内置 docker-entrypoint.sh，
-# 已经在容器启动时执行 migrate + seed.js。本脚本不再在宿主机上尝试 seed。
+# 关键：dev server 必须带 E2E 专用 env（本 runner 是 E2E env 的唯一权威，
+# 与 CI 的 service-container env 表达同一契约）：
+#   - APP_MODE=e2e              选择测试数据库路径 + 自动关闭限流（与 CI 一致）
+#   - HEARTBEAT_TIMEOUT_MS=15000    disconnect-restore spec 依赖 15s 超时
+#   - HEARTBEAT_SCAN_INTERVAL_MS=5000 / DEADLINE_SCAN_INTERVAL_MS=5000
+# 缺这些 env，disconnect/restore 类 spec 会因 scanner 时序不符而 timeout。
+#   - PUBLIC_WEB_ORIGIN           绑定 http://localhost:<本进程端口>。
+#     INVARIANT：身份一次性链接（邀请接受/密码重置）= PUBLIC_WEB_ORIGIN +
+#     固定站内路径，浏览器直接 goto 该绝对 URL；本拓扑中 SPA 由 API 进程
+#     自己服务，链接必须回到 Playwright 实际访问的同一 origin。绑定跟随
+#     各自进程端口，禁止全局固定端口（并行 shard 端口各不相同）。
 #
 # 用法：
-#   bash scripts/e2e/run.sh                       # 跑 e2e/ 下所有 spec（全跑）
+#   bash scripts/e2e/run.sh                       # 跑全部 spec
 #   bash scripts/e2e/run.sh candidate-happy-path  # 关键字匹配 spec 文件
-#   bash scripts/e2e/run.sh resume submit-flush   # 多个关键字（OR 关系）
-#   bash scripts/e2e/run.sh --grep "happy path"   # Playwright 标题正则过滤
-#   bash scripts/e2e/run.sh --no-build            # 跳过构建（复用上次镜像）
-#   bash scripts/e2e/run.sh --keep                # 跑完保留容器（不清理）
-#   bash scripts/e2e/run.sh --rebuild --headed    # 强制 --no-cache 重建（不支持 headed，仅作示例）
+#   bash scripts/e2e/run.sh --grep "happy path"   # Playwright 标题正则
+#   bash scripts/e2e/run.sh --no-reseed           # 复用现有 seed（不重 seed，仅串行）
+#   bash scripts/e2e/run.sh --keep-server         # 跑完保留 dev server（仅串行）
 #
 # 环境变量：
-#   EXAM_PORT            宿主机暴露给 app 的端口，默认 3000
-#   DB_HOST_PORT         宿主机暴露给 db 的端口，默认 5432
-#   REDIS_HOST_PORT      宿主机暴露给 redis 的端口，默认 6379
-#   JWT_SECRET           覆盖默认 change-me-in-development
-#   E2E_PROXY            E2E 容器内 npm install 时的 HTTP(S) 代理
-#   COMPOSE_PROJECT_NAME 隔离多个并发运行，默认 exam-e2e
-#   KEEP_STACK=1         等价于 --keep
+#   DEV_API_PORT        api/dev server 端口，默认 3000
+#   DB_HOST_PORT        dev compose PostgreSQL 宿主端口，默认 5432
+#   REDIS_HOST_PORT     dev compose Redis 宿主端口，默认 6379；与 DB_HOST_PORT
+#                       配合 REDIS_URL=redis://localhost:<port> 可在其它 worktree
+#                       的 dev 栈占用默认端口时并行运行本脚本
+#   KEEP_SERVER=1     等价于 --keep-server
+#   E2E_WORKERS       并行 shard 数；--keep-server / --no-reseed 仅支持 =1
 #
-# 拓扑权威是唯一的 docker-compose.test.yml —— 端口重映射只用上述环境变量，
-# 不通过 COMPOSE_FILE 叠加第二个 Compose 文件。
+# 数据库生命周期（issue #256-A review；#330 取证/执行分离）：
+#   - 并行 worker 库 exam_e2e_w<N> 为 ephemeral：每次运行结束（stop server 后）
+#     一律 DROP（失败保留仅限 E2E_KEEP_WORKER_DB_ON_FAILURE=1）。
+#   - 启动时若发现已存在的 exam_e2e_w<N>（上次失败保留的取证现场，或崩溃
+#     泄漏），先 RENAME 为 exam_e2e_w<N>_prior 再创建全新库 —— 取证 artifact
+#     保持可查（每 worker 只保留最近一代），本运行绝不复用其执行状态。
+#     归档由 run_cleanup 之外的启动路径独占管理，cleanup 从不触碰 _prior。
+#   - 串行 exam_e2e 库持久保留（历史默认；--no-reseed 依赖它跨运行存在），
+#     脚本从不主动 DROP 它；RESEED=1（默认）时 seed 入口自带受守卫的
+#     mutable-state reset，使重跑收敛到 canonical baseline（见
+#     packages/db/src/e2eReset.ts）。DB identity 在可能失败的操作（migrate/
+#     seed/health）之前登记，确保任何退出路径 cleanup 都知道要清理/保留什么。
 #
-# 退出码：
-#   测试（playwright）或预检失败 → 退出码直传；清理失败仅作 stderr 诊断。
-#   测试通过但清理（compose down -v）失败 → sentinel 70（与 run-wsl 清理语义一致）。
-#   清理永不掩盖测试失败，也永不把失败的清理吞成 0。
+# 退出码：Playwright 退出码（任一 shard 失败则取最差非零）；若 cleanup 失败
+#   且测试本身通过，则用 sentinel 70 覆盖（见 run-lib.sh 的
+#   compute_final_exit）。cleanup 永不掩盖 Playwright 失败。INT/TERM 中断为
+#   130/143（signal_handler），参数组合非法为 2。
 
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+ORIG_CWD=$(pwd)
 
-# INVARIANT (compose authority): the Docker E2E topology is owned by exactly
-# one repository file — docker-compose.test.yml. This runner pins it; callers
-# remap HOST ports through the file's env authorities (EXAM_PORT /
-# DB_HOST_PORT / REDIS_HOST_PORT), never by layering another Compose file.
-PROJECT_NAME="${COMPOSE_PROJECT_NAME:-exam-e2e}"
-
-DO_BUILD=1
-BUILD_NO_CACHE=0
-KEEP_STACK="${KEEP_STACK:-0}"
+DEV_COMPOSE="${ROOT_DIR}/docker-compose.dev.yml"
+DEV_API_PORT="${DEV_API_PORT:-3000}"
+KEEP_SERVER="${KEEP_SERVER:-0}"
+RESEED=1
 GREP_PATTERN=""
 SPEC_KEYS=()
 EXTRA_PW_ARGS=()
 
-usage() {
-  sed -n '3,33p' "$0"
-}
+# ── 并行控制 ──────────────────────────────────────────────────────────
+# E2E_WORKERS：并行 shard 数。默认 2（与 CI 对齐）。
+#   >1 时：为每个 shard 启动独立 exam_e2e_w{N} 库 + 独立 API server（端口
+#          E2E_WORKER_BASE_PORT+i），跑 npx playwright test --shard=i/N。
+#          shard 之间完全隔离（DB/server/端口），文件级 serial 仍被尊重。
+#   =1 时：走原有单 server 单 exam_e2e 库路径（单 shard 模式）。
+# E2E_WORKER_BASE_PORT：并行 shard 的 API server 起始端口，默认 3100。
+# E2E_KEEP_WORKER_DB_ON_FAILURE：失败时保留 worker 库便于 debug（1/0）。
+E2E_WORKERS="${E2E_WORKERS:-2}"
+if [[ "$E2E_WORKERS" -gt 16 ]]; then
+  err "E2E_WORKERS=${E2E_WORKERS} 超过上限 16，拒绝启动（防资源耗尽）"
+  exit 2
+fi
+E2E_WORKER_BASE_PORT="${E2E_WORKER_BASE_PORT:-3100}"
+E2E_KEEP_WORKER_DB_ON_FAILURE="${E2E_KEEP_WORKER_DB_ON_FAILURE:-0}"
 
-# ----- 参数解析 -----
+log()  { printf '\033[1;36m[e2e-wsl]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[e2e-wsl]\033[0m %s\n' "$*" >&2; }
+err()  { printf '\033[1;31m[e2e-wsl]\033[0m %s\n' "$*" >&2; }
+
+usage() { sed -n '3,45p' "$0"; }
+
 while (( "$#" )); do
   case "$1" in
-    -h|--help)
-      usage; exit 0 ;;
-    --no-build)
-      DO_BUILD=0; shift ;;
-    --rebuild)
-      DO_BUILD=1; BUILD_NO_CACHE=1; shift ;;
-    --keep)
-      KEEP_STACK=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --no-reseed) RESEED=0; shift ;;
+    --keep-server) KEEP_SERVER=1; shift ;;
     --grep)
-      [[ $# -ge 2 ]] || { echo "ERROR: --grep needs a value" >&2; exit 2; }
+      [[ $# -ge 2 ]] || { err "--grep 需要参数"; exit 2; }
       GREP_PATTERN="$2"; shift 2 ;;
     --)
-      shift
-      while (( "$#" )); do EXTRA_PW_ARGS+=("$1"); shift; done ;;
-    -*)
-      EXTRA_PW_ARGS+=("$1"); shift ;;
-    *)
-      SPEC_KEYS+=("$1"); shift ;;
+      shift; while (( "$#" )); do EXTRA_PW_ARGS+=("$1"); shift; done ;;
+    -*) EXTRA_PW_ARGS+=("$1"); shift ;;
+    *) SPEC_KEYS+=("$1"); shift ;;
   esac
 done
 
-compose() {
-  # Single-file topology: docker-compose.test.yml is the whole Docker E2E
-  # authority — no caller-selectable layering (see the invariant above).
-  docker compose -f docker-compose.test.yml -p "$PROJECT_NAME" "$@"
-}
-
-log()  { printf '\033[1;36m[e2e]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[e2e]\033[0m %s\n' "$*" >&2; }
-err()  { printf '\033[1;31m[e2e]\033[0m %s\n' "$*" >&2; }
-
-# ----- 清理 -----
-# Exit-code priority matrix — same contract as run-wsl-lib.sh
-# compute_final_exit (issue #375):
+# ── 冻结拓扑输入（#571）───────────────────────────────────────────────
+# MANAGED E2E TOPOLOGY OWNERSHIP:
+#   runner/test invocation owns topology; root developer .env is intentionally
+#   ignored by Compose. Shell explicit values remain legitimate inputs.
 #
-#   tests | cleanup | final
-#   ------+---------+------
-#   pass  | pass    | 0
-#   fail  | pass    | test/preflight exit code
-#   pass  | fail    | 70 (cleanup-failure sentinel)
-#   fail  | fail    | test/preflight exit code; cleanup error to stderr
+# Why: Docker Compose automatically reads the project root `.env` when no
+# explicit mechanism disables it. The runner derives TEST_DATABASE_URL from
+# shell defaults, while Compose interpolates DB_HOST_PORT/REDIS_HOST_PORT/TZ/
+# APP_TIMEZONE from the root `.env` — producing split authority (runner URL
+# on port 5432, Compose publishes on a different port from .env).
 #
-# `exit` (not `return`) inside the handler is what publishes the final code —
-# a bare `return` would restore the pre-trap $? and drop the sentinel.
-# `trap - EXIT` prevents trap re-entry when `exit` fires inside the handler.
-cleanup() {
-  local code=$?
-  trap - EXIT
-  if [[ "$KEEP_STACK" == "1" ]]; then
-    warn "KEEP_STACK=1，保留 stack。手动清理：docker compose -f docker-compose.test.yml -p $PROJECT_NAME down -v"
-    exit "$code"
-  fi
-  log "清理 stack（含数据卷）..."
-  local down_out
-  if down_out="$(compose down -v --remove-orphans 2>&1)"; then
-    exit "$code"
-  fi
-  err "compose down -v 失败 (project=$PROJECT_NAME)。docker compose 输出："
-  printf '%s\n' "$down_out" >&2
-  err "手动清理：docker compose -f docker-compose.test.yml -p $PROJECT_NAME down -v"
-  if [[ "$code" -eq 0 ]]; then
-    err "测试通过但清理失败 → 以 sentinel 70 退出。"
-    exit 70
-  fi
-  warn "测试已失败 (exit=$code)，保留测试退出码；清理失败仅作诊断。"
-  exit "$code"
-}
-trap cleanup EXIT
-trap 'err "中断"; exit 130' INT TERM
+# Fix: COMPOSE_DISABLE_ENV_FILE=1 prevents Compose from reading the root
+# `.env`. The runner freezes each topology input once from shell/tester
+# input (or the managed default), then every consumer — URL derivation,
+# Compose interpolation, cleanup — derives from that frozen fact.
+#
+# Normal developer behavior is unchanged: `docker compose -f
+# docker-compose.dev.yml ...` without the managed runner still reads root
+# `.env` as before.
 
-# ----- 0. 预检 -----
-if ! command -v docker >/dev/null 2>&1; then
-  err "未找到 docker，请先安装 Docker"; exit 127
-fi
-if ! docker compose version >/dev/null 2>&1; then
-  err "未找到 docker compose（v2 plugin）"; exit 127
-fi
-
-# ----- 0.5. 宿主机端口占用检测 -----
-#
-# docker-compose.test.yml 把 app / db / redis 三个 host 端口暴露给宿主机
-# （EXAM_PORT / DB_HOST_PORT / REDIS_HOST_PORT）。如果宿主机上已经有别的
-# 进程在监听这些端口（常见情况：本地 `pnpm dev`、残留的
-# `pnpm --filter @exam/api start`、或 docker-compose.dev.yml 的 db/redis），
-# `docker compose up` 不会自动迁走它们：
-#   - 端口冲突时 compose 会报 bind 失败；
-#   - 但若宿主机上的旧进程刚好响应 health 探测，预检/Playwright 可能会无声地
-#     打到”假 app”，看到 rate-limit headers / 401 / 500 等无关行为。
-# 在 compose up 之前显式失败，能把”环境污染”变成可识别错误，而不是污染 E2E。
-#
-# 端口是配置值而不是拓扑变体 —— 用环境变量重映射，无需 override YAML：
-#   EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 \
-#     bash scripts/e2e/run.sh
-APP_HOST_PORT="${EXAM_PORT:-3000}"
+# Explicit shell/tester input → honor it; otherwise use managed defaults.
 DB_HOST_PORT="${DB_HOST_PORT:-5432}"
 REDIS_HOST_PORT="${REDIS_HOST_PORT:-6379}"
+TZ="${TZ:-Asia/Shanghai}"
+APP_TIMEZONE="${APP_TIMEZONE:-Asia/Shanghai}"
 
-port_owner() {
-  local port="$1"
-  # ss 优先，回退到 lsof，最后回退到无信息
-  if command -v ss >/dev/null 2>&1; then
-    ss -ltnp 2>/dev/null | awk -v p=":${port}\$" '$4 ~ p { print $0 }'
-  elif command -v lsof >/dev/null 2>&1; then
-    lsof -iTCP:"$port" -sTCP:LISTEN -nP 2>/dev/null | tail -n +2
+# Export frozen values so Compose interpolation and all downstream consumers
+# see the same managed topology. Export TZ and APP_TIMEZONE so the db/redis
+# containers receive the runner-selected timezone, not whatever the root
+# `.env` contained (before #571, Compose would read TZ from `.env` and
+# the runner had no way to know or control it).
+export DB_HOST_PORT REDIS_HOST_PORT TZ APP_TIMEZONE
+
+# Prevent Docker Compose from importing the developer root `.env` file.
+# This is runner-owned profile policy, not a tester-selectable topology knob:
+# even an inherited COMPOSE_DISABLE_ENV_FILE=0 must be overwritten.
+export COMPOSE_DISABLE_ENV_FILE=1
+
+# E2E 专用 env（runner 权威）。导出给 dev server + migrate +
+# seed 进程。WSL 快速 E2E 走独立的 exam_e2e 库（不是 dev 的 exam，也不是 vitest 的
+# exam_test），这样 reseed 只覆盖 e2e 数据，绝不污染 dev/vitest 库（AGENTS.md
+# "Local Database Discipline"）。APP_MODE=e2e 使 resolver 强制走
+# TEST_DATABASE_URL（test/e2e/ci 分支，绝不停退 DATABASE_URL），并自动关闭限流；
+# DATABASE_URL 显式 unset，防止残留的 dev URL 干扰（e2e 模式下 resolver 本来也不会读它）。
+E2E_DB_NAME="exam_e2e"
+export APP_MODE=e2e
+export TEST_DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT}/${E2E_DB_NAME}"
+export HEARTBEAT_TIMEOUT_MS=15000
+export HEARTBEAT_SCAN_INTERVAL_MS=5000
+export DEADLINE_SCAN_INTERVAL_MS=5000
+# 防止 shell 残留的 dev/prod DB 变量让 resolver 误走 dev 分支。
+# 不吞 unset 错误：readonly 变量会使 unset 失败，此时应停止而非带污染 env 继续。
+unset DATABASE_URL TEST_DB_URL
+
+# ── 共享 helper（串行 / 并行 shard 路径复用）──────────────────────────
+DB_BASE_URL_NO_NAME="postgresql://exam:exam@localhost:${DB_HOST_PORT}"
+
+# 每个库的唯一名前缀，便于失败时按前缀定位 worker 库。
+WORKER_DB_PREFIX="exam_e2e_w"
+SHARD_PIDS=()
+SHARD_LOGS=()
+SHARD_WORKER_DBS=()
+WORKER_DBS_SERIAL=()
+
+# Source the testable cleanup/cleanup-helper library. The lib defines:
+#   is_safe_worker_db_name, wait_for_process_exit, process_group_alive,
+#   stop_process_group, drop_worker_db_loud, run_cleanup,
+#   compute_final_exit, exit_handler, signal_handler, validate_run_flags
+# It owns ALL teardown ordering and the loud-DROP contract (issue #256-A):
+# the historical script dropped worker DBs before stopping the shard API
+# servers, and `>/dev/null 2>&1 || true` swallowed the resulting
+# "database is being accessed by other users" error, leaking exam_e2e_w*.
+# run_cleanup is wired to EXIT/INT/TERM below; the parallel path NO LONGER
+# drops DBs inline — run_cleanup does it after the servers are stopped.
+# shellcheck source=./run-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/run-lib.sh"
+
+# ── 参数组合校验（fail fast，任何副作用之前）────────────────────────────
+# --keep-server / --no-reseed 的保留/复用语义只在单 server 串行路径有定义。
+validate_run_flags "$RESEED" "$E2E_WORKERS" "$KEEP_SERVER" || exit 2
+
+# ensure_db_exists <db_name>：幂等创建库（连 exam 库执行 CREATE DATABASE）。
+ensure_db_exists() {
+  local db="$1" cid
+  cid="$(docker compose -f "$DEV_COMPOSE" ps -q db)"
+  if ! docker exec "$cid" psql -U exam -tAc \
+    "SELECT 1 FROM pg_database WHERE datname='${db}'" | grep -q 1; then
+    docker exec "$cid" psql -U exam -c "CREATE DATABASE ${db}" >/dev/null
   fi
 }
 
-ensure_host_port_free() {
-  local port="$1" label="$2" env_name="$3"
-  local owner
-  owner="$(port_owner "$port" || true)"
-  if [[ -z "$owner" ]]; then
-    return 0
-  fi
-  # compose 项目里自身的容器占用是 OK 的（重复运行同一个 stack）。
-  # 检查是不是已经有同 project_name 的 app 容器在用：如果是，让 compose up 处理。
-  local cid
-  cid="$(compose ps -q app 2>/dev/null || true)"
-  if [[ -n "$cid" ]]; then
-    return 0
-  fi
-  err "宿主机 :${port} (${label}) 已被占用，本脚本不会接管它："
-  while IFS= read -r line; do err "  $line"; done <<< "$owner"
-  err ""
-  err "可能原因："
-  err "  - 本地 'pnpm dev' / 'pnpm --filter @exam/api start' 还在跑"
-  err "  - docker-compose.dev.yml 的 stack 没停"
-  err "  - 其他服务占用了同名端口"
-  err "处理建议（任选其一）："
-  err "  1) 停掉占用进程：lsof -iTCP:${port} -sTCP:LISTEN | tail -n +2"
-  err "  2) 停 dev compose：pnpm db:down（或 docker compose -f docker-compose.dev.yml down -v）"
-  # 指引必须指向这个端口自己的 env 权威 —— db/redis 冲突时让用户改 EXAM_PORT
-  # 是错误指引（deployment-topology-contract.mjs 的 MG2 不变量）。
-  err "  3) 改用其他端口：${env_name}=3001 bash scripts/e2e/run.sh"
-  return 1
-}
+# migrate_db <db_url>：对指定库跑 migrate（stderr 保留）。
+# APP_MODE=e2e 下 resolver 走 TEST_DATABASE_URL（test/e2e/ci 分支）。
+migrate_db() { TEST_DATABASE_URL="$1" pnpm --filter @exam/api exec tsx src/scripts/migrate.ts 1>/dev/null; }
 
-if ! ensure_host_port_free "$APP_HOST_PORT" "app" EXAM_PORT; then
-  exit 1
-fi
-if ! ensure_host_port_free "$DB_HOST_PORT" "db" DB_HOST_PORT; then
-  exit 1
-fi
-# docker-compose.test.yml 同样发布 redis（REDIS_HOST_PORT）—— 碰撞模型
-# 必须覆盖全部三个 host 端口权威，不允许第二个硬编码机制。
-if ! ensure_host_port_free "$REDIS_HOST_PORT" "redis" REDIS_HOST_PORT; then
-  exit 1
-fi
+# seed_db <db_url>：对指定库跑 e2e seed（idempotent）。
+seed_db()   { TEST_DATABASE_URL="$1" pnpm --filter @exam/api exec tsx src/e2e-seed.ts >/dev/null; }
 
-# ----- 1. 构建 app 镜像 -----
-if [[ "$DO_BUILD" == "1" ]]; then
-  if [[ "$BUILD_NO_CACHE" == "1" ]]; then
-    log "构建 app 镜像（--no-cache）..."
-    compose build --no-cache app
+# launch_api <db_url> <port> <log_file>：后台起一个 dev server，pid 写入全局
+# launch_api <db_url> <port> <log_file> <mode>：后台起一个 API server，pid 写入
+# 全局 LAUNCHED_PID（不通过 stdout，避免 $(...) 命令替换把后台进程跑在立即退出
+# 的子 shell 里）。mode=dev 用 tsx watch（本地单 server 串行路径，保留热重载）；
+# mode=start 用构建产物 node dist/server.js（并行 shard 路径——避免 tsx watch 在
+# 多 server 共享源码树时互相触发重启，打断 disconnect-restore 等 15s 心跳 spec）。
+# 使用 setsid 建独立进程组，便于 cleanup 时 kill -- -PID 整组。
+LAUNCHED_PID=""
+launch_api() {
+  local db_url="$1" port="$2" logfile="$3" mode="${4:-dev}"
+  local cmd
+  if [[ "$mode" == "start" ]]; then
+    cmd=(pnpm --filter @exam/api start)
   else
-    log "构建 app 镜像..."
-    compose build app
+    cmd=(pnpm --filter @exam/api dev)
   fi
-else
-  log "跳过构建（--no-build）"
-fi
-
-# ----- 2. 启动 db + app（app 内置 entrypoint：migrate + RUN_SEED=1 → seed） -----
-log "启动 db 与 app..."
-compose up -d db app
-
-# ----- 3. 等待 app health -----
-log "等待 app 健康..."
-APP_CID="$(compose ps -q app)"
-if [[ -z "$APP_CID" ]]; then
-  err "未找到 app 容器"; exit 1
-fi
-
-# 健康检查 start_period=30s + 3 retries × 30s ≈ 最长 ~120s。给 180s 余量。
-DEADLINE=$((SECONDS + 180))
-last_status=""
-while (( SECONDS < DEADLINE )); do
-  status="$(docker inspect -f '{{.State.Health.Status}}' "$APP_CID" 2>/dev/null || echo "unknown")"
-  if [[ "$status" != "$last_status" ]]; then
-    log "  app 状态: $status"
-    last_status="$status"
-  fi
-  case "$status" in
-    healthy) break ;;
-    unhealthy)
-      err "app 进入 unhealthy"
-      compose logs --tail=200 app || true
-      exit 1
-      ;;
-  esac
-  sleep 2
-done
-if [[ "$last_status" != "healthy" ]]; then
-  err "app 在 180s 内未变 healthy（last=$last_status）"
-  compose logs --tail=200 app || true
-  exit 1
-fi
-log "app healthy ✓ (entrypoint 已执行 migrate + seed)"
-
-# ----- 3.5. 预检：confirm canonical E2E seed + no rate-limit drift -----
-#
-# 预检走 docker 内网 (http://127.0.0.1:3000 inside the app container) —
-# 与 Playwright 容器的 http://app:3000 走同一条 Fastify 入口、同一份 server，
-# 不依赖宿主机端口映射，避免“主机网络 500 / 内网 200”这种歧义。
-preflight() {
-  log "预检 1/3: GET /api/health (in-network via app container)"
-  if ! compose exec -T app node -e '
-    fetch("http://127.0.0.1:3000/api/health")
-      .then(r => { if (!r.ok) { console.error("status="+r.status); process.exit(1); } })
-      .catch(e => { console.error(e.message); process.exit(1); });
-  ' >/dev/null 2>&1; then
-    err "预检失败: /api/health unreachable inside app container"
-    return 1
-  fi
-
-  log "预检 2/3: 候选账号登录 (admin + candidate1..4，无 429)"
-  if ! compose exec -T \
-      -e PREFLIGHT_USERS='admin:admin123,candidate1:candidate123,candidate2:candidate123,candidate3:candidate123,candidate4:candidate123' \
-      app node -e '
-    const users = process.env.PREFLIGHT_USERS.split(",").map(p => p.split(":"));
-    (async () => {
-      for (const [username, password] of users) {
-        const r = await fetch("http://127.0.0.1:3000/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        });
-        if (r.status === 200) continue;
-        const body = await r.text();
-        if (r.status === 401) {
-          console.error("[e2e] demo seed missing: " + username + " returned 401");
-        } else if (r.status === 429) {
-          console.error("[e2e] rate limit active in APP_MODE=e2e: " + username + " returned 429");
-        } else {
-          console.error("[e2e] preflight: " + username + " returned unexpected status=" + r.status);
-        }
-        console.error(body);
-        process.exit(1);
-      }
-    })().catch(e => { console.error(e.stack || e.message); process.exit(1); });
-  '; then
-    return 1
-  fi
-
-  log "预检 3/3: 重复 admin 登录 5 次 (确保 rate-limit 已禁用)"
-  if ! compose exec -T app node -e '
-    (async () => {
-      for (let i = 1; i <= 5; i++) {
-        const r = await fetch("http://127.0.0.1:3000/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: "admin", password: "admin123" }),
-        });
-        if (r.status === 429) {
-          console.error("[e2e] rate limit active in APP_MODE=e2e: admin returned 429 on attempt " + i);
-          process.exit(1);
-        }
-        if (r.status !== 200) {
-          console.error("[e2e] preflight: repeated admin login returned " + r.status + " on attempt " + i);
-          process.exit(1);
-        }
-      }
-    })().catch(e => { console.error(e.stack || e.message); process.exit(1); });
-  '; then
-    return 1
-  fi
-
-  log "预检通过 ✓ (canonical E2E seed + 无速率限制)"
-  return 0
+  # 身份一次性链接由本 API 进程按 PUBLIC_WEB_ORIGIN 生成绝对 URL，浏览器
+  # 随后直接 goto 该 URL；origin 必须是本进程端口（SPA 由 API 进程自己服务），
+  # 缺省时 runtime config 会回退到 Vite dev origin(:5173)，那里无进程监听。
+  # APP_PORT 必须显式跟随 shard 端口：e2e 模式的 bind-port owner 是
+  # APP_PORT ?? DEV_API_PORT（runtimeConfig.resolveApiBindPort），而 dotenv
+  # 加载的根 .env 不覆盖已存在的 process.env——deploy 风格 .env 遗留的
+  # APP_PORT=3000 会让所有 shard 绑同一端口（EADDRINUSE / 健康检查错位）。
+  DEV_API_PORT="$port" APP_PORT="$port" TEST_DATABASE_URL="$db_url" \
+    PUBLIC_WEB_ORIGIN="http://localhost:${port}" \
+    APP_MODE=e2e \
+    HEARTBEAT_TIMEOUT_MS=15000 HEARTBEAT_SCAN_INTERVAL_MS=5000 DEADLINE_SCAN_INTERVAL_MS=5000 \
+    setsid "${cmd[@]}" >"$logfile" 2>&1 &
+  LAUNCHED_PID=$!
 }
 
-if ! preflight; then
-  err "E2E preflight 失败 — 不会启动 Playwright"
-  warn "app 最近日志："
-  compose logs --tail=200 app || true
-  exit 1
-fi
-
-# ----- 4. 组装 playwright 参数 -----
-PW_ARGS=(npx playwright test --reporter=list)
-
-# spec 关键字 → 解析为 e2e/<file>
-if (( ${#SPEC_KEYS[@]} > 0 )); then
-  log "spec 选择: ${SPEC_KEYS[*]}"
-  shopt -s nullglob
-  matched=()
-  for key in "${SPEC_KEYS[@]}"; do
-    found=0
-    for f in apps/e2e/e2e/*.spec.ts; do
-      base="$(basename "$f")"
-      if [[ "$base" == "$key" || "$base" == "$key.spec.ts" || "$base" == *"$key"* ]]; then
-        matched+=("e2e/$base"); found=1
-      fi
-    done
-    if (( found == 0 )); then
-      err "spec 关键字未匹配: $key"
-      err "可选 spec："
-      for f in apps/e2e/e2e/*.spec.ts; do err "  - $(basename "$f")"; done
-      exit 2
+# wait_health <port> <pid> <log_file>：轮询 health，失败打印日志并返回非零。
+wait_health() {
+  local port="$1" pid="$2" logfile="$3" i
+  for i in $(seq 1 60); do
+    if curl -sf "http://localhost:${port}/api/health" >/dev/null 2>&1; then return 0; fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+      err "api server(:${port}) 进程退出。日志："; tail -30 "$logfile" >&2; return 1
     fi
+    sleep 1
   done
-  # 去重
-  IFS=$'\n' matched=($(printf '%s\n' "${matched[@]}" | awk '!seen[$0]++'))
-  unset IFS
-  PW_ARGS+=("${matched[@]}")
-else
-  log "spec 选择: 全跑（apps/e2e/e2e/*.spec.ts）"
-fi
+  err "api(:${port}) 60s 内未健康。日志："; tail -30 "$logfile" >&2; return 1
+}
 
-if [[ -n "$GREP_PATTERN" ]]; then
-  PW_ARGS+=(--grep "$GREP_PATTERN")
-fi
+build_assets() {
+  log "构建前端 + API + 同步 apps/api/public..."
+  pnpm --filter @exam/web build >/dev/null
+  pnpm --filter @exam/api build >/dev/null
+  rm -rf apps/api/public
+  cp -r apps/web/dist apps/api/public
+}
 
-if (( ${#EXTRA_PW_ARGS[@]} > 0 )); then
+# ────────────────────────────────────────────────────────────────────
+
+# 预检
+command -v pnpm >/dev/null 2>&1 || { err "未找到 pnpm"; exit 127; }
+command -v docker >/dev/null 2>&1 || { err "未找到 docker"; exit 127; }
+
+# 记录 dev compose 在 run.sh 启动前的状态，cleanup 时恢复原状：
+# 跑前已运行的，不关；由本脚本启动的，跑完关掉（含数据卷）。
+# 注意：不能用 `docker compose ps -q db` 的退出码判断——它在「无容器运行」时
+# 仍返回 exit 0（stdout 为空），会导致本变量恒为 1，cleanup 永不关 compose。
+# 必须以 stdout 非空作为「确实有容器在跑」的判据。
+DEV_COMPOSE_WAS_UP=0
+if [[ -n "$(docker compose -f "$DEV_COMPOSE" ps -q db 2>/dev/null || true)" ]]; then
+  DEV_COMPOSE_WAS_UP=1
+fi
+API_PID=""
+# FROZEN_EXIT is set by the run phases before any trap can fire; run_cleanup +
+# compute_final_exit read it. Defaults to 0 if the script exits early (e.g.
+# migrate failure → `exit 1` below sets it first).
+FROZEN_EXIT=0
+CLEANUP_FAILURE=0
+CLEANUP_DONE=0
+CLEANUP_RUNNING=0
+
+# ── Unified cleanup (issue #256-A) ────────────────────────────────────────
+# All teardown is owned by run_cleanup (from run-lib.sh). The EXIT trap
+# freezes the real exit code (FROZEN_EXIT) BEFORE running cleanup, runs
+# cleanup once, then calls compute_final_exit to pick the priority-matrix
+# code (Playwright code wins; cleanup failure can only escalate 0 → 70).
+# INT/TERM freeze 130/143 and run the SAME cleanup via the EXIT trap
+# (`exit` from a signal handler triggers EXIT), so signals never bypass DB
+# teardown and the trap chain is single. exit_handler/signal_handler live in
+# the lib so the real handler chain is unit-tested.
+trap exit_handler EXIT
+trap 'signal_handler INT'  INT
+trap 'signal_handler TERM' TERM
+
+# 1. dev compose（db + redis）——串行/并行共用。
+log "启动 dev compose (db + redis)..."
+docker compose -f "$DEV_COMPOSE" up -d --wait >/dev/null
+
+# 1b. 清理 test-results/playwright-report（可能含 Docker run 残留的 root 拥有文件）。
+docker run --rm -v "$ROOT_DIR/apps/e2e:/data" alpine \
+  sh -c "rm -rf /data/test-results /data/playwright-report" 2>/dev/null || true
+
+build_assets
+
+# ── 公共 Playwright 参数组装（spec 选择 / grep / 额外参数）────────────
+assemble_pw_args() {
+  PW_ARGS=()
+  if [[ -n "$GREP_PATTERN" ]]; then PW_ARGS+=(--grep "$GREP_PATTERN"); fi
+  for k in "${SPEC_KEYS[@]:-}"; do [[ -n "$k" ]] && PW_ARGS+=("$k"); done
   PW_ARGS+=("${EXTRA_PW_ARGS[@]}")
+}
+
+# ════════════════════════════════════════════════════════════════════
+# 分支：E2E_WORKERS
+# ════════════════════════════════════════════════════════════════════
+if [[ "$E2E_WORKERS" -le 1 ]]; then
+  # ── 串行路径（原行为）──────────────────────────────────────────────
+  E2E_DB_NAME="exam_e2e"
+
+  # Register the DB identity BEFORE any failing operation (ensure/migrate/
+  # seed/health): the EXIT-trap cleanup must know exam_e2e on every exit path
+  # (issue #256-A review P1-1). Serial exam_e2e persists across runs by
+  # default (--no-reseed depends on it), so cleanup never drops it — the
+  # registration drives the failure-retention diagnostics.
+  WORKER_DBS_SERIAL=("$E2E_DB_NAME")
+
+  # 确保 exam_e2e 库存在
+  ensure_db_exists "$E2E_DB_NAME"
+
+  log "迁移 ${E2E_DB_NAME} 库..."
+  migrate_db "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}"
+
+  if [[ "$RESEED" == "1" ]]; then
+    log "E2E seed (baseline + demo)..."
+    seed_db "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}"
+  else
+    warn "跳过 seed（--no-reseed），复用现有数据"
+  fi
+
+  log "启动 api dev server (:$DEV_API_PORT, APP_MODE=e2e, fast scanners)..."
+  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log
+  API_PID="$LAUNCHED_PID"
+
+  log "等待 api 健康..."
+  wait_health "$DEV_API_PORT" "$API_PID" /tmp/e2e-wsl-api.log || exit 1
+
+  log "运行 Playwright（WSL 本地，workers=1）..."
+  cd apps/e2e
+  assemble_pw_args
+  set +e
+  E2E_BASE_URL="http://localhost:${DEV_API_PORT}" npx playwright test "${PW_ARGS[@]}" --reporter=list
+  # Freeze Playwright's real exit code; the EXIT trap (exit_handler) will
+  # run_cleanup (stop server → keep persistent exam_e2e → artifacts) and
+  # compute the final priority-matrix code. We must NOT `exit $?` directly —
+  # that would skip freezing and the trap would see the wrong FROZEN_EXIT.
+  FROZEN_EXIT=$?
+  set -e
+  exit "$FROZEN_EXIT"
 fi
 
-# ----- 5. 跑 e2e 容器 -----
-# e2e 容器共享 app 容器的网络命名空间（docker-compose.test.yml 的
-# network_mode: service:app），浏览器直接访问 http://localhost:3000。必须是
-# localhost 而不是 app 容器 IP/别名：
-#   1. Chromium 对字面量主机名 `app` 有 HSTS 预加载 → 强制 HTTPS →
-#      ERR_SSL_PROTOCOL_ERROR（app 仅纯 HTTP）。
-#   2. 非 localhost 的明文 HTTP 不是 secure context，navigator.locks 为
-#      undefined，PendingGrantCoordinator 会 fail-closed，所有加时弹窗
-#      spec（recovery-time-grant / recovery-operations-a11y /
-#      cross-tab）都会失败。localhost 是 potentially-trustworthy origin。
-E2E_BASE_URL_VALUE="http://localhost:3000"
+# ── 并行 shard 路径（E2E_WORKERS>1）────────────────────────────────────
+# 每个 shard = 独立 exam_e2e_w{N} 库 + 独立 API server（端口 BASE+i）。
+# Playwright 以 file-level granularity 切分 shard（fullyParallel:false），保证
+# 同一文件内的 serial 顺序不被打断；不同 shard 的 candidate/attempt/audit 完全
+# 隔离（不同库）。汇总所有 shard 退出码：任一非零则整体失败。
+log "并行模式：E2E_WORKERS=${E2E_WORKERS}，每 shard 独立 DB + server。"
 
-log "执行 Playwright: ${PW_ARGS[*]}"
-set +e
-compose run --rm \
-  -e E2E_BASE_URL="$E2E_BASE_URL_VALUE" \
-  -e CI="${CI:-1}" \
-  e2e sh -lc '
+# 1. 为每个 shard 建库（幂等）。顺序固定为「先归档 → 后 claim → 再创建」：
+#    - 启动前若同名库已存在（失败保留/崩溃泄漏的取证现场），先归档为
+#      *_prior 再建全新库 —— 保留取证 ≠ 复用执行状态（issue #330）。
+#    - DB identity 只在归档成功之后登记（#330 review P1-2）：归档失败 →
+#      exit 1 时，同名库是上一轮遗留的取证现场、尚未被本轮 claim，EXIT
+#      cleanup 无权 DROP 它。若先登记再归档，归档失败的退出路径会把这个
+#      取证现场当作本轮 ephemeral 库清掉，毁灭取证证据。
+#    - 登记仍在 ensure/migrate/seed/health 等可能失败的操作之前（issue
+#      #256-A review P1-1），任何退出路径 cleanup 都知道要清理哪些库。
+ARCHIVE_CID="$(docker compose -f "$DEV_COMPOSE" ps -q db)"
+for (( i=0; i<E2E_WORKERS; i++ )); do
+  if ! archive_retained_worker_db "$ARCHIVE_CID" "${WORKER_DB_PREFIX}${i}"; then
+    err "归档遗留 worker 库 ${WORKER_DB_PREFIX}${i} 失败，拒绝在不干净的基线上继续"
+    exit 1
+  fi
+  SHARD_WORKER_DBS+=("${WORKER_DB_PREFIX}${i}")
+  ensure_db_exists "${WORKER_DB_PREFIX}${i}"
+done
+
+# 2. 并行 migrate + seed 每个 shard 库（后台）。RESEED=0 时跳过 seed。
+log "并行 migrate + seed ${E2E_WORKERS} 个 worker 库..."
+MIG_PIDS=()
+for (( i=0; i<E2E_WORKERS; i++ )); do
+  (
     set -e
-    # The e2e container resolves @playwright/test and @exam/* through the
-    # workspace pnpm symlink farm: node_modules is bind-mounted read-only
-    # alongside /app/packages (see docker-compose.test.yml). An in-container
-    # `npm install` is impossible — apps/e2e/package.json declares pnpm
-    # `workspace:*` devDependencies and npm aborts with
-    # EUNSUPPORTEDPROTOCOL, which (with output redirected) silently killed
-    # this whole path since d91e401e. Fail loudly when the mount is missing.
-    if [ ! -e node_modules/@playwright/test ]; then
-      echo "[e2e] node_modules/@playwright/test is not resolvable inside the container." >&2
-      echo "[e2e] Run pnpm install at the repo root, then retry." >&2
-      exit 1
-    fi
-    exec "$@"
-  ' _ "${PW_ARGS[@]}"
-EXIT_CODE=$?
+    local_url="${DB_BASE_URL_NO_NAME}/${WORKER_DB_PREFIX}${i}"
+    migrate_db "$local_url"
+    if [[ "$RESEED" == "1" ]]; then seed_db "$local_url"; fi
+  ) >/tmp/e2e-wsl-w${i}-migrate.log 2>&1 &
+  MIG_PIDS+=($!)
+done
+MIG_FAIL=0
+for (( i=0; i<E2E_WORKERS; i++ )); do
+  if ! wait "${MIG_PIDS[$i]}"; then
+    err "shard $((i+1)) migrate/seed 失败（db=${WORKER_DB_PREFIX}${i}）。日志："
+    tail -30 /tmp/e2e-wsl-w${i}-migrate.log >&2
+    MIG_FAIL=1
+  fi
+done
+[[ "$MIG_FAIL" -eq 1 ]] && exit 1
+
+# 3. 启动每个 shard 的 API server。
+log "启动 ${E2E_WORKERS} 个 api dev server（端口 ${E2E_WORKER_BASE_PORT}..$((E2E_WORKER_BASE_PORT+E2E_WORKERS-1))）..."
+for (( i=0; i<E2E_WORKERS; i++ )); do
+  local_url="${DB_BASE_URL_NO_NAME}/${WORKER_DB_PREFIX}${i}"
+  local_port=$((E2E_WORKER_BASE_PORT+i))
+  logfile="/tmp/e2e-wsl-w${i}-api.log"
+  SHARD_LOGS+=("$logfile")
+  # start 模式：用构建产物 node dist/server.js（无 tsx watch 文件监听），
+  # 避免多 server 共享源码树时互相触发重启。
+  launch_api "$local_url" "$local_port" "$logfile" start
+  SHARD_PIDS+=("$LAUNCHED_PID")
+done
+
+# 4. 等所有 shard server 健康。
+for (( i=0; i<E2E_WORKERS; i++ )); do
+  local_port=$((E2E_WORKER_BASE_PORT+i))
+  log "等待 shard $((i+1)) api 健康 (:${local_port}, db=${WORKER_DB_PREFIX}${i})..."
+  wait_health "$local_port" "${SHARD_PIDS[$i]}" "${SHARD_LOGS[$i]}" || exit 1
+done
+
+# 5. 并行跑 N 个 shard。每个 shard 一个 Playwright 进程，--shard=i/N，独立 baseURL。
+log "并行运行 ${E2E_WORKERS} 个 Playwright shard..."
+cd apps/e2e
+assemble_pw_args
+# 给 shard 进程建独立进程组（setsid），便于 cleanup。
+# 每个 shard 输出到独立目录，避免并发写冲突。
+run_pids=()
+# `set +e`: a shard failure returns nonzero from `wait` below; we must NOT let
+# `set -e` abort before we freeze the worst Playwright exit code. set -e is
+# restored right after the wait loop.
+set +e
+for (( i=0; i<E2E_WORKERS; i++ )); do
+  local_port=$((E2E_WORKER_BASE_PORT+i))
+  local_url="${DB_BASE_URL_NO_NAME}/${WORKER_DB_PREFIX}${i}"
+  shard_out_dir="test-results/shard-${i}"
+  mkdir -p "$shard_out_dir"
+  (
+    E2E_BASE_URL="http://localhost:${local_port}" \
+      E2E_SHARD_TOTAL="$E2E_WORKERS" \
+      PLAYWRIGHT_BLOB_OUTPUT_DIR="blob-report/shard-${i}" \
+      E2E_TEST_DATABASE_URL="$local_url" \
+      setsid npx playwright test "${PW_ARGS[@]}" \
+      --shard="$((i+1))/${E2E_WORKERS}" \
+      --output="$shard_out_dir" \
+      >/tmp/e2e-wsl-w${i}-pw.log 2>&1
+  ) &
+  # 捕获 setsid 子进程 pid
+  run_pids+=($!)
+done
+
+# 6. 汇总退出码（任一 shard 非零则整体失败）。
+WORST=0
+for (( i=0; i<E2E_WORKERS; i++ )); do
+  if wait "${run_pids[$i]}"; then
+    log "shard $((i+1))/${E2E_WORKERS} 通过 ✓"
+  else
+    ec=$?
+    err "shard $((i+1))/${E2E_WORKERS} 失败 (exit=$ec)。Playwright 日志："
+    tail -40 /tmp/e2e-wsl-w${i}-pw.log >&2 || true
+    WORST=$ec
+  fi
+done
 set -e
 
-if [[ $EXIT_CODE -eq 0 ]]; then
-  log "E2E 通过 ✓"
-else
-  err "E2E 失败 (exit=$EXIT_CODE)"
-  warn "app 最近日志："
-  compose logs --tail=200 app || true
+# 7. 合并 blob report（各 shard 的 blob 合为一份 HTML report）。
+if ls blob-report/shard-*/report-*.zip >/dev/null 2>&1; then
+  log "合并 ${E2E_WORKERS} 个 blob report..."
+  BLOB_MERGE_DIR="blob-report/merged"
+  rm -rf "$BLOB_MERGE_DIR"
+  mkdir -p "$BLOB_MERGE_DIR"
+  cp blob-report/shard-*/report-*.zip "$BLOB_MERGE_DIR/"
+  npx playwright merge-reports --reporter html "$BLOB_MERGE_DIR" >/dev/null 2>&1 || \
+    warn "merge-reports 失败（单个 shard 空结果时可忽略）"
+  log "HTML report: apps/e2e/playwright-report/index.html"
 fi
 
-exit $EXIT_CODE
+# 8. 切回 root dir（cleanup 中 docker compose down 需要正确 project context）。
+cd "$ORIG_CWD"
+
+# 9. Freeze the worst Playwright exit code and exit. The EXIT trap
+# (exit_handler → run_cleanup) now owns ALL teardown in the correct order:
+#   stop shard servers (process groups, bounded wait)
+#   → drop worker DBs (loud; no `|| true`)
+#   → remove temp logs (success path only)
+#   → compose down (if this script started it)
+# This replaces the OLD inline `drop_db_if_allowed` loop that ran BEFORE the
+# servers were stopped (issue #256-A root cause). Cleanup failure is folded
+# into the final code by compute_final_exit per the priority matrix.
+FROZEN_EXIT="$WORST"
+exit "$WORST"

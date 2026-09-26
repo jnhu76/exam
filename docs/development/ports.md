@@ -28,7 +28,7 @@ Notes:
   tooling never reads `.env.deploy`. Tests keep their own `.env.test.local`
   (from `.env.test.example`).
 - **Managed WSL E2E topology** (issue #571): The runner
-  (`scripts/e2e/run-wsl.sh`) sets `COMPOSE_DISABLE_ENV_FILE=1` before any
+  (`scripts/e2e/run.sh`) sets `COMPOSE_DISABLE_ENV_FILE=1` before any
   Compose invocation, so the developer root `.env` is intentionally ignored by
   managed E2E Compose. The runner freezes `DB_HOST_PORT`, `REDIS_HOST_PORT`,
   `TZ`, and `APP_TIMEZONE` once from shell input (or managed defaults) and
@@ -36,7 +36,7 @@ Notes:
   the same values. Normal development (`docker compose -f docker-compose.dev.yml
   ...` without the runner) still reads root `.env` as before. To override ports
   for managed E2E, pass them as shell env vars:
-  `DB_HOST_PORT=25432 bash scripts/e2e/run-wsl.sh`.
+  `DB_HOST_PORT=25432 bash scripts/e2e/run.sh`.
 - `APP_PORT` is container-internal only ("current API process bind port",
   fixed at 3000 in every Compose file and the Dockerfile). It is never a host
   publish port; host publishing is `EXAM_PORT`.
@@ -46,7 +46,8 @@ Notes:
     pre-split `.env` is deliberately ignored.
   - `production` → `APP_PORT` (default 3000) — the container identity.
   - test-like (`test`/`e2e`/`ci`) → `APP_PORT` when a container runner sets it
-    (Docker E2E), else `DEV_API_PORT` (WSL E2E shards).
+    (production/Docker shapes), else `DEV_API_PORT` (host-native E2E shards,
+    set by `scripts/e2e/run.sh` launch_api).
 - In dev, an unset `DATABASE_URL` is constructed from `DB_HOST_PORT`
   (`postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam`, the
   `docker-compose.dev.yml` contract). An explicit `DATABASE_URL` (external

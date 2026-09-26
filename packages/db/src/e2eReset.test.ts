@@ -13,7 +13,7 @@
  *                            historical behavior, pinned as intentional)
  *
  * The tests run against a dedicated `exam_e2e_w31` database — slot 31 is
- * beyond run-wsl.sh's E2E_WORKERS cap (16 → w0..w15), so the real harness
+ * beyond run.sh's E2E_WORKERS cap (16 → w0..w15), so the real harness
  * never manages this name and cannot collide with a live run. The database
  * is created and dropped per test-file run through the same guarded helpers
  * the vitest worker-DB isolation uses.

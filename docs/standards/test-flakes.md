@@ -1862,7 +1862,7 @@ Error: Test timed out in 5000ms.
 
 - 文件：`apps/e2e/e2e/assignment-affordances.spec.ts`
 - 用例：`Story C: a course beyond the first 100 is reachable via catalog search and assignable (issue 548 corrective)`
-- 调用：`bash scripts/e2e/run-wsl.sh`（全量，2 shard，宿主 dev server + Playwright）
+- 调用：`bash scripts/e2e/run.sh`（全量，2 shard，宿主 dev server + Playwright）
 
 ### 错误
 
@@ -1909,7 +1909,7 @@ transport 错误（连接被拒/重置），而不是 4xx/5xx 语义失败（语
 ### 复发记录
 
 - 2026-09-24：#601 Phase F 全量 E2E（2 shard）单次出现（1/94）；同代码聚焦复跑
-  `run-wsl.sh data-view-1 table-contract-2 assignment-affordances` 两个 shard 全绿。
+  `run.sh data-view-1 table-contract-2 assignment-affordances` 两个 shard 全绿。
 
 ---
 
@@ -1954,7 +1954,7 @@ transport 错误（连接被拒/重置），而不是 4xx/5xx 语义失败（语
 ### 失败位置
 
 - 文件：`apps/e2e/e2e/admin-flow.spec.ts`（:210）与 `apps/e2e/e2e/data-view-1.spec.ts`（:519，B compressed inline panel）
-- 调用：`bash scripts/e2e/run-wsl.sh`（全量，2 shard）
+- 调用：`bash scripts/e2e/run.sh`（全量，2 shard）
 - 同一轮 `pnpm verify` 期间还确认了 `src/server.shutdown.test.ts` 的 `EADDRINUSE
   127.0.0.1:3000`：该用例子进程以 `NODE_ENV=development` 启动，而 development 模式
   的端口所有权是 `DEV_API_PORT ?? 3000`（`runtimeConfig.ts`，`APP_PORT` 被有意忽略），

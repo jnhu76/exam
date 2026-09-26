@@ -172,7 +172,7 @@ pnpm dev
 pnpm test
 pnpm verify
 pnpm lint:md
-bash scripts/e2e/run-wsl.sh
+bash scripts/e2e/run.sh
 ```
 
 Database lifecycle and environment discipline are authoritative in

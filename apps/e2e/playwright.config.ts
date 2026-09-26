@@ -6,7 +6,7 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 // parallel via run-script sharding (E2E_WORKERS>1). NOTE: parallel execution
 // is NOT enabled by raising Playwright `workers` here — that would share one
 // DB/server across workers and collide on candidate1/audit-log state. Parallel
-// mode instead launches N independent Playwright shards (run-wsl.sh), each with
+// mode instead launches N independent Playwright shards (scripts/e2e/run.sh), each with
 // its own exam_e2e_w{i} DB + API server. `workers` stays 1 per shard so each
 // shard's files run in their declared order (file-level serial respected).
 const workers = Number(process.env.E2E_WORKERS_PER_SHARD) || 1;

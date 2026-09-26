@@ -135,6 +135,7 @@ echo "=== #547 readiness gate run #${RUN_NUM} (project: ${PROJECT}) ==="
 
 # ── D1: healthy baseline (fresh up exercises the depends_on gate) ─────────
 echo "--- D1: healthy baseline ---"
+ensure_source_images
 D1_UP="$(run_compose "${PROJECT}" up -d 2>&1 || true)"
 echo "${D1_UP}" | sed 's/^/  /'
 if echo "${D1_UP}" | grep -q "db-1.*Healthy"; then

@@ -8,9 +8,9 @@ services:
     # Operator path: prebuilt semantic image, pinned by EXAM_IMAGE in the
     # deployment env file (generate-env.mjs derives the default from
     # .release-version — the single version authority). Contributors / PR
-    # acceptance merge docker-compose.build.yml to build THIS checkout
-    # instead (pull_policy: build — a cached registry image can never fake
-    # source acceptance).
+    # acceptance build THIS checkout explicitly and run this file against
+    # the local pin (tests/deployment/lib.sh ensure_source_images — #626;
+    # a cached registry image can never fake source acceptance).
     image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}
     ports:
       - "${EXAM_PORT:-3000}:3000"

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# scripts/e2e/run-wsl-lib.sh
+# scripts/e2e/run-lib.sh
 #
-# Pure, side-effect-free Bash helpers for scripts/e2e/run-wsl.sh, extracted so
-# they can be unit-tested (scripts/e2e/run-wsl-lib.test.sh, driven by
-# run-wsl-lib.test.mjs via `bash`).
+# Pure, side-effect-free Bash helpers for scripts/e2e/run.sh, extracted so
+# they can be unit-tested (scripts/e2e/run-lib.test.sh, driven by
+# run-lib.test.mjs via `bash`).
 #
 # This file MUST NOT execute any work at the top level — it only defines
 # functions. It is intended to be `source`d.
 #
 # Why a separate library:
-#   The historical run-wsl.sh dropped worker DBs *before* stopping the shard
+#   The historical run.sh dropped worker DBs *before* stopping the shard
 #   API servers (issue #256-A). PostgreSQL refuses DROP DATABASE while
 #   connections are open, and the failure was swallowed by
 #   `>/dev/null 2>&1 || true`, so `exam_e2e_w*` leaked permanently. The fix
@@ -17,7 +17,7 @@
 #   one idempotent `run_cleanup` wired to EXIT/INT/TERM traps, and makes DROP
 #   failures loud.
 #
-# Contracts enforced here (see run-wsl-lib.test.sh):
+# Contracts enforced here (see run-lib.test.sh):
 #   1. Cleanup ordering: stop process groups → bounded wait → drop DBs →
 #      artifact cleanup. DROP never runs while an API server may hold a
 #      connection.
@@ -124,7 +124,7 @@ process_group_alive() {
 # disappear, escalates to KILL only if still alive, then reaps. Safe to call
 # when the pid is already gone. Idempotent.
 #
-# `setsid` in run-wsl.sh launched each API server in its own process group
+# `setsid` in run.sh launched each API server in its own process group
 # with pgid == child pid, so `kill -- -PID` reaches the server and any
 # descendant (tsx, node children). We ALSO send the signal to the positive
 # pid as a belt-and-braces fallback — some environments (notably WSL1 / certain
@@ -288,7 +288,7 @@ archive_retained_worker_db() {
 
 # ── Unified cleanup orchestrator ──────────────────────────────────────────
 # run_cleanup
-# Single owner of all teardown. Reads module-level state that run-wsl.sh sets
+# Single owner of all teardown. Reads module-level state that run.sh sets
 # before trapping (all are `${VAR:-default}` so unset is safe):
 #
 #   FROZEN_EXIT                       — Playwright exit code, frozen earlier.
@@ -362,7 +362,7 @@ run_cleanup() {
   # with E2E_KEEP_WORKER_DB_ON_FAILURE=1 on failure). Serial: exam_e2e is the
   # persistent dev-e2e DB (--no-reseed depends on it surviving between runs;
   # matches the historical script, which only ever dropped exam_e2e_w<N>), so
-  # it is never a drop candidate. run-wsl.sh registers both identities BEFORE
+  # it is never a drop candidate. run.sh registers both identities BEFORE
   # any failing operation (migrate/seed/health), so every exit path is
   # covered.
   local -a dbs_to_drop=()
@@ -464,7 +464,7 @@ run_cleanup() {
         exit 3
       fi
       if [[ -n "$_sc_still" ]]; then
-        log "关 dev compose（由 run-wsl.sh 启动）..."
+        log "关 dev compose（由 run.sh 启动）..."
         if ! docker compose -f "$DEV_COMPOSE" down -v >/dev/null 2>&1; then
           err "run_cleanup: docker compose down -v 失败"
           exit 4
@@ -503,7 +503,7 @@ compute_final_exit() {
   return "$code"
 }
 
-# ── Trap handlers (shared with run-wsl.sh so the real chain is testable) ──
+# ── Trap handlers (shared with run.sh so the real chain is testable) ──
 # exit_handler: installed on EXIT. Freezes the code the shell was about to
 # exit with, runs cleanup once, then computes the priority-matrix final code.
 # `compute_final_exit` may return 7/70; under `set -e` a bare call would abort
