@@ -2,8 +2,9 @@
 
 # scripts/e2e/run.sh
 #
-# WSL/本地一键执行 E2E（不走 Docker app 镜像，直接在宿主跑 api dev server +
-# Playwright）。与 scripts/e2e/run.sh（Docker 模式）互补，失败集合应一致。
+# 唯一 E2E 入口（pnpm e2e 指向本脚本）：host-native —— 不走 Docker app 镜像，
+# 直接在宿主跑 api dev server + Playwright；Compose 只提供 PostgreSQL/Redis
+# 依赖（#626）。
 #
 # 为什么需要这个脚本：手动跑 E2E 需要一长串步骤（dev compose → migrate →
 # seed → build web → 同步 api/public → 起 dev server 带 E2E env → playwright），

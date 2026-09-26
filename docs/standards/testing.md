@@ -149,7 +149,15 @@ production deployment itself is the acceptance surface (§1.6).
 | CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
 
 **Rules:**
-- An explicit `TEST_DATABASE_URL` always wins (CI / remote DB / special case) and is **operator-owned**: the harness verifies it exists and fails fast if missing — it never creates, migrates, or falls back for an explicit URL (see §2.8).
+- An explicit `TEST_DATABASE_URL` always wins (CI / remote DB / special case).
+  Ownership splits by layer (§2.8): the BASE database is
+  environment/operator-owned — the harness verifies it is connectable and
+  fails fast if missing, and never creates, drops, or falls back for it. The
+  lifecycle INSIDE the target stays harness-owned: test schemas are
+  created/dropped and production migrations run there (worker-database mode
+  additionally derives physical worker DBs with their own permission and
+  lifecycle contract). An explicit base DB is therefore NOT "never migrated" —
+  only its existence is external.
 - Set-but-empty (`TEST_DATABASE_URL=`) counts as unset.
 - When unset, the resolver constructs a LOCAL test URL from the single-source `DB_HOST_PORT` (the same variable `docker-compose.dev.yml` publishes and dev `DATABASE_URL` construction uses) and targets `exam_test`, which the harness self-provisions when missing (see §2.8). There is nothing to keep in sync.
 - Must point to a database whose name contains `test`, `e2e`, or `ci`.
@@ -591,7 +599,10 @@ E2E_WORKERS=4 bash scripts/e2e/run.sh
 ```
 
 - **DB required**: Yes (`exam_e2e` on `DB_HOST_PORT`, default 5432).
-- **Env**: `APP_MODE=development`, `DATABASE_URL` pointing to `exam_e2e`, `TEST_DATABASE_URL` unset.
+- **Env**: `APP_MODE=e2e` with an explicit `TEST_DATABASE_URL` (the serial
+  `exam_e2e` or per-shard `exam_e2e_w{N}` URL). The runner exports
+  `TEST_DATABASE_URL` itself and unsets `DATABASE_URL` / `TEST_DB_URL`, so the
+  resolver can only take the explicit test-URL branch (§2.2, §4.1).
 - **Topology ownership** (issue #571): The managed WSL runner owns all Compose
   topology. `COMPOSE_DISABLE_ENV_FILE=1` prevents Docker Compose from reading
   the developer root `.env`; `DB_HOST_PORT`, `REDIS_HOST_PORT`, `TZ`, and
