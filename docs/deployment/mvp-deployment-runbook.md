@@ -35,9 +35,12 @@ OS:        Linux (Docker host). Windows/macOS via Docker Desktop acceptable
            for evaluation only.
 Software:  Docker Engine ≥ 25.x, Docker Compose v2.
 Network:   internal LAN only. The platform must remain offline-capable.
-           TLS is delegated to a reverse proxy (nginx/caddy) in front of the
-           API when the deployment needs HTTPS — the app does not terminate
-           TLS itself.
+           Public ingress is the bundled nginx edge (#585): host EXAM_PORT
+           (default 80) -> /api/** to the API, everything else to the static
+           SPA. The app does not terminate TLS; HTTPS is a commented template
+           in deploy/nginx/edge.conf (mount /etc/nginx/certs/fullchain.pem +
+           privkey.pem, uncomment the 443 block, publish 443 — no ACME/
+           Certbot is bundled).
 Postgres:  provided by the 'db' service (postgres:18.4-bookworm). The
            bundled docker-compose.yml composes DATABASE_URL for the app
            from POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB, so the
@@ -92,9 +95,9 @@ if any is unset. There is NO default database password in production
 
 | Variable | Default | Notes |
 |---|---|---|
-| `CORS_ORIGIN` | `http://localhost:<EXAM_PORT>` | Browser origin allowlist (credentials:true); comma-separated → array. The Compose default follows the host port; override for LAN/hostname access |
-| `PUBLIC_WEB_ORIGIN` | `http://localhost:<EXAM_PORT>` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). The Compose default follows the host port; override for LAN/hostname access; HTTPS recommended in production |
-| `EXAM_PORT` | 3000 | Host published port (`${EXAM_PORT:-3000}:3000`); the container API stays on 3000 (`APP_PORT` is container-internal only). Local dev uses `DEV_API_PORT` instead — see docs/development/ports.md |
+| `CORS_ORIGIN` | `http://localhost` | Browser origin allowlist (credentials:true); comma-separated → array. #585: nginx owns public :80, so the default carries no port suffix; a remapped `EXAM_PORT` or LAN/hostname access MUST set it to the exact origin users browse |
+| `PUBLIC_WEB_ORIGIN` | `http://localhost` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). Same #585 default; set explicitly for remapped/LAN/HTTPS access |
+| `EXAM_PORT` | 80 | Host port published by the `nginx` edge (`${EXAM_PORT:-80}:80`) — the only published service (#585). The container API stays on 3000 (`APP_PORT` is container-internal only; never host-published). Local dev uses `DEV_API_PORT` instead — see docs/development/ports.md |
 | `HOST` | 0.0.0.0 | API bind host |
 | `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookies, and fail-fast required env |
 | `NODE_ENV` | development | maps to production/test/development |
@@ -105,7 +108,7 @@ if any is unset. There is NO default database password in production
 | `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` | 30000 / 60000 | in-process heartbeat scanner |
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed rate limiter; Redis-backed shared state when the `redis` profile is enabled and the runtime is ready — local in-memory fallback only in `optional` mode; `required` mode fails closed with 503 `RATE_LIMIT_UNAVAILABLE` (never falls back to local). See §10 |
-| `TRUSTED_PROXY_CIDRS` | unset (socket-peer identity) | reverse-proxy deployments only: CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). Unset keeps headers ignored. See "Rate-limit identity, trusted proxies, and sizing" above |
+| `TRUSTED_PROXY_CIDRS` | unset (socket-peer identity) | deployments with a proxy in front of the API: CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). #585 default topology: the bundled nginx edge IS such a proxy — set this to the Compose bridge subnet (see below). Unset collapses all candidates onto the edge IP. See "Rate-limit identity, trusted proxies, and sizing" above |
 
 ### Email (in-process outbox loop + sender)
 
@@ -143,7 +146,8 @@ depends on the deployment topology:
 
 | Topology | `request.ip` | Verdict |
 | --- | --- | --- |
-| Direct LAN (default compose, `EXAM_PORT` direct, one candidate per device) | each candidate's real IP | Safe by default — no configuration needed |
+| Bundled nginx edge (#585 default compose) + `TRUSTED_PROXY_CIDRS` = the Compose bridge subnet | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default — one lookup: `docker network inspect <project>_exam-net` and set the subnet (e.g. `172.19.0.0/16`) in `.env.deploy` |
+| Bundled nginx edge WITHOUT `TRUSTED_PROXY_CIDRS` | the edge's bridge IP (all candidates collapse) | Misconfigured — the app cannot trust its only ingress; set the subnet as above |
 | Shared NAT (many candidates behind one egress IP) | the shared IP | Supported with sizing: the whole cohort shares one identity; size `RATE_LIMIT_MAX` by the rule below and stagger logins (the login budget is 10/min/IP) |
 | Reverse proxy WITH trusted client-IP wiring | per-candidate IP | Supported: set `TRUSTED_PROXY_CIDRS` to the proxy's addresses |
 | Reverse proxy WITHOUT trusted client-IP wiring | the proxy IP (all candidates collapse) | Degraded by config — wire `TRUSTED_PROXY_CIDRS` (below) |
@@ -156,11 +160,16 @@ limit and audit identity behind a proxy:
    those** (comma-separated CIDRs; a bare IP means that one host; malformed
    entries or entries with host bits set fail fast at startup). Typical
    single-host TLS terminator: `TRUSTED_PROXY_CIDRS=127.0.0.1/32`.
-2. Configure the proxy to **append** the real client address to
-   `X-Forwarded-For` (nginx: `proxy_set_header X-Forwarded-For
-   $proxy_add_x_forwarded_for;`) or to overwrite it (`$remote_addr`). A
-   pass-through proxy that forwards the client's header untouched is NOT
-   supported: it would let candidates spoof their limiter identity.
+2. Configure the proxy to **overwrite** `X-Forwarded-For` with the real
+   client address (nginx: `proxy_set_header X-Forwarded-For
+   $remote_addr;`) — this is what the bundled edge does. **Appending**
+   (`$proxy_add_x_forwarded_for`) is NOT safe for a directly client-facing
+   proxy: the client-supplied chain would sit inside the app's trusted
+   walk, letting a candidate choose its audit/rate-limit identity (pinned
+   by `tests/deployment/nginx-ingress.sh` R3). Append remains correct only
+   for CHAINED trusted proxies where every hop in front of the app is
+   itself trusted and overwrites. A pass-through proxy that forwards the
+   client's header untouched is NOT supported either way.
 3. Also overwrite `X-Forwarded-Host` and `X-Forwarded-Proto` on the proxy
    (nginx: `proxy_set_header Host $host;`, `X-Forwarded-Proto $scheme;`).
    The API reads neither today, but a trusted socket lets these headers
@@ -216,11 +225,11 @@ node scripts/generate-env.mjs
 # SMTP_USER=...
 # SMTP_PASSWORD=...
 
-# 4. Pull and start the default stack (app + db) from the
-#    prebuilt release image. Compose runs the image pinned in .env.deploy
-#    as EXAM_IMAGE, which step 2 derived from .release-version (see
-#    "Image acquisition" below). No local build happens; Redis is NOT
-#    started by default (P6-010); see §10 to enable it.
+# 4. Pull and start the default stack (nginx + web + app + db) from the
+#    prebuilt release images. Compose runs the images pinned in .env.deploy
+#    as EXAM_IMAGE / EXAM_WEB_IMAGE, which step 2 derived from
+#    .release-version (see "Image acquisition" below). No local build
+#    happens; Redis is NOT started by default (P6-010); see §10 to enable it.
 docker compose --env-file .env.deploy up -d
 
 # 5. Watch the API come up (migration runs inside the container entrypoint).
@@ -230,7 +239,8 @@ docker compose --env-file .env.deploy logs --tail=50 -f app
 # 6. Verify app + db are healthy. The in-process email outbox loop waits for
 #    the first organization to be bootstrapped (step 7).
 docker compose --env-file .env.deploy ps
-# Expected: app (healthy), db (healthy)
+# Expected: nginx (running, publishes EXAM_PORT), app (healthy),
+#           web (healthy), db (healthy)
 #
 # Health layers (#547) — read them separately:
 #   /api/health = LIVENESS (process responsive; stays 200 through DB loss).
@@ -245,8 +255,10 @@ docker compose --env-file .env.deploy ps
 # events from the app logs — see docs/operations/README.md "Active Alerting".
 ```
 
-`CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost:3000`; set
-them in `.env.deploy` to your machine's address for LAN access.
+`CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost` (nginx
+owns public 80); set both in `.env.deploy` to your machine's address for
+LAN access (e.g. `http://192.168.1.5:80`), or to
+`http://localhost:<EXAM_PORT>` when you remap the port.
 
 # 7. Bootstrap the first Admin (production path — see §5). This also
 #    creates the internal default organization, which unblocks the in-process
@@ -291,13 +303,13 @@ container).
 
 ### Image acquisition (#321)
 
-The `app` service runs the **prebuilt release image**
-pinned in `.env.deploy` as `EXAM_IMAGE`. `node scripts/generate-env.mjs`
-derives the pin from the repository's `.release-version`
-(`ghcr.io/jnhu76/exam:vX.Y.Z`); an explicit non-canonical `EXAM_IMAGE`
-value wins (private registry mirrors, offline loads), while a canonical
-`ghcr.io/jnhu76/exam:vX.Y.Z` pin follows `.release-version` on the next
-generate-env run (the upgrade path). The image is published automatically
+The `app` and `web` services run the **prebuilt release images**
+pinned in `.env.deploy` as `EXAM_IMAGE` / `EXAM_WEB_IMAGE`.
+`node scripts/generate-env.mjs` derives both pins from the repository's
+`.release-version` (`ghcr.io/jnhu76/exam{,-web}:vX.Y.Z`); an explicit
+non-canonical pin value wins (private registry mirrors, offline loads),
+while a canonical `ghcr.io/jnhu76/exam{,-web}:vX.Y.Z` pin follows
+`.release-version` on the next generate-env run (the upgrade path). The image is published automatically
 by the release workflow (`.github/workflows/release.yml`) when the release
 tag is cut — same commit as the GitHub Release, the enforced-immutable git
 tag, and a `sha-<commit>` alias tag. There is deliberately NO `latest` tag;
@@ -327,22 +339,25 @@ On any machine with registry access:
 
 ```bash
 docker pull ghcr.io/jnhu76/exam:vX.Y.Z
+docker pull ghcr.io/jnhu76/exam-web:vX.Y.Z
 docker save ghcr.io/jnhu76/exam:vX.Y.Z | gzip > exam-image-vX.Y.Z.tar.gz
-sha256sum exam-image-vX.Y.Z.tar.gz   # record; verify after transfer
+docker save ghcr.io/jnhu76/exam-web:vX.Y.Z | gzip > exam-web-image-vX.Y.Z.tar.gz
+sha256sum exam-image-vX.Y.Z.tar.gz exam-web-image-vX.Y.Z.tar.gz   # record; verify after transfer
 ```
 
 Transfer the archive (plus the repository checkout, for
 `generate-env.mjs`) by removable media, then on the air-gapped host:
 
 ```bash
-sha256sum exam-image-vX.Y.Z.tar.gz                 # must match
+sha256sum exam-image-vX.Y.Z.tar.gz exam-web-image-vX.Y.Z.tar.gz  # must match
 docker load < exam-image-vX.Y.Z.tar.gz
-node scripts/generate-env.mjs                      # derives the same EXAM_IMAGE
-docker compose --env-file .env.deploy up -d        # local image, no pull
+docker load < exam-web-image-vX.Y.Z.tar.gz
+node scripts/generate-env.mjs                      # derives the same pins
+docker compose --env-file .env.deploy up -d        # local images, no pull
 ```
 
-Keep the loaded reference identical to `EXAM_IMAGE` — Compose matches by
-reference, not digest.
+Keep the loaded references identical to `EXAM_IMAGE` / `EXAM_WEB_IMAGE` —
+Compose matches by reference, not digest.
 
 #### Contributor source build (not the operator path)
 
@@ -353,16 +368,17 @@ this through `tests/deployment/lib.sh` (`ensure_source_images` + the
 `EXAM_IMAGE` pin):
 
 ```bash
-# explicit source build, then the canonical operator Compose consumes the
-# pinned local image:
+# explicit source builds (both targets), then the canonical operator
+# Compose consumes the pinned local images:
 docker build --target runner -t exam-local:dev .
-EXAM_IMAGE=exam-local:dev \
+docker build --target web-runner -t exam-local:web-dev .
+EXAM_IMAGE=exam-local:dev EXAM_WEB_IMAGE=exam-local:web-dev \
   docker compose --env-file .env.deploy -f docker-compose.yml up -d
 ```
 
-The explicit build pins `exam-local:dev`, so no registry image can be
-pulled under the acceptance tag; a stale registry image can never satisfy
-acceptance.
+The explicit builds pin `exam-local:dev` / `exam-local:web-dev`, so no
+registry image can be pulled under the acceptance tags; a stale registry
+image can never satisfy acceptance.
 
 ---
 
@@ -483,15 +499,16 @@ docker compose --env-file .env.deploy up -d
 
 # Verify
 docker compose --env-file .env.deploy ps
-# Expected: app (healthy), db (healthy)
+# Expected: nginx (running, publishes EXAM_PORT), app (healthy),
+#           web (healthy), db (healthy)
 
 # API health (liveness — process alive)
-curl -s http://localhost:${EXAM_PORT:-3000}/api/health
+curl -s http://localhost:${EXAM_PORT:-80}/api/health
 # Expected: {"status":"ok"}
 
 # Admin-only system health (DB ping + CPU/memory)
 # (requires authentication; obtain the auth-token cookie via the login page)
-curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/health
+curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/health
 # Expected: {"cpu":..,"memory":..,"dbResponseMs":..,"status":"ok"}
 ```
 
@@ -590,7 +607,7 @@ docker compose --env-file .env.deploy logs --tail=20 app
 #    lockTimeoutMs, enabled)
 
 # Inspect the loop heartbeat (admin-only)
-curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics \
+curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/diagnostics \
   | jq .emailStatus
 # Expected fields: status, enabled, worker.{status,lastPollAt,lastSuccessAt,
 #                  lastErrorAt,lastError}, outbox.{pending,processing,
@@ -636,7 +653,7 @@ assumes a single API process.
 
 ```bash
 # Inspect scanner metrics (admin-only)
-curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics \
+curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/diagnostics \
   | jq '.heartbeatStatus, .deadlineScannerStatus'
 # Expected: interval, timeout, lastScanAt, disruptedCount / autoSubmitCount
 ```
@@ -690,7 +707,8 @@ docker compose --env-file .env.deploy --profile redis up -d
 
 # 3. Verify all four services:
 docker compose --env-file .env.deploy ps
-# Expected: app (healthy), db (healthy), redis (healthy)
+# Expected: nginx (running, publishes EXAM_PORT), app (healthy),
+#           web (healthy), db (healthy), redis (healthy)
 ```
 
 The `redis` service exists for the optional shared rate limiter and
@@ -713,10 +731,10 @@ After first install:
 
 ```bash
 # 1. API liveness
-curl -s http://localhost:${EXAM_PORT:-3000}/api/health
+curl -s http://localhost:${EXAM_PORT:-80}/api/health
 
 # 2. Public config
-curl -s http://localhost:${EXAM_PORT:-3000}/api/system/public-config
+curl -s http://localhost:${EXAM_PORT:-80}/api/system/public-config
 
 # 3. Admin login via the web UI (https://exam.your-org.internal/login)
 #    Log in with the seeded admin credentials.
@@ -737,7 +755,7 @@ curl -s http://localhost:${EXAM_PORT:-3000}/api/system/public-config
 #    and that it navigates to the authoritative frozen result page.
 
 # 7. (If EMAIL_ENABLED=true) Verify the outbox loop drained the queue:
-curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics \
+curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/diagnostics \
   | jq .emailStatus.outbox
 #    Expect sent to increase; pending/processing to return to 0.
 
@@ -872,7 +890,7 @@ docker compose --env-file .env.deploy logs app | jq 'select(.level >= 40)'   # w
 
 # Live diagnostics (admin-only)
 watch -n 5 'curl -s -b "auth-token=<JWT>"
-  http://localhost:${EXAM_PORT:-3000}/api/system/diagnostics | jq'
+  http://localhost:${EXAM_PORT:-80}/api/system/diagnostics | jq'
 ```
 
 Diagnostic fields (see `GET /api/system/diagnostics`):
@@ -908,10 +926,10 @@ config                            — heartbeatInterval / heartbeatTimeout / dea
 [ ] Back up the database (logical dump — backup-and-recovery.md §7).
 [ ] Pull the new code: git pull.
 [ ] Run pnpm verify:static locally.
-[ ] Re-pin the image: .env.deploy EXAM_IMAGE follows .release-version on
-    the next `node scripts/generate-env.mjs` run (a canonical
-    ghcr.io/jnhu76/exam:vX.Y.Z pin is re-derived; an explicit mirror
-    value must be updated by hand), then pull it:
+[ ] Re-pin the images: .env.deploy EXAM_IMAGE / EXAM_WEB_IMAGE follow
+    .release-version on the next `node scripts/generate-env.mjs` run
+    (canonical ghcr.io/jnhu76/exam{,-web}:vX.Y.Z pins are re-derived;
+    explicit mirror values must be updated by hand), then pull both:
     docker compose --env-file .env.deploy pull.
 [ ] docker compose --env-file .env.deploy up -d (migrate runs on app start).
 [ ] Watch migration logs: docker compose --env-file .env.deploy logs app
@@ -919,9 +937,9 @@ config                            — heartbeatInterval / heartbeatTimeout / dea
 [ ] Verify /api/health and /api/system/health; log in as an existing Admin;
     open a candidate + a recent result.
 [ ] Rollback (if needed): restore the pre-upgrade backup + redeploy the
-    previous image tag (upgrade-and-uninstall.md §2.5 — a canonical
-    EXAM_IMAGE pin follows .release-version on the next generate-env run,
-    so edit .env.deploy AFTER it, or pin by digest).
+    previous image tags (upgrade-and-uninstall.md §2.5 — canonical
+    EXAM_IMAGE / EXAM_WEB_IMAGE pins follow .release-version on the next
+    generate-env run, so edit .env.deploy AFTER it, or pin by digest).
 ```
 
 Migrations are forward-only by default. drizzle-kit does not auto-generate

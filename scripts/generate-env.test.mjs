@@ -426,3 +426,87 @@ test("canonical EXAM_IMAGE pin follows .release-version on re-run (upgrade drift
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ── #585: EXAM_WEB_IMAGE mirrors the EXAM_IMAGE pin contract ──────────────
+// The static-Web image (nginx serving apps/web/dist on 4173) is published
+// beside the API image and pinned from the SAME release version authority.
+
+test("EXAM_WEB_IMAGE is derived from .release-version on first run (#585)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "genenv-webimage-first-"));
+  try {
+    const envPath = join(dir, ".env.deploy");
+    const absentLegacy = join(dir, ".absent-dev-env");
+    const result = runGenerator(envPath, absentLegacy);
+    assert.equal(result.status, 0, result.stderr);
+
+    const env = readFileSync(envPath, "utf-8");
+    assert.equal(
+      secretLine(env, "EXAM_WEB_IMAGE"),
+      `ghcr.io/jnhu76/exam-web:${RELEASE_VERSION}`,
+      "EXAM_WEB_IMAGE must pin the current release version",
+    );
+    // Both pins must coexist as separate keys.
+    assert.equal(
+      secretLine(env, "EXAM_IMAGE"),
+      `ghcr.io/jnhu76/exam:${RELEASE_VERSION}`,
+      "EXAM_IMAGE derivation must be unchanged",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("explicit EXAM_WEB_IMAGE wins over the derived pin (never rotated)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "genenv-webimage-explicit-"));
+  try {
+    const envPath = join(dir, ".env.deploy");
+    const absentLegacy = join(dir, ".absent-dev-env");
+    writeFileSync(
+      envPath,
+      readFileSync(EXAMPLE, "utf-8").replace(
+        /^EXAM_WEB_IMAGE=.*$/m,
+        "EXAM_WEB_IMAGE=registry.mirror.internal/exam-web:v9.9.9",
+      ),
+      "utf-8",
+    );
+
+    const result = runGenerator(envPath, absentLegacy);
+    assert.equal(result.status, 0, result.stderr);
+    const env = readFileSync(envPath, "utf-8");
+    assert.equal(
+      secretLine(env, "EXAM_WEB_IMAGE"),
+      "registry.mirror.internal/exam-web:v9.9.9",
+      "an explicit operator pin must never be overwritten",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("stale canonical EXAM_WEB_IMAGE pin follows .release-version on re-run", () => {
+  const dir = mkdtempSync(join(tmpdir(), "genenv-webimage-repin-"));
+  try {
+    const envPath = join(dir, ".env.deploy");
+    const absentLegacy = join(dir, ".absent-dev-env");
+    writeFileSync(
+      envPath,
+      readFileSync(EXAMPLE, "utf-8").replace(
+        /^EXAM_WEB_IMAGE=.*$/m,
+        "EXAM_WEB_IMAGE=ghcr.io/jnhu76/exam-web:v0.0.0",
+      ),
+      "utf-8",
+    );
+
+    const result = runGenerator(envPath, absentLegacy);
+    assert.equal(result.status, 0, result.stderr);
+    const env = readFileSync(envPath, "utf-8");
+    assert.equal(
+      secretLine(env, "EXAM_WEB_IMAGE"),
+      `ghcr.io/jnhu76/exam-web:${RELEASE_VERSION}`,
+      "a stale canonical pin must follow the current .release-version",
+    );
+    assert.match(result.stdout, /EXAM_WEB_IMAGE re-pinned/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -136,7 +136,8 @@ db_query() {
     psql -v ON_ERROR_STOP=1 -U exam -d exam -tAc "${query}" 2>&1
 }
 
-# The app container is the API + SPA server. The host port is EXAM_PORT.
+# Host-side probes ride nginx (the only published service, on EXAM_PORT)
+# into the API (#585 topology).
 status_get() { curl -s --max-time 10 "http://localhost:$1/api/launchpad/status"; }
 post_json() {
   local port="$1" path="$2" body="$3" out="$4"

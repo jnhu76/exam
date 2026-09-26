@@ -13,11 +13,12 @@
 > the deployment env file exactly as the runbook documents:
 > `docker compose --env-file .env.deploy ...`.
 >
-> **Prebuilt images (#321):** the stack runs `ghcr.io/jnhu76/exam:vX.Y.Z`,
-> pinned in `.env.deploy` as `EXAM_IMAGE` (derived from `.release-version`
-> by `node scripts/generate-env.mjs`; an explicit non-canonical value —
-> mirror / offline load — wins). There is no `latest` tag; the semantic
-> pin is the upgrade/rollback authority. Image acquisition (online pull,
+> **Prebuilt images (#321):** the stack runs `ghcr.io/jnhu76/exam:vX.Y.Z`
+> (API) and `ghcr.io/jnhu76/exam-web:vX.Y.Z` (static SPA, #585), pinned in
+> `.env.deploy` as `EXAM_IMAGE` / `EXAM_WEB_IMAGE` (derived from
+> `.release-version` by `node scripts/generate-env.mjs`; an explicit
+> non-canonical value — mirror / offline load — wins). There is no
+> `latest` tag; the semantic pin is the upgrade/rollback authority. Image acquisition (online pull,
 > offline `docker save`/`docker load`) is documented in the runbook §3.
 
 ---
@@ -32,7 +33,7 @@ containers:
 | Data root (`EXAM_DATA_ROOT`, default `./data`) | `data/postgres` | PostgreSQL PGDATA — ALL business data | yes | yes (deleted) |
 | | `data/wal-archive` | PITR WAL archive (inert unless PITR enabled) | yes | yes |
 | | `data/redis` | Redis persistence (`redis` profile only) | yes | yes |
-| Deployment env file | `.env.deploy` | `JWT_SECRET`, `POSTGRES_PASSWORD`, `EXAM_IMAGE` pin, `EXAM_PORT`, overrides | yes | yes (deleted) |
+| Deployment env file | `.env.deploy` | `JWT_SECRET`, `POSTGRES_PASSWORD`, `EXAM_IMAGE` / `EXAM_WEB_IMAGE` pins, `EXAM_PORT`, `TRUSTED_PROXY_CIDRS`, overrides | yes | yes (deleted) |
 
 Containers, the `exam-net` network, and the Compose project carry NO state
 (`docker compose down` removes them; PostgreSQL data lives in the bind
@@ -68,7 +69,8 @@ Upgrade prerequisites:
    precondition (§2.4).
 3. Ensure the target image is available: online installs `pull` it
    automatically; air-gapped installs must `docker load` it beforehand
-   (runbook §3 — the loaded reference must equal `EXAM_IMAGE`).
+   (runbook §3 — the loaded references must equal `EXAM_IMAGE` /
+   `EXAM_WEB_IMAGE`).
 
 ### 2.2 Step-by-step
 
@@ -82,7 +84,7 @@ node scripts/generate-env.mjs
 #   - canonical pin (ghcr.io/jnhu76/exam:vX.Y.Z) -> re-derived to the NEW
 #     version automatically;
 #   - explicit non-canonical value (registry mirror / offline load) ->
-#     update EXAM_IMAGE by hand in .env.deploy.
+#     update EXAM_IMAGE / EXAM_WEB_IMAGE by hand in .env.deploy.
 
 # 2. Pre-upgrade backup (see backup-and-recovery.md §7).
 scripts/backup/postgres-logical-backup.sh exam /mnt/nas/exam-logical/$(date +%Y%m%d).dump
@@ -137,13 +139,14 @@ docker compose --env-file .env.deploy up -d
   scripts/backup/postgres-logical-restore.sh exam /mnt/nas/exam-logical/<date>.dump exam
   docker compose --env-file .env.deploy up -d app
 
-  # 2. Point EXAM_IMAGE at the previous release — CAREFUL: a canonical
-  #    `ghcr.io/jnhu76/exam:vX.Y.Z` value follows .release-version on the
-  #    NEXT generate-env run, which would silently revert the rollback.
-  #    Options:
+  # 2. Point EXAM_IMAGE / EXAM_WEB_IMAGE at the previous release — CAREFUL:
+  #    a canonical `ghcr.io/jnhu76/exam{,-web}:vX.Y.Z` value follows
+  #    .release-version on the NEXT generate-env run, which would silently
+  #    revert the rollback. Options:
   #    - edit .env.deploy AFTER the last generate-env run (edit wins); or
   #    - pin by digest: EXAM_IMAGE=ghcr.io/jnhu76/exam@sha256:<digest>
   sed -i 's|^EXAM_IMAGE=.*|EXAM_IMAGE=ghcr.io/jnhu76/exam:v<PREVIOUS>|' .env.deploy
+  sed -i 's|^EXAM_WEB_IMAGE=.*|EXAM_WEB_IMAGE=ghcr.io/jnhu76/exam-web:v<PREVIOUS>|' .env.deploy
 
   # 3. Pull + start the previous image:
   docker compose --env-file .env.deploy pull
@@ -157,8 +160,8 @@ docker compose --env-file .env.deploy up -d
 ### 2.6 Post-upgrade verification checklist
 
 ```text
-[ ] docker compose --env-file .env.deploy ps      # app + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
-[ ] curl -s http://localhost:${EXAM_PORT:-3000}/api/health   # {"status":"ok"}
+[ ] docker compose --env-file .env.deploy ps      # nginx running; app + web + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
+[ ] curl -s http://localhost:${EXAM_PORT:-80}/api/health   # {"status":"ok"} (through the nginx edge, #585)
 [ ] Log in as an existing Admin; open a candidate + a recent result.
 [ ] Watch migration logs (first boot):
     docker compose --env-file .env.deploy logs app | grep -i migrat
@@ -237,7 +240,8 @@ zero remaining state. The Compose project/network are already gone after
 
 After full removal, install again (runbook §3):
 `node scripts/generate-env.mjs` derives NEW secrets and the current
-`EXAM_IMAGE` pin, then `docker compose --env-file .env.deploy up -d`.
+`EXAM_IMAGE` / `EXAM_WEB_IMAGE` pins, then
+`docker compose --env-file .env.deploy up -d`.
 Properties of the resulting deployment:
 
 - the database has 0 organizations before bootstrap (no rows from the old

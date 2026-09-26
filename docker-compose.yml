@@ -3,6 +3,9 @@
 # (created by node scripts/generate-env.mjs; the dev .env is never read when
 # --env-file is passed). Authoritative state is the ./data bind mounts — see
 # docs/deployment/backup-and-recovery.md.
+# #585 topology: nginx is the ONLY public ingress (host ${EXAM_PORT:-80} ->
+# container 80); app (:3000, API) and web (:4173, static SPA) are internal
+# services on exam-net.
 services:
   app:
     # Operator path: prebuilt semantic image, pinned by EXAM_IMAGE in the
@@ -12,8 +15,12 @@ services:
     # the local pin (tests/deployment/lib.sh ensure_source_images — #626;
     # a cached registry image can never fake source acceptance).
     image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}
-    ports:
-      - "${EXAM_PORT:-3000}:3000"
+    # #585: the API is an internal service — nginx is the only public
+    # ingress. Direct host publishing (the former ${EXAM_PORT:-3000}:3000)
+    # moved to the nginx service. Development/test keeps using 3000
+    # directly (host-native E2E / CI never involve this file).
+    expose:
+      - "3000"
     environment:
       # Application runtime settings are FORWARDED, not defaulted, here:
       # an empty `${KEY:-}` value reaches the app as "" and resolves to the
@@ -28,8 +35,11 @@ services:
       APP_MODE: production
       APP_PORT: 3000
       HOST: 0.0.0.0
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
-      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost:${EXAM_PORT:-3000}}
+      # #585: nginx owns public :80, so the canonical production public
+      # origin is http://localhost (no port suffix). Remapped EXAM_PORT or
+      # LAN access must set both explicitly (.env.deploy.example).
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
@@ -80,17 +90,19 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # #547 DEPLOYMENT READINESS GATE: the API leg probes /api/ready (DB-aware
-      # mandatory-dependency gate — 503 => probe exit 1), NOT the
-      # dependency-blind /api/health liveness probe. The SPA leg keeps proving
-      # the web surface is servable. HTTP 503 must fail the probe and the
-      # timeout stays tight — no retry/timeout widening to buy green.
+      # #547 DEPLOYMENT READINESS GATE + #585 service split: the API leg
+      # probes /api/ready (DB-aware mandatory-dependency gate — 503 => probe
+      # exit 1), NOT the dependency-blind /api/health liveness probe. The
+      # former bundled-SPA leg (fetch of '/' expecting text/html) is gone:
+      # the SPA is served by the separate `web` service, which carries its
+      # own HTML healthcheck — API health must not assume the API container
+      # serves frontend HTML.
       test:
         [
           "CMD",
           "node",
           "-e",
-          "Promise.all([fetch('http://127.0.0.1:3000/api/ready'), fetch('http://127.0.0.1:3000/')]).then(([api, web]) => { const ok = api.ok && (web.headers.get('content-type') || '').includes('text/html'); process.exit(ok ? 0 : 1) }).catch(() => process.exit(1))",
+          "fetch('http://127.0.0.1:3000/api/ready').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
         ]
       interval: 30s
       timeout: 5s
@@ -107,6 +119,49 @@ services:
     # deployment-topology-contract.mjs (assertShutdownBudgetContract), which
     # fails when the relation breaks.
     stop_grace_period: 45s
+
+  web:
+    # #585: dedicated static Web runtime — nginx serving the built
+    # apps/web/dist on :4173 (never `vite preview`; web.conf is baked into
+    # the web-runner image). Internal service: nginx routes non-API traffic
+    # here. The operator pin mirrors EXAM_IMAGE (#321 two-path split):
+    # derived from .release-version; source builds pin it explicitly
+    # (tests/deployment/lib.sh ensure_source_images).
+    image: ${EXAM_WEB_IMAGE:?EXAM_WEB_IMAGE is required (node scripts/generate-env.mjs)}
+    expose:
+      - "4173"
+    healthcheck:
+      # #585 service split: the Web leg proves the SPA HTML is servable on
+      # 4173 — the proof the app healthcheck no longer carries.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4173/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - exam-net
+    restart: unless-stopped
+
+  nginx:
+    # #585: the ONLY public production ingress. Routes /api/** -> app:3000
+    # (path preserved, #546 forwarded headers) and /* -> web:4173. The edge
+    # config is deployment configuration — runtime-mounted read-only, never
+    # baked into an image. HTTPS lives as a commented template in
+    # deploy/nginx/edge.conf (mount certs at /etc/nginx/certs/ and publish
+    # 443 to activate); the active profile is HTTP :80 only.
+    image: nginx:1.30.5-alpine3.24
+    ports:
+      - "${EXAM_PORT:-80}:80"
+    volumes:
+      - ./deploy/nginx/edge.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - exam-net
+    restart: unless-stopped
 
   db:
     image: postgres:18.4-bookworm

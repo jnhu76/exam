@@ -166,9 +166,44 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          # INVARIANT (#585): the Dockerfile's final stage is the nginx
+          # web-runner; the published API image must pin the API runner.
+          target: runner
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # #585: the static-Web image (nginx serving apps/web/dist on :4173)
+      # is published beside the API image; the operator pins are
+      # EXAM_IMAGE / EXAM_WEB_IMAGE, both derived from .release-version by
+      # generate-env.mjs. Same tag strategy and no-latest policy as above.
+      - name: Derive web image metadata
+        id: meta-web
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/jnhu76/exam-web
+          tags: |
+            type=raw,value=${{ steps.release.outputs.version }}
+            type=sha
+          flavor: |
+            latest=false
+          labels: |
+            org.opencontainers.image.title=exam-web
+            org.opencontainers.image.description=Exam static web runtime (nginx, SPA on 4173)
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/jnhu76/exam
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Build and push release web image
+        id: build-web
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: web-runner
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
 
       - name: Record published digest
         shell: bash
@@ -176,4 +211,8 @@ jobs:
           echo "image=ghcr.io/jnhu76/exam" >> "$GITHUB_STEP_SUMMARY"
           echo "tags=${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
           echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "source=${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "image=ghcr.io/jnhu76/exam-web" >> "$GITHUB_STEP_SUMMARY"
+          echo "tags=${{ steps.meta-web.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "digest=${{ steps.build-web.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
           echo "source=${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"

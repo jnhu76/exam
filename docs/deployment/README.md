@@ -12,37 +12,54 @@
 - Multi-instance deployment is **not** supported (in-process scanners
   assume a single API owner)
 
-## Production Topology
+## Production Topology (#585)
 
 ```text
-┌─────────────────────────────────────────────┐
-│  Docker Compose (default stack)             │
-│                                             │
-│  ┌─────────┐  ┌─────────┐  ┌───────────┐  │
-│  │   app   │  │   db    │  │   redis   │  │
-│  │ (Fastify│  │ (PG 18) │  │  (7, opt) │  │
-│  │  + SPA) │  │         │  │           │  │
-│  └─────────┘  └─────────┘  └───────────┘  │
-│                                             │
-│  Services: app + db (default)               │
-│            app + db + redis (--profile redis)│
-│                                             │
-│  Host port: EXAM_PORT → container 3000      │
-│  Data: ./data/postgres (bind mount)         │
-└─────────────────────────────────────────────┘
+                    host :EXAM_PORT (default 80)
+                              │
+┌─────────────────────────────┼───────────────────────────┐
+│  Docker Compose (nginx is the ONLY public ingress)      │
+│  ┌─────────┐   /api/** ──► ┌─────────┐                  │
+│  │  nginx  │──────────────►│   app   │  API (Fastify)   │
+│  │ (edge)  │   /* ──────►  └────┬────┘  :3000          │
+│  └────┬────┘              ┌────┴────┐                  │
+│       │            /* ──► │   web   │  static SPA      │
+│       │                   │ (nginx) │  :4173           │
+│       │                   └─────────┘                  │
+│  ┌─────────┐  ┌─────────┐  ┌───────────┐               │
+│  │   db    │  │  redis  │  │ app runs  │                │
+│  │ (PG 18) │  │ (7, opt)│  │ migrations│                │
+│  └─────────┘  └─────────┘  └───────────┘               │
+│                                                        │
+│  Services: nginx + web + app + db (default)            │
+│            + redis (--profile redis)                   │
+│                                                        │
+│  Host port: EXAM_PORT → nginx 80 (nothing else published)│
+│  Data: ${EXAM_DATA_ROOT}/postgres (bind mount)         │
+└────────────────────────────────────────────────────────┘
 ```
 
-The app container runs the API, serves the built SPA, runs database
-migrations on startup, and executes the in-process email outbox loop.
-There is no separate email worker service.
+- `nginx` is the sole public ingress (`deploy/nginx/edge.conf`,
+  runtime-mounted read-only): `/api/**` → app:3000, `/*` → web:4173.
+  Upstreams resolve through Docker DNS at request time, so app/web
+  recreations never strand the edge on a stale address.
+- The `web` service is a dedicated static runtime: nginx serving the
+  built SPA from the `web-runner` image (`deploy/nginx/web.conf` is
+  baked in; never `vite preview`).
+- The `app` container runs the API only (no bundled SPA), database
+  migrations on startup, and the in-process email outbox loop. There is
+  no separate email worker service.
+- `app`, `web`, and `db` publish no host ports; `nginx` health-gates its
+  startup on both upstreams being healthy.
 
 ## Deployment Paths
 
 ### Prebuilt image (recommended for operators)
 
-The `app` service runs a prebuilt release image pinned by `EXAM_IMAGE`
-in `.env.deploy`. The `generate-env.mjs` script derives the pin from
-`.release-version` (`ghcr.io/jnhu76/exam:vX.Y.Z`).
+The `app` and `web` services run prebuilt release images pinned by
+`EXAM_IMAGE` / `EXAM_WEB_IMAGE` in `.env.deploy`. The `generate-env.mjs`
+script derives both pins from `.release-version`
+(`ghcr.io/jnhu76/exam{,-web}:vX.Y.Z`).
 
 ```bash
 node scripts/generate-env.mjs
@@ -51,12 +68,14 @@ docker compose --env-file .env.deploy up -d
 
 ### Source build (contributors / PR acceptance)
 
-Build the current checkout explicitly and run the canonical operator
-Compose against the local tag (#626 — no build overlay):
+Build the current checkout explicitly (both targets) and run the
+canonical operator Compose against the local tags (#626 — no build
+overlay):
 
 ```bash
 docker build --target runner -t exam-local:dev .
-EXAM_IMAGE=exam-local:dev \
+docker build --target web-runner -t exam-local:web-dev .
+EXAM_IMAGE=exam-local:dev EXAM_WEB_IMAGE=exam-local:web-dev \
   docker compose --env-file .env.deploy -f docker-compose.yml up -d
 ```
 
@@ -66,9 +85,12 @@ Pull on a connected machine, `docker save`, transfer, `docker load`:
 
 ```bash
 docker pull ghcr.io/jnhu76/exam:vX.Y.Z
+docker pull ghcr.io/jnhu76/exam-web:vX.Y.Z
 docker save ghcr.io/jnhu76/exam:vX.Y.Z | gzip > exam-image.tar.gz
+docker save ghcr.io/jnhu76/exam-web:vX.Y.Z | gzip > exam-web-image.tar.gz
 # transfer, then on the target:
 docker load < exam-image.tar.gz
+docker load < exam-web-image.tar.gz
 ```
 
 ## Configuration
@@ -95,18 +117,29 @@ See
 the complete image acquisition guide (online pull, offline transfer,
 source build, contributor verification).
 
-## Network / TLS
+## Network / TLS (#585)
 
-- The application does **not** terminate TLS
-- Place a reverse proxy (nginx, Caddy) in front for HTTPS
-- Behind a reverse proxy, set `TRUSTED_PROXY_CIDRS` to the proxy's link
-  addresses **only — never the candidate client network** — and let the
-  proxy append the real client IP to `X-Forwarded-For`. Without it, all
-  candidates share the proxy IP as one rate-limit identity; with a CIDR
-  covering clients, candidates could forge their identity. See the runbook
-  §2 "Rate-limit identity, trusted proxies, and sizing"
+- The bundled `nginx` edge is the only public ingress and terminates
+  plain HTTP on `EXAM_PORT` (default 80).
+- The application does **not** terminate TLS. HTTPS is a commented
+  template inside `deploy/nginx/edge.conf`: mount the certificate chain
+  at `/etc/nginx/certs/fullchain.pem` and the key at
+  `/etc/nginx/certs/privkey.pem`, uncomment the 443 server block, and
+  publish 443 in `docker-compose.yml`. No ACME/Certbot is bundled.
+- `TRUSTED_PROXY_CIDRS` must name the nginx→app hop **only — never the
+  candidate client network**. In the bundled topology the client-visible
+  peer of the app is the Compose bridge; resolve the actual subnet with
+  `docker network inspect <project>_exam-net` and set e.g.
+  `TRUSTED_PROXY_CIDRS=172.19.0.0/16`. The edge **replaces**
+  `X-Forwarded-For` with the real client address (appending would let a
+  client forge its audit/rate-limit identity), so with the narrow CIDR
+  `request.ip` is the true client and a client-sent `X-Forwarded-For`
+  is ignored. See the runbook §2 "Rate-limit identity, trusted proxies,
+  and sizing".
 - Set `CORS_ORIGIN` and `PUBLIC_WEB_ORIGIN` to the address users will
-  access (e.g. `http://192.168.1.5:3000` for LAN)
+  access. The default is `http://localhost` (nginx owns public 80); a
+  remapped `EXAM_PORT` or LAN address must set both explicitly (e.g.
+  `http://192.168.1.5:8080`).
 
 ## Deployment Validation
 

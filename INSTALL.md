@@ -38,7 +38,9 @@ secrets are never rotated on re-run.
 docker compose --env-file .env.deploy up -d
 ```
 
-This pulls the prebuilt release image and starts the app and PostgreSQL.
+This pulls the prebuilt release images and starts the nginx edge, the
+static web server, the API, and PostgreSQL (#585 topology; nginx is the
+only published service, on `EXAM_PORT`, default 80).
 No local build is required. Watch the startup logs:
 
 ```bash
@@ -53,7 +55,8 @@ Wait until you see `Server listening at http://0.0.0.0:3000`.
 docker compose --env-file .env.deploy ps
 ```
 
-Expected: `app` (healthy), `db` (healthy).
+Expected: `nginx` (running), `app` (healthy), `web` (healthy),
+`db` (healthy).
 
 ### 4. Bootstrap the first Admin
 
@@ -69,8 +72,8 @@ internal default organization, which unblocks the email outbox loop.
 
 ### 5. Open the application
 
-Navigate to `http://localhost:3000` and log in with the credentials you
-just created.
+Navigate to `http://localhost` (the nginx edge on `EXAM_PORT`, default
+80) and log in with the credentials you just created.
 
 ### Alternative: Launchpad first-install page
 
@@ -79,7 +82,7 @@ Instead of the CLI, you can use the browser-based Launchpad flow:
 1. Set `LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32>` in `.env.deploy`
    **before** starting the stack.
 2. Start the stack (`docker compose --env-file .env.deploy up -d`).
-3. Navigate to `http://localhost:3000/launchpad` and complete the form.
+3. Navigate to `http://localhost/launchpad` and complete the form.
 4. Once initialized, `/launchpad` redirects to `/login` and never
    reopens.
 
@@ -87,11 +90,11 @@ Instead of the CLI, you can use the browser-based Launchpad flow:
 
 ```bash
 # API liveness
-curl -s http://localhost:3000/api/health
+curl -s http://localhost/api/health
 # Expected: {"status":"ok"}
 
 # Public config
-curl -s http://localhost:3000/api/system/public-config
+curl -s http://localhost/api/system/public-config
 ```
 
 Then log in through the web UI and create a test candidate, course,
@@ -103,17 +106,20 @@ For machines on your local network, set these in `.env.deploy` before
 starting the stack:
 
 ```bash
-EXAM_PORT=3000
-CORS_ORIGIN=http://192.168.1.5:3000
-PUBLIC_WEB_ORIGIN=http://192.168.1.5:3000
+EXAM_PORT=8080
+CORS_ORIGIN=http://192.168.1.5:8080
+PUBLIC_WEB_ORIGIN=http://192.168.1.5:8080
 ```
 
 Replace `192.168.1.5` with your machine's actual LAN address. The
 browser uses `PUBLIC_WEB_ORIGIN` for email action links, so set it to
 the address users will access.
 
-For HTTPS, place a reverse proxy (nginx, Caddy) in front of the app.
-The application does not terminate TLS itself.
+For HTTPS, the bundled nginx edge carries a commented HTTPS template:
+mount the certificate chain at `/etc/nginx/certs/fullchain.pem` and the
+key at `/etc/nginx/certs/privkey.pem`, uncomment the 443 server block in
+`deploy/nginx/edge.conf`, and publish 443 in `docker-compose.yml`. The
+application does not terminate TLS itself.
 
 ## Optional Capabilities
 

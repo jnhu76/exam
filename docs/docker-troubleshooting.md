@@ -57,12 +57,13 @@ the security repo.
 
 ## Common issues
 
-### Port 3000 already in use
+### Port 80 already in use
 
-The stack maps `${EXAM_PORT:-3000}`. Change the host port in `.env.deploy`:
+The nginx edge maps `${EXAM_PORT:-80}` (#585 — the only published
+service). Change the host port in `.env.deploy`:
 
 ```dotenv
-EXAM_PORT=3001
+EXAM_PORT=8080
 ```
 (docker compose --env-file .env.deploy ...)
 
@@ -73,16 +74,17 @@ Verify instead of guessing:
 ```bash
 # Always pass the deployment env file: the base compose interpolates
 # required variables (${EXAM_IMAGE:?...}) and aborts without it.
-docker compose --env-file .env.deploy ps          # all services running, app healthy
+docker compose --env-file .env.deploy ps          # nginx running; app/web/db healthy
 docker compose --env-file .env.deploy logs app    # migrations + 'Server listening'?
-curl -i http://localhost:3000/          # expect 200 + text/html
-curl -I http://localhost:3000/assets/   # expect 200 for a built asset
+curl -i http://localhost/               # expect 200 + text/html (SPA via the edge)
+curl -I http://localhost/assets/        # expect 200 for a built asset
 ```
 
-The app healthcheck requires the readiness gate (`/api/ready` — mandatory
-dependencies usable, e.g. PostgreSQL reachable) and the SPA (`/` returning
-HTML) to respond, so `app: healthy` means the web app is being served and
-the deployment readiness state holds. If the browser still cannot reach it,
+`app: healthy` means the readiness gate (`/api/ready` — mandatory
+dependencies usable, e.g. PostgreSQL reachable) holds; `web: healthy`
+means the SPA is servable on 4173; `nginx` only starts once both are
+true, so a running edge means the web app is being served and the
+deployment readiness state holds. If the browser still cannot reach it,
 check that the container's published port is reachable from the host
 (firewall / WSL2 localhost forwarding on Windows).
 
@@ -91,6 +93,7 @@ check that the container's published port is reachable from the host
 - Run the Quick Start from inside WSL2 (Ubuntu). `docker compose --env-file
   .env.deploy up -d` works from PowerShell too, but
   `node scripts/generate-env.mjs` needs Node on the host PATH.
-- On Windows, Docker Desktop usually exposes `localhost:3000` to the host
+- On Windows, Docker Desktop usually exposes `localhost` (the nginx edge,
+  `EXAM_PORT`) to the host
   automatically. If not, access the container via the WSL2 IP
   (`ip addr show eth0 | grep inet` inside WSL) or run the browser inside WSL.

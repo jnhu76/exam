@@ -11,6 +11,13 @@ dist
 *.tsbuildinfo
 .turbo
 
+# #585: the SPA ships ONLY in the web-runner image (apps/web/dist, copied
+# by that stage). apps/api/public is a host-native E2E artifact
+# (scripts/e2e/run.sh syncs the built SPA next to the API for the E2E dev
+# server) — it must never leak into the API image via the build context,
+# or a local E2E run silently turns the API image back into an SPA origin.
+apps/api/public
+
 # Testing
 coverage
 *.lcov

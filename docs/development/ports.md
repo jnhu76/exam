@@ -11,14 +11,17 @@ changing product defaults.
 | dev   | Vite              |           n/a | `VITE_PORT` (also owns API dev CORS / PUBLIC_WEB_ORIGIN default) | 5173 |
 | dev   | PostgreSQL Docker |          5432 | `DB_HOST_PORT` (dev compose publish + constructed dev `DATABASE_URL`) | 5432 |
 | dev   | Redis Docker      |          6379 | `REDIS_HOST_PORT` (dev compose publish; point `REDIS_URL` at the same port) | 6379 |
-| Docker | Exam app         |          3000 | `EXAM_PORT` (host publish; also owns default `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN`) | 3000 |
+| Docker | nginx edge       |            80 | `EXAM_PORT` (the ONLY host publish; also owns default `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN`) | 80 |
+| Docker | Exam app (API)   |          3000 | internal only (`app:3000` behind the edge) | — |
+| Docker | static web (SPA) |          4173 | internal only (`web:4173` behind the edge) | — |
 | Docker | PostgreSQL        |          5432 | internal only (`db:5432`)            | — |
 | Docker | Redis             |          6379 | internal only (`redis:6379`)         | — |
 
 Notes:
 
-- Vite exists only in local development. Production Docker serves the compiled
-  SPA and the API through the same Exam app port (`EXAM_PORT` → container 3000).
+- Vite exists only in local development. Production Docker exposes ONE port:
+  `EXAM_PORT` → the nginx edge on container 80 (#585), which routes `/api/**`
+  to the API (`app:3000`) and everything else to the static SPA (`web:4173`).
 - Env files own one mode each: `.env` (from `.env.example`) is local
   development ONLY; `.env.deploy` (from `.env.deploy.example`, filled by
   `node scripts/generate-env.mjs`) is deployment ONLY and is read via

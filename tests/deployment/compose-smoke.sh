@@ -81,11 +81,16 @@ if [ -n "${DEPLOY_ENV_FILE:-}" ]; then
     exit 1
   fi
   EXAM_PORT_FROM_ENV="$(env_file_value EXAM_PORT)"
-  ORIGIN="http://localhost:${EXAM_PORT_FROM_ENV:-3000}"
+  # #585: without an EXAM_PORT remap nginx publishes :80 and the canonical
+  # production origin carries no port suffix.
+  ORIGIN="http://localhost${EXAM_PORT_FROM_ENV:+:${EXAM_PORT_FROM_ENV}}"
 else
   PG_PASSWORD="smoke-pass-${RUN_NUM}-$(date +%s)"
   JWT_SECRET="smoke-jwt-${RUN_NUM}-$(openssl rand -hex 16)"
-  ORIGIN="http://localhost:3000"
+  # #585: nginx is the only published service; a remapped EXAM_PORT (never
+  # assume host :80) must pair with an explicit origin, as in the docs.
+  export EXAM_PORT=$((3340 + RUN_NUM % 40))
+  ORIGIN="http://localhost:${EXAM_PORT}"
 fi
 ADMIN_USER="smokeadmin${RUN_NUM}"
 ADMIN_PASS="Smoke-Admin-${RUN_NUM}-$(openssl rand -hex 8)"
@@ -213,15 +218,15 @@ ensure_source_images
 run_compose "${PROJECT}" up -d --quiet-pull 2>&1 | tail -5
 echo "  stack started."
 
-# ── Test 3: verify only 3 services started (no redis) ────────────────────
-echo "--- TEST 3: default topology = app + db (no redis, no email-worker) ---"
+# ── Test 3: default topology (no redis, no email-worker) ─────────────────
+echo "--- TEST 3: default topology = app + db + web + nginx (no redis) ---"
 SERVICES=$(run_compose "${PROJECT}" ps --services 2>/dev/null | sort | tr '\n' ' ')
 echo "  services: ${SERVICES}"
 if echo "${SERVICES}" | grep -qw "redis"; then
   echo "  FAIL: redis was started without the profile (regression)."
   exit 1
 fi
-for s in app db; do
+for s in app db web nginx; do
   echo "${SERVICES}" | grep -qw "${s}" || {
     echo "  FAIL: required service '${s}' missing."
     exit 1
@@ -233,19 +238,24 @@ if echo "${SERVICES}" | grep -qw "email-worker"; then
 fi
 echo "  PASS: default topology excludes redis and email-worker; required services present."
 
-# ── Test 4: wait for app + db healthy ────────────────────────────────────
-echo "--- TEST 4: wait for app + db healthy (migrate runs first) ---"
+# ── Test 4: wait for app + db + web + nginx ─────────────────────────────
+echo "--- TEST 4: wait for all services (migrate runs first) ---"
 for i in $(seq 1 60); do
   APP_STATUS=$(docker inspect "$(app_container "${PROJECT}")" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
   DB_STATUS=$(docker inspect "$(db_container "${PROJECT}")" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
-  if [ "${APP_STATUS}" = "healthy" ] && [ "${DB_STATUS}" = "healthy" ]; then
-    echo "  PASS: app=${APP_STATUS}, db=${DB_STATUS} (after ~$((i*2))s)."
+  WEB_STATUS=$(docker inspect "$(web_container "${PROJECT}")" --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
+  NGINX_STATE=$(docker inspect "$(nginx_container "${PROJECT}")" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
+  if [ "${APP_STATUS}" = "healthy" ] && [ "${DB_STATUS}" = "healthy" ] \
+    && [ "${WEB_STATUS}" = "healthy" ] && [ "${NGINX_STATE}" = "running" ]; then
+    echo "  PASS: app=${APP_STATUS}, db=${DB_STATUS}, web=${WEB_STATUS}, nginx=${NGINX_STATE} (after ~$((i*2))s)."
     break
   fi
   sleep 2
   if [ "${i}" = "60" ]; then
-    echo "  FAIL: app/db did not become healthy in 120s (app=${APP_STATUS}, db=${DB_STATUS})."
+    echo "  FAIL: services did not become healthy in 120s (app=${APP_STATUS}, db=${DB_STATUS}, web=${WEB_STATUS}, nginx=${NGINX_STATE})."
     compose_logs "${PROJECT}" app
+    compose_logs "${PROJECT}" web
+    compose_logs "${PROJECT}" nginx
     exit 1
   fi
 done
@@ -355,15 +365,22 @@ echo "${HEALTH}" | grep -q '"status":"ok"' && echo "  PASS: API liveness OK." ||
   exit 1
 }
 
-# ── Test 8b: SPA reachability (explicit, not only via the healthcheck) ───
-echo "--- TEST 8b: SPA index reachable (text/html) ---"
-SPA_PROBE=$(docker exec "$(app_container "${PROJECT}")" node -e \
+# ── Test 8b: SPA served by the WEB service, app stays API-only (#585) ────
+echo "--- TEST 8b: web serves SPA on 4173; app root is API-only ---"
+SPA_HEADERS=$(docker exec "$(web_container "${PROJECT}")" sh -c \
+  "wget -q -S -O /dev/null http://127.0.0.1:4173/ 2>&1 | tr -d '\r'")
+echo "  spa headers: $(echo "${SPA_HEADERS}" | head -n1)"
+echo "${SPA_HEADERS}" | grep -q 'HTTP/1.1 200' \
+  && echo "${SPA_HEADERS}" | grep -qi 'content-type: text/html' \
+  && echo "  PASS: web serves the SPA index as text/html on 4173." || {
+    echo "  FAIL: web did not serve the SPA index as text/html."; exit 1;
+  }
+APP_ROOT=$(docker exec "$(app_container "${PROJECT}")" node -e \
   "fetch('http://127.0.0.1:3000/').then(r=>console.log(JSON.stringify({status:r.status,ct:r.headers.get('content-type')||''}))).catch(e=>console.error('ERR',e.message))" 2>&1)
-echo "  spa: ${SPA_PROBE}"
-echo "${SPA_PROBE}" | grep -q '"status":200' \
-  && echo "${SPA_PROBE}" | grep -q 'text/html' \
-  && echo "  PASS: SPA index served as text/html." || {
-    echo "  FAIL: SPA index not reachable as text/html."; exit 1;
+echo "  app root: ${APP_ROOT}"
+echo "${APP_ROOT}" | grep -q '"status":404' \
+  && echo "  PASS: app root is the API-only JSON 404 (no bundled SPA)." || {
+    echo "  FAIL: app still serves content at / (bundled SPA must be gone)."; exit 1;
   }
 
 # ── Test 9: production bootstrap creates exactly one Admin ──────────────
