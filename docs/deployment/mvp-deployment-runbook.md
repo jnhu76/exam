@@ -475,17 +475,17 @@ docker compose --env-file .env.production exec app node dist/scripts/reset-admin
 
 ### Dev/test seed (NOT for production)
 
-The baseline seed is dev/test infrastructure only. The container entrypoint
-honors `RUN_SEED=1` (baseline) / `RUN_SEED=e2e` (canonical E2E seed), but the
-**deployment compose file does not forward `RUN_SEED`**. Host-local and CI
-E2E do not use `RUN_SEED` either: both call the canonical seed command
-(`pnpm --filter @exam/api db:seed:e2e`) directly. `RUN_SEED` is the Docker
-image entrypoint's seed-selection mechanism for image-based invocations —
-a retained mechanism, not a supported full image-E2E path (issue #636);
-no in-repo caller sets it today. The seed refuses
-to run when `APP_MODE=production`. For full demo data (courses, questions,
-exams, attempts), use `pnpm db:seed:demo` against the dev DB only — never
-against the production DB.
+The baseline seed is dev/test infrastructure only. There is no image-based
+seed path: the container entrypoint accepts no seed flags — it **rejects any
+non-empty `RUN_SEED` / `FORCE_APP_MODE` before migration or any data write**
+(the former automatic-seed interface was removed in #636; unset/empty values
+start normally: migrate → serve). Host-local and CI E2E seed by calling the
+canonical seed command (`pnpm --filter @exam/api db:seed:e2e`) against the
+e2e database themselves; the production first admin comes from
+`bootstrap-admin` above. The seed refuses to run when `APP_MODE=production`.
+For full demo data (courses, questions, exams, attempts), use
+`pnpm db:seed:demo` against the dev DB only — never against the production
+DB.
 
 > **Custom seed credentials** (optional, dev/test only): `SEED_ORG_NAME`,
 > `SEED_ORG_DISPLAY_NAME`, `SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD`,

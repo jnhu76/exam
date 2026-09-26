@@ -1,17 +1,34 @@
 #!/bin/sh
 set -e
 
-# E2E seed implies the E2E runtime mode: when RUN_SEED=e2e, default APP_MODE to
-# "e2e" (the E2E runtime mode). This is necessary because the image's
-# Dockerfile sets ENV APP_MODE=production, and production-mode security headers
-# (Strict-Transport-Security + Secure cookies) are wrong for the plain-HTTP E2E
-# app container: they make browsers upgrade HTTP->HTTPS, causing
-# ERR_SSL_PROTOCOL_ERROR (no TLS server). In e2e mode runtimeConfig resolves
-# isProduction=false -> no HSTS, no Secure cookie.
-# A caller may still override via FORCE_APP_MODE to validate production headers.
-if [ "$RUN_SEED" = "e2e" ]; then
-  APP_MODE="${FORCE_APP_MODE:-e2e}"
-  export APP_MODE
+# INVARIANT: the image entrypoint only checks required config, runs the
+# canonical migration, and execs the server. It never seeds and never derives
+# APP_MODE from seed flags (issue #636). APP_MODE resolution authority is the
+# app resolver (packages/db/src/databaseUrl.ts) fed by the environment; the
+# image default is APP_MODE=production (Dockerfile). Test/E2E data comes from
+# the explicit canonical seed command (pnpm --filter @exam/api db:seed:e2e)
+# run by the host-local E2E runner and CI against an e2e/test database; the
+# production first admin comes from bootstrap-admin (deployment runbook §5).
+#
+# The former RUN_SEED / FORCE_APP_MODE automatic-seed interface was removed
+# with the #636 image-E2E scope decision. Any non-empty value fails before
+# migration or any data write — the flags are never silently ignored.
+
+if [ -n "${RUN_SEED:-}" ] || [ -n "${FORCE_APP_MODE:-}" ]; then
+  {
+    echo "ERROR: the image automatic-seed interface was removed (issue #636);"
+    echo "  the entrypoint no longer seeds or switches APP_MODE."
+    [ -n "${RUN_SEED:-}" ] &&
+      echo "  Rejected: RUN_SEED='${RUN_SEED}' is no longer a supported setting."
+    [ -n "${FORCE_APP_MODE:-}" ] &&
+      echo "  Rejected: FORCE_APP_MODE='${FORCE_APP_MODE}' is no longer a supported setting."
+    echo "  E2E/test data: run 'pnpm --filter @exam/api db:seed:e2e' against the"
+    echo "  e2e/test database (the host-local runner and CI do this; they do"
+    echo "  not use this image)."
+    echo "  Production first admin: bootstrap-admin (see the deployment"
+    echo "  runbook, mvp-deployment-runbook.md §5)."
+  } >&2
+  exit 1
 fi
 
 if [ -z "$JWT_SECRET" ]; then
@@ -21,30 +38,6 @@ fi
 
 echo "Running database migrations..."
 node dist/scripts/migrate.js
-
-# Seed mode selection:
-#   RUN_SEED=1   → baseline seed only (admin / candidate / candidate2)
-#   RUN_SEED=e2e → canonical E2E seed (baseline + demo: candidate1..4)
-# Host-local and CI E2E converge on the same canonical seed contract by
-# calling db:seed:e2e directly; they do not set RUN_SEED. This branch is the
-# image-based wiring of that same seed (retained; not a supported full
-# image-E2E path — issue #636).
-case "$RUN_SEED" in
-  e2e)
-    echo "Running canonical E2E seed (baseline + demo)..."
-    node dist/e2e-seed.js --skip-migrate
-    ;;
-  1)
-    echo "Running baseline seed..."
-    node dist/seed.js --skip-migrate
-    ;;
-  "" )
-    : # no seed
-    ;;
-  *)
-    echo "WARN: unknown RUN_SEED='$RUN_SEED' (expected '', '1', or 'e2e'); skipping seed"
-    ;;
-esac
 
 echo "Starting server..."
 exec node dist/server.js

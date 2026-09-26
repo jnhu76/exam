@@ -8,6 +8,15 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+### Removed
+
+- Image automatic-seed interface (#636): `docker-entrypoint.sh` no longer
+  runs a seed or derives `APP_MODE` from `RUN_SEED` / `FORCE_APP_MODE`; any
+  non-empty value now fails the container before migration. E2E/test data:
+  run `pnpm --filter @exam/api db:seed:e2e` against the e2e/test database
+  (the host runner and CI already do). Production first admin:
+  `bootstrap-admin` (deployment runbook §5).
+
 ## [0.0.5] - 2026-09-22
 
 ### Added

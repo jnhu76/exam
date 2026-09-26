@@ -1,9 +1,11 @@
 /**
  * E2E seed runner for `@exam/api`.
  *
- * Thin adapter around `@exam/db/e2eSeedOrchestrator.runE2eSeed`. Lives
- * inside `apps/api` so it is compiled into the Docker image's `dist/` and can
- * be invoked from `docker-entrypoint.sh`.
+ * Thin adapter around `@exam/db/e2eSeedOrchestrator.runE2eSeed`. Invoked via
+ * the package script `db:seed:e2e` (`tsx src/e2e-seed.ts`) — the single E2E
+ * seed entry for host-local E2E (`scripts/e2e/run.sh`) and CI. The image
+ * entrypoint never calls it: the RUN_SEED automatic-seed interface was
+ * removed (#636).
  *
  * All orchestration logic (reset → migrate → seed → seedDemo → verify) is
  * delegated to the shared orchestrator. This file handles only env loading

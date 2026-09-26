@@ -204,6 +204,11 @@ production deployment itself is the acceptance surface (§1.6).
 - `APP_MODE` is the authoritative runtime mode selector.
 - `NODE_ENV` is a fallback when `APP_MODE` is unset.
 - Valid values: `development`, `test`, `e2e`, `ci`, `production`.
+- `APP_MODE=ci` and `APP_MODE=test` take the identical test-like branch
+  (`packages/db/src/databaseUrl.ts`); `ci` is a compatibility value for the
+  CI verify environment with no runtime behavior of its own, while `test` is
+  the value the vitest harness forces. Enum values describe DB routing, not
+  deployment scenarios (#636).
 - `APP_MODE=multiTenant` must fail fast at startup (Phase 4 only).
 
 ### 2.6 `REDIS_URL`

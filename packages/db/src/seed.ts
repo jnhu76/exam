@@ -132,9 +132,12 @@ export async function seed(
   // infrastructure and ships known default credentials (admin/admin123,
   // candidate/candidate123). It MUST NOT be used as the production
   // bootstrap path. The canonical production bootstrap is
-  // apps/api/src/scripts/bootstrap-admin.ts. This guard refuses to seed
-  // when APP_MODE=production so a misconfigured entrypoint (RUN_SEED=1
-  // in production) cannot silently introduce default credentials.
+  // apps/api/src/scripts/bootstrap-admin.ts, and the image entrypoint no
+  // longer auto-seeds (it rejects the removed RUN_SEED flags before any
+  // command — #636). This guard stays as defense in depth: it refuses to
+  // seed when APP_MODE=production even if someone invokes a seed directly
+  // (e.g. `docker compose exec app node dist/seed.js`) in a production
+  // container.
   assertNotProductionSeed();
 
   const timestamp = new Date();
