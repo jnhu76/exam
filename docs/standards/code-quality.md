@@ -143,13 +143,9 @@ University / campus / student
 - 考生身份列必须来自 `CandidateField`，不能假设一定存在"学号"或"工号"。
 - 示例数据不得进入正式 fallback 文案。
 
-建议增加脚本：
-
-```bash
-pnpm lint:copy
-```
-
-检查 `apps/**` 和 `packages/**` 中是否出现上述禁用词，并排除 test/story/demo 文件。
+本规则由 code review 依据 [`AGENTS.md`](../../AGENTS.md) §1 与
+[`docs/standards/i18n-copy-policy.md`](i18n-copy-policy.md) 把关；
+生产源码中的用户可见中文遵循 i18n copy policy（`t()` + zh-CN catalog）。
 
 ---
 
@@ -159,7 +155,6 @@ pnpm lint:copy
 
 ```bash
 pnpm format:check
-pnpm lint:copy
 ```
 
 ---
@@ -554,7 +549,6 @@ pnpm --filter @exam/db test   # DB repository tests (in-memory)
 
 ```bash
 pnpm exec lint-staged   # Prettier --write on staged files
-pnpm lint:copy          # hardcoded copy guard
 pnpm lint:arch          # architecture boundary lint
 ```
 
@@ -574,37 +568,11 @@ pnpm exec commitlint --edit "$1"   # Conventional Commits 校验
 
 ## 15. CI Quality Gate
 
-CI 运行三个并行 job，由 `static` job 门控：
+CI job 拓扑、命令与 env 接线的唯一权威是 `.github/workflows/ci.yml`，本文档不维护它的副本。需要记住的约束只有三条：
 
-### static job (必须先通过)
-
-```bash
-pnpm verify:static
-# 展开为：
-# pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck
-```
-
-### verify job (全量测试)
-
-```bash
-pnpm verify
-# 展开为 static + coverage + build：
-# ... && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build
-```
-
-### e2e job
-
-```bash
-pnpm test:e2e
-```
-
-J9 最终增加 smoke：
-
-```bash
-pnpm smoke
-```
-
-PR 不通过 CI，不允许合并。
+- `static` 必须先通过，其余 job 才开跑；
+- 本地等价入口是 `pnpm verify`（可执行组成以根 `package.json` 为准）与 `pnpm e2e`（host-native runner）；冒烟门是 `pnpm smoke`；
+- PR 不通过 CI，不允许合并。
 
 ---
 
@@ -656,29 +624,7 @@ PR 不通过 CI，不允许合并。
 
 ## 18. Verify Commands
 
-根目录 `package.json` scripts：
-
-```json
-{
-  "scripts": {
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "lint": "node scripts/check-code-quality.mjs",
-    "lint:copy": "node scripts/check-hardcoded-copy.mjs",
-    "lint:arch": "node scripts/check-architecture.mjs",
-    "lint:db-config": "node scripts/check-db-config.mjs",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
-    "coverage": "turbo coverage",
-    "test:integration": "turbo test:integration",
-    "test:e2e": "turbo test:e2e",
-    "smoke": "turbo smoke",
-    "build": "turbo build",
-    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck",
-    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build"
-  }
-}
-```
+可执行命令的唯一权威是根 `package.json` 的 `scripts`（CI 接线为 `.github/workflows/*`）；本文档不复制脚本快照，避免出现第二份 package.json。需要命令时直接读 `package.json`：常用入口是 `pnpm verify`、`pnpm verify:static`、`pnpm test`、`pnpm test:integration`、`pnpm e2e`、`pnpm smoke`。
 
 ### 按 Job 类型额外运行
 

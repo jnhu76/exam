@@ -151,8 +151,6 @@ Key checks:
 pnpm lint:arch          # architecture boundary checks
 pnpm lint:db-config     # database config consistency
 pnpm lint:env-contract  # env var contract guards
-pnpm lint:repo-contract # turbo/package/seed/ADR/topology contracts
-pnpm lint:ui-gates      # frontend visual authority guards
 ```
 
 ## E2E

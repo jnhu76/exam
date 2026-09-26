@@ -42,7 +42,7 @@ production deployment itself is the acceptance surface (§1.6).
 | **Forbidden** | Database access, network calls, file writes outside repo |
 | **Timeout** | 10 minutes |
 | **Cache** | pnpm store plus GitHub-backed `.turbo` cache. Turbo remains the authority for task hashes; the GitHub cache only persists its local CAS between runners/runs. |
-| **Failure attribution** | `format:check` → Prettier issue; `lint` → ESLint issue; `lint:copy` → hardcoded business copy; `lint:arch` → dependency boundary violation; `typecheck` → TypeScript error |
+| **Failure attribution** | `format:check` → Prettier issue; `lint` → console-output violation; `lint:arch` → dependency boundary violation; `typecheck` → TypeScript error |
 
 ### 1.2 Build Once + Artifact Fan-out
 
@@ -56,7 +56,7 @@ production deployment itself is the acceptance surface (§1.6).
 | **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}` for this workflow run only (1-day retention). The name is run-scoped, not attempt-scoped, so partial reruns of downstream jobs still resolve it; `overwrite: true` lets a full rerun replace the same-run artifact. |
 | **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and the four E2E shards download this same-workflow artifact and do not rebuild it. |
 | **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
-| **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment fresh-install (release acceptance, §1.6) does not consume it; that gate continues to build the Docker image from the current checkout. |
+| **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment acceptance does not consume it: the operator's real `docker compose` run uses the pinned release images, not this artifact. |
 
 ### 1.3 Web Coverage
 
@@ -105,7 +105,7 @@ production deployment itself is the acceptance surface (§1.6).
 |-------|-------|
 | **Workflow** | `release` (`.github/workflows/release.yml`) — NOT PR CI |
 | **Ordering** | Validate version contract → build API image → build Web image → push both → immutable tag → GitHub Release. Both images build before anything irreversible happens, so a failed second build cannot leave a half-published release. |
-| **No deployment simulation** | The workflow runs no fresh-install/compose simulation; deployment acceptance is the real `docker compose` execution by the operator (runbook §3/§11). |
+| **No deployment simulation** | The workflow runs no compose/deployment simulation; deployment acceptance is the real `docker compose` execution by the operator (runbook §3/§11). |
 
 ### 1.7 E2E (Playwright)
 
@@ -274,8 +274,7 @@ wired into both vitest globalSetups (`apps/api/vitest.globalSetup.ts`,
   is declared in the `env` key of the DB-backed test tasks in `turbo.json` —
   passed through AND hashed into the task cache key, so a routing change can
   never replay a green result recorded against a different database. The
-  `passThroughEnv`-only shape is forbidden for these tasks (enforced by
-  `scripts/repository-contract/turbo-config-contract.mjs`).
+  `passThroughEnv`-only shape is forbidden for these tasks.
 
 **Worker-DB physical lifecycle** (`TEST_DB_ISOLATION=worker-database`):
 

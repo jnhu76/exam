@@ -565,10 +565,8 @@ Process-boundary differences by design:
   process open past the grace after `app.close()` has settled; it waits
   briefly for natural exit, then logs the remaining owners and exits with
   the settled code. On the clean-drain path the process exits naturally
-  (regression-tested by `server.shutdown.test.ts`). The relation is
-  enforced by
-  `scripts/repository-contract/deployment-topology-contract.mjs`; raise the
-  grace if any component budget grows.
+  (regression-tested by `server.shutdown.test.ts`). Raise the grace if any
+  component budget grows.
 - **Startup**: the loop starts in the background (it does not block
   `listen`) and waits for the internal default organization the same way
   the worker does (`bootstrap_pending` heartbeats before bootstrap).
@@ -578,10 +576,8 @@ The standalone `emailDeliveryWorker.ts` entrypoint and the
 escape hatch (e.g. draining a large backlog off the API process during an
 incident, or local debugging). They are NOT part of the supported
 deployment topology: the production Compose file has no email-worker
-service, and the deployment topology contract
-(`scripts/repository-contract/deployment-topology-contract.mjs`) FAILS if
-one reappears. Reintroducing a dedicated worker container is an ADR
-revision, not a config change.
+service. Reintroducing a dedicated worker container is an ADR revision,
+not a config change.
 
 A new `apps/worker` package is introduced only if several worker types need
 independent dependencies, builds, ownership, or deployment. One email
@@ -1282,12 +1278,11 @@ query cost at 10k backlog: 11.9 ms per 100-row claim (EXPLAIN ANALYZE).
 - `EMAIL_ENABLED=false` deployments no longer ship a resident no-op
   container; the loop still runs in-process and marks enqueued rows `sent`
   via `DisabledEmailSender` (ADR-011 §12 Approach A unchanged).
-- The deployment topology contract asserts `app + db` and FAILS if an
-  `email-worker` service reappears; the app service must forward
-  `EMAIL_ENABLED`.
+- The supported topology is `app + db` with no `email-worker` service; the
+  app service must forward `EMAIL_ENABLED`.
 - Diagnostics, `worker_heartbeats`, and `buildEmailStatus` are unchanged.
 - New runtime knob: `EMAIL_FAKE_DELAY_MS` (non-negative, default 0) —
-  simulated transport latency on the fake sender for tests/deployment
+  simulated transport latency on the fake sender, for test / deployment
   rehearsal.
 - #351 post-merge remediation (same amendment window): the loop's shutdown
   race timer is explicitly owned and cleared (a cleared-less ref'ed timer

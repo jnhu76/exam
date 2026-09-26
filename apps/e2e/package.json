@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "test:e2e": "playwright test",
-    "e2e": "playwright test",
     "smoke": "playwright test e2e/candidate-happy-path.spec.ts",
     "typecheck": "tsc --noEmit"
   },

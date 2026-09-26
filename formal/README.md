@@ -133,7 +133,6 @@ TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:server
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:client
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:witnesses
 TLA2TOOLS_JAR=/path/to/tla2tools.jar pnpm formal:operator-grant:counterexamples
-pnpm formal:operator-grant:runner-test
 ```
 
 The runner fails clearly if `TLA2TOOLS_JAR` is unset, the path is not a

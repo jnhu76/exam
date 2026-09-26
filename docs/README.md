@@ -169,7 +169,6 @@ For archive semantics and directory taxonomy, see
 pnpm dev
 pnpm test
 pnpm verify
-pnpm lint:md
 bash scripts/e2e/run.sh
 ```
 

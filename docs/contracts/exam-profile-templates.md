@@ -330,7 +330,7 @@ version tables: 0                           inheritance: 0
 ```
 
 Verified: fresh DB (isolated test schemas) applies the migration; existing DB
-migration check (`pnpm test:db-journal`, `pnpm lint:db-journal`) passes;
+migration check (`pnpm lint:db-journal`) passes;
 profile CRUD works; normal Exam create without a profile still works (full API
 suite).
 

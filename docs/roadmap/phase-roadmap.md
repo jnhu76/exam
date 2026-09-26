@@ -95,7 +95,7 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 **Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/status/implementation-status.md` and the archived `docs/archive/dev/AUDIT-PHASE2-REALITY.md`). The `deadline` and `untimed` timing modes are implemented (#291 Phase A, PR #388). The remaining `timed_sync` mode (semantics frozen in `docs/contracts/timed-sync-semantics.md`) and queue admission are deferred to Issues (#291, #292).
 
-**i18n foundation complete (J1–J10).** All user-visible Chinese in production source goes through `t()` via `apps/web/src/i18n/locales/zh-CN.ts`. Full production source hardcoded copy gate enforced via `pnpm lint:copy`. See `docs/standards/i18n-copy-policy.md`.
+**i18n foundation complete (J1–J10).** All user-visible Chinese in production source goes through `t()` via `apps/web/src/i18n/locales/zh-CN.ts`, per `docs/standards/i18n-copy-policy.md`.
 
 ### In scope — Implemented
 

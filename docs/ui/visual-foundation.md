@@ -29,11 +29,11 @@ Koi/Element Plus screenshots or archived research.
 | --- | --- |
 | Where is typography governed? | `DESIGN.md` §Typography (role table) + `docs/standards/ui-system.md` §Typography recipes; machine registry `apps/web/src/typography/recipeRegistry.ts`; implementation `apps/web/src/typography/recipes.css` |
 | Where is the font source / fallback contract governed? | `docs/standards/ui-system.md` §Fonts (bundled-source authority, fallback chain, allowed weights 400/500/700, `font-synthesis: none`); assets `apps/web/public/fonts/harmonyos-sans-sc/`; regeneration `scripts/fonts/bundled-font-sources.mjs`; gate `apps/web/src/docs/fontAuthority.test.ts` |
-| Where are text/color roles governed? | Token source `apps/web/src/index.css` `:root` + `@theme inline`; document-of-record table `DESIGN.md` §Token authority; enforcement `scripts/check-token-bypass.mjs`, `scripts/check-raw-color-usage.mjs` |
+| Where are text/color roles governed? | Token source `apps/web/src/index.css` `:root` + `@theme inline`; document-of-record table `DESIGN.md` §Token authority (review-enforced) |
 | Where are surfaces/borders governed? | `apps/web/src/surface/recipes.css` + `docs/standards/ui-system.md` §Surface and elevation (elevation vocabulary) + `DESIGN.md` §Token authority (border roles) |
 | Where is spacing governed? | `DESIGN.md` §Geometry and elevation (scale) + `docs/standards/ui-system.md` §Spatial governance boundary (who may own what); no semantic spacing-token layer exists by design |
 | Where is radius governed? | `DESIGN.md` §Geometry and elevation (base 8, control family 6, status 6) implemented via `--radius` and `apps/web/src/control/recipes.css` |
-| Where are icons governed? | `apps/web/src/components/shared/AppIcon.tsx` (single size/stroke entry, `data-app-icon` marker) + `docs/standards/ui-system.md` §Icons; gate `apps/web/src/components/shared/AppIconStrokeCascade.test.tsx`; direct-import ban for action icons `scripts/check-row-action-icons.mjs` |
+| Where are icons governed? | `apps/web/src/components/shared/AppIcon.tsx` (single size/stroke entry, `data-app-icon` marker) + `docs/standards/ui-system.md` §Icons; gate `apps/web/src/components/shared/AppIconStrokeCascade.test.tsx`; action icons must go through `AppIcon` (review-enforced) |
 | Where is component geometry governed? | The authoritative component/recipe for each family (see `docs/standards/ui-system.md` §Component authority), shadcn/Radix primitives in `apps/web/src/components/ui/`, recipes in `apps/web/src/{control,badge,feedback,table}/recipes.css`, dialog size vocabulary `docs/standards/ui-system.md` §Dialogs, control disabled-state policy §Disabled states (gate `apps/web/src/components/ui/primitiveContracts.test.tsx`) |
 | Where are responsive/density rules governed? | Shell contract NAV-1…NAV-6 `docs/standards/ui-system.md` §Navigation shell continuity; page-width roles §Page geometry (`apps/web/src/components/shared/PageContainer.tsx`); density as the negotiated table tier (`apps/web/src/table/tableTiers.ts` — the tier is the region's density signal; component layout owns concrete padding within its role); table archetypes §Tables (non-table rules only) |
 | Where are theme rules governed? | `DESIGN.md` header: **light-theme only; dark mode is out of scope.** No theme-switch surface exists |
@@ -84,7 +84,7 @@ authority is and when a change needs an explicit decision.
 
 - invent arbitrary font weights (600 does not exist in the loaded family; 700
   is recipe-owned metric emphasis only) — authority: `docs/standards/ui-system.md`
-  §Fonts; gates: `exam-ui/no-heavy-font-weight`, `scripts/check-high-font-weight.mjs`;
+  §Fonts; gate: `exam-ui/no-heavy-font-weight` (`pnpm lint:eslint`);
 - rely on a host OS font as the primary UI typography, or reintroduce a
   host `local()` font source ahead of the bundled WOFF2 — authority: §Fonts +
   `scripts/fonts/bundled-font-sources.mjs`; gate: `fontAuthority.test.ts`;
@@ -96,8 +96,7 @@ authority is and when a change needs an explicit decision.
   contracts + `docs/standards/ui-system.md` §Spatial governance boundary /
   §Page geometry (review-enforced);
 - use raw gray/blue palette utilities or hex/rgb literals where a semantic
-  role exists — gates: `scripts/check-token-bypass.mjs`,
-  `scripts/check-raw-color-usage.mjs`;
+  role exists — authority: `DESIGN.md` §Token authority (review-enforced);
 - repair visual hierarchy by blindly adding shadow, border, or font-weight,
   and never treat "fewer borders" as a quality rule — see §2;
 - let a page invent visual rhythm or component geometry outside the authority
