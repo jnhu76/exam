@@ -42,7 +42,7 @@ production deployment itself is the acceptance surface (§1.6).
 | **Forbidden** | Database access, network calls, file writes outside repo |
 | **Timeout** | 10 minutes |
 | **Cache** | pnpm store plus GitHub-backed `.turbo` cache. Turbo remains the authority for task hashes; the GitHub cache only persists its local CAS between runners/runs. |
-| **Failure attribution** | `format:check` → Prettier issue; `lint` → ESLint issue; `lint:copy` → hardcoded business copy; `lint:arch` → dependency boundary violation; `typecheck` → TypeScript error |
+| **Failure attribution** | `format:check` → Prettier issue; `lint` → console-output violation; `lint:arch` → dependency boundary violation; `typecheck` → TypeScript error |
 
 ### 1.2 Build Once + Artifact Fan-out
 
@@ -274,8 +274,7 @@ wired into both vitest globalSetups (`apps/api/vitest.globalSetup.ts`,
   is declared in the `env` key of the DB-backed test tasks in `turbo.json` —
   passed through AND hashed into the task cache key, so a routing change can
   never replay a green result recorded against a different database. The
-  `passThroughEnv`-only shape is forbidden for these tasks (enforced by
-  `scripts/repository-contract/turbo-config-contract.mjs`).
+  `passThroughEnv`-only shape is forbidden for these tasks.
 
 **Worker-DB physical lifecycle** (`TEST_DB_ISOLATION=worker-database`):
 

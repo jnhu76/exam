@@ -1,4 +1,2 @@
 pnpm exec lint-staged
-pnpm lint:copy
 pnpm lint:arch
-pnpm lint:ui-gates

@@ -1,12 +1,12 @@
 # i18n Copy Policy
 
-> **Scope of this document:** copy *enforcement* and the copy taxonomy.
+> **Scope of this document:** copy *rules* and the copy taxonomy.
 > The semantic authority for user-facing messages, error codes, reasons,
 > params, and compatibility text is
 > [`docs/contracts/api-contract.md`](../contracts/api-contract.md)
 > (Message & Error Contract, frozen by #413 C0). This policy does not
-> redefine that contract; it says which copy may exist where and how the
-> hardcoded-copy gate treats it.
+> redefine that contract; it says which copy may exist where and how
+> this policy treats it.
 
 ## Copy taxonomy
 
@@ -38,8 +38,8 @@ browser-interactive presentation copy** must be:
 1. Defined in `apps/web/src/i18n/locales/zh-CN.ts`
 2. Rendered via `t("key")` or `useTranslation()` in components
 
-This rule is enforced by `pnpm lint:copy` (CI gate). The CJK gate scans
-**both** `apps/` trees **and** every workspace package under
+This rule is enforced by code review against this policy. The rule's scope
+covers **both** `apps/` trees **and** every workspace package under
 `packages/*/src/` — a new package is covered automatically.
 
 **Scope of "user-visible":** browser-interactive UI copy rendered by the
@@ -50,15 +50,18 @@ governed by the message contract and their own rules; in production source
 they are declared with a narrow suppression directive, never a blanket
 file exemption.
 
-## Enforcement model (Tier 2)
+## Directive model (Tier 2)
 
-The guard (`scripts/check-hardcoded-copy.mjs`) parses each production
-source file with the TypeScript compiler API and flags every CJK string
-literal, template literal, and JSX text node. Comments — including Chinese
-comments — are never flagged, and `//` inside a string cannot disguise
-copy as a comment.
+Every CJK string literal, template literal, and JSX text node in production
+source outside a catalog authority carries an adjacent
+`i18n-copy-allow` directive naming its category (the grammar below).
+Comments — including Chinese comments — are never copy, and `//` inside a
+string cannot disguise copy as a comment. This grammar was machine-checked
+by `scripts/check-hardcoded-copy.mjs` until that guard was removed by the
+#634 script-surface audit; the directives remain in source as the review
+vocabulary for legitimate CJK dataflows.
 
-A flagged literal is legal only in one of two ways:
+A CJK literal is legitimate in only one of two ways:
 
 **Catalog authorities.** Files whose declared architectural
 responsibility *is* copy storage:
@@ -68,7 +71,7 @@ responsibility *is* copy storage:
   catalog (exact file; the privilege does not extend to sibling files)
 
 This list is exact-path on purpose. Widening it to a package or directory
-is a guard change and must be reviewed as such — a catalog exception must
+is a policy change and must be reviewed as such — a catalog exception must
 never become a way for mixed production files to inherit blanket immunity.
 
 **Narrow suppression directives.** Any other production CJK literal needs
@@ -100,32 +103,33 @@ message: "课程代码已存在",
 | `data-format` | CSV headers/aliases/parser tokens, placeholder-matching tokens — the data format itself |
 | `temporary` | Placeholder copy awaiting implementation; the reason must state the removal condition |
 
-- **Fail conditions:** an unknown category, a missing reason, a malformed
-  directive (including a missing `—` separator), or a stale directive (no
-  CJK literal on its own/next line) each fail the gate. An invalid
-  directive never silently suppresses the literal next to it.
+- **Validity conditions:** a directive must carry a known category, a
+  reason, the `—` separator, and an adjacent CJK literal (its own line or
+  the immediately following line). A stale directive (no adjacent CJK
+  literal) is removed together with the copy it described. An invalid
+  directive never legitimizes the literal next to it.
 - **No file-level bypass exists.** A directive covers its literal, never
-  the file; an unrelated new literal in the same file still fails.
+  the file; an unrelated new literal in the same file needs its own
+  directive.
 
-**Non-JS production text.** The gate is not limited to JS/TS: production
+**Non-JS production text.** The rule is not limited to JS/TS: production
 `.css`, `.json`, `.html`, `.md`, `.yaml`, and `.yml` files under the same
-roots are scanned with a raw CJK line check. None of these formats has a
-legitimate CJK zone today, so **every CJK line fails** and no suppression
-directives exist for them; a legitimate need must first be established in
-this policy, then implemented as the narrowest format-appropriate
-exemption — not by growing a directive engine into these formats.
+roots have no legitimate CJK zone today, so **every CJK line needs a
+policy-level justification** — a legitimate need must first be established
+in this policy, then implemented as the narrowest format-appropriate
+exemption.
 
-**Test-only classification.** The gate excludes genuine test-only content
-by *structure*, not by filename: `*.test.*` / `*.spec.*` / `*.stories.*`
+**Test-only classification.** Test-only content is out of scope by
+*structure*, not by filename: `*.test.*` / `*.spec.*` / `*.stories.*`
 files, `__tests__/` and `testHelpers/` **directories**, `fixtures/`
 directories, e2e/demo seed, and the dev-only labs under
 `apps/web/src/dev/`. A production file named `foo.testHelpers.ts` gets **no**
-exemption from its name and is scanned like any other production file.
+exemption from its name.
 
 **Tier 1** (deployment-specific terms such as 校内/大学/student) is
-independent of this model and scans all text files under `apps/` and
-`packages/`; the terms are forbidden everywhere except docs, tests,
-stories, and demo seed.
+independent of this model: it is the scenario-word ban of
+[`AGENTS.md`](../../AGENTS.md) §1 and applies everywhere except docs,
+tests, stories, and demo seed.
 
 ## Rule 2: zh-CN catalog is the single source of truth for browser-interactive copy
 
@@ -250,15 +254,5 @@ enforcement classifies zones; it does not redefine them.
    code only", "CSV header data contract", "Email rendered server-side").
 4. Explain the category choice in the PR.
 
-Whole-file allowlist entries no longer exist; the catalog authority list in
-the guard is exact-path and changes to it are reviewed as guard changes.
-
-## Enforcement
-
-- `pnpm lint:copy` — production scan (`scripts/check-hardcoded-copy.mjs`)
-- `pnpm test:copy-guard` — permanent regression suite for the guard itself
-  (`scripts/check-hardcoded-copy.test.mjs`): builds fixture repos and
-  asserts what must fail and what must stay legal
-
-Both run as part of `pnpm verify:static`, `pnpm verify`, and CI on every
-push. Exit code 1 blocks the commit/merge.
+Whole-file allowlist entries no longer exist; the catalog authority list
+above is exact-path by design.

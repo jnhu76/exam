@@ -139,8 +139,6 @@ pnpm --filter api dev   # 仅 API
 pnpm lint:arch          # 架构边界
 pnpm lint:db-config     # 数据库配置一致性
 pnpm lint:env-contract  # 环境变量契约
-pnpm lint:repo-contract # turbo / package / seed / ADR / topology 契约
-pnpm lint:ui-gates      # 前端视觉 authority 门禁
 ```
 
 ## E2E
