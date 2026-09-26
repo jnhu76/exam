@@ -104,6 +104,7 @@ echo "=== PITR suite: WAL archiving + physical backup + recovery (ts ${RUN_TS}) 
 
 # ── 0. Source cluster + canonical WAL archiving ─────────────────────────
 echo "--- start SOURCE cluster; enable WAL archiving via the canonical operator script ---"
+ensure_source_images
 run_compose "${PROJECT_SRC}" up -d --quiet-pull db >/dev/null
 wait_for_postgres "${PROJECT_SRC}"
 # The PITR helper is not a run_compose consumer; make its bare compose

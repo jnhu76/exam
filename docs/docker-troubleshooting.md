@@ -30,10 +30,11 @@ The build downloads packages from `registry.npmjs.org` by default. Override
 with a China registry (e.g. npmmirror):
 
 ```bash
-# The base compose stack runs a prebuilt image (EXAM_IMAGE); building THIS
-# checkout requires the build overlay:
-docker compose -f docker-compose.yml -f docker-compose.build.yml build \
-  --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+# The operator stack runs a prebuilt image (EXAM_IMAGE); building THIS
+# checkout is an explicit docker build:
+docker build --target runner \
+  --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
+  -t exam-local:dev .
 ```
 
 ### 3. `apt-get` fails during the image build
@@ -43,10 +44,11 @@ The build installs `ca-certificates` (base) and `python3 make g++`
 mirror:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.build.yml build \
+docker build --target runner \
   --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
   --build-arg DEBIAN_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian \
-  --build-arg DEBIAN_SECURITY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian-security
+  --build-arg DEBIAN_SECURITY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian-security \
+  -t exam-local:dev .
 ```
 
 `DEBIAN_MIRROR` must be the mirror's Debian repo URL (the value that replaces

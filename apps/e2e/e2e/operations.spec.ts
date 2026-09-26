@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 /**
  * Repo-root-relative path to the built evidence CLI (spec cwd is apps/e2e).
- * Available on the host-direct modes (CI + run-wsl.sh, where `pnpm build`
+ * Available on the host-direct modes (CI + run.sh, where `pnpm build`
  * produces apps/api/dist) and absent in the Docker e2e container (which only
  * mounts apps/e2e + packages) — the evidence-state tests skip there; the
  * truthful empty-state assertions still run everywhere.
@@ -20,7 +20,7 @@ const EVIDENCE_CLI = resolve(
 );
 const EVIDENCE_CLI_AVAILABLE = existsSync(EVIDENCE_CLI);
 /**
- * The API server's database for this shard: run-wsl.sh exports the per-shard
+ * The API server's database for this shard: run.sh exports the per-shard
  * DB URL (E2E_TEST_DATABASE_URL); CI exports TEST_DATABASE_URL directly.
  */
 const EVIDENCE_DATABASE_URL =
@@ -67,7 +67,7 @@ async function createMaintainerViaApi(
 
 /**
  * Runs the operator evidence CLI against the E2E database (APP_MODE=e2e →
- * TEST_DATABASE_URL, exported by run-wsl.sh). This is the ONLY path that
+ * TEST_DATABASE_URL, exported by run.sh). This is the ONLY path that
  * writes ledger evidence — mirroring the host operator flow.
  */
 function recordEvidence(args: string[]): void {

@@ -289,7 +289,7 @@ async function getCandidateSummariesByApi(
  * as `in_progress` regardless of the accelerated heartbeat scanner's timing.
  *
  * The demo seed plants candidate1's attempt as `in_progress` with
- * `lastActivityAt = seedTime`. docker-compose.test.yml accelerates the
+ * `lastActivityAt = seedTime`. The E2E runner accelerates the
  * heartbeat scanner (HEARTBEAT_TIMEOUT_MS=15000) for the disconnect/restore
  * specs, so by the time this test runs that attempt may already have been
  * auto-marked `disrupted` — surfacing as `resumable/resume` instead of the

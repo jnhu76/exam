@@ -51,12 +51,13 @@ docker compose --env-file .env.deploy up -d
 
 ### Source build (contributors / PR acceptance)
 
-Merge the build override to force a build from the current checkout:
+Build the current checkout explicitly and run the canonical operator
+Compose against the local tag (#626 — no build overlay):
 
 ```bash
-docker compose --env-file .env.deploy \
-  -f docker-compose.yml -f docker-compose.build.yml \
-  up -d --build
+docker build --target runner -t exam-local:dev .
+EXAM_IMAGE=exam-local:dev \
+  docker compose --env-file .env.deploy -f docker-compose.yml up -d
 ```
 
 ### Offline / air-gapped transfer
@@ -112,8 +113,10 @@ source build, contributor verification).
 After first install, run the smoke test described in
 [`mvp-deployment-runbook.md`](mvp-deployment-runbook.md) section 11.
 
-Automated deployment verification suites are in `tests/deployment/` and
-gated by CI (`pnpm test:deployment`).
+Automated deployment verification suites are in `tests/deployment/`
+(`pnpm test:deployment`); the release-blocking gate is the fresh-install
+acceptance inside the `release` workflow (see
+[`gates.md`](gates.md)).
 
 ## Runbooks
 

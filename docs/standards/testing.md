@@ -15,10 +15,9 @@
 2. [Environment Variable Contract](#2-environment-variable-contract)
 3. [Time / Async Testing Contract](#3-time--async-testing-contract)
 4. [E2E Contract](#4-e2e-contract)
-5. [Local WSL Test Matrix](#5-local-wsl-test-matrix)
-6. [Docker E2E Test Matrix](#6-docker-e2e-test-matrix)
-7. [CI E2E Test Matrix](#7-ci-e2e-test矩阵)
-8. [Verification Checklist](#8-verification-checklist)
+5. [Local Test Matrix](#5-local-test-matrix)
+6. [CI E2E Test Matrix](#6-ci-e2e-test矩阵)
+7. [Verification Checklist](#7-verification-checklist)
 
 ---
 
@@ -444,22 +443,29 @@ durability boundary.
 
 ## 4. E2E Contract
 
-### 4.1 WSL E2E vs Docker E2E
+### 4.1 Local E2E (`scripts/e2e/run.sh`)
 
-| Aspect | WSL E2E (`scripts/e2e/run-wsl.sh`) | Docker E2E (`scripts/e2e/run.sh`) |
-|--------|--------------------------------------|-----------------------------------|
-| **Execution** | Native on host (no app container) | Full Docker Compose (app + db + e2e containers) |
-| **Database** | `exam_e2e` (serial) or per-shard `exam_e2e_w{N}` | `exam_e2e` (`POSTGRES_DB` default inside container) |
-| **APP_MODE** | `e2e` (exported by the runner; the managed profile never imports the developer `.env`) | `e2e` |
-| **TEST_DATABASE_URL** | Explicit per-DB URL (`…/exam_e2e[_w{N}]`); `DATABASE_URL`/`TEST_DB_URL` unset | `db:5432/exam_e2e` |
-| **Compose topology** | Runner-owned: `COMPOSE_DISABLE_ENV_FILE=1` prevents Compose from reading root `.env`; `DB_HOST_PORT`/`REDIS_HOST_PORT`/`TZ`/`APP_TIMEZONE` are frozen once from shell input (or managed defaults) and exported. Developer root `.env` has ZERO authority over managed E2E Compose interpolation. | Standard Compose behavior (reads `.env` if present) |
-| **Topology overrides** | Shell env vars only: `DB_HOST_PORT=25432 bash scripts/e2e/run-wsl.sh` | `.env` or shell env |
-| **Sharding** | Supported (`E2E_WORKERS`, default 2) | Not supported (single process) |
-| **Blob reports** | Merged locally after run | Not used (list reporter only) |
-| **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs | `docker compose down -v` |
-| **Cleanup ordering** | Strict: stop servers BEFORE `DROP DATABASE` (issue #256-A). DROP is loud (no `\|\| true`); failure surfaces DB name + PG error and escalates exit to sentinel 70 if tests passed | N/A |
-| **DB retention** | `E2E_KEEP_WORKER_DB_ON_FAILURE=1` retains `exam_e2e_w*` only on Playwright failure (success always cleans) | N/A |
-| **Use case** | Fast local iteration | CI-like parity, reproducible builds |
+One canonical host-native runner backs `pnpm e2e`. The application runs on
+the host (API dev server + Playwright); Compose owns only the PostgreSQL/Redis
+dependencies (`docker-compose.dev.yml`).
+
+| Aspect | Local E2E (`scripts/e2e/run.sh`) |
+|--------|----------------------------------|
+| **Execution** | Native on host (no app container) |
+| **Database** | `exam_e2e` (serial) or per-shard `exam_e2e_w{N}` |
+| **APP_MODE** | `e2e` (exported by the runner; the managed profile never imports the developer `.env`) |
+| **TEST_DATABASE_URL** | Explicit per-DB URL (`…/exam_e2e[_w{N}]`); `DATABASE_URL`/`TEST_DB_URL` unset |
+| **Compose topology** | Runner-owned: `COMPOSE_DISABLE_ENV_FILE=1` prevents Compose from reading root `.env`; `DB_HOST_PORT`/`REDIS_HOST_PORT`/`TZ`/`APP_TIMEZONE` are frozen once from shell input (or managed defaults) and exported. Developer root `.env` has ZERO authority over managed E2E Compose interpolation. |
+| **Topology overrides** | Shell env vars only: `DB_HOST_PORT=25432 bash scripts/e2e/run.sh` |
+| **Sharding** | Supported (`E2E_WORKERS`, default 2) |
+| **Blob reports** | Merged locally after run |
+| **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs |
+| **Cleanup ordering** | Strict: stop servers BEFORE `DROP DATABASE` (issue #256-A). DROP is loud (no `\|\| true`); failure surfaces DB name + PG error and escalates exit to sentinel 70 if tests passed |
+| **DB retention** | `E2E_KEEP_WORKER_DB_ON_FAILURE=1` retains `exam_e2e_w*` only on Playwright failure (success always cleans) |
+
+CI E2E (§6) uses GitHub Actions service containers plus a host Node/Playwright
+process — the same product contracts as the local runner, without a second
+repository-owned topology.
 
 ### 4.2 CI E2E Shard Rules
 
@@ -491,11 +497,11 @@ The build artifact may contain only deterministic build products (`dist/**`).
 It must never contain database state, test results, coverage output, secrets, or
 runtime-generated files.
 
-### 4.4 run-wsl.sh Cleanup Contract (issue #256-A)
+### 4.4 run.sh Cleanup Contract (issue #256-A)
 
-The WSL runner owns a strict teardown lifecycle. All cleanup logic lives in
-`scripts/e2e/run-wsl-lib.sh` (sourced by `run-wsl.sh`) and is unit-tested by
-`scripts/e2e/run-wsl-lib.test.mjs` (run via `pnpm test:e2e-runner`, also part of
+The local runner owns a strict teardown lifecycle. All cleanup logic lives in
+`scripts/e2e/run-lib.sh` (sourced by `run.sh`) and is unit-tested by
+`scripts/e2e/run-lib.test.mjs` (run via `pnpm test:e2e-runner`, also part of
 `verify:static`).
 
 **Lifecycle (after Playwright shards finish):**
@@ -535,7 +541,7 @@ rejected by `is_safe_worker_db_name`.
 
 ---
 
-## 5. Local WSL Test Matrix
+## 5. Local Test Matrix
 
 ### 5.1 Unit Tests
 
@@ -581,13 +587,13 @@ pnpm --filter @exam/web test
 
 ```bash
 # Default (2 shards, parallel)
-bash scripts/e2e/run-wsl.sh
+bash scripts/e2e/run.sh
 
 # Single shard
-E2E_WORKERS=1 bash scripts/e2e/run-wsl.sh
+E2E_WORKERS=1 bash scripts/e2e/run.sh
 
 # Custom shard count
-E2E_WORKERS=4 bash scripts/e2e/run-wsl.sh
+E2E_WORKERS=4 bash scripts/e2e/run.sh
 ```
 
 - **DB required**: Yes (`exam_e2e` on `DB_HOST_PORT`, default 5432).
@@ -608,7 +614,7 @@ E2E_WORKERS=4 bash scripts/e2e/run-wsl.sh
   ```bash
   DB_HOST_PORT=25432 \
   REDIS_HOST_PORT=26379 \
-  bash scripts/e2e/run-wsl.sh
+  bash scripts/e2e/run.sh
   ```
 
   Do **not** edit the root `.env` to configure managed E2E — it is ignored by
@@ -616,46 +622,7 @@ E2E_WORKERS=4 bash scripts/e2e/run-wsl.sh
 
 ---
 
-## 6. Docker E2E Test Matrix
-
-```bash
-# Standard run
-pnpm e2e:docker
-
-# With host-port remapping (ports are configuration, not topology variants:
-# the same docker-compose.test.yml, no override YAML)
-EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
-```
-
-### Services
-
-| Service | Image | Host port authority | DB |
-|---------|-------|------|----|
-| `db` | `postgres:18.4-bookworm` | `DB_HOST_PORT` (default 5432) | `exam_e2e` |
-| `app` | Built from `Dockerfile` | `EXAM_PORT` (default 3000) | N/A |
-| `redis` | `redis:7-alpine` | `REDIS_HOST_PORT` (default 6379) | N/A |
-| `e2e` | `mcr.microsoft.com/playwright:v1.61.0-noble` | N/A | N/A |
-
-### Seed Data
-
-- `RUN_SEED=e2e` in app container → auto-runs `db:seed:e2e` on startup.
-- Produces deterministic demo accounts: admin, candidate, candidate1-4.
-
-### DB Lifecycle
-
-- Created fresh by `docker compose up`.
-- Destroyed by `docker compose down -v` on cleanup.
-- No persistent volumes (data is ephemeral).
-
-### Artifact Output
-
-- Playwright list reporter (stdout).
-- No blob reports, no merge.
-- Screenshots on failure saved to `test-results/`.
-
----
-
-## 7. CI E2E 测试矩阵
+## 6. CI E2E 测试矩阵
 
 ### Services
 
@@ -685,7 +652,7 @@ EXAM_PORT=3300 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 pnpm e2e:docker
 
 ---
 
-## 8. Verification Checklist
+## 7. Verification Checklist
 
 After any change to test configuration, CI workflow, or vitest config, verify:
 

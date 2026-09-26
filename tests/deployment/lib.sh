@@ -18,13 +18,12 @@ LIB_DIR="$(
 )"
 REPO_ROOT="$(cd -- "${LIB_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
-# Source-build override (the single build-mode surface). The deployment
-# verification suites ARE contributor/PR acceptance: every invocation merges
-# this override so the app image is built from THE CURRENT
-# CHECKOUT (pull_policy: build) — a stale registry or local image can never
-# fake a passing acceptance run, regardless of the operator `image:` pin in
-# docker-compose.yml (#319 contract, #321 two-path split).
-BUILD_OVERRIDE_FILE="${REPO_ROOT}/docker-compose.build.yml"
+# Local source-build tag for the deployment suites. #626 removed the
+# docker-compose.build.yml overlay: acceptance builds THIS checkout with an
+# explicit `docker build` (ensure_source_images) and runs the canonical
+# operator Compose file against that local tag. A stale registry image can
+# never fake an acceptance run.
+SOURCE_IMAGE_TAG="exam-local:dev"
 
 # ── Compose ──────────────────────────────────────────────────────────────
 # Run docker compose against the canonical production compose file.
@@ -39,15 +38,13 @@ BUILD_OVERRIDE_FILE="${REPO_ROOT}/docker-compose.build.yml"
 # as Compose's explicit --env-file — the same operator invocation the
 # runbook documents (`docker compose --env-file .env.deploy ...`). Compose
 # then NEVER reads the repo-root .env for interpolation, so a developer's
-# dev secrets cannot leak into a test stack. Unset = legacy behavior
-# (every required key is explicitly exported by the suites, which take
-# precedence over any ambient .env; no test stack reads developer files).
+# dev secrets cannot leak into a test stack.
 #
-# EXAM_IMAGE interpolation (#321): the operator file requires EXAM_IMAGE
-# even though acceptance never RUNS that image (the build override below
-# replaces it on app). In DEPLOY_ENV_FILE mode the generated
-# file carries the pin; in legacy-export mode there is no env file, so a
-# placeholder is defaulted here — interpolation-only, never pulled or run.
+# EXAM_IMAGE interpolation (#321/#626): the operator file requires EXAM_IMAGE.
+# Acceptance always runs the LOCALLY BUILT source image, so this library
+# exports the local pin in BOTH modes (shell env beats --env-file in Compose
+# interpolation) — a generated deployment env file may carry a registry pin,
+# but no suite ever pulls or runs it.
 run_compose() {
   local project=""
   if [ "${1:-}" != "" ] && [[ "${1}" != -* ]]; then
@@ -56,16 +53,29 @@ run_compose() {
   elif [ "${1:-}" = "" ]; then
     shift
   fi
-  local -a args=(docker compose -f "${COMPOSE_FILE}" -f "${BUILD_OVERRIDE_FILE}")
+  local -a args=(docker compose -f "${COMPOSE_FILE}")
   if [ -n "${DEPLOY_ENV_FILE:-}" ]; then
     args+=(--env-file "${DEPLOY_ENV_FILE}")
-  else
-    export EXAM_IMAGE="${EXAM_IMAGE:-exam-local:dev}"
   fi
+  export EXAM_IMAGE="${EXAM_IMAGE:-${SOURCE_IMAGE_TAG}}"
   if [ -n "${project}" ]; then
     args+=(-p "${project}")
   fi
   "${args[@]}" "$@"
+}
+
+# Build THIS checkout's app image and tag it as the local source pin
+# (idempotent per process: SOURCE_IMAGES_BUILT guards repeat builds across
+# a suite's multiple `up` invocations). #626: the replacement for the
+# removed docker-compose.build.yml overlay — explicit build, then the
+# canonical operator Compose consumes the pinned name. Suites call this
+# before their FIRST `up`; later projects reuse the same image.
+ensure_source_images() {
+  if [ -z "${SOURCE_IMAGES_BUILT:-}" ]; then
+    docker build --target runner -t "${SOURCE_IMAGE_TAG}" "${REPO_ROOT}"
+    export EXAM_IMAGE="${SOURCE_IMAGE_TAG}"
+    export SOURCE_IMAGES_BUILT=1
+  fi
 }
 
 # Read one KEY=VALUE pair from DEPLOY_ENV_FILE (or an explicitly given

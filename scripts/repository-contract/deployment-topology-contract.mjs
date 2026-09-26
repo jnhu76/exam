@@ -19,10 +19,10 @@
  * this guard first.
  *
  * The rules this file enforces are stated at their own sites below: service
- * presence and the email-worker ban, the single Compose entry point and its
- * build-mode override, the shutdown-budget contract, the readiness
- * healthcheck, DB/Redis credential expansion, Redis auth at container startup,
- * operator-doc drift, and the retired test-override workflow.
+ * presence and the email-worker ban, the single Compose entry point (no
+ * test/build overlay may reintroduce a second topology — #626), the
+ * shutdown-budget contract, the readiness healthcheck, DB/Redis credential
+ * expansion, Redis auth at container startup, and operator-doc drift.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -49,73 +49,48 @@ try {
   process.exit(1);
 }
 
-// ONE production/operator Compose entry point (docker-compose.yml). No
-// production PITR/backup/restore/production variant Compose file may exist.
-// dev/test Compose files are allowed (development infrastructure), and
-// docker-compose.build.yml is allowed as the single source-build MODE
-// override (build/image/pull_policy only — see assertBuildVariant). The
-// stable rule: optional operational capabilities (PITR, backup, restore)
-// do NOT get another production topology — they are database
-// configuration (scripts/backup/postgres-enable-pitr.sh — ALTER SYSTEM),
-// not an alternate Compose topology. Development/test files match
-// docker-compose.dev.yml or docker-compose.test*.yml without allowlist
-// edits; anything else at repo root is flagged for explicit justification.
+// ONE Compose entry point per lifecycle (#626): docker-compose.yml is the
+// sole production/operator topology and docker-compose.dev.yml is the sole
+// local dependency topology. The former docker-compose.test.yml (Docker E2E)
+// and docker-compose.build.yml (source-build overlay) were removed by #626 —
+// E2E is host-native (`pnpm e2e`) and source builds are explicit
+// `docker build --target …` consumed through the pinned image names — so NO
+// other docker-compose*.yml at repo root may exist. Optional operational
+// capabilities (PITR, backup, restore) are database configuration
+// (scripts/backup/postgres-enable-pitr.sh — ALTER SYSTEM), never an
+// alternate Compose topology.
 const FORBIDDEN_PROD_VARIANT_RE =
   /docker-compose\.(pitr|backup|restore|production)\.yml$/i;
-// Exactly ONE test-lifecycle topology authority: docker-compose.test.yml.
-// Any other docker-compose.test*.yml (e.g. the retired .override) is flagged
-// so a second test topology cannot reappear without editing this contract.
-const ALLOWED_TEST_VARIANT_RE = /^docker-compose\.test\.ya?ml$/i;
 const ALLOWED_DEV_VARIANT = "docker-compose.dev.yml";
-const ALLOWED_BUILD_VARIANT = "docker-compose.build.yml";
 try {
   const repoFiles = readdirSync(ROOT);
   for (const f of repoFiles) {
     if (!/^docker-compose\b.*\.ya?ml$/i.test(f)) continue;
     if (f === "docker-compose.yml" || f === ALLOWED_DEV_VARIANT) continue;
-    if (f === ALLOWED_BUILD_VARIANT) {
-      // Structurally checked below; here it just bypasses the
-      // unrecognized-variant error.
-    } else if (ALLOWED_TEST_VARIANT_RE.test(f)) {
-      continue;
-    } else if (FORBIDDEN_PROD_VARIANT_RE.test(f)) {
+    if (FORBIDDEN_PROD_VARIANT_RE.test(f)) {
       errors.push(
         `'${f}' is a forbidden production Compose variant: there must be ` +
           "exactly ONE production/operator Compose entry point " +
           "(docker-compose.yml). Optional PostgreSQL capabilities such as " +
           "PITR are database configuration (scripts/backup/" +
           "postgres-enable-pitr.sh — ALTER SYSTEM), not an alternate Docker " +
-          "topology. Development/test Compose files are allowed.",
+          "topology.",
       );
     } else {
       // An unknown docker-compose*.yml at repo root is suspicious — flag it
-      // so a new production variant cannot slip in under an unrecognized name.
+      // so a second topology (test overlay, build overlay, production
+      // variant) cannot reappear without editing this contract (#626).
       errors.push(
         `'${f}' is an unrecognized docker-compose variant at repo root. ` +
-          "If it is development/test infrastructure, name it " +
-          "docker-compose.dev.yml or docker-compose.test*.yml. Production " +
-          "capabilities must not introduce a second operator Compose " +
-          "entry point.",
+          "#626 converged the repository to exactly two Compose files " +
+          "(docker-compose.yml production, docker-compose.dev.yml local " +
+          "dependencies); removing or justifying a new file means editing " +
+          "this contract consciously.",
       );
     }
   }
 } catch {
   // If the root cannot be read, the compose read above already failed.
-}
-
-// docker-compose.build.yml structural rules — enforced by assertBuildVariant()
-// below (build-mode override of the ONE entry point).
-try {
-  assertBuildVariant(readFileSync(join(ROOT, ALLOWED_BUILD_VARIANT), "utf-8"));
-} catch (err) {
-  if (err && err.code === "ENOENT") {
-    errors.push(
-      `${ALLOWED_BUILD_VARIANT} is missing: the source-build verification ` +
-        "mode (contributors / PR acceptance) is a required surface.",
-    );
-  } else {
-    throw err;
-  }
 }
 
 // The deployment verification suite lives under tests/deployment/ and must
@@ -225,9 +200,10 @@ if (!servicesBlock) {
       // image via a REQUIRED EXAM_IMAGE pin (generate-env.mjs derives it
       // from .release-version — the single version authority), and the
       // base file must NOT carry a build key: contributors / PR acceptance
-      // get source authority exclusively through docker-compose.build.yml
-      // (pull_policy: build). A hardcoded tag here would drift from the
-      // release version; a base build key would blur the two paths.
+      // get source authority through an explicit docker build pinned to
+      // EXAM_IMAGE (tests/deployment/lib.sh ensure_source_images — #626).
+      // A hardcoded tag here would drift from the release version; a base
+      // build key would blur the two paths.
       const appNoComments = appBlock
         .split(/\r?\n/)
         .filter((l) => !/^\s*#/.test(l))
@@ -241,14 +217,15 @@ if (!servicesBlock) {
           "'app' service must pin " +
             "'image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/generate-env.mjs)}' " +
             "(the operator prebuilt-image pin derived from .release-version; " +
-            "source builds belong to docker-compose.build.yml) — #321.",
+            "source builds pin EXAM_IMAGE explicitly — #321/#626).",
         );
       }
       if (/^\s*build:\s*\S/im.test(appNoComments)) {
         errors.push(
           "'app' service must NOT carry a build key in docker-compose.yml: " +
-            "the operator path consumes the prebuilt EXAM_IMAGE pin, and the " +
-            "source-build path is docker-compose.build.yml (pull_policy: build).",
+            "the operator path consumes the prebuilt EXAM_IMAGE pin, and " +
+            "source builds are explicit docker builds pinned via EXAM_IMAGE " +
+            "(#626).",
         );
       }
       // The app must NOT depend on redis health (Redis is optional).
@@ -387,245 +364,16 @@ if (!servicesBlock) {
   }
 }
 
-// ── Compose & routine-operation authority closure (#498 baseline hardening) ──
-// ONE topology authority per lifecycle:
-//   docker-compose.yml        operator/production topology
-//   docker-compose.build.yml  source-build MODE override (assertBuildVariant)
-//   docker-compose.dev.yml    local dependency topology
-//   docker-compose.test.yml   Docker E2E topology — the ONLY test variant
-//
-// docker-compose.test.override.yml was retired: host-port remapping is
-// EXAM_PORT/DB_HOST_PORT/REDIS_HOST_PORT configuration of the same file, and
-// the override path was actively harmful (Compose merges `ports` by union, so
-// it still published the colliding original port, and PUBLIC_WEB_ORIGIN
-// stayed derived from EXAM_PORT=3000 while the app was published on 3300).
-{
-  // Rule 1: the retired override file must not come back.
-  if (existsSync(join(ROOT, "docker-compose.test.override.yml"))) {
-    errors.push(
-      "docker-compose.test.override.yml must not exist: host ports are " +
-        "env configuration of docker-compose.test.yml (EXAM_PORT / " +
-        "DB_HOST_PORT / REDIS_HOST_PORT), not a second test topology. The " +
-        "override path union-published BOTH port sets and left " +
-        "PUBLIC_WEB_ORIGIN stale — retire it permanently.",
-    );
-  }
-
-  // Rule 2: the E2E runner owns one topology file — no caller-selected
-  // Compose layering. The runner must pin docker-compose.test.yml as its ONLY
-  // -f/--file argument and must not expand a caller-provided COMPOSE_FILE
-  // (braced or unbraced — `$COMPOSE_FILE` and `${COMPOSE_FILE:-...}` are both
-  // caller-layering vectors).
-  const runShPath = join(ROOT, "scripts", "e2e", "run.sh");
-  try {
-    const runSh = readFileSync(runShPath, "utf-8");
-    if (/\$\{?COMPOSE_FILE/.test(runSh)) {
-      errors.push(
-        "scripts/e2e/run.sh must not take a caller-controlled COMPOSE_FILE " +
-          "(layering would let callers redefine the Docker E2E topology). " +
-          "The runner pins docker-compose.test.yml; host ports remap via " +
-          "EXAM_PORT / DB_HOST_PORT / REDIS_HOST_PORT.",
-      );
-    }
-    // At least one topology file argument must be docker-compose.test.yml,
-    // and NO other -f/--file argument may carry a different value. Scoped to
-    // the compose() function: that is the ONLY place the runner selects
-    // topology files (cleanup/help text may mention other compose files
-    // without layering them, e.g. the dev-stack stop suggestion).
-    const composeFn = runSh.match(/compose\(\) \{[\s\S]*?\n\}/);
-    if (
-      composeFn === null ||
-      !/(?:^|\s)(?:-f|--file)\s+docker-compose\.test\.yml\b/.test(
-        composeFn[0],
-      ) ||
-      /(?:^|\s)(?:-f|--file)\s+(?!docker-compose\.test\.yml\b)\S+/.test(
-        composeFn[0],
-      )
-    ) {
-      errors.push(
-        "scripts/e2e/run.sh compose() must invoke docker compose with " +
-          "exactly one topology file argument, docker-compose.test.yml " +
-          "(-f/--file) — the Docker E2E topology authority. No second file " +
-          "may be layered.",
-      );
-    }
-    // MG1: the runner must preflight ALL THREE host-port authorities.
-    // The label↔env binding at the call site is the mechanically checkable
-    // fact that collision guidance names the port's OWN env var (MG2).
-    const portPreflights = [
-      ['"app"', "EXAM_PORT"],
-      ['"db"', "DB_HOST_PORT"],
-      ['"redis"', "REDIS_HOST_PORT"],
-    ];
-    for (const [label, env] of portPreflights) {
-      if (
-        !new RegExp(
-          `ensure_host_port_free\\s+\\S+\\s+${label}\\s+${env}\\b`,
-          "m",
-        ).test(runSh)
-      ) {
-        errors.push(
-          `scripts/e2e/run.sh must preflight the ${env} host port via ` +
-            `ensure_host_port_free <port> ${label} ${env} — all three host ` +
-            "port authorities (EXAM_PORT / DB_HOST_PORT / " +
-            "REDIS_HOST_PORT) must fail fast on collision.",
-        );
-      }
-    }
-    // MG2: the collision help must recommend the colliding port's own env
-    // authority — never a hardcoded EXAM_PORT for a db/redis collision.
-    if (!/改用其他端口[^\n]*\$\{env_name\}/.test(runSh)) {
-      errors.push(
-        "scripts/e2e/run.sh collision guidance must recommend the port's " +
-          "own env authority (${env_name}, passed by the caller) — telling " +
-          "a db/redis collision to change EXAM_PORT is wrong guidance.",
-      );
-    }
-  } catch (err) {
-    if (err && err.code === "ENOENT") {
-      errors.push(
-        "scripts/e2e/run.sh is missing: the canonical Docker E2E runner is " +
-          "a required repository surface (pnpm e2e:docker).",
-      );
-    } else {
-      throw err;
-    }
-  }
-
-  // Rule 4: docker-compose.test.yml host ports are owned by the three env
-  // authorities (EXAM_PORT / DB_HOST_PORT / REDIS_HOST_PORT) — a hardcoded
-  // host port would reintroduce a port variant outside the configuration
-  // seam (the retired override's failure mode).
-  {
-    const testComposePath = join(ROOT, "docker-compose.test.yml");
-    try {
-      const testCompose = readFileSync(testComposePath, "utf-8");
-      const services = extractTopLevelBlock(testCompose, "services");
-      const expectedHostPortBindings = [
-        ["app", /^\s*-\s*"\$\{EXAM_PORT:-3000\}:3000"\s*$/m],
-        ["db", /^\s*-\s*"\$\{DB_HOST_PORT:-5432\}:5432"\s*$/m],
-        ["redis", /^\s*-\s*"\$\{REDIS_HOST_PORT:-6379\}:6379"\s*$/m],
-      ];
-      for (const [service, bindingRe] of expectedHostPortBindings) {
-        const block =
-          services !== null ? extractServiceBlock(services, service) : null;
-        if (block === null || !bindingRe.test(block)) {
-          errors.push(
-            `docker-compose.test.yml service '${service}' must publish its ` +
-              "host port via its env authority " +
-              "(app: ${EXAM_PORT:-3000}:3000, db: ${DB_HOST_PORT:-5432}:5432, " +
-              "redis: ${REDIS_HOST_PORT:-6379}:6379) — host ports are " +
-              "configuration, never hardcoded topology.",
-          );
-        }
-      }
-    } catch (err) {
-      if (err && err.code === "ENOENT") {
-        errors.push(
-          "docker-compose.test.yml is missing: the Docker E2E topology " +
-            "authority is a required repository surface.",
-        );
-      } else {
-        throw err;
-      }
-    }
-  }
-
-  // Rule 3: no ACTIVE doc/script may teach the retired override workflow.
-  // Scope: current sources only — archives and release notes are history.
-  // This file is excluded (it carries the pattern strings themselves).
-  const DRIFT_SCAN_DIRS = [
-    join(ROOT, "scripts"),
-    join(ROOT, "docs"),
-    join(ROOT, "apps", "e2e"),
-    join(ROOT, "tests"),
-  ];
-  const DRIFT_SCAN_EXCLUDED_DIRS = new Set([
-    "node_modules",
-    ".git",
-    "dist",
-    "coverage",
-    "blob-report",
-    "playwright-report",
-    "test-results",
-    "archive", // docs/archive — historical record
-    "releases", // docs/releases — frozen per-release records
-  ]);
-  const DRIFT_SCAN_EXTENSIONS = new Set([
-    ".md",
-    ".sh",
-    ".mjs",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".yml",
-    ".yaml",
-  ]);
-  const DRIFT_PATTERNS = [
-    {
-      re: /docker-compose\.test\.override\.yml/,
-      why:
-        "references docker-compose.test.override.yml (retired — port " +
-        "remapping is env configuration of docker-compose.test.yml)",
-    },
-    {
-      re: /COMPOSE_FILE=docker-compose\.test\.yml:/,
-      why:
-        "teaches COMPOSE_FILE layering over docker-compose.test.yml " +
-        "(caller-controlled Docker E2E topology is forbidden)",
-    },
-    {
-      re: /APP_PORT=3300/,
-      why:
-        "uses APP_PORT as an E2E host-port authority (APP_PORT is the " +
-        "in-container port; the host-port authority is EXAM_PORT)",
-    },
-  ];
-  const thisFile = join(
-    import.meta.dirname,
-    "deployment-topology-contract.mjs",
-  );
-  const driftHits = [];
-  const walk = (dir) => {
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith(".") && entry.name !== ".") continue;
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (DRIFT_SCAN_EXCLUDED_DIRS.has(entry.name)) continue;
-        walk(full);
-        continue;
-      }
-      const ext = entry.name.slice(entry.name.lastIndexOf("."));
-      if (!DRIFT_SCAN_EXTENSIONS.has(ext)) continue;
-      if (full === thisFile) continue;
-      let text;
-      try {
-        text = readFileSync(full, "utf-8");
-      } catch {
-        continue;
-      }
-      for (const { re, why } of DRIFT_PATTERNS) {
-        if (re.test(text)) {
-          driftHits.push(`${relative(ROOT, full)} ${why}`);
-        }
-      }
-    }
-  };
-  for (const dir of DRIFT_SCAN_DIRS) walk(dir);
-  for (const hit of new Set(driftHits)) {
-    errors.push(
-      `active-source drift: ${hit}. Update it to the env-configuration ` +
-        "form (EXAM_PORT / DB_HOST_PORT / REDIS_HOST_PORT with the single " +
-        "docker-compose.test.yml).",
-    );
-  }
-}
+// ── Single-topology closure (#626) ──────────────────────────────────────
+// The compose-variant allowlist above already encodes the #626 surface:
+// docker-compose.yml (production) + docker-compose.dev.yml (dependencies).
+// The former #498 rules pinning the Docker E2E runner (compose() topology
+// pinning, host-port preflights, docker-compose.test.yml port bindings and
+// their drift scan) were removed with the Docker E2E topology itself; the
+// host-native runner contract lives in config-contract.mjs §"WSL port
+// projection" and scripts/e2e/run-lib tests. The retired
+// docker-compose.test.override.yml mechanism cannot reappear without first
+// reintroducing a variant file, which the allowlist rejects.
 
 if (errors.length > 0) {
   console.error("FAIL: Deployment topology contract regression:");
@@ -729,74 +477,6 @@ function extractServiceBlock(servicesBlockText, serviceName) {
   }
   if (best === null) return null;
   return extractTopLevelBlock(lines.slice(best.idx).join("\n"), serviceName);
-}
-
-/**
- * docker-compose.build.yml is the single allowed source-build MODE override
- * of the one operator entry point. It cannot run standalone (no db service),
- * so the rules here keep it from silently growing into a second topology:
- *   - only `app` may appear;
- *   - each must carry build + a pinned local image tag + pull_policy: build
- *     (the PR-acceptance guarantee that containers run the freshly built
- *     checkout, never a registry/local-cache image);
- *   - it must not carry any topology keys (ports/environment/volumes/
- *     command/entrypoint) — those live in docker-compose.yml alone.
- */
-function assertBuildVariant(text) {
-  const services = extractTopLevelBlock(text, "services");
-  if (!services) {
-    errors.push(
-      `${ALLOWED_BUILD_VARIANT} has no top-level 'services:' mapping.`,
-    );
-    return;
-  }
-  for (const name of topLevelKeys(services)) {
-    if (name !== "app") {
-      errors.push(
-        `${ALLOWED_BUILD_VARIANT} may only override 'app' ` +
-          `(found '${name}'); it is a build-mode override of docker-compose.yml, ` +
-          "not a second topology.",
-      );
-      continue;
-    }
-    const block = extractServiceBlock(services, name);
-    if (!block) continue;
-    const noComments = block
-      .split(/\r?\n/)
-      .filter((l) => !/^\s*#/.test(l))
-      .join("\n");
-    if (!/^\s*build:\s*\S/im.test(noComments)) {
-      errors.push(
-        `${ALLOWED_BUILD_VARIANT} service '${name}' must keep a build key.`,
-      );
-    }
-    if (!/^\s*image:\s*exam-local:dev\s*$/im.test(noComments)) {
-      errors.push(
-        `${ALLOWED_BUILD_VARIANT} service '${name}' must pin 'image: exam-local:dev' ` +
-          "(the stable local tag used to prove which build the containers run).",
-      );
-    }
-    if (!/^\s*pull_policy:\s*build\s*$/im.test(noComments)) {
-      errors.push(
-        `${ALLOWED_BUILD_VARIANT} service '${name}' must pin 'pull_policy: build' ` +
-          "(source-build verification must never reuse a registry/local-cache image).",
-      );
-    }
-    for (const forbidden of [
-      "ports:",
-      "environment:",
-      "volumes:",
-      "command:",
-      "entrypoint:",
-    ]) {
-      if (new RegExp(`^\\s*${forbidden}\\s*$`, "im").test(noComments)) {
-        errors.push(
-          `${ALLOWED_BUILD_VARIANT} service '${name}' must not carry '${forbidden}' — ` +
-            "topology belongs to docker-compose.yml alone.",
-        );
-      }
-    }
-  }
 }
 
 function topLevelKeys(blockText) {

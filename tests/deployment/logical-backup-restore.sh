@@ -84,6 +84,7 @@ capture_state() {
 echo "=== Logical backup / clean-restore suite (ts ${RUN_TS}) ==="
 
 echo "--- start deployment; bootstrap first Admin ---"
+ensure_source_images
 run_compose "${PROJECT}" up -d --quiet-pull >/dev/null
 wait_for_postgres "${PROJECT}"
 wait_for_app "${PROJECT}"

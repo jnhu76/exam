@@ -9,7 +9,7 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3001";
  * dedicated testDir (./patrol) so normal `npx playwright test` never
  * discovers patrol specs. Invoked via:
  *
- *   E2E_WORKERS=1 bash scripts/e2e/run-wsl.sh -- --config=playwright.patrol.config.ts
+ *   E2E_WORKERS=1 bash scripts/e2e/run.sh -- --config=playwright.patrol.config.ts
  *
  * Or directly:
  *   npx playwright test --config=playwright.patrol.config.ts

@@ -2,8 +2,8 @@
 # Operator upgrade + uninstall lifecycle suite (#329): proves the command
 # sequences documented in docs/deployment/upgrade-and-uninstall.md against a
 # REAL Compose stack, in OPERATOR mode (--env-file + the pinned image — the
-# build override is deliberately NOT merged here, because these legs test
-# the prebuilt-image path, not source acceptance).
+# source-build overlay/merge machinery is deliberately NOT used here,
+# because these legs test the prebuilt-image path, not source acceptance).
 #
 # What is proven (per leg):
 #   [setup]          deployment env file generated; two local image tags
@@ -119,7 +119,7 @@ grep -qF "EXAM_IMAGE=${OLD_IMAGE}" "${ENV_FILE}" || {
 cp "${ENV_FILE}" "${GATE_TMP}/.env.deploy.teardown"
 
 stage setup "building local image tags (no registry required)"
-docker build -q -t "${OLD_IMAGE}" "${REPO_ROOT}" >/dev/null
+docker build -q --target runner -t "${OLD_IMAGE}" "${REPO_ROOT}" >/dev/null
 docker tag "${OLD_IMAGE}" "${NEW_IMAGE}"
 
 # ── [upgrade] boot at the old pin ───────────────────────────────────────

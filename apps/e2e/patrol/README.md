@@ -17,13 +17,13 @@ Visual patrol harness for the admin/candidate UI. Two complementary layers:
 
 ## Usage
 
-The patrol reuses the canonical `run-wsl.sh` lifecycle on dedicated ports so
+The patrol reuses the canonical `run.sh` lifecycle on dedicated ports so
 it never collides with the standard E2E stack:
 
 ```bash
 DEV_API_PORT=3001 DB_HOST_PORT=5433 REDIS_HOST_PORT=6380 \
 E2E_BASE_URL=http://localhost:3001 E2E_WORKERS=1 \
-bash scripts/e2e/run-wsl.sh --keep-server -- --config=playwright.patrol.config.ts
+bash scripts/e2e/run.sh --keep-server -- --config=playwright.patrol.config.ts
 ```
 
 Output lands in `.tmp/ui-patrol/<run-id>/`:

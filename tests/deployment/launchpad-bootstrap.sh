@@ -125,7 +125,8 @@ start_stack() {
   local origin="http://localhost:${port}"
   EXAM_DATA_ROOT="${data_root}" EXAM_PORT="${port}" \
     CORS_ORIGIN="${origin}" PUBLIC_WEB_ORIGIN="${origin}" \
-    run_compose "${project}" up -d --build --quiet-pull 2>&1 | tail -6
+    ensure_source_images
+    run_compose "${project}" up -d --quiet-pull 2>&1 | tail -6
   wait_app_healthy "${project}"
 }
 

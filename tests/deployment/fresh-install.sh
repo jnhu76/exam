@@ -25,9 +25,10 @@
 #   - the host port comes from a canary EXAM_PORT written into the
 #     generated file, and the gate proves Compose consumed THE FILE by
 #     asserting the published host port equals the canary;
-#   - Docker build cache is reused as a performance cache only — every
-#     stage runs `up --build` (source-build authority; no registry image
-#     can satisfy acceptance).
+#   - Source authority (#626): the acceptance image is built explicitly
+#     from THIS checkout (lib.sh ensure_source_images) and pinned via
+#     EXAM_IMAGE — no registry image can satisfy acceptance; Docker build
+#     cache is reused as a performance cache only.
 #
 # Every failure is prefixed with its stage: [env] [smoke] [persist] [cleanup].
 #
@@ -78,7 +79,7 @@ export EXAM_DATA_ROOT
 
 # Teardown first: any failure (or INT/TERM) after this point must not leak
 # the compose stack or the temp roots. Signal exits route through the EXIT
-# trap (run-wsl.sh precedent).
+# trap (run.sh precedent).
 cleanup() {
   stage cleanup "tearing down project ${PROJECT} and temp roots"
   compose_down_best_effort "${PROJECT}"
@@ -140,15 +141,16 @@ bash "${SCRIPT_DIR}/compose-smoke.sh" "${RUN_NUM}"
 # stage-tagged diagnostic with a meaningful tail (never just 3 lines).
 boot_stack() {
   local log="${GATE_TMP}/up.log"
-  if run_compose "${PROJECT}" up -d --build --quiet-pull >"${log}" 2>&1; then
+  ensure_source_images
+  if run_compose "${PROJECT}" up -d --quiet-pull >"${log}" 2>&1; then
     tail -3 "${log}"
   else
-    echo "[persist] FAIL: compose up --build failed; last 30 log lines:"
+    echo "[persist] FAIL: compose up failed; last 30 log lines:"
     tail -30 "${log}" >&2
     exit 1
   fi
 }
-stage persist "first up --build against unique data root"
+stage persist "first up against unique data root (source-built image)"
 boot_stack
 wait_for_postgres "${PROJECT}"
 wait_for_app "${PROJECT}"

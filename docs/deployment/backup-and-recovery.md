@@ -40,9 +40,8 @@ PITR                        =  optional PostgreSQL cluster capability
 PITR                        != alternate Exam deployment topology
 ```
 
-Development/test Compose files (`docker-compose.dev.yml`,
-`docker-compose.test.yml`) are development infrastructure and may remain;
-they are NOT operator entry points.
+Development/test Compose (`docker-compose.dev.yml`) is development
+infrastructure; it is NOT an operator entry point.
 
 ---
 

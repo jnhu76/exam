@@ -13,18 +13,16 @@ enforced by `scripts/repository-contract/deployment-topology-contract.mjs`).
 Since #321 the operator topology pins the prebuilt release image
 (`image: ${EXAM_IMAGE:?...}`, derived from `.release-version` by
 `scripts/generate-env.mjs`); acceptance must prove the SOURCE checkout, so
-`tests/deployment/lib.sh` `run_compose` ALWAYS merges
-`-f docker-compose.build.yml` (source-build authority: `exam-local:dev`
-with `pull_policy: build`) on top of the operator file — a cached or
-registry image can never satisfy acceptance, and build cache is
-performance only. The operator file still requires `EXAM_IMAGE` at
-interpolation time even though acceptance never runs that image; when
-`DEPLOY_ENV_FILE` is unset (legacy export mode) `run_compose` defaults an
-`exam-local:dev` placeholder for interpolation only — it is never pulled
-or run, and compose-smoke Test 1c asserts the merged acceptance model
-contains no registry image reference. When `DEPLOY_ENV_FILE` is set,
-`run_compose` passes Compose's explicit `--env-file` (the exact runbook
-invocation), so the repo-root `.env` is never read for interpolation.
+`tests/deployment/lib.sh` `ensure_source_images` builds THIS checkout
+explicitly (`docker build --target runner -t exam-local:dev .` — the #626
+replacement for the removed build overlay) and `run_compose` exports that
+pin in BOTH env modes — a cached or registry image can never satisfy
+acceptance, and build cache is performance only. When `DEPLOY_ENV_FILE`
+is set, `run_compose` also passes Compose's explicit `--env-file` (the
+exact runbook invocation), so the repo-root `.env` is never read for
+interpolation; the exported source pin overrides the file's registry pin,
+and compose-smoke Test 1c asserts the interpolated model contains no
+registry image reference.
 
 ## Gate inventory
 
@@ -35,7 +33,7 @@ invocation), so the repo-root `.env` is never read for interpolation.
 | Launchpad bootstrap | `pnpm test:deployment:launchpad` | release / manual | not yet measured; bootstrap-only flow | isolated project + temp root (suite-owned) |
 | Persistence & cold restore | `pnpm test:deployment:persistence` | release / manual | not yet measured; multi-recreation flow | isolated project + temp root |
 | Logical backup & restore | `pnpm test:deployment:logical` | release / manual | destructive pg_restore inside its own stack | isolated project + temp root |
-| Upgrade & uninstall lifecycle | `pnpm test:deployment:upgrade` | release / manual | ~2–4 min warm (one image build, three stack boots); operator-mode legs (no build override) against two local image tags | isolated project + temp root + teardown env-file copy |
+| Upgrade & uninstall lifecycle | `pnpm test:deployment:upgrade` | release / manual | ~2–4 min warm (one image build, three stack boots); operator-mode legs (explicit canary image builds) against two local image tags | isolated project + temp root + teardown env-file copy |
 | Cold-backup restricted tree | `pnpm test:deployment:cold-backup` (`cold-backup-restricted-tree.sh`) | release / manual | ~1 min; no stack boot (container-built uid-999/0700 fixture) | temp roots only; SKIPs (explicitly, never a false pass) when the operator can traverse the fixture |
 | Cleanup boundary | `pnpm test:deployment:cleanup` (`cleanup-boundary-regression.sh`) | release / manual | <1 min; no stack boot (driver + container-built fixture) | temp roots only, prefix-scoped sweep; deterministic unavailable-helper simulation, no registry/credential contact |
 | PITR | `pnpm test:deployment:pitr` | nightly / manual (WAL archive + basebackup cycles) | slowest of the suite | isolated project + temp root + dedicated WAL archive path |

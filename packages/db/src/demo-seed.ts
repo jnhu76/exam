@@ -1147,7 +1147,7 @@ export async function seedDemo(
     ],
     startedAt: ts(-10 * 60_000),
     // deadlineAt must stay in the future for the whole E2E run; the accelerated
-    // deadline scanner (interval owned by docker-compose.test.yml)
+    // deadline scanner (interval owned by the E2E runner's env projection)
     // otherwise auto-submits this attempt. exam1.closeAt is ts(24h), so ts(2h)
     // is inside the window. (The heartbeat scanner may still flip this
     // to `disrupted` since lastActivityAt is not refreshed at runtime; the
@@ -1176,7 +1176,7 @@ export async function seedDemo(
     ],
     startedAt: ts(-20 * 60_000),
     // deadlineAt must stay in the future for the whole E2E run, otherwise the
-    // deadline scanner (interval owned by docker-compose.test.yml)
+    // deadline scanner (interval owned by the E2E runner's env projection)
     // auto-submits this disrupted attempt → graded, breaking the demo-seed
     // contract (candidate3 = resumable/resume). exam1.closeAt is ts(24h), so
     // ts(2h) is inside the window and well past any suite duration.

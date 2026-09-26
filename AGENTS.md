@@ -169,8 +169,7 @@ pnpm typecheck
 pnpm test
 pnpm verify:static
 pnpm verify
-bash scripts/e2e/run-wsl.sh
-pnpm e2e:docker
+bash scripts/e2e/run.sh   # 即 pnpm e2e（唯一 E2E 入口）
 ```
 
 不得把未执行的门禁报告为 PASS；工具不可用或测试不适用时，明确记录 `SKIPPED` 和原因。
@@ -182,7 +181,7 @@ REPOSITORY OWNS PROCEDURE
 AGENT EXECUTES PROCEDURE
 ```
 
-例行操作优先使用仓库拥有的语义命令（`pnpm db:up`、`pnpm e2e:docker`、`pnpm verify` 等），不在会话中重建等价的低层命令序列；底层脚本与拓扑保持隐藏。禁止发明平行的 Compose 栈、数据库生命周期命令、E2E 拓扑、验证流水线或清理程序。宿主机端口重映射是配置值（`EXAM_PORT` / `DB_HOST_PORT` / `REDIS_HOST_PORT`），不是拓扑变体；Docker E2E 拓扑的唯一权威是 `docker-compose.test.yml`。
+例行操作优先使用仓库拥有的语义命令（`pnpm db:up`、`pnpm e2e`、`pnpm verify` 等），不在会话中重建等价的低层命令序列；底层脚本与拓扑保持隐藏。禁止发明平行的 Compose 栈、数据库生命周期命令、E2E 拓扑、验证流水线或清理程序。宿主机端口重映射是配置值（如 `EXAM_PORT` / `DB_HOST_PORT` / `REDIS_HOST_PORT`），不是拓扑变体；Compose 拓扑的唯一权威是 `docker-compose.yml`（生产）与 `docker-compose.dev.yml`（本地依赖），E2E 是 host-native 的（#626）。
 
 在第 2 节四种模式语义下的操作分类：
 

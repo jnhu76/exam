@@ -67,7 +67,7 @@
  *    result and never invokes this hook.
  *
  * E2E ISOLATION: this hook lives in apps/api's vitest config. E2E runs through
- * @playwright/test (apps/e2e/playwright.config.ts) + scripts/e2e/run-wsl.sh
+ * @playwright/test (apps/e2e/playwright.config.ts) + scripts/e2e/run.sh
  * against the dedicated `exam_e2e` database, and never imports this file.
  *
  * @see https://vitest.dev/config/globalsetup

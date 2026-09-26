@@ -25,7 +25,7 @@ node dist/scripts/migrate.js
 # Seed mode selection:
 #   RUN_SEED=1   → baseline seed only (admin / candidate / candidate2)
 #   RUN_SEED=e2e → canonical E2E seed (baseline + demo: candidate1..4)
-# Local Docker E2E (scripts/e2e/run.sh + docker-compose.test.yml) and CI E2E
+# Local E2E (scripts/e2e/run.sh drives db:seed:e2e on the host) and CI E2E
 # must converge on RUN_SEED=e2e to share one seed contract.
 case "$RUN_SEED" in
   e2e)

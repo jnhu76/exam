@@ -346,18 +346,23 @@ reference, not digest.
 
 #### Contributor source build (not the operator path)
 
-Contributors and PR acceptance verify THIS checkout by merging the build
-override; the deployment acceptance suites (`tests/deployment/`) always
-merge it via their compose wrapper:
+Contributors and PR acceptance verify THIS checkout by building it
+explicitly and running the canonical operator Compose against the local
+tag; the deployment acceptance suites (`tests/deployment/`) do exactly
+this through `tests/deployment/lib.sh` (`ensure_source_images` + the
+`EXAM_IMAGE` pin):
 
 ```bash
-docker compose --env-file .env.deploy \
-  -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# explicit source build, then the canonical operator Compose consumes the
+# pinned local image:
+docker build --target runner -t exam-local:dev .
+EXAM_IMAGE=exam-local:dev \
+  docker compose --env-file .env.deploy -f docker-compose.yml up -d
 ```
 
-The override pins `exam-local:dev` with `pull_policy: build`, forcing a
-build from the current tree and never pulling a registry image under that
-tag.
+The explicit build pins `exam-local:dev`, so no registry image can be
+pulled under the acceptance tag; a stale registry image can never satisfy
+acceptance.
 
 ---
 
@@ -458,7 +463,7 @@ docker compose --env-file .env.deploy exec app node dist/scripts/reset-admin-pas
 The baseline seed is dev/test infrastructure only. The container entrypoint
 honors `RUN_SEED=1` (baseline) / `RUN_SEED=e2e` (canonical E2E seed), but the
 **deployment compose file does not forward `RUN_SEED`** — only the dev/test
-topologies set it (`docker-compose.test.yml`, the dev entrypoint). It refuses
+paths set it (the E2E runner, the dev entrypoint). It refuses
 to run when `APP_MODE=production`. For full demo data (courses, questions,
 exams, attempts), use `pnpm db:seed:demo` against the dev DB only — never
 against the production DB.
@@ -740,7 +745,7 @@ curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-3000}/api/system/dia
 ```
 
 For a full automated end-to-end smoke (Playwright), use
-`pnpm e2e:docker` (Docker lifecycle) or `bash scripts/e2e/run-wsl.sh` (WSL
+`pnpm e2e` (Docker lifecycle) or `bash scripts/e2e/run.sh` (WSL
 host lifecycle) in a non-production stack. **Never** run E2E against the
 production database.
 

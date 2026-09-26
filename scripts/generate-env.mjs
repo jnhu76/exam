@@ -8,8 +8,9 @@
 //
 // The deployment stack is then started explicitly against the file:
 //   docker compose --env-file .env.deploy -f docker-compose.yml up -d
-// (source builds — contributors / PR acceptance — merge
-// docker-compose.build.yml; the operator path never builds)
+// (source builds — contributors / PR acceptance — are an explicit
+// `docker build --target runner` pinned via EXAM_IMAGE; the operator path
+// never builds)
 //
 // Passing --env-file replaces the default `.env` as Compose's interpolation
 // file (the dev .env is never read for deployment), and no dev tooling ever

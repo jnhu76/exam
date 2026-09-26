@@ -244,39 +244,8 @@ console.log("2. Checking docker-compose.yml app environment bindings...");
 }
 console.log("   Docker production binding check complete.");
 
-// ── 3. Docker test profile: PUBLIC_WEB_ORIGIN is the in-container origin ────
-console.log("3. Checking docker-compose.test.yml public web origin...");
-{
-  const composeTest = readFileSync(
-    join(ROOT, "docker-compose.test.yml"),
-    "utf-8",
-  );
-  // The e2e container shares the app container's network namespace
-  // (network_mode: service:app): the browser reaches the app at
-  // http://localhost:3000 regardless of the host-published EXAM_PORT.
-  // Deriving the origin from EXAM_PORT pointed identity one-time links
-  // (#297) at a port nothing listens on inside the netns under remapped
-  // ports — witnessed by identity-lifecycle invitation specs failing.
-  if (!composeTest.includes("PUBLIC_WEB_ORIGIN: http://localhost:3000")) {
-    fail(
-      "docker-compose.test.yml env missing the pinned in-container " +
-        "PUBLIC_WEB_ORIGIN (http://localhost:3000) — the e2e browser shares " +
-        "the app network namespace and never uses the host-published " +
-        "EXAM_PORT; identity one-time links must use the in-container origin.",
-    );
-  }
-  if (/PUBLIC_WEB_ORIGIN:[^\n]*EXAM_PORT/.test(composeTest)) {
-    fail(
-      "docker-compose.test.yml must NOT derive PUBLIC_WEB_ORIGIN from " +
-        "EXAM_PORT — EXAM_PORT republishes the HOST port only; inside the " +
-        "shared network namespace the app always listens on :3000.",
-    );
-  }
-}
-console.log("   Docker test origin check complete.");
-
-// ── 4. CI profile: required env + e2e origin relation ───────────────────────
-console.log("4. Checking CI workflow env contract...");
+// ── 3. CI profile: required env + e2e origin relation ───────────────────────
+console.log("3. Checking CI workflow env contract...");
 {
   const ciPath = join(ROOT, ".github/workflows/ci.yml");
   const ciContent = readFileSync(ciPath, "utf-8");
@@ -326,8 +295,8 @@ console.log("4. Checking CI workflow env contract...");
 }
 console.log("   CI env contract check complete.");
 
-// ── 4b. CI build artifact identity: run-scoped, not attempt-scoped ──────────
-console.log("4b. Checking CI build artifact identity contract...");
+// ── 3b. CI build artifact identity: run-scoped, not attempt-scoped ──────────
+console.log("3b. Checking CI build artifact identity contract...");
 {
   // The build artifact belongs to the workflow RUN, not the rerun ATTEMPT.
   // A partial rerun ("Re-run failed jobs") keeps the original attempt's
@@ -404,8 +373,8 @@ console.log("4b. Checking CI build artifact identity contract...");
 }
 console.log("   CI artifact identity check complete.");
 
-// ── 5. Local/WSL profile: launch_api owns the per-shard port projection ────
-console.log("5. Checking WSL runner port projection contract...");
+// ── 4. Local/WSL profile: launch_api owns the per-shard port projection ────
+console.log("4. Checking E2E runner port projection contract...");
 {
   // Every port authority of a WSL E2E API process must be bound INSIDE
   // launch_api to that process's port argument, so the runner-selected port
@@ -418,7 +387,7 @@ console.log("5. Checking WSL runner port projection contract...");
   // the same port — EADDRINUSE / health-probe misalignment (#565). Bounded
   // textual extraction of the function body — not a shell parser.
   const runWslLines = readFileSync(
-    join(ROOT, "scripts/e2e/run-wsl.sh"),
+    join(ROOT, "scripts/e2e/run.sh"),
     "utf-8",
   ).split("\n");
   const launchStart = runWslLines.findIndex((l) =>
@@ -426,7 +395,7 @@ console.log("5. Checking WSL runner port projection contract...");
   );
   if (launchStart === -1) {
     fail(
-      "scripts/e2e/run-wsl.sh launch_api() not found — API launch seam " +
+      "scripts/e2e/run.sh launch_api() not found — API launch seam " +
         "changed; re-bind the per-process port to APP_PORT, DEV_API_PORT and " +
         "PUBLIC_WEB_ORIGIN",
     );
@@ -464,7 +433,7 @@ console.log("5. Checking WSL runner port projection contract...");
     for (const { re, why } of requiredBindings) {
       if (!re.test(launchBody)) {
         fail(
-          "run-wsl.sh launch_api does not bind the runner-selected shard " +
+          "run.sh launch_api does not bind the runner-selected shard " +
             `port to every port authority: ${why} (required inside ` +
             'launch_api: APP_PORT="$port", DEV_API_PORT="$port", ' +
             'PUBLIC_WEB_ORIGIN="http://localhost:${port}").',
@@ -473,10 +442,10 @@ console.log("5. Checking WSL runner port projection contract...");
     }
   }
 }
-console.log("   WSL port projection check complete.");
+console.log("   E2E runner port projection check complete.");
 
-// ── 6. Test discipline: production-guard tests use vi.stubEnv ───────────────
-console.log("6. Checking production-guard test env isolation...");
+// ── 5. Test discipline: production-guard tests use vi.stubEnv ───────────────
+console.log("5. Checking production-guard test env isolation...");
 {
   const testFiles = [];
   walk(
@@ -528,7 +497,7 @@ console.log("6. Checking production-guard test env isolation...");
 }
 console.log("   Production-guard test check complete.");
 
-// ── 7. Client-IP trust wiring: server.ts derives trustProxy from config ─────
+// ── 6. Client-IP trust wiring: server.ts derives trustProxy from config ─────
 // #546: the ONE place client-IP trust is decided is the Fastify constructor
 // in server.ts, and the option must come from resolveTrustProxyOption — the
 // same function the topology tests derive it through. A regression to
@@ -559,7 +528,7 @@ console.log("\n" + "=".repeat(60));
 if (errors.length === 0) {
   console.log(
     `PASS: config contract upheld (${LEAVES.size} semantic leaves, ` +
-      "4 topology profiles, 1 consumption seam).",
+      "3 topology profiles, 1 consumption seam).",
   );
   process.exit(0);
 } else {

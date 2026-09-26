@@ -189,13 +189,14 @@ else
 fi
 
 # ── Test 1c: acceptance runs the SOURCE build, never a registry image ────
-echo "--- TEST 1c: merged acceptance model has no registry image ---"
-# The build override must replace the operator EXAM_IMAGE pin on app. If a
-# registry image reference survived the merge into the merged model,
-# acceptance could pass on a pulled image instead of this checkout (#321
-# two-path split).
+echo "--- TEST 1c: acceptance model has no registry image ---"
+# #626: the docker-compose.build.yml overlay is gone — acceptance pins the
+# locally built image via EXAM_IMAGE (tests/deployment/lib.sh), so the
+# interpolated model must resolve app to the local source tag and NEVER to
+# a registry pin (#321 two-path split). Holds in BOTH env modes: the shell
+# export beats any DEPLOY_ENV_FILE pin.
 if run_compose "${PROJECT}" config 2>/dev/null | grep -q "image: ghcr.io/jnhu76/exam"; then
-  echo "  FAIL: a registry image reference survived the build override merge."
+  echo "  FAIL: a registry image reference survived into the acceptance model."
   exit 1
 fi
 T1C_SOURCE_IMAGES="$(run_compose "${PROJECT}" config 2>/dev/null | grep -c "image: exam-local:dev" || true)"
@@ -207,8 +208,9 @@ else
 fi
 
 # ── Test 2: build + start the default stack (no redis profile) ───────────
-echo "--- TEST 2: start default stack (no redis profile) ---"
-run_compose "${PROJECT}" up -d --build --quiet-pull 2>&1 | tail -5
+echo "--- TEST 2: build source image + start default stack ---"
+ensure_source_images
+run_compose "${PROJECT}" up -d --quiet-pull 2>&1 | tail -5
 echo "  stack started."
 
 # ── Test 3: verify only 3 services started (no redis) ────────────────────

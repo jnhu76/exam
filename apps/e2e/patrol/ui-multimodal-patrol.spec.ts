@@ -2,7 +2,7 @@
  * UI-MULTIMODAL-PATROL-1 — visual patrol harness.
  *
  * Runs as a serial Playwright test under playwright.patrol.config.ts.
- * Uses the canonical run-wsl lifecycle (DB/Redis/migrate/seed/api server).
+ * Uses the canonical run.sh lifecycle (DB/Redis/migrate/seed/api server).
  * Each role persona is set up via Admin product APIs, logged in via real UI.
  *
  * Output: .tmp/ui-patrol/<sha>/ with manifest.json, screenshots, findings.

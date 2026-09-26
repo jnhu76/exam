@@ -785,8 +785,8 @@ describe("runtimeConfig", () => {
       expect(config.port).toBe(3000);
     });
 
-    it("e2e mode: APP_PORT (Docker E2E container) wins over DEV_API_PORT", () => {
-      // docker-compose.test.yml sets APP_PORT=3000 inside the app container.
+    it("e2e mode: APP_PORT (container profile) wins over DEV_API_PORT", () => {
+      // A container profile sets APP_PORT=3000 (production/Docker shapes).
       const config = loadRuntimeConfig({
         APP_MODE: "e2e",
         TEST_DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam_e2e",
@@ -797,7 +797,7 @@ describe("runtimeConfig", () => {
     });
 
     it("e2e mode: DEV_API_PORT drives the WSL runner when APP_PORT is unset", () => {
-      // scripts/e2e/run-wsl.sh launches each shard with DEV_API_PORT=<port>.
+      // scripts/e2e/run.sh launches each shard with DEV_API_PORT=<port>.
       const config = loadRuntimeConfig({
         APP_MODE: "e2e",
         TEST_DATABASE_URL: "postgresql://exam:exam@localhost:5432/exam_e2e",

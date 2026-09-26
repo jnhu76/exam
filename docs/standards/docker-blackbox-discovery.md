@@ -8,8 +8,9 @@ This file is a **testing runbook**, not a second agent-instruction authority.
 
 - `AGENTS.md` remains the repository's single semantic authority for agent behavior.
 - `docs/standards/testing.md` owns the repository-wide test, environment, and lifecycle contract.
-- `scripts/e2e/run.sh` owns the canonical Docker E2E orchestration behavior.
-- `docker-compose.test.yml` owns the canonical disposable Docker E2E topology.
+- `scripts/e2e/run.sh` owns the canonical local E2E orchestration behavior (host-native; Compose owns dependencies only).
+- `docker-compose.yml` owns the canonical disposable Docker application topology (production shape; isolated project + source-built image for probing).
+- `tests/deployment/lib.sh` owns the reusable deployment-stack lifecycle semantics (project isolation, readiness, loud cleanup).
 - This runbook describes **what a periodic black-box discovery campaign should exercise and report**.
 
 If this runbook conflicts with any authority above, stop and reconcile the conflict before running the campaign. Do not copy a competing lifecycle into this file.
@@ -33,12 +34,12 @@ Do not automatically convert every anomaly into a bug. Distinguish product defec
 
 ## Docker lifecycle authority
 
-The campaign **MUST reuse or extract the lifecycle semantics already implemented by `scripts/e2e/run.sh`**. It MUST NOT hand-roll a second weaker Compose lifecycle merely because the campaign needs the stack to remain alive for HTTP probes.
+The campaign **MUST reuse the lifecycle semantics already implemented by `tests/deployment/lib.sh`** against the canonical `docker-compose.yml` topology. It MUST NOT hand-roll a second weaker Compose lifecycle merely because the campaign needs the stack to remain alive for HTTP probes.
 
 The following existing semantics are mandatory:
 
-- a unique `COMPOSE_PROJECT_NAME` for isolated disposable runs;
-- canonical `docker-compose.test.yml` topology and app image;
+- a unique Compose project (`run_compose -p`) for isolated disposable runs;
+- canonical `docker-compose.yml` topology with the locally built app image (`ensure_source_images` — never a pulled registry image);
 - host-port ownership protection before startup so probes cannot silently hit a stale/non-campaign service;
 - health-based readiness, not `docker compose up` exit status;
 - cleanup on normal exit and interruption (`EXIT` / `INT` / `TERM` equivalent discipline);
@@ -47,14 +48,14 @@ The following existing semantics are mandatory:
 - a prior test/probe failure remains the primary failure when cleanup also fails;
 - production, staging, and shared developer databases are never campaign targets.
 
-If the campaign cannot use `scripts/e2e/run.sh` directly because it needs a long-lived target, **extract/reuse the runner lifecycle helpers first**. Do not duplicate port checks, readiness loops, trap handling, or cleanup-exit semantics in an ad-hoc campaign script.
+The application's behavioral contracts are exercised by the host-native E2E runner (`pnpm e2e`) and CI — the Docker campaign probes the DEPLOYED artifact, not a second application topology.
 
 ## Safety constraints
 
 MUST:
 
-- run only against the disposable Docker E2E/test topology;
-- build the real app Docker image used by the canonical Docker E2E path;
+- run only against the disposable deployment-stack topology (isolated project of `docker-compose.yml`);
+- build the real app Docker image from THIS checkout (source authority, as the deployment tests do);
 - verify target health before probing;
 - use real HTTP over the exposed service boundary;
 - preserve reproducible request/response evidence for findings;
@@ -100,7 +101,7 @@ If relevant tracked files are dirty, stop or use an isolated clean worktree. Do 
 
 ## Stage 1 — Existing baseline
 
-Run the repository's canonical verification and Docker E2E before exploratory probing.
+Run the repository's canonical verification and local E2E before exploratory probing.
 
 At minimum:
 
@@ -108,40 +109,34 @@ At minimum:
 pnpm verify
 ```
 
-For the authoritative Docker campaign build, use the canonical runner's no-cache rebuild path rather than a separate build recipe:
-
-```bash
-bash scripts/e2e/run.sh --rebuild
-```
-
-If the campaign needs to retain the stack for subsequent probes, use/reuse the runner's supported keep/lifecycle seams rather than replacing its orchestration.
+For the authoritative Docker campaign build, build the app image explicitly from THIS checkout, as the deployment tests do (`docker build --target runner -t <local-tag> .`), then start an isolated `docker-compose.yml` project through `tests/deployment/lib.sh` helpers. Do not invent a separate build recipe or lifecycle.
 
 Record PASS/FAIL separately for:
 
 ```text
 static/typecheck/unit/integration/coverage/build
-Docker build
-Docker Playwright E2E
+Docker deployment-stack build + health
+local E2E (pnpm e2e)
 ```
 
 If a known unrelated blocker prevents `pnpm verify`, record the linked issue and continue only if the Docker campaign can still execute independently and honestly.
 
 ## Stage 2 — Start and retain the black-box target
 
-Start a unique disposable Compose project using the **canonical Docker E2E lifecycle**.
+Start a unique disposable Compose project using the **canonical deployment-stack lifecycle**.
 
 Required ownership:
 
 ```text
-topology                  docker-compose.test.yml
-orchestration semantics   scripts/e2e/run.sh (reuse/extract)
-project isolation          COMPOSE_PROJECT_NAME
-port safety                existing runner protection
-readiness                  app container health
-cleanup                    existing runner trap/down semantics
+topology                  docker-compose.yml
+orchestration semantics   tests/deployment/lib.sh (reuse)
+project isolation         run_compose -p <unique-project>
+port safety               existing suite protection (remapped EXAM_PORT)
+readiness                 app container health (/api/ready gate)
+cleanup                   compose_down_best_effort + trap discipline
 ```
 
-The campaign may add a narrow reusable helper only when necessary to keep the already-built stack alive between Playwright and black-box probes. Such a helper must preserve the runner's behavior; it must not become a second lifecycle authority.
+The campaign may add a narrow reusable helper only when necessary to keep the already-built stack alive between deployment gates and black-box probes. Such a helper must preserve the suite's behavior; it must not become a second lifecycle authority.
 
 Prove the target through real HTTP:
 
@@ -391,7 +386,8 @@ DOCKER BLACK-BOX DISCOVERY
 
 BASE / HEAD / image
 existing verification status
-Docker E2E status
+local E2E (pnpm e2e) status
+deployment-stack health status
 OpenAPI operation count
 stable-oracle result
 exploratory HTTP request count

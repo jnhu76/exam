@@ -84,6 +84,7 @@ capture_invariants() {
 
 start_stack() {
   local project="$1" root="$2"
+  ensure_source_images
   EXAM_DATA_ROOT="${root}" run_compose "${project}" up -d --quiet-pull >/dev/null
   wait_for_postgres "${project}"
   wait_for_app "${project}"

@@ -145,12 +145,13 @@ pnpm lint:ui-gates      # 前端视觉 authority 门禁
 
 ## E2E
 
-Playwright 浏览器测试有两种执行方式：
+Playwright 浏览器测试只有一条 canonical 入口：
 
-- **WSL / 本地**：`bash scripts/e2e/run-wsl.sh` — 使用开发服务器 + 主机 Chromium，适合开发迭代。
-- **Docker**：`pnpm e2e:docker`（即 `bash scripts/e2e/run.sh`）— 在容器中构建并运行完整 stack，更接近 CI。
+- **本地（host-native）**：`pnpm e2e`（即 `bash scripts/e2e/run.sh`）— 在宿主机
+  运行 API dev server + 主机 Chromium；Compose 只负责 PostgreSQL / Redis 依赖。
+  CI 用 service containers 执行同样的产品契约。
 
-两种方式应得到相同的 pass / fail 集合。完整 E2E 契约见
+完整 E2E 契约见
 [`docs/standards/testing.md`](../standards/testing.md)。
 
 ## 架构入口

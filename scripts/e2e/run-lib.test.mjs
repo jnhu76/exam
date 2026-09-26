@@ -1,16 +1,16 @@
-// scripts/e2e/run-wsl-lib.test.mjs
+// scripts/e2e/run-lib.test.mjs
 //
-// Node test runner that drives scripts/e2e/run-wsl-lib.test.sh scenarios,
+// Node test runner that drives scripts/e2e/run-lib.test.sh scenarios,
 // isolating each scenario in a fresh `bash` and (for docker-dependent ones)
 // prepending a fake-bin dir to PATH so no real database or process is touched.
 //
 // Why a node:test wrapper around a bash scenario file:
-//   The library under test (run-wsl-lib.sh) is Bash. The repo's standard test
+//   The library under test (run-lib.sh) is Bash. The repo's standard test
 //   runner is `node --test` (see scripts/formal/run-operator-grant-tlc.test.mjs
 //   for the precedent). We keep that convention: this file is what `verify`
 //   invokes, and it shells out to bash for the bash-level assertions.
 //
-// Run:  node --test scripts/e2e/run-wsl-lib.test.mjs
+// Run:  node --test scripts/e2e/run-lib.test.mjs
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -21,8 +21,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const TEST_SH = join(__dirname, "run-wsl-lib.test.sh");
-const RUN_WSL_SH = join(__dirname, "run-wsl.sh");
+const TEST_SH = join(__dirname, "run-lib.test.sh");
+const RUN_WSL_SH = join(__dirname, "run.sh");
 
 // Scenarios that depend on `docker`: a fake `docker` is installed on PATH.
 //   drop scenarios         — `docker exec <cid> psql ...` (fail/succeed).
@@ -229,7 +229,7 @@ test("archive-existence-error-loud: docker error → rc=1, never a silent no-op"
 
 // Rename failure is the trigger of the #330 review P1-2 ownership bug: the
 // retained forensic DB is still under its ACTIVE name, and run_cleanup must
-// never get a claim on it (run-wsl.sh registers only after archive success —
+// never get a claim on it (run.sh registers only after archive success —
 // pinned structurally above). At lib level this pins the loud rc=1 and that
 // the active name itself is never a DROP target on this path.
 test("archive-rename-failure-loud: ALTER fails → rc=1 loud, active DB never DROPped", () => {
@@ -379,9 +379,9 @@ test("signal-exit-codes: TERM → 143, INT → 130, cleanup exactly once", () =>
   assertPass("signal-exit-codes", res);
 });
 
-// ── P1-1 + #330 review P1-2: registration timing in run-wsl.sh (structural)
+// ── P1-1 + #330 review P1-2: registration timing in run.sh (structural)
 // The behavioral scenarios cover what cleanup does WITH registered identities;
-// these assertions pin WHERE run-wsl.sh registers them. Parallel loop order,
+// these assertions pin WHERE run.sh registers them. Parallel loop order,
 // pinned below: (1) archive the pre-existing retained DB, (2) register
 // ownership, (3) create. Registration must follow a SUCCESSFUL archive — a
 // pre-existing exam_e2e_w<N> is a forensic artifact from a previous run, and
@@ -390,7 +390,7 @@ test("signal-exit-codes: TERM → 143, INT → 130, cleanup exactly once", () =>
 // Registration must still precede ensure_db_exists (and everything after it:
 // migrate/seed/health), so no exit path leaks a DB this run created
 // (issue #256-A review P1-1).
-test("run-wsl.sh: ownership claimed only after archive succeeds, before any failing op", () => {
+test("run.sh: ownership claimed only after archive succeeds, before any failing op", () => {
   const src = readFileSync(RUN_WSL_SH, "utf8");
   const lines = src.split("\n");
   const archiveIdx = lines.findIndex((l) =>
@@ -429,7 +429,7 @@ test("run-wsl.sh: ownership claimed only after archive succeeds, before any fail
 });
 
 // ── P1-2 / P1-3: fail-fast guards run before any side effect ─────────────
-test("run-wsl.sh: flag validation runs before compose up", () => {
+test("run.sh: flag validation runs before compose up", () => {
   const lines = readFileSync(RUN_WSL_SH, "utf8").split("\n");
   const guardIdx = lines.findIndex((l) =>
     l.includes('validate_run_flags "$RESEED"'),
@@ -451,10 +451,10 @@ test("run-wsl.sh: flag validation runs before compose up", () => {
 // loadRootEnv (managed profiles skip the developer .env); this projection is
 // the runner-side half of the same ownership law and covers shell-inherited
 // values that no loader can filter.
-test("run-wsl.sh: launch_api binds APP_PORT, DEV_API_PORT and PUBLIC_WEB_ORIGIN to the shard port", () => {
+test("run.sh: launch_api binds APP_PORT, DEV_API_PORT and PUBLIC_WEB_ORIGIN to the shard port", () => {
   const lines = readFileSync(RUN_WSL_SH, "utf8").split("\n");
   const launchStart = lines.findIndex((l) => /^launch_api\(\) \{/.test(l));
-  assert.ok(launchStart >= 0, "launch_api() must exist in run-wsl.sh");
+  assert.ok(launchStart >= 0, "launch_api() must exist in run.sh");
   let launchEnd = launchStart;
   while (launchEnd < lines.length && lines[launchEnd] !== "}") launchEnd++;
   const body = lines.slice(launchStart, launchEnd + 1).join("\n");
@@ -490,17 +490,14 @@ test("run-wsl.sh: launch_api binds APP_PORT, DEV_API_PORT and PUBLIC_WEB_ORIGIN 
 // (TEST_DATABASE_URL set, dev DATABASE_URL / TEST_DB_URL removed), so a
 // managed E2E process can never resolve into the dev profile (whose
 // configuration authority is the developer .env).
-test("run-wsl.sh: pins APP_MODE=e2e and removes dev DB URL branches before launch", () => {
+test("run.sh: pins APP_MODE=e2e and removes dev DB URL branches before launch", () => {
   const src = readFileSync(RUN_WSL_SH, "utf8");
   const exportIdx = src.search(/^export APP_MODE=e2e$/m);
   const unsetIdx = src.search(/^unset DATABASE_URL TEST_DB_URL$/m);
-  assert.ok(
-    exportIdx >= 0,
-    "run-wsl.sh must export APP_MODE=e2e at script level",
-  );
+  assert.ok(exportIdx >= 0, "run.sh must export APP_MODE=e2e at script level");
   assert.ok(
     unsetIdx >= 0,
-    "run-wsl.sh must unset DATABASE_URL / TEST_DB_URL so the resolver cannot take a dev branch",
+    "run.sh must unset DATABASE_URL / TEST_DB_URL so the resolver cannot take a dev branch",
   );
   assert.ok(
     unsetIdx < launchApiDefIdx(src),
@@ -555,7 +552,7 @@ function launchApiBody(src) {
 
 // A. COMPOSE_DISABLE_ENV_FILE=1 must be exported before the first compose call.
 // This prevents Docker Compose from importing the developer root `.env`.
-test("run-wsl.sh: COMPOSE_DISABLE_ENV_FILE=1 exported before first compose call", () => {
+test("run.sh: COMPOSE_DISABLE_ENV_FILE=1 exported before first compose call", () => {
   const src = readFileSync(RUN_WSL_SH, "utf8");
   const lines = src.split("\n");
 
@@ -581,7 +578,7 @@ test("run-wsl.sh: COMPOSE_DISABLE_ENV_FILE=1 exported before first compose call"
 // B. DB_HOST_PORT must be frozen once before TEST_DATABASE_URL and
 // DB_BASE_URL_NO_NAME derive from it. The freeze must use the single-frozen
 // value, not re-derive with `${DB_HOST_PORT:-5432}`.
-test("run-wsl.sh: DB_HOST_PORT frozen before TEST_DATABASE_URL and DB_BASE_URL_NO_NAME", () => {
+test("run.sh: DB_HOST_PORT frozen before TEST_DATABASE_URL and DB_BASE_URL_NO_NAME", () => {
   const src = readFileSync(RUN_WSL_SH, "utf8");
   const lines = src.split("\n");
 
@@ -624,7 +621,7 @@ test("run-wsl.sh: DB_HOST_PORT frozen before TEST_DATABASE_URL and DB_BASE_URL_N
 
 // C. REDIS_HOST_PORT and timezone variables must be frozen and exported so
 // Compose interpolation and all downstream consumers see the same topology.
-test("run-wsl.sh: REDIS_HOST_PORT, TZ, APP_TIMEZONE frozen and exported before compose", () => {
+test("run.sh: REDIS_HOST_PORT, TZ, APP_TIMEZONE frozen and exported before compose", () => {
   const src = readFileSync(RUN_WSL_SH, "utf8");
   const lines = src.split("\n");
 
