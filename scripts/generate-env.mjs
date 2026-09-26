@@ -60,14 +60,20 @@ if (!existsSync(envPath)) {
 const SECRET_KEYS = ["JWT_SECRET", "POSTGRES_PASSWORD"];
 const PRESERVE_KEYS = ["POSTGRES_USER", "POSTGRES_DB"];
 
-// #321: the operator image pin is DERIVED from the repository release
-// version authority (.release-version) — never an independently maintained
-// copy that can silently drift. A canonical pin for THIS repository
-// (ghcr.io/jnhu76/exam:vX.Y.Z) FOLLOWS .release-version on re-runs (the
-// upgrade path: git pull → generate-env re-pins the new version); any other
-// value is an explicit operator override (air-gapped registry mirror,
-// offline docker load) and is preserved exactly like the other keys.
-const IMAGE_REPOSITORY = "ghcr.io/jnhu76/exam";
+// #321 / #585: the operator image pins are DERIVED from the repository
+// release version authority (.release-version) — never independently
+// maintained copies that can silently drift. A canonical pin for THIS
+// repository (ghcr.io/jnhu76/exam{,-web}:vX.Y.Z) FOLLOWS .release-version
+// on re-runs (the upgrade path: git pull → generate-env re-pins the new
+// version); any other value is an explicit operator override (air-gapped
+// registry mirror, offline docker load) and is preserved exactly like the
+// other keys.
+const IMAGE_PINS = [
+  { key: "EXAM_IMAGE", repository: "ghcr.io/jnhu76/exam" },
+  // #585: the dedicated static-Web image (nginx serving apps/web/dist on
+  // 4173) is published and pinned beside the API image.
+  { key: "EXAM_WEB_IMAGE", repository: "ghcr.io/jnhu76/exam-web" },
+];
 const releaseVersionPath = join(root, ".release-version");
 if (!existsSync(releaseVersionPath)) {
   console.error(".release-version not found at the repository root");
@@ -78,10 +84,6 @@ if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(releaseVersion)) {
   console.error(`Invalid .release-version: ${releaseVersion}`);
   process.exit(1);
 }
-const derivedImage = `${IMAGE_REPOSITORY}:${releaseVersion}`;
-const canonicalPinPattern = new RegExp(
-  `^${IMAGE_REPOSITORY.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:v[0-9]+\\.[0-9]+\\.[0-9]+$`,
-);
 
 // Read the legacy dev .env once. A post-split dev-only .env has none of the
 // keys below, so legacyValue() returns null and fresh secrets are generated.
@@ -134,60 +136,66 @@ for (const key of PRESERVE_KEYS) {
   }
 }
 
-// EXAM_IMAGE follows .release-version when its effective value is a
+// Image pins follow .release-version when their effective value is a
 // canonical pin for this repository (the upgrade path); any other value is
 // an explicit operator override and wins (see the derivation comment above).
 // The EFFECTIVE value follows dotenv/--env-file semantics: the LAST
-// non-blank definition wins. Every EXAM_IMAGE line is then rewritten to a
-// single key, so a stale, quoted, or blank sibling can never create a
-// duplicate whose ordering silently decides the running image. Blank and
-// quoted-empty values are "absent" — they fall into ensureKey for filling.
-const imageValues = [...env.matchAll(/^EXAM_IMAGE=(\S.*)$/gm)]
-  .map((m) => m[1].trim().replace(/^(["'])(.*)\1$/, "$2"))
-  .filter((v) => v !== "");
-const existingImage = imageValues.length
-  ? imageValues[imageValues.length - 1]
-  : null;
-if (existingImage !== null && !canonicalPinPattern.test(existingImage)) {
-  // Explicit override wins: keep exactly that value as the single key.
-  const explicitLines = env.match(/^EXAM_IMAGE=.*$/gm) ?? [];
-  if (
-    explicitLines.length === 1 &&
-    explicitLines[0] === `EXAM_IMAGE=${existingImage}`
-  ) {
-    console.log(`EXAM_IMAGE already set in ${envPath}; leaving it unchanged.`);
-  } else {
-    env = env.replace(/^EXAM_IMAGE=.*$/gm, "");
-    if (!env.endsWith("\n")) env += "\n";
-    env = `${env}EXAM_IMAGE=${existingImage}\n`;
-    console.log(
-      `EXAM_IMAGE already set in ${envPath}; preserving the effective value.`,
-    );
-  }
-} else if (existingImage !== null) {
-  // Canonical pin: strip every previous EXAM_IMAGE line (quoted or blank)
-  // and append the single derived pin. Byte-idempotent when the pin is
-  // already current and alone.
-  const occurrences = env.match(/^EXAM_IMAGE=.*$/gm) ?? [];
-  if (
-    occurrences.length === 1 &&
-    occurrences[0] === `EXAM_IMAGE=${derivedImage}`
-  ) {
-    console.log(`EXAM_IMAGE already pinned to ${derivedImage}.`);
-  } else {
-    env = env.replace(/^EXAM_IMAGE=.*$/gm, "");
-    if (!env.endsWith("\n")) env += "\n";
-    env = `${env}EXAM_IMAGE=${derivedImage}\n`;
-    console.log(
-      `EXAM_IMAGE re-pinned to ${derivedImage} (follows .release-version)`,
-    );
-  }
-} else {
-  ensureKey(
-    "EXAM_IMAGE",
-    derivedImage,
-    "EXAM_IMAGE (pinned from .release-version)",
+// non-blank definition wins. Every KEY line is then rewritten to a single
+// entry, so a stale, quoted, or blank sibling can never create a duplicate
+// whose ordering silently decides the running image. Blank and quoted-empty
+// values are "absent" — they fall into ensureKey for filling.
+function pinImageFromRelease({ key, repository }) {
+  const derivedImage = `${repository}:${releaseVersion}`;
+  const canonicalPinPattern = new RegExp(
+    `^${repository.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:v[0-9]+\\.[0-9]+\\.[0-9]+$`,
   );
+  const imageValues = [...env.matchAll(new RegExp(`^${key}=(\\S.*)$`, "gm"))]
+    .map((m) => m[1].trim().replace(/^(["'])(.*)\1$/, "$2"))
+    .filter((v) => v !== "");
+  const existingImage = imageValues.length
+    ? imageValues[imageValues.length - 1]
+    : null;
+  if (existingImage !== null && !canonicalPinPattern.test(existingImage)) {
+    // Explicit override wins: keep exactly that value as the single key.
+    const explicitLines = env.match(new RegExp(`^${key}=.*$`, "gm")) ?? [];
+    if (
+      explicitLines.length === 1 &&
+      explicitLines[0] === `${key}=${existingImage}`
+    ) {
+      console.log(`${key} already set in ${envPath}; leaving it unchanged.`);
+    } else {
+      env = env.replace(new RegExp(`^${key}=.*$`, "gm"), "");
+      if (!env.endsWith("\n")) env += "\n";
+      env = `${env}${key}=${existingImage}\n`;
+      console.log(
+        `${key} already set in ${envPath}; preserving the effective value.`,
+      );
+    }
+  } else if (existingImage !== null) {
+    // Canonical pin: strip every previous KEY line (quoted or blank)
+    // and append the single derived pin. Byte-idempotent when the pin is
+    // already current and alone.
+    const occurrences = env.match(new RegExp(`^${key}=.*$`, "gm")) ?? [];
+    if (
+      occurrences.length === 1 &&
+      occurrences[0] === `${key}=${derivedImage}`
+    ) {
+      console.log(`${key} already pinned to ${derivedImage}.`);
+    } else {
+      env = env.replace(new RegExp(`^${key}=.*$`, "gm"), "");
+      if (!env.endsWith("\n")) env += "\n";
+      env = `${env}${key}=${derivedImage}\n`;
+      console.log(
+        `${key} re-pinned to ${derivedImage} (follows .release-version)`,
+      );
+    }
+  } else {
+    ensureKey(key, derivedImage, `${key} (pinned from .release-version)`);
+  }
+}
+
+for (const pin of IMAGE_PINS) {
+  pinImageFromRelease(pin);
 }
 
 if (env !== original) {

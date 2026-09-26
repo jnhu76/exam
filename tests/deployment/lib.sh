@@ -18,12 +18,14 @@ LIB_DIR="$(
 )"
 REPO_ROOT="$(cd -- "${LIB_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
-# Local source-build tag for the deployment suites. #626 removed the
-# docker-compose.build.yml overlay: acceptance builds THIS checkout with an
-# explicit `docker build` (ensure_source_images) and runs the canonical
-# operator Compose file against that local tag. A stale registry image can
-# never fake an acceptance run.
-SOURCE_IMAGE_TAG="exam-local:dev"
+# Local source-build tags for the deployment suites. #626 removed the
+# docker-compose.build.yml overlay: acceptance builds THIS checkout with
+# explicit `docker build`s (ensure_source_images) and runs the canonical
+# operator Compose file against those local tags. Stale registry images can
+# never fake an acceptance run. #585: TWO application images — the API
+# runner and the nginx static-Web runtime.
+SOURCE_APP_IMAGE_TAG="exam-local:dev"
+SOURCE_WEB_IMAGE_TAG="exam-local:web-dev"
 
 # ── Compose ──────────────────────────────────────────────────────────────
 # Run docker compose against the canonical production compose file.
@@ -40,11 +42,11 @@ SOURCE_IMAGE_TAG="exam-local:dev"
 # then NEVER reads the repo-root .env for interpolation, so a developer's
 # dev secrets cannot leak into a test stack.
 #
-# EXAM_IMAGE interpolation (#321/#626): the operator file requires EXAM_IMAGE.
-# Acceptance always runs the LOCALLY BUILT source image, so this library
-# exports the local pin in BOTH modes (shell env beats --env-file in Compose
-# interpolation) — a generated deployment env file may carry a registry pin,
-# but no suite ever pulls or runs it.
+# EXAM_IMAGE / EXAM_WEB_IMAGE interpolation (#321/#626/#585): the operator
+# file requires both pins. Acceptance always runs the LOCALLY BUILT source
+# images, so this library exports the local pins in BOTH modes (shell env
+# beats --env-file in Compose interpolation) — a generated deployment env
+# file may carry registry pins, but no suite ever pulls or runs them.
 run_compose() {
   local project=""
   if [ "${1:-}" != "" ] && [[ "${1}" != -* ]]; then
@@ -57,23 +59,28 @@ run_compose() {
   if [ -n "${DEPLOY_ENV_FILE:-}" ]; then
     args+=(--env-file "${DEPLOY_ENV_FILE}")
   fi
-  export EXAM_IMAGE="${EXAM_IMAGE:-${SOURCE_IMAGE_TAG}}"
+  export EXAM_IMAGE="${EXAM_IMAGE:-${SOURCE_APP_IMAGE_TAG}}"
+  export EXAM_WEB_IMAGE="${EXAM_WEB_IMAGE:-${SOURCE_WEB_IMAGE_TAG}}"
   if [ -n "${project}" ]; then
     args+=(-p "${project}")
   fi
   "${args[@]}" "$@"
 }
 
-# Build THIS checkout's app image and tag it as the local source pin
-# (idempotent per process: SOURCE_IMAGES_BUILT guards repeat builds across
-# a suite's multiple `up` invocations). #626: the replacement for the
-# removed docker-compose.build.yml overlay — explicit build, then the
-# canonical operator Compose consumes the pinned name. Suites call this
-# before their FIRST `up`; later projects reuse the same image.
+# Build THIS checkout's application images and tag them as the local source
+# pins (idempotent per process: SOURCE_IMAGES_BUILT guards repeat builds
+# across a suite's multiple `up` invocations). #626/#585: the replacement
+# for the removed docker-compose.build.yml overlay — explicit builds, then
+# the canonical operator Compose consumes the pinned names. INVARIANT: the
+# Dockerfile's FINAL stage is the nginx web-runner, so both targets are
+# pinned explicitly. Suites call this before their FIRST `up`; later
+# projects reuse the same images.
 ensure_source_images() {
   if [ -z "${SOURCE_IMAGES_BUILT:-}" ]; then
-    docker build --target runner -t "${SOURCE_IMAGE_TAG}" "${REPO_ROOT}"
-    export EXAM_IMAGE="${SOURCE_IMAGE_TAG}"
+    docker build --target runner -t "${SOURCE_APP_IMAGE_TAG}" "${REPO_ROOT}"
+    docker build --target web-runner -t "${SOURCE_WEB_IMAGE_TAG}" "${REPO_ROOT}"
+    export EXAM_IMAGE="${SOURCE_APP_IMAGE_TAG}"
+    export EXAM_WEB_IMAGE="${SOURCE_WEB_IMAGE_TAG}"
     export SOURCE_IMAGES_BUILT=1
   fi
 }
@@ -103,6 +110,18 @@ db_container() {
 app_container() {
   local project="${1:-}"
   run_compose "${project}" ps -q app 2>/dev/null | head -1
+}
+
+# Resolve the static-Web container ID for a project via Compose (#585).
+web_container() {
+  local project="${1:-}"
+  run_compose "${project}" ps -q web 2>/dev/null | head -1
+}
+
+# Resolve the edge nginx container ID for a project via Compose (#585).
+nginx_container() {
+  local project="${1:-}"
+  run_compose "${project}" ps -q nginx 2>/dev/null | head -1
 }
 
 # Best-effort teardown of an isolated project (never fatal). Extra args are

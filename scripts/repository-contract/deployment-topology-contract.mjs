@@ -20,9 +20,11 @@
  *
  * The rules this file enforces are stated at their own sites below: service
  * presence and the email-worker ban, the single Compose entry point (no
- * test/build overlay may reintroduce a second topology — #626), the
- * shutdown-budget contract, the readiness healthcheck, DB/Redis credential
- * expansion, Redis auth at container startup, and operator-doc drift.
+ * test/build overlay may reintroduce a second topology — #626), the #585
+ * public-ingress split (nginx -> web:4173 / app:3000, internal-only
+ * application services, config-file routing authority), the shutdown-budget
+ * contract, the readiness healthcheck, DB/Redis credential expansion, Redis
+ * auth at container startup, and operator-doc drift.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -138,11 +140,13 @@ if (!servicesBlock) {
 } else {
   const serviceNames = topLevelKeys(servicesBlock);
 
-  // Redis is OPTIONAL (ADR-001). The required MVP topology is
-  // app + db (#320 CONVERGE: the email outbox loop runs in-process in the
-  // app container). The `redis` service may be present (as an opt-in
-  // profile) but is NOT required.
-  for (const required of ["app", "db"]) {
+  // Redis is OPTIONAL (ADR-001). The required topology is
+  // app + db + web + nginx (#320 CONVERGE: the email outbox loop runs
+  // in-process in the app container; #585: the nginx edge is the ONLY
+  // public ingress and the static SPA runs on the dedicated web service).
+  // The `redis` service may be present (as an opt-in profile) but is NOT
+  // required.
+  for (const required of ["app", "db", "nginx", "web"]) {
     if (!serviceNames.includes(required)) {
       errors.push(
         `docker-compose.yml is missing required service '${required}'.`,
@@ -269,8 +273,71 @@ if (!servicesBlock) {
       // #351: the container stop grace must strictly dominate the app's
       // whole graceful-shutdown worst case.
       assertShutdownBudgetContract(appNoComments, appEnvNoComments);
+      // #585 public-ingress split: the API is an internal service — it must
+      // NOT publish host ports (nginx is the only public ingress) and keeps
+      // its in-network identity on 3000.
+      assertInternalService(appBlock, "app", "3000");
     }
   }
+
+  // #585: the dedicated static-Web service (nginx serving apps/web/dist on
+  // 4173 — never `vite preview`). Same two-path split as `app`: the
+  // operator path consumes the EXAM_WEB_IMAGE pin derived from
+  // .release-version; source builds pin it explicitly
+  // (tests/deployment/lib.sh ensure_source_images).
+  if (serviceNames.includes("web")) {
+    const webBlock = extractServiceBlock(servicesBlock, "web");
+    if (webBlock) {
+      const webNoComments = webBlock
+        .split(/\r?\n/)
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      if (
+        !/^\s*image:\s*\$\{EXAM_WEB_IMAGE:\?EXAM_WEB_IMAGE is required \(node scripts\/generate-env\.mjs\)\}\s*$/im.test(
+          webNoComments,
+        )
+      ) {
+        errors.push(
+          "'web' service must pin " +
+            "'image: ${EXAM_WEB_IMAGE:?EXAM_WEB_IMAGE is required (node scripts/generate-env.mjs)}' " +
+            "(the operator prebuilt-image pin derived from .release-version; " +
+            "source builds pin EXAM_WEB_IMAGE explicitly) — #321/#585.",
+        );
+      }
+      if (/^\s*build:\s*\S/im.test(webNoComments)) {
+        errors.push(
+          "'web' service must NOT carry a build key in docker-compose.yml: " +
+            "the operator path consumes the prebuilt EXAM_WEB_IMAGE pin, " +
+            "and source builds are explicit docker builds pinned via " +
+            "EXAM_WEB_IMAGE (#626/#585).",
+        );
+      }
+      assertInternalService(webBlock, "web", "4173");
+      assertWebHtmlHealthcheck(webNoComments);
+    }
+  } else {
+    errors.push(
+      "docker-compose.yml is missing the 'web' service (#585: the static " +
+        "SPA runs on a dedicated nginx runtime on 4173, not inside the API " +
+        "container).",
+    );
+  }
+
+  // #585: the nginx edge — the ONLY public production ingress.
+  if (serviceNames.includes("nginx")) {
+    const nginxBlock = extractServiceBlock(servicesBlock, "nginx");
+    if (nginxBlock) {
+      assertNginxEdge(nginxBlock);
+    }
+  } else {
+    errors.push(
+      "docker-compose.yml is missing the 'nginx' service (#585: the nginx " +
+        "edge is the ONLY public production ingress).",
+    );
+  }
+
+  // #585: the two nginx configs exist with the routing authority they own.
+  assertNginxConfigs();
 
   // The `db` service must require POSTGRES_PASSWORD too.
   if (serviceNames.includes("db")) {
@@ -576,7 +643,9 @@ function assertRequiredPostgresPasswordDb(block) {
  * endpoint, not on liveness. The probe command must fetch /api/ready and
  * must NOT fetch /api/health (the dependency-blind liveness probe — gating
  * on it recreates F3-05: compose reports healthy through total DB loss).
- * The SPA leg (fetch of '/') is expected and untouched by this check.
+ * #585: the healthcheck must also NOT fetch the bundled-SPA leg ('/') —
+ * the SPA moved to the dedicated `web` service, and API health must not
+ * assume the API container serves frontend HTML.
  */
 function assertReadinessHealthcheck(appNoComments) {
   const healthcheckBlock = extractTopLevelBlock(appNoComments, "healthcheck");
@@ -600,6 +669,234 @@ function assertReadinessHealthcheck(appNoComments) {
         "available as a route; it is just not the deployment gate. Use " +
         "/api/ready (#547).",
     );
+  }
+  if (/fetch\('http:\/\/127\.0\.0\.1:3000\/'\)/.test(healthcheckBlock)) {
+    errors.push(
+      "'app' healthcheck must NOT probe the SPA leg (fetch of '/' expecting " +
+        "HTML) — #585 moved the SPA to the dedicated 'web' service, which " +
+        "carries its own HTML healthcheck; API health must not assume the " +
+        "API container serves frontend HTML.",
+    );
+  }
+}
+
+/**
+ * #585: an INTERNAL application service — no host port publishing (nginx
+ * is the only public ingress) and an explicit in-network identity port.
+ */
+function assertInternalService(block, serviceName, port) {
+  const noComments = block
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+  if (/^\s*ports:\s*$/m.test(noComments)) {
+    errors.push(
+      `'${serviceName}' service must NOT publish host ports (#585: nginx ` +
+        "is the only public production ingress; direct access would bypass " +
+        "the edge). Host publishing belongs to the nginx service only.",
+    );
+  }
+  if (!new RegExp(`^\\s*-\\s*"${port}"\\s*$`, "m").test(noComments)) {
+    errors.push(
+      `'${serviceName}' service must declare its internal service port via ` +
+        `'expose:\n  - "${port}"' (#585 in-network identity).`,
+    );
+  }
+}
+
+/**
+ * #585: the web healthcheck proves the SPA HTML is servable on 4173 —
+ * the proof the app healthcheck no longer carries.
+ */
+function assertWebHtmlHealthcheck(webNoComments) {
+  const healthcheckBlock = extractTopLevelBlock(webNoComments, "healthcheck");
+  if (!healthcheckBlock) {
+    errors.push(
+      "'web' service must declare a healthcheck (#585: the SPA HTML proof " +
+        "moved from the app healthcheck to the web service).",
+    );
+    return;
+  }
+  if (!/4173/.test(healthcheckBlock)) {
+    errors.push(
+      "'web' healthcheck must probe the SPA on 127.0.0.1:4173 (#585).",
+    );
+  }
+}
+
+/**
+ * #585: the nginx edge service — pinned public nginx image, the only host
+ * port publisher (HTTP :80 via EXAM_PORT; 443 is deliberately NOT published
+ * yet), the edge.conf read-only mount, and startup gated on BOTH upstreams
+ * being healthy.
+ */
+function assertNginxEdge(nginxBlock) {
+  const noComments = nginxBlock
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+  if (!/^\s*image:\s*nginx:[0-9.]+-alpine[0-9.]*\s*$/m.test(noComments)) {
+    errors.push(
+      "'nginx' service must pin an exact alpine nginx image tag " +
+        "(image: nginx:<version>-alpine[.<variant>]; the floating 'latest'/" +
+        "'stable'/'alpine' tags are forbidden for the public ingress) — #585.",
+    );
+  }
+  if (!/^\s*-\s*"\$\{EXAM_PORT:-80\}:80"\s*$/m.test(noComments)) {
+    errors.push(
+      "'nginx' service must publish the public ingress via the EXAM_PORT " +
+        "authority: '\"${EXAM_PORT:-80}:80\"' (#585 — host ports are " +
+        "configuration, never hardcoded topology; default 80).",
+    );
+  }
+  if (/^\s*-\s*"[^"]*:443"\s*$/m.test(noComments)) {
+    errors.push(
+      "'nginx' service must NOT publish 443 yet (#585: HTTPS is a commented " +
+        "template in deploy/nginx/edge.conf; publishing 443 is the future " +
+        "activation step and changes this contract explicitly).",
+    );
+  }
+  if (
+    !/^\s*-\s*\.\/deploy\/nginx\/edge\.conf:\/etc\/nginx\/conf\.d\/default\.conf:ro\s*$/m.test(
+      noComments,
+    )
+  ) {
+    errors.push(
+      "'nginx' service must runtime-mount './deploy/nginx/edge.conf' " +
+        "read-only at '/etc/nginx/conf.d/default.conf' (#585: the edge " +
+        "config is deployment configuration, never baked into an image).",
+    );
+  }
+  for (const upstream of ["app", "web"]) {
+    if (
+      !new RegExp(
+        `^\\s+${upstream}:\\s*\\n\\s+condition:\\s*service_healthy\\s*$`,
+        "m",
+      ).test(noComments)
+    ) {
+      errors.push(
+        `'nginx' service must depend on '${upstream}: condition: ` +
+          "service_healthy' (#585: the edge starts only when both upstreams " +
+          "are ready, so an unready API/SPA is never advertised).",
+      );
+    }
+  }
+}
+
+/**
+ * #585: the in-repository nginx configs and the routing authority they
+ * must encode. Structural substring checks on the two files:
+ *   deploy/nginx/edge.conf  — runtime-mounted edge proxy (:80 -> web/app)
+ *   deploy/nginx/web.conf   — baked-in static SPA server (:4173)
+ */
+function assertNginxConfigs() {
+  const edgePath = join(ROOT, "deploy", "nginx", "edge.conf");
+  const webConfPath = join(ROOT, "deploy", "nginx", "web.conf");
+  let edge;
+  let webConf;
+  try {
+    edge = readFileSync(edgePath, "utf-8");
+  } catch {
+    errors.push(
+      "deploy/nginx/edge.conf is missing (#585: the edge proxy config is " +
+        "the routing authority mounted by the nginx service).",
+    );
+    return;
+  }
+  try {
+    webConf = readFileSync(webConfPath, "utf-8");
+  } catch {
+    errors.push(
+      "deploy/nginx/web.conf is missing (#585: the static SPA server " +
+        "config is baked into the web-runner image).",
+    );
+    return;
+  }
+
+  const edgeActive = edge
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+  for (const [marker, why] of [
+    ["set $upstream_web web:4173;", "the web upstream identity"],
+    ["set $upstream_api app:3000;", "the API upstream identity"],
+    ["listen 80;", "the public HTTP listener"],
+    ["location /api/", "the API routing rule"],
+    ["proxy_pass http://$upstream_api;", "the API upstream route"],
+    ["proxy_pass http://$upstream_web;", "the web upstream route"],
+    [
+      "resolver 127.0.0.11",
+      "request-time DNS re-resolution (a static upstream cache would " +
+        "502 after an app/web recreate)",
+    ],
+    [
+      "proxy_set_header X-Forwarded-For $remote_addr;",
+      "the #546 client-IP contract: the edge REPLACES XFF (append would " +
+        "put a forged client chain inside the app's trusted-proxy walk)",
+    ],
+    ["proxy_set_header X-Real-IP $remote_addr;", "the real-client-IP header"],
+  ]) {
+    if (!edgeActive.includes(marker)) {
+      errors.push(
+        `deploy/nginx/edge.conf is missing '${marker}' (${why}) — #585.`,
+      );
+    }
+  }
+  // HTTPS is template-only: the 443 server block and the HTTP->HTTPS
+  // redirect must exist COMMENTED, and no active 443 listener may exist.
+  if (!/^\s*#\s*listen 443 ssl;\s*$/m.test(edge)) {
+    errors.push(
+      "deploy/nginx/edge.conf is missing the commented HTTPS template " +
+        "('#[ ]listen 443 ssl;') — #585 keeps the future TLS profile " +
+        "structurally present but inactive.",
+    );
+  }
+  if (
+    !/^\s*#\s*ssl_certificate\s+\/etc\/nginx\/certs\/fullchain\.pem;/m.test(
+      edge,
+    )
+  ) {
+    errors.push(
+      "deploy/nginx/edge.conf is missing the commented certificate path " +
+        "('/etc/nginx/certs/fullchain.pem') — the future activation must " +
+        "be an uncomment, not a redesign.",
+    );
+  }
+  if (
+    !/^\s*#\s*ssl_certificate_key\s+\/etc\/nginx\/certs\/privkey\.pem;/m.test(
+      edge,
+    )
+  ) {
+    errors.push(
+      "deploy/nginx/edge.conf is missing the commented key path " +
+        "('/etc/nginx/certs/privkey.pem') — the future activation must be " +
+        "an uncomment, not a redesign.",
+    );
+  }
+  if (!/^\s*#\s*return 301 https:\/\/\$host\$request_uri;/m.test(edge)) {
+    errors.push(
+      "deploy/nginx/edge.conf is missing the commented HTTP->HTTPS " +
+        "redirect ('# return 301 https://$host$request_uri;') — #585.",
+    );
+  }
+  if (/^\s*listen 443\b/m.test(edgeActive)) {
+    errors.push(
+      "deploy/nginx/edge.conf must NOT carry an ACTIVE 443 listener (#585: " +
+        "HTTP :80 is this profile's active surface; 443 stays a commented " +
+        "template until certificates are mounted).",
+    );
+  }
+
+  for (const [marker, why] of [
+    ["listen 4173;", "the internal SPA listener"],
+    ["root /usr/share/nginx/html;", "the baked-in SPA root"],
+    ["try_files $uri $uri/ /index.html;", "the SPA deep-link fallback"],
+  ]) {
+    if (!webConf.includes(marker)) {
+      errors.push(
+        `deploy/nginx/web.conf is missing '${marker}' (${why}) — #585.`,
+      );
+    }
   }
 }
 

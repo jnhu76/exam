@@ -202,14 +202,14 @@ env -u EMAIL_ENABLED -u EMAIL_TRANSPORT -u EMAIL_FROM -u EMAIL_FROM_NAME \
     pnpm --filter api dev
 
 # 3. Login as admin, capture cookie
-curl -s -X POST http://localhost:3000/api/auth/login \
+curl -s -X POST http://localhost:${EXAM_PORT:-80}/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}' \
   -c /tmp/admin-cookies.txt
 
 # 4. Send a test email
 curl -s -b /tmp/admin-cookies.txt \
-  -X POST http://localhost:3000/api/email/test \
+  -X POST http://localhost:${EXAM_PORT:-80}/api/email/test \
   -H "Content-Type: application/json" \
   -d '{"to":"recipient@example.com"}'
 ```
