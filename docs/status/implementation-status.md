@@ -209,8 +209,7 @@ MVP deployment now has:
 - bootstrap-pending state in the in-process email delivery loop lifecycle;
 - PostgreSQL Inbox and Email outbox;
 - delivery-loop heartbeat and diagnostics;
-- clean production Docker build;
-- repeatable relocated clean-volume Compose smoke evidence.
+- clean production Docker build.
 
 The ordering principle: define permissions first (P4), then harden the Email
 base (P5-0), then close out result publishing (P3), then attach the first
@@ -260,7 +259,7 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   for the final gate matrix. **P7 is CLOSED (2026-08-14).** The RTO +
   retention mechanism (P7-CLOSE, PR #290: typed nullable RTO authority 30s..48h
   measured via automated restore-drill evidence, retention evidence ledger +
-  readiness endpoint + host pgBackRest script — execution stays host-only per
+  readiness endpoint — execution stays host-only per
   ADR-017 D4) is implemented; **Gate P7-3 is PASS as the Product / Software
   Readiness Gate**: the deterministic clean-volume restore drill executed
   2026-08-14 records its measured duration (18 000 ms) as automated drill
@@ -290,9 +289,10 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
     store). SUCCESS requires artifact + readable + verification + durable
     commit (DB CHECK + partial-unique at most-one-success-per-operation);
     crash/idempotency/duplicate semantics tested. Operator evidence CLI
-    (`backup-evidence.js`) instruments `postgres-logical-backup.sh` +
-    `pg-basebackup.sh` at natural checkpoints; cold backups spool + import;
-    restore drills recorded (automated vs operator-declared). Read-only
+    (`backup-evidence.js`) records the operator's own `scripts/db-backup.sh`
+    (`pg_dump -Fc` / `pg_restore`) outcomes at natural checkpoints
+    (start / complete / fail / cold-import); restore drills recorded
+    (automated vs operator-declared). Read-only
     `GET /system/backups` + `GET /system/restore-readiness` (Admin +
     Maintainer).
   - **E2C — Operations views**: `/admin/operations` (health, backup posture,

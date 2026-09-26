@@ -217,7 +217,6 @@ Redis service added to all compose files (`redis:7-alpine`):
 | `packages/contracts/src/system.ts` | Added `redisStatus` to DiagnosticsResponseSchema |
 | `docker-compose.yml` | Added Redis service |
 | `docker-compose.dev.yml` | Added Redis service |
-| `docker-compose.test.yml` | Added Redis service |
 | `.env.example` | Added REDIS_URL and REDIS_KEY_PREFIX documentation |
 | `docs/adr/ADR-001-redis.md` | Updated status and added baseline section |
 

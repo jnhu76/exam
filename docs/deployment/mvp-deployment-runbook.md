@@ -806,8 +806,8 @@ app container (SIGTERM, stop_grace_period: 45s):
 
 A container exit code of **137 after `docker stop` is a FAILURE**, not
 normal: it means Docker SIGKILLed the app because graceful shutdown
-exceeded the grace period (budget regression — enforced by
-`scripts/repository-contract/deployment-topology-contract.mjs`).
+exceeded the grace period (budget regression — raise `stop_grace_period` if
+any component budget grows).
 
 ---
 

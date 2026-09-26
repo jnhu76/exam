@@ -155,7 +155,7 @@ authority, granted by host/CLI access, never by an Exam login:
 
 ```text
 SSH, terminal, Docker, Compose, systemd, PostgreSQL administration,
-WAL, pgBackRest, filesystem, secrets, restore, PITR
+backup tooling, filesystem, secrets, restore, PITR
 ```
 
 A real-world person may hold an Exam Maintainer account **plus** host SSH

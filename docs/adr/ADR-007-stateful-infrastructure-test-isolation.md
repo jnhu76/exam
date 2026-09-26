@@ -2,13 +2,19 @@
 
 ## Status
 
-ACCEPTED (infrastructure implemented, Phase 6G/7 deferred).
+ACCEPTED (infrastructure implemented; Phase 7 deferred).
 
-Phase 2–4 and 6E are implemented and enforced. Phases 5A/5B and 6D have
-local-only evidence; Phases 6 and 6F have CI config prepared but await live
-validation. The core isolation contract (per-worker DB, scope resolver,
-background default-off) is in active use. Phase 6G (live CI validation) and
-Phase 7 (Redis/Queue prefix) remain deferred until triggered.
+Phase 2–4 are implemented and enforced. The core isolation contract
+(per-worker DB, scope resolver, background default-off) is in active use, and
+the per-file / per-slot lifecycle contract below is the current authority.
+
+> **Superseded: CI gate / shard shape.** The Phase 6 sections below (`CI
+> strategy`, `Phase 6 Plan`, `Phase 6G`) record a planned `api-fast` shard
+> matrix that was never adopted. CI wiring today — one `api-coverage` job on
+> worker-database isolation — is owned by `.github/workflows/ci.yml` and the
+> root `package.json`; never treat the job/script names in those sections as
+> runnable commands. Phase 7 (Redis/Queue prefix) remains deferred until
+> triggered.
 
 This ADR is a **long-term architecture constraint** that governs how every
 stateful test resource (PostgreSQL, Redis, Queue, background worker) is
@@ -70,9 +76,9 @@ that covers PostgreSQL, Redis, Queue, and background workers together.
 ## Non-Goals
 
 - No claim that `BUG-FLAKE-001` (or any entry in `test-flakes.md`) is fixed.
-  Existing mitigations (`fileParallelism: false`, `verify:db-tests` serial
-  chain, scanner legacy timeout, per-file schema isolation) remain in force
-  until a follow-up PR removes them with its own evidence.
+  Existing mitigations (`fileParallelism: false` default, explicit timeout
+  budgets on long scanner/contention cases, per-file / per-slot isolation)
+  remain in force until a follow-up PR removes them with its own evidence.
 - No replacement of real PostgreSQL with SQLite, `pg-mem`, or any in-process
   fake. Real PostgreSQL stays the only engine for correctness-critical tests.
 - No test-only migrations and no business-schema changes made for test speed.
@@ -112,10 +118,10 @@ State taxonomy used in this table:
 | Phase 5A — local maxWorkers=2    | LOCAL_ONLY_EVIDENCE       | 5/5 local stress pass; not CI-ready, not coverage/global proof |
 | Phase 5B — local maxWorkers=4    | LOCAL_ONLY_EVIDENCE       | 5/5 local stress pass; local recommended mode; not CI-ready, not coverage/global proof |
 | Phase 6 — CI shard               | CONFIG_PREPARED           | 2 shards × 1 worker in ci.yml; live CI validation pending |
-| Phase 6D — physical DB lifecycle contention | LOCAL_ONLY_EVIDENCE | advisory lock + unique DB names + robust drop; coverage:db 5/5 PASS, verify 1/1 PASS + 2/2 stress; does not close BUG-FLAKE-001 |
-| Phase 6E — CI verify gate dedup | ACCEPTED_AND_ENFORCED     | `verify:ci` uses coverage as test entry; `verify`/`verify:db-tests`/api-fast/e2e semantics unchanged |
-| Phase 6F — CI job DAG optimization | CONFIG_PREPARED        | new `static` job; `verify`/`api-fast`/`e2e` now `needs: static` (parallel); test semantics unchanged; live CI validation pending |
-| Phase 6G — Live CI validation    | DEFERRED                  | Blocked until GitHub Actions can run. Must validate `static`/`verify`/`api-fast`/`e2e` on the real CI DAG before changing defaults or closing ADR-007. Local evidence is not sufficient. |
+| Phase 6D — physical DB lifecycle contention | LOCAL_ONLY_EVIDENCE | advisory lock + unique DB names + robust drop implemented; no live-CI claim |
+| Phase 6E — CI verify gate dedup | ACCEPTED_AND_ENFORCED     | Coverage as the single test entry, so the same suite is not run twice |
+| Phase 6F — CI job DAG optimization | SUPERSEDED       | The DAG this row describes (`static` / `verify` / `api-fast` / `e2e`) was later replaced; current wiring lives in `.github/workflows/ci.yml` |
+| Phase 6G — Live CI validation    | SUPERSEDED                  | The gate validation this row deferred belongs to the CI DAG above; read current status from `.github/workflows/ci.yml` and real CI runs |
 | Phase 7 — Redis / Queue prefix   | DEFERRED                  | Only when Redis / Queue adoption is triggered       |
 
 ## Current Recommended Modes
@@ -226,7 +232,7 @@ scopes (`background`, `concurrency`, `e2e`) are single-namespace by design.
 | Scope kind               | Scope id format | Used by                          |
 | ------------------------ | --------------- | -------------------------------- |
 | Local ordinary worker    | `local_w{w}`    | local `pnpm --filter @exam/api test` |
-| CI shard worker          | `s{shard}_w{w}` | CI `api-fast` shard matrix       |
+| CI shard worker          | `s{shard}_w{w}` | CI shard matrix (`TEST_SHARD_INDEX`) |
 | Background dedicated     | `background`    | background-job test group         |
 | Concurrency dedicated    | `concurrency`   | true concurrency test group       |
 | E2E dedicated            | `e2e`           | Playwright / full browser tests   |
@@ -416,8 +422,8 @@ Negative / cost:
 
 - Requires a datasource / scope resolver, per-worker database provisioning,
   and Redis/Queue prefix plumbing — sequenced in the rollout plan.
-- The current `fileParallelism: false` and `verify:db-tests` chain cannot be
-  removed by this ADR; each removal is a follow-up PR with stress evidence.
+- The current `fileParallelism: false` default cannot be changed by this ADR;
+  each removal is a follow-up PR with stress evidence.
 - Migration cost on a fresh per-worker database must be measured. If it is
   still too high, Phase 8 (template database) is the lever, not premature
   optimization.
@@ -510,6 +516,8 @@ worker 4 -> PG exam_test_w4,  Redis exam:test:local:w4:, Queue prefix exam:test:
 
 ## CI strategy
 
+> **Superseded** — the target shape below was not adopted; current CI wiring is owned by `.github/workflows/ci.yml`.
+
 CI MUST NOT rely solely on Vitest workers inside a single job. CI target:
 
 ```
@@ -552,9 +560,8 @@ Full sequencing and acceptance gates live in
 - **Phase 5A — local maxWorkers=2 (Completed).** 5/5 stress pass.
 - **Phase 5B — local maxWorkers=4 (Completed).** 5/5 stress pass; local
   recommended mode.
-- **Phase 6 — CI sharding (Planned / Prepared next).** `api-fast` matrix
-  shards, per-shard `maxWorkers=1~2`, background/concurrency/E2E as separate
-  jobs. Live CI validation pending.
+- **Phase 6 — CI sharding (superseded).** The planned matrix-shard shape was
+  not adopted; current CI wiring is owned by `.github/workflows/ci.yml`.
 - **Phase 7 — Redis / Queue integration (Deferred).** Redis prefix resolver,
   queue prefix resolver, `producer-only` mode, `worker-enabled` only in
   dedicated tests. Only when Redis / Queue adoption is triggered.
@@ -563,9 +570,9 @@ Full sequencing and acceptance gates live in
 
 ## Phase 6 Plan — CI Shard + Worker Database Isolation
 
-Status: Config prepared; live CI shard validation pending. Live CI validation is
-currently unavailable. This phase must not claim CI speedup until real CI
-timing exists.
+Status: **superseded** — this plan was not adopted. Current CI wiring lives in
+`.github/workflows/ci.yml`; keep this section only as the design record for the
+shard/worker isolation it describes.
 
 **Goal**: CI uses GitHub Actions matrix shards with worker-database isolation,
 not single-job Vitest workers.
@@ -644,56 +651,37 @@ following lands:
 - Phase 7 is not required to finish current PostgreSQL test-infra work.
 - Redis / Queue must not be introduced only for testing.
 
-### Phase 6G — Live CI validation TODO
+### Phase 6G — Live CI validation (superseded)
 
-Status: **Deferred until GitHub Actions can run.**
+The live-CI gate validation this section deferred belonged to the planned
+`api-fast` shard DAG, which was never adopted; it is therefore closed as
+superseded rather than pending. Current CI wiring and its validation status are
+owned by `.github/workflows/ci.yml` and real CI runs.
 
-Phase 6G is required because **local evidence cannot prove CI stability**. The
-optimized CI DAG (Phase 6F) and the worker-database shard job (`api-fast`) must
-be validated on GitHub Actions before ADR-007 can be considered complete. Local
-stress (Phase 6D `coverage:db` 5/5, `pnpm verify` PASS) is necessary but not
-sufficient: CI differs in CPU scheduling, PostgreSQL service behavior, cold-start
-timing, cache state, and job parallelism.
+**Decisions that still require real-CI evidence** (do not flip them on local
+evidence alone):
 
-**Blocked decisions** (do not proceed until live CI evidence exists):
+- making worker-database mode the default
+- removing `apps/api` `fileParallelism: false` (the serial default)
+- declaring BUG-FLAKE-001 globally closed
+- further CI DAG / artifact-sharing optimization
 
-- default worker-database mode
-- removing `apps/api fileParallelism:false`
-- removing `verify:db-tests`
-- treating `api-fast` as a replacement gate
-- closing BUG-FLAKE-001 globally
-- further CI DAG / artifact-sharing optimization based only on local evidence
-
-**Acceptance evidence** (minimum): one clean GitHub Actions run on the new DAG
-with `static` / `verify` / both `api-fast` shards / `e2e` all PASS, and no
-recurrence of physical-DB-lifecycle timeout, auth amplification timeout,
-worker-database shard isolation failure, or e2e ordering/cold-start failure.
-Preferred: 3 consecutive clean runs with recorded timing. Full checklist lives
-in `docs/standards/test-flakes.md` Phase 6G section.
+CI differs from a laptop in CPU scheduling, PostgreSQL service behavior,
+cold-start timing, cache state, and job parallelism, so local stress evidence is
+necessary but not sufficient.
 
 ## Completion Boundary
 
-> **Phase 6 completion-boundary 修正（2026-06-23）**：ADR-007 **不能**算作已完全关闭，除非
-> 残留缓解**要么**以 stress 证据移除，**要么**被明确接受为永久设计决策。当前仍在的缓解：
+> **Completion-boundary 修正（2026-06-23）**：ADR-007 的隔离合同已在生产测试路径中使用，
+> 但以下缓解仍是当前配置，需要独立证据才能改变：
 >
-> - `apps/api` `fileParallelism: false`（默认串行；worker-database 仍 opt-in，未默认）。
-> - `verify:db-tests` 串行链（`test:db && test:api && coverage:db && coverage:api`）。
-> - scanner legacy timeout（15_000ms）。
-> - worker-database opt-in 状态（未设为默认 / CI 默认）。
-> - CI shard live validation pending。
-> - **auth amplification 仍 open**（`auth.test.ts` 在全量 coverage + PG I/O 争用下的 5s
->   timeout 子类，未单独修复）。
+> - `apps/api` `fileParallelism: false`（默认串行；worker-database 并行是 env-gated
+>   opt-in，由 CI 与 `pnpm verify` 使用）。
+> - scanner / contention 类长用例在调用点显式传 timeout 预算（不放宽包级 `hookTimeout`）。
+> - CI 与真实 CI run 的接线以 `.github/workflows/ci.yml` 为准。
 >
-> 因此 Phase 5 的 "Completed" 仅是 **local-only / test-only evidence**；Phase 6 的
-> "Config prepared" 仅是**配置就绪，live CI validation pending**。
->
-> **Phase 6D（2026-06-23）补充**：physical DB lifecycle contention 已实现根因缓解
-> （PostgreSQL advisory lock 串行化 heavy test-infra DDL/migration + per-run unique DB
-> names + robust DROP with connection termination），local 证据 `coverage:db` 5/5 PASS、
-> `pnpm verify` 1/1 + 2/2 stress PASS。这**只**修复 BUG-FLAKE-001 的 physical-DB-lifecycle
-> 子类，**不**关闭 BUG-FLAKE-001 全局（auth amplification 子类 + A′ serial 仍在），**不**
-> 构成 CI 证据，**不**允许移除上述任何残留缓解。在上述缓解移除 / 永久化决策 + CI live
-> validation 完成之前，ADR-007 保持 Proposed / not-fully-closed。
+> 改变上述任何一条都需要独立证据；ADR-007 的 CI gate / shard 形态部分已 superseded
+> （见上文 Phase 6 各节）。
 
 For the current PostgreSQL test-infra track, ADR-007 is considered complete
 when:
@@ -711,7 +699,9 @@ PostgreSQL local / CI test isolation can be completed before Redis / Queue
 exists. Redis / Queue prefix integration is adoption-triggered, not mandatory
 upfront work.
 
-## Validation matrix (acceptance gates, not run in this PR)
+## Validation matrix (acceptance gates; superseded CI-shape rows)
+
+> The `api-fast` / shard rows below belong to the superseded CI-shape plan above.
 
 Local:
 
