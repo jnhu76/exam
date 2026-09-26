@@ -77,11 +77,18 @@ Upgrade prerequisites:
 git pull                      # master now carries the new .release-version
 # (air-gapped: transfer the checkout + image archive; docker load it)
 
-# 0b. ONE-TIME migration (installs made before the env-file rename):
-#     the deployment env file is now .env.production. Rename the old
-#     .env.deploy BEFORE running init-production-env, or it would create a
-#     fresh file with NEW secrets against the kept PGDATA:
+# 0b. ONE-TIME migration — BREAKING RENAME (installs made before the
+#     env-file rename): the deployment env file is now .env.production.
+#     Rename the old .env.deploy BEFORE running init-production-env, or
+#     it would create a fresh file with NEW secrets against the kept
+#     PGDATA (JWT logins and DB auth would break):
 mv .env.deploy .env.production   # only if .env.production does not exist yet
+#
+#     INVARIANT (safe to re-run): an existing .env.production is NEVER
+#     re-secreted. init-production-env only FILLS BLANK values; a value
+#     already present — JWT_SECRET, POSTGRES_PASSWORD, or any explicit
+#     operator override — is never regenerated or rotated, so no upgrade
+#     run can invalidate sessions or database credentials.
 
 # 1. Re-pin the image (operator image pin follows .release-version):
 node scripts/init-production-env.mjs
