@@ -477,8 +477,12 @@ docker compose --env-file .env.production exec app node dist/scripts/reset-admin
 
 The baseline seed is dev/test infrastructure only. The container entrypoint
 honors `RUN_SEED=1` (baseline) / `RUN_SEED=e2e` (canonical E2E seed), but the
-**deployment compose file does not forward `RUN_SEED`** — only the dev/test
-paths set it (the E2E runner, the dev entrypoint). It refuses
+**deployment compose file does not forward `RUN_SEED`**. Host-local and CI
+E2E do not use `RUN_SEED` either: both call the canonical seed command
+(`pnpm --filter @exam/api db:seed:e2e`) directly. `RUN_SEED` is the Docker
+image entrypoint's seed-selection mechanism for image-based invocations —
+a retained mechanism, not a supported full image-E2E path (issue #636);
+no in-repo caller sets it today. The seed refuses
 to run when `APP_MODE=production`. For full demo data (courses, questions,
 exams, attempts), use `pnpm db:seed:demo` against the dev DB only — never
 against the production DB.
@@ -517,9 +521,13 @@ chaining these dependencies — the drizzle migration journal tracks state,
 it does NOT lock concurrent runners:
 
 ```text
-default topology (#320 CONVERGE):
-  db (healthy) ← app (healthy)
-                  ↑ app entrypoint runs migrate before binding
+default topology (#585 service split; #320 CONVERGE):
+  db (healthy) ← app (healthy)            # app entrypoint migrates before binding
+  app (healthy) ─┐
+  web (healthy) ─┴→ nginx (the ONLY public ingress)
+                   # nginx fans OUT: /api/** → app:3000, everything else →
+                   # web:4173. app and web are siblings behind the edge —
+                   # NOT an app→web proxy chain.
 
 optional redis profile (--profile redis):
   db (healthy) ← app
@@ -549,16 +557,22 @@ The implemented MVP separates **liveness**, **readiness**, and
 | `GET /api/system/info` | none | — | Version + uptime |
 | `GET /api/system/public-config` | none | — | Public config (deployment mode, feature flags) |
 
-The Compose `app` healthcheck polls `GET /api/ready` (plus the SPA root)
-every 30s (5s timeout, 3 retries, 30s start period). The healthcheck has
-two roles:
+The Compose `app` healthcheck polls `GET /api/ready` every 30s (5s timeout,
+3 retries, 30s start period) — the API leg ONLY. The SPA HTML proof is NOT
+part of it: the separate `web` service carries its own healthcheck
+(`wget http://127.0.0.1:4173/`), so `web (healthy)` is the SPA-servable
+signal (#585 service split). The `nginx` edge is the service that depends on
+those health states: `depends_on` holds nginx startup until both `app` and
+`web` are healthy.
 
 ```text
 healthcheck:
-  - marks the container healthy / unhealthy (visible via 'docker compose ps',
+  - marks each container healthy / unhealthy (visible via 'docker compose ps',
     'docker inspect', and Compose UI);
-  - no other service depends on app health since #320 CONVERGE removed the
-    email-worker service (the guard exists for future dependent services).
+  - gates STARTUP of dependent services: nginx waits for app + web healthy
+    (#585). Health state does NOT route runtime traffic — once started, nginx
+    proxies to app/web unconditionally — and does NOT by itself restart
+    anything.
 ```
 
 A healthcheck does **not**, by itself, restart a still-running container.
@@ -761,10 +775,33 @@ curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/diagn
 # 8. Inspect the audit log for the publication event.
 ```
 
-For a full automated end-to-end smoke (Playwright), use
-`pnpm e2e` (Docker lifecycle) or `bash scripts/e2e/run.sh` (WSL
-host lifecycle) in a non-production stack. **Never** run E2E against the
-production database.
+For the full automated browser suite (Playwright), use the ONE host-native
+entry: `pnpm e2e`, which is exactly `bash scripts/e2e/run.sh`
+(`package.json`). It is a non-production stack by construction — the
+application runs on the host with `APP_MODE=e2e` against the isolated
+`exam_e2e*` databases, and Compose supplies only the PostgreSQL/Redis
+dependencies. There is no Docker-app-image E2E path (issue #636).
+**Never** run E2E against the production database.
+
+### Release artifact evidence
+
+The production smoke above validates deployment and selected business
+workflows. It is NOT certification of the full browser suite, production
+security policy, upgrade, or platform — and it must not be presented as
+such. When recording acceptance against a released image, identify the
+complete artifact identity; a Git tag or source SHA alone is NOT image
+identity:
+
+- the source SHA and the Git release tag;
+- the image tags AND the actual digests of BOTH `EXAM_IMAGE` and
+  `EXAM_WEB_IMAGE` (the release workflow records tags + digest + source per
+  image in its step summary);
+- the platform (published images are `linux/amd64`);
+- the Compose/ingress configuration used for acceptance.
+
+Rebuilding the same source SHA produces different image digests (no
+reproducible-build guarantee), so acceptance of one digest pair never
+transfers to a rebuild at the same tag or SHA.
 
 ---
 

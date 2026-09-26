@@ -25,8 +25,10 @@ node dist/scripts/migrate.js
 # Seed mode selection:
 #   RUN_SEED=1   → baseline seed only (admin / candidate / candidate2)
 #   RUN_SEED=e2e → canonical E2E seed (baseline + demo: candidate1..4)
-# Local E2E (scripts/e2e/run.sh drives db:seed:e2e on the host) and CI E2E
-# must converge on RUN_SEED=e2e to share one seed contract.
+# Host-local and CI E2E converge on the same canonical seed contract by
+# calling db:seed:e2e directly; they do not set RUN_SEED. This branch is the
+# image-based wiring of that same seed (retained; not a supported full
+# image-E2E path — issue #636).
 case "$RUN_SEED" in
   e2e)
     echo "Running canonical E2E seed (baseline + demo)..."
