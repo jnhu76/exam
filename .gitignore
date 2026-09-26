@@ -37,3 +37,4 @@ mutation-campaign-results/
 .tmp/
 gui-test-screenshots/
 apps/e2e/test-results-patrol/
+.zcodeignore
