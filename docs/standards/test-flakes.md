@@ -18,6 +18,18 @@
 
 ## 已修复事故
 
+### 2026-09-27 — 多个 package coverage 并发跑触发 worker-database 运行租约互斥（操作模式限制，非回归；PR #643 验证期间）
+
+- **现象**：本地（WSL2，PR #643 closure 修复验证期间，head `4250aea7`）把三个 coverage 套件作为独立 pnpm/vitest 进程**同时**在后台运行（`pnpm --filter @exam/api run coverage` + `pnpm --filter @exam/web run coverage` + `pnpm --filter @exam/db run coverage`，共用 docker-compose.dev 的同一 PG 实例）。db coverage 失败而 api/web 全绿。首次发生：`packages/db/src/testInfraLock.test.ts` 3 个失败 + `packages/db/src/repository/recoveryRepo.test.ts` 3 个失败（两文件耗时分别被拉长到 ~44.6s / ~63s，其余 53 文件全过）。
+- **错误片段（复现时完整捕获）**：两个 run-lease 契约测试失败，错误相同——
+  `Error: [testInfraLock] another worker-database test run is already active on this PostgreSQL server (run lease exam_test_worker_database_run is held). Concurrent local worker-database runs are not supported: both runs derive the same slot databases from VITEST_POOL_ID. Wait for the running invocation to finish, or point TEST_DATABASE_URL at a separate PostgreSQL instance.`（抛出于 `src/testInfraLock.ts:425`）：
+  - `acquireTestInfraRunLease — run B fails IMMEDIATELY while run A holds; release is idempotent and unblocks` — `testInfraLock.test.ts:765`（测试里 run-A 的 acquire 本身被外部租约拒绝）
+  - `run lease is CLUSTER-scoped: alien TEST_ADMIN_DATABASE is rejected, not honored (round-5)` — `testInfraLock.test.ts:799`（"canonical domain is still free" 的收尾 acquire 被外部租约拒绝）
+- **证据（同代码再跑就过，登记规则 #1）**：① 首次失败后立即单独重跑两个失败文件：96/96 全过（7.6s）；② 再单独跑完整 db coverage：55 文件 / 669 测试全过；③ 复现实验（同一 commit、同一操作模式，api + web + db 三进程并发）：db coverage 2 个失败（如上，均为 run-lease 测试），api coverage（租约持有方）与 web coverage 同时全绿——非对称签名与租约机制完全吻合（先启动者持约正常运行，后启动者取不到租约）。首次发生的 recoveryRepo 3 个失败在复现中未再出现，归入宿主负载型超时家族（见 2026-08-31 姊妹条目），机制未捕获到错误片段（首次输出被过滤），不作断言。
+- **根因**：不是产品/测试回归，而是**集群级运行租约的既定契约与"同一 PG 上并发跑两个 worker-database 隔离的测试套件"这一操作模式的必然冲突**：`acquireTestInfraRunLease` 每个 PG server 只发放一把 `exam_test_worker_database_run` 租约（slot 库 `exam_test_w1..wN` 由 `VITEST_POOL_ID` 派生，两套并发运行会在同一批 slot 库内互踩），API coverage 全程持约 ~3.5 分钟，期间启动的 db coverage 取约失败——包括那两个**用真实 acquire 断言租约契约**的测试。租约错误消息本身已写明原因与 remedy。2026-08-31 条目记录的是同一操作模式的宿主负载面（5s 超时），本条记录的是它的租约互斥面：同一操作模式的第二种受害形态。
+- **当前缓解**：开发机多套件**串行**执行（同 2026-08-31 缓解），不并发跑两个使用 worker-database 隔离的 vitest 进程；CI 各 job 独立 runner，不受此操作模式影响。无代码改动：失败行为**就是**租约契约在工作（fail loud + 指明 remedy），不调 timeout、不 skip、不 retry、不放宽租约。
+- **后续动作**：无。串行执行下同签名再出现即为真回归，按 bug 处理；若并发误操作再发生 ≥3 次考虑在文档顶部操作提示中更显式声明。
+
 ### 2026-09-01 — CI API coverage 4-worker 并行下 DB 生命周期钩子漂移超时（PR #362 S1 anti-decay）
 
 - **现象**：CI run 33425276029（2026-08-31T18:29Z，pull_request，`chore/recovery-anti-decay-s1` @ cdafbd38）的 API coverage job（`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`）失败；同 run 其余 job（Build / Static / E2E×2 / Web / Package）全部通过。3 个文件 6 个错误，全部为 DB 生命周期钩子超时，无任何断言失败：
