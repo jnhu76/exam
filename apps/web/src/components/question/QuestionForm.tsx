@@ -325,12 +325,11 @@ export function QuestionForm({
                 // answer (plain text | null). Always clear standardAnswer
                 // on type switch — preserving it would carry objective
                 // answers (e.g. "A" from single_choice) into the reference
-                // field, leaking grading metadata. Rubric IS preserved
-                // because it is text_response-specific and an in-flight
-                // draft is valuable.
+                // field, leaking grading metadata. Rubric is cleared here
+                // as well: drafts never survive incompatible type changes.
                 defaults.options = [];
                 defaults.standardAnswer = null;
-                defaults.rubric = form.rubric ?? null;
+                defaults.rubric = null;
               }
               update({ type, ...defaults });
             }}
