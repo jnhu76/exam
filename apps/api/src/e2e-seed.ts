@@ -32,7 +32,9 @@ import {
   runE2eSeed,
   buildE2eSeedOutput,
 } from "@exam/db/src/e2eSeedOrchestrator.js";
+import { seedDemo } from "@exam/db/src/demo-seed.js";
 import { hashPassword } from "@exam/auth/src/password.js";
+import { createDemoSeedGrader } from "./demo-seed-grader.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
 
@@ -49,6 +51,13 @@ try {
     reset: true,
     migrateFn: async (db) => {
       await migratePostgres(db);
+    },
+    // Graded demo attempts are closed through the production submit+grade
+    // composition (EXSEM-020) — injected via the workflow seam because the
+    // orchestrator lives in @exam/db while the composition lives here.
+    workflow: {
+      seedDemoFn: (db, hashFn) =>
+        seedDemo(db, hashFn, createDemoSeedGrader(db)),
     },
   });
 
