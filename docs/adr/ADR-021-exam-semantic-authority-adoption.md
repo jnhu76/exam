@@ -96,10 +96,14 @@ a semantic question.
 ## Evidence
 
 - Decision history: Issue [#640](https://github.com/jnhu76/exam/issues/640),
-  Issue [#641](https://github.com/jnhu76/exam/issues/641), and the 2026-09-27
-  semantic closure decision report they produced (CONDITIONAL_PASS,
-  D1–D7 resolved, EXSEM-001..020 frozen).
+  Issue [#641](https://github.com/jnhu76/exam/issues/641), and the
+  [2026-09-27 semantic closure decision report][closure-report] they produced
+  (CONDITIONAL_PASS, D1–D7 resolved, EXSEM-001..020 frozen; archived as
+  historical evidence, not a second normative root).
 - Normative body:
   [`docs/architecture/exam-semantic-boundaries.md`](../architecture/exam-semantic-boundaries.md).
 - Scoped ADR-008 supersession note:
   [ADR-008](ADR-008-submit-answer-freeze.md) Status section.
+
+[closure-report]:
+  ../archive/audits/EXAM-SEMANTIC-CLOSURE-DECISION-2026-09-27.md
