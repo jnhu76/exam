@@ -18,7 +18,10 @@
 
 本考试平台采用 RESTful API 设计，所有端点均以 `/api` 为前缀，支持 JSON 格式请求和响应。
 
-**Base URL**: `http://<server-host>:3000/api`
+**Base URL**:
+
+- 开发环境：`http://localhost:3000/api`（`pnpm dev` 直连 API）
+- 生产部署：`http://<server-host>[:EXAM_PORT]/api`（经 nginx 边缘转发 `/api/**` → app:3000；3000 是容器内部端口，不对宿主机发布，#585）
 
 **认证**: 大多数端点需要认证。认证通过 HTTP-only Cookie (`auth-token`) 实现，使用 JWT Token。
 
@@ -86,6 +89,8 @@
   "password": "admin123"
 }
 ```
+
+> 该示例使用的是开发 seed 账号（见 `mock-data.md`），仅存在于 dev/test 数据库。生产部署的第一个管理员来自 `bootstrap-admin`（见上文 Bootstrap 管理），不存在默认口令。
 
 > Phase 1 登录仅接受 `username` 和 `password`。`organizationSlug` 不再接受；系统使用 internal default organization。
 

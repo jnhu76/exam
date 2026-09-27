@@ -774,8 +774,8 @@ export const SETTINGS = {
   emailWorker: {
     // #351 shutdown budget contract: this leaf is one term of the graceful-
     // shutdown budget bounded by the container's stop_grace_period. Do not
-    // raise it without raising that budget (see docker-compose.yml; enforced by
-    // scripts/repository-contract/deployment-topology-contract.mjs).
+    // raise it without raising that budget (see docker-compose.yml
+    // stop_grace_period).
     EMAIL_WORKER_POLL_INTERVAL_MS: posIntLeaf(5000),
     EMAIL_WORKER_BATCH_SIZE: posIntLeaf(20),
     EMAIL_WORKER_LOCK_TIMEOUT_MS: posIntLeaf(300000),

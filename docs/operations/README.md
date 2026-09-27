@@ -72,11 +72,12 @@ Four distinct layers — do not conflate them (#547):
 | `GET /api/system/info` | none | — | Version + uptime |
 | `GET /api/system/public-config` | none | — | Deployment mode, feature flags |
 
-The Compose `app` healthcheck polls `/api/ready` (the readiness gate) and
-the SPA root every 30s. An `unhealthy` app container means the deployment
-readiness state is violated (e.g. PostgreSQL is down); it is an
-orchestration/visibility signal, NOT a traffic block — in the default
-direct-LAN topology nothing routes on Docker health status.
+The Compose `app` healthcheck polls `/api/ready` (the readiness gate) every
+30s; the separate `web` service carries the SPA HTML healthcheck, and the
+`nginx` edge holds its own startup until both are healthy. An `unhealthy`
+app container means the deployment readiness state is violated (e.g.
+PostgreSQL is down); it is an orchestration/visibility signal, NOT a
+runtime traffic block — health status never routes or restarts traffic.
 
 ## Active Alerting (operability events)
 

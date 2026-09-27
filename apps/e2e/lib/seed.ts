@@ -151,7 +151,8 @@ async function createCandidate(
   const password = "candidate123";
   // Demo seed registers `candidateNo` as required+unique on the default org.
   // Always supply a unique value here so tests work whether or not the demo
-  // seed has been applied (canonical seed:e2e in Docker E2E always applies it).
+  // seed has been applied (the canonical db:seed:e2e — host runner and CI —
+  // always applies it).
   // `name` is made unique (carries the stamp) because several admin surfaces
   // (e.g. the grading-queue row) display the user `name`, not the `username`;
   // a unique name lets specs match the displayed text deterministically.

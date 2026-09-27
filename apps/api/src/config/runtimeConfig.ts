@@ -414,8 +414,9 @@ function defaultDevWebOrigin(s: ResolvedSettings): string {
  *     DEV_API_PORT even when a leftover APP_PORT=3000 exists).
  *   - production  → APP_PORT. Container identity (every Compose file fixes
  *     it at 3000; host publishing is EXAM_PORT).
- *   - test/e2e/ci → APP_PORT ?? DEV_API_PORT. The runner decides: Docker E2E
- *     sets APP_PORT; the WSL runner sets DEV_API_PORT per shard.
+ *   - test/e2e/ci → APP_PORT ?? DEV_API_PORT. The host E2E runner
+ *     (scripts/e2e/run.sh) sets both per shard; no image-based E2E exists
+ *     (#636).
  */
 function resolveApiBindPort(s: ResolvedSettings, mode: AppMode): number {
   if (mode === "production") {
@@ -594,8 +595,8 @@ function resolveEmailWorkerConfig(
     // #351 shutdown budget contract: this value is one term of a hierarchy
     // bounded by the container's stop_grace_period. Raising it without raising
     // that budget turns a stuck in-flight email send into SIGKILL (exit 137).
-    // Terms and enforcement: docker-compose.yml stop_grace_period +
-    // scripts/repository-contract/deployment-topology-contract.mjs.
+    // Term source: docker-compose.yml stop_grace_period (45s); the in-app
+    // default is pinned by runtimeConfig.test.ts.
     shutdownTimeoutMs: s.emailWorker.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS,
     // Fixed at 1: no consumer reads this field today (single worker instance).
     // It exists so the shape does not change when a multi-worker mode lands.

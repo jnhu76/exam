@@ -132,7 +132,6 @@ production deployment itself is the acceptance surface (§1.6).
 | Local dev (constructed) | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam` (default 5432) | Runtime/dev |
 | CI verify | `postgresql://exam:exam@localhost:5432/exam_test` | Both DATABASE_URL and TEST_DATABASE_URL point to same test DB |
 | CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
-| Docker test | `postgresql://db:5432/exam_test` | Container internal |
 | WSL E2E | `postgresql://exam:exam@localhost:<DB_HOST_PORT>/exam_e2e` (default 5432) | E2E runtime |
 
 **Rules:**

@@ -99,8 +99,7 @@ if any is unset. There is NO default database password in production
 | `PUBLIC_WEB_ORIGIN` | `http://localhost` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). Same #585 default; set explicitly for remapped/LAN/HTTPS access |
 | `EXAM_PORT` | 80 | Host port published by the `nginx` edge (`${EXAM_PORT:-80}:80`) — the only published service (#585). The container API stays on 3000 (`APP_PORT` is container-internal only; never host-published). Local dev uses `DEV_API_PORT` instead — see docs/development/ports.md |
 | `HOST` | 0.0.0.0 | API bind host |
-| `APP_MODE` | development | `production` enables CSRF, HSTS, Secure cookies, and fail-fast required env |
-| `NODE_ENV` | development | maps to production/test/development |
+| `APP_MODE` / `NODE_ENV` | compose-pinned `production` | `docker-compose.yml` fixes both to `production` (values in `.env.production` are not read): CSRF, HSTS, Secure cookies, and fail-fast required env are always on in the deployed stack |
 | `DEPLOYMENT_MODE` | singleTenant | `multiTenant` is rejected at boot (Phase 4 only) |
 | `APP_TIMEZONE` / `TZ` | Asia/Shanghai | display/log/diagnostics only; does not change business-time comparison semantics |
 | `REDIS_URL` | unset (disabled) | optional; see §10 (enable with `--profile redis`; authenticated URL required) |
@@ -750,7 +749,8 @@ curl -s http://localhost:${EXAM_PORT:-80}/api/health
 curl -s http://localhost:${EXAM_PORT:-80}/api/system/public-config
 
 # 3. Admin login via the web UI (https://exam.your-org.internal/login)
-#    Log in with the seeded admin credentials.
+#    Log in with the bootstrapped admin credentials (§5 — never the
+#    default-credential dev/test seed).
 
 # 4. In the admin console:
 #    - Create a Candidate
