@@ -177,7 +177,7 @@ The following fields are written by `publishExam()` and MUST NOT change after pu
 | `totalScore` | Yes | Must equal sum of question scores |
 | `passingScore` | Yes | Must be ≤ totalScore |
 | `durationMinutes` | Yes | Positive for timed_window; semantic null for deadline/untimed (#291 Phase A) |
-| `timingMode` | Yes | Authoring modes: `timed_window`, `deadline`, `untimed` (#291 Phase A); `timed_sync` rejected until Phase B activation |
+| `timingMode` | Yes | Authoring modes: `timed_window`, `deadline`, `untimed` (#291 Phase A); `timed_sync` rejected by the publish gate — reserved capability, not currently supported (EXSEM-019) |
 | `questionSelectionMode` | Yes | Phase 1: `manual` only |
 | `controlFlags` | Yes | All flags |
 | `retakePolicy` | Yes | Phase 1: `unlimited`, `max_attempts`, `pass_then_stop` |
@@ -247,9 +247,9 @@ The following fields are written by `publishExam()` and MUST NOT change after pu
 | `in_progress` | YES | `startOrRestoreAttempt()`, `restoreInterruptedAttempt()` |
 | `disrupted` | YES | Heartbeat scanner (`markDisrupted`) |
 | `submitted` | YES | `submitAttempt()`, deadline reconciliation |
-| `grading` | **NO** | No write path — `finalizeTerminalGrading()` writes `graded` directly, bypassing the `grading` state. The state machine table has `submitted:grade → grading` entries but they are unreachable. |
+| `grading` | **NO** | No write path — `finalizeTerminalGrading()` writes `graded` directly. #542 removed the value from the vocabulary, transition table, and wire contract; the DB CHECK rejects it (legacy rows need explicit operator disposition). |
 | `graded` | YES | `finalizeTerminalGrading()` |
-| `voided` | **NO** | Target design only — no admin/proctor entry point |
+| `voided` | **NO** | Reserved vocabulary — no writer, no admin/proctor entry point (EXSEM-019; no activation commitment) |
 
 ### 8.3 The two-column answer model
 
@@ -289,7 +289,7 @@ Behavior: freezes draft answers into `submitted_answers`, sets `submittedAt = ef
 - `disrupted` → `in_progress`: via `restoreInterruptedAttempt()` (applies the interruption-time policy, writing a `bounded_grace` adjustment only when the policy grants one; operator grants are a separate `grantAttemptTime()` command).
 - `in_progress` → `in_progress`: via `saveAnswer()` (while not expired).
 
-Once `submitted`/`graded`, the attempt is terminal — no recovery path (except `voided`, which is target design).
+Once `submitted`/`graded`, the attempt is terminal — no recovery path (`voided` is reserved vocabulary with no writer and would itself be terminal).
 
 ## 9. Grading Model
 
@@ -483,7 +483,7 @@ The `notifications` table (`pg.ts`), the notification repo/service, and the Inbo
 3. **Disrupted recovery UI (candidate side)**: **IMPLEMENTED** (REC-I3, PR #219) — the candidate-facing restore flow (`useAttemptRestore()`, restoring/failed/retry surface, authoritative snapshot reload) is live. The **operator/proctor** side is likewise **IMPLEMENTED**: operator time grant (REC-I4-I3B2 CLOSED), incident authority Admin runtime (J3, PR #242 — see [incident-authority.md](./incident-authority.md)), assigned-Proctor incident scope (J4-I1/M11, ADR-015 §13), the Admin Recovery Center (J5) and Proctor Operations surface (J6, #303), and system-generated incidents (#304). (P6 closed before REC-I3 landed, so older audits list recovery as not-productized — that is frozen history.)
 4. **Email business caller**: **IMPLEMENTED** — the `result_published` publication (P5-N1, CLOSED, PR #213) is the first production caller; additional operational notification types remain P5-N2+ scope.
 5. **Notification Inbox**: **IMPLEMENTED** (P5-N1, CLOSED, PR #213) for `result_published`; additional operational notification types remain P5-N2+ scope.
-6. **`grading` attempt status**: No write path — auto-graded attempts go directly from `submitted` to `graded`. State machine table entries for `grading` are unreachable.
-7. **`not_started` / `queued` / `voided`**: No write path — target design only.
+6. **`grading` attempt status**: No write path — auto-graded attempts go directly from `submitted` to `graded`. The value was removed from the vocabulary, transition table, and wire contract (#542); DB CHECK rejects it, legacy rows need explicit disposition.
+7. **`not_started` / `queued` / `voided`**: No write path — reserved vocabulary (EXSEM-019), not a future commitment.
 8. **Teacher resource scope**: **ENFORCED** (#286) — `teacher_course_assignments` carriers, per-request scope gate, and SQL-side LIST filtering narrow Teacher capabilities to assigned courses. (Historical note retained: before #286 this was flat org-wide.)
 9. **Candidate answer-key visibility**: Fixed to hidden. Configurable release is NOT IMPLEMENTED.

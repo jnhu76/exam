@@ -77,7 +77,7 @@ archived   → []  (terminal)
 
 **Command functions**: All status changes go through centralized command functions (`packages/exam-engine/src/examCommands.ts`); mutating `status` directly in a route is forbidden.
 
-- `publishExam` — draft → published (builds QuestionSnapshot; guards: ≥1 question, valid schedule, authoring timing mode (`timed_window`/`deadline`/`untimed`; `timed_sync` rejected until Phase B activation), manual selection, valid retake policy, score totals)
+- `publishExam` — draft → published (builds QuestionSnapshot; guards: ≥1 question, valid schedule, authoring timing mode (`timed_window`/`deadline`/`untimed`; `timed_sync` rejected by the publish gate — reserved capability, not currently supported, EXSEM-019), manual selection, valid retake policy, score totals)
 - `openExam` — published → open
 - `closeExam` — open → closed (idempotent: already-closed returns unchanged)
 - `cancelExam` — published|open → canceled (NOT idempotent; does not void/force-submit attempts — that guard is route-layer)
@@ -95,7 +95,7 @@ _Avoid_ (command names): `reopen` (use `open`/`openExam`), `delete` (use `archiv
 _Avoid_: attempt state, attempt phase
 
 - `not_started` — enrolled but not yet started
-- `queued` — waiting for batch entry (Phase 2)
+- `queued` — reserved vocabulary, no write path; batch admission is modeled by `exam_admissions` (#292)
 - `in_progress` — candidate is actively taking the exam; `answers` is writable
 - `disrupted` — heartbeat timeout; candidate disconnected
 - `submitted` — candidate submitted; `submitted_answers` frozen; `gradingStatus` may be `pending_manual` if manual grading is needed
@@ -115,7 +115,7 @@ _Avoid_: score status, grading phase
 
 **Critical rule**: The manual grading queue's work truth source is the materialized `attempt_grading_entries` (predicate: `grading_mode='manual' AND status='pending_manual'`), NOT `gradingStatus` and NOT an `attemptStatus = 'grading'` query. `gradingStatus` describes the attempt-level scoring lifecycle/display state but cannot manufacture or rebuild queue work items; `gradingStatus = 'pending_manual'` without a matching pending entry does not appear in the queue (ghost-attempt guard). Historical `status='grading'` rows are upgrade/recovery concerns only and are not current manual- or auto-grading workflow states.
 
-**State machine discipline**: All current state changes go through centralized command functions (`submitAttempt`, `restoreInterruptedAttempt` — the disruption-restore entry, `markDisrupted`, `gradeQuestion`; `voidAttempt` is reserved vocabulary with no production writer). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed current transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state. Historical persisted values are handled by explicit migration/recovery logic rather than by widening the current state machine.
+**State machine discipline**: All current lifecycle state changes go through canonical command functions (`submitAttempt`, `restoreInterruptedAttempt` — the disruption-restore entry, `markDisrupted`, `gradeQuestion`; `voidAttempt` is reserved vocabulary with no production writer), each executed inside a database transaction with row lock or conditional update and explicit status/business guards. The transition table (`attemptStateMachine.ts`) is the lifecycle contract, **not a single chokepoint every command funnels through**: submit/terminal-grading transitions use the shared `transition()` seam, while disruption/restore enforce their transitions directly under the canonical lock with explicit status preconditions (direct `attemptRepo.update` of the status field). DB is the fact source; domain state machine defines allowed current transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state. Historical persisted values are handled by explicit migration/recovery logic rather than by widening the current state machine.
 
 > The historical `completeManualGrading` command does not exist in current production code; the one-way pending-only manual completion command is `gradeQuestion` (`packages/exam-engine/src/manualGrading.ts`).
 

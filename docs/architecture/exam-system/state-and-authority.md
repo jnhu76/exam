@@ -131,15 +131,25 @@ stateDiagram-v2
 
 ### States
 
-| State | Meaning | Answers writable? | Reachable? |
-|-------|---------|-------------------|------------|
-| `not_started` | Enrolled but not started | N/A | **NO** — no write path (reserved target design) |
-| `queued` | Waiting for batch entry | N/A | **NO** — reserved, no write path; admission is modeled by `exam_admissions` (#292) |
-| `in_progress` | Actively taking the exam | Yes | YES |
-| `disrupted` | Heartbeat timeout; disconnected | No | YES |
-| `submitted` | Candidate submitted; frozen | No | YES |
-| `graded` | All scoring complete | No | YES |
-| `voided` | Terminal override | No | **NO** — target design |
+| State | Meaning | UI editable (`isEditable`)? | Server save protocol? | Reachable? |
+|-------|---------|------------------------------|-----------------------|------------|
+| `not_started` | Enrolled but not started | — | — | **NO** — reserved vocabulary, no write path |
+| `queued` | Waiting for batch entry | — | — | **NO** — reserved vocabulary, no write path; admission is modeled by `exam_admissions` (#292) |
+| `in_progress` | Actively taking the exam | Yes (while `serverNow < effectiveDeadline`) | Accepted | YES |
+| `disrupted` | Heartbeat timeout; disconnected | No (locked) | Accepted | YES |
+| `submitted` | Candidate submitted; frozen | No | Rejected (`ATTEMPT_ALREADY_SUBMITTED`) | YES |
+| `graded` | All scoring complete | No | Rejected (`ATTEMPT_ALREADY_SUBMITTED`) | YES |
+| `voided` | Terminal override | No | Rejected (`ATTEMPT_CLOSED`) | **NO** — reserved vocabulary, no writer |
+
+UI editability and server-side save acceptance are distinct authorities —
+server-side acceptance ≠ page editability (exam-runtime.md §4 save guards,
+§6 `isEditable`): the page edit authority is
+`isEditable = attemptStatus === "in_progress" && serverNow < effectiveDeadline`,
+while the save protocol (`processSaveAnswer`) rejects only `voided`,
+`submitted`/`graded`, and past-effective-deadline saves — `disrupted` is a
+protocol-acceptable input state server-side (e.g. a save racing the heartbeat
+scanner or arriving before restore). Reserved values are read-compatibility
+vocabulary, not a future state-machine commitment (EXSEM-019).
 
 > **`grading` disposition (#542)**: the `grading` lifecycle state was a
 > historical production intermediate — older code (`gradeAttempt`, window
@@ -185,12 +195,15 @@ stateDiagram-v2
     submitted --> graded: finalizeTerminalGrading()
     graded --> [*]
 
-    state "not_started (no write path)" as not_started
-    state "queued (Phase 2)" as queued
-    state "voided (target design)" as voided
+    state "not_started (reserved / no writer)" as not_started
+    state "queued (reserved / no writer)" as queued
+    state "voided (reserved / no writer)" as voided
 
     note right of voided
-        Target design only.
+        Reserved vocabulary (EXSEM-019)
+        read-compatible values with no
+        production writer and no future
+        state-machine commitment.
         No admin/proctor entry point.
     end note
 ```
@@ -256,7 +269,7 @@ stateDiagram-v2
 | `assigned` | Candidate enrolled; no attempt started yet |
 | `started` | At least one attempt created |
 | `completed` | Retake policy exhausted, passed, or exam window closed |
-| `blocked` | Violation; candidate is blocked |
+| `blocked` | Violation; candidate is blocked — reserved vocabulary, no writer (EXSEM-019) |
 
 ### State machine diagram
 
@@ -265,8 +278,8 @@ stateDiagram-v2
     [*] --> assigned: enrollment created
     assigned --> started: startOrRestoreAttempt()
     started --> completed: finalizeTerminalGrading() when policy says so
-    started --> blocked: (future)
-    blocked --> started: (future)
+    started --> blocked: reserved (EXSEM-019 / no writer)
+    blocked --> started: reserved (EXSEM-019 / no writer)
     completed --> [*]
 ```
 
@@ -469,7 +482,7 @@ deadline or irreversible attempt transition.
 | Dimension | States | Independent? |
 |-----------|--------|--------------|
 | Exam status | 6 | Yes — unrelated to any specific candidate |
-| Attempt status | 8 (4 reachable) | Yes — each attempt progresses independently |
+| Attempt status | 7 (4 reachable) | Yes — each attempt progresses independently |
 | Grading status | 3 | Yes — orthogonal to attempt lifecycle |
 | Enrollment status | 4 | Yes — describes candidate qualification |
 | Email outbox status | 5 | Yes — describes delivery progress |

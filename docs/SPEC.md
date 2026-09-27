@@ -122,15 +122,17 @@ ExamAttempt 是考试系统的核心实体，取代原来的"一份答卷"概念
 最终认定成绩               — 按 scoreStrategy 从多次中选
 ```
 
-**ExamAttempt 状态机（目标设计）**：
+**ExamAttempt 当前运行时状态机**（唯一拥有生产 writer 的迁移）：
 
 ```
-not_started → queued → in_progress → submitted → graded
-                                     ↑             ↓
-                                     └── disrupted voided
+startOrRestoreAttempt      [*] → in_progress（新建即 in_progress，或返回/恢复既有活跃 attempt）
+markDisrupted              in_progress → disrupted（心跳超时）
+restoreInterruptedAttempt  disrupted → in_progress（恢复）
+submitAttempt              in_progress | disrupted → submitted
+finalizeTerminalGrading    submitted → graded
 ```
 
-> 上图是状态机的**长期目标设计**。当前实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/archive/phase1-archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §3。
+> 上图只画当前运行时状态机。`not_started` / `queued` / `voided` 不在图中：它们是**读兼容保留词汇**（EXSEM-019 / `RESERVED_VOCABULARY_POLICY`），当前无生产 writer，也**不构成未来状态机承诺**——保留值 ≠ 未来承诺；激活任一保留值需要一次显式 superseding decision（`exam-semantic-boundaries.md` §6），届时更新本图，而不是今天就画出未来机器。下表给出每个值在当前实现中的真实接线情况。状态机收敛策略与裁决记录见 `docs/archive/phase1-archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §3。
 
 | 状态 | 含义 | 当前实现接线 |
 |------|------|------|
@@ -140,7 +142,7 @@ not_started → queued → in_progress → submitted → graded
 | `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Admin/Proctor 恢复工作台均已交付（J5 / J6，#303） |
 | `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入。人工批改未完成时 attempt 停留在 `submitted` + `gradingStatus=pending_manual` |
 | `graded` | 批改完成 | **已接线**：终局批改在同一锁定事务内由 `submitted` 直接落 `graded` |
-| `voided` | 已作废（监考员或管理员操作） | **保留值，无生产 writer**：`voidAttempt` 仅作为目标设计（EXSEM-019），未提供管控入口，不因文档列出而激活 |
+| `voided` | 已作废（监考员或管理员操作） | **保留值，无生产 writer**：`voidAttempt` 无 admin/proctor 管控入口，不因文档列出而激活（EXSEM-019 读兼容，无激活承诺） |
 
 > **`grading` 处置裁决（#542）**：旧版本生产代码曾短暂使用 `status='grading'` 作为自动批改的持久中间态（`submitted → grading → graded`，窗口 2026-06-01 → 2026-06-14）。该值已从当前 `AttemptStatus`、转换表、wire 契约和 API 中移除，DB CHECK（`exam_attempts_status_check`）拒绝该值。历史数据库可能仍含此类行：旧 writer 的终局写入是**单条原子 UPDATE**（`graded` 与全部终局事实同语句提交），因此单写者顺序执行下可证明的 crash 残留形状是 `grading` + 终局事实全 NULL；`grading` + 任何终局事实非 NULL 不是任何单写者运行或迁移可产生的形状（唯一理论来源是 pre-lock 异步窗口内同一 attempt 的并发双重批改交错，无证据表明真实发生过），按矛盾数据 fail closed 人工调查，#542 不提供任何脚本化语义转换（包括不脚本化提升为 `graded`）。Migration 0043 的 preflight 检测到该值时 fail closed；操作员按 0043 头部 runbook 显式处置（离线历史数据修复例外：默认 rewind 回 `submitted`，或按业务作废置 `voided`）——#542 不做自动恢复，业务收口经由正常批改路径。批改流水线的持久状态由 `gradingStatus`（P2D-J2，与 lifecycle 正交）承载，`submitted` 已是带恢复语义的持久中间态。
 
@@ -282,12 +284,12 @@ Phase 3 引入基于 permission + scope 的协作角色。已交付并强制：T
 
 | 模式 | 时间规则 | 典型场景 | 当前接线 |
 |------|----------|----------|------|
-| **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 | **设计已冻结（Phase B / planned）**：语义见 `docs/contracts/timed-sync-semantics.md`，实现按 B1→B2 分片推进 |
+| **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 | **保留值，当前不受支持**（EXSEM-019）：发布门拒绝；`docs/contracts/timed-sync-semantics.md` 是冻结设计契约（dormant design authority），不是当前实现授权 |
 | **窗口限时** `timed_window` | 在开放窗口内考生自选时间开始，开始后倒计时 | 实验室准入、随堂测验 | **已接线** |
 | **纯截止日** `deadline` | 只有截止时间，不计时，做完就交 | 培训确认、课后作业 | **已接线**（#291 Phase A2） |
 | **不限时** `untimed` | 永久开放，随时做随时交（或管理员手动关闭） | 练习题、模拟考试 | **已接线**（#291 Phase A2） |
 
-> `timed_window`、`deadline`、`untimed` 已在当前代码中接线（#291 Phase A）。`timed_sync` 仍是目标设计：其计时语义已冻结（操作员触发的全局时钟 + 共享截止时间），但 authoring/publish/考生路径尚未激活——后续 agent 不应把缺失视作状态机或排队逻辑的实现缺陷来"补全"，需要按冻结文档的 B1→B2 分片显式推进。队列入场（`requireQueue`）独立归属 #292。
+> `timed_window`、`deadline`、`untimed` 已在当前代码中接线（#291 Phase A）。`timed_sync` 是**保留值，不是当前受支持的产品能力**（EXSEM-019，`RESERVED_VOCABULARY_POLICY = READ_COMPATIBILITY_ALLOWED; NO_IMPLICIT_WRITER_OR_ACTIVATION`）：其计时语义已有冻结设计契约（操作员触发的全局时钟 + 共享截止时间，见 `docs/contracts/timed-sync-semantics.md`），该契约是 dormant design authority / 未来输入——文中的 B1/B2 分片是设计史与未来决策的素材，**不是当前的实现授权，也不构成 roadmap 承诺**。发布门继续拒绝 `timed_sync`；后续 agent 不应把缺失视作状态机或排队逻辑的实现缺陷来"补全"。激活（包括是否、何时、以何种分片推进）本身需要一次显式的 superseding capability/architecture decision，符合 `exam-semantic-boundaries.md` §5/§6 的程序。队列入场（`requireQueue`）独立归属 #292。
 
 ```
 timed_sync 示例（冻结语义，见 docs/contracts/timed-sync-semantics.md）：
@@ -478,15 +480,15 @@ draft → published → open → closed → archived
 
 > Phase 2 已实现全部 6 个状态和上述所有迁移。`canceled` 状态表示考试被异常取消，不等于 `closed`（正常结束）。`canceled` 考试的结果/导出需要明确的 cancellation marker（Phase 3 语义）。
 
-**ExamAttempt 状态**（见 §2.2）：
+**ExamAttempt 状态**（当前运行时状态机与逐值接线表见 §2.2，此处不重复画图）：
 
 ```
-not_started → queued → in_progress → submitted → graded
-                                     ↑             ↓
-                                     └── disrupted voided
+in_progress → submitted → graded
+in_progress ↔ disrupted（心跳超时 / 恢复）
+disrupted → submitted（截止 / 强制交卷）
 ```
 
-> 当前实现仅有 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / voided` 保留为目标设计但**当前无写入路径**。`grading` 已从当前运行时词汇移除（#542；旧版生产代码曾将其作为持久中间态，J2 收敛后移除，历史残留行需操作员显式处置，裁决见 §2.2）。完整接线表见 §2.2。
+> 当前运行时状态机仅含 `in_progress / submitted / disrupted / graded` 四个状态；`not_started / queued / voided` 是读兼容保留词汇（EXSEM-019），**无生产写入路径，也不构成未来承诺**。`grading` 已从当前运行时词汇移除（#542；旧版生产代码曾将其作为持久中间态，J2 收敛后移除，历史残留行需操作员显式处置，裁决见 §2.2）。
 
 **Command functions**（当前实现；接线细节以 exam-runtime.md §2.3/§3.4 为准）：
 
@@ -506,7 +508,7 @@ submitAttempt(ctx, attemptId)   // in_progress/disrupted → submitted（冻结 
 markDisrupted(ctx, attemptId)   // in_progress → disrupted
 restoreInterruptedAttempt(...)  // disrupted → in_progress（内部生命周期步 restoreAttemptState）
 gradeQuestion(...)              // 单向完成一个 pending_manual 工作项（manualGrading.ts）
-voidAttempt(ctx, attemptId, reason) // 保留：目标设计，无生产 writer（EXSEM-019）
+voidAttempt(ctx, attemptId, reason) // 保留词汇：无生产 writer、无激活承诺（EXSEM-019）
 ```
 
 > 旧命令名 `startAttempt` / `restoreAttempt` / `gradeAttempt` 是历史文档漂移：`gradeAttempt` 是 #542 之前旧版生产代码的命令，当前终态闭合由 submit 冻结屏障 + `gradeQuestion` + `finalizeTerminalGrading` 承担。`voidAttempt` 无 admin/proctor 入口，保留值不因文档列出而激活。
@@ -821,7 +823,7 @@ Admin 新建 Exam → 选择 Course
 
 **排队分批进入**（用于闭卷统考，**#292 已交付 durable 准入运行时**）：
 
-> 准入运行时（join/批次放行/原子 start 边界/重启与多实例安全）已由 #292 交付，语义见 exam-runtime.md §3.1.1。下图中依赖 `timed_sync` 的"开考"触发与监考面板联动仍归属 Phase 2+（见 §2.5、§4.5）；`timed_sync` 考试开启 requireQueue 属于运行支持矩阵问题，与准入内核正交。
+> 准入运行时（join/批次放行/原子 start 边界/重启与多实例安全）已由 #292 交付，语义见 exam-runtime.md §3.1.1。下图中依赖 `timed_sync` 的"开考"触发与监考面板联动不在当前能力集内（`timed_sync` 为保留能力，激活语义与门禁见 §2.5；监考面板见 §4.5）；`timed_sync` 考试开启 requireQueue 属于运行支持矩阵问题，与准入内核正交。
 
 ```
 Phase 2 运营人员点击"开考"
