@@ -5,10 +5,10 @@ import { resolve } from "node:path";
 
 /**
  * Repo-root-relative path to the built evidence CLI (spec cwd is apps/e2e).
- * Available on the host-direct modes (CI + run.sh, where `pnpm build`
- * produces apps/api/dist) and absent in the Docker e2e container (which only
- * mounts apps/e2e + packages) — the evidence-state tests skip there; the
- * truthful empty-state assertions still run everywhere.
+ * Available wherever `pnpm build` has produced apps/api/dist (the host-direct
+ * modes: CI + run.sh) and absent otherwise (e.g. a checkout without a build)
+ * — the evidence-state tests skip there; the truthful empty-state assertions
+ * still run everywhere.
  */
 const EVIDENCE_CLI = resolve(
   process.cwd(),
@@ -186,7 +186,7 @@ test.describe("P7-E2C operations surface", () => {
   }) => {
     // Skip inside the test (not as a placeholder): without the CLI the body
     // below would throw; test.skip here marks THIS test skipped, and keeps it
-    // from failing the Docker e2e container where the CLI is absent.
+    // from failing in modes where the CLI is absent (no build output).
     test.skip(!evidenceAvailable(), "evidence CLI not available in this mode");
     recordEvidence([
       "start",

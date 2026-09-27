@@ -145,7 +145,8 @@ source build, contributor verification).
 
 The production deployment itself is the acceptance surface:
 `docker compose config` proves interpolation, `up -d` + the runbook §11
-smoke test (`curl /`, `/api/health`, `/api/ready`) prove real HTTP behavior.
+smoke test (health and public-config curls, admin login, and an
+admin/candidate walkthrough) prove real HTTP behavior.
 The release workflow builds both images before any irreversible publication
 step; it runs no deployment simulation.
 

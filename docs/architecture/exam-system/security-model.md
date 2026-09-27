@@ -8,6 +8,11 @@ cac6b85c425c85ad4077002bc518fca0b50f766d
 
 Verification scope:
 Current master implementation after merged P5-0 / PR #210.
+
+Update note (2026-09-27, #636 consistency sweep): §12 was refreshed to the
+as-built #320 CONVERGE topology — the email outbox loop runs in-process
+inside the API app; the standalone worker entrypoint is an escape hatch
+only. Other sections remain pinned to the commit above.
 ```
 
 ## 1. Authentication Boundary
@@ -197,7 +202,9 @@ Canceled exams MUST NOT expose normal scores/export.
 
 ### 12.1 Outbox pattern
 
-Business transactions INSERT rows into `email_outbox`. A separate worker claims and sends them.
+Business transactions INSERT rows into `email_outbox`. The in-process
+email outbox loop inside the API app (#320 CONVERGE) claims and sends them;
+the standalone worker entrypoint remains available as an escape hatch.
 
 ### 12.2 Ownership fence
 

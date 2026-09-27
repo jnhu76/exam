@@ -1517,9 +1517,8 @@ describe("runtimeConfig", () => {
       const config = getRuntimeConfig();
       // INVARIANT (#351 shutdown budget contract): loop 8s + audit drain
       // 10s + DB close 10s must stay below compose stop_grace_period (45s).
-      // The deployment-side relation is enforced by
-      // scripts/repository-contract/deployment-topology-contract.mjs; this
-      // pins the in-app default that the compose default mirrors.
+      // The compose-side budget is convention (docker-compose.yml); this
+      // test pins the in-app default that must stay below it.
       expect(config.emailWorker.shutdownTimeoutMs).toBe(8000);
     });
 

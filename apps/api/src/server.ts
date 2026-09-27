@@ -75,8 +75,7 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
     // graceful close has settled, it is bounded, and it names what it cuts.
     // INVARIANT: BOUNDED_EXIT_ASSIST_MS is a term of the #351 shutdown
     // budget contract (loop 8s + audit 10s + DB 10s + this 2s = 30s <
-    // compose stop_grace_period 45s; enforced by
-    // scripts/repository-contract/deployment-topology-contract.mjs).
+    // compose stop_grace_period 45s, docker-compose.yml).
     const assist = setTimeout(() => {
       app.log.warn(
         { activeResources: process.getActiveResourcesInfo() },
