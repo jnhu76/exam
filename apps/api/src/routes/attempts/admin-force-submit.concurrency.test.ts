@@ -591,7 +591,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
   async function createAttemptInOrg(
     t: TestOrgFixture,
     examTitle: string,
-  ): Promise<{ attemptId: string }> {
+  ): Promise<{ attemptId: string; examId: string }> {
     const now = new Date();
     const exam = (
       await ctx.db
@@ -673,16 +673,24 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
         `Failed to start attempt: ${startRes.statusCode} ${startRes.body}`,
       );
     }
-    return { attemptId: startRes.json().id as string };
+    return { attemptId: startRes.json().id as string, examId: exam.id };
   }
 
   /** Creates a fresh org + one started attempt (self-contained matrix fixture). */
-  async function createOrgAndAttempt(
-    examTitle: string,
-  ): Promise<{ adminCtx: RequestContext; attemptId: string }> {
+  async function createOrgAndAttempt(examTitle: string): Promise<{
+    adminCtx: RequestContext;
+    attemptId: string;
+    examId: string;
+    candidateProfileId: string;
+  }> {
     const t = await createOrg();
-    const { attemptId } = await createAttemptInOrg(t, examTitle);
-    return { adminCtx: t.adminCtx, attemptId };
+    const { attemptId, examId } = await createAttemptInOrg(t, examTitle);
+    return {
+      adminCtx: t.adminCtx,
+      attemptId,
+      examId,
+      candidateProfileId: t.candidateProfileId,
+    };
   }
 
   async function listReceipts(attemptId: string) {
@@ -1416,7 +1424,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
   }, 30_000);
 
   it("failure atomicity: exception after submit/grade but before the audit rolls back everything including the workset", async () => {
-    const { adminCtx, attemptId } =
+    const { adminCtx, attemptId, examId, candidateProfileId } =
       await createOrgAndAttempt("FS Fault PreAudit");
     const input = {
       attemptId,
@@ -1452,6 +1460,23 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
       .from(schema.attemptGradingEntries)
       .where(eq(schema.attemptGradingEntries.attemptId, attemptId));
     expect(gradingEntries).toHaveLength(0);
+    // F11c: the enrollment projection rolled back with the same transaction —
+    // no final facts, attemptCount still the post-start value.
+    const enrollment = (
+      await ctx.db
+        .select()
+        .from(schema.examEnrollments)
+        .where(
+          and(
+            eq(schema.examEnrollments.examId, examId),
+            eq(schema.examEnrollments.candidateId, candidateProfileId),
+          ),
+        )
+    )[0]!;
+    expect(enrollment.attemptCount).toBe(1);
+    expect(enrollment.finalAttemptId).toBeNull();
+    expect(enrollment.finalScore).toBeNull();
+    expect(enrollment.finalPassed).toBeNull();
     expect((await countForceSubmitAudits(attemptId)).length).toBe(0);
   }, 30_000);
 

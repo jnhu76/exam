@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -12,6 +12,10 @@ import {
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 import scoreRoutes from "./scores.js";
+import { hashPassword } from "@exam/auth/src/password.js";
+import { signJWT } from "@exam/auth/src/session.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import type { Role } from "@exam/domain";
 
 /**
  * P2D-J5a — Result Publishing Policy integration tests.
@@ -406,6 +410,65 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(response.statusCode).toBe(403);
   });
 
+  // ── F11e (EXSEM-013/014): stale-status inputs follow the adopted
+  // effective-state rules — the persisted-status allowed set {published,
+  // open, closed} is reconcile-EQUIVALENT for every stale-reachable effective
+  // status, so publication succeeds on stale rows; non-reachable statuses
+  // stay rejected even for already-published exams.
+  it("F11e: publish-results succeeds on a stale `open` exam whose closeAt passed (logically closed)", async () => {
+    const { examId } = await createGradedAttemptForMode("manual");
+    // Persisted status is `open` (reconciled at attempt start); push closeAt
+    // into the past WITHOUT materializing the close.
+    await createExamRepo(ctx.db).update(adminCtx(), examId, {
+      closeAt: new Date(Date.now() - 60_000),
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish-results`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().alreadyPublished).toBe(false);
+    expect(response.json().resultsPublishedAt).toBeTruthy();
+  });
+
+  it("F11e: publish-results succeeds on a persisted `closed` exam", async () => {
+    const { examId } = await createGradedAttemptForMode("manual");
+    await createExamRepo(ctx.db).update(adminCtx(), examId, {
+      status: "closed",
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish-results`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().resultsPublishedAt).toBeTruthy();
+  });
+
+  it("F11e: a canceled exam stays rejected even when results were already published (guard precedes idempotency)", async () => {
+    const { examId } = await createGradedAttemptForMode("manual");
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish-results`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(first.statusCode).toBe(200);
+
+    await createExamRepo(ctx.db).update(adminCtx(), examId, {
+      status: "canceled",
+    });
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish-results`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(second.statusCode).toBe(409);
+    expect(second.json().error.code).toBe("EXAM_PUBLISH_RESULTS_NOT_ALLOWED");
+  });
+
   // ── Slice 8 ───────────────────────────────────────────────────────
   it("J5a-8: mode=after_grading + gradingStatus=pending_manual → hidden, hiddenReason='not_graded'", async () => {
     const { attemptId } = await createGradedAttemptForMode("after_grading");
@@ -542,6 +605,190 @@ describe("P2D-J5a: result publishing policy", () => {
       passed: true,
     });
     expect(response.json().questionResults).toHaveLength(1);
+  });
+
+  // ── #640 notification/result boundary ─────────────────────────────
+  it("#640: publish-results notifies only candidates with visible results and payloads carry no result facts", async () => {
+    // Second candidate: enrolled, attempt started but never submitted — no
+    // finalAttemptId, hence not a publication recipient.
+    const secondUserId = crypto.randomUUID();
+    const secondProfileId = crypto.randomUUID();
+    await ctx.db.insert(schema.users).values({
+      id: secondUserId,
+      organizationId: ctx.org.id,
+      username: `j5a-b-${uniquePrefix()}`,
+      passwordHash: await hashPassword("password123"),
+      name: "Candidate B",
+      role: "Candidate",
+      email: `j5a-b-${uniquePrefix()}@test.local`,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      userId: secondUserId,
+      role: "Candidate",
+      isPrimary: true,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await ctx.db.insert(schema.candidateProfiles).values({
+      id: secondProfileId,
+      organizationId: ctx.org.id,
+      userId: secondUserId,
+      fields: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    // The primary candidate gets an email too, so the Email leg is exercised
+    // for the graded candidate and PROVABLY not for the ungraded one.
+    await ctx.db
+      .update(schema.users)
+      .set({ email: `j5a-a-${uniquePrefix()}@test.local` })
+      .where(eq(schema.users.id, ctx.candidate.id));
+
+    // Manual-mode exam over both candidates; title deliberately carries no
+    // digits or pass/fail words so payload equality assertions are meaningful.
+    const examTitle = "通知边界考试";
+    const createResponse = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: examTitle,
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3_600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 6,
+        totalScore: 10,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+        resultPublicationMode: "manual",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createResponse.json().id as string;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId, secondProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    // Candidate A: graded attempt (single_choice auto-graded).
+    const startA = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    const attemptAId = startA.json().id as string;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptAId}/answers/${questionId}`,
+      payload: {
+        attemptId: attemptAId,
+        questionId,
+        answer: "a",
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptAId}/submit`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+
+    // Candidate B: attempt stays in_progress (hidden result, no final facts).
+    const startB = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: {
+        "auth-token": signJWT(
+          {
+            actorId: secondUserId,
+            role: "Candidate" as Role,
+            organizationId: ctx.org.id,
+            authEpoch: 0,
+          },
+          getRuntimeConfig().authSecret.jwtSecret,
+        ),
+      },
+    });
+    expect(startB.statusCode).toBe(201);
+
+    // ── Publish results ──────────────────────────────────────────────
+    const published = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish-results`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(published.statusCode).toBe(200);
+    await ctx.drainAuditWrites();
+
+    // ── Inbox: exactly one result_published row, for the graded candidate,
+    // with the fixed server copy — no score/pass/fail facts interpolated. ──
+    const inboxRows = await ctx.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.dedupeKey, `result_published:${examId}`));
+    expect(inboxRows).toHaveLength(1);
+    expect(inboxRows[0]!.recipientUserId).toBe(ctx.candidate.id);
+    expect(inboxRows[0]!.type).toBe("result_published");
+    expect(inboxRows[0]!.title).toBe("考试结果已发布");
+    expect(inboxRows[0]!.body).toBe(
+      `您参加的考试「${examTitle}」的结果已发布，点击查看。`,
+    );
+    // The deep link is scoped to the recipient's own attempt.
+    expect(inboxRows[0]!.actionPath).toBe(`/exam/${attemptAId}/result`);
+
+    // ── Email outbox: exactly one row, for the graded candidate's email;
+    // subject/body carry the publication fact, never the result facts. ──
+    const outboxRows = await ctx.db
+      .select()
+      .from(schema.emailOutbox)
+      .where(
+        like(schema.emailOutbox.dedupeKey, `result_published:${examId}:%`),
+      );
+    expect(outboxRows).toHaveLength(1);
+    expect(outboxRows[0]!.recipientUserId).toBe(ctx.candidate.id);
+    expect(outboxRows[0]!.subject).toBe("考试结果已发布");
+    // Structural pin: the prose is exactly the fixed publication copy — the
+    // only variable part is the attempt-scoped link. No result facts
+    // (score, pass/fail wording) can appear anywhere in the body.
+    const [prose, rest] = outboxRows[0]!.bodyText.split("请登录考试平台查看：");
+    expect(prose).toBe(`您参加的考试「${examTitle}」的结果已发布。\n`);
+    expect(rest).toMatch(
+      /^http\S+\n\n（本邮件由系统自动发送，请勿直接回复。）$/,
+    );
+    expect(outboxRows[0]!.bodyHtml).toContain(`<a href="`);
   });
 });
 

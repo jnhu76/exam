@@ -1325,6 +1325,53 @@ describe("exam unpublish / extend / PATCH-clarify (ADR-005 Slice 2)", () => {
     expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
   });
 
+  // F11d (EXSEM-003 freeze): title and every non-schedule authoring field stay
+  // immutable on published/open exams through the actual write API — only
+  // draft authoring may change them.
+  it("PATCH rejects a title edit on a reconciled-open exam -> 409", async () => {
+    const examId = await createOpenExam("PATCH Open Title");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { title: "Open Renamed" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+  });
+
+  it("PATCH rejects a description edit on a published exam -> 409", async () => {
+    const examId = await createPublishedExam("PATCH Desc");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { description: "changed" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+  });
+
+  it("PATCH rejects a questionIds edit on a published exam -> 409", async () => {
+    const examId = await createPublishedExam("PATCH QIds");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { questionIds: [questionId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+    // The frozen publication snapshot is untouched by the rejected edit.
+    const detail = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().status).toBe("published");
+  });
+
   it("PATCH draft with empty body returns 200 without mutation or audit", async () => {
     const createRes = await ctx.app.inject({
       method: "POST",
