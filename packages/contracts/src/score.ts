@@ -23,19 +23,6 @@ export const QuestionScoreResultSchema = z.object({
   manualGraded: z.boolean(),
 });
 
-/**
- * Candidate-safe per-question score result: the full {@link QuestionScoreResultSchema}
- * minus `standardAnswer` (EXSEM-017 / ADR-021 `CONTRACT_VS_MAPPER_RULE =
- * SAFE_CONTRACT_AND_MINIMAL_PROJECTION`). The candidate result contract is
- * structurally UNABLE to represent the reference answer — mapper stripping
- * alone is not the boundary. The full schema stays the authority for the
- * authorized all-view surface (`GET /admin/attempts/:attemptId/result`).
- */
-export const CandidateQuestionScoreResultSchema =
-  QuestionScoreResultSchema.omit({
-    standardAnswer: true,
-  });
-
 // ── Manual Grading (P2D-J2) ──────────────────────────────────────
 
 /**

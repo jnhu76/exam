@@ -342,10 +342,11 @@ describe("AttemptDetailPage", () => {
   });
 
   // ── P3-MOD-P3-3: Admin frozen result view ────────────────────────
-  // AttemptDetailPage consumes the Admin scores DTO (GET /api/scores/attempts).
-  // For Admin the server bypasses the publication gate and keeps standardAnswer,
-  // so the DTO carries showResultImmediately:true + standardAnswer even when the
-  // candidate result is pending_publish. This test proves the page renders the
+  // AttemptDetailPage consumes the admin all-view DTO
+  // (GET /api/admin/attempts/:id/result). The server bypasses the publication
+  // gate on that surface and keeps standardAnswer, so the DTO carries
+  // showResultImmediately:true + standardAnswer even when the candidate result
+  // is pending_publish. This test proves the page renders the
   // full admin frozen detail (score/pass + objective standardAnswer) purely from
   // that DTO — it never fetches live questions and never hides based on
   // candidate publication state.

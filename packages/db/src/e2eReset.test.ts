@@ -9,7 +9,7 @@
  * production submit+grade composition, which lives above this package.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./database.js";
 import { resolveTestDbUrl } from "./testDb.js";
 import { resetE2eState } from "./e2eReset.js";

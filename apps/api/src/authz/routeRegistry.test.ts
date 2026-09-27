@@ -140,6 +140,7 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
  * route. These four declarations are pinned here:
  *
  *   - GET  /scores/attempts/:attemptId        -> score capability (own/all)
+ *   - GET  /admin/attempts/:attemptId/result  -> score capability (all-view required)
  *   - GET  /admin/exams/:examId/proctor/attempts   -> exam resolver
  *   - GET  /admin/attempts/:attemptId/proctor-events   -> attempt resolver
  *   - POST /admin/attempts/:attemptId/proctor-incident -> attempt resolver

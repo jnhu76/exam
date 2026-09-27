@@ -634,10 +634,11 @@ describe("OpenAPI structural baseline — candidate responses hide standardAnswe
     ["/api/attempts/{examId}/start", "post"],
     ["/api/attempts/{id}", "get"],
     ["/api/attempts/{attemptId}/answers/{questionId}", "post"],
-    // NOTE: GET /api/scores/attempts/{attemptId} serves both Admin and Candidate.
-    // The handler strips standardAnswer for candidates at runtime, but the spec
-    // must show the full schema (discriminated unions are not compatible with
-    // fastify-swagger). Runtime behavior is verified by API test, not schema check.
+    // GET /api/scores/attempts/{attemptId} is the candidate surface: its
+    // declared 200 union (CandidateAttemptResultResponseSchema) structurally
+    // omits standardAnswer. The authorized full representation lives on
+    // GET /api/admin/attempts/{attemptId}/result and is schema-checked
+    // separately below (standardAnswer must REMAIN there).
   ] as const;
 
   for (const [path, method] of candidatePaths) {

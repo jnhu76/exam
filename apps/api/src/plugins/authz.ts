@@ -193,7 +193,8 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   );
 
   // Score-route capability gate (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
-  // Capability + ownership arbitration for `GET /scores/attempts/:attemptId`.
+  // Capability + ownership arbitration for the attempt-result surfaces
+  // (`GET /scores/attempts/:attemptId` and `GET /admin/attempts/:attemptId/result`).
   // Own/all is resolved from the actor's capability set (ScoreAllView /
   // ScoreOwnView) plus the resolved attempt ownership — never from a role-name
   // branch. Emits request.scoreView for the publication handler (P1-4).
