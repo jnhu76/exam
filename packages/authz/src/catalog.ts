@@ -96,10 +96,11 @@ export const Permission = {
   GradingDetailView: "grading.detail.view",
   GradingAnswerView: "grading.answer.view",
   GradingScoreWrite: "grading.score.write",
-  // GradingFinalize / GradingIdentityView: RESERVED for scoped grading.
-  // Omitted from all human presets by design (scoped finalize + double-blind
-  // identity). No HTTP route gates on them: grade-question +
-  // finalizeTerminalGrading run without a separate capability gate.
+  // GradingFinalize / GradingIdentityView: RESERVED for scoped grading
+  // (scoped finalize + double-blind identity). No HTTP route gates on them:
+  // grade-question + finalizeTerminalGrading run without a separate
+  // capability gate, so the grants are inert. The Grader preset omits both
+  // by default; Admin holds them as part of its compat superset (presets.ts).
   GradingFinalize: "grading.finalize",
   GradingIdentityView: "grading.identity.view",
 

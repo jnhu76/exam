@@ -906,8 +906,9 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!examRow) {
         throw new NotFoundError("Exam not found");
       }
-      // Cast DB row to domain Exam type — buildCandidateTakeSnapshot only needs
-      // resultPublicationMode, resultsPublishedAt, and closeAt.
+      // Cast DB row to domain Exam type — buildCandidateTakeSnapshot needs
+      // resultPublicationMode, resultsPublishedAt, closeAt, and timingMode
+      // (serialized as the canonical client countdown gate).
       const exam = examRow as unknown as Exam;
 
       const snapshot = buildCandidateTakeSnapshot(attempt, exam, fastify.now());
@@ -1104,8 +1105,9 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /attempts/:attemptId/submit — Submits an in-progress or disrupted
-   * attempt for grading. Transitions the attempt to submitted, runs the
-   * grading engine, and returns the graded result.
+   * attempt for grading. Grades inline when no subjective grading is
+   * pending; a pending_manual attempt holds at `submitted` for the
+   * manual-grading queue, which owns the terminal transition.
    */
   fastify.post(
     "/attempts/:attemptId/submit",

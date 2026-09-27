@@ -8,9 +8,10 @@
  * Note on `permissions`: {@link RequestContext.permissions} is typed as the
  * legacy `@exam/domain` `Permission[]` (SCREAMING_SNAKE). The System role's
  * real grants are the dotted `system.*` perms in the `System` ROLE_PRESET
- * (see presets.ts); scanner code paths never read `ctx.permissions`
- * (only `requirePermission` does, which scanners don't call), so the field is
- * kept as `[]` to stay type-correct against the legacy context shape. Audit
+ * (see presets.ts); scanner code paths never read `ctx.permissions` (no
+ * production authz decision reads it — the slot is documented
+ * non-authoritative in apps/api's auth plugin), so the field is kept as
+ * `[]` to stay type-correct against the legacy context shape. Audit
  * attribution uses `role: "System"` + `actorId: "system:..."`.
  */
 import type { RequestContext } from "@exam/domain";

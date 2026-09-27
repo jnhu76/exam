@@ -148,7 +148,7 @@ export interface ContentDocumentV1 {
 export const CONTENT_LIMITS = {
   /** Max JSON.stringify(document).length (chars). */
   serializedChars: 131072,
-  /** Max total content nodes (blocks + inlines, excluding the doc envelope). */
+  /** Max total nodes the walker visits below the doc envelope (blocks, list items, table rows/cells, inlines). */
   totalNodes: 2000,
   /** Max tree depth (doc = depth 0; a paragraph is depth 1; etc.). */
   depth: 16,

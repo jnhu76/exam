@@ -32,7 +32,7 @@ import { misconductMarkWithOperationRaceRecovery } from "../orchestrators/miscon
 
 /**
  * Registers all admin-facing attempt routes: misconduct flag, force-submit,
- * and time-grants. Handlers are unchanged from the pre-split module.
+ * and time-grants.
  */
 export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   /**

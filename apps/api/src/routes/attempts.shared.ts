@@ -6,8 +6,10 @@ import {
 } from "@exam/exam-engine";
 
 /**
- * OpenAPI security scheme: HTTP-only cookie authentication. Shared by every
- * attempt route (candidate + admin) for response schema serialization.
+ * OpenAPI security scheme: HTTP-only cookie authentication. Consumed only
+ * as `schema.security` (response shapes come from the Zod response
+ * schemas); shared beyond the attempt routes by other cookie-authenticated
+ * route modules.
  */
 export const cookieAuth = [{ cookieAuth: [] }] as const;
 
@@ -130,8 +132,9 @@ export function toCandidateAttemptResponse(
  * Builds a CandidateTakeSnapshot from an attempt, exam, and server time.
  * This is the unified endpoint response for GET /candidate/attempts/:attemptId/take.
  *
- * Implements L0 §6.1: derived capabilities, answerSource routing,
- * security projection, and Cache-Control: no-store.
+ * Implements L0 §6.1: derived capabilities, answerSource routing, and
+ * security projection. The transport contract (`Cache-Control: no-store`)
+ * belongs to the route handler, not this pure builder.
  */
 export function buildCandidateTakeSnapshot(
   attempt: ExamAttempt,

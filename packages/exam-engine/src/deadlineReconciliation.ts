@@ -136,11 +136,13 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
 export { computeEffectiveDeadline, isAttemptDeadlineExpired } from "./timer.js";
 
 /**
- * Lazy-triggered deadline reconciliation (ADR-008 §5.3).
+ * Lazy-triggered deadline reconciliation (ADR-008).
  *
- * Called at candidate attempt entry points (`/take`, save, submit, resume).
- * No background worker, no scheduled scan — reconciliation happens inline at
- * the entry point, transactionally. If the attempt is in an auto-submittable
+ * Inline half of a two-trigger deadline model. Called at candidate attempt
+ * entry points (`/take`, save, submit, resume); the scheduled half is the
+ * deadlineScanner plugin (apps/api), which runs the same freeze+grade logic
+ * on its own scan interval. Reconciliation here happens inline at the entry
+ * point, transactionally. If the attempt is in an auto-submittable
  * state (`in_progress`/`disrupted`) and `now >= effectiveDeadline`, this
  * freezes the draft answers into `submitted_answers` (via `submitAttempt`
  * with `submissionReason: 'deadline'`), then grades. `submittedAt` is set to
