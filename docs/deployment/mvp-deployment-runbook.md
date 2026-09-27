@@ -752,6 +752,18 @@ curl -s http://localhost:${EXAM_PORT:-80}/api/system/public-config
 #    Log in with the bootstrapped admin credentials (§5 — never the
 #    default-credential dev/test seed).
 
+# 3b. Scripted no-browser login check (optional): in production every POST
+#     must carry the browser-equivalent Origin header — CSRF Origin
+#     enforcement rejects other origins with 403 CSRF_ORIGIN_REJECTED
+#     (browsers send Origin automatically, so the UI path above needs
+#     nothing). The value must be the configured CORS_ORIGIN.
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' -X POST \
+  "http://localhost:${EXAM_PORT:-80}/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: <CORS_ORIGIN value, e.g. http://localhost:18080>' \
+  -d '{"username":"<admin-username>","password":"<strong-password>"}'
+#    Expect HTTP 200 and a Set-Cookie: auth-token=... header.
+
 # 4. In the admin console:
 #    - Create a Candidate
 #    - Create or import a Course
