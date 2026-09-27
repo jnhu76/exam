@@ -71,7 +71,6 @@ describe("ResultPage", () => {
           content: "选择正确答案",
           order: 0,
           candidateAnswer: "a",
-          standardAnswer: "a",
           score: 10,
           maxScore: 10,
           correct: true,
@@ -82,7 +81,6 @@ describe("ResultPage", () => {
           content: "另一题",
           order: 1,
           candidateAnswer: "b",
-          standardAnswer: "a",
           score: 0,
           maxScore: 10,
           correct: false,
@@ -216,7 +214,7 @@ describe("ResultPage", () => {
           content: "填写答案",
           order: 0,
           candidateAnswer: longAnswer,
-          standardAnswer: longAnswer,
+          manualGraded: false,
           score: 10,
           maxScore: 10,
           correct: true,
@@ -226,10 +224,12 @@ describe("ResultPage", () => {
 
     renderPage();
 
+    // The candidate DTO carries only the candidate answer (the correct-answer
+    // cell renders the hidden marker for objective questions), so exactly one
+    // truncated answer remains.
     const truncatedAnswers = await screen.findAllByTitle(longAnswer);
-    expect(truncatedAnswers).toHaveLength(2);
+    expect(truncatedAnswers).toHaveLength(1);
     expect(truncatedAnswers[0]).toHaveClass("data-table-overflow-truncate");
-    expect(truncatedAnswers[1]).toHaveClass("data-table-overflow-truncate");
   });
 
   it("navigates back to the exam list", async () => {

@@ -591,10 +591,11 @@ describe("P2D-J5a: result publishing policy", () => {
   // ── Slice 13 ──────────────────────────────────────────────────────
   it("J5a-13: admin sees full result regardless of mode (even manual + unpublished)", async () => {
     const { attemptId } = await createGradedAttemptForMode("manual");
-    // No publish-results call; candidate would see hidden.
+    // No publish-results call; candidate would see hidden. The full result
+    // lives on the authorized all-view surface (EXSEM-017 contract split).
     const response = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(response.statusCode).toBe(200);

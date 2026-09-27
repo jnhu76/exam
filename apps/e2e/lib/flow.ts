@@ -356,7 +356,8 @@ export async function publishResultsApi(
 }
 
 /**
- * Fetch a candidate's attempt result as the parsed AttemptResultResponse.
+ * Fetch a candidate's attempt result (the candidate-safe contract: no
+ * standardAnswer).
  * Branches on `showResultImmediately`: visible results carry totalScore/passed;
  * hidden results carry a status + hiddenReason.
  */

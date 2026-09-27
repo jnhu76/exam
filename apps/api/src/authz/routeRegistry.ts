@@ -337,6 +337,21 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       proctorAccess: "not_applicable",
       migrationStage: 7,
     },
+    {
+      // Authorized all-view attempt result (EXSEM-017 contract split): the
+      // full representation incl. frozen standardAnswer. Same score resolver
+      // arbitration as the candidate surface; the handler additionally
+      // requires the all-view outcome (ScoreOwnView-only principals → 403).
+      method: "GET",
+      path: "/admin/attempts/:attemptId/result",
+      legacyGate: "Admin",
+      permission: Permission.ScoreAllView,
+      scope: Scope.Attempt,
+      resolver: "score",
+      sensitive: false,
+      proctorAccess: "not_applicable",
+      migrationStage: 7,
+    },
 
     // ── Questions (course scope) ──
     {

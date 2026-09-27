@@ -478,8 +478,11 @@ export function AttemptDetailPage() {
     setLiveAttempt(null);
     setLiveMisconduct(null);
     try {
+      // Admin/teacher all-view surface: the FULL result representation
+      // (frozen standardAnswer per question). The candidate-safe projection
+      // lives on GET /api/scores/attempts/:id (EXSEM-017 contract split).
       const data = await api.get<AttemptResultResponse>(
-        `/api/scores/attempts/${id}`,
+        `/api/admin/attempts/${id}/result`,
       );
       if (data.showResultImmediately === true) {
         setResult(data);

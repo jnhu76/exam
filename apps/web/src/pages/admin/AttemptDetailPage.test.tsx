@@ -585,7 +585,9 @@ describe("AttemptDetailPage", () => {
     // request WAS issued and composed).
     expect(await screen.findByText("尝试状态")).toBeInTheDocument();
     await waitFor(() => {
-      expect(apiGet).toHaveBeenCalledWith("/api/scores/attempts/attempt-1");
+      expect(apiGet).toHaveBeenCalledWith(
+        "/api/admin/attempts/attempt-1/result",
+      );
     });
 
     // The un-held sub-features stay absent.

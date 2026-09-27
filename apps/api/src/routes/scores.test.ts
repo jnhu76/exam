@@ -202,10 +202,13 @@ describe("score routes", () => {
       correct: true,
       score: 10,
     });
-    // standardAnswer is stripped for candidates — must not be present
+    // standardAnswer is stripped for candidates — must not be present, at the
+    // per-question level nor anywhere in the HTTP body (the stored grading
+    // truth carries it; EXSEM-017 keeps it out of the candidate wire output).
     expect(response.json().questionResults[0]).not.toHaveProperty(
       "standardAnswer",
     );
+    expect(response.body).not.toContain('"standardAnswer"');
     const requestContext = {
       actorId: ctx.candidate.id,
       organizationId: ctx.org.id,
@@ -312,8 +315,11 @@ describe("score routes", () => {
     });
   });
 
-  it("allows admins to view a single attempt result", async () => {
-    const { attemptId } = await createGradedAttempt(false);
+  it("gives admins the candidate-safe projection on the candidate surface (no standardAnswer)", async () => {
+    // EXSEM-017 contract split: GET /scores/attempts/:id is definitionally the
+    // candidate surface — even a ScoreAllView actor receives the candidate
+    // projection here; the full representation lives on the admin route.
+    const { attemptId } = await createGradedAttempt(true);
     const response = await ctx.app.inject({
       method: "GET",
       url: `/api/scores/attempts/${attemptId}`,
@@ -321,12 +327,16 @@ describe("score routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
+    const body = response.json();
+    expect(body).toMatchObject({
       attemptId,
       showResultImmediately: true,
       totalScore: 10,
       passed: true,
     });
+    for (const q of body.questionResults) {
+      expect(q).not.toHaveProperty("standardAnswer");
+    }
   });
 
   it("does not expose an attempt to an admin from another organization", async () => {
@@ -1722,7 +1732,7 @@ describe("P3-3 admin frozen result view", () => {
     // the publication gate) returns the complete terminal result.
     const adminRes = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(adminRes.statusCode).toBe(200);
@@ -1743,8 +1753,8 @@ describe("P3-3 admin frozen result view", () => {
     );
     expect(textQ.score).toBe(15);
 
-    // Candidate result for the SAME attempt is still hidden (manual,
-    // pending_publish) — score/pass must not leak.
+    // Candidate result for the SAME attempt stays hidden on the candidate
+    // surface (manual, pending_publish) — score/pass must not leak.
     const candRes = await ctx.app.inject({
       method: "GET",
       url: `/api/scores/attempts/${attemptId}`,
@@ -1757,6 +1767,41 @@ describe("P3-3 admin frozen result view", () => {
     expect(candBody).not.toHaveProperty("totalScore");
     expect(candBody).not.toHaveProperty("passed");
     expect(candBody).not.toHaveProperty("questionResults");
+
+    // The full result surface is NOT a candidate surface: a ScoreOwnView-only
+    // principal calling it is denied outright (EXSEM-017 contract split).
+    const candAdminRoute = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/result`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(candAdminRoute.statusCode).toBe(403);
+    expect(candAdminRoute.json().error.code).toBe("PERMISSION_DENIED");
+  });
+
+  it("marker proof: candidate HTTP body cannot contain the frozen standardAnswer; admin body does", async () => {
+    // EXSEM-017 HTTP-surface evidence: the grading truth carries distinctive
+    // reference answers; the candidate response must not contain ANY of them
+    // as server data, while the authorized all-view surface keeps them.
+    const { attemptId } = await buildTerminalManualAttempt();
+
+    const candRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(candRes.statusCode).toBe(200);
+    expect(candRes.body).not.toContain("P3-3 frozen reference answer");
+    expect(candRes.body).not.toContain('"standardAnswer"');
+
+    const adminRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/result`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(adminRes.statusCode).toBe(200);
+    expect(adminRes.body).toContain("P3-3 frozen reference answer");
+    expect(adminRes.body).toContain('"standardAnswer"');
   });
 
   /**
@@ -1807,7 +1852,7 @@ describe("P3-3 admin frozen result view", () => {
     // keeps frozen standardAnswer.
     const teacherRes = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
       cookies: { "auth-token": teacher.token },
     });
     expect(teacherRes.statusCode).toBe(200);
@@ -1849,7 +1894,7 @@ describe("P3-3 admin frozen result view", () => {
 
     const afterMutate = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
       cookies: { "auth-token": teacher.token },
     });
     const afterObj = afterMutate
@@ -1878,7 +1923,7 @@ describe("P3-3 admin frozen result view", () => {
 
     const before = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
       cookies: { "auth-token": ctx.adminToken },
     });
     const beforeObj = before
@@ -1901,7 +1946,7 @@ describe("P3-3 admin frozen result view", () => {
 
     const after = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
       cookies: { "auth-token": ctx.adminToken },
     });
     const afterObj = after
@@ -1920,7 +1965,7 @@ describe("P3-3 admin frozen result view", () => {
 
     const adminBefore = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
       cookies: { "auth-token": ctx.adminToken },
     });
 
@@ -1942,7 +1987,7 @@ describe("P3-3 admin frozen result view", () => {
     // Admin projection is unchanged by publication (no recompute).
     const adminAfter = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(adminAfter.json().totalScore).toBe(adminBefore.json().totalScore);
@@ -1953,7 +1998,7 @@ describe("P3-3 admin frozen result view", () => {
     const { attemptId } = await buildTerminalManualAttempt();
     const res = await ctx.app.inject({
       method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
+      url: `/api/admin/attempts/${attemptId}/result`,
     });
     expect(res.statusCode).toBe(401);
   });
