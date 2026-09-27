@@ -237,6 +237,15 @@ const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
 });
 
 /**
+ * Candidate-safe per-question result for the candidate attempt-result
+ * contract: carries the question projection (type/content/document/order)
+ * without the grading secret (EXSEM-017).
+ */
+const CandidateAttemptQuestionResultSchema = AttemptQuestionResultSchema.omit({
+  standardAnswer: true,
+});
+
+/**
  * Reason the full result is withheld in the hidden response variant.
  *
  * - `not_graded` — grading is incomplete or pending manual scoring; the result
@@ -278,8 +287,45 @@ const HiddenAttemptResultSchema = z.object({
 });
 
 /**
- * Response variant when the exam's showResultImmediately flag is true.
- * Includes full score details, per-question results, and pass/fail status.
+ * Response variant when the exam's showResultImmediately flag is true, on the
+ * CANDIDATE capability path: full score details with per-question results
+ * structurally stripped of `standardAnswer` (EXSEM-017 — the candidate result
+ * contract cannot represent the reference answer).
+ */
+const CandidateVisibleAttemptResultSchema = z.object({
+  attemptId: z.string().uuid(),
+  status: z.literal("graded"),
+  showResultImmediately: z.literal(true),
+  examTitle: z.string(),
+  passingScore: z.number(),
+  totalScore: z.number(),
+  passed: z.boolean(),
+  gradedAt: z.string().datetime(),
+  questionResults: z.array(CandidateAttemptQuestionResultSchema),
+});
+
+/**
+ * Candidate-safe attempt result response (hidden or visible variant) — the
+ * output contract for `GET /scores/attempts/:attemptId`. Structurally unable
+ * to represent `standardAnswer` (and never carrying rubric/gradingRule/
+ * misconduct): safe contract AND minimal projection per ADR-021.
+ */
+export const CandidateAttemptResultResponseSchema = z.discriminatedUnion(
+  "showResultImmediately",
+  [HiddenAttemptResultSchema, CandidateVisibleAttemptResultSchema],
+);
+
+/** Type for a candidate-safe attempt result response. */
+export type CandidateAttemptResultResponse = z.infer<
+  typeof CandidateAttemptResultResponseSchema
+>;
+
+/**
+ * Response variant when the exam's showResultImmediately flag is true, on the
+ * AUTHORIZED all-view capability path: full score details INCLUDING the frozen
+ * `standardAnswer` per question. Admin-only representation — consumed by
+ * `GET /admin/attempts/:attemptId/result`; never serialized to a candidate
+ * (the candidate surface uses {@link CandidateAttemptResultResponseSchema}).
  */
 const VisibleAttemptResultSchema = z.object({
   attemptId: z.string().uuid(),
@@ -294,15 +340,16 @@ const VisibleAttemptResultSchema = z.object({
 });
 
 /**
- * Discriminated union of attempt result responses, keyed on showResultImmediately.
- * Hidden variant omits scores; visible variant includes full grading details.
+ * Discriminated union of the FULL attempt result responses, keyed on
+ * showResultImmediately. The authorized all-view contract (admin/teacher
+ * capability path): the visible variant includes the frozen standardAnswer.
  */
 export const AttemptResultResponseSchema = z.discriminatedUnion(
   "showResultImmediately",
   [HiddenAttemptResultSchema, VisibleAttemptResultSchema],
 );
 
-/** Type for an attempt result response (hidden or visible variant). */
+/** Type for a full attempt result response (hidden or visible variant). */
 export type AttemptResultResponse = z.infer<typeof AttemptResultResponseSchema>;
 
 /**

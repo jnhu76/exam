@@ -1,6 +1,7 @@
 import { eq, and } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
+import { DEMO_GRADED_ATTEMPT_KEYS } from "./demo-seed.js";
 
 /** Shape of demo seed IDs used for verification lookups. */
 interface DemoIds {
@@ -349,7 +350,38 @@ export async function verifyDemoSeed(
     }
   }
 
-  // 15. Graded attempts have grading detail
+  // 15. Graded attempts satisfy the durable grading-truth relationships
+  // (EXSEM-008/009/010): frozen submittedAnswers + per-question grading
+  // entries + terminal projection, all mutually consistent.
+  //
+  // Completeness gate FIRST (EXSEM-020): the KNOWN graded fixtures must
+  // exist and be terminal. A query-then-loop over `status = graded` alone
+  // would pass vacuously when zero attempts reached the grading seam (e.g. a
+  // no-op grader), so the fixture identities below are required evidence —
+  // each must be present and graded before the deep checks run.
+  for (const key of DEMO_GRADED_ATTEMPT_KEYS) {
+    const attemptId = ids.attempts[key];
+    assert(
+      attemptId != null,
+      `Graded demo fixture '${key}' missing from seed ids`,
+    );
+    if (attemptId == null) continue;
+    const rows = await db
+      .select()
+      .from(schema.examAttempts)
+      .where(eq(schema.examAttempts.id, attemptId));
+    const attempt = rows[0];
+    assert(
+      attempt != null,
+      `Graded demo fixture '${key}' (${attemptId}) not found`,
+    );
+    assert(
+      attempt?.status === "graded",
+      `Graded demo fixture '${key}' should be 'graded', got '${attempt?.status}' ` +
+        `(the seed's grading handoff must run through the production seam)`,
+    );
+  }
+
   const gradedAttempts = await db
     .select()
     .from(schema.examAttempts)
@@ -378,11 +410,84 @@ export async function verifyDemoSeed(
       Array.isArray(gradingResult) && gradingResult.length > 0,
       `Graded attempt ${attempt.id} has no gradingResult`,
     );
+
+    // Frozen answer authority.
+    assert(
+      attempt.submittedAnswers != null,
+      `Graded attempt ${attempt.id} has no frozen submittedAnswers`,
+    );
+    assert(
+      attempt.submissionReason != null,
+      `Graded attempt ${attempt.id} has no submissionReason`,
+    );
+    assert(
+      attempt.gradingStatus === "auto_graded",
+      `Graded attempt ${attempt.id} gradingStatus should be 'auto_graded' ` +
+        `(demo exams contain only objective questions), got '${attempt.gradingStatus}'`,
+    );
+
+    const snapshotIds = (
+      attempt.questionSnapshot as Array<{ originalQuestionId: string }>
+    ).map((q) => q.originalQuestionId);
+    const submittedAnswers = (
+      attempt.submittedAnswers as {
+        answers: Array<{ questionId: string; value: unknown }>;
+      }
+    ).answers;
+    const submittedIds = submittedAnswers.map((a) => a.questionId);
+    assert(
+      submittedIds.length === snapshotIds.length &&
+        snapshotIds.every((id) => submittedIds.includes(id)),
+      `Graded attempt ${attempt.id} submittedAnswers do not cover its question snapshot`,
+    );
+
+    // Durable per-question grading workset.
+    const entries = await db
+      .select()
+      .from(schema.attemptGradingEntries)
+      .where(eq(schema.attemptGradingEntries.attemptId, attempt.id));
+    assert(
+      entries.length === snapshotIds.length,
+      `Graded attempt ${attempt.id} has ${entries.length} grading entries, expected ${snapshotIds.length}`,
+    );
+    const entryQuestionIds = new Set(entries.map((e) => e.questionId));
+    assert(
+      snapshotIds.every((id) => entryQuestionIds.has(id)),
+      `Graded attempt ${attempt.id} grading entries do not match its question snapshot`,
+    );
+    for (const entry of entries) {
+      assert(
+        entry.status === "completed_auto",
+        `Grading entry ${entry.id} status should be 'completed_auto', got '${entry.status}'`,
+      );
+      const submitted = submittedAnswers.find(
+        (a) => a.questionId === entry.questionId,
+      );
+      assert(
+        submitted !== undefined &&
+          JSON.stringify(entry.candidateAnswer) ===
+            JSON.stringify(submitted.value),
+        `Grading entry ${entry.id} candidateAnswer does not match the frozen submitted answer`,
+      );
+    }
+    const earnedSum = entries.reduce((sum, e) => sum + (e.earnedScore ?? 0), 0);
+    assert(
+      Math.abs(earnedSum - (attempt.score ?? -1)) < 1e-9,
+      `Graded attempt ${attempt.id} score (${attempt.score}) != sum of grading entries (${earnedSum})`,
+    );
+    assert(
+      Array.isArray(gradingResult) && gradingResult.length === entries.length,
+      `Graded attempt ${attempt.id} gradingResult length (${gradingResult?.length}) != grading entries (${entries.length})`,
+    );
   }
 
   // 16. In-progress attempt has valid snapshot and deadline
   {
     const ipAttemptId = ids.attempts["open-c1-inprogress"];
+    assert(
+      ipAttemptId != null,
+      "In-progress demo fixture 'open-c1-inprogress' missing from seed ids",
+    );
     if (ipAttemptId) {
       const rows = await db
         .select()
@@ -410,6 +515,10 @@ export async function verifyDemoSeed(
   // 17. Disrupted attempt exists
   {
     const disruptedId = ids.attempts["open-c3-disrupted"];
+    assert(
+      disruptedId != null,
+      "Disrupted demo fixture 'open-c3-disrupted' missing from seed ids",
+    );
     if (disruptedId) {
       const rows = await db
         .select()
@@ -469,6 +578,12 @@ export async function verifyDemoSeed(
           assert(
             enrollment.finalScore === highestScore,
             `Closed exam candidate1 enrollment finalScore (${enrollment.finalScore}) != highest graded score (${highestScore})`,
+          );
+          // EXSEM-010: the terminal projection names the selected attempt.
+          assert(
+            enrollment.finalAttemptId != null &&
+              gradedForC1.some((a) => a.id === enrollment.finalAttemptId),
+            `Closed exam candidate1 enrollment finalAttemptId (${enrollment.finalAttemptId}) does not reference a graded attempt`,
           );
         }
       }

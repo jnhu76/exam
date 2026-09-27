@@ -2,6 +2,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   AttemptResultResponseSchema,
+  CandidateAttemptResultResponseSchema,
   AttemptScoreParamsSchema,
   ScoreListQuerySchema,
   ScoreListResponseSchema,
@@ -13,7 +14,7 @@ import type {
   QuestionScoreResult,
   RequestContext,
 } from "@exam/domain";
-import { NotFoundError } from "@exam/domain";
+import { NotFoundError, PermissionDeniedError } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { Permission } from "@exam/authz";
@@ -318,24 +319,27 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   /**
-   * GET /scores/attempts/:attemptId — Returns the detailed result for a
-   * single graded attempt. Visibility is governed by P2D-J5a:
+   * GET /scores/attempts/:attemptId — the CANDIDATE result surface. Returns
+   * the caller's own graded result, or a status-only hidden variant. The
+   * whole route is definitionally candidate-safe:
    *
-   *   1. resultReady — the result is computable (status=graded, score/passed/
-   *      gradedAt/gradingResult all present, AND gradingStatus is not
-   *      pending_manual — i.e. grading is done). If not ready, the response
-   *      is status-only with hiddenReason='not_graded' (or 'not_started' for
-   *      pre-submit states).
-   *   2. publication gate — for candidates, the exam's resultPublicationMode:
-   *        immediate     → visible as soon as resultReady
-   *        after_grading → visible as soon as resultReady (gradingStatus must
-   *                        be fully_graded, NOT auto_graded)
-   *        manual        → visible only after admin publish-results
-   *                        (resultsPublishedAt != null); pending_publish
-   *                        hiddenReason otherwise.
+   *   1. Access — `requireScoreCapability` arbitrates capability + ownership
+   *      (RBAC-M10-E): ScoreOwnView principals reach only their own attempts;
+   *      ScoreAllView actors (admins) may pass the gate but still receive the
+   *      candidate projection — the full representation lives on
+   *      GET /admin/attempts/:attemptId/result.
+   *   2. Visibility — the projection ALWAYS resolves through the candidate
+   *      publication gate (P2D-J5a, EXSEM-018): resultReady first, then the
+   *      exam's resultPublicationMode. All-view publication bypass never
+   *      happens on this surface.
+   *   3. Contract — every response is parsed through
+   *      CandidateAttemptResultResponseSchema, which structurally cannot
+   *      represent standardAnswer (EXSEM-017 / ADR-021: safe contract AND
+   *      minimal projection; the mapper strip below is the projection layer,
+   *      the parse is the contract boundary).
    *
-   * Admins (non-Candidate roles) bypass the publication gate and see the full
-   * result whenever resultReady is true.
+   * Visibility semantics (hiddenReason, publication modes) are documented on
+   * resolveCandidateResultVisibility.
    */
   fastify.get(
     "/scores/attempts/:attemptId",
@@ -346,7 +350,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         security: cookieAuth,
         "x-role": ["Candidate", "Admin"],
         response: {
-          200: AttemptResultResponseSchema,
+          200: CandidateAttemptResultResponseSchema,
           400: ErrorResponseSchema,
         },
       },
@@ -373,10 +377,110 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         throw new NotFoundError("Exam not found");
       }
 
+      // Fail-closed proof the capability gate ran (ownership was enforced
+      // upstream); the projection below is candidate-owned regardless of the
+      // arbitrated view.
+      if ((await requireScoreView(request, reply)) === null) return;
+      const visibility = resolveCandidateResultVisibility(exam, attempt, "own");
+
+      if (!visibility.visible) {
+        return CandidateAttemptResultResponseSchema.parse({
+          attemptId: attempt.id,
+          status: attempt.status,
+          showResultImmediately: false,
+          hiddenReason: visibility.hiddenReason,
+          examTitle: exam.title,
+        });
+      }
+
+      // visibility.visible === true guarantees score/passed/gradedAt/
+      // gradingResult are all present (the helper checks them before returning
+      // visible). Assert non-null for TS; the runtime invariant holds.
+      const gradedAt = attempt.gradedAt as Date;
+      const gradingResult = attempt.gradingResult as QuestionScoreResult[];
+      const questionResults = buildQuestionResults(attempt, gradingResult);
+
+      // Minimal projection (RBAC-M10-E): this surface never carries the
+      // frozen reference answer — for ANY caller. The CandidateAttemptResultResponseSchema
+      // parse below is the structural boundary: even if this strip drifted,
+      // the candidate contract could not emit standardAnswer.
+      const safeQuestionResults = questionResults.map(
+        ({ standardAnswer: _, ...rest }) => rest,
+      );
+
+      return CandidateAttemptResultResponseSchema.parse({
+        attemptId: attempt.id,
+        status: attempt.status,
+        showResultImmediately: true,
+        examTitle: exam.title,
+        passingScore: exam.passingScore,
+        totalScore: attempt.score,
+        passed: attempt.passed,
+        gradedAt: gradedAt.toISOString(),
+        questionResults: safeQuestionResults,
+      });
+    },
+  );
+
+  /**
+   * GET /admin/attempts/:attemptId/result — the AUTHORIZED all-view result
+   * surface (admin/teacher ScoreAllView capability path; the surface
+   * AttemptDetailPage consumes). Returns the full graded result INCLUDING the
+   * frozen standardAnswer per question (EXSEM-017 keeps it representable on
+   * authorized internal surfaces), or a status-only hidden variant when the
+   * result is not computable yet. The candidate publication gate is bypassed
+   * on this path (INV-A1): all-view actors see results as soon as they are
+   * ready, independent of publication policy.
+   *
+   * Candidates (ScoreOwnView-only principals) are rejected: the full result
+   * representation is not a candidate surface (EXSEM-017/018).
+   */
+  fastify.get(
+    "/admin/attempts/:attemptId/result",
+    {
+      preHandler: [fastify.authenticate, fastify.requireScoreCapability()],
+      schema: {
+        params: AttemptScoreParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin", "Teacher"],
+        response: {
+          200: AttemptResultResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = AttemptScoreParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
       const view = await requireScoreView(request, reply);
       if (view === null) return;
-      const visibility = resolveCandidateResultVisibility(exam, attempt, view);
+      if (view !== "all") {
+        throw new PermissionDeniedError(
+          "Full attempt result requires the all-view score capability",
+        );
+      }
+      const ctx = getRequestContext(request);
+      const attempt = await findVisibleAttempt(
+        fastify,
+        ctx,
+        parsed.data.attemptId,
+      );
+      if (!attempt) {
+        throw new NotFoundError("Attempt not found");
+      }
+      const exam = (await createExamRepo(fastify.db).findById(
+        ctx,
+        attempt.examId,
+      )) as Exam | null;
+      if (!exam) {
+        throw new NotFoundError("Exam not found");
+      }
 
+      // All-view bypasses the candidate publication gate (INV-A1).
+      const visibility = resolveCandidateResultVisibility(exam, attempt, "all");
       if (!visibility.visible) {
         return AttemptResultResponseSchema.parse({
           attemptId: attempt.id,
@@ -394,16 +498,6 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       const gradingResult = attempt.gradingResult as QuestionScoreResult[];
       const questionResults = buildQuestionResults(attempt, gradingResult);
 
-      // standardAnswer stripping follows the capability path (RBAC-M10-E):
-      // own-view (ScoreOwnView) = candidate own-score access -> strip; all-view
-      // (ScoreAllView) = administrative/academic result access -> keep. This is
-      // NOT roles.includes("Candidate"): a multi-role actor reaching via
-      // ScoreAllView keeps the full result.
-      const stripStandardAnswer = view === "own";
-      const safeQuestionResults = stripStandardAnswer
-        ? questionResults.map(({ standardAnswer: _, ...rest }) => rest)
-        : questionResults;
-
       return AttemptResultResponseSchema.parse({
         attemptId: attempt.id,
         status: attempt.status,
@@ -413,7 +507,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         totalScore: attempt.score,
         passed: attempt.passed,
         gradedAt: gradedAt.toISOString(),
-        questionResults: safeQuestionResults,
+        questionResults,
       });
     },
   );

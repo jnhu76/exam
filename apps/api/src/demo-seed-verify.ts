@@ -3,6 +3,7 @@ import { migratePostgres } from "@exam/db/src/postgres.js";
 import { seedDemo } from "@exam/db/src/demo-seed.js";
 import { verifyDemoSeed } from "@exam/db/src/demo-seed-verify.js";
 import { hashPassword } from "@exam/auth/src/password.js";
+import { createDemoSeedGrader } from "./demo-seed-grader.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
 
@@ -15,7 +16,11 @@ process.stdout.write("Running migrations...\n");
 await migratePostgres(conn.db);
 
 process.stdout.write("Re-seeding demo data for verification...\n");
-const ids = await seedDemo(conn.db, hashPassword);
+const ids = await seedDemo(
+  conn.db,
+  hashPassword,
+  createDemoSeedGrader(conn.db),
+);
 
 process.stdout.write("Running verification...\n");
 const errors = await verifyDemoSeed(conn.db, ids);

@@ -10,7 +10,6 @@ import type { AssignableRole } from "./schema/pg.js";
 import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
 import type {
   QuestionSnapshot,
-  QuestionScoreResult,
   AnswerRecord,
   ControlFlags,
   GradingRule,
@@ -22,9 +21,41 @@ import type {
   RetakePolicy,
   ScoreStrategy,
 } from "@exam/domain";
-import { gradeAnswers } from "@exam/domain";
 
 export type HashFunction = (password: string) => Promise<string>;
+
+/**
+ * Production submit+grade composition injected into {@link seedDemo} for the
+ * graded demo attempts (EXSEM-008/009/010/020).
+ *
+ * OWNERSHIP: the seed owns only the pre-submit fabrication (an in_progress
+ * attempt with protocol-shaped draft answers and a back-dated timeline).
+ * Every terminal fact — frozen `submittedAnswers`, durable
+ * `attempt_grading_entries`, `gradingStatus`, the terminal score projection,
+ * and the enrollment projection — is written by this callback, which callers
+ * bind to the same production orchestrator the API uses. That keeps demo
+ * "valid data" on the single grading semantic; the seed must not fabricate
+ * terminal projections beside a missing workset.
+ *
+ * Idempotency contract: for an already-graded attempt the production
+ * orchestrator PRESERVES it as-is (no-op) — it neither re-freezes nor
+ * revalidates the existing grading workset. Verifying that the preserved
+ * workset matches the demo fixture spec is {@link verifyDemoSeed}'s job, not
+ * the grader's.
+ */
+export interface DemoSeedGrader {
+  /**
+   * Submits (and auto-grades) one seeded attempt as of the fabricated
+   * `now`. Must be idempotent for already-submitted/graded attempts (the
+   * production orchestrator's already-graded branch satisfies this).
+   */
+  submitAndGrade(input: {
+    attemptId: string;
+    candidateProfileId: string;
+    organizationId: string;
+    now: Date;
+  }): Promise<void>;
+}
 
 /** Internal slug for the default demo organization. */
 const DEMO_ORG_SLUG = "default";
@@ -51,6 +82,23 @@ export interface DemoIds {
   enrollments: Record<string, string>;
   attempts: Record<string, string>;
 }
+
+/**
+ * The `ids.attempts` keys {@link seedDemo} must deliver in terminal `graded`
+ * state (EXSEM-020). Single authority for graded-fixture identity: the seed
+ * creates exactly these six through {@link seedGradedAttempt} and
+ * `verifyDemoSeed` requires each of them to exist AND be graded before its
+ * deeper consistency checks — so a seed run that never reached the grading
+ * seam cannot pass verification vacuously.
+ */
+export const DEMO_GRADED_ATTEMPT_KEYS = [
+  "open-c4-graded",
+  "closed-c1-attempt1",
+  "closed-c1-attempt2",
+  "closed-c2-graded",
+  "closed-c3-graded",
+  "closed-c4-graded",
+] as const;
 
 /** Returns default control flags with all restrictions disabled. */
 function makeDefaultControlFlags(): ControlFlags {
@@ -84,21 +132,28 @@ function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
  *
  * Complete interactive demo seed — the counterpart to `seed.ts` (which creates
  * authentication-only accounts). This seed creates organizations, users,
- * courses, questions, exams, enrollments, attempts, grading entries, and
- * organization settings for a full interactive demo experience.
+ * courses, questions, exams, enrollments, attempts, and organization settings
+ * for a full interactive demo experience. Graded attempts are closed through
+ * the injected {@link DemoSeedGrader} so they carry the same durable grading
+ * truth (frozen submitted answers + per-question grading entries + terminal
+ * and enrollment projections) as production-submitted attempts.
  *
  * This is a demo reset routine: it writes demo questions, exams, enrollments,
- * and attempts to a known sample state. User authority is preserved if the
  * and attempts to a known sample state. User authority is preserved if the
  * user already has any assignment rows. It is NOT allowed in production.
  *
  * @param db - Database instance.
  * @param hashFn - Password hashing function.
+ * @param grader - Production submit+grade composition for graded attempts.
+ *   REQUIRED: the demo fixture set always includes graded attempts, so there
+ *   is no legitimate no-grader seed mode (EXSEM-020 — the runtime guard below
+ *   is defense for non-TS callers only).
  * @returns IDs of all seeded entities for verification.
  */
 export async function seedDemo(
   db: Database,
   hashFn: HashFunction,
+  grader: DemoSeedGrader,
 ): Promise<DemoIds> {
   if (process.env.NODE_ENV === "production") {
     throw new Error("demo-seed is not allowed in production mode");
@@ -859,11 +914,21 @@ export async function seedDemo(
         ),
       );
     if (existing.length > 0) {
-      await db
-        .update(schema.examEnrollments)
-        .set({ ...data, updatedAt: ts() })
-        .where(eq(schema.examEnrollments.id, existing[0]!.id));
-      return existing[0]!.id;
+      // EXSEM-010: terminal enrollment projections are owned by the grading
+      // closure (written by the injected grader). Re-seeding only refreshes
+      // pre-grade state and must never downgrade a completed/projected row.
+      const row = existing[0]!;
+      const hasProjection =
+        row.status === "completed" ||
+        row.finalScore != null ||
+        row.finalAttemptId != null;
+      if (!hasProjection) {
+        await db
+          .update(schema.examEnrollments)
+          .set({ ...data, updatedAt: ts() })
+          .where(eq(schema.examEnrollments.id, row.id));
+      }
+      return row.id;
     }
     const id = uuid("enroll");
     await db.insert(schema.examEnrollments).values({
@@ -883,29 +948,6 @@ export async function seedDemo(
   const c3 = candidateProfileIds["candidate3"] ?? "";
   const c4 = candidateProfileIds["candidate4"] ?? "";
 
-  function buildGradingResult(
-    snapshot: QuestionSnapshot[],
-    answers: AnswerRecord[],
-    passingScore: number,
-  ): {
-    gradingResult: QuestionScoreResult[];
-    totalScore: number;
-    passed: boolean;
-  } {
-    const result = gradeAnswers(
-      "seed-attempt",
-      snapshot,
-      answers,
-      passingScore,
-      ts(),
-    );
-    return {
-      gradingResult: result.questionResults,
-      totalScore: result.totalScore,
-      passed: result.passed,
-    };
-  }
-
   const closedC1Attempt1Answers: AnswerRecord[] = exam4Snapshot.map((q, i) => ({
     questionId: q.originalQuestionId,
     answer:
@@ -919,12 +961,6 @@ export async function seedDemo(
     version: 1,
     savedAt: ts(-6 * DAY + i * 60_000),
   }));
-  const closedC1Grading1 = buildGradingResult(
-    exam4Snapshot,
-    closedC1Attempt1Answers,
-    15,
-  );
-
   const closedC1Attempt2Answers: AnswerRecord[] = exam4Snapshot.map((q, i) => ({
     questionId: q.originalQuestionId,
     answer:
@@ -938,12 +974,6 @@ export async function seedDemo(
     version: 1,
     savedAt: ts(-3 * DAY + i * 60_000),
   }));
-  const closedC1Grading2 = buildGradingResult(
-    exam4Snapshot,
-    closedC1Attempt2Answers,
-    15,
-  );
-
   const closedC2Answers: AnswerRecord[] = exam4Snapshot.map((q, i) => ({
     questionId: q.originalQuestionId,
     answer:
@@ -957,12 +987,6 @@ export async function seedDemo(
     version: 1,
     savedAt: ts(-6 * DAY + i * 60_000),
   }));
-  const closedC2Grading = buildGradingResult(
-    exam4Snapshot,
-    closedC2Answers,
-    15,
-  );
-
   const closedC3Answers: AnswerRecord[] = exam4Snapshot.map((q, i) => ({
     questionId: q.originalQuestionId,
     answer:
@@ -976,29 +1000,12 @@ export async function seedDemo(
     version: 1,
     savedAt: ts(-6 * DAY + i * 60_000),
   }));
-  const closedC3Grading = buildGradingResult(
-    exam4Snapshot,
-    closedC3Answers,
-    15,
-  );
-
   const closedC4Answers: AnswerRecord[] = exam4Snapshot.map((q, i) => ({
     questionId: q.originalQuestionId,
     answer: q.standardAnswer,
     version: 1,
     savedAt: ts(-6 * DAY + i * 60_000),
   }));
-  const closedC4Grading = buildGradingResult(
-    exam4Snapshot,
-    closedC4Answers,
-    15,
-  );
-
-  const closedC1Highest = Math.max(
-    closedC1Grading1.totalScore,
-    closedC1Grading2.totalScore,
-  );
-
   const enrollOpen1 = await upsertEnrollment(exam1Id, c1, {
     status: "started",
     attemptCount: 1,
@@ -1017,41 +1024,36 @@ export async function seedDemo(
   });
   ids.enrollments["open-c3"] = enrollOpen3;
 
+  // EXSEM-010: enrollments that will hold graded attempts are seeded in
+  // their PRE-grade state only; the grading closure (injected grader) owns
+  // the terminal status, finalScore/finalPassed/finalAttemptId projection.
   const enrollOpen4 = await upsertEnrollment(exam1Id, c4, {
-    status: "completed",
+    status: "started",
     attemptCount: 1,
   });
   ids.enrollments["open-c4"] = enrollOpen4;
 
   const enrollClosed1 = await upsertEnrollment(exam4Id, c1, {
-    status: "completed",
+    status: "started",
     attemptCount: 2,
-    finalScore: closedC1Highest,
-    finalPassed: closedC1Highest >= 15,
   });
   ids.enrollments["closed-c1"] = enrollClosed1;
 
   const enrollClosed2 = await upsertEnrollment(exam4Id, c2, {
-    status: "completed",
+    status: "started",
     attemptCount: 1,
-    finalScore: closedC2Grading.totalScore,
-    finalPassed: closedC2Grading.passed,
   });
   ids.enrollments["closed-c2"] = enrollClosed2;
 
   const enrollClosed3 = await upsertEnrollment(exam4Id, c3, {
-    status: "completed",
+    status: "started",
     attemptCount: 1,
-    finalScore: closedC3Grading.totalScore,
-    finalPassed: closedC3Grading.passed,
   });
   ids.enrollments["closed-c3"] = enrollClosed3;
 
   const enrollClosed4 = await upsertEnrollment(exam4Id, c4, {
-    status: "completed",
+    status: "started",
     attemptCount: 1,
-    finalScore: closedC4Grading.totalScore,
-    finalPassed: closedC4Grading.passed,
   });
   ids.enrollments["closed-c4"] = enrollClosed4;
 
@@ -1065,33 +1067,13 @@ export async function seedDemo(
       status: AttemptStatus;
       questionSnapshot: QuestionSnapshot[];
       answers: AnswerRecord[];
-      gradingResult?: QuestionScoreResult[];
-      score?: number;
-      passed?: boolean;
       startedAt?: Date;
       deadlineAt?: Date;
-      submittedAt?: Date;
-      gradedAt?: Date;
       lastActivityAt?: Date;
       currentInterruptionId?: string | null;
       interruptedAt?: Date;
     },
   ): Promise<string> {
-    // Invariant: a graded attempt MUST carry a non-empty gradingResult that is
-    // consistent with its seeded exam questions. This guards against silent
-    // data corruption (e.g. an empty question snapshot producing
-    // gradingResult: []) that would make the demo seed ungradeable.
-    if (data.status === "graded") {
-      if (
-        !Array.isArray(data.gradingResult) ||
-        data.gradingResult.length === 0
-      ) {
-        throw new Error(
-          `demo-seed: graded attempt (enrollmentId=${enrollmentId}, ` +
-            `attemptNo=${attemptNo}) must have a non-empty gradingResult`,
-        );
-      }
-    }
     const existing = await db
       .select()
       .from(schema.examAttempts)
@@ -1126,6 +1108,114 @@ export async function seedDemo(
       updatedAt: ts(),
     });
     return id;
+  }
+
+  /**
+   * Seeds one graded demo attempt through the production submit+grade path
+   * (EXSEM-008/009/010/020). Only the PRE-submit state is fabricated here:
+   * an in_progress row with protocol-shaped draft answers and a back-dated
+   * timeline. The injected grader then owns the freeze, the durable grading
+   * workset, the terminal projection, and the enrollment projection — the
+   * same facts a production submit produces.
+   *
+   * Idempotency: a previously frozen row (submitted/graded) is handed to the
+   * grader unchanged — the production orchestrator's already-graded branch
+   * preserves it as-is without revalidating the workset (frozen-fact
+   * consistency is verifyDemoSeed's authority); a pre-submit residue row from
+   * an interrupted seed run is re-synced to the spec's draft state before
+   * submitting. Legacy demo rows fabricated by pre-workset seed versions
+   * (graded without submittedAnswers) fail closed: re-running the seed cannot
+   * rebuild frozen facts — reset the demo database.
+   */
+  async function seedGradedAttempt(
+    enrollmentId: string,
+    candidateProfileId: string,
+    examId: string,
+    attemptNo: number,
+    spec: {
+      questionSnapshot: QuestionSnapshot[];
+      answers: AnswerRecord[];
+      startedAt: Date;
+      deadlineAt: Date;
+      lastActivityAt: Date;
+      /** Fabricated submit instant; must precede the effective deadline. */
+      submittedAt: Date;
+    },
+  ): Promise<string> {
+    if (!grader) {
+      throw new Error(
+        "demo-seed: seeding graded attempts requires a DemoSeedGrader " +
+          "(the production submit+grade composition). Fabricating terminal " +
+          "grading projections without the durable per-question workset is " +
+          "forbidden by EXSEM-020.",
+      );
+    }
+    const existing = await db
+      .select()
+      .from(schema.examAttempts)
+      .where(
+        and(
+          eq(schema.examAttempts.organizationId, ids.orgId),
+          eq(schema.examAttempts.enrollmentId, enrollmentId),
+          eq(schema.examAttempts.attemptNo, attemptNo),
+        ),
+      );
+    const row = existing[0];
+    let attemptId: string;
+    if (!row) {
+      attemptId = uuid("attempt");
+      await db.insert(schema.examAttempts).values({
+        id: attemptId,
+        organizationId: ids.orgId,
+        examId,
+        enrollmentId,
+        candidateId: candidateProfileId,
+        attemptNo,
+        status: "in_progress",
+        questionSnapshot: spec.questionSnapshot,
+        answers: spec.answers,
+        startedAt: spec.startedAt,
+        deadlineAt: spec.deadlineAt,
+        lastActivityAt: spec.lastActivityAt,
+        createdAt: ts(),
+        updatedAt: ts(),
+      });
+    } else if (row.status === "in_progress" || row.status === "disrupted") {
+      attemptId = row.id;
+      await db
+        .update(schema.examAttempts)
+        .set({
+          status: "in_progress",
+          questionSnapshot: spec.questionSnapshot,
+          answers: spec.answers,
+          startedAt: spec.startedAt,
+          deadlineAt: spec.deadlineAt,
+          lastActivityAt: spec.lastActivityAt,
+          currentInterruptionId: null,
+          interruptedAt: null,
+          updatedAt: ts(),
+        })
+        .where(eq(schema.examAttempts.id, attemptId));
+    } else if (
+      row.status === "submitted" ||
+      (row.status === "graded" && row.submittedAnswers != null)
+    ) {
+      attemptId = row.id;
+    } else {
+      throw new Error(
+        `demo-seed: attempt ${row.id} (status=${row.status}) predates the ` +
+          "grading-workset model (no frozen submittedAnswers). Re-running the " +
+          "seed cannot rebuild frozen grading facts — reset the demo database " +
+          "(e.g. the E2E reseed truncation) and seed again.",
+      );
+    }
+    await grader.submitAndGrade({
+      attemptId,
+      candidateProfileId,
+      organizationId: ids.orgId,
+      now: spec.submittedAt,
+    });
+    return attemptId;
   }
 
   const openAttempt1Id = await upsertAttempt(enrollOpen1, c1, exam1Id, 1, {
@@ -1228,138 +1318,97 @@ export async function seedDemo(
     version: 1,
     savedAt: ts(-25 * 60_000 + i * 60_000),
   }));
-  const openC4Grading = buildGradingResult(exam1Snapshot, openC4Answers, 20);
-  const openAttempt4Id = await upsertAttempt(enrollOpen4, c4, exam1Id, 1, {
-    status: "graded",
+  const openAttempt4Id = await seedGradedAttempt(enrollOpen4, c4, exam1Id, 1, {
     questionSnapshot: exam1Snapshot,
     answers: openC4Answers,
-    gradingResult: openC4Grading.gradingResult,
-    score: openC4Grading.totalScore,
-    passed: openC4Grading.passed,
     startedAt: ts(-30 * 60_000),
     deadlineAt: ts(0),
-    submittedAt: ts(-5 * 60_000),
-    gradedAt: ts(-4 * 60_000),
     lastActivityAt: ts(-5 * 60_000),
+    submittedAt: ts(-5 * 60_000),
   });
   ids.attempts["open-c4-graded"] = openAttempt4Id;
 
-  const closedAttempt1Id = await upsertAttempt(enrollClosed1, c1, exam4Id, 1, {
-    status: "graded",
-    questionSnapshot: exam4Snapshot,
-    answers: closedC1Attempt1Answers,
-    gradingResult: closedC1Grading1.gradingResult,
-    score: closedC1Grading1.totalScore,
-    passed: closedC1Grading1.passed,
-    startedAt: ts(-7 * DAY),
-    deadlineAt: ts(-7 * DAY + 90 * 60_000),
-    submittedAt: ts(-7 * DAY + 80 * 60_000),
-    gradedAt: ts(-7 * DAY + 81 * 60_000),
-    lastActivityAt: ts(-7 * DAY + 80 * 60_000),
-  });
+  // closed-c1 attempt order matters: attempt1 must close before attempt2 so
+  // the "highest" score strategy folds the second attempt onto the first.
+  const closedAttempt1Id = await seedGradedAttempt(
+    enrollClosed1,
+    c1,
+    exam4Id,
+    1,
+    {
+      questionSnapshot: exam4Snapshot,
+      answers: closedC1Attempt1Answers,
+      startedAt: ts(-7 * DAY),
+      deadlineAt: ts(-7 * DAY + 90 * 60_000),
+      lastActivityAt: ts(-7 * DAY + 80 * 60_000),
+      submittedAt: ts(-7 * DAY + 80 * 60_000),
+    },
+  );
   ids.attempts["closed-c1-attempt1"] = closedAttempt1Id;
 
-  const closedAttempt2Id = await upsertAttempt(enrollClosed1, c1, exam4Id, 2, {
-    status: "graded",
-    questionSnapshot: exam4Snapshot,
-    answers: closedC1Attempt2Answers,
-    gradingResult: closedC1Grading2.gradingResult,
-    score: closedC1Grading2.totalScore,
-    passed: closedC1Grading2.passed,
-    startedAt: ts(-4 * DAY),
-    deadlineAt: ts(-4 * DAY + 90 * 60_000),
-    submittedAt: ts(-4 * DAY + 85 * 60_000),
-    gradedAt: ts(-4 * DAY + 86 * 60_000),
-    lastActivityAt: ts(-4 * DAY + 85 * 60_000),
-  });
+  const closedAttempt2Id = await seedGradedAttempt(
+    enrollClosed1,
+    c1,
+    exam4Id,
+    2,
+    {
+      questionSnapshot: exam4Snapshot,
+      answers: closedC1Attempt2Answers,
+      startedAt: ts(-4 * DAY),
+      deadlineAt: ts(-4 * DAY + 90 * 60_000),
+      lastActivityAt: ts(-4 * DAY + 85 * 60_000),
+      submittedAt: ts(-4 * DAY + 85 * 60_000),
+    },
+  );
   ids.attempts["closed-c1-attempt2"] = closedAttempt2Id;
 
-  const closedAttemptC2Id = await upsertAttempt(enrollClosed2, c2, exam4Id, 1, {
-    status: "graded",
-    questionSnapshot: exam4Snapshot,
-    answers: closedC2Answers,
-    gradingResult: closedC2Grading.gradingResult,
-    score: closedC2Grading.totalScore,
-    passed: closedC2Grading.passed,
-    startedAt: ts(-7 * DAY + 2 * HOUR),
-    deadlineAt: ts(-7 * DAY + 2 * HOUR + 90 * 60_000),
-    submittedAt: ts(-7 * DAY + 2 * HOUR + 45 * 60_000),
-    gradedAt: ts(-7 * DAY + 2 * HOUR + 46 * 60_000),
-    lastActivityAt: ts(-7 * DAY + 2 * HOUR + 45 * 60_000),
-  });
+  const closedAttemptC2Id = await seedGradedAttempt(
+    enrollClosed2,
+    c2,
+    exam4Id,
+    1,
+    {
+      questionSnapshot: exam4Snapshot,
+      answers: closedC2Answers,
+      startedAt: ts(-7 * DAY + 2 * HOUR),
+      deadlineAt: ts(-7 * DAY + 2 * HOUR + 90 * 60_000),
+      lastActivityAt: ts(-7 * DAY + 2 * HOUR + 45 * 60_000),
+      submittedAt: ts(-7 * DAY + 2 * HOUR + 45 * 60_000),
+    },
+  );
   ids.attempts["closed-c2-graded"] = closedAttemptC2Id;
 
-  const closedAttemptC3Id = await upsertAttempt(enrollClosed3, c3, exam4Id, 1, {
-    status: "graded",
-    questionSnapshot: exam4Snapshot,
-    answers: closedC3Answers,
-    gradingResult: closedC3Grading.gradingResult,
-    score: closedC3Grading.totalScore,
-    passed: closedC3Grading.passed,
-    startedAt: ts(-5 * DAY),
-    deadlineAt: ts(-5 * DAY + 90 * 60_000),
-    submittedAt: ts(-5 * DAY + 70 * 60_000),
-    gradedAt: ts(-5 * DAY + 71 * 60_000),
-    lastActivityAt: ts(-5 * DAY + 70 * 60_000),
-  });
+  const closedAttemptC3Id = await seedGradedAttempt(
+    enrollClosed3,
+    c3,
+    exam4Id,
+    1,
+    {
+      questionSnapshot: exam4Snapshot,
+      answers: closedC3Answers,
+      startedAt: ts(-5 * DAY),
+      deadlineAt: ts(-5 * DAY + 90 * 60_000),
+      lastActivityAt: ts(-5 * DAY + 70 * 60_000),
+      submittedAt: ts(-5 * DAY + 70 * 60_000),
+    },
+  );
   ids.attempts["closed-c3-graded"] = closedAttemptC3Id;
 
-  const closedAttemptC4Id = await upsertAttempt(enrollClosed4, c4, exam4Id, 1, {
-    status: "graded",
-    questionSnapshot: exam4Snapshot,
-    answers: closedC4Answers,
-    gradingResult: closedC4Grading.gradingResult,
-    score: closedC4Grading.totalScore,
-    passed: closedC4Grading.passed,
-    startedAt: ts(-7 * DAY + 4 * HOUR),
-    deadlineAt: ts(-7 * DAY + 4 * HOUR + 90 * 60_000),
-    submittedAt: ts(-7 * DAY + 4 * HOUR + 60 * 60_000),
-    gradedAt: ts(-7 * DAY + 4 * HOUR + 61 * 60_000),
-    lastActivityAt: ts(-7 * DAY + 4 * HOUR + 60 * 60_000),
-  });
+  const closedAttemptC4Id = await seedGradedAttempt(
+    enrollClosed4,
+    c4,
+    exam4Id,
+    1,
+    {
+      questionSnapshot: exam4Snapshot,
+      answers: closedC4Answers,
+      startedAt: ts(-7 * DAY + 4 * HOUR),
+      deadlineAt: ts(-7 * DAY + 4 * HOUR + 90 * 60_000),
+      lastActivityAt: ts(-7 * DAY + 4 * HOUR + 60 * 60_000),
+      submittedAt: ts(-7 * DAY + 4 * HOUR + 60 * 60_000),
+    },
+  );
   ids.attempts["closed-c4-graded"] = closedAttemptC4Id;
-
-  // ── Patch enrollments with finalAttemptId ──────────────────────
-  await upsertEnrollment(exam1Id, c4, {
-    status: "completed",
-    attemptCount: 1,
-    finalScore: openC4Grading.totalScore,
-    finalPassed: openC4Grading.passed,
-    finalAttemptId: openAttempt4Id,
-  });
-
-  const closedC1FinalAttemptId =
-    closedC1Grading2.totalScore >= closedC1Grading1.totalScore
-      ? closedAttempt2Id
-      : closedAttempt1Id;
-  await upsertEnrollment(exam4Id, c1, {
-    status: "completed",
-    attemptCount: 2,
-    finalScore: closedC1Highest,
-    finalPassed: closedC1Highest >= 15,
-    finalAttemptId: closedC1FinalAttemptId,
-  });
-  await upsertEnrollment(exam4Id, c2, {
-    status: "completed",
-    attemptCount: 1,
-    finalScore: closedC2Grading.totalScore,
-    finalPassed: closedC2Grading.passed,
-    finalAttemptId: closedAttemptC2Id,
-  });
-  await upsertEnrollment(exam4Id, c3, {
-    status: "completed",
-    attemptCount: 1,
-    finalScore: closedC3Grading.totalScore,
-    finalPassed: closedC3Grading.passed,
-    finalAttemptId: closedAttemptC3Id,
-  });
-  await upsertEnrollment(exam4Id, c4, {
-    status: "completed",
-    attemptCount: 1,
-    finalScore: closedC4Grading.totalScore,
-    finalPassed: closedC4Grading.passed,
-    finalAttemptId: closedAttemptC4Id,
-  });
 
   return ids;
 }

@@ -477,5 +477,184 @@ describe("attempt routes", () => {
       expect(body.questionResults[0]!.maxScore).toBeGreaterThan(0);
       expect(body.questionResults[0]!.correct).toBe(true);
     });
+    describe("answer-source authority (EXSEM-007/008/009: F8)", () => {
+      /** Saves one candidate answer on the started attempt. */
+      async function saveAnswer(
+        t: IsolatedTestOrg,
+        attemptId: string,
+        answer: string,
+      ) {
+        const res = await ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${attemptId}/answers/${t.questionId}`,
+          payload: {
+            attemptId,
+            questionId: t.questionId,
+            answer,
+            clientSeq: 1,
+            clientSavedAt: new Date().toISOString(),
+            baseVersion: 0,
+          },
+          cookies: { "auth-token": t.candidateToken },
+        });
+        expect(res.statusCode).toBe(200);
+      }
+
+      /** Force-submits (auto-grades) the attempt via the admin operation. */
+      async function forceSubmit(t: IsolatedTestOrg, attemptId: string) {
+        const res = await ctx.app.inject({
+          method: "POST",
+          url: `/api/admin/attempts/${attemptId}/force-submit`,
+          payload: {
+            operationId: crypto.randomUUID(),
+            reason: "export authority fixture",
+          },
+          cookies: { "auth-token": t.adminToken },
+        });
+        expect(res.statusCode).toBe(200);
+      }
+
+      /** Rewrites the mutable draft `answers` column for one question. */
+      async function tamperDraftAnswer(
+        attemptId: string,
+        questionId: string,
+        answer: string,
+      ) {
+        const rows = await ctx.db
+          .select({ answers: schema.examAttempts.answers })
+          .from(schema.examAttempts)
+          .where(eq(schema.examAttempts.id, attemptId));
+        const answers = rows[0]!.answers as {
+          questionId: string;
+          answer: unknown;
+          version: number;
+          savedAt: Date;
+        }[];
+        const next = answers.map((a) =>
+          a.questionId === questionId ? { ...a, answer } : a,
+        );
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ answers: next, updatedAt: new Date() })
+          .where(eq(schema.examAttempts.id, attemptId));
+      }
+
+      it("exports the frozen submitted value after submission when draft differs", async () => {
+        const t = await createIsolatedTestOrg();
+        const { attemptId } = await createStartedAttempt(
+          t,
+          "Export Submitted Authority Exam",
+        );
+        await saveAnswer(t, attemptId, "b");
+        await forceSubmit(t, attemptId);
+        // Competing representations deliberately differ (§6 methodology): the
+        // draft column is rewritten AFTER the freeze so the test proves which
+        // authority the export reads.
+        await tamperDraftAnswer(attemptId, t.questionId, "a");
+
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/attempts/${attemptId}/export`,
+          cookies: { "auth-token": t.adminToken },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json().status).toBe("graded");
+        expect(res.json().questionResults[0]!.candidateAnswer).toBe("b");
+      });
+
+      it("exports the frozen submitted value in CSV after submission", async () => {
+        const t = await createIsolatedTestOrg();
+        const { attemptId } = await createStartedAttempt(
+          t,
+          "Export Submitted Authority CSV Exam",
+        );
+        await saveAnswer(t, attemptId, "b");
+        await forceSubmit(t, attemptId);
+        await tamperDraftAnswer(attemptId, t.questionId, "a");
+
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/attempts/${attemptId}/export/csv`,
+          cookies: { "auth-token": t.adminToken },
+        });
+
+        expect(res.statusCode).toBe(200);
+        // Fixture fields are comma-free, so the data row splits cleanly:
+        // 题号,题型,题目内容,考生答案,标准答案,得分,满分,是否正确
+        const dataRow = res.body.trimEnd().split("\n")[1]!.split(",");
+        expect(dataRow[3]).toBe("b");
+      });
+
+      it("exports draft answers for an in-progress attempt (pre-submit source)", async () => {
+        const t = await createIsolatedTestOrg();
+        const { attemptId } = await createStartedAttempt(
+          t,
+          "Export PreSubmit Exam",
+        );
+        await saveAnswer(t, attemptId, "a");
+
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/attempts/${attemptId}/export`,
+          cookies: { "auth-token": t.adminToken },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json().status).toBe("in_progress");
+        expect(res.json().questionResults[0]!.candidateAnswer).toBe("a");
+      });
+
+      it("uses draft answers only for legacy rows marked by a NULL submissionReason", async () => {
+        const t = await createIsolatedTestOrg();
+        const { attemptId } = await createStartedAttempt(
+          t,
+          "Export Legacy Row Exam",
+        );
+        await saveAnswer(t, attemptId, "b");
+        await forceSubmit(t, attemptId);
+        // Fabricate the pre-freeze historical shape: submitted_answers is NULL
+        // AND submissionReason is NULL (the adopted legacy marker).
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ submittedAnswers: null, submissionReason: null })
+          .where(eq(schema.examAttempts.id, attemptId));
+
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/attempts/${attemptId}/export`,
+          cookies: { "auth-token": t.adminToken },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json().questionResults[0]!.candidateAnswer).toBe("b");
+      });
+
+      it("fails closed when a submitted row lost its frozen answers without the legacy marker", async () => {
+        const t = await createIsolatedTestOrg();
+        const { attemptId } = await createStartedAttempt(
+          t,
+          "Export Corruption Exam",
+        );
+        await saveAnswer(t, attemptId, "b");
+        await forceSubmit(t, attemptId);
+        // Current-data corruption shape: submitted_answers is NULL but the row
+        // carries a current submissionReason. NULL alone must NOT be treated as
+        // a legitimate historical row (F8).
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ submittedAnswers: null })
+          .where(eq(schema.examAttempts.id, attemptId));
+
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/attempts/${attemptId}/export`,
+          cookies: { "auth-token": t.adminToken },
+        });
+
+        expect(res.statusCode).toBe(500);
+        expect(res.json().error.code).toBe("INTERNAL_ERROR");
+      });
+    });
   });
 });

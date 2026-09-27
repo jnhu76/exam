@@ -122,7 +122,6 @@ export function toCandidateAttemptResponse(
         contentDocument: o.contentDocument ?? null,
       })),
       score: q.score,
-      gradingRule: q.gradingRule,
       order: q.order,
     })),
   };

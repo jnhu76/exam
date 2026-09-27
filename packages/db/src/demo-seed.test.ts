@@ -3,7 +3,11 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { getIsolatedTestDb } from "./testDb.js";
-import { seedDemo } from "./demo-seed.js";
+import {
+  seedDemo,
+  DEMO_GRADED_ATTEMPT_KEYS,
+  type DemoSeedGrader,
+} from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
 import { schema } from "./schema/pg.js";
 import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
@@ -20,6 +24,38 @@ const precomputedHash = async (password: string): Promise<string> => {
   return password === "admin123" ? ADMIN_PW_HASH : CAND_PW_HASH;
 };
 
+/**
+ * Recording grader stub for the seed-machinery tests in this package. The
+ * graded-attempt SEMANTIC conformance (durable workset, frozen answers,
+ * projections) lives in @exam/api's demo-seed-grading tests, where the real
+ * production submit+grade composition is importable; here the stub only
+ * records the handoff contract.
+ */
+function makeRecordingGrader(): {
+  grader: DemoSeedGrader;
+  calls: Array<{
+    attemptId: string;
+    candidateProfileId: string;
+    organizationId: string;
+    now: Date;
+  }>;
+} {
+  const calls: Array<{
+    attemptId: string;
+    candidateProfileId: string;
+    organizationId: string;
+    now: Date;
+  }> = [];
+  return {
+    calls,
+    grader: {
+      async submitAndGrade(input) {
+        calls.push(input);
+      },
+    },
+  };
+}
+
 describe("demo seed", { timeout: 30_000 }, () => {
   let db: Database;
   let cleanup: () => Promise<void>;
@@ -34,21 +70,79 @@ describe("demo seed", { timeout: 30_000 }, () => {
     await cleanup();
   }, 30_000);
 
-  it("seeds and verifies without errors", async () => {
-    const ids = await seedDemo(db, precomputedHash);
+  it("verifyDemoSeed FAILS a recording-grader seed: handoff without real grading is not valid demo state", async () => {
+    // Negative witness for verifier completeness (EXSEM-020): the recording
+    // grader proves the seed REQUESTED grading (6 handoffs) but no terminal
+    // facts exist, so the seeded database is NOT valid graded demo state.
+    // verifyDemoSeed must detect exactly that — it may not pass vacuously on
+    // zero graded rows.
+    const { grader } = makeRecordingGrader();
+    const ids = await seedDemo(db, precomputedHash, grader);
     const errors = await verifyDemoSeed(db, ids);
-    expect(errors).toEqual([]);
+    expect(errors.length).toBeGreaterThan(0);
+    for (const key of DEMO_GRADED_ATTEMPT_KEYS) {
+      expect(
+        errors.some((e) => e.includes(`'${key}'`)),
+        `verifier must report the ungraded fixture '${key}'; got: ${JSON.stringify(errors)}`,
+      ).toBe(true);
+    }
   });
 
-  it("is idempotent on second run", async () => {
-    await seedDemo(db, precomputedHash);
-    const ids = await seedDemo(db, precomputedHash);
-    const errors = await verifyDemoSeed(db, ids);
-    expect(errors).toEqual([]);
+  it("is idempotent on second run (identical fixture identity)", async () => {
+    // Mechanical idempotency of the seed's upsert machinery — same fixture
+    // identity on re-run. Semantic grading-truth idempotency (frozen workset
+    // preserved through a reseed) is proven with the real grader in
+    // @exam/api's demo-seed-grading tests.
+    const { grader } = makeRecordingGrader();
+    const firstIds = await seedDemo(db, precomputedHash, grader);
+    const secondIds = await seedDemo(db, precomputedHash, grader);
+    expect(secondIds.attempts).toEqual(firstIds.attempts);
+    expect(secondIds.exams).toEqual(firstIds.exams);
+  });
+
+  it("fails closed when a nullish grader slips past the type contract (EXSEM-020)", async () => {
+    // The TS contract makes the grader REQUIRED; this pins the runtime guard
+    // that still protects non-TS callers (the tsx seed entrypoints).
+    const grader = undefined as unknown as DemoSeedGrader;
+    await expect(seedDemo(db, precomputedHash, grader)).rejects.toThrow(
+      /DemoSeedGrader.*EXSEM-020|EXSEM-020.*DemoSeedGrader/s,
+    );
+  });
+
+  it("hands every graded attempt to the grader in pre-submit state, deadlines respected", async () => {
+    const { grader, calls } = makeRecordingGrader();
+    const ids = await seedDemo(db, precomputedHash, grader);
+
+    // Six graded attempt specs, closed-c1 attempt1 before attempt2 so the
+    // "highest" strategy folds in order.
+    expect(calls).toHaveLength(6);
+    const attemptOrder = calls.map((c) => c.attemptId);
+    expect(
+      attemptOrder.indexOf(ids.attempts["closed-c1-attempt1"]!),
+    ).toBeLessThan(attemptOrder.indexOf(ids.attempts["closed-c1-attempt2"]!));
+
+    for (const call of calls) {
+      expect(call.organizationId).toBe(ids.orgId);
+      const rows = await db
+        .select()
+        .from(schema.examAttempts)
+        .where(eq(schema.examAttempts.id, call.attemptId));
+      const attempt = rows[0]!;
+      expect(attempt.candidateId).toBe(call.candidateProfileId);
+      // Pre-submit handoff: the seed fabricated the draft state only — no
+      // frozen answers, no terminal projection, and the fabricated submit
+      // instant precedes the attempt deadline.
+      expect(attempt.status).toBe("in_progress");
+      expect(attempt.submittedAnswers).toBeNull();
+      expect(attempt.gradingResult).toBeNull();
+      expect(attempt.score).toBeNull();
+      expect(call.now.getTime()).toBeLessThan(attempt.deadlineAt!.getTime());
+    }
   });
 
   it("keeps question idempotency scoped by course", async () => {
-    const ids = await seedDemo(db, precomputedHash);
+    const { grader } = makeRecordingGrader();
+    const ids = await seedDemo(db, precomputedHash, grader);
     const skillCourseId = ids.courses["SKILL-201"]!;
 
     await db.insert(schema.questions).values({
@@ -72,7 +166,7 @@ describe("demo seed", { timeout: 30_000 }, () => {
       updatedAt: new Date(),
     });
 
-    const reseededIds = await seedDemo(db, precomputedHash);
+    const reseededIds = await seedDemo(db, precomputedHash, grader);
     const safetyCourseId = reseededIds.courses["SAFETY-101"]!;
     const safetyQuestions = await db
       .select()
@@ -92,7 +186,8 @@ describe("demo seed", { timeout: 30_000 }, () => {
   });
 
   it("creates all expected users with real argon2 hashes", async () => {
-    await seedDemo(db, hashPassword);
+    const { grader } = makeRecordingGrader();
+    await seedDemo(db, hashPassword, grader);
     const demoOrg = await db
       .select()
       .from(schema.organizations)
@@ -111,40 +206,5 @@ describe("demo seed", { timeout: 30_000 }, () => {
 
     const admin = users.find((u) => u.username === "admin")!;
     expect(await verifyPassword("admin123", admin.passwordHash)).toBe(true);
-  });
-
-  it("creates graded attempts with grading results", async () => {
-    const ids = await seedDemo(db, precomputedHash);
-    const allAttempts = await db
-      .select()
-      .from(schema.examAttempts)
-      .where(eq(schema.examAttempts.organizationId, ids.orgId));
-    const gradedAttempts = allAttempts.filter((a) => a.status === "graded");
-    expect(gradedAttempts.length).toBeGreaterThanOrEqual(5);
-    for (const attempt of gradedAttempts) {
-      expect(attempt.score).toBeDefined();
-      expect(attempt.gradingResult).toBeDefined();
-      const results = attempt.gradingResult as Array<unknown>;
-      expect(results.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("regression: keeps non-empty gradingResult on every graded attempt across a double seedDemo run", async () => {
-    const firstIds = await seedDemo(db, precomputedHash);
-    await seedDemo(db, precomputedHash);
-
-    const attempts = await db
-      .select()
-      .from(schema.examAttempts)
-      .where(eq(schema.examAttempts.organizationId, firstIds.orgId));
-    const gradedAttempts = attempts.filter((a) => a.status === "graded");
-    expect(gradedAttempts.length).toBeGreaterThanOrEqual(5);
-    for (const attempt of gradedAttempts) {
-      expect(Array.isArray(attempt.gradingResult)).toBe(true);
-      expect((attempt.gradingResult as Array<unknown>).length).toBeGreaterThan(
-        0,
-      );
-      expect(attempt.score).toBeDefined();
-    }
   });
 });

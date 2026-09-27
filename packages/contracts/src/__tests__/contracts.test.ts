@@ -225,6 +225,16 @@ describe("exam contracts", () => {
     expect(result.questionSelectionMode).toBe("manual");
   });
 
+  // EXSEM-019: `random` is reserved vocabulary — the create contract must
+  // not accept it as a selectable mode.
+  it("CreateExamRequestSchema rejects random question selection", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      questionSelectionMode: "random",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("CreateExamRequestSchema rejects values outside the timing-mode enum", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,

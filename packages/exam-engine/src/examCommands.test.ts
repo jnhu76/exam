@@ -301,6 +301,15 @@ describe("examCommands", () => {
       );
     });
 
+    // EXSEM-019: `random` selection is reserved vocabulary — readable in
+    // storage/enum terms but never publishable (the gate requires manual).
+    it("rejects publish of a random-selection draft (latent mode)", async () => {
+      const repo = makeRepo(makeExam({ questionSelectionMode: "random" }));
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /random|manual/i,
+      );
+    });
+
     it("captures questionSnapshot with real data", async () => {
       const repo = makeRepo(makeExam());
       const result = await publishExam(repo, "exam-1", testQuestions);

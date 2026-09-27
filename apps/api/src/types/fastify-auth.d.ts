@@ -135,7 +135,8 @@ declare module "fastify" {
     ) => AuthzPreHandler;
     /**
      * Score-route capability gate (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
-     * Capability + ownership arbitration for `GET /scores/attempts/:attemptId`.
+     * Capability + ownership arbitration for the attempt-result surfaces
+     * (`GET /scores/attempts/:attemptId` and `GET /admin/attempts/:attemptId/result`).
      * Authorizes iff the principal's preset grants ScoreAllView (any same-org
      * attempt) OR ScoreOwnView + the attempt's owner is the actor. Own/all is
      * resolved from the preset + resolved ownership — never a role-name branch.

@@ -46,10 +46,6 @@ describe("QuestionRenderer", () => {
           score: 10,
           order: 0,
           originalQuestionId: "q1",
-          gradingRule: {
-            multiSelectScoring: "all_correct_full",
-            fillBlankMatchMode: "exact",
-          },
         }}
         answer={undefined}
         onChange={() => {}}

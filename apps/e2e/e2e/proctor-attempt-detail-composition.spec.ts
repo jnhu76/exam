@@ -9,7 +9,7 @@
  *     section rendered — the legitimate base page works);
  *   - the privileged affordances (export CSV/JSON, flag misconduct) never
  *     render for a caller whose capability set does not own them;
- *   - the privileged requests (GET /api/scores/attempts/:id — a guaranteed
+ *   - the privileged requests (the attempt-result surfaces — a guaranteed
  *     403 for the Proctor preset — plus export/misconduct) are never EMITTED.
  *
  * The network-level assertion is the point: DOM visibility alone cannot prove
@@ -40,7 +40,7 @@ const PROCTOR_LANDING = /\/admin\/proctor(?:$|[/?#])/;
 function isPrivilegedAttemptDetailRequest(url: string): boolean {
   return (
     url.includes("/api/scores/attempts/") ||
-    /\/api\/admin\/attempts\/[^/]+\/export/.test(url) ||
+    /\/api\/admin\/attempts\/[^/]+\/(?:result|export)/.test(url) ||
     url.includes("/misconduct")
   );
 }

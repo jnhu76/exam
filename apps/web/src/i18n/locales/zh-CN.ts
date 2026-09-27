@@ -361,6 +361,7 @@ const zhCN = {
       resources: {
         course: "课程",
         examProfile: "考试策略模板",
+        question: "题目",
       },
     },
   },

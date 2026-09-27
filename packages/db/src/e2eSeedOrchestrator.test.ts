@@ -10,6 +10,15 @@ import type { DemoIds } from "./demo-seed.js";
 const fakeDb = {} as Database;
 const fakeHash = async (password: string) => `hashed-${password}`;
 
+/**
+ * Fake grader for workflow-machinery tests: the orchestrator must thread it
+ * into seedDemoFn (the grader → demo-seed handoff), but these tests inject
+ * the whole workflow, so it never performs real grading.
+ */
+const fakeGrader = {
+  submitAndGrade: async () => {},
+};
+
 const FAKE_IDS: DemoIds = {
   orgId: "org1",
   settingsId: "s1",
@@ -67,6 +76,7 @@ describe("e2eSeedOrchestrator", () => {
     const { logger, messages } = createCapturingLogger();
 
     await runE2eSeed(fakeDb, fakeHash, {
+      grader: fakeGrader,
       migrateFn: steps.migrateFn,
       logger,
       workflow: {
@@ -80,11 +90,15 @@ describe("e2eSeedOrchestrator", () => {
     expect(messages).toContain("Running migrations...\n");
     // Demo ids flow from seedDemo into verifyDemoSeed.
     expect(steps.verifyDemoSeedFn).toHaveBeenCalledWith(fakeDb, FAKE_IDS);
+    // The required grader option is threaded into the demo-seed handoff
+    // (EXSEM-020): the orchestrator cannot invoke seedDemo without it.
+    expect(steps.seedDemoFn).toHaveBeenCalledWith(fakeDb, fakeHash, fakeGrader);
 
     order.length = 0;
     const { logger: skipLogger, messages: skipMessages } =
       createCapturingLogger();
     await runE2eSeed(fakeDb, fakeHash, {
+      grader: fakeGrader,
       skipMigrate: true,
       migrateFn: steps.migrateFn,
       logger: skipLogger,
@@ -104,6 +118,7 @@ describe("e2eSeedOrchestrator", () => {
     const { logger, messages } = createCapturingLogger();
 
     await runE2eSeed(fakeDb, fakeHash, {
+      grader: fakeGrader,
       reset: true,
       resetFn: steps.resetFn,
       migrateFn: steps.migrateFn,
@@ -120,6 +135,7 @@ describe("e2eSeedOrchestrator", () => {
 
     const untouched = makeSteps([]);
     await runE2eSeed(fakeDb, fakeHash, {
+      grader: fakeGrader,
       skipMigrate: true,
       resetFn: untouched.resetFn,
       workflow: {
@@ -137,6 +153,7 @@ describe("e2eSeedOrchestrator", () => {
     resetSteps.resetFn.mockRejectedValue(new Error("reset refused"));
     await expect(
       runE2eSeed(fakeDb, fakeHash, {
+        grader: fakeGrader,
         reset: true,
         resetFn: resetSteps.resetFn,
         migrateFn: resetSteps.migrateFn,
@@ -155,6 +172,7 @@ describe("e2eSeedOrchestrator", () => {
     seedSteps.seedFn.mockRejectedValue(new Error("seed boom"));
     await expect(
       runE2eSeed(fakeDb, fakeHash, {
+        grader: fakeGrader,
         skipMigrate: true,
         workflow: {
           seedFn: seedSteps.seedFn,
@@ -171,6 +189,7 @@ describe("e2eSeedOrchestrator", () => {
     demoSteps.seedDemoFn.mockRejectedValue(new Error("demo boom"));
     await expect(
       runE2eSeed(fakeDb, fakeHash, {
+        grader: fakeGrader,
         skipMigrate: true,
         workflow: {
           seedFn: demoSteps.seedFn,
@@ -189,6 +208,7 @@ describe("e2eSeedOrchestrator", () => {
       "missing exam",
     ]);
     const failed = await runE2eSeed(fakeDb, fakeHash, {
+      grader: fakeGrader,
       skipMigrate: true,
       workflow: {
         seedFn: failing.seedFn,
@@ -201,6 +221,7 @@ describe("e2eSeedOrchestrator", () => {
 
     const clean = makeSteps([]);
     const passed = await runE2eSeed(fakeDb, fakeHash, {
+      grader: fakeGrader,
       skipMigrate: true,
       workflow: {
         seedFn: clean.seedFn,

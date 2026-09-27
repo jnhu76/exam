@@ -697,16 +697,29 @@ describe("P1 #324: candidate result visibility projection", () => {
 
   // ── Admin all-view unaffected ────────────────────────────────────
 
-  it("admin all-view — sees full result even when manual + unpublished", async () => {
+  it("admin all-view — full result on the admin surface even when manual + unpublished; candidate surface stays gated", async () => {
+    // EXSEM-017 contract split: the authorized all-view representation lives
+    // on GET /admin/attempts/:id/result; the candidate URL always resolves
+    // through the publication gate, even for an admin caller.
     const { attemptId } = await createGradedAttemptForMode("manual");
-    const response = await ctx.app.inject({
+    const adminResponse = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/result`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(adminResponse.statusCode).toBe(200);
+    const adminBody = adminResponse.json() as Record<string, unknown>;
+    expect(adminBody.showResultImmediately).toBe(true);
+    expect(adminBody.totalScore).toBe(10);
+
+    const candResponse = await ctx.app.inject({
       method: "GET",
       url: `/api/scores/attempts/${attemptId}`,
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(response.statusCode).toBe(200);
-    const body = response.json() as Record<string, unknown>;
-    expect(body.showResultImmediately).toBe(true);
-    expect(body.totalScore).toBe(10);
+    expect(candResponse.statusCode).toBe(200);
+    const candBody = candResponse.json() as Record<string, unknown>;
+    expect(candBody.showResultImmediately).toBe(false);
+    expect(candBody).not.toHaveProperty("totalScore");
   });
 });

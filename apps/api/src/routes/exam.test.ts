@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
 import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
@@ -7,6 +8,7 @@ import attemptRoutes from "./attempts.js";
 import scoreRoutes from "./scores.js";
 import { exportRoutes } from "./export.js";
 import auditRoutes from "./audit.js";
+import { schema } from "@exam/db/src/schema/pg.js";
 import {
   buildTestApp,
   uniquePrefix,
@@ -389,6 +391,243 @@ describe("exam routes", () => {
     ]);
     // T6: the compatibility message remains required on the wire.
     expect(body.error.details.fields[0].message.length).toBeGreaterThan(0);
+  });
+
+  describe("dangling draft question references (EXSEM-004/OBS-03)", () => {
+    /** Creates a draft exam referencing the given questions. */
+    async function createDraftExam(
+      title: string,
+      questionIds: string[],
+    ): Promise<string> {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title,
+          courseId,
+          durationMinutes: 60,
+          openAt: new Date().toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 60,
+          totalScore: 100,
+          questionIds,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(201);
+      return res.json().id as string;
+    }
+
+    /** Creates a true_false question in the shared course, returning its id. */
+    async function createCourseQuestion(): Promise<string> {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/questions",
+        payload: {
+          courseId,
+          type: "true_false",
+          content: "Dangling-ref question.",
+          standardAnswer: true,
+          score: 100,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(201);
+      return res.json().id as string;
+    }
+
+    it("PATCH reports a deleted question reference as missing (RESOURCE_NOT_FOUND)", async () => {
+      const deletedQuestionId = await createCourseQuestion();
+      // Start from a different reference so the PATCH is a real mutation —
+      // the same-value draft guard skips validation when nothing changes.
+      const examId = await createDraftExam("Dangling Patch Exam", [questionId]);
+      const deleteRes = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/questions/${deletedQuestionId}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(deleteRes.statusCode).toBe(204);
+
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/exams/${examId}`,
+        payload: { questionIds: [deletedQuestionId] },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      const fields = res.json().error.details.fields;
+      expect(fields).toEqual([
+        expect.objectContaining({
+          field: "questionIds",
+          code: "RESOURCE_NOT_FOUND",
+          params: { resource: "question" },
+        }),
+      ]);
+    });
+
+    it("PATCH reports an existing wrong-course question as QUESTION_COURSE_MISMATCH", async () => {
+      const otherCourseRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/courses",
+        payload: {
+          name: "Dangling Other Course",
+          code: `EC-DANGLE-${uniquePrefix()}`,
+          description: "",
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const foreignRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/questions",
+        payload: {
+          courseId: otherCourseRes.json().id,
+          type: "true_false",
+          content: "Wrong-course question.",
+          standardAnswer: true,
+          score: 100,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId = await createDraftExam("Wrong Course Patch Exam", [
+        questionId,
+      ]);
+
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/exams/${examId}`,
+        payload: { questionIds: [foreignRes.json().id] },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      const fields = res.json().error.details.fields;
+      expect(fields).toEqual([
+        expect.objectContaining({
+          field: "questionIds",
+          code: "QUESTION_COURSE_MISMATCH",
+        }),
+      ]);
+    });
+
+    it("PATCH reports a cross-org question id as missing without existence leak", async () => {
+      // A real question row in ANOTHER organization: the org-scoped lookup
+      // returns null, so it must resolve identically to a hard-deleted
+      // reference (no cross-org enumeration).
+      const otherOrgId = randomUUID();
+      const otherCourseId = randomUUID();
+      const otherQuestionId = randomUUID();
+      const now = new Date();
+      await ctx.db.insert(schema.organizations).values({
+        id: otherOrgId,
+        name: "Dangling Foreign Org",
+        displayName: "Dangling Foreign Org",
+        slug: `dangling-${uniquePrefix()}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.courses).values({
+        id: otherCourseId,
+        organizationId: otherOrgId,
+        name: "Foreign Course",
+        code: `FC-${uniquePrefix()}`,
+        description: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.questions).values({
+        id: otherQuestionId,
+        organizationId: otherOrgId,
+        courseId: otherCourseId,
+        type: "true_false",
+        content: "Cross-org question.",
+        options: [],
+        standardAnswer: true,
+        attachments: [],
+        score: 100,
+        difficulty: 1,
+        tags: [],
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const examId = await createDraftExam("Cross Org Patch Exam", [
+        questionId,
+      ]);
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/exams/${examId}`,
+        payload: { questionIds: [otherQuestionId] },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      const fields = res.json().error.details.fields;
+      expect(fields).toEqual([
+        expect.objectContaining({
+          field: "questionIds",
+          code: "RESOURCE_NOT_FOUND",
+          params: { resource: "question" },
+        }),
+      ]);
+    });
+
+    it("POST reports a deleted question reference as missing, not wrong-course", async () => {
+      const deletedQuestionId = await createCourseQuestion();
+      const deleteRes = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/questions/${deletedQuestionId}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(deleteRes.statusCode).toBe(204);
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Deleted Question Create Exam",
+          courseId,
+          durationMinutes: 60,
+          openAt: new Date().toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 60,
+          totalScore: 100,
+          questionIds: [deletedQuestionId],
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      const fields = res.json().error.details.fields;
+      expect(fields).toEqual([
+        expect.objectContaining({
+          field: "questionIds",
+          code: "RESOURCE_NOT_FOUND",
+          params: { resource: "question" },
+        }),
+      ]);
+    });
+
+    it("publishing a draft with a dangling question reference remains fail-closed", async () => {
+      const deletedQuestionId = await createCourseQuestion();
+      const examId = await createDraftExam("Dangling Publish Exam", [
+        deletedQuestionId,
+      ]);
+      const deleteRes = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/questions/${deletedQuestionId}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(deleteRes.statusCode).toBe(204);
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    });
   });
 
   it("POST /api/exams emits machine field semantics for an unknown profile (C2 T8)", async () => {
@@ -1084,6 +1323,53 @@ describe("exam unpublish / extend / PATCH-clarify (ADR-005 Slice 2)", () => {
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+  });
+
+  // F11d (EXSEM-003 freeze): title and every non-schedule authoring field stay
+  // immutable on published/open exams through the actual write API — only
+  // draft authoring may change them.
+  it("PATCH rejects a title edit on a reconciled-open exam -> 409", async () => {
+    const examId = await createOpenExam("PATCH Open Title");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { title: "Open Renamed" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+  });
+
+  it("PATCH rejects a description edit on a published exam -> 409", async () => {
+    const examId = await createPublishedExam("PATCH Desc");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { description: "changed" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+  });
+
+  it("PATCH rejects a questionIds edit on a published exam -> 409", async () => {
+    const examId = await createPublishedExam("PATCH QIds");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { questionIds: [questionId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+    // The frozen publication snapshot is untouched by the rejected edit.
+    const detail = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().status).toBe("published");
   });
 
   it("PATCH draft with empty body returns 200 without mutation or audit", async () => {

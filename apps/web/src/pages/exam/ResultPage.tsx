@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { CircleCheck, CircleX } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { useNavigate, useParams } from "react-router";
-import type { AttemptResultResponse } from "@exam/contracts";
+import type { CandidateAttemptResultResponse } from "@exam/contracts";
 import { isContentDocumentV1 } from "@exam/domain";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
@@ -92,7 +92,9 @@ export function ResultPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [result, setResult] = useState<AttemptResultResponse | null>(null);
+  const [result, setResult] = useState<CandidateAttemptResultResponse | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   /** Fetches the attempt result from the scores API. */
@@ -100,8 +102,10 @@ export function ResultPage() {
     if (!attemptId) return;
     setError(null);
     try {
+      // Candidate-safe result contract (EXSEM-017): the DTO structurally
+      // cannot carry standardAnswer/rubric/gradingRule.
       setResult(
-        await api.get<AttemptResultResponse>(
+        await api.get<CandidateAttemptResultResponse>(
           `/api/scores/attempts/${attemptId}`,
         ),
       );
@@ -188,12 +192,11 @@ export function ResultPage() {
               </TableHeader>
               <TableBody>
                 {result.questionResults.map((question) => {
+                  // Candidate result contract (EXSEM-017): the DTO never
+                  // carries standardAnswer. Objective questions always render
+                  // the hidden marker; manual questions render the manual
+                  // marker (manualGraded is computed server-side).
                   const isManual = question.manualGraded === true;
-                  // Candidate DTO strips standardAnswer server-side, so an
-                  // objective question whose answer is absent was hidden, not
-                  // manually graded.
-                  const answerHidden =
-                    !isManual && question.standardAnswer == null;
                   return (
                     <TableRow key={question.questionId}>
                       <DataTableCell role="number">
@@ -250,16 +253,10 @@ export function ResultPage() {
                           <span className="type-secondary">
                             {t("candidateResult.answer.manual")}
                           </span>
-                        ) : answerHidden ? (
+                        ) : (
                           <span className="type-secondary">
                             {t("candidateResult.answer.hidden")}
                           </span>
-                        ) : (
-                          <AnswerText
-                            answer={question.standardAnswer}
-                            truncate={question.type === "fill_blank"}
-                            t={t as (key: string) => string}
-                          />
                         )}
                       </DataTableCell>
                       <DataTableCell role="score">

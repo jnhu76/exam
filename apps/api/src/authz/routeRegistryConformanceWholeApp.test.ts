@@ -369,7 +369,7 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 147 primary routes (126 protected + 21 non-protected)", () => {
+  it("the full composition reconciles to 148 primary routes (127 protected + 21 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
@@ -384,11 +384,11 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
     expect(
       protectedCount,
       "protected (capability/ownership-gated) routes",
-    ).toBe(126);
+    ).toBe(127);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
       21,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(147);
+    expect(capturedRoutes.length, "total primary routes").toBe(148);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

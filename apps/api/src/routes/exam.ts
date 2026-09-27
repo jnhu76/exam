@@ -583,6 +583,26 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const questionChecks = await Promise.all(
         data.questionIds.map((id) => questionRepo.findById(ctx, id)),
       );
+      // EXSEM-004/OBS-03: distinguish a missing referenced question (deleted,
+      // or cross-org and therefore invisible to the org-scoped lookup) from
+      // an existing question that belongs to another course.
+      if (questionChecks.some((q) => q == null)) {
+        return reply.code(400).send(
+          buildErrorResponse(request.id, "VALIDATION_ERROR", {
+            fields: [
+              {
+                field: "questionIds",
+                code: "RESOURCE_NOT_FOUND",
+                // Machine params per message contract D0.4/D0.7 (same shape
+                // as the course/examProfile references above).
+                params: { resource: "question" },
+                // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
+                message: "题目不存在",
+              },
+            ],
+          }),
+        );
+      }
       if (questionChecks.some((q) => q?.courseId !== data.courseId)) {
         return reply.code(400).send(
           buildErrorResponse(request.id, "VALIDATION_ERROR", {
@@ -964,9 +984,38 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                 createQuestionRepo(tx).findById(ctx, questionId),
               ),
             );
-            if (questionChecks.some((q) => q?.courseId !== exam.courseId)) {
+            // EXSEM-004/OBS-03: a draft may legitimately reference a
+            // since-deleted question (hard delete leaves a dangling id), and
+            // that must be distinguishable from an existing wrong-course
+            // question. The org-scoped lookup already collapses cross-org ids
+            // to null, so missing-reference reporting leaks no cross-org
+            // existence. Deletion is NOT blocked and the reference is NOT
+            // silently repaired; publish stays fail-closed on the same null.
+            if (questionChecks.some((q) => q == null)) {
+              throw new ValidationError("题目不存在", {
+                fields: [
+                  {
+                    field: "questionIds",
+                    code: "RESOURCE_NOT_FOUND",
+                    params: { resource: "question" },
+                    // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
+                    message: "题目不存在",
+                  },
+                ],
+              });
+            }
+            if (questionChecks.some((q) => q!.courseId !== exam.courseId)) {
               // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
-              throw new ValidationError("题目不属于所选课程");
+              throw new ValidationError("题目不属于所选课程", {
+                fields: [
+                  {
+                    field: "questionIds",
+                    code: "QUESTION_COURSE_MISMATCH",
+                    // i18n-copy-allow: wire-compat — non-authoritative field compatibility message on the wire; field code+params are the contract
+                    message: "题目不属于所选课程",
+                  },
+                ],
+              });
             }
           }
 

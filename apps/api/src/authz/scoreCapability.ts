@@ -1,9 +1,12 @@
 /**
  * Score route capability preHandler (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
  *
- * Resource-aware authorization for `GET /scores/attempts/:attemptId`. This is
- * the capability-driven replacement for the legacy `requireRole(["Candidate",
- * "Admin"])` gate, implementing ADR §scope table L444 + §L619-620:
+ * Resource-aware authorization for the attempt-result surfaces sharing this
+ * arbitration — `GET /scores/attempts/:attemptId` (candidate projection) and
+ * `GET /admin/attempts/:attemptId/result` (authorized all-view projection).
+ * This is the capability-driven replacement for the legacy
+ * `requireRole(["Candidate", "Admin"])` gate, implementing ADR §scope table
+ * L444 + §L619-620:
  *
  *   score.own.view OR score.all.view  @  own_score / attempt scope
  *

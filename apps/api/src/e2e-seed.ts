@@ -33,6 +33,7 @@ import {
   buildE2eSeedOutput,
 } from "@exam/db/src/e2eSeedOrchestrator.js";
 import { hashPassword } from "@exam/auth/src/password.js";
+import { createDemoSeedGrader } from "./demo-seed-grader.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
 
@@ -50,6 +51,10 @@ try {
     migrateFn: async (db) => {
       await migratePostgres(db);
     },
+    // Graded demo attempts are closed through the production submit+grade
+    // composition (EXSEM-020) — the orchestrator requires it: the composition
+    // lives here (API layer) because `submitAndGradeAttempt` does.
+    grader: createDemoSeedGrader(conn.db),
   });
 
   if (!result.ok) {
