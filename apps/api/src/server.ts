@@ -27,7 +27,7 @@ import {
   getRuntimeConfig,
   resolveTrustProxyOption,
 } from "./config/runtimeConfig.js";
-import { REDACT_CONFIG } from "./lib/logRedaction.js";
+import { REDACT_CONFIG, serializeErrorForLog } from "./lib/logRedaction.js";
 
 loadRootEnv();
 
@@ -104,7 +104,11 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
  */
 async function main() {
   const app = Fastify({
-    logger: { level: "info", redact: REDACT_CONFIG },
+    logger: {
+      level: "info",
+      redact: REDACT_CONFIG,
+      serializers: { err: serializeErrorForLog },
+    },
     // #546: the ONLY place client-IP trust is decided. Empty TRUSTED_PROXY_CIDRS
     // keeps request.ip = socket peer (DIRECT_LAN); a non-empty list enables the
     // bounded trusted-proxy walk. The limiter key and audit ipAddress both read
