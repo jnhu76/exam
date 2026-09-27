@@ -131,13 +131,14 @@ function createSystemContext(organizationId: string): RequestContext {
  * Concurrency model (proven for the `extendExam(closeAt) || Scanner` race):
  *
  * 1. `executeInTransaction` runs at REPEATABLE READ with 40001/40P01 retry.
- * 2. Lock `Attempt FOR UPDATE` first.
- * 3. Lock `Exam FOR UPDATE` AFTER the attempt lock — lock order is
- *    `Attempt → Exam`. This is consistent with the operator time grant engine
- *    (which locks Attempt then reads Exam under the EA seam) and inverts no
- *    existing path (admin exam transitions lock Exam only; `extendExam` locks
- *    Exam only). No
- *    `Exam → Attempt` path exists, so no deadlock inversion is introduced.
+ * 2. `lockEnrollmentAndAttempt` locks `Enrollment FOR UPDATE` first, then
+ *    `Attempt FOR UPDATE` — the EA-seam protocol shared with the operator
+ *    time grant engine.
+ * 3. Lock `Exam FOR UPDATE` AFTER both — scanner-local lock order is
+ *    `Enrollment → Attempt → Exam` (see the audited ordering note inside the
+ *    function). Admin exam transitions lock Exam only and `extendExam` locks
+ *    Exam only, so no `Exam → Attempt` path exists and no deadlock inversion
+ *    is introduced.
  * 4. The `Exam FOR UPDATE` is the SERIALIZATION POINT vs `extendExam`
  *    (which takes `Exam FOR UPDATE` in `executeAdminExamTransition`):
  *    - if the scanner's Exam lock acquires before `extendExam` commits, the

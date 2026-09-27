@@ -76,9 +76,10 @@ export interface GradeQuestionResult {
  *
  * @throws {NotFoundError} attempt or its grading entry does not exist.
  * @throws {PermissionDeniedError} the entry is `grading_mode = auto`
- *   (nothing to manually grade). This subsumes the historical `auto_graded`
- *   attempt rejection: a fully-auto attempt has no manual entries at all, so
- *   the lookup itself misses or returns an auto entry.
+ *   (nothing to manually grade) — reachable only for mixed attempts
+ *   (overall `pending_manual`, requested question auto). A fully-auto
+ *   attempt never reaches the lookup: the `gradingStatus` lifecycle guard
+ *   rejects it first with `InvalidStateTransitionError`.
  * @throws {InvalidStateTransitionError} the attempt is not in the
  *   `submitted + pending_manual` lifecycle, or the entry is already
  *   `completed_manual` (manual work has already been completed for this

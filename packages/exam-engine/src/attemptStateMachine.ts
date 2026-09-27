@@ -23,9 +23,12 @@ export interface TransitionFail {
 /** Discriminated union of transition outcomes: success or failure. */
 export type TransitionResult = TransitionOk | TransitionFail;
 
-/** Optional guards evaluated before a transition is applied (e.g., deadline check). */
+/**
+ * Reserved guard seam, currently unevaluated: `transition` is a pure table
+ * lookup and takes no guards. Deadline authority lives in the answer
+ * protocol (`answerProtocol.ts`) and deadline reconciliation, not here.
+ */
 export interface TransitionGuards {
-  // Null = no deadline (#291 untimed/deadline attempts) — guard is skipped.
   deadlineAt?: Date | null;
   now?: Date;
 }

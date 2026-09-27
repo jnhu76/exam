@@ -330,8 +330,10 @@ export async function restoreInterruptedAttempt(
   let eligibleSeconds = 0;
   let reasonCode = "";
 
-  // bounded_grace is the only policy that can carry a durable time adjustment,
-  // so it is the only one that participates in idempotent adjustment reuse.
+  // bounded_grace is the only policy whose restore path mints a durable time
+  // adjustment, so it is the only one that participates in idempotent
+  // adjustment reuse here (operator_incident adjustments are minted by the
+  // operator grant command, not by restore).
   if (snapshot.policy === "bounded_grace") {
     // #8: Check idempotency before evaluating.
     const existingAdjustment =
