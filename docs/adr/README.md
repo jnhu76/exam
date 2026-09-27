@@ -116,7 +116,8 @@ Architecture decisions
 +-- B. Exam execution & correctness core
 |   +-- ADR-005 exam lifecycle / operation state
 |   +-- ADR-006 time authority
-|   `-- ADR-008 submit answer freeze barrier
+|   +-- ADR-008 submit answer freeze barrier
+|   `-- ADR-021 exam semantic authority adoption
 |
 +-- C. Recovery, incident & proctoring
 |   +-- ADR-012 candidate recovery contract
@@ -165,7 +166,8 @@ unrelated ADR cleanup.
 | --- | --- | --- |
 | [ADR-005](ADR-005-exam-operation-state-baseline.md) | Exam lifecycle/state transitions and admin operation baseline | ACCEPTED |
 | [ADR-006](ADR-006-exam-time-authority.md) | Canonical exam/attempt time authority | ACCEPTED, amended |
-| [ADR-008](ADR-008-submit-answer-freeze.md) | Submit/save serialization and answer freeze boundary | ACCEPTED |
+| [ADR-008](ADR-008-submit-answer-freeze.md) | Submit/save serialization and answer freeze boundary | ACCEPTED (Phase-2 implementation-scope statements superseded by ADR-021) |
+| [ADR-021](ADR-021-exam-semantic-authority-adoption.md) | Cross-boundary Exam semantic authority adoption (EXSEM corpus) | ACCEPTED |
 
 ### C. Recovery, incident & proctoring
 
@@ -258,7 +260,7 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-005](ADR-005-exam-operation-state-baseline.md) | Exam Operation State Baseline | ACCEPTED | none | none |
 | [ADR-006](ADR-006-exam-time-authority.md) | Exam Time Authority | ACCEPTED, amended | none | none |
 | [ADR-007](ADR-007-stateful-infrastructure-test-isolation.md) | Stateful Infrastructure Test Isolation | ACCEPTED core / later work partly deferred | none | none |
-| [ADR-008](ADR-008-submit-answer-freeze.md) | Submit Answer Freeze Barrier | ACCEPTED | none | none |
+| [ADR-008](ADR-008-submit-answer-freeze.md) | Submit Answer Freeze Barrier | ACCEPTED (implementation-scope statements superseded by ADR-021) | none | ADR-021 (Phase-2 storage/grading-scope statements only) |
 | [ADR-009](ADR-009-frontend-state-machine-adoption.md) | Frontend State Machine Adoption | PROPOSED | none | none |
 | [ADR-010](ADR-010-scoped-rbac-architecture.md) | Scoped RBAC Architecture | ACCEPTED, amended 2026-09-25 (DB-seeding half retired) | none | none |
 | [ADR-011](ADR-011-notification-and-email-delivery.md) | Notification Inbox and Email Delivery Architecture | ACCEPTED, amended (see also the [2026-09-06 corrective amendment](ADR-011-amendment-2026-09-06-delivery-attempt-recovery.md)) | none | none |
@@ -271,9 +273,10 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-018](ADR-018-operational-observability-window.md) | Operational Observability Window | ACCEPTED | none | none |
 | [ADR-019](ADR-019-content-document-model.md) | Content Document Model | ACCEPTED (2026-09-25) | none | none |
 | [ADR-020](ADR-020-http-surface-routing-authority.md) | HTTP Surface Routing & Policy Authority | ACCEPTED | none | none |
+| [ADR-021](ADR-021-exam-semantic-authority-adoption.md) | Exam Semantic Authority Adoption | ACCEPTED | Stale assertions listed in its supersession table (incl. ADR-008 Phase-2 scope statements) | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-021**.
+ADR numbers are stable and never reused. The next free number is **ADR-022**.
 Files that are audits *about* an ADR belong under `docs/archive/`, not in this
 folder with a conflicting ADR number.
