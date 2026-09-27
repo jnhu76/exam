@@ -522,9 +522,34 @@ async function buildAttemptExport(
     throw new NotFoundError("Attempt not found");
   }
 
+  // Answer-source authority (EXSEM-007/008/009): a submitted/graded row's
+  // frozen `submittedAnswers` is the exported answer truth; the mutable draft
+  // `answers` column is only the intentional export source for pre-submit
+  // attempts. Legacy rows predating the freeze column are marked by a NULL
+  // `submissionReason` (domain types.ts) and fall back to draft answers — the
+  // same narrow compatibility rule the grading read path applies. A submitted
+  // row missing its frozen snapshot WITHOUT that marker is current corruption:
+  // fail closed instead of silently trusting draft answers. No per-question
+  // fallback exists when a non-null snapshot is merely incomplete.
   const answerMap = new Map<string, unknown>();
-  for (const a of attempt.answers) {
-    answerMap.set(a.questionId, a.answer);
+  if (attempt.submittedAnswers != null) {
+    for (const a of attempt.submittedAnswers.answers) {
+      answerMap.set(a.questionId, a.value);
+    }
+  } else if (attempt.submittedAt == null) {
+    for (const a of attempt.answers) {
+      answerMap.set(a.questionId, a.answer);
+    }
+  } else if (attempt.submissionReason == null) {
+    for (const a of attempt.answers) {
+      answerMap.set(a.questionId, a.answer);
+    }
+  } else {
+    throw new Error(
+      `Attempt ${attempt.id} was submitted (submissionReason=${attempt.submissionReason}) ` +
+        "but has no frozen submittedAnswers; refusing to export draft answers " +
+        "as submitted truth. Repair the row via the backfill protocol.",
+    );
   }
 
   const questionResults: AttemptExportQuestionResult[] =
