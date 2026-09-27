@@ -18,6 +18,7 @@ has one authority:
 
 | Fact type | Authority |
 | --- | --- |
+| Cross-boundary Exam semantics (fact ownership, freeze/transfer points, candidate boundary, supported-capability rule) | [`architecture/exam-semantic-boundaries.md`](architecture/exam-semantic-boundaries.md) — EXSEM-001..020, adopted by [ADR-021](adr/ADR-021-exam-semantic-authority-adoption.md) |
 | A specific architectural decision | Accepted ADRs under [`docs/adr/`](adr/) |
 | External behavior, data format, and frozen semantics | [`docs/contracts/`](contracts/), generated OpenAPI, and contract tests |
 | Product invariants and domain model | [`docs/SPEC.md`](SPEC.md) |
@@ -55,12 +56,35 @@ guidance.
 
 | Document | Purpose |
 | --- | --- |
+| [`architecture/exam-semantic-boundaries.md`](architecture/exam-semantic-boundaries.md) | **Cross-boundary Exam semantic authority** — EXSEM-001..020 frozen invariants: fact ownership, authority freeze/transfer points, legitimately live facts, candidate-observable boundary, effective-state rule, supported-capability definition (adopted by [ADR-021](adr/ADR-021-exam-semantic-authority-adoption.md)) |
 | [`architecture/authorization.md`](architecture/authorization.md) | Capability-based authorization model |
 | [`architecture/exam-runtime.md`](architecture/exam-runtime.md) | Exam / Attempt / Answer / Submit / Grading / Result visibility protocol |
 | [`architecture/exam-system/README.md`](architecture/exam-system/README.md) | Exam-system architecture map and known limitations |
 | [`architecture/exam-system/candidate-recovery.md`](architecture/exam-system/candidate-recovery.md) | Candidate recovery sequences and authority boundaries |
 | [`architecture/exam-system/state-and-authority.md`](architecture/exam-system/state-and-authority.md) | Lifecycle, policy, timestamp, and evidence dimensions |
 | [`architecture/frontend.md`](architecture/frontend.md) | As-built frontend architecture |
+
+#### Exam semantic authority — where to answer "who owns the fact?"
+
+The cross-boundary Exam semantic authority is
+[`architecture/exam-semantic-boundaries.md`](architecture/exam-semantic-boundaries.md)
+(EXSEM-001..020), adopted by
+[ADR-021](adr/ADR-021-exam-semantic-authority-adoption.md); there is no need
+to search Issues #640/#641 for it. Division of authority:
+
+| Carrier | Owns |
+| --- | --- |
+| `architecture/exam-semantic-boundaries.md` | Cross-boundary semantic authority (EXSEM clauses) |
+| ADR-021 | Adoption / supersession rationale and the list of precisely superseded assertions |
+| Existing mechanism ADRs | Specific mechanisms not superseded (transaction, time, recovery, authz) |
+| `architecture/exam-runtime.md` | Current runtime commands and state relationships |
+| SPEC / contracts / OpenAPI | Product and API formats |
+| Code / tests | Mechanism + conformance evidence |
+| Issues / audits / archive | Historical evidence, not normative authority |
+
+Changing a frozen EXSEM clause requires an explicit superseding architecture
+decision (see the boundaries document §6); code, tests, schema
+representability, and stored reserved values cannot silently redefine it.
 
 ### Contracts (behavior code must preserve)
 
@@ -82,7 +106,7 @@ guidance.
 | Document | Purpose |
 | --- | --- |
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
-| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-020-http-surface-routing-authority.md`](adr/ADR-020-http-surface-routing-authority.md) | Formal architecture decisions |
+| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-021-exam-semantic-authority-adoption.md`](adr/ADR-021-exam-semantic-authority-adoption.md) | Formal architecture decisions |
 
 Key recovery authority:
 

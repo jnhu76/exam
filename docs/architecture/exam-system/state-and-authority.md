@@ -134,7 +134,7 @@ stateDiagram-v2
 | State | Meaning | Answers writable? | Reachable? |
 |-------|---------|-------------------|------------|
 | `not_started` | Enrolled but not started | N/A | **NO** — no write path (reserved target design) |
-| `queued` | Waiting for batch entry (Phase 2) | N/A | **NO** — Phase 2 planned (reserved target design) |
+| `queued` | Waiting for batch entry | N/A | **NO** — reserved, no write path; admission is modeled by `exam_admissions` (#292) |
 | `in_progress` | Actively taking the exam | Yes | YES |
 | `disrupted` | Heartbeat timeout; disconnected | No | YES |
 | `submitted` | Candidate submitted; frozen | No | YES |

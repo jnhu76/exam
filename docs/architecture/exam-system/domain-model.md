@@ -138,7 +138,7 @@ Question has **NO version table**. Edits mutate the row in place. Historical fid
 
 Composition authority lives on the `Exam` aggregate:
 - `exam.questionIds` defines which questions are in what order.
-- `exam.questionSelectionMode` is `manual` (Phase 1) or `random` (Phase 2 planned).
+- `exam.questionSelectionMode` is `manual`; `random` is reserved vocabulary — the publish gate requires `manual`, and activation needs an explicit capability decision (EXSEM-019).
 - `exam.questionSnapshot` is the frozen copy built at publish time by `publishExam()` → `buildQuestionSnapshot()`.
 
 ### 5.3 Reuse between Exams
@@ -243,7 +243,7 @@ The following fields are written by `publishExam()` and MUST NOT change after pu
 | Status | Reachable? | Write path |
 |--------|-----------|------------|
 | `not_started` | **NO** | No write path — attempt goes directly to `in_progress` on start |
-| `queued` | **NO** | Phase 2 planned (timed_sync queue admission) |
+| `queued` | **NO** | Reserved, no write path — admission is modeled by `exam_admissions` (#292), not by this attempt status |
 | `in_progress` | YES | `startOrRestoreAttempt()`, `restoreInterruptedAttempt()` |
 | `disrupted` | YES | Heartbeat scanner (`markDisrupted`) |
 | `submitted` | YES | `submitAttempt()`, deadline reconciliation |

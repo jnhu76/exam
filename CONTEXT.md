@@ -115,7 +115,7 @@ _Avoid_: score status, grading phase
 
 **Critical rule**: The manual grading queue's work truth source is the materialized `attempt_grading_entries` (predicate: `grading_mode='manual' AND status='pending_manual'`), NOT `gradingStatus` and NOT an `attemptStatus = 'grading'` query. `gradingStatus` describes the attempt-level scoring lifecycle/display state but cannot manufacture or rebuild queue work items; `gradingStatus = 'pending_manual'` without a matching pending entry does not appear in the queue (ghost-attempt guard). Historical `status='grading'` rows are upgrade/recovery concerns only and are not current manual- or auto-grading workflow states.
 
-**State machine discipline**: All current state changes go through centralized command functions (`submitAttempt`, `restoreInterruptedAttempt` — the disruption-restore entry, `markDisrupted`, `gradeQuestion`, `voidAttempt`). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed current transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state. Historical persisted values are handled by explicit migration/recovery logic rather than by widening the current state machine.
+**State machine discipline**: All current state changes go through centralized command functions (`submitAttempt`, `restoreInterruptedAttempt` — the disruption-restore entry, `markDisrupted`, `gradeQuestion`; `voidAttempt` is reserved vocabulary with no production writer). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed current transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state. Historical persisted values are handled by explicit migration/recovery logic rather than by widening the current state machine.
 
 > The historical `completeManualGrading` command does not exist in current production code; the one-way pending-only manual completion command is `gradeQuestion` (`packages/exam-engine/src/manualGrading.ts`).
 
@@ -129,7 +129,7 @@ _Avoid_: computed permissions
 - `canSubmit` — can the candidate submit
 - `lockReason` — why the UI is locked (e.g. `'deadline'`, `'submitted'`, `'voided'`); present when `isEditable=false`
 
-**answers** (column): The candidate's editable work-in-progress answers. Mutated by saveAnswer. Only writable when attempt is `in_progress`. Read by the candidate during the exam.
+**answers** (column): The candidate's editable work-in-progress answers. Mutated by saveAnswer. Server-side save guards reject `voided`/`submitted`/`graded` and past-deadline saves; other non-terminal statuses (including `disrupted`) are protocol-acceptable server-side — UI editability is governed separately by `isEditable`. Read by the candidate during the exam.
 _Avoid_: working answers, draft column
 
 **submitted_answers** (column): The frozen snapshot of answers at submit time. Written once in the submit transaction as a clean `SubmittedAnswersSnapshot` (no clientSeq/baseVersion). Immutable after submit. Used exclusively by grading and result computation.

@@ -134,13 +134,13 @@ not_started → queued → in_progress → submitted → graded
 
 | 状态 | 含义 | 当前实现接线 |
 |------|------|------|
-| `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startAttempt` 时直接进入 `in_progress`） |
+| `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startOrRestoreAttempt` 新建分支直接进入 `in_progress`） |
 | `queued` | 排队中（requireQueue 时） | **不作为 attempt 状态建模**：准入是与计时模式正交的独立维度，由 `exam_admissions` 准入记录承载（#292 durable admission runtime，见 exam-runtime.md §3.1.1）；attempt 直接 `in_progress` 起步 |
-| `in_progress` | 正在答题 | **已接线**：`startAttempt` 命令写入 |
+| `in_progress` | 正在答题 | **已接线**：`startOrRestoreAttempt` 新建分支写入 |
 | `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**候考人自助恢复入口已产品化**（REC-I3 / ADR-012，详见 §3.5）；Admin/Proctor 恢复工作台均已交付（J5 / J6，#303） |
 | `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入。人工批改未完成时 attempt 停留在 `submitted` + `gradingStatus=pending_manual` |
 | `graded` | 批改完成 | **已接线**：终局批改在同一锁定事务内由 `submitted` 直接落 `graded` |
-| `voided` | 已作废（监考员或管理员操作） | **Phase 2+ / planned**：`voidAttempt` command 仅作为目标设计，未提供管控入口 |
+| `voided` | 已作废（监考员或管理员操作） | **保留值，无生产 writer**：`voidAttempt` 仅作为目标设计（EXSEM-019），未提供管控入口，不因文档列出而激活 |
 
 > **`grading` 处置裁决（#542）**：旧版本生产代码曾短暂使用 `status='grading'` 作为自动批改的持久中间态（`submitted → grading → graded`，窗口 2026-06-01 → 2026-06-14）。该值已从当前 `AttemptStatus`、转换表、wire 契约和 API 中移除，DB CHECK（`exam_attempts_status_check`）拒绝该值。历史数据库可能仍含此类行：旧 writer 的终局写入是**单条原子 UPDATE**（`graded` 与全部终局事实同语句提交），因此单写者顺序执行下可证明的 crash 残留形状是 `grading` + 终局事实全 NULL；`grading` + 任何终局事实非 NULL 不是任何单写者运行或迁移可产生的形状（唯一理论来源是 pre-lock 异步窗口内同一 attempt 的并发双重批改交错，无证据表明真实发生过），按矛盾数据 fail closed 人工调查，#542 不提供任何脚本化语义转换（包括不脚本化提升为 `graded`）。Migration 0043 的 preflight 检测到该值时 fail closed；操作员按 0043 头部 runbook 显式处置（离线历史数据修复例外：默认 rewind 回 `submitted`，或按业务作废置 `voided`）——#542 不做自动恢复，业务收口经由正常批改路径。批改流水线的持久状态由 `gradingStatus`（P2D-J2，与 lifecycle 正交）承载，`submitted` 已是带恢复语义的持久中间态。
 
@@ -176,6 +176,8 @@ ExamAttempt {
 assigned → started → completed
                   ↘ blocked（违反规则被禁止继续）
 ```
+
+> `blocked` 是保留值：状态机转换表允许 `assigned/started → blocked`，但**当前无生产 writer**；读侧（考生摘要等）按枚举容错处理。激活需要显式能力决策（EXSEM-019）。
 
 **ExamEnrollment 数据结构**：
 
@@ -486,7 +488,7 @@ not_started → queued → in_progress → submitted → graded
 
 > 当前实现仅有 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / voided` 保留为目标设计但**当前无写入路径**。`grading` 已从当前运行时词汇移除（#542；旧版生产代码曾将其作为持久中间态，J2 收敛后移除，历史残留行需操作员显式处置，裁决见 §2.2）。完整接线表见 §2.2。
 
-**Command functions**（Phase 2 全部已实现）：
+**Command functions**（当前实现；接线细节以 exam-runtime.md §2.3/§3.4 为准）：
 
 ```ts
 publishExam(ctx, examId)        // draft → published
@@ -497,16 +499,17 @@ archiveExam(ctx, examId)        // closed/canceled → archived
 extendExam(ctx, examId, minutes) // open → open（仅更新 closeAt）
 unpublishExam(ctx, examId)      // published → draft
 publishResults(ctx, examId)     // 设置 resultsPublishedAt（非状态迁移）
-startAttempt(ctx, examId, candidateId)
-saveAnswer(ctx, attemptId, questionId, payload)
-submitAttempt(ctx, attemptId)
-gradeAttempt(ctx, attemptId)
-markDisrupted(ctx, attemptId)
-restoreAttempt(ctx, attemptId)
-voidAttempt(ctx, attemptId, reason) // Phase 3 / planned（无 admin / proctor 入口）
+checkAndUpdateExamStatus(ctx, examId) // 懒触发 reconcile-by-now
+startOrRestoreAttempt(...)      // 新建 attempt（直接 in_progress）或返回/恢复既有活跃 attempt
+saveAnswer(...)                 // 答案保存协议（answerProtocol.ts）
+submitAttempt(ctx, attemptId)   // in_progress/disrupted → submitted（冻结 + 工作集物化）
+markDisrupted(ctx, attemptId)   // in_progress → disrupted
+restoreInterruptedAttempt(...)  // disrupted → in_progress（内部生命周期步 restoreAttemptState）
+gradeQuestion(...)              // 单向完成一个 pending_manual 工作项（manualGrading.ts）
+voidAttempt(ctx, attemptId, reason) // 保留：目标设计，无生产 writer（EXSEM-019）
 ```
 
-> `voidAttempt` 是唯一仍标注为 Phase 3 / planned 的命令。其余 command 均已在 Phase 2 实现。
+> 旧命令名 `startAttempt` / `restoreAttempt` / `gradeAttempt` 是历史文档漂移：`gradeAttempt` 是 #542 之前旧版生产代码的命令，当前终态闭合由 submit 冻结屏障 + `gradeQuestion` + `finalizeTerminalGrading` 承担。`voidAttempt` 无 admin/proctor 入口，保留值不因文档列出而激活。
 
 ### 3.4 Server Time Authority：服务端权威计时
 
@@ -606,26 +609,29 @@ QuestionSnapshot {
   originalQuestionId: string
   type: QuestionType
   content: string
+  contentDocument: ContentDocumentV1 | null  // #301 冻结富文本题干（null = Plain）
+  answerMode: ContentMode | null             // #301 冻结作答输入模式（仅 text_response）
   attachments: Attachment[]
-  options: OptionSnapshot[]
+  options: OptionSnapshot[]                  // 选项快照无正确性标记（见下）
   standardAnswer: unknown
   score: number
   gradingRule: GradingRule
   order: number
+  rubric: string | null                      // P3-L0-1 冻结人工评分依据（text_response）
 }
 ```
 
-冻结内容：题目内容、选项、题目顺序、选项顺序、标准答案、分值、批改规则、附件。
+冻结内容：题目内容（含富文本文档与投影）、选项、题目顺序、选项顺序、标准答案、分值、批改规则、附件、rubric。字段权威是 `packages/domain` 的 `QuestionSnapshot` 类型；选项快照**没有** `isCorrect`——正确性权威是 `standardAnswer`（自动题）与冻结 rubric/人工条目（人工题），`options.isCorrect` 仅是作者期兼容元数据，无执行或评分权威。
+
+### 3.6.1 语义权威引用
+
+快照的事实归属、冻结/转移点与考生可观察边界由 EXSEM-002..005、EXSEM-006、EXSEM-017 承载（`docs/architecture/exam-semantic-boundaries.md`，ADR-021 采纳）。
 
 ### 3.7 Grading Engine：批改引擎
 
-自动批改是独立引擎，不写在 route 里。
+自动批改是独立引擎，不写在 route 里。当前架构（P3-L0-2E 工作集模型，取代旧版 `gradeAttempt` 命令）：submit 冻结屏障物化逐题 `attempt_grading_entries`（客观题同步 `completed_auto`，text_response 为 `pending_manual`），人工题由 `gradeQuestion` 单向完成，终态由 `aggregateGradingEntries`（唯一调用点 `finalizeTerminalGrading`）从完整工作集聚合。评分事实归属见 EXSEM-008..010。
 
-```ts
-gradeAttempt(attempt, snapshot, answers, gradingPolicy): ScoreResult
-```
-
-Phase 1 仅支持客观题：
+批改规则语义（判分口径不变）：
 
 | 题型 | 批改规则 |
 |------|----------|

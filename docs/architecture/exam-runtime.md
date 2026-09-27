@@ -2,6 +2,8 @@
 
 > **本文档是 Phase 3 P-1/L0 的正式协议规格，是 Exam / Attempt / Answer / Submit / Grading / Result Visibility 的权威协议真相源。** 所有实现必须遵循本文档；实现与本文档冲突时，以本文档为准。
 >
+> **与语义权威的分工**：跨边界语义（事实归属、权威冻结/转移点、live 例外、考生可观察边界、受支持能力定义）由 [`exam-semantic-boundaries.md`](exam-semantic-boundaries.md) 的 EXSEM-001..020 承载（ADR-021 采纳）；本文引用这些条款，不重新定义它们。
+>
 > **协议覆盖**：本文档覆盖 21 项协议（14 原有 + 7 L0 扩展），涵盖题型模型、attempt 生命周期、答案协议、提交冻结、deadline reconciliation、DTO 边界、前端状态模型、渲染、migration 与测试矩阵。
 
 ---
@@ -252,13 +254,15 @@ type AttemptStatus =
 
 | 状态 | 含义 | 下一步 |
 | ---- | ---- |--------|
-| not_started | 已分配但未开始 | → in_progress |
-| queued | 等待批量入场（Phase 2） | → in_progress |
+| not_started | 已分配但未开始（保留值，无写入路径——attempt 创建即 `in_progress`） | → in_progress |
+| queued | 排队中（保留值，无写入路径；准入由 `exam_admissions` 独立承载，见 §3.1.1） | → in_progress |
 | in_progress | 考生正在作答，answers 可写 | → submitted, disrupted |
 | disrupted | 心跳超时，考生断连 | → in_progress (resume) |
 | submitted | 考生已提交，submitted_answers 已冻结 | → graded |
 | graded | 所有评分完成 | terminal |
-| voided | 终态覆盖；`submitted_answers` **可有可无**（取决于 void 前是否提交过） | terminal |
+| voided | 终态覆盖（保留值，无 `voidAttempt` 生产 writer，EXSEM-019）；`submitted_answers` **可有可无**（取决于 void 前是否提交过） | terminal |
+
+> 当前仅 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / voided` 是读兼容保留值，无生产写入路径（EXSEM-019，接线表见 SPEC §2.2）。
 
 > `grading` 已从当前运行时词汇移除（#542）：旧版生产代码（`gradeAttempt`，约 13 天窗口）曾将 `status='grading'` 作为 `submitted → graded` 之间的持久中间态写入；J2 生命周期收敛移除了该写入路径。当前终局批改在同一锁定事务内 `submitted → graded`；批改流水线的持久状态由 `gradingStatus`（P2D-J2）承载。`exam_attempts_status_check`（migration 0043）在 DB 层拒绝该值；历史残留行需操作员显式处置。
 
@@ -337,14 +341,14 @@ Deadline 触发：
 
 | 命令函数 | 允许的前置状态 | 事务行为 |
 | -------- | -------------- | -------- |
-| `startAttempt` | not_started | 锁 attempt，设 in_progress |
-| `resumeAttempt` | disrupted | 锁 attempt，设 in_progress |
-| `submitAttempt` | in_progress | 锁 attempt，冻结 submitted_answers，物化 grading workset，设 submitted（见 §4.2） |
-| `saveAnswer` | in_progress | 锁 attempt，更新 answers（draft；submit 后永不为评分真相） |
+| `startOrRestoreAttempt` | 无活跃 attempt（新建即 `in_progress`）；已有 active/disrupted attempt 则直接返回或恢复 | 锁 enrollment + attempt；新建分支物化 `attempt.questionSnapshot`；disrupted 分支内部组合 `restoreInterruptedAttempt`（见 `attemptCommands.ts`） |
+| `restoreInterruptedAttempt`（内部生命周期步 `restoreAttemptState`：disrupted → in_progress） | disrupted | 锁内恢复；补偿与个人 deadline 效果按 ADR-013 策略评估（见 `restoreInterruption.ts`） |
+| `submitAttempt` | in_progress / disrupted | 锁 attempt，冻结 submitted_answers，物化 grading workset，设 submitted（见 §4.2） |
+| `saveAnswer`（`answerProtocol.ts`） | 非 `voided` / `submitted` / `graded` 且未过有效截止 | 经 EA 锁序 + mutation context 锁内更新 answers（draft；submit 后永不为评分真相）。服务端接受范围 ≠ 页面可编辑（见 §4.3） |
 | `markDisrupted` | in_progress | 锁 attempt，设 disrupted |
 | `gradeQuestion` | attempt.status=submitted ∧ attempt.gradingStatus=pending_manual ∧ entry.gradingMode=manual ∧ entry.status=pending_manual | 单向完成一个 pending_manual 工作项：pending_manual → completed_manual；剩余 pending>0 则保持 submitted+pending_manual；剩余 pending=0 则 `aggregateGradingEntries` 聚合并写 graded+fully_graded（见 §6.6） |
-| `voidAttempt` | any | 设 voided |
-| `ensureAttemptDeadlineReconciled` | in_progress/disrupted | 过期则走同一 submit 冻结屏障 + 工作集物化 |
+| `voidAttempt` | — | **无生产 writer**：`voided` 是保留值（EXSEM-019），不因任何文档列出而激活 |
+| `ensureAttemptDeadlineReconciled`（`deadlineReconciliation.ts`） | in_progress/disrupted | 过期则走同一 submit 冻结屏障 + 工作集物化 |
 
 每个命令使用 transition matrix + business guard，在数据库事务内用 `FOR UPDATE` row lock 落库。
 
@@ -417,7 +421,7 @@ AND attempt 生命周期与 workset 匹配
 **Save**：`POST /candidate/attempts/:attemptId/answers/save`
 
 - 前端在每次作答变更后调用 save。
-- 后端校验 `attemptStatus === 'in_progress'`，否则返回 `ATTEMPT_NOT_EDITABLE`。
+- 后端守卫拒绝三类保存：`voided`（`ATTEMPT_CLOSED`）、`submitted`/`graded`（`ATTEMPT_ALREADY_SUBMITTED`）、已过有效截止（`DEADLINE_EXCEEDED`）。其余非终态（含 `disrupted`）在服务端协议上可接受——**服务端接受范围 ≠ 页面立即可编辑**：页面编辑权威仍是 `isEditable`（§6.1）与 ADR-012 恢复页面契约，不因服务端可保存而放宽 UI 锁定。
 - Save 是幂等的：相同 `clientSeq` + `baseVersion` 的重复 save 不产生副作用。
 - Save 不触发评分，不写 `submitted_answers`。
 - Save 不改变 `attemptStatus`。
@@ -713,11 +717,13 @@ maxScore
 `GET /candidate/attempts/:attemptId/result` 的响应。受 resultVisibility / answerVisibility 门控。
 
 | 条件 | 返回 |
-| ---- | ---- |
+| ------ | ---- |
 | resultVisibility = hidden | 不返回 score / pass |
 | resultVisibility = visible | 返回 score / pass |
 | answerVisibility = hidden | 不返回 standardAnswer / rubric |
-| answerVisibility = visible | 返回 standardAnswer / rubric |
+| answerVisibility = visible | 返回 standardAnswer / rubric（**保留语义**） |
+
+> `answerVisibility` 当前无生产 writer 翻转为 `visible`（`computeAnswerVisibility` 恒返回 `hidden`）。`visible` 行描述的是字段契约的保留语义，不是当前受支持的产品能力（EXSEM-019）；公开标准答案/rubric 需要显式能力决策后才可激活。
 
 ### 6.4 Candidate Own-Result 边界
 
@@ -1095,7 +1101,7 @@ type TransientEvent =
 | `attempt.saved` | saveAnswer 成功 |
 | `attempt.submitted` | submitAttempt 成功 |
 | `attempt.deadline_reconciled` | ensureAttemptDeadlineReconciled 触发冻结 |
-| `attempt.voided` | voidAttempt 成功 |
+| `attempt.voided` | （保留）`voidAttempt` 成功——当前无生产 writer，该事件实际不产生（EXSEM-019） |
 | `grading.detail_viewed` | grading-details 路由被访问（敏感读取审计，仅记录 FACT，元数据不含 candidateAnswer/rubric） |
 | `grading.score_entered` | gradeQuestion 成功（每次接受的 pending_manual 完成都发出，含部分完成与最终完成） |
 | `grading.finalized` | 仅当最后一条 pending_manual 完成、attempt 从 submitted+pending_manual → graded+fully_graded 时发出（由 gradeQuestion 终态分支触发；部分完成**不**发出） |
