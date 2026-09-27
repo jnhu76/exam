@@ -23727,27 +23727,6 @@
                           "score": {
                             "type": "number"
                           },
-                          "gradingRule": {
-                            "type": "object",
-                            "properties": {
-                              "multiSelectScoring": {
-                                "type": "string",
-                                "enum": ["all_correct_full", "partial_half"]
-                              },
-                              "fillBlankMatchMode": {
-                                "type": "string",
-                                "enum": ["exact", "keyword"]
-                              },
-                              "fillBlankCaseSensitive": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "multiSelectScoring",
-                              "fillBlankMatchMode"
-                            ],
-                            "additionalProperties": false
-                          },
                           "order": {
                             "type": "integer"
                           }
@@ -23759,7 +23738,6 @@
                           "attachments",
                           "options",
                           "score",
-                          "gradingRule",
                           "order"
                         ],
                         "additionalProperties": false
@@ -23807,35 +23785,6 @@
                     "lastActivityAt": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "misconduct": {
-                      "type": "object",
-                      "properties": {
-                        "flaggedAt": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "flaggedBy": {
-                          "type": "string"
-                        },
-                        "notes": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 1000
-                        },
-                        "severity": {
-                          "type": "string",
-                          "enum": ["warning", "serious"]
-                        }
-                      },
-                      "required": [
-                        "flaggedAt",
-                        "flaggedBy",
-                        "notes",
-                        "severity"
-                      ],
-                      "additionalProperties": false,
-                      "nullable": true
                     },
                     "createdAt": {
                       "type": "string",
@@ -25139,27 +25088,6 @@
                           "score": {
                             "type": "number"
                           },
-                          "gradingRule": {
-                            "type": "object",
-                            "properties": {
-                              "multiSelectScoring": {
-                                "type": "string",
-                                "enum": ["all_correct_full", "partial_half"]
-                              },
-                              "fillBlankMatchMode": {
-                                "type": "string",
-                                "enum": ["exact", "keyword"]
-                              },
-                              "fillBlankCaseSensitive": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "multiSelectScoring",
-                              "fillBlankMatchMode"
-                            ],
-                            "additionalProperties": false
-                          },
                           "order": {
                             "type": "integer"
                           }
@@ -25171,7 +25099,6 @@
                           "attachments",
                           "options",
                           "score",
-                          "gradingRule",
                           "order"
                         ],
                         "additionalProperties": false
@@ -25219,35 +25146,6 @@
                     "lastActivityAt": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "misconduct": {
-                      "type": "object",
-                      "properties": {
-                        "flaggedAt": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "flaggedBy": {
-                          "type": "string"
-                        },
-                        "notes": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 1000
-                        },
-                        "severity": {
-                          "type": "string",
-                          "enum": ["warning", "serious"]
-                        }
-                      },
-                      "required": [
-                        "flaggedAt",
-                        "flaggedBy",
-                        "notes",
-                        "severity"
-                      ],
-                      "additionalProperties": false,
-                      "nullable": true
                     },
                     "createdAt": {
                       "type": "string",
@@ -26667,27 +26565,6 @@
                           "score": {
                             "type": "number"
                           },
-                          "gradingRule": {
-                            "type": "object",
-                            "properties": {
-                              "multiSelectScoring": {
-                                "type": "string",
-                                "enum": ["all_correct_full", "partial_half"]
-                              },
-                              "fillBlankMatchMode": {
-                                "type": "string",
-                                "enum": ["exact", "keyword"]
-                              },
-                              "fillBlankCaseSensitive": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "multiSelectScoring",
-                              "fillBlankMatchMode"
-                            ],
-                            "additionalProperties": false
-                          },
                           "order": {
                             "type": "integer"
                           }
@@ -26699,7 +26576,6 @@
                           "attachments",
                           "options",
                           "score",
-                          "gradingRule",
                           "order"
                         ],
                         "additionalProperties": false
@@ -26747,35 +26623,6 @@
                     "lastActivityAt": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "misconduct": {
-                      "type": "object",
-                      "properties": {
-                        "flaggedAt": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "flaggedBy": {
-                          "type": "string"
-                        },
-                        "notes": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 1000
-                        },
-                        "severity": {
-                          "type": "string",
-                          "enum": ["warning", "serious"]
-                        }
-                      },
-                      "required": [
-                        "flaggedAt",
-                        "flaggedBy",
-                        "notes",
-                        "severity"
-                      ],
-                      "additionalProperties": false,
-                      "nullable": true
                     },
                     "createdAt": {
                       "type": "string",
@@ -29980,27 +29827,6 @@
                           "score": {
                             "type": "number"
                           },
-                          "gradingRule": {
-                            "type": "object",
-                            "properties": {
-                              "multiSelectScoring": {
-                                "type": "string",
-                                "enum": ["all_correct_full", "partial_half"]
-                              },
-                              "fillBlankMatchMode": {
-                                "type": "string",
-                                "enum": ["exact", "keyword"]
-                              },
-                              "fillBlankCaseSensitive": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "multiSelectScoring",
-                              "fillBlankMatchMode"
-                            ],
-                            "additionalProperties": false
-                          },
                           "order": {
                             "type": "integer"
                           }
@@ -30012,7 +29838,6 @@
                           "attachments",
                           "options",
                           "score",
-                          "gradingRule",
                           "order"
                         ],
                         "additionalProperties": false
@@ -30060,35 +29885,6 @@
                     "lastActivityAt": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "misconduct": {
-                      "type": "object",
-                      "properties": {
-                        "flaggedAt": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "flaggedBy": {
-                          "type": "string"
-                        },
-                        "notes": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 1000
-                        },
-                        "severity": {
-                          "type": "string",
-                          "enum": ["warning", "serious"]
-                        }
-                      },
-                      "required": [
-                        "flaggedAt",
-                        "flaggedBy",
-                        "notes",
-                        "severity"
-                      ],
-                      "additionalProperties": false,
-                      "nullable": true
                     },
                     "createdAt": {
                       "type": "string",
@@ -31753,27 +31549,6 @@
                               "score": {
                                 "type": "number"
                               },
-                              "gradingRule": {
-                                "type": "object",
-                                "properties": {
-                                  "multiSelectScoring": {
-                                    "type": "string",
-                                    "enum": ["all_correct_full", "partial_half"]
-                                  },
-                                  "fillBlankMatchMode": {
-                                    "type": "string",
-                                    "enum": ["exact", "keyword"]
-                                  },
-                                  "fillBlankCaseSensitive": {
-                                    "type": "boolean"
-                                  }
-                                },
-                                "required": [
-                                  "multiSelectScoring",
-                                  "fillBlankMatchMode"
-                                ],
-                                "additionalProperties": false
-                              },
                               "order": {
                                 "type": "integer"
                               }
@@ -31785,7 +31560,6 @@
                               "attachments",
                               "options",
                               "score",
-                              "gradingRule",
                               "order"
                             ],
                             "additionalProperties": false
@@ -31833,35 +31607,6 @@
                         "lastActivityAt": {
                           "type": "string",
                           "format": "date-time"
-                        },
-                        "misconduct": {
-                          "type": "object",
-                          "properties": {
-                            "flaggedAt": {
-                              "type": "string",
-                              "format": "date-time"
-                            },
-                            "flaggedBy": {
-                              "type": "string"
-                            },
-                            "notes": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 1000
-                            },
-                            "severity": {
-                              "type": "string",
-                              "enum": ["warning", "serious"]
-                            }
-                          },
-                          "required": [
-                            "flaggedAt",
-                            "flaggedBy",
-                            "notes",
-                            "severity"
-                          ],
-                          "additionalProperties": false,
-                          "nullable": true
                         },
                         "createdAt": {
                           "type": "string",

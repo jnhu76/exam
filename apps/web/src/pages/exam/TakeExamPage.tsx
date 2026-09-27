@@ -1075,6 +1075,8 @@ export function TakeExamPage() {
 
   // This is mechanical field-name mapping only (id/prompt/options/score) —
   // it does NOT derive isEditable / answerSource / lock / visibility.
+  // No gradingRule: the candidate question contract structurally excludes the
+  // internal grading object (EXSEM-017).
   const rendererQuestion = {
     originalQuestionId: currentQuestionView.id,
     type: currentQuestionView.type,
@@ -1084,10 +1086,6 @@ export function TakeExamPage() {
     attachments: [],
     options: currentQuestionView.options,
     score: currentQuestionView.maxScore,
-    gradingRule: {
-      multiSelectScoring: "all_correct_full" as const,
-      fillBlankMatchMode: "exact" as const,
-    },
     order: currentIndex,
   };
 

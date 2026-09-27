@@ -19,10 +19,6 @@ const baseQuestion = {
   attachments: [],
   options: [],
   score: 20,
-  gradingRule: {
-    multiSelectScoring: "all_correct_full" as const,
-    fillBlankMatchMode: "exact" as const,
-  },
   order: 0,
 };
 

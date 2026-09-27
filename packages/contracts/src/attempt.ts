@@ -119,13 +119,17 @@ export const QuestionSnapshotSchema = z.object({
 });
 
 /**
- * Candidate-safe question snapshot that omits standardAnswer and rubric.
+ * Candidate-safe question snapshot that omits grading secrets:
+ * standardAnswer, rubric, and the raw internal gradingRule
+ * (EXSEM-017 / ADR-021 `GRADING_RULE_VISIBILITY =
+ * HIDDEN_ON_ALL_CURRENT_CANDIDATE_QUESTION_SURFACES`).
  * Used when returning attempt data to candidates. Per L0 §6.1, candidates
- * must never receive rubric or standardAnswer.
+ * must never receive rubric, standardAnswer, or the internal grading object.
  */
 export const CandidateQuestionSnapshotSchema = QuestionSnapshotSchema.omit({
   standardAnswer: true,
   rubric: true,
+  gradingRule: true,
 });
 
 const AnswerRecordSchema = z.object({
@@ -163,10 +167,25 @@ export const AttemptSchema = z.object({
 export type AttemptDTO = z.infer<typeof AttemptSchema>;
 
 /**
- * Response schema for loading an attempt, with question snapshots stripped of standardAnswer
- * to prevent candidates from seeing correct answers.
+ * Candidate-safe attempt projection: the internal `AttemptSchema` minus the
+ * server-managed misconduct projection (flaggedBy/notes/severity — EXSEM-016
+ * management facts). EXSEM-017 requires administrative secrets to be
+ * UNREPRESENTABLE in candidate output contracts (ADR-021
+ * `CONTRACT_VS_MAPPER_RULE = SAFE_CONTRACT_AND_MINIMAL_PROJECTION`), so the
+ * candidate load/start/submit/restore responses build on this schema, never
+ * on `AttemptSchema` itself. Authorized staff/admin surfaces keep using the
+ * full shape.
  */
-export const LoadAttemptResponseSchema = AttemptSchema.extend({
+export const CandidateAttemptSchema = AttemptSchema.omit({
+  misconduct: true,
+});
+
+/**
+ * Response schema for loading an attempt, with question snapshots stripped of
+ * standardAnswer, rubric, and gradingRule to prevent candidates from seeing
+ * grading secrets, and without the administrative misconduct projection.
+ */
+export const LoadAttemptResponseSchema = CandidateAttemptSchema.extend({
   questionSnapshot: z.array(CandidateQuestionSnapshotSchema),
   serverNow: z.string().datetime(),
 });

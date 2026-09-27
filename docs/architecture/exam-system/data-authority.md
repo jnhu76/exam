@@ -124,12 +124,13 @@ Under the current MVP contract (`apps/api/src/routes/attempts.shared.ts`):
 
 ```text
 computeAnswerVisibility() always returns "hidden" (no arguments, no conditions).
-CandidateTakeSnapshot and candidate attempt serializers never include standardAnswer or rubric.
+CandidateTakeSnapshot and candidate attempt serializers never include standardAnswer, rubric, or gradingRule.
+Candidate attempt response contracts structurally exclude the misconduct projection (EXSEM-017 safe-contract rule).
 Result own-view strips standardAnswer unconditionally.
 Rubric is absent from the Candidate result contract.
 ```
 
-**INV-R-001**: Under the current MVP contract, Candidate-facing Attempt and Result projections MUST NOT expose `standardAnswer` or `rubric`. `answerVisibility` is currently fixed to hidden. A future configurable answer-key release policy is NOT IMPLEMENTED.
+**INV-R-001**: Under the current MVP contract, Candidate-facing Attempt and Result projections MUST NOT expose `standardAnswer`, `rubric`, the raw internal `gradingRule`, or the administrative `misconduct` projection (EXSEM-017; ADR-021 `CANDIDATE_SECRET_BOUNDARY` / `GRADING_RULE_VISIBILITY`). Secrets are unrepresentable in the candidate output contracts, not merely omitted by the current mappers. `answerVisibility` is currently fixed to hidden. A future configurable answer-key release policy is NOT IMPLEMENTED.
 
 ### 7.2 What must never read live data
 
