@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import type { Database } from "@exam/db/src/types.js";
 import { getIsolatedTestDb } from "@exam/db/src/testDb.js";
-import { seedDemo } from "@exam/db/src/demo-seed.js";
+import { seedDemo, DEMO_GRADED_ATTEMPT_KEYS } from "@exam/db/src/demo-seed.js";
 import { verifyDemoSeed } from "@exam/db/src/demo-seed-verify.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { aggregateGradingEntries } from "@exam/exam-engine";
@@ -41,14 +41,9 @@ describe("demo seed grading semantics (EXSEM-020)", { timeout: 60_000 }, () => {
     await cleanup();
   }, 30_000);
 
-  const GRADED_KEYS = [
-    "open-c4-graded",
-    "closed-c1-attempt1",
-    "closed-c1-attempt2",
-    "closed-c2-graded",
-    "closed-c3-graded",
-    "closed-c4-graded",
-  ] as const;
+  // The authoritative graded-fixture identity (EXSEM-020) declared by the
+  // seed itself — the verifier's completeness gate uses the same list.
+  const GRADED_KEYS = DEMO_GRADED_ATTEMPT_KEYS;
 
   it("verifyDemoSeed accepts the seeded state", async () => {
     const errors = await verifyDemoSeed(db, ids);

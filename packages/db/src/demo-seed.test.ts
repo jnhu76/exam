@@ -3,7 +3,11 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { getIsolatedTestDb } from "./testDb.js";
-import { seedDemo, type DemoSeedGrader } from "./demo-seed.js";
+import {
+  seedDemo,
+  DEMO_GRADED_ATTEMPT_KEYS,
+  type DemoSeedGrader,
+} from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
 import { schema } from "./schema/pg.js";
 import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
@@ -66,23 +70,41 @@ describe("demo seed", { timeout: 30_000 }, () => {
     await cleanup();
   }, 30_000);
 
-  it("seeds and verifies without errors", async () => {
+  it("verifyDemoSeed FAILS a recording-grader seed: handoff without real grading is not valid demo state", async () => {
+    // Negative witness for verifier completeness (EXSEM-020): the recording
+    // grader proves the seed REQUESTED grading (6 handoffs) but no terminal
+    // facts exist, so the seeded database is NOT valid graded demo state.
+    // verifyDemoSeed must detect exactly that — it may not pass vacuously on
+    // zero graded rows.
     const { grader } = makeRecordingGrader();
     const ids = await seedDemo(db, precomputedHash, grader);
     const errors = await verifyDemoSeed(db, ids);
-    expect(errors).toEqual([]);
+    expect(errors.length).toBeGreaterThan(0);
+    for (const key of DEMO_GRADED_ATTEMPT_KEYS) {
+      expect(
+        errors.some((e) => e.includes(`'${key}'`)),
+        `verifier must report the ungraded fixture '${key}'; got: ${JSON.stringify(errors)}`,
+      ).toBe(true);
+    }
   });
 
-  it("is idempotent on second run", async () => {
+  it("is idempotent on second run (identical fixture identity)", async () => {
+    // Mechanical idempotency of the seed's upsert machinery — same fixture
+    // identity on re-run. Semantic grading-truth idempotency (frozen workset
+    // preserved through a reseed) is proven with the real grader in
+    // @exam/api's demo-seed-grading tests.
     const { grader } = makeRecordingGrader();
-    await seedDemo(db, precomputedHash, grader);
-    const ids = await seedDemo(db, precomputedHash, grader);
-    const errors = await verifyDemoSeed(db, ids);
-    expect(errors).toEqual([]);
+    const firstIds = await seedDemo(db, precomputedHash, grader);
+    const secondIds = await seedDemo(db, precomputedHash, grader);
+    expect(secondIds.attempts).toEqual(firstIds.attempts);
+    expect(secondIds.exams).toEqual(firstIds.exams);
   });
 
-  it("fails closed when no grader is injected (EXSEM-020)", async () => {
-    await expect(seedDemo(db, precomputedHash)).rejects.toThrow(
+  it("fails closed when a nullish grader slips past the type contract (EXSEM-020)", async () => {
+    // The TS contract makes the grader REQUIRED; this pins the runtime guard
+    // that still protects non-TS callers (the tsx seed entrypoints).
+    const grader = undefined as unknown as DemoSeedGrader;
+    await expect(seedDemo(db, precomputedHash, grader)).rejects.toThrow(
       /DemoSeedGrader.*EXSEM-020|EXSEM-020.*DemoSeedGrader/s,
     );
   });

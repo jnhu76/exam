@@ -36,13 +36,18 @@ export type HashFunction = (password: string) => Promise<string>;
  * bind to the same production orchestrator the API uses. That keeps demo
  * "valid data" on the single grading semantic; the seed must not fabricate
  * terminal projections beside a missing workset.
+ *
+ * Idempotency contract: for an already-graded attempt the production
+ * orchestrator PRESERVES it as-is (no-op) — it neither re-freezes nor
+ * revalidates the existing grading workset. Verifying that the preserved
+ * workset matches the demo fixture spec is {@link verifyDemoSeed}'s job, not
+ * the grader's.
  */
 export interface DemoSeedGrader {
   /**
    * Submits (and auto-grades) one seeded attempt as of the fabricated
    * `now`. Must be idempotent for already-submitted/graded attempts (the
-   * production orchestrator's already-graded branch satisfies this) and must
-   * validate the existing workset instead of re-freezing.
+   * production orchestrator's already-graded branch satisfies this).
    */
   submitAndGrade(input: {
     attemptId: string;
@@ -77,6 +82,23 @@ export interface DemoIds {
   enrollments: Record<string, string>;
   attempts: Record<string, string>;
 }
+
+/**
+ * The `ids.attempts` keys {@link seedDemo} must deliver in terminal `graded`
+ * state (EXSEM-020). Single authority for graded-fixture identity: the seed
+ * creates exactly these six through {@link seedGradedAttempt} and
+ * `verifyDemoSeed` requires each of them to exist AND be graded before its
+ * deeper consistency checks — so a seed run that never reached the grading
+ * seam cannot pass verification vacuously.
+ */
+export const DEMO_GRADED_ATTEMPT_KEYS = [
+  "open-c4-graded",
+  "closed-c1-attempt1",
+  "closed-c1-attempt2",
+  "closed-c2-graded",
+  "closed-c3-graded",
+  "closed-c4-graded",
+] as const;
 
 /** Returns default control flags with all restrictions disabled. */
 function makeDefaultControlFlags(): ControlFlags {
@@ -123,14 +145,15 @@ function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
  * @param db - Database instance.
  * @param hashFn - Password hashing function.
  * @param grader - Production submit+grade composition for graded attempts.
- *   Required whenever the graded demo specs run; omitting it fails closed
- *   rather than fabricating terminal projections without the grading workset.
+ *   REQUIRED: the demo fixture set always includes graded attempts, so there
+ *   is no legitimate no-grader seed mode (EXSEM-020 — the runtime guard below
+ *   is defense for non-TS callers only).
  * @returns IDs of all seeded entities for verification.
  */
 export async function seedDemo(
   db: Database,
   hashFn: HashFunction,
-  grader?: DemoSeedGrader,
+  grader: DemoSeedGrader,
 ): Promise<DemoIds> {
   if (process.env.NODE_ENV === "production") {
     throw new Error("demo-seed is not allowed in production mode");
@@ -1095,12 +1118,14 @@ export async function seedDemo(
    * workset, the terminal projection, and the enrollment projection — the
    * same facts a production submit produces.
    *
-   * Idempotency: a previously frozen row (submitted/graded) is left untouched
-   * and the grader's already-graded branch validates the existing workset; a
-   * pre-submit residue row from an interrupted seed run is re-synced to the
-   * spec's draft state before submitting. Legacy demo rows fabricated by
-   * pre-workset seed versions (graded without submittedAnswers) fail closed:
-   * re-running the seed cannot rebuild frozen facts — reset the demo database.
+   * Idempotency: a previously frozen row (submitted/graded) is handed to the
+   * grader unchanged — the production orchestrator's already-graded branch
+   * preserves it as-is without revalidating the workset (frozen-fact
+   * consistency is verifyDemoSeed's authority); a pre-submit residue row from
+   * an interrupted seed run is re-synced to the spec's draft state before
+   * submitting. Legacy demo rows fabricated by pre-workset seed versions
+   * (graded without submittedAnswers) fail closed: re-running the seed cannot
+   * rebuild frozen facts — reset the demo database.
    */
   async function seedGradedAttempt(
     enrollmentId: string,

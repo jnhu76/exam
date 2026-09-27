@@ -1,5 +1,5 @@
 import type { Database } from "./types.js";
-import type { HashFunction, DemoIds } from "./demo-seed.js";
+import type { DemoSeedGrader, HashFunction, DemoIds } from "./demo-seed.js";
 import { seed, SEED_CREDENTIALS } from "./seed.js";
 import { seedDemo } from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
@@ -23,17 +23,29 @@ export interface E2eSeedResult {
 /** Injected workflow functions for testability. Defaults use real modules. */
 export interface E2eSeedWorkflow {
   seedFn: (db: Database, hashFn: HashFunction) => Promise<unknown>;
-  seedDemoFn: (db: Database, hashFn: HashFunction) => Promise<DemoIds>;
+  seedDemoFn: (
+    db: Database,
+    hashFn: HashFunction,
+    grader: DemoSeedGrader,
+  ) => Promise<DemoIds>;
   verifyDemoSeedFn: (db: Database, ids: DemoIds) => Promise<string[]>;
 }
 
 const defaultWorkflow: E2eSeedWorkflow = {
   seedFn: seed,
-  seedDemoFn: seedDemo,
+  seedDemoFn: (db, hashFn, grader) => seedDemo(db, hashFn, grader),
   verifyDemoSeedFn: verifyDemoSeed,
 };
 
 export interface E2eSeedOptions {
+  /**
+   * Production submit+grade composition for the graded demo attempts
+   * (EXSEM-020). REQUIRED — the demo fixture set always includes graded
+   * attempts, so no grader-less default exists here: the composition lives
+   * above @exam/db (the API's `createDemoSeedGrader` binding
+   * `submitAndGradeAttempt`), and `seedDemo` itself fails closed without it.
+   */
+  grader: DemoSeedGrader;
   skipMigrate?: boolean;
   /**
    * When true, truncate all business tables (guarded — see `e2eReset.ts`)
@@ -69,6 +81,8 @@ export interface E2eSeedOptions {
  *
  * @param db - Drizzle database instance.
  * @param hashFn - Password hashing function.
+ * @param opts.grader - REQUIRED production submit+grade composition for the
+ *   graded demo attempts (EXSEM-020).
  * @param opts.skipMigrate - When false, run migrations before seeding.
  * @param opts.reset - Truncate business tables first (see above).
  * @param opts.resetFn - Optional reset function override (testing).
@@ -79,16 +93,19 @@ export interface E2eSeedOptions {
 export async function runE2eSeed(
   db: Database,
   hashFn: HashFunction,
-  opts?: E2eSeedOptions,
+  // NOT optional: the grader is mandatory (EXSEM-020), so there is no valid
+  // argument-less invocation to default for.
+  opts: E2eSeedOptions,
 ): Promise<E2eSeedResult> {
   const {
+    grader,
     skipMigrate = false,
     reset = false,
     resetFn,
     migrateFn,
     logger = defaultLogger,
     workflow = {},
-  } = opts ?? {};
+  } = opts;
   const { seedFn, seedDemoFn, verifyDemoSeedFn } = {
     ...defaultWorkflow,
     ...workflow,
@@ -113,7 +130,7 @@ export async function runE2eSeed(
   await seedFn(db, hashFn);
 
   logger.write("Running demo seed...\n");
-  const ids = await seedDemoFn(db, hashFn);
+  const ids = await seedDemoFn(db, hashFn, grader);
 
   logger.write("Verifying demo seed...\n");
   const errors = await verifyDemoSeedFn(db, ids);

@@ -1,6 +1,7 @@
 import { eq, and } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
+import { DEMO_GRADED_ATTEMPT_KEYS } from "./demo-seed.js";
 
 /** Shape of demo seed IDs used for verification lookups. */
 interface DemoIds {
@@ -352,6 +353,35 @@ export async function verifyDemoSeed(
   // 15. Graded attempts satisfy the durable grading-truth relationships
   // (EXSEM-008/009/010): frozen submittedAnswers + per-question grading
   // entries + terminal projection, all mutually consistent.
+  //
+  // Completeness gate FIRST (EXSEM-020): the KNOWN graded fixtures must
+  // exist and be terminal. A query-then-loop over `status = graded` alone
+  // would pass vacuously when zero attempts reached the grading seam (e.g. a
+  // no-op grader), so the fixture identities below are required evidence —
+  // each must be present and graded before the deep checks run.
+  for (const key of DEMO_GRADED_ATTEMPT_KEYS) {
+    const attemptId = ids.attempts[key];
+    assert(
+      attemptId != null,
+      `Graded demo fixture '${key}' missing from seed ids`,
+    );
+    if (attemptId == null) continue;
+    const rows = await db
+      .select()
+      .from(schema.examAttempts)
+      .where(eq(schema.examAttempts.id, attemptId));
+    const attempt = rows[0];
+    assert(
+      attempt != null,
+      `Graded demo fixture '${key}' (${attemptId}) not found`,
+    );
+    assert(
+      attempt?.status === "graded",
+      `Graded demo fixture '${key}' should be 'graded', got '${attempt?.status}' ` +
+        `(the seed's grading handoff must run through the production seam)`,
+    );
+  }
+
   const gradedAttempts = await db
     .select()
     .from(schema.examAttempts)
@@ -454,6 +484,10 @@ export async function verifyDemoSeed(
   // 16. In-progress attempt has valid snapshot and deadline
   {
     const ipAttemptId = ids.attempts["open-c1-inprogress"];
+    assert(
+      ipAttemptId != null,
+      "In-progress demo fixture 'open-c1-inprogress' missing from seed ids",
+    );
     if (ipAttemptId) {
       const rows = await db
         .select()
@@ -481,6 +515,10 @@ export async function verifyDemoSeed(
   // 17. Disrupted attempt exists
   {
     const disruptedId = ids.attempts["open-c3-disrupted"];
+    assert(
+      disruptedId != null,
+      "Disrupted demo fixture 'open-c3-disrupted' missing from seed ids",
+    );
     if (disruptedId) {
       const rows = await db
         .select()
