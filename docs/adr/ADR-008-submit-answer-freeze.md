@@ -2,12 +2,45 @@
 
 ## Status
 
-**Accepted (Phase 2 conservative).** This ADR records the grading-authority
-semantics the current contract can actually guarantee, the `submitAndGradeAttempt`
-single-transaction fix (J1) that closes a real stale-snapshot window, and the
-explicit non-guarantee around concurrent save-vs-submit lock ordering. Option D
-(the generic final-answer submit barrier) is recorded as a follow-up that
-requires a contract change and is **out of Phase-2 scope**.
+**Accepted (Phase 2 conservative); phase-specific implementation-scope
+statements partially superseded by
+[ADR-021](ADR-021-exam-semantic-authority-adoption.md) (2026-09-27).** This ADR
+records the grading-authority semantics the current contract can actually
+guarantee, the `submitAndGradeAttempt` single-transaction fix (J1) that closes a
+real stale-snapshot window, and the explicit non-guarantee around concurrent
+save-vs-submit lock ordering. Option D (the generic final-answer submit barrier)
+is recorded as a follow-up that requires a contract change and is **out of
+Phase-2 scope**.
+
+> **Scoped supersession note (2026-09-27, via ADR-021).** The Phase-2
+> implementation-scope statements below are **historical for that scope** and no
+> longer describe the current implementation:
+>
+> - The "Rejected alternatives" row for the `submittedAnswerSnapshot` schema
+>   column, whose rationale was "redundant: `answers` is already immutable
+>   post-`submitted`". The current architecture does persist a frozen
+>   submitted-answer truth (`exam_attempts.submitted_answers`) plus durable
+>   per-question grading entries (`attempt_grading_entries`).
+> - The J1 scope wording implying terminal grading computes the score directly
+>   from the locked draft `answers` inside the submit transaction, and
+>   "Grading must match the answers read inside the submit transaction" read as
+>   *grading consumes draft answers*. Today the same locked transaction freezes
+>   `submitted_answers` and materializes the grading workset; terminal
+>   aggregation consumes the entries.
+>
+> The current authority for submit-freeze, workset, and terminal-aggregation
+> semantics is EXSEM-008..010 in
+> [`docs/architecture/exam-semantic-boundaries.md`](../architecture/exam-semantic-boundaries.md)
+> (mechanism detail: `exam-runtime.md` §4.2/§6.6). The rejection itself
+> remains valid Phase-2 history — it was the correct decision for its scope,
+> later overtaken by the P3-L0-2E workset architecture.
+>
+> **Still in force (not superseded):** the single-transaction submit barrier
+> (submit + freeze + workset materialization commit atomically); save/submit
+> concurrency serialized by Postgres row lock with lock-acquisition order
+> deciding the winning answer; unconfirmed local input is not automatically
+> part of the submission; no "final input payload" or submit-priority semantics
+> (Option D remains unadopted).
 
 > **Revision note (2026-07-31, docs-only):** Option D was originally labelled
 > "WYSIWYG submit" because rich-text answering was the expected trigger at the
