@@ -40,9 +40,11 @@ async function pgReachable(url: string): Promise<boolean> {
   }
 }
 
-const PG_UP = await pgReachable(
-  BASE_URL.replace(/\/[^/?]*(\?|$)/, "/postgres$1"),
-);
+// Probe the BASE test target itself, not the `postgres` maintenance DB: this
+// regression protects exactly the restricted-role topology (explicit
+// TEST_DATABASE_URL, CONNECT on the target only) and must NOT self-skip in
+// it because the probe needed `postgres`.
+const PG_UP = await pgReachable(BASE_URL);
 const PG_DESCRIBE = PG_UP ? describe : describe.skip;
 
 async function schemaExists(schemaName: string): Promise<boolean> {

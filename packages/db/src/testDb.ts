@@ -240,7 +240,19 @@ let _workerScopedFixture: Promise<WorkerScopedTestDb> | undefined;
 let _workerScopedResetPerformed = false;
 
 export async function getWorkerScopedTestDb(): Promise<WorkerScopedTestDb> {
-  _workerScopedFixture ??= openWorkerScopedFixture();
+  if (!_workerScopedFixture) {
+    const attempt = openWorkerScopedFixture();
+    // A failed open must not stay cached for the file's remaining calls
+    // (mirrors the bootstrap memo's delete-on-error): evict only if this
+    // attempt is still the cached one, so a later successful open is never
+    // displaced by a stale rejection.
+    attempt.catch(() => {
+      if (_workerScopedFixture === attempt) {
+        _workerScopedFixture = undefined;
+      }
+    });
+    _workerScopedFixture = attempt;
+  }
   return _workerScopedFixture;
 }
 
