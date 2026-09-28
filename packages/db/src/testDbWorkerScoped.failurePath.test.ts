@@ -31,6 +31,11 @@ import {
  * after the rejection, no other backend may remain connected to the throwaway
  * slot (pg_stat_activity); on the unfixed code the failed pool's single
  * connection leaks there.
+ *
+ * #650: the count is observed through a bounded settle poll, not an
+ * instantaneous read — postgres.js `close()` resolves on the client-side
+ * Terminate while the server-side backend's pg_stat_activity row can lag
+ * briefly behind the actual exit.
  */
 
 const BASE_URL = resolveTestDbUrl();
@@ -71,6 +76,53 @@ async function otherBackendCount(): Promise<number> {
     return Number(rows[0]?.c ?? 0);
   } finally {
     await admin.end();
+  }
+}
+
+/**
+ * Bounded settle wait for the server-side handle-release proof (#650).
+ *
+ * postgres.js `close()` resolves once the CLIENT has sent Terminate and
+ * closed its socket; the server-side backend exits asynchronously and its
+ * `pg_stat_activity` row disappears only when that process actually exits.
+ * A just-closed connection to the throwaway slot can therefore remain
+ * briefly visible in `pg_stat_activity` after its client-side close has
+ * completed; the #650 beforeAll reproducer did not PID-attribute which
+ * just-closed slot connection (predecessor pool or DDL connection) was
+ * observed. A REAL leaked pool — the #648 P1-3 regression this file guards —
+ * is different in kind: it keeps its backend connected indefinitely.
+ *
+ * The predicate stays EXACTLY `otherBackendCount() === 0`: the poll only
+ * tolerates the short exit-visibility window, it never weakens the invariant.
+ * Same bounded-polling precedent as `pollAdvisoryLocks` in
+ * `testInfraLock.test.ts`: poll REAL server state until the predicate holds,
+ * fail loudly at the deadline; no fixed sleep stands in for the ordering.
+ *
+ * 2_000ms deadline / 50ms interval: the observed exit lag is milliseconds
+ * scale (#650 failed only when the count query ran ~1 round-trip after
+ * close, and every immediate rerun passed), so 2s is orders of magnitude
+ * above the real window while a genuine leak still fails fast — well inside
+ * the unchanged 30s hook/test budgets. Each poll performs one short-lived
+ * admin connection and one count query via the `otherBackendCount`
+ * predicate verbatim; the 50ms cadence keeps the observation budget bounded
+ * and the measured overhead negligible for this focused regression test.
+ */
+const BACKEND_EXIT_SETTLE_DEADLINE_MS = 2_000;
+const BACKEND_EXIT_SETTLE_INTERVAL_MS = 50;
+
+async function waitForNoOtherBackends(): Promise<void> {
+  const deadline = Date.now() + BACKEND_EXIT_SETTLE_DEADLINE_MS;
+  let count = await otherBackendCount();
+  while (count !== 0) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `backend still connected to throwaway slot "${slotName}" ` +
+          `after ${BACKEND_EXIT_SETTLE_DEADLINE_MS}ms (otherBackendCount=${count}) — ` +
+          `a real #648 P1-3 handle leak never drains and must fail here`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, BACKEND_EXIT_SETTLE_INTERVAL_MS));
+    count = await otherBackendCount();
   }
 }
 
@@ -117,7 +169,7 @@ WORKER_MODE_DESCRIBE(
            BEFORE TRUNCATE ON organizations
            FOR EACH STATEMENT EXECUTE FUNCTION test_block_reset()`,
       ]);
-      expect(await otherBackendCount()).toBe(0);
+      await waitForNoOtherBackends();
     }, 30_000);
 
     afterAll(async () => {
@@ -140,10 +192,13 @@ WORKER_MODE_DESCRIBE(
           /test_block_reset/,
         );
         // OWNERSHIP proof: the adapter owned the handle until returning the
-        // fixture; after the rejection its pool must be closed — no other
-        // backend may still be connected to the throwaway slot. On the
-        // leaky code the failed max:1 pool's connection survives here.
-        expect(await otherBackendCount()).toBe(0);
+        // fixture; after the rejection its pool must be closed — no backend
+        // may remain connected to the throwaway slot, settled within the
+        // bounded server-exit window. On the leaky code the failed max:1
+        // pool's connection survives indefinitely and the settle deadline
+        // fails here. Unlike the beforeAll settle, the handle proven released
+        // here is the adapter's own — the stronger direct #648 P1-3 evidence.
+        await waitForNoOtherBackends();
       },
     );
 

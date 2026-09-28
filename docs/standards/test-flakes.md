@@ -1247,7 +1247,7 @@ current-destination 标记是否依赖数据加载完成（收敛路径而非等
 
 - 2026-09-26：4-shard 首跑单次出现（1/166），隔离复跑与 4-shard 重跑均通过。
 
-## 2026-09-28 — `testDbWorkerScoped.failurePath.test.ts` beforeAll 与 `pg_stat_activity` 后端退出可见性竞态（#648 P1-3 所有权证明；已升级 → issue #650）
+## 2026-09-28 — `testDbWorkerScoped.failurePath.test.ts` beforeAll 与 `pg_stat_activity` 后端退出可见性竞态（#648 P1-3 所有权证明；已升级 → issue #650；已修复）
 
 ### 失败位置
 
@@ -1284,12 +1284,14 @@ AssertionError: expected 1 to be +0 // Object.is equality
 
 ### 根因假设
 
-断言在 `predecessor.close()` 之后**瞬时**读 `pg_stat_activity`：postgres.js
-`sql.end()` 在客户端发出 Terminate、关闭 socket 后即返回，而服务端 backend
-进程异步退出、其活动行要等进程真正退出才消失。该文件每次执行都对全新一次性
-槽位（`exam_test_db_wfailpath<rand>`，run 内唯一）走完整 CREATE DATABASE +
-migrate + 多次连接开/关（bootstrap 预检 ×2、migrate 连接、predecessor 池），
-`close()` → count 查询间隔毫秒级；退出滞后偶发超过该间隔 → count=1。单文件
+断言在 `predecessor.close()` 与随后安装阻断 trigger 的短命 DDL 连接 `end()`
+之后**瞬时**读 `pg_stat_activity`：postgres.js `sql.end()` 在客户端发出
+Terminate、关闭 socket 后即返回，而服务端 backend 进程异步退出、其活动行要等
+进程真正退出才消失。该文件每次执行都对全新一次性槽位
+（`exam_test_db_wfailpath<rand>`，run 内唯一）走完整 CREATE DATABASE +
+migrate + 多次连接开/关（bootstrap 预检 ×2、migrate 连接、predecessor 池、
+DDL 连接），`close()` → count 查询间隔毫秒级；退出滞后偶发超过该间隔 →
+count=1。单文件
 （单 worker、无全套件负载）也以 ~12% 复现，因为复现条件是本文件自身的
 DDL/连接churn，不是套件并行。
 
@@ -1303,16 +1305,53 @@ DDL/连接churn，不是套件并行。
 
 ### 当前缓解
 
-无代码改动（登记规则：不 skip、不 retry、不弱化断言、不加超时）。测量会话
-record-only。
+已修复（2026-09-28，issue #650，见下方「修复」）。不 skip、不 retry、不弱化断言、
+不加超时。
+
+### 修复（2026-09-28，[issue #650](https://github.com/jnhu76/exam/issues/650)）
+
+- **根因（即上方「根因假设」的定性结论）**：客户端 close 正确（`postgres.js`
+  `close()` 在发出 Terminate、关闭 socket 后即返回）；服务端 backend 进程异步
+  退出，其 `pg_stat_activity` 行要等进程真正退出才消失——瞬时读取撞上这个
+  毫秒级退出可见性窗口。不是真实 pool 泄漏（#648 P1-3 的泄漏形态是 backend
+  永久存活、count 永不归零）。
+- **观测归属（provenance）**：beforeAll 复现路径只支持较弱陈述——唯一一次性
+  槽位上一条刚 close 的连接，在客户端 close 完成后仍可能在
+  `pg_stat_activity` 中短暂可见；未做 PID 归因，瞬时观测到的 backend 无法
+  区分是 predecessor 池连接还是随后的短命 DDL 连接，故不表述为
+  「predecessor 的 backend 仍可见」。根因类别不受影响：客户端连接拆除 ≠
+  服务端 backend 可观测性即时消失。更强的直接 #648 P1-3 证明是第二个所有权
+  断言：reset 抛错 → adapter 关闭自持 handle → backend count 最终必须恰好
+  归 0。
+- **修复机制（测试预言机，仅测试文件）**：`testDbWorkerScoped.failurePath.test.ts`
+  内新增**文件局部** `waitForNoOtherBackends()`，替换 `beforeAll` 与 it 体内
+  两处瞬时 `expect(await otherBackendCount()).toBe(0)` 断言：立即查询
+  `otherBackendCount()`，为 0 立即通过；否则以 50ms 间隔轮询**真实**
+  `pg_stat_activity` 状态，谓词保持精确为 `otherBackendCount() === 0`；到
+  2000ms 截止仍非 0 则响亮失败，错误信息携带槽名与最后观测 count。沿用
+  `testInfraLock.test.ts` `pollAdvisoryLocks` 的 bounded-polling 先例（谓词必须
+  被真实状态满足才继续，无固定 sleep 充当排序 oracle）。截止 2000ms / 间隔
+  50ms：观测到的退出滞后为毫秒级（#650 仅在 count 查询紧跟 close ~1 个
+  round-trip 时命中），2s 高出真实窗口数个量级，同时真实泄漏仍在 2s 内快速
+  响亮失败——远在未改动的 30s hook/test 预算之内；每次轮询原样复用
+  `otherBackendCount` 谓词，各自执行一条短命 admin 连接 + 一条 count 查询，
+  轮询开销有界，在该聚焦回归测试的规模下实测可忽略。30s hook/test 超时未动，
+  测试文件外的任何生产/测试基建代码未动。
+- **为什么不是 retry / sleep 掩盖**：最终谓词不变（仍是 count===0，不弱化为
+  `<=1`、不忽略 PID）；轮询读的是真实服务端状态，没有任何固定 sleep 充当
+  排序保证；失败仍响亮（到截止即抛错）。反掩盖阴性对照已做：临时绕过
+  `testDb.ts` 失败路径的 `handle.close()`（模拟真实泄漏）→ 所有权用例恰在
+  settle 截止失败（`otherBackendCount=1`，2000ms）→ 完整还原、未提交该变异。
+  结构论证：瞬态退出滞后 → 最终归零 → PASS；真实泄漏（max:1 pool 未关闭）→
+  count 恒 ≥1 → 到截止 → FAIL。
+- **验证**：修复后单文件 `vitest run src/testDbWorkerScoped.failurePath.test.ts`
+  连续 30 次（阴性对照前后各 15 次）全绿、0 失败（修复前同命令 17 跑 2 败）；
+  命中率归零。全套件与静态门禁见该 issue closeout。
 
 ### 后续动作
 
-issue #650 跟踪修复：把两处瞬时 `otherBackendCount()` 断言（`beforeAll` `:120`
-与 it 体内 reset 拒绝后的对应断言）改为**有界 settle 轮询**（~2–3s 截止、
-50–100ms 间隔，沿用 `testInfraLock.test.ts` 的 `pg_locks` bounded-polling 先例：
-谓词必须被真实状态满足才继续）。真实泄漏永不归零、到截止仍响亮失败——证明力
-不变，仅容忍退出可见性滞后。修复后以单文件 15+ 连跑确认命中率归零。
+无（已修复并经阴性对照验证证明力不变）。若 settle 截止在无泄漏证据下反复到
+期触发失败，按 issue #650 的既定处置停止并调查真实泄漏，不加大截止时间。
 
 ### 复发记录
 
