@@ -921,13 +921,21 @@ Contract rules going forward:
    over.** Ordinary `@exam/db` tests now reuse persistent package worker
    slots — `exam_test_db_w{pool}` locally, `exam_test_db_s{shard}_w{pool}` in
    CI (derived by `resolveDbPackageTestScope`, provably disjoint from API
-   slot names) — through `getWorkerScopedTestDb`: migrate once per slot
+   slot names; the slot identity is owned by the worker slot + shard ONLY —
+   `API_TEST_GROUP` dedicated-group namespaces deliberately do NOT collapse
+   package slots, because sibling workers of one invocation each truncate
+   their own slot) — through `getWorkerScopedTestDb`: migrate once per slot
    (server-side bootstrap precheck, rule 4), `resetPostgres()` once per file
-   (rule 2's truncate boundary), pools closed without dropping the slot. Two
-   simultaneous `@exam/db` runs would truncate each other's slots, so
-   `packages/db/vitest.globalSetup.ts` holds a package-db invocation lease
-   (`exam_test_db_worker_database_run`) with exactly this rule's semantics:
-   one immediate try-lock, whole-invocation hold, automatic release on
+   (rule 2's truncate boundary), pools closed without dropping the slot.
+   Under `TEST_DB_ISOLATION=file-schema` (supported restricted-role mode) the
+   adapter transparently delegates to `getIsolatedTestDb` — per-file schema,
+   no package worker DB, no CREATEDB privilege — so converted ordinary tests
+   are mode-agnostic. Two simultaneous `@exam/db` worker-database runs would
+   truncate each other's slots, so `packages/db/vitest.globalSetup.ts` holds
+   a package-db invocation lease (`exam_test_db_worker_database_run`) with
+   exactly this rule's semantics — worker-database invocations only; a
+   file-schema invocation owns no package slots and takes no lease: one
+   immediate try-lock, whole-invocation hold, automatic release on
    process death, canonical-`postgres` host, alien `TEST_ADMIN_DATABASE`
    rejected. The key is deliberately DISTINCT from the API run lease — the
    API lease's contract tests execute inside the @exam/db suite and must stay
@@ -935,12 +943,16 @@ Contract rules going forward:
    unchanged; `getIsolatedTestDb` fresh-schema semantics are unchanged and
    remain the path for migration/DDL/multi-fixture/second-connection tests.
    Regressions: package-slot namespace derivation (determinism, CI shard
-   shape, disjointness, file-schema fail-fast) in `testScope.test.ts`;
-   namespace separation of all THREE keys, second-acquire immediate
-   rejection against the enclosing holder (foreign-session try-lock probe),
-   API-identity acquire while the package lease is held, and cluster-scope
+   shape, disjointness, file-schema fail-fast, dedicated-group pool
+   separation) in `testScope.test.ts`; namespace separation of all THREE
+   keys, second-acquire immediate rejection against the enclosing holder
+   (foreign-session try-lock probe), API-identity acquire while the package
+   lease is held, and cluster-scope
    rejection in `testInfraLock.test.ts`; first-use reset / no-second-truncate
-   / metadata survival / slot-name shape in `testDbWorkerScoped.test.ts`.
+   / metadata survival / slot-name shape in `testDbWorkerScoped.test.ts`;
+   file-schema adapter delegation and run-lease mode gating in
+   `testDbWorkerScoped.fileSchema.test.ts` and
+   `packages/db/vitest.globalSetup.test.ts`.
 
 Regression tests assert these rules deterministically (charset/priority unit
 tests for rule 1; pg_locks self-session proofs and try-lock probes for rules

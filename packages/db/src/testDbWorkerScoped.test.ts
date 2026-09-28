@@ -3,7 +3,10 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "./schema/pg.js";
 import { getWorkerScopedTestDb, resolveTestDbUrl } from "./testDb.js";
-import { resolveDbPackageTestScope } from "./testScope.js";
+import {
+  resolveDbIsolationMode,
+  resolveDbPackageTestScope,
+} from "./testScope.js";
 import {
   setupWorkerTestDatabase,
   withDatabaseName,
@@ -29,6 +32,11 @@ import {
  * executed test file (same VITEST_POOL_ID, fresh process) leaves behind —
  * the bootstrap fact is server-side, so the helper then behaves as it would
  * at a real file handoff.
+ *
+ * These proofs exercise the worker-database branch; under a
+ * `TEST_DB_ISOLATION=file-schema` enclosing invocation the worker-slot
+ * mechanism is not in use (the adapter's file-schema branch is covered by
+ * `testDbWorkerScoped.fileSchema.test.ts`), so this describe self-skips.
  */
 
 const BASE_URL = resolveTestDbUrl();
@@ -46,7 +54,10 @@ async function pgReachable(url: string): Promise<boolean> {
 }
 
 const PG_UP = await pgReachable(withDatabaseName(BASE_URL, "postgres"));
-const PG_DESCRIBE = PG_UP ? describe : describe.skip;
+const WORKER_MODE_DESCRIBE =
+  PG_UP && resolveDbIsolationMode() === "worker-database"
+    ? describe
+    : describe.skip;
 
 /** Inserted by the simulated predecessor, queried after the file's reset. */
 const sentinelSlug = `worker-scope-sentinel-${randomUUID().slice(0, 8)}`;
@@ -85,7 +96,7 @@ async function sentinelOrgExists(
   }
 }
 
-PG_DESCRIBE(
+WORKER_MODE_DESCRIBE(
   "getWorkerScopedTestDb — ordinary-test worker-slot seam (#648)",
   { timeout: 30_000 },
   () => {
