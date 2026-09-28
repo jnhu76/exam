@@ -9,6 +9,10 @@ import {
 } from "./testWorkerDatabase.js";
 import { resolveTestDbUrl } from "./testDb.js";
 import { getTestInfraLockAcquisitionCount } from "./testInfraLock.js";
+import {
+  resolveDbIsolationMode,
+  resolveDbPackageTestScope,
+} from "./testScope.js";
 
 /**
  * ADR-007 Phase 3A worker-database prototype tests.
@@ -52,6 +56,15 @@ async function pgReachable(url: string): Promise<boolean> {
 const PG_UP = await pgReachable(ADMIN_URL);
 /** describe or describe.skip depending on PG reachability. */
 const PG_DESCRIBE = PG_UP ? describe : describe.skip;
+/**
+ * describe for worker-slot-seam proofs: `resolveDbPackageTestScope()` requires
+ * worker-database isolation, so these cases self-skip under file-schema
+ * (same seam rule as `testDbWorkerScoped.test.ts`).
+ */
+const WORKER_SLOT_DESCRIBE =
+  PG_UP && resolveDbIsolationMode() === "worker-database"
+    ? describe
+    : describe.skip;
 
 /**
  * Generate a per-run unique, safety-guard-compatible database name.
@@ -476,30 +489,26 @@ describe("truncateBusinessTables — guard", () => {
   });
 });
 
-PG_DESCRIBE(
+WORKER_SLOT_DESCRIBE(
   "truncateBusinessTables — no-op path",
   // Same lifecycle-queue budget as the other worker-database describes.
   { timeout: 30_000 },
   () => {
     it("does not error when there are zero business rows", async () => {
-      // Phase 6D Option B: unique TEST_WORKER_ID → unique resolved DB name.
-      const runTag = Math.random().toString(36).slice(2, 8);
-      const workerId = `phase6d_noop_${runTag}`.replace(/[^a-z0-9_]/g, "_");
+      // Runs on the persistent package worker slot (#648 seam) instead of a
+      // unique throwaway database: the no-op proof needs a migrated DB with
+      // zero business rows, not physical CREATE/DROP lifecycle. The first
+      // reset clears whatever a predecessor file left on the slot, so the
+      // resets under proof run against a guaranteed-empty business schema.
       const handle = await setupWorkerTestDatabase({
-        env: {
-          TEST_DB_ISOLATION: "worker-database",
-          TEST_WORKER_ID: workerId,
-          TEST_DATABASE_URL: BASE_URL,
-        },
+        scope: resolveDbPackageTestScope(),
       });
       try {
         await handle.resetPostgres();
-        await handle.resetPostgres(); // no business rows -> no-op, no error
+        await handle.resetPostgres(); // zero business rows -> no-op, no error
+        await handle.resetPostgres(); // still zero -> no-op, no error
       } finally {
         await handle.close();
-        await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
-          keepMissing: true,
-        });
       }
     });
   },
