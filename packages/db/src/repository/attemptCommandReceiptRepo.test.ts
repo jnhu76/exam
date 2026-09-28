@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "../schema/pg.js";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import type { Database } from "../types.js";
 import {
   createAttemptCommandReceiptRepo,
@@ -207,9 +207,7 @@ describe("attempt command receipt persistence foundation", () => {
   let repo: ReturnType<typeof createAttemptCommandReceiptRepo>;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb(
-      "attempt-command-receipt-persistence",
-    );
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     alpha = await createFixture(db, "alpha");

@@ -3,7 +3,7 @@ import type { RequestContext } from "@exam/domain";
 import type { IncidentSeverity, IncidentType } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "../schema/pg.js";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import type { Database } from "../types.js";
 import { createIncidentRepo } from "./incidentRepo.js";
 
@@ -163,7 +163,7 @@ describe("incident persistence foundation", () => {
   let beta: Fixture;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("incident-persistence");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     alpha = await createFixture(db, "alpha");

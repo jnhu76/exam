@@ -3,7 +3,7 @@ import type { RequestContext } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { schema } from "../schema/pg.js";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import type { Database } from "../types.js";
 import { createProctorAssignmentRepo } from "./proctorAssignmentRepo.js";
 
@@ -146,7 +146,7 @@ describe("proctor assignment persistence foundation", () => {
   let repo: ReturnType<typeof createProctorAssignmentRepo>;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("proctor-assignment-persistence");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     alpha = await createFixture(db, "alpha");

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { auditLogs } from "../schema/pg.js";
 import { createAuditLogTestRepo } from "../testHelpers/auditLogTestRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
@@ -33,7 +33,7 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
   let ctx: RequestContext;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-repo-audit-keyset");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     const orgRepo = createOrganizationRepo(db);

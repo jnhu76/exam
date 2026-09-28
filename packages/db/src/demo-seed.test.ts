@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "./types.js";
-import { getIsolatedTestDb } from "./testDb.js";
+import { getWorkerScopedTestDb } from "./testDb.js";
 import {
   seedDemo,
   DEMO_GRADED_ATTEMPT_KEYS,
@@ -61,7 +61,7 @@ describe("demo seed", { timeout: 30_000 }, () => {
   let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-demo-seed");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
   }, 30_000);

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { schema } from "../schema/pg.js";
 import { createAttemptRepo } from "./attemptRepo.js";
 import { createEnrollmentRepo } from "./enrollmentRepo.js";
@@ -124,7 +124,7 @@ describe("attemptGradingEntryRepo", () => {
   const orgId = randomUUID();
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-attempt-grading-entries");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     entryRepo = createAttemptGradingEntryRepo(db);

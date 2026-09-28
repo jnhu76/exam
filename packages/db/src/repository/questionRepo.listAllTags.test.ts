@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { createQuestionRepo } from "./questionRepo.js";
 import type { Database } from "../types.js";
 import { sql } from "drizzle-orm";
@@ -79,7 +79,7 @@ describe("questionRepo.listAllTags (vocabulary resilience)", () => {
   let repo: ReturnType<typeof createQuestionRepo>;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-repo-question-tags");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     repo = createQuestionRepo(db);

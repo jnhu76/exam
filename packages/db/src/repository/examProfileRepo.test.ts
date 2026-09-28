@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "../schema/pg.js";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import type { Database } from "../types.js";
 import { createExamProfileRepo } from "./examProfileRepo.js";
 
@@ -61,7 +61,7 @@ describe("examProfileRepo — organization-scoped CRUD (P7-M2 §10/§27)", () =>
   };
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-examProfileRepo");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     orgA = randomUUID();

@@ -3,7 +3,7 @@ import type { RequestContext } from "@exam/domain";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "../schema/pg.js";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import type { Database } from "../types.js";
 import { createAttemptInterruptionEventRepo } from "./attemptInterruptionEventRepo.js";
 import { createAttemptInterruptionRepo } from "./attemptInterruptionRepo.js";
@@ -163,7 +163,7 @@ describe("interruption persistence foundation", () => {
   let beta: Fixture;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("interruption-persistence");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     alpha = await createFixture(db, "alpha");

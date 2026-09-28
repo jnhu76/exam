@@ -5,7 +5,7 @@ import type {
   RequestContext,
 } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { setupIsolatedTestDb } from "../testIsolation.js";
 import type { IsolatedTestDb } from "../testIsolation.js";
 import { createDatabase } from "../database.js";
@@ -142,7 +142,7 @@ describe("emailOutboxRepo", () => {
   let orgScope: OrganizationScope;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-email-outbox");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     organizationRepo = createOrganizationRepo(db);

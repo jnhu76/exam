@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { schema } from "../schema/pg.js";
 import { createQuestionRepo } from "./questionRepo.js";
 import { createAttemptRepo } from "./attemptRepo.js";
@@ -29,7 +29,7 @@ describe("P3-L0-1 repo round-trip: text_response + submitted_answers", () => {
   };
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("l01-roundtrip");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     questionRepo = createQuestionRepo(db);
