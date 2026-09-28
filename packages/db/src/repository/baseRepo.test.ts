@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { createAsyncTenantCrudRepo } from "./baseRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import { schema } from "../schema/pg.js";
@@ -22,7 +22,7 @@ describe("baseRepo count and listPaginated", () => {
   let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-baseRepo-count");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
   }, 30_000);

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { createAuditLogTestRepo } from "../testHelpers/auditLogTestRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import type { Database } from "../types.js";
@@ -30,7 +30,7 @@ describe("auditLogRepo.listByTarget (timeline)", () => {
   let ctx: RequestContext;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-repo-audit-timeline");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     const orgRepo = createOrganizationRepo(db);

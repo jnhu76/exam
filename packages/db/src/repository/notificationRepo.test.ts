@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { createNotificationRepo } from "./notificationRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import { createUserRepo } from "./userRepo.js";
@@ -88,7 +88,7 @@ describe("notificationRepo", () => {
   }
 
   beforeAll(async () => {
-    const env = await getIsolatedTestDb("db-notificationRepo");
+    const env = await getWorkerScopedTestDb();
     db = env.db;
     cleanup = env.cleanup;
     userCounter = 0;

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { createClientEventRepo } from "./clientEventRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import { retentionRuns, schema } from "../schema/pg.js";
@@ -37,7 +37,7 @@ describe("clientEventRepo.deleteOlderThan (retention primitive)", () => {
   let orgCounter = 0;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("db-clientEventRetention");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     repo = createClientEventRepo(db);

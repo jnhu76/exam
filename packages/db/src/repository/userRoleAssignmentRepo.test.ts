@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { schema } from "../schema/pg.js";
 import { createUserRoleAssignmentRepo } from "./userRoleAssignmentRepo.js";
 import type { Database } from "../types.js";
@@ -51,7 +51,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
   let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const iso = await getIsolatedTestDb("userroleassign");
+    const iso = await getWorkerScopedTestDb();
     db = iso.db;
     cleanup = iso.cleanup;
   }, 30_000);

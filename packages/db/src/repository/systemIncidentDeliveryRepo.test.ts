@@ -19,7 +19,7 @@ import { eq } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schema } from "../schema/pg.js";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import type { Database } from "../types.js";
 import { createAttemptInterruptionEventRepo } from "./attemptInterruptionEventRepo.js";
 import { createIncidentRepo, OPERATION_PROBE_BATCH } from "./incidentRepo.js";
@@ -205,7 +205,7 @@ describe("system incident delivery discovery reads (#304)", () => {
   let beta: OrgFixture;
 
   beforeAll(async () => {
-    const result = await getIsolatedTestDb("sysinc-delivery-repo");
+    const result = await getWorkerScopedTestDb();
     db = result.db;
     cleanup = result.cleanup;
     alpha = await createOrgFixture(db, "alpha");

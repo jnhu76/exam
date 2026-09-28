@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
-import { getIsolatedTestDb } from "../testDb.js";
+import { getWorkerScopedTestDb } from "../testDb.js";
 import { schema } from "../schema/pg.js";
 import { createExamAdmissionRepo } from "./examAdmissionRepo.js";
 import type { Database } from "../types.js";
@@ -150,7 +150,7 @@ async function createFreshExam(): Promise<string> {
 }
 
 beforeAll(async () => {
-  const isolated = await getIsolatedTestDb("exam-admission-repo");
+  const isolated = await getWorkerScopedTestDb();
   db = isolated.db;
   cleanup = isolated.cleanup;
   orgId = randomUUID();

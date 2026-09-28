@@ -354,6 +354,80 @@ export function resolveTestScope(
   };
 }
 
+/**
+ * Resolve ONLY the PostgreSQL isolation strategy (`TEST_DB_ISOLATION`).
+ *
+ * Single authority for mode reads at seams that must NOT resolve a worker
+ * identity: `resolveTestScope` correctly fail-fasts on a missing
+ * `VITEST_POOL_ID` under Vitest, which is wrong for the Vitest MAIN process
+ * (globalSetup: VITEST=true, no pool id exists yet) and unnecessary for
+ * ordinary-test adapter branches. Same values, same validation, same default
+ * as the full resolver's `dbIsolation` field.
+ */
+export function resolveDbIsolationMode(
+  env: ResolverEnv = process.env,
+): TestDbIsolationMode {
+  return resolveDbIsolation(env);
+}
+
+/**
+ * Resolve the scope for the @exam/db package's OWN worker slots.
+ *
+ * The physical slot database name is derived DIRECTLY from the dimensions
+ * that own package worker resources — the worker slot id
+ * (TEST_WORKER_ID → VITEST_POOL_ID → fail-fast under Vitest), plus the shard
+ * index in CI — and NOT by renaming the API scope's slot name:
+ *
+ *   local:  exam_test_db_w{worker}
+ *   CI:     exam_test_db_s{shard}_w{worker}
+ *
+ * INVARIANT (#648 P1-2): `API_TEST_GROUP` must NOT alter the package slot
+ * identity. Turbo passes API_TEST_GROUP through DB-backed tasks, so a
+ * dedicated API group (`background` / `concurrency` / `e2e`) can be present
+ * in a plain @exam/db invocation. The API resolver deliberately collapses
+ * dedicated groups to one namespace (`exam_test_<group>`), but sibling Vitest
+ * workers of ONE @exam/db invocation each own a slot and call
+ * `resetPostgres()` on it — inheriting the group collapse would point them
+ * all at one database and let them truncate each other's fixtures mid-file.
+ *
+ * The two slot namespaces are still provably disjoint: the API grammar after
+ * `exam_test_` is `w*`, `s*_w*`, or a dedicated group name, never the literal
+ * `db_` segment, so a package slot can never equal an API slot and the two
+ * suites sharing one PostgreSQL server cannot truncate each other's fixtures.
+ *
+ * Field semantics of the returned scope: `postgresDatabaseName`, `workerId`
+ * and `shardIndex` describe the PHYSICAL package slot (under a dedicated API
+ * group these deliberately differ from the API scope's informational values);
+ * every other field (scopeId, kind, redisPrefix, queuePrefix, …) is the
+ * enclosing run's taxonomy, inherited unchanged and unused for slot binding.
+ *
+ * INVARIANT: callers must persist nothing here; the derived name is re-derived
+ * every run from the same slot identity, keeping physical cardinality bounded
+ * by VITEST_POOL_ID exactly like the API slots.
+ */
+export function resolveDbPackageTestScope(
+  env: ResolverEnv = process.env,
+): ResolvedTestScope {
+  const scope = resolveTestScope(env);
+  if (scope.dbIsolation === "file-schema") {
+    fail(
+      `the @exam/db worker-slot helper requires worker-database isolation, but TEST_DB_ISOLATION is "${scope.dbIsolation}" (no slot database is derived in that mode)`,
+    );
+  }
+  const workerId = resolveWorkerId(env);
+  const shardIndex = resolveShardIndex(env, scope.isCi);
+  const dbPackageSlot = scope.isCi
+    ? `exam_test_db_s${shardIndex}_w${workerId}`
+    : `exam_test_db_w${workerId}`;
+  assertPgNameSafe(dbPackageSlot);
+  return {
+    ...scope,
+    postgresDatabaseName: dbPackageSlot,
+    workerId,
+    shardIndex,
+  };
+}
+
 interface DeriveNameInput {
   group: TestGroup;
   dbIsolation: TestDbIsolationMode;

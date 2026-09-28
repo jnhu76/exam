@@ -6,11 +6,14 @@ import {
   withDatabaseName,
 } from "./testWorkerDatabase.js";
 import {
+  acquireDbPackageRunLease,
   acquireTestInfraRunLease,
   getTestInfraLifecycleLockKey,
   resolveTestInfraCoordinationUrl,
+  TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_KEY,
   TEST_INFRA_RUN_LEASE_LOCK_KEY,
   withTestInfraLifecycleLock,
+  type TestInfraRunLease,
 } from "./testInfraLock.js";
 import { resolveTestDbUrl } from "./testDb.js";
 
@@ -798,6 +801,92 @@ PG_DESCRIBE(
       // free for the next clean caller.
       const next = await acquireTestInfraRunLease(BASE_URL, {});
       await next.release();
+    });
+  },
+);
+
+PG_DESCRIBE(
+  "acquireDbPackageRunLease — @exam/db package worker-slot run lease (#648)",
+  // OWNERSHIP: under worker-database isolation the enclosing @exam/db run
+  // ALREADY holds this lease — its globalSetup acquires it before any worker
+  // exists and releases only in the global teardown (mirror of the API run
+  // lease, one slot namespace over). Under TEST_DB_ISOLATION=file-schema the
+  // enclosing run takes NO package lease (P1-1 — it owns no worker slots),
+  // so the conflict test acquires the identity itself as run A. Either way a
+  // REAL holder owns the lease when the second acquire is attempted, the
+  // same way the API suite proves an end-to-end conflict against its own
+  // held lease. "Release permits the next invocation" is proven at the
+  // implementation level by the sibling API-lease tests (shared
+  // acquireServerScopedRunLease seam) and end-to-end by the required two
+  // consecutive @exam/db runs.
+  { timeout: 30_000 },
+  () => {
+    it("package lease key is namespace-separated from lifecycle AND API lease keys", () => {
+      expect(TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_KEY).not.toBe(
+        getTestInfraLifecycleLockKey(),
+      );
+      expect(TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_KEY).not.toBe(
+        TEST_INFRA_RUN_LEASE_LOCK_KEY,
+      );
+      expect(TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_KEY).not.toBe(0n);
+    });
+
+    it("a second acquire fails IMMEDIATELY against the real holder", async () => {
+      // Run A: the enclosing worker-database run's globalSetup holds
+      // exam_test_db_worker_database_run; a file-schema enclosing run holds
+      // nothing (P1-1), so acquire it here. The foreign-session probe below
+      // pins the holder's existence server-side either way. A second
+      // invocation's globalSetup calls exactly this function and must be
+      // rejected in ONE try-lock round-trip, naming the lease.
+      let selfHeld: TestInfraRunLease | undefined;
+      try {
+        try {
+          selfHeld = await acquireDbPackageRunLease(BASE_URL, {});
+        } catch (err) {
+          // Enclosing worker-database run is already the holder.
+          expect(String(err)).toMatch(
+            /exam_test_db_worker_database_run is held/,
+          );
+        }
+        const foreign = postgres(ADMIN_URL, { max: 1 });
+        try {
+          const probe = (await foreign.unsafe(
+            "SELECT pg_try_advisory_lock($1) AS ok",
+            [TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_KEY.toString()],
+          )) as Array<{ ok: boolean }>;
+          expect(probe[0]?.ok).toBe(false);
+        } finally {
+          await foreign.end().catch(() => {});
+        }
+        const t0 = Date.now();
+        await expect(acquireDbPackageRunLease(BASE_URL, {})).rejects.toThrow(
+          /exam_test_db_worker_database_run is held/,
+        );
+        expect(Date.now() - t0).toBeLessThan(2_000);
+      } finally {
+        await selfHeld?.release();
+      }
+    });
+
+    it("does NOT collide with the API run lease: API identity acquires while the package lease is held", async () => {
+      // The API lease's contract tests run inside this package; if the
+      // package lease shared the API identity, the enclosing run would make
+      // those tests fail against their own outer lease. Distinct keys are a
+      // correctness requirement, proven here by acquiring the API identity
+      // WHILE the enclosing run holds the package identity.
+      const api = await acquireTestInfraRunLease(BASE_URL, {});
+      await api.release();
+    });
+
+    it("is CLUSTER-scoped: alien TEST_ADMIN_DATABASE is rejected, not honored", async () => {
+      // Validation fires before any connection opens, deterministically —
+      // independent of the enclosing holder. No trailing clean acquire here:
+      // the canonical domain is legitimately occupied by the enclosing run.
+      const t0 = Date.now();
+      await expect(
+        acquireDbPackageRunLease(BASE_URL, { TEST_ADMIN_DATABASE: "coord_a" }),
+      ).rejects.toThrow(/TEST_ADMIN_DATABASE must be unset or "postgres"/);
+      expect(Date.now() - t0).toBeLessThan(2_000);
     });
   },
 );

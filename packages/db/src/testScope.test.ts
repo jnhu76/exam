@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveTestScope,
+  resolveDbPackageTestScope,
+  resolveDbIsolationMode,
   resolvePostgresDatabaseName,
   resolveRedisPrefix,
   resolveQueuePrefix,
@@ -383,5 +385,196 @@ describe("resolveTestScope — no external dependencies", () => {
     const scope = resolveTestScope(env());
     expect(scope.scopeId).toBe("local_w1");
     expect(scope.postgresDatabaseName).toBe("exam_test_w1");
+  });
+});
+
+describe("resolveDbPackageTestScope — @exam/db package worker-slot namespace (#648)", () => {
+  it("derives the package slot name for the local default pool id", () => {
+    const scope = resolveDbPackageTestScope(env({ TEST_WORKER_ID: "1" }));
+    expect(scope.postgresDatabaseName).toBe("exam_test_db_w1");
+  });
+
+  it("is deterministic: same env, same slot name", () => {
+    const e = env({ TEST_WORKER_ID: "2" });
+    expect(resolveDbPackageTestScope(e).postgresDatabaseName).toBe(
+      resolveDbPackageTestScope(e).postgresDatabaseName,
+    );
+  });
+
+  it("pool id bounds the slot name: distinct pool ids → distinct slots", () => {
+    const w1 = resolveDbPackageTestScope(
+      env({ TEST_WORKER_ID: "1" }),
+    ).postgresDatabaseName;
+    const w2 = resolveDbPackageTestScope(
+      env({ TEST_WORKER_ID: "2" }),
+    ).postgresDatabaseName;
+    expect(w1).toBe("exam_test_db_w1");
+    expect(w2).toBe("exam_test_db_w2");
+    expect(w1).not.toBe(w2);
+  });
+
+  it("derives the CI shard+pool name and never equals the API slot", () => {
+    const e = env({
+      TEST_INFRA_SCOPE: "ci",
+      TEST_SHARD_INDEX: "3",
+      TEST_WORKER_ID: "2",
+    });
+    const dbScope = resolveDbPackageTestScope(e);
+    expect(dbScope.postgresDatabaseName).toBe("exam_test_db_s3_w2");
+    expect(dbScope.postgresDatabaseName).not.toBe(
+      resolveTestScope(e).postgresDatabaseName,
+    );
+  });
+
+  it("overrides only the slot-identity fields; run taxonomy facts are preserved", () => {
+    const e = env({ TEST_WORKER_ID: "2" });
+    const api = resolveTestScope(e);
+    const dbPkg = resolveDbPackageTestScope(e);
+    expect(dbPkg.scopeId).toBe(api.scopeId);
+    expect(dbPkg.workerId).toBe(api.workerId);
+    expect(dbPkg.shardIndex).toBe(api.shardIndex);
+    expect(dbPkg.dbIsolation).toBe(api.dbIsolation);
+    expect(dbPkg.redisPrefix).toBe(api.redisPrefix);
+    expect(dbPkg.queuePrefix).toBe(api.queuePrefix);
+  });
+
+  it("package slot names are disjoint from every API slot name shape", () => {
+    // The API grammar after `exam_test_` is `w*`, `s*_w*`, or a dedicated
+    // group — never the literal `db_` segment, so the namespaced slot can
+    // never collide with an API slot on a shared server.
+    const envs = [
+      env({ TEST_WORKER_ID: "1" }),
+      env({ TEST_WORKER_ID: "3" }),
+      env({
+        TEST_INFRA_SCOPE: "ci",
+        TEST_SHARD_INDEX: "2",
+        TEST_WORKER_ID: "1",
+      }),
+      env({ API_TEST_GROUP: "background" }),
+    ];
+    for (const e of envs) {
+      const apiName = resolveTestScope(e).postgresDatabaseName;
+      const dbPkgName = resolveDbPackageTestScope(e).postgresDatabaseName;
+      expect(dbPkgName).not.toBe(apiName);
+      expect(dbPkgName).toMatch(/^exam_test_db_/);
+    }
+  });
+
+  it("fails loudly under file-schema isolation (no slot database exists)", () => {
+    expect(() =>
+      resolveDbPackageTestScope(env({ TEST_DB_ISOLATION: "file-schema" })),
+    ).toThrow(/requires worker-database isolation/);
+  });
+
+  it("keeps the runner fail-fast: Vitest without a pool id still hard-fails", () => {
+    expect(() => resolveDbPackageTestScope(env({ VITEST: "true" }))).toThrow(
+      /VITEST_POOL_ID is required/,
+    );
+  });
+});
+
+describe("resolveDbPackageTestScope — API_TEST_GROUP must not collapse package slots (P1-2, #648)", () => {
+  // Turbo passes API_TEST_GROUP through DB-backed tasks, so a dedicated API
+  // group can be present in a plain @exam/db invocation. The package slot
+  // identity is owned ONLY by the worker slot (+ shard in CI); the API
+  // dedicated-group namespace (exam_test_<group>) must never leak into the
+  // physical package slot name — sibling Vitest workers of ONE invocation
+  // would otherwise share one database and resetPostgres() each other's
+  // fixtures mid-file.
+  const dedicatedGroups = ["background", "concurrency", "e2e"] as const;
+
+  it.each(dedicatedGroups)(
+    "API_TEST_GROUP=%s: distinct pool ids stay on distinct package slots",
+    (group) => {
+      const pool1 = resolveDbPackageTestScope(
+        env({ API_TEST_GROUP: group, VITEST_POOL_ID: "1" }),
+      );
+      const pool2 = resolveDbPackageTestScope(
+        env({ API_TEST_GROUP: group, VITEST_POOL_ID: "2" }),
+      );
+      expect(pool1.postgresDatabaseName).toBe("exam_test_db_w1");
+      expect(pool2.postgresDatabaseName).toBe("exam_test_db_w2");
+      expect(pool1.postgresDatabaseName).not.toBe(pool2.postgresDatabaseName);
+    },
+  );
+
+  it.each(dedicatedGroups)(
+    "API_TEST_GROUP=%s: the slot name never contains the group segment",
+    (group) => {
+      const scope = resolveDbPackageTestScope(
+        env({ API_TEST_GROUP: group, VITEST_POOL_ID: "1" }),
+      );
+      expect(scope.postgresDatabaseName).not.toContain(group);
+      expect(scope.postgresDatabaseName).toMatch(/^exam_test_db_w/);
+    },
+  );
+
+  it("CI: dedicated group keeps shard+pool identity (s3, w1/w2)", () => {
+    const base = {
+      API_TEST_GROUP: "background",
+      TEST_INFRA_SCOPE: "ci",
+      TEST_SHARD_INDEX: "3",
+    } as const;
+    const w1 = resolveDbPackageTestScope(env({ ...base, VITEST_POOL_ID: "1" }));
+    const w2 = resolveDbPackageTestScope(env({ ...base, VITEST_POOL_ID: "2" }));
+    expect(w1.postgresDatabaseName).toBe("exam_test_db_s3_w1");
+    expect(w2.postgresDatabaseName).toBe("exam_test_db_s3_w2");
+    expect(w1.postgresDatabaseName).not.toBe(w2.postgresDatabaseName);
+  });
+
+  it("ordinary group unchanged: pool-only local name, TEST_WORKER_ID wins over VITEST_POOL_ID", () => {
+    const scope = resolveDbPackageTestScope(
+      env({ VITEST_POOL_ID: "2", TEST_WORKER_ID: "7" }),
+    );
+    expect(scope.postgresDatabaseName).toBe("exam_test_db_w7");
+  });
+
+  it("slot-identity fields describe the physical slot even under a dedicated API group", () => {
+    const scope = resolveDbPackageTestScope(
+      env({ API_TEST_GROUP: "background", VITEST_POOL_ID: "4" }),
+    );
+    expect(scope.workerId).toBe("4");
+    expect(scope.postgresDatabaseName).toBe("exam_test_db_w4");
+  });
+
+  it("the package slot stays disjoint from the API dedicated-group database", () => {
+    const e = env({ API_TEST_GROUP: "background", VITEST_POOL_ID: "1" });
+    expect(resolveDbPackageTestScope(e).postgresDatabaseName).not.toBe(
+      resolveTestScope(e).postgresDatabaseName,
+    );
+  });
+});
+
+describe("resolveDbIsolationMode — mode-only read (main-process safe)", () => {
+  it("unset / empty / whitespace default to worker-database", () => {
+    expect(resolveDbIsolationMode(env({}))).toBe("worker-database");
+    expect(resolveDbIsolationMode(env({ TEST_DB_ISOLATION: "" }))).toBe(
+      "worker-database",
+    );
+    expect(resolveDbIsolationMode(env({ TEST_DB_ISOLATION: "  " }))).toBe(
+      "worker-database",
+    );
+  });
+
+  it("echoes both supported modes", () => {
+    expect(
+      resolveDbIsolationMode(env({ TEST_DB_ISOLATION: "file-schema" })),
+    ).toBe("file-schema");
+    expect(
+      resolveDbIsolationMode(env({ TEST_DB_ISOLATION: "worker-database" })),
+    ).toBe("worker-database");
+  });
+
+  it("fails fast on invalid values (same error as the full resolver)", () => {
+    expect(() =>
+      resolveDbIsolationMode(env({ TEST_DB_ISOLATION: "magic-schema" })),
+    ).toThrow(/invalid TEST_DB_ISOLATION/);
+  });
+
+  it("never resolves a worker identity: safe without VITEST_POOL_ID under Vitest", () => {
+    expect(() => resolveDbIsolationMode(env({ VITEST: "true" }))).not.toThrow();
+    expect(resolveDbIsolationMode(env({ VITEST: "true" }))).toBe(
+      "worker-database",
+    );
   });
 });
