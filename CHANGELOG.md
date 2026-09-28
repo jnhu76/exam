@@ -8,6 +8,17 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+### Changed
+
+- Compose project identities are pinned (#631): the dev stack
+  (`docker-compose.dev.yml`) runs as project `exam-dev` and production
+  (`docker-compose.yml`) as `exam-prod`, so a production rehearsal from a
+  developer checkout can no longer recreate dev containers under the
+  directory-derived `exam` project. Existing deployments remove the old
+  `exam` containers once before `up -d` (upgrade guide §2.2 step 0c);
+  contributor source-build rehearsals set `EXAM_DATA_ROOT` outside the
+  checkout.
+
 ### Removed
 
 - Image automatic-seed interface (#636): `docker-entrypoint.sh` no longer

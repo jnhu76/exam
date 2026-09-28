@@ -159,7 +159,7 @@ export default async function globalSetup(): Promise<
           `(~${(RETRY_COUNT * RETRY_DELAY_MS) / 1000}s window).\n` +
           `  Target: ${host}:${port} (resolved test DB URL)\n` +
           `  Remedy: ensure the Postgres test container is up and healthy.\n` +
-          `    pnpm db:up   # starts exam-db-1 (host port: DB_HOST_PORT, default 5432)`,
+          `    pnpm db:up   # starts the dev Postgres (exam-dev-db-1; host port: DB_HOST_PORT, default 5432)`,
       );
     }
     await sleep(RETRY_DELAY_MS);
