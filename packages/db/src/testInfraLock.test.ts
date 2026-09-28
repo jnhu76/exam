@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   dropDatabaseIfExists,
@@ -53,6 +53,35 @@ async function pgReachable(url: string): Promise<boolean> {
 
 const PG_UP = await pgReachable(ADMIN_URL);
 const PG_DESCRIBE = PG_UP ? describe : describe.skip;
+
+/**
+ * Per-run unique coordination-fixture database SHARED by the two authority
+ * tests below (round-3 caller-env authority + round-4 wrapper env authority).
+ *
+ * Both proofs need a coordination database that (a) is NOT the ambient
+ * `postgres` and (b) hosts NO sibling lifecycle-key traffic, so a granted or
+ * waiting row tagged with its OID can only come from THIS file's own
+ * sessions. Per-run uniqueness preserves that discrimination under any run
+ * overlap (two simultaneous invocations get different fixture DBs, exactly
+ * like the previous per-test names); sharing ONE database between the two
+ * sequential tests halves the fixture's physical CREATE/DROP lifecycle —
+ * every `DROP DATABASE` of an existing DB forces a server-wide checkpoint
+ * (measured: num_requested +1 per drop, create/ensure/drop-missing +0).
+ * Each test re-ensures the fixture (create-if-missing), so a failure in one
+ * test cannot break the other; the drop moved to the file-level afterAll.
+ */
+const COORD_AUTHORITY_FIXTURE_DB = `exam_test_coordauth_${process.pid}_${Math.random().toString(36).slice(2, 10)}`;
+
+afterAll(
+  async () => {
+    if (PG_UP) {
+      await dropDb(ADMIN_URL, COORD_AUTHORITY_FIXTURE_DB).catch(() => {});
+    }
+  },
+  // Queue-participant budget: the fixture DROP DATABASE joins the shared
+  // lifecycle lane like every teardown drop.
+  30_000,
+);
 
 /** Create a disposable database (unique coordination-DB fixtures). */
 async function ensureDb(adminUrl: string, name: string): Promise<void> {
@@ -525,15 +554,14 @@ PG_DESCRIBE(
       // ambient value move the lock onto a different database — and advisory
       // locks are database-local, i.e. coordination silently broke.
       //
-      // The injected authority is a UNIQUE disposable database: no sibling
-      // test traffic can put rows there, so a granted row for THE lifecycle
-      // key on this DB can only come from OUR holder. Old implementation:
-      // holder's lock lands on the ambient DB, this DB never sees a row, the
-      // poll times out and the test FAILS — deterministic either way.
+      // The injected authority is the file's per-run unique coordination
+      // fixture (see COORD_AUTHORITY_FIXTURE_DB): no sibling test traffic can
+      // put rows there, so a granted row for THE lifecycle key on this DB can
+      // only come from OUR holder. Old implementation: holder's lock lands on
+      // the ambient DB, this DB never sees a row, the poll times out and the
+      // test FAILS — deterministic either way.
       const ambientDb = "postgres";
-      const injectedDb = `exam_test_coordauth_${Math.random()
-        .toString(36)
-        .slice(2, 10)}`;
+      const injectedDb = COORD_AUTHORITY_FIXTURE_DB;
       await ensureDb(ADMIN_URL, injectedDb);
       const injectedEnv = { TEST_ADMIN_DATABASE: injectedDb };
       const injectedUrl = resolveTestInfraCoordinationUrl(
@@ -601,7 +629,8 @@ PG_DESCRIBE(
         else process.env.TEST_ADMIN_DATABASE = saved;
         disposeAll(holderEntered, releaseHolder);
         await Promise.allSettled(holderPromise ? [holderPromise] : []);
-        await dropDb(ADMIN_URL, injectedDb).catch(() => {});
+        // The shared fixture itself is dropped once by the file-level
+        // afterAll, after both authority tests have finished.
       }
     });
   },
@@ -666,9 +695,7 @@ PG_DESCRIBE(
       // blocks until the holder releases. If the wrapper re-reads process.env
       // (the bug), its lock lands on the ambient DB, no waiter row ever carries
       // the injected oid, the poll times out and the test FAILS.
-      const injectedDb = `exam_test_coordwrap_${Math.random()
-        .toString(36)
-        .slice(2, 10)}`;
+      const injectedDb = COORD_AUTHORITY_FIXTURE_DB;
       const target = `exam_test_wraptgt_${Math.random()
         .toString(36)
         .slice(2, 10)}`;
@@ -737,8 +764,11 @@ PG_DESCRIBE(
         ]);
         await foreign.end().catch(() => {});
         await oidProbe.end().catch(() => {});
+        // `target` was created by the wrapper-under-test and MUST be dropped
+        // here (its absence is what Phase 1's CREATE proof required — leaving
+        // it behind would poison future runs). The shared coordination fixture
+        // is dropped once by the file-level afterAll.
         await dropDb(ADMIN_URL, target).catch(() => {});
-        await dropDb(ADMIN_URL, injectedDb).catch(() => {});
       }
     });
   },
