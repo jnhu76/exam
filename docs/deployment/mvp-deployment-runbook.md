@@ -145,7 +145,7 @@ depends on the deployment topology:
 
 | Topology | `request.ip` | Verdict |
 | --- | --- | --- |
-| Bundled nginx edge (#585 default compose) + `TRUSTED_PROXY_CIDRS` = the Compose bridge subnet | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default — one lookup: `docker network inspect <project>_exam-net` and set the subnet (e.g. `172.19.0.0/16`) in `.env.production` |
+| Bundled nginx edge (#585 default compose) + `TRUSTED_PROXY_CIDRS` = the Compose bridge subnet | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default — one lookup: `docker network inspect exam-prod_exam-net` (pinned project name, #631) and set the subnet (e.g. `172.19.0.0/16`) in `.env.production` |
 | Bundled nginx edge WITHOUT `TRUSTED_PROXY_CIDRS` | the edge's bridge IP (all candidates collapse) | Misconfigured — the app cannot trust its only ingress; set the subnet as above |
 | Shared NAT (many candidates behind one egress IP) | the shared IP | Supported with sizing: the whole cohort shares one identity; size `RATE_LIMIT_MAX` by the rule below and stagger logins (the login budget is 10/min/IP) |
 | Reverse proxy WITH trusted client-IP wiring | per-candidate IP | Supported: set `TRUSTED_PROXY_CIDRS` to the proxy's addresses |
@@ -363,7 +363,10 @@ Compose matches by reference, not digest.
 
 Contributors and PR acceptance verify THIS checkout by building it
 explicitly and running the canonical operator Compose against the local
-pin (`EXAM_IMAGE` / `EXAM_WEB_IMAGE`):
+pin (`EXAM_IMAGE` / `EXAM_WEB_IMAGE`). When the checkout is also a dev
+checkout, `EXAM_DATA_ROOT` must point outside it (#631): the `./data`
+default would let the postgres container (uid 999) create root-owned
+runtime state inside the source tree and break `pnpm format:check`:
 
 ```bash
 # explicit source builds (both targets), then the canonical operator
@@ -371,6 +374,7 @@ pin (`EXAM_IMAGE` / `EXAM_WEB_IMAGE`):
 docker build --target runner -t exam-local:dev .
 docker build --target web-runner -t exam-local:web-dev .
 EXAM_IMAGE=exam-local:dev EXAM_WEB_IMAGE=exam-local:web-dev \
+  EXAM_DATA_ROOT="${TMPDIR:-/tmp}/exam-prod-rehearsal" \
   docker compose --env-file .env.production -f docker-compose.yml up -d
 ```
 

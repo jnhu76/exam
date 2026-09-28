@@ -90,6 +90,18 @@ mv .env.deploy .env.production   # only if .env.production does not exist yet
 #     operator override — is never regenerated or rotated, so no upgrade
 #     run can invalidate sessions or database credentials.
 
+# 0c. ONE-TIME migration — BREAKING RENAME (installs made before the
+#     Compose project identities were pinned, #631): the production stack
+#     now runs as project `exam-prod` (dev stack: `exam-dev`). The next
+#     `up -d` creates NEW containers under that name; the old stateless
+#     `exam` containers keep holding the published ports and must be
+#     removed once, or the new nginx cannot bind:
+docker compose -p exam -f docker-compose.yml down --remove-orphans
+#
+#     Data safety: the data root is a bind mount outside the containers
+#     (§1) — `down` never touches it. Idempotent: a no-op once no old
+#     `exam` containers remain.
+
 # 1. Re-pin the image (operator image pin follows .release-version):
 node scripts/init-production-env.mjs
 #   - canonical pin (ghcr.io/jnhu76/exam:vX.Y.Z) -> re-derived to the NEW

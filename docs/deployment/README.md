@@ -51,6 +51,10 @@
   no separate email worker service.
 - `app`, `web`, and `db` publish no host ports; `nginx` health-gates its
   startup on both upstreams being healthy.
+- Compose project identities are pinned (#631): production runs as project
+  `exam-prod`, the dev stack (`docker-compose.dev.yml`) as `exam-dev` — a
+  production rehearsal from a developer checkout can never recreate dev
+  containers.
 
 ## Deployment Paths
 
@@ -70,12 +74,16 @@ docker compose --env-file .env.production up -d
 
 Build the current checkout explicitly (both targets) and run the
 canonical operator Compose against the local tags (#626 — no build
-overlay):
+overlay). Rehearsing from a dev checkout must point `EXAM_DATA_ROOT`
+outside the source tree (#631): the `./data` default is the operator
+deployment model, and a rehearsal that creates Docker-owned state
+inside the checkout breaks `pnpm format:check`:
 
 ```bash
 docker build --target runner -t exam-local:dev .
 docker build --target web-runner -t exam-local:web-dev .
 EXAM_IMAGE=exam-local:dev EXAM_WEB_IMAGE=exam-local:web-dev \
+  EXAM_DATA_ROOT="${TMPDIR:-/tmp}/exam-prod-rehearsal" \
   docker compose --env-file .env.production -f docker-compose.yml up -d
 ```
 
@@ -129,7 +137,7 @@ source build, contributor verification).
 - `TRUSTED_PROXY_CIDRS` must name the nginx→app hop **only — never the
   candidate client network**. In the bundled topology the client-visible
   peer of the app is the Compose bridge; resolve the actual subnet with
-  `docker network inspect <project>_exam-net` and set e.g.
+  `docker network inspect exam-prod_exam-net` and set e.g.
   `TRUSTED_PROXY_CIDRS=172.19.0.0/16`. The edge **replaces**
   `X-Forwarded-For` with the real client address (appending would let a
   client forge its audit/rate-limit identity), so with the narrow CIDR

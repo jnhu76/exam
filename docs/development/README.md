@@ -76,6 +76,14 @@ The Vite dev server proxies `/api/*` requests to the API automatically.
 | `pnpm db:studio` | Open Drizzle Studio |
 | `pnpm db:generate` | Generate migration files |
 
+The dev stack runs as the pinned Compose project `exam-dev` (#631), so a
+production rehearsal from this checkout can never recreate its containers.
+A dev stack created before the pin lives under project `exam` and is
+untouched by `pnpm db:up`; start it explicitly with
+`docker compose -p exam -f docker-compose.dev.yml up -d` (its data volume
+is preserved) or recreate fresh data with `pnpm db:migrate` +
+`pnpm db:seed`.
+
 The dev `DATABASE_URL` is constructed from `DB_HOST_PORT` by the single
 source DB resolver (`packages/db/src/databaseUrl.ts`). An explicit
 `DATABASE_URL` always wins.

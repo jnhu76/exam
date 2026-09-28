@@ -1,43 +1,25 @@
-# Sole operator entry point.
-# Run with the deployment env file: docker compose --env-file .env.production ...
-# (created by node scripts/init-production-env.mjs; the dev .env is never read when
-# --env-file is passed). Authoritative state is the ./data bind mounts — see
-# docs/deployment/mvp-deployment-runbook.md.
-# #585 topology: nginx is the ONLY public ingress (host ${EXAM_PORT:-80} ->
-# container 80); app (:3000, API) and web (:4173, static SPA) are internal
-# services on exam-net.
+# Production stack. Run with: docker compose --env-file .env.production ...
+# nginx is the only public ingress (host ${EXAM_PORT:-80}); app (:3000, API)
+# and web (:4173, static SPA) are internal services on exam-net.
+# Pinned so prod never shares the directory-derived `exam` project with the
+# dev stack (docker-compose.dev.yml, `exam-dev`) when run from one checkout.
+name: exam-prod
 services:
   app:
-    # Operator path: prebuilt semantic image, pinned by EXAM_IMAGE in the
-    # deployment env file (init-production-env.mjs derives the default from
-    # .release-version — the single version authority). Contributors / PR
-    # acceptance build THIS checkout explicitly and run this file against
-    # the local pin (docker build --target runner -t exam-local:dev . — #626;
-    # a cached registry image can never fake source acceptance).
     image: ${EXAM_IMAGE:?EXAM_IMAGE is required (node scripts/init-production-env.mjs)}
-    # #585: the API is an internal service — nginx is the only public
-    # ingress. Direct host publishing (the former ${EXAM_PORT:-3000}:3000)
-    # moved to the nginx service. Development/test keeps using 3000
-    # directly (host-native E2E / CI never involve this file).
     expose:
       - "3000"
     environment:
-      # Application runtime settings are FORWARDED, not defaulted, here:
-      # an empty `${KEY:-}` value reaches the app as "" and resolves to the
-      # semantic default defined once in apps/api/src/config/settings.ts
-      # (enforced by scripts/repository-contract/config-contract.mjs — a
-      # literal fallback in this file may only mirror that same default).
-      # Exceptions: APP_TIMEZONE (also drives the db service PGTZ literal)
-      # and DEPLOYMENT_MODE keep explicit, parity-guarded literals.
+      # Runtime settings are forwarded, never defaulted, here: an empty
+      # value resolves to the semantic default in apps/api/src/config/settings.ts.
       DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-exam}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (node scripts/init-production-env.mjs)}
       NODE_ENV: production
       APP_MODE: production
       APP_PORT: 3000
       HOST: 0.0.0.0
-      # #585: nginx owns public :80, so the canonical production public
-      # origin is http://localhost (no port suffix). Remapped EXAM_PORT or
-      # LAN access must set both explicitly (.env.production.example).
+      # Canonical public origin (nginx owns :80); remapped EXAM_PORT or LAN
+      # access must set both explicitly.
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
       PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
@@ -54,8 +36,7 @@ services:
       EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
       EMAIL_FAKE_MODE: ${EMAIL_FAKE_MODE:-}
       EMAIL_FAKE_DELAY_MS: ${EMAIL_FAKE_DELAY_MS:-}
-      # Test/rehearsal-only fake-sender witness (#482): empty in any real
-      # deployment; lets tests observe that the fake send path was entered.
+      # Test-only fake-sender witness; empty in real deployments.
       EMAIL_FAKE_SEND_ENTERED_FILE: ${EMAIL_FAKE_SEND_ENTERED_FILE:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-}
@@ -77,8 +58,6 @@ services:
       SMTP_SOCKET_TIMEOUT_MS: ${SMTP_SOCKET_TIMEOUT_MS:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      # Tunable runtime knobs (defaults live in settings.ts). Forwarded so
-      # operators can override them via .env.production without editing Compose.
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-}
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
@@ -90,13 +69,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # #547 DEPLOYMENT READINESS GATE + #585 service split: the API leg
-      # probes /api/ready (DB-aware mandatory-dependency gate — 503 => probe
-      # exit 1), NOT the dependency-blind /api/health liveness probe. The
-      # former bundled-SPA leg (fetch of '/' expecting text/html) is gone:
-      # the SPA is served by the separate `web` service, which carries its
-      # own HTML healthcheck — API health must not assume the API container
-      # serves frontend HTML.
+      # /api/ready (DB-aware readiness), never /api/health (liveness).
       test:
         [
           "CMD",
@@ -111,24 +84,16 @@ services:
     networks:
       - exam-net
     restart: unless-stopped
-    # INVARIANT: stop_grace_period MUST dominate the app's whole
-    # graceful-shutdown worst case (email loop drain + audit drain + DB pool
-    # close + bounded exit assist, run serially) — or a stuck in-flight email
-    # send turns SIGTERM into SIGKILL (exit 137).
+    # INVARIANT: must dominate the app's serial graceful-shutdown worst case,
+    # or SIGTERM degrades to SIGKILL (exit 137) mid email drain.
     stop_grace_period: 45s
 
   web:
-    # #585: dedicated static Web runtime — nginx serving the built
-    # apps/web/dist on :4173 (never `vite preview`; web.conf is baked into
-    # the web-runner image). Internal service: nginx routes non-API traffic
-    # here. The operator pin mirrors EXAM_IMAGE (#321 two-path split):
-    # derived from .release-version; source builds pin it explicitly.
+    # Dedicated static SPA runtime (web.conf baked into the image).
     image: ${EXAM_WEB_IMAGE:?EXAM_WEB_IMAGE is required (node scripts/init-production-env.mjs)}
     expose:
       - "4173"
     healthcheck:
-      # #585 service split: the Web leg proves the SPA HTML is servable on
-      # 4173 — the proof the app healthcheck no longer carries.
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4173/"]
       interval: 30s
       timeout: 5s
@@ -139,12 +104,9 @@ services:
     restart: unless-stopped
 
   nginx:
-    # #585: the ONLY public production ingress. Routes /api/** -> app:3000
-    # (path preserved, #546 forwarded headers) and /* -> web:4173. The edge
-    # config is deployment configuration — runtime-mounted read-only, never
-    # baked into an image. HTTPS lives as a commented template in
-    # deploy/nginx/edge.conf (mount certs at /etc/nginx/certs/ and publish
-    # 443 to activate); the active profile is HTTP :80 only.
+    # Only public ingress: /api/** -> app:3000, /* -> web:4173. HTTPS is a
+    # commented template in deploy/nginx/edge.conf (mount certs + publish
+    # 443 to activate); the active profile is HTTP only.
     image: nginx:1.30.5-alpine3.24
     ports:
       - "${EXAM_PORT:-80}:80"
@@ -186,8 +148,8 @@ services:
       - exam-net
     restart: unless-stopped
 
-  # `$$` escapes Compose interpolation — the startup guard requires a
-  # password at container runtime and the server runs with --requirepass.
+  # `$$` escapes interpolation: refuses to start without REDIS_PASSWORD and
+  # runs --requirepass.
   redis:
     image: redis:7-alpine
     profiles: ["redis"]
@@ -211,13 +173,8 @@ services:
       - exam-net
     restart: unless-stopped
 
-  # Outbox delivery (#320 CONVERGE): the email outbox loop runs in-process
-  # inside the app container (plugins/emailOutboxLoop.ts) — same PostgreSQL
-  # semantics as the former dedicated worker (durable outbox, SKIP LOCKED,
-  # retry/backoff, lock-timeout recovery, at-least-once). The standalone
-  # worker entrypoint (`worker:email`) remains available as an escape hatch.
-  # The app's EMAIL_* environment variables configure the loop's sender; the
-  # app container is the sole migration owner (see ADR-011 §8.6/#320).
+  # Email delivery runs in-process inside the app container (durable
+  # PostgreSQL outbox); the app container is the sole migration owner.
 
 networks:
   exam-net:

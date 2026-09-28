@@ -1,9 +1,11 @@
+# Pinned so a same-checkout prod stack (docker-compose.yml, `exam-prod`)
+# can never share the directory-derived `exam` project with dev.
+name: exam-dev
 services:
   db:
     image: postgres:18.4-bookworm
     ports:
-      # DB_HOST_PORT owns the dev host port (default 5432 — verified available
-      # on WSL2/Docker Desktop; see docs/development/ports.md).
+      # DB_HOST_PORT owns the dev host port (default 5432).
       - "${DB_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: exam
@@ -12,12 +14,9 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     command: postgres -c default_transaction_isolation='repeatable read'
-    # NOTE: no /docker-entrypoint-initdb.d mount. POSTGRES_DB creates the dev
-    # `exam` database; the test `exam_test` database is self-provisioned by
-    # the test harness (packages/db/src/testDbBootstrap.ts) on the implicit
-    # local URL, so it is (re)created whenever missing — including on a
-    # container whose initdb phase already ran (which an initdb script could
-    # never heal).
+    # No initdb mount: the test `exam_test` database is self-provisioned by
+    # the test harness (testDbBootstrap.ts), which also heals an already-
+    # initialized container — an initdb script could not.
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam"]
       interval: 2s
@@ -27,8 +26,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      # REDIS_HOST_PORT owns the dev host port (default 6379), mirroring
-      # DB_HOST_PORT so parallel worktrees can run isolated dev stacks.
+      # REDIS_HOST_PORT owns the dev host port (default 6379).
       - "${REDIS_HOST_PORT:-6379}:6379"
     environment:
       TZ: ${TZ:-Asia/Shanghai}
