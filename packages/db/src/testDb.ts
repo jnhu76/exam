@@ -263,9 +263,17 @@ async function openWorkerScopedFixture(): Promise<WorkerScopedTestDb> {
   const handle: WorkerDatabaseHandle = await setupWorkerTestDatabase({
     scope: resolveDbPackageTestScope(),
   });
-  if (!_workerScopedResetPerformed) {
-    await handle.resetPostgres();
-    _workerScopedResetPerformed = true;
+  try {
+    if (!_workerScopedResetPerformed) {
+      await handle.resetPostgres();
+      _workerScopedResetPerformed = true;
+    }
+  } catch (err) {
+    // OWNERSHIP: the adapter owns this handle until the fixture is returned;
+    // a failed reset boundary must not leak its pool. Close errors are
+    // secondary — the original failure is the signal.
+    await handle.close().catch(() => {});
+    throw err;
   }
   return {
     db: handle.db,

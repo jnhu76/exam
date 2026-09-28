@@ -34,7 +34,9 @@ export interface CreatePostgresDatabaseOptions {
  *   creates a single-connection pool and sets `search_path` to the given
  *   schema (without `public`, to avoid `CREATE TABLE IF NOT EXISTS` skipping
  *   when tables already exist in the `public` schema).
- * @param options - Optional connection settings (e.g. pool cap).
+ * @param options - Optional connection settings (pool cap). Only consulted
+ *   when `searchPath` is NOT set — the searchPath path always pins `max: 1`
+ *   for serialized statement execution (see CreatePostgresDatabaseOptions).
  */
 export async function createPostgresDatabase(
   databaseUrl: string,
