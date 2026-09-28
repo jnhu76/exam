@@ -39,12 +39,16 @@
         candidate authority;
       - a deadline-won restore (RejectRestoreDeadlineWon) materializes the
         terminal deadline outcome instead of leaving disrupted+expired.
-    When the canonical deadline reaches the routed attempt while the page
-    is editable, DeadlinePasses atomically performs the client deadline
-    auto-submit collapse (TakeExamPage deadline auto-submit → server-side
-    deadline submission): the freeze is deadline-attributed and the page
-    becomes terminal in the same step, so no state pairs an editable page
-    with a canonically expired attempt.
+    DeadlinePasses models canonical time crossing only: it records the
+    canonical fact and materializes nothing. The client runtime may
+    subsequently notice the deadline and trigger auto-submit asynchronously
+    (flush → POST /submit → server reconciliation → authoritative reload),
+    and that workflow is not collapsed into DeadlinePasses. Stored status —
+    and the page projection derived from the last authoritative snapshot —
+    may therefore lag canonical expiry. That lag is not an authority: a
+    candidate submit of an expired attempt is never legal, and an
+    authoritative response produced after canonical expiry is
+    reconciled/terminal before it is served.
 
   Non-goals:
     Does NOT model React/DOM/Fastify/PostgreSQL/HTTP serialization/RBAC/
@@ -192,8 +196,9 @@ DeadlineExpiredFor(a) ==
 \* The shared deadline-reconciliation effect: materialize the canonical
 \* terminal outcome — status submitted, answers frozen once, server version
 \* advanced. Used by every site that terminalizes a deadline-won attempt
-\* (DeadlineReconcile, the GET handler, the deadline-won restore rejection,
-\* and the deadline auto-submit collapse) so they cannot diverge.
+\* (DeadlineReconcile, the GET handler, the deadline-won restore rejection)
+\* so they cannot diverge. It is deliberately NOT applied by DeadlinePasses:
+\* canonical time crossing materializes nothing.
 \* OWNERSHIP: the caller must establish the not-yet-terminal precondition
 \* (serverStatus[a] \in {"in_progress","disrupted"}), which is exactly
 \* submittedSnapshot[a] = NoSnapshot — the freeze is first-and-only, so
@@ -352,16 +357,19 @@ StartAuthoritativeReload ==
                  uiState, lastSnapshotViaGet, deadlinePassed>>
 
 \* Apply a page-load / snapshot-reload response. Reads the FROZEN server
-\* state carried by the delivery. Under TARGET, a stale delivery (not
-\* current route/generation) is rejected. Under the legacy flag, a stale
-\* delivery may be applied — the buggy behavior the property catches.
-\* The editable arm additionally evaluates the canonical deadline at apply
-\* time: a frozen editable response for an attempt that is canonically
-\* expired by the time it is applied cannot re-open editing — the client
-\* countdown has hit zero and the deadline auto-submit collapse
-\* (see DeadlinePasses) has already terminalized the attempt, so the page
-\* lands terminal. This reads a canonical environment fact, NOT live server
-\* response content — the frozen-status principle above is preserved.
+\* state carried by the delivery — and ONLY that. Under TARGET, a stale
+\* delivery (not current route/generation) is rejected. Under the legacy
+\* flag, a stale delivery may be applied — the buggy behavior the property
+\* catches.
+\* Apply time deliberately consults neither live server state nor the
+\* canonical clock: an applied CandidateTakeSnapshot is the page's business
+\* authority until another authoritative server response replaces it.
+\* A response produced before expiry may therefore be applied after the
+\* canonical deadline has crossed and still render editable — an allowed
+\* transient UI lag, not a grant of mutation authority. Convergence comes
+\* from the server paths (submit is deadline-guarded, a new GET reconciles
+\* before serving, the scanner converges durable state), never from
+\* client-side reconstruction of business lock state.
 ApplyAuthoritativeReload(d) ==
   /\ d \in pendingDeliveries
   /\ d.requestKind \in {"page_load", "snapshot_reload"}
@@ -374,10 +382,8 @@ ApplyAuthoritativeReload(d) ==
   /\ clientSnapshotGen' = d.generation
   /\ clientSnapshotEditable' = d.editableAtResponse
   /\ lastSnapshotViaGet' = TRUE
-  /\ uiState' = CASE d.statusAtResponse = "in_progress" /\ ~deadlinePassed[d.attemptId]
+  /\ uiState' = CASE d.statusAtResponse = "in_progress"
                   -> "editable"
-                [] d.statusAtResponse = "in_progress"
-                  -> "terminal"
                 [] IsTerminal(d.statusAtResponse)
                   -> "terminal"
                 [] IsResumable(d.statusAtResponse) /\ d.requestKind = "snapshot_reload"
@@ -562,33 +568,24 @@ LoseResponse ==
                       uiState, lastSnapshotViaGet, deadlinePassed>>
 
 \* Canonical time advances past an attempt's deadline (EXSEM-011: server
-\* time is the only deadline authority). DeadlinePasses carries the client
-\* deadline auto-submit collapse: when the deadline reaches the ROUTED
-\* attempt while the page is editable, the client countdown has hit zero
-\* and the runtime auto-submit fires (TakeExamPage deadline auto-submit →
-\* POST submit), which the server reconciles inside the submit transaction
-\* into a deadline-attributed submission; the page then applies the
-\* terminal outcome. The chain is collapsed atomically at this abstraction
-\* level so the page's editable authority ends in the same step canonical
-\* expiry begins — required for EditableImpliesNotExpired (no intermediate
-\* state pairs an editable page with a canonically expired attempt). If the
-\* stored status already terminalized, only the page observes terminal; a
-\* frozen snapshot is never rewritten.
+\* time is the only deadline authority). This action carries the canonical
+\* fact and NOTHING else: no durable state is materialized and no UI
+\* projection is rewritten, so stored status may lag canonical expiry
+\* (EXSEM-013) and the page may still show the last authoritative snapshot.
+\* The client runtime may subsequently notice the deadline and trigger
+\* auto-submit, but that workflow spans flush → POST /submit → server
+\* reconciliation → authoritative reload and is deliberately NOT collapsed
+\* into this step. Materialization stays owned by ServerReturnSnapshot,
+\* SubmitAttempt, RejectRestoreDeadlineWon, and DeadlineReconcile.
 DeadlinePasses ==
   /\ \E a \in Attempts :
        /\ ~deadlinePassed[a]
        /\ deadlinePassed' = [deadlinePassed EXCEPT ![a] = TRUE]
-       /\ IF a = routeAttempt /\ uiState = "editable"
-            THEN /\ IF serverStatus[a] \in {"in_progress", "disrupted"}
-                      THEN DeadlineReconcileEffect(a)
-                      ELSE UNCHANGED <<serverStatus, submittedSnapshot, serverVersion>>
-                 /\ uiState' = "terminal"
-            ELSE /\ UNCHANGED <<serverStatus, submittedSnapshot, serverVersion>>
-                 /\ UNCHANGED <<uiState>>
-       /\ UNCHANGED <<routeAttempt, clientGeneration,
+       /\ UNCHANGED <<serverStatus, serverVersion, submittedSnapshot,
+                      routeAttempt, clientGeneration,
                       clientSnapshotAttempt, clientSnapshotGen, clientSnapshotEditable,
                       pageLoadRequests, restoreRequests, snapshotReloadRequests,
-                      pendingDeliveries, lastSnapshotViaGet>>
+                      pendingDeliveries, uiState, lastSnapshotViaGet>>
 
 \* =============================================================================
 \* Next variants. The safety model is SPLIT into focused configurations to
@@ -759,17 +756,6 @@ EditableRequiresCurrentAuthoritativeSnapshot ==
     (clientSnapshotAttempt = routeAttempt
      /\ clientSnapshotGen = clientGeneration
      /\ clientSnapshotEditable = TRUE)
-
-\* Editable page authority is bounded by the canonical deadline: no state may
-\* pair an editable page with a canonically expired routed attempt
-\* (EXSEM-013/014). Regression oracle for the Issue #656 F1/F2 defect class:
-\* a candidate-authority submit of an expired attempt, or an editable GET
-\* response/page served for an expired attempt. Checked where the deadline
-\* and the editable page genuinely interact (SubmissionSafety); Core and
-\* RouteSwitch exclude DeadlinePasses, so deadlinePassed is constant FALSE
-\* there and the invariant would be vacuous.
-EditableImpliesNotExpired ==
-  (uiState = "editable") => ~deadlinePassed[routeAttempt]
 
 \* POST outcome is not page authority: editable requires the applied snapshot
 \* to have come from a GET (page_load / snapshot_reload), not from a POST

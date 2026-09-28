@@ -74,28 +74,36 @@ transactions:
   candidate command is never the freeze authority for an expired attempt;
   production reconciles inside the submit transaction and returns the
   deadline-attributed freeze (the candidate POST becomes an idempotent
-  return).
+  return). This bounds **server mutation legality**, not what the page
+  currently displays: the client projection may still lag editable while
+  the expired submit is already illegal.
 - **Restore** (`ProcessRestore` guard / `RejectRestoreDeadlineWon`
   terminalization): a deadline-won restore materializes the terminal
   deadline outcome via the same `DeadlineReconcileEffect` — it never leaves
   a perpetual `disrupted + expired` authoritative state (production
   composes policy evaluation → adjustment-if-applicable → reconciliation
   inside the restore transaction, ADR-013 §7).
-- **Deadline auto-submit collapse** (`DeadlinePasses`): when the canonical
-  deadline reaches the routed attempt while the page is editable, the client
-  countdown has hit zero and the runtime deadline auto-submit fires
-  (`TakeExamPage` deadline auto-submit → POST submit → server-side deadline
-  submission → terminal page). The model collapses this chain atomically,
-  so the page's editable authority ends in the same step canonical expiry
-  begins.
-- **Apply-time deadline gate** (`ApplyAuthoritativeReload`): a frozen
-  editable response whose attempt is canonically expired by the time it is
-  applied cannot re-open editing (the page lands terminal). This evaluates
-  a canonical environment fact — not live server response content — so the
-  frozen-delivery principle below is preserved.
+- **Canonical time crossing** (`DeadlinePasses`): models the canonical
+  server-time fact only — it materializes nothing. The client runtime may
+  subsequently notice the deadline and trigger auto-submit asynchronously
+  (`TakeExamPage` countdown expiry → flush → POST submit → server-side
+  deadline submission → authoritative reload → terminal page), but that
+  workflow is **not** collapsed into this action: it may be delayed or
+  fail, so stored status and the page projection may lag canonical expiry
+  (EXSEM-013 lazy materialization).
+- **Snapshot authority at apply time** (`ApplyAuthoritativeReload`): an
+  applied `CandidateTakeSnapshot` is the page's business authority until
+  another authoritative server response replaces it. A response legitimately
+  produced *before* expiry may be applied *after* the deadline crosses and
+  still render editable — an allowed transient UI lag, and explicitly **not**
+  a grant of mutation authority. Apply time reads neither live server state
+  nor the canonical clock; the page never reconstructs business lock state
+  from a clock (production's `deriveTakeExamView` takes `isLocked` from
+  `snapshot.isEditable` and passes `canSave`/`canSubmit` through unchanged).
 
 All terminalization sites share one operator, `DeadlineReconcileEffect`, so
-they cannot drift apart.
+they cannot drift apart. It is applied by the server paths only — canonical
+time crossing never applies it.
 
 ---
 
@@ -143,18 +151,6 @@ State predicates (INVARIANTs):
 - `EditableRequiresCurrentAuthoritativeSnapshot` — `uiState = "editable"`
   requires `clientSnapshotAttempt = routeAttempt`, current generation, and
   `clientSnapshotEditable`.
-- `EditableImpliesNotExpired` — `uiState = "editable"` requires
-  `~deadlinePassed[routeAttempt]`: no state may pair an editable page with
-  a canonically expired attempt (EXSEM-013/014). This is the regression
-  oracle for the Issue #656 F1/F2 defect class (candidate-authority freeze
-  of an expired attempt; editable GET served for an expired attempt). It is
-  checked as an INVARIANT in `RecoveryProtocolSubmissionSafety.cfg` — the
-  only gated safety config where `DeadlinePasses` runs and the deadline and
-  the editable page genuinely interact; Core and RouteSwitch exclude
-  `DeadlinePasses`, so `deadlinePassed` is constant FALSE there and the
-  invariant would be vacuous. Verified non-vacuous: stated against the
-  pre-repair model, TLC violates it (Issue #656); on the repaired model it
-  holds over the full SubmissionSafety state space.
 - `PostOutcomeIsNotPageAuthority` — `uiState = "editable"` requires the
   applied snapshot to have come from a GET (page_load/snapshot_reload),
   tracked via the `lastSnapshotViaGet` history variable. A POST restore
@@ -270,20 +266,25 @@ protocol's correctness guarantees) is unaffected.
 | MAX_VERSION | 3 |
 | MAX_DELIVERIES | 2 |
 
-State-space statistics (TLC2 v2.19 / TLA+ v1.7.4):
+State-space statistics (TLC2 v2.19 / TLA+ v1.7.4). The three safety
+figures are deterministic (recorded with `FORMAL_WORKERS=1`); the liveness
+figure is approximate because TLC reports the count at the point the
+temporal counterexample is discovered.
 
 ```text
 CoreSafety       :   4,679 distinct states, depth 25 — PASS
-RouteSwitchSafety:  31,158 distinct states, depth 27 — PASS (includes NavigateTo)
-SubmissionSafety :  81,140 distinct states, depth 26 — PASS (incl. EditableImpliesNotExpired)
-Liveness         :  30,674 distinct states         — PARTIAL (property violated, documented)
+RouteSwitchSafety:  31,158 distinct states, depth 26 — PASS (includes NavigateTo)
+SubmissionSafety :  88,936 distinct states, depth 26 — PASS
+Liveness         : ≈30–32k distinct states          — PARTIAL (property violated, documented)
 ```
 
-(Pre-repair SubmissionSafety was 88,936 distinct states; the EXSEM-013/014
-repair prunes the forbidden expiry-window states. Post-repair liveness
-grows over its pre-repair 14,653 because the reconciled-serve and
-deadline-collapse variants add reachable states; the PARTIAL verdict and
-its root cause are unchanged.)
+The independent-review correction removed the artificial atomic deadline
+collapse, which restores the legitimate `editable + deadlinePassed`
+transient window to the reachable graph: SubmissionSafety is back to
+88,936 distinct states (the collapsed model pruned to 81,140), matching the
+figure previously recorded for the pre-repair model. Core and RouteSwitch
+are unchanged (both exclude `DeadlinePasses`). The liveness PARTIAL verdict
+and its root cause are unchanged.
 
 Counterexample reproduction (each produces the NAMED violation):
 
@@ -339,7 +340,19 @@ violation / counterexample not reproduced / tool error → non-zero.
    switch affects ONLY the guard (`RestoreStartGuard`), not navigation
    behavior — ensuring target and legacy face the same reachable state
    and differ only in guard logic (clean A/B comparison).
-4. **bounded_grace is out of policy scope** — see "Policy scope" above.
+4. **No client-clock business-state invariant.** The model deliberately
+   does not constrain `uiState` by `deadlinePassed`. An applied
+   `CandidateTakeSnapshot` stays the page's business authority until another
+   authoritative server response replaces it, so `editable + deadlinePassed`
+   is a reachable transient — the client has not yet completed
+   auto-submit → server reconciliation → authoritative reload. Asserting
+   `uiState = "editable" ⇒ ¬deadlinePassed[routeAttempt]` would be stronger
+   than the contract: it would erase that window and conflate canonical
+   expiry with the currently installed page projection. The obligation that
+   *is* enforced is server-side — `SubmitAttempt` is guarded by
+   `¬deadlinePassed[a]`, and a GET running after expiry reconciles before
+   serving. Do not re-add a clock-derived client lock state to compensate.
+5. **bounded_grace is out of policy scope** — see "Policy scope" above.
 
 ---
 
