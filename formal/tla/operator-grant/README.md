@@ -87,6 +87,23 @@ checking exposes a real stuck `begun` state.
 response. It represents intentional protocol termination and cannot mask a
 stuck in-progress transaction.
 
+### Status abstraction (post-reconciliation classification)
+
+`attemptStatus ∈ {active, terminal}` is an abstraction of the
+**post-lock / post-effective-state-reconciliation** grant decision.
+Production grant processing reconciles the canonical effective state inside
+the transaction before granting (`operatorGrant.ts` — the grant path locks,
+validates, then reconciles the deadline): an already-expired attempt
+therefore reaches the formal `terminal` class and cannot receive a grant
+(outcome `terminal`, no ledger effect). The static per-behavior status is a
+sound abstraction precisely because the lock serializes grant decisions and
+the inline reconciliation runs before the grant branch.
+
+The `exam.closeAt` cap details and untimed-exam rejection details are
+intentionally abstracted as rejection paths: they never affect the safety
+properties under verification (they can only refuse a grant, never grant
+one).
+
 ### Target safety properties
 
 ```text
@@ -244,6 +261,12 @@ invariant violation; pass, a different invariant, temporal failure, deadlock,
 spawn failure, parse failure, JVM failure, and other tool errors all fail the
 suite.
 
+Nine of the ten remain CURRENTLY_POSSIBLE_DEFECT_CLASS demonstrations. One —
+`ClientLegacyPerTabPending.cfg` — is HISTORICAL_REGRESSION_DEFECT_CLASS
+evidence (the runtime now implements the shared cross-tab authority; see
+"Known runtime/model boundaries"). It is retained unchanged and must keep
+reproducing its named violation.
+
 ## State-space justification
 
 The server representation changed because a per-operation function could not
@@ -266,7 +289,7 @@ None. The target configs check safety invariants only (`INVARIANT`, no
 `PROPERTY`). No liveness is verified, so the model assumes no fairness for
 server processing, response delivery, retry, tab lifetime, or user actions.
 
-## Known runtime/model mismatches
+## Known runtime/model boundaries
 
 - The models are executable consistency checks, not TypeScript/PostgreSQL
   refinement proofs.
@@ -275,11 +298,20 @@ server processing, response delivery, retry, tab lifetime, or user actions.
   `packages/db/src/repository/attemptTimeAdjustmentRepo.ts`, and
   `apps/api/src/routes/attempts.admin.ts`. It abstracts row/Exam locks,
   connection pooling, HTTP, RBAC, audit, timestamps, and reason validation.
-- The client target is not the current runtime. The current
-  `ProctorDashboardPage.tsx` uses per-tab `sessionStorage` and explicitly falls
-  back to in-memory state if storage fails. Shared cross-tab authority and
-  fail-closed storage belong to REC-I4-C1. The legacy per-tab counterexample
-  records this target/runtime gap rather than disguising it.
+- The target shared-authority semantics represented by the client model
+  are now implemented by the runtime (REC-I4-C1 landed):
+  `apps/web/src/features/operator-grant/pendingGrantAuthority.ts` and
+  `pendingGrantCoordinator.ts` implement the shared cross-tab authority —
+  localStorage persistence, `navigator.locks` serialization,
+  BroadcastChannel/storage-notification coordination, fail-closed
+  reservation before first send, frozen/verbatim retry, and
+  compare-and-clear confirmation, keyed by `(organizationId, actorId)`.
+  The model intentionally abstracts the concrete browser storage/locking
+  mechanism; it does not commit to a specific storage technology.
+  `ClientLegacyPerTabPending.cfg` is retained as
+  **HISTORICAL_REGRESSION_DEFECT_CLASS** evidence: it documents the
+  per-tab pending defect class that the shared authority eliminated, and
+  must keep reproducing.
 - The client model fixes one organizationId + attemptId workflow and one
   generation. Cross-workflow concurrency, later confirmed generations,
   different browser profiles/devices, and the concrete shared-storage
@@ -287,6 +319,8 @@ server processing, response delivery, retry, tab lifetime, or user actions.
 
 ## Relationship to RecoveryProtocol
 
-`formal/tla/recovery/` models candidate recovery. Its `timeGrant` properties
-remain locally vacuous there. This independent model owns the operator command,
+`formal/tla/recovery/` models candidate recovery (restore/reload timeline,
+effective-deadline conformance to EXSEM-013/014) and deliberately contains
+no grant mechanism — its former `timeGrant` scaffold was removed as stale
+dead surface. This independent model owns the operator command,
 idempotency, retry, atomicity, and cross-tab safety semantics.

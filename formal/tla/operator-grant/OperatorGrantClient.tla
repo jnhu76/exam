@@ -10,8 +10,13 @@
 
   Authority:
     docs/adr/ADR-013-interruption-time-compensation-policy.md is binding.
-    The model does NOT commit to IndexedDB, localStorage, Web Locks, or another
-    storage technology; that decision belongs to REC-I4-C1.
+    The target shared-authority semantics represented by this model are now
+    implemented by the runtime (REC-I4-C1 landed: shared cross-tab
+    authority via localStorage + navigator.locks + BroadcastChannel
+    coordination, fail-closed reservation, frozen/verbatim retry,
+    compare-and-clear confirmation). The model intentionally abstracts the
+    concrete browser storage/locking mechanism; it does not commit to a
+    specific storage technology as a normative requirement.
 
   Non-goals:
     Does NOT model PostgreSQL, HTTP transport, RBAC, React internals, DOM
