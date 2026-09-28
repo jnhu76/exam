@@ -17,15 +17,29 @@
  * (warning only), while a reachable server with a missing/misconfigured
  * target database is a hard fail-fast.
  *
- * No worker-DB sweep here: packages/db never runs in worker-database mode
- * (its tests use the per-file schema helper; the worker-DB lifecycle tests
- * create uniquely-named, self-cleaned fixtures).
+ * PACKAGE-DB RUN LEASE (#648): once the server is reachable, this invocation
+ * claims the package-db worker-slot namespace (`exam_test_db_w*`) for the
+ * whole run by holding `acquireDbPackageRunLease` until the global teardown.
+ * Ordinary @exam/db tests reuse those persistent slots (migrate once +
+ * `resetPostgres()` per file), so a second simultaneous @exam/db run on the
+ * same server would truncate this run's fixtures mid-file and is rejected
+ * immediately in its own globalSetup. The lease is a DIFFERENT key from the
+ * API run lease (`exam_test_worker_database_run`), which must stay untouched:
+ * the API lease's contract tests run inside this package and would fail
+ * against their own enclosing run if this globalSetup held the API identity.
+ * A crashed run releases automatically — the lease is a PG session lock.
+ *
+ * No worker-DB sweep here: the package slot databases (exam_test_db_w1..wN,
+ * N bounded by maxWorkers/VITEST_POOL_ID) persist across runs by design —
+ * their reuse is the optimization. The worker-DB lifecycle tests create
+ * uniquely-named, self-cleaned fixtures outside the slot namespace.
  *
  * @see https://vitest.dev/config/globalsetup
  */
 import { createConnection } from "node:net";
 import { URL } from "node:url";
 import { resolveTestBranchUrl } from "./src/databaseUrl.js";
+import { acquireDbPackageRunLease } from "./src/testInfraLock.js";
 import { prepareTestDatabase } from "./src/testDbBootstrap.js";
 
 const PROBE_TIMEOUT_MS = 2_000;
@@ -54,7 +68,9 @@ function probeTcp(host: string, port: number): Promise<boolean> {
   });
 }
 
-export default async function globalSetup(): Promise<void> {
+export default async function globalSetup(): Promise<
+  (() => Promise<void>) | undefined
+> {
   // Invalid URL (unsafe test DB name) is a hard configuration error even
   // before any probing — surface it directly.
   const url = resolveTestBranchUrl(process.env);
@@ -67,7 +83,13 @@ export default async function globalSetup(): Promise<void> {
       // Server is up: enforce the ownership contract (self-provision the
       // implicit local exam_test / fail fast on a missing explicit DB).
       await prepareTestDatabase();
-      return;
+      // Claim the package-db worker-slot namespace for this whole invocation
+      // (released by the teardown after all test files finish). A concurrent
+      // @exam/db run rejects here, immediately, before any worker exists.
+      const lease = await acquireDbPackageRunLease(url, process.env);
+      return async () => {
+        await lease.release();
+      };
     }
     if (attempt < RETRY_COUNT) await sleep(RETRY_DELAY_MS);
   }

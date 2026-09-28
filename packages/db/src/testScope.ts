@@ -354,6 +354,46 @@ export function resolveTestScope(
   };
 }
 
+/**
+ * Resolve the scope for the @exam/db package's OWN worker slots.
+ *
+ * Identical to {@link resolveTestScope} (same slot identity: TEST_WORKER_ID →
+ * VITEST_POOL_ID → fail-fast under Vitest, same shard/CI handling), except the
+ * physical slot database name is derived in the package-db namespace:
+ *
+ *   API slots:      exam_test_w{worker}   / exam_test_s{shard}_w{worker}
+ *   @exam/db slots: exam_test_db_w{worker} / exam_test_db_s{shard}_w{worker}
+ *
+ * The two namespaces are provably disjoint: an API name never places the
+ * literal `db_` segment directly after the `exam_test_` prefix (the grammar
+ * after the prefix is `w*`, `s*`, or a dedicated group name), so the renamed
+ * slot can never equal an API slot and the two suites sharing one PostgreSQL
+ * server cannot truncate each other's fixtures.
+ *
+ * INVARIANT: callers must persist nothing here; the derived name is re-derived
+ * every run from the same slot identity, keeping physical cardinality bounded
+ * by VITEST_POOL_ID exactly like the API slots.
+ */
+export function resolveDbPackageTestScope(
+  env: ResolverEnv = process.env,
+): ResolvedTestScope {
+  const scope = resolveTestScope(env);
+  const apiSlot = scope.postgresDatabaseName;
+  if (apiSlot === null) {
+    fail(
+      `the @exam/db worker-slot helper requires worker-database isolation, but TEST_DB_ISOLATION is "${scope.dbIsolation}" (no slot database is derived in that mode)`,
+    );
+  }
+  const prefix = "exam_test_";
+  if (!apiSlot.startsWith(prefix)) {
+    // Defensive: the resolver's grammar always emits this prefix.
+    fail(`unexpected slot database name shape: "${apiSlot}"`);
+  }
+  const dbPackageSlot = `exam_test_db_${apiSlot.slice(prefix.length)}`;
+  assertPgNameSafe(dbPackageSlot);
+  return { ...scope, postgresDatabaseName: dbPackageSlot };
+}
+
 interface DeriveNameInput {
   group: TestGroup;
   dbIsolation: TestDbIsolationMode;

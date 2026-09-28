@@ -42,6 +42,7 @@ import {
   type ResolvedTestScope,
   type ResolverEnv,
 } from "./testScope.js";
+import type { Database } from "./types.js";
 
 /** PostgreSQL identifier charset for derived database names. */
 const PG_NAME_SAFE_RE = /^[a-z0-9_]+$/;
@@ -71,6 +72,12 @@ export interface WorkerDatabaseHandle {
   /** The resolved test scope this handle is bound to. */
   scope: ResolvedTestScope;
   /**
+   * Drizzle binding over the handle's OWN connection pool. Consumers that need
+   * a second independent pool open their own connection to `databaseUrl`
+   * instead; sharing the handle's pool keeps one pool per handle.
+   */
+  db: Database;
+  /**
    * Truncate all business tables in the target schema (default `public`),
    * excluding migration-metadata tables. Resets sequences via
    * `RESTART IDENTITY`. Safe to call between tests / test files.
@@ -88,6 +95,15 @@ export interface SetupWorkerTestDatabaseOptions {
    * business tables live in `public` unless a future migration moves them.
    */
   truncateSchema?: string;
+  /**
+   * Caller-resolved scope override. Defaults to `resolveTestScope(env)`.
+   * Only for callers that resolved the scope through the same resolver family
+   * but need a different physical slot NAME for the same slot identity —
+   * the @exam/db package worker slots (`resolveDbPackageTestScope`). The
+   * override must keep `dbIsolation === "worker-database"` and a non-null
+   * `postgresDatabaseName`; the bootstrap validates the name before any DDL.
+   */
+  scope?: ResolvedTestScope;
 }
 
 /**
@@ -453,7 +469,7 @@ export async function setupWorkerTestDatabase(
 
   assertNotProduction(env);
 
-  const scope = resolveTestScope(env);
+  const scope = options?.scope ?? resolveTestScope(env);
   if (scope.dbIsolation !== "worker-database") {
     throw new Error(
       `[testWorkerDatabase] expected TEST_DB_ISOLATION=worker-database, got "${scope.dbIsolation}"`,
@@ -478,13 +494,22 @@ export async function setupWorkerTestDatabase(
     databaseName,
     env,
   );
-  const conn = await createPostgresDatabase(workerUrl);
+  // INVARIANT: single-connection pool. The per-file schema path always runs
+  // on a max-1 pool, so ordinary tests written against it (e.g. Promise.all
+  // CAS pairs whose loser must observe the winner's commit and return null)
+  // get the same serialized statement execution here. A multi-connection
+  // pool would run such statements truly concurrently and, on servers with
+  // default_transaction_isolation=repeatable read, surface 40001 instead of
+  // the CAS loser — a semantic change, not a speedup. API's buildTestApp
+  // opens its own pool and is unaffected.
+  const conn = await createPostgresDatabase(workerUrl, undefined, { max: 1 });
 
   let closed = false;
   return {
     databaseName,
     databaseUrl: workerUrl,
     scope,
+    db: conn.db,
     async resetPostgres() {
       await truncateBusinessTables(conn.sql, truncateSchema);
     },

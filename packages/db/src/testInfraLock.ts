@@ -357,6 +357,94 @@ export interface TestInfraRunLease {
 }
 
 /**
+ * Lock name of the @exam/db PACKAGE worker-slot run lease (#648).
+ *
+ * The @exam/db package keeps its own persistent worker-slot databases
+ * (`exam_test_db_w*`, derived by `resolveDbPackageTestScope`) for ordinary
+ * package tests. Same contract as the API lease, one slot namespace over:
+ * one @exam/db invocation per PostgreSQL server at a time, so two concurrent
+ * runs cannot truncate each other's slot databases mid-file. The identity is
+ * deliberately a DIFFERENT key from the API run lease: the API suite's own
+ * lease-contract tests execute inside @exam/db, so an outer lease on the API
+ * identity would make those tests fail against their own enclosing run.
+ */
+const TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_NAME =
+  "exam_test_db_worker_database_run";
+
+/**
+ * Stable advisory-lock key for the @exam/db package run lease. Exported for
+ * deterministic namespace-separation regressions (must differ from BOTH the
+ * lifecycle key and the API run-lease key).
+ */
+export const TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_KEY: bigint =
+  computeAdvisoryLockKey(TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_NAME);
+
+/**
+ * Shared cluster-scope validation for both run leases. The lease host is
+ * pinned to the canonical `postgres` database (round-5: lock namespace must
+ * equal the server-named slot-resource namespace), so an alien
+ * TEST_ADMIN_DATABASE would silently fragment the single-run contract and is
+ * rejected. `purpose` only shapes the error text per lease.
+ */
+function assertCanonicalLeaseHost(
+  env: NodeJS.ProcessEnv,
+  purpose: string,
+): void {
+  const declared = (env.TEST_ADMIN_DATABASE ?? "").trim();
+  if (declared !== "" && declared !== TEST_INFRA_RUN_LEASE_HOST_DATABASE) {
+    throw new Error(
+      `[testInfraLock] TEST_ADMIN_DATABASE must be unset or "${TEST_INFRA_RUN_LEASE_HOST_DATABASE}" for ${purpose}: ` +
+        `the run lease is scoped to the whole PostgreSQL server and hosts on the canonical ` +
+        `"${TEST_INFRA_RUN_LEASE_HOST_DATABASE}" database — a separate coordination database is not an isolation namespace ` +
+        `(slot databases are derived from VITEST_POOL_ID on the same server and would still collide). ` +
+        `Unset TEST_ADMIN_DATABASE, or point TEST_DATABASE_URL at a separate PostgreSQL instance.`,
+    );
+  }
+}
+
+/**
+ * One immediate try-lock of a run-lease key on the canonical `postgres` host,
+ * held on a dedicated session until `release()`. Both run leases share this
+ * implementation; they differ only in key and conflict error.
+ */
+async function acquireServerScopedRunLease(
+  baseUrl: string,
+  lockKey: bigint,
+  conflictError: Error,
+): Promise<TestInfraRunLease> {
+  const coordinationUrl = resolveTestInfraCoordinationUrl(baseUrl, {
+    TEST_ADMIN_DATABASE: TEST_INFRA_RUN_LEASE_HOST_DATABASE,
+  });
+  const session = postgres(coordinationUrl, { max: 1 });
+  try {
+    const rows = (await session.unsafe(
+      "SELECT pg_try_advisory_lock($1) AS ok",
+      [lockKey.toString()],
+    )) as Array<{ ok: boolean }>;
+    if (rows[0]?.ok !== true) {
+      throw conflictError;
+    }
+  } catch (err) {
+    await session.end().catch(() => {});
+    throw err;
+  }
+  let released = false;
+  return {
+    async release() {
+      if (released) return;
+      released = true;
+      try {
+        await session.unsafe("SELECT pg_advisory_unlock($1)", [
+          lockKey.toString(),
+        ]);
+      } finally {
+        await session.end();
+      }
+    },
+  };
+}
+
+/**
  * Acquire the RUN-level worker-database exclusion lease, or fail immediately.
  *
  * CONTRACT: concurrent local worker-database test runs on the same PostgreSQL
@@ -402,49 +490,46 @@ export async function acquireTestInfraRunLease(
   baseUrl: string,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<TestInfraRunLease> {
-  const declared = (env.TEST_ADMIN_DATABASE ?? "").trim();
-  if (declared !== "" && declared !== TEST_INFRA_RUN_LEASE_HOST_DATABASE) {
-    throw new Error(
-      `[testInfraLock] TEST_ADMIN_DATABASE must be unset or "${TEST_INFRA_RUN_LEASE_HOST_DATABASE}" for worker-database runs: ` +
-        `the run lease is scoped to the whole PostgreSQL server and hosts on the canonical ` +
-        `"${TEST_INFRA_RUN_LEASE_HOST_DATABASE}" database — a separate coordination database is not an isolation namespace ` +
-        `(slot databases are derived from VITEST_POOL_ID on the same server and would still collide). ` +
-        `Unset TEST_ADMIN_DATABASE, or point TEST_DATABASE_URL at a separate PostgreSQL instance.`,
-    );
-  }
-  const coordinationUrl = resolveTestInfraCoordinationUrl(baseUrl, {
-    TEST_ADMIN_DATABASE: TEST_INFRA_RUN_LEASE_HOST_DATABASE,
-  });
-  const session = postgres(coordinationUrl, { max: 1 });
-  try {
-    const rows = (await session.unsafe(
-      "SELECT pg_try_advisory_lock($1) AS ok",
-      [TEST_INFRA_RUN_LEASE_LOCK_KEY.toString()],
-    )) as Array<{ ok: boolean }>;
-    if (rows[0]?.ok !== true) {
-      throw new Error(
-        "[testInfraLock] another worker-database test run is already active on this PostgreSQL server " +
-          "(run lease exam_test_worker_database_run is held). " +
-          "Concurrent local worker-database runs are not supported: both runs derive the same slot databases from VITEST_POOL_ID. " +
-          "Wait for the running invocation to finish, or point TEST_DATABASE_URL at a separate PostgreSQL instance.",
-      );
-    }
-  } catch (err) {
-    await session.end().catch(() => {});
-    throw err;
-  }
-  let released = false;
-  return {
-    async release() {
-      if (released) return;
-      released = true;
-      try {
-        await session.unsafe("SELECT pg_advisory_unlock($1)", [
-          TEST_INFRA_RUN_LEASE_LOCK_KEY.toString(),
-        ]);
-      } finally {
-        await session.end();
-      }
-    },
-  };
+  assertCanonicalLeaseHost(env, "worker-database runs");
+  return acquireServerScopedRunLease(
+    baseUrl,
+    TEST_INFRA_RUN_LEASE_LOCK_KEY,
+    new Error(
+      "[testInfraLock] another worker-database test run is already active on this PostgreSQL server " +
+        "(run lease exam_test_worker_database_run is held). " +
+        "Concurrent local worker-database runs are not supported: both runs derive the same slot databases from VITEST_POOL_ID. " +
+        "Wait for the running invocation to finish, or point TEST_DATABASE_URL at a separate PostgreSQL instance.",
+    ),
+  );
+}
+
+/**
+ * Acquire the @exam/db PACKAGE worker-slot run lease, or fail immediately
+ * (#648).
+ *
+ * Same semantics as {@link acquireTestInfraRunLease} — one immediate
+ * try-lock, whole-invocation hold, automatic release on process death,
+ * canonical-`postgres` host — but for the package's OWN slot namespace
+ * (`exam_test_db_w*`): acquired once in `packages/db/vitest.globalSetup.ts`
+ * after DB readiness, so two simultaneous `@exam/db` runs on one PostgreSQL
+ * server cannot truncate each other's slot databases. A different key from
+ * the API lease by construction: the API lease's own contract tests run
+ * inside this package and must stay hermetic under an enclosing @exam/db
+ * run.
+ */
+export async function acquireDbPackageRunLease(
+  baseUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<TestInfraRunLease> {
+  assertCanonicalLeaseHost(env, "@exam/db package worker-slot runs");
+  return acquireServerScopedRunLease(
+    baseUrl,
+    TEST_INFRA_DB_PACKAGE_RUN_LEASE_LOCK_KEY,
+    new Error(
+      "[testInfraLock] another @exam/db test run is already active on this PostgreSQL server " +
+        "(run lease exam_test_db_worker_database_run is held). " +
+        "Concurrent @exam/db runs share the fixed exam_test_db_w* worker-slot namespace and would truncate each other's fixtures. " +
+        "Wait for the running invocation to finish, or point TEST_DATABASE_URL at a separate PostgreSQL instance.",
+    ),
+  );
 }

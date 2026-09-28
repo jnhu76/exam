@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveTestScope,
+  resolveDbPackageTestScope,
   resolvePostgresDatabaseName,
   resolveRedisPrefix,
   resolveQueuePrefix,
@@ -383,5 +384,90 @@ describe("resolveTestScope — no external dependencies", () => {
     const scope = resolveTestScope(env());
     expect(scope.scopeId).toBe("local_w1");
     expect(scope.postgresDatabaseName).toBe("exam_test_w1");
+  });
+});
+
+describe("resolveDbPackageTestScope — @exam/db package worker-slot namespace (#648)", () => {
+  it("derives the package slot name for the local default pool id", () => {
+    const scope = resolveDbPackageTestScope(env({ TEST_WORKER_ID: "1" }));
+    expect(scope.postgresDatabaseName).toBe("exam_test_db_w1");
+  });
+
+  it("is deterministic: same env, same slot name", () => {
+    const e = env({ TEST_WORKER_ID: "2" });
+    expect(resolveDbPackageTestScope(e).postgresDatabaseName).toBe(
+      resolveDbPackageTestScope(e).postgresDatabaseName,
+    );
+  });
+
+  it("pool id bounds the slot name: distinct pool ids → distinct slots", () => {
+    const w1 = resolveDbPackageTestScope(
+      env({ TEST_WORKER_ID: "1" }),
+    ).postgresDatabaseName;
+    const w2 = resolveDbPackageTestScope(
+      env({ TEST_WORKER_ID: "2" }),
+    ).postgresDatabaseName;
+    expect(w1).toBe("exam_test_db_w1");
+    expect(w2).toBe("exam_test_db_w2");
+    expect(w1).not.toBe(w2);
+  });
+
+  it("derives the CI shard+pool name and never equals the API slot", () => {
+    const e = env({
+      TEST_INFRA_SCOPE: "ci",
+      TEST_SHARD_INDEX: "3",
+      TEST_WORKER_ID: "2",
+    });
+    const dbScope = resolveDbPackageTestScope(e);
+    expect(dbScope.postgresDatabaseName).toBe("exam_test_db_s3_w2");
+    expect(dbScope.postgresDatabaseName).not.toBe(
+      resolveTestScope(e).postgresDatabaseName,
+    );
+  });
+
+  it("renames ONLY the slot database; all other scope facts are preserved", () => {
+    const e = env({ TEST_WORKER_ID: "2" });
+    const api = resolveTestScope(e);
+    const dbPkg = resolveDbPackageTestScope(e);
+    expect(dbPkg.scopeId).toBe(api.scopeId);
+    expect(dbPkg.workerId).toBe(api.workerId);
+    expect(dbPkg.shardIndex).toBe(api.shardIndex);
+    expect(dbPkg.dbIsolation).toBe(api.dbIsolation);
+    expect(dbPkg.redisPrefix).toBe(api.redisPrefix);
+    expect(dbPkg.queuePrefix).toBe(api.queuePrefix);
+  });
+
+  it("package slot names are disjoint from every API slot name shape", () => {
+    // The API grammar after `exam_test_` is `w*`, `s*_w*`, or a dedicated
+    // group — never the literal `db_` segment, so the namespaced slot can
+    // never collide with an API slot on a shared server.
+    const envs = [
+      env({ TEST_WORKER_ID: "1" }),
+      env({ TEST_WORKER_ID: "3" }),
+      env({
+        TEST_INFRA_SCOPE: "ci",
+        TEST_SHARD_INDEX: "2",
+        TEST_WORKER_ID: "1",
+      }),
+      env({ API_TEST_GROUP: "background" }),
+    ];
+    for (const e of envs) {
+      const apiName = resolveTestScope(e).postgresDatabaseName;
+      const dbPkgName = resolveDbPackageTestScope(e).postgresDatabaseName;
+      expect(dbPkgName).not.toBe(apiName);
+      expect(dbPkgName).toMatch(/^exam_test_db_/);
+    }
+  });
+
+  it("fails loudly under file-schema isolation (no slot database exists)", () => {
+    expect(() =>
+      resolveDbPackageTestScope(env({ TEST_DB_ISOLATION: "file-schema" })),
+    ).toThrow(/requires worker-database isolation/);
+  });
+
+  it("keeps the runner fail-fast: Vitest without a pool id still hard-fails", () => {
+    expect(() => resolveDbPackageTestScope(env({ VITEST: "true" }))).toThrow(
+      /VITEST_POOL_ID is required/,
+    );
   });
 });
