@@ -917,6 +917,31 @@ Contract rules going forward:
    an ordinary test; mutation-removing the include pin lets the config run
    an ordinary API test and fails the suite).
 
+   **#648 addendum (2026-09-28): @exam/db repeats this shape one namespace
+   over.** Ordinary `@exam/db` tests now reuse persistent package worker
+   slots — `exam_test_db_w{pool}` locally, `exam_test_db_s{shard}_w{pool}` in
+   CI (derived by `resolveDbPackageTestScope`, provably disjoint from API
+   slot names) — through `getWorkerScopedTestDb`: migrate once per slot
+   (server-side bootstrap precheck, rule 4), `resetPostgres()` once per file
+   (rule 2's truncate boundary), pools closed without dropping the slot. Two
+   simultaneous `@exam/db` runs would truncate each other's slots, so
+   `packages/db/vitest.globalSetup.ts` holds a package-db invocation lease
+   (`exam_test_db_worker_database_run`) with exactly this rule's semantics:
+   one immediate try-lock, whole-invocation hold, automatic release on
+   process death, canonical-`postgres` host, alien `TEST_ADMIN_DATABASE`
+   rejected. The key is deliberately DISTINCT from the API run lease — the
+   API lease's contract tests execute inside the @exam/db suite and must stay
+   hermetic under an enclosing @exam/db run. The API lease key/semantics are
+   unchanged; `getIsolatedTestDb` fresh-schema semantics are unchanged and
+   remain the path for migration/DDL/multi-fixture/second-connection tests.
+   Regressions: package-slot namespace derivation (determinism, CI shard
+   shape, disjointness, file-schema fail-fast) in `testScope.test.ts`;
+   namespace separation of all THREE keys, second-acquire immediate
+   rejection against the enclosing holder (foreign-session try-lock probe),
+   API-identity acquire while the package lease is held, and cluster-scope
+   rejection in `testInfraLock.test.ts`; first-use reset / no-second-truncate
+   / metadata survival / slot-name shape in `testDbWorkerScoped.test.ts`.
+
 Regression tests assert these rules deterministically (charset/priority unit
 tests for rule 1; pg_locks self-session proofs and try-lock probes for rules
 3–5; `getTestInfraLockAcquisitionCount()` counters; authority-mismatch,
