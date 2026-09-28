@@ -1246,3 +1246,75 @@ current-destination 标记是否依赖数据加载完成（收敛路径而非等
 ### 复发记录
 
 - 2026-09-26：4-shard 首跑单次出现（1/166），隔离复跑与 4-shard 重跑均通过。
+
+## 2026-09-28 — `testDbWorkerScoped.failurePath.test.ts` beforeAll 与 `pg_stat_activity` 后端退出可见性竞态（#648 P1-3 所有权证明；已升级 → issue #650）
+
+### 失败位置
+
+- 文件：`packages/db/src/testDbWorkerScoped.failurePath.test.ts:120`
+- 用例：describe `getWorkerScopedTestDb — reset-boundary failure releases the handle (#648 P1-3)` 的 `beforeAll`（`predecessor.close()` + 阻断 trigger 安装之后的 `expect(await otherBackendCount()).toBe(0)`）
+- 调用：`pnpm --filter @exam/db test`（全套件）与
+  `pnpm --filter @exam/db exec vitest run src/testDbWorkerScoped.failurePath.test.ts`（单文件）
+
+### 错误
+
+```text
+FAIL  src/testDbWorkerScoped.failurePath.test.ts > getWorkerScopedTestDb — reset-boundary failure releases the handle (#648 P1-3)
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/testDbWorkerScoped.failurePath.test.ts:120:41
+    120|       expect(await otherBackendCount()).toBe(0);
+```
+
+全套件形态：`Test Files 1 failed | 58 passed (59)`，`Tests 705 passed | 2 skipped (707)`，失败文件 1757ms（其余两用例 skipped 为 beforeAll 失败的次生）。
+
+### 出现场景
+
+- 基线：master `a4a813fa`（#649 合并后）；post-#649 `@exam/db` 性能归因测量会话
+  （报告在 `research/db-test-post-649-perf` 分支），WSL2 + 本地 docker PG 18.4，warm 槽位 `exam_test_db_w1..w3`
+- 触发：全套件 1 次（基线 N=5 的 test-5）+ 单文件 17 次中 2 次（~12%）——同日共 3 次同签名
+- 复跑结果（登记规则 #1）：每次失败后立即单文件复跑 2/2 PASS；同会话其余全部
+  全套件运行 707/707 全绿
+
+### 根因假设
+
+断言在 `predecessor.close()` 之后**瞬时**读 `pg_stat_activity`：postgres.js
+`sql.end()` 在客户端发出 Terminate、关闭 socket 后即返回，而服务端 backend
+进程异步退出、其活动行要等进程真正退出才消失。该文件每次执行都对全新一次性
+槽位（`exam_test_db_wfailpath<rand>`，run 内唯一）走完整 CREATE DATABASE +
+migrate + 多次连接开/关（bootstrap 预检 ×2、migrate 连接、predecessor 池），
+`close()` → count 查询间隔毫秒级；退出滞后偶发超过该间隔 → count=1。单文件
+（单 worker、无全套件负载）也以 ~12% 复现，因为复现条件是本文件自身的
+DDL/连接churn，不是套件并行。
+
+### 已知不是的原因
+
+- 不是 adapter 泄漏 handle（本测试防御的 #648 P1-3 泄漏模式是 backend **永久**
+  存活 → 确定性 count≥1；本 flake 瞬态、复跑即过，所有权不变量成立）
+- 不是 trigger/DDL 冲突：失败点在 trigger 安装成功之后的 count 断言，且
+  `rejects.toThrow(/test_block_reset/)` 用例未及执行
+- 不是全套件负载限定：单文件复现排除调度/争用为必要条件（负载只放大退出滞后窗口）
+
+### 当前缓解
+
+无代码改动（登记规则：不 skip、不 retry、不弱化断言、不加超时）。测量会话
+record-only。
+
+### 后续动作
+
+issue #650 跟踪修复：把两处瞬时 `otherBackendCount()` 断言（`beforeAll` `:120`
+与 it 体内 reset 拒绝后的对应断言）改为**有界 settle 轮询**（~2–3s 截止、
+50–100ms 间隔，沿用 `testInfraLock.test.ts` 的 `pg_locks` bounded-polling 先例：
+谓词必须被真实状态满足才继续）。真实泄漏永不归零、到截止仍响亮失败——证明力
+不变，仅容忍退出可见性滞后。修复后以单文件 15+ 连跑确认命中率归零。
+
+### 复发记录
+
+- 2026-09-28：全套件基线 test-5 单次（1/59 文件失败）；同日单文件 17 跑 2 败
+  （~12%）。3 次同签名 → 按登记规则 #3 升级为 [issue #650](https://github.com/jnhu76/exam/issues/650)。
