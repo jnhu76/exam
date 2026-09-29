@@ -220,11 +220,12 @@ describe("rate limit — trusted proxy topology (#546)", () => {
 });
 
 describe("rate limit — over-broad trusted CIDR hazard (#546)", () => {
-  // INVARIANT documented in the deployment runbook: trusted CIDRs must cover
-  // ONLY the proxy→API link, never the candidate client network. proxy-addr's
-  // walk skips EVERY address matching a trusted CIDR — including the genuine
-  // client entry the proxy appended — so an over-broad CIDR lets a candidate
-  // choose their limiter/audit identity. This pins that behavior so the
+  // INVARIANT documented in the deployment runbook: no trusted CIDR may
+  // cover the candidate client network — each configured CIDR should name
+  // forwarding infrastructure only. proxy-addr's walk skips EVERY address
+  // matching a trusted CIDR — including the genuine client entry the proxy
+  // appended — so an over-broad CIDR lets a candidate choose their
+  // limiter/audit identity. This pins that behavior so the
   // precondition stays executable knowledge instead of folklore.
   const app = Fastify({
     trustProxy: resolveTrustProxyOption(

@@ -419,7 +419,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       reply.setCookie("auth-token", token, {
         httpOnly: true,
-        secure: getRuntimeConfig().authSecret.cookieSecure,
+        // Transport policy: Secure follows the canonical browser-visible
+        // origin's scheme (runtimeConfig single authority) — an http:// LAN
+        // origin must receive a non-Secure cookie or browsers discard it and
+        // login breaks; an https:// origin must keep Secure.
+        secure: getRuntimeConfig().publicWebOrigin.isSecure,
         sameSite: "strict",
         maxAge: 24 * 60 * 60,
         path: "/",

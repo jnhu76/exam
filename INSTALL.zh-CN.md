@@ -111,7 +111,10 @@ PUBLIC_WEB_ORIGIN=http://192.168.1.5:8080
 ```
 
 把 `192.168.1.5` 替换成部署机器的真实局域网地址。浏览器生成邮件操作链接时会使用
-`PUBLIC_WEB_ORIGIN`，因此它应当填写用户实际访问的地址。
+`PUBLIC_WEB_ORIGIN`，因此它应当填写用户实际访问的地址。它的 scheme 同时是传输策略的
+唯一权威：`http://` 源下认证 cookie 不带 `Secure`、无 HSTS（在受控或适当可信的局域网上
+受支持——HTTP 下能够窃听或篡改局域网流量的攻击者可以捕获凭据、会话与考试内容）；
+`https://` 源保留全部 HTTPS 加固。
 
 如果需要 HTTPS，内置的 `web` nginx 已提供带注释的 HTTPS 模板——但该配置
 **烘焙在 `exam-web` 镜像内**，修改 checkout 里的 `deploy/nginx/web.conf`

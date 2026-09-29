@@ -61,7 +61,16 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-}
-      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      # Bundled-topology default: the web nginx edge is the only public
+      # ingress, so the trust set is the stack's own bridge subnet. Honest
+      # scope: EVERY exam-net peer is trusted (web, db, redis, any future
+      # service) — not only the web→app hop; browser-supplied XFF never
+      # reaches the app because the edge REPLACES the header (runbook §2).
+      # INVARIANT: this fallback and networks.exam-net.ipam below must
+      # derive from the SAME EXAM_DOCKER_SUBNET default — pinned together by
+      # runtimeConfig.test.ts ("bundled production proxy-trust baseline").
+      # Override only for an EXTERNAL proxy topology (runbook §2).
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-${EXAM_DOCKER_SUBNET:-172.28.0.0/24}}
       HEARTBEAT_SCAN_INTERVAL_MS: ${HEARTBEAT_SCAN_INTERVAL_MS:-}
       HEARTBEAT_TIMEOUT_MS: ${HEARTBEAT_TIMEOUT_MS:-}
       # Unset → defaults to HEARTBEAT_SCAN_INTERVAL_MS inside the app.
@@ -169,3 +178,14 @@ services:
 networks:
   exam-net:
     driver: bridge
+    ipam:
+      config:
+        # Single topology authority: EXAM_DOCKER_SUBNET names the bridge
+        # subnet AND feeds the bundled TRUSTED_PROXY_CIDRS fallback above,
+        # so moving the subnet cannot leave the trust default stale.
+        # Collision semantics (accurate form): overlap with another Docker
+        # network fails at `up` ("Pool overlaps..."); overlap with a host
+        # LAN/VPN route may succeed and then silently break container
+        # routing — choose a free subnet via EXAM_DOCKER_SUBNET in
+        # .env.production (runbook §2).
+        - subnet: ${EXAM_DOCKER_SUBNET:-172.28.0.0/24}

@@ -136,7 +136,6 @@ export interface RedisConfig {
 
 export interface AuthSecretConfig {
   jwtSecret: string;
-  cookieSecure: boolean;
 }
 
 export interface CorsConfig {
@@ -154,9 +153,18 @@ export interface CorsConfig {
  * Defaults in non-production to `http://localhost:${VITE_PORT}` (VITE_PORT
  * owns the dev web port; default 5173) so a bare dev run still works;
  * production requires the env var (fail-fast).
+ *
+ * This is ALSO the single transport-policy authority: {@link isSecure} is
+ * derived from the canonical origin's scheme and decides every
+ * HTTPS-specific behavior (auth-cookie `Secure`, HSTS,
+ * `upgrade-insecure-requests`). TLS is an ingress/deployment property —
+ * APP_MODE never implies HTTPS, so `APP_MODE=production` supports both
+ * HTTP and HTTPS canonical origins.
  */
 export interface PublicWebOriginConfig {
   origin: string;
+  /** True iff the canonical browser-visible origin is `https:`. */
+  isSecure: boolean;
 }
 
 export interface HeartbeatConfig {
@@ -669,7 +677,6 @@ export function loadRuntimeConfig(
     redis: resolveRedisConfig(s),
     authSecret: {
       jwtSecret: s.auth.JWT_SECRET,
-      cookieSecure: isProduction || s.app.COOKIE_SECURE,
     },
     cors: { origin: resolveCorsOrigin(s) },
     heartbeat: {
@@ -717,9 +724,7 @@ export function loadRuntimeConfig(
     timezone: { timezone: s.app.APP_TIMEZONE },
     email,
     emailWorker: resolveEmailWorkerConfig(s, email),
-    publicWebOrigin: {
-      origin: s.app.PUBLIC_WEB_ORIGIN ?? defaultDevWebOrigin(s),
-    },
+    publicWebOrigin: resolvePublicWebOrigin(s),
     launchpad: {
       // P7-C1: unset/empty LAUNCHPAD_SETUP_TOKEN disables launchpad (the
       // bootstrap endpoint refuses). NOT fail-fast — a bare `docker compose
@@ -727,6 +732,21 @@ export function loadRuntimeConfig(
       setupToken: s.app.LAUNCHPAD_SETUP_TOKEN,
     },
   };
+}
+
+/**
+ * Resolve the canonical browser-visible origin and derive the single
+ * transport-policy fact from its scheme: an `https:` origin means the
+ * external transport is secure (cookie `Secure`, HSTS,
+ * `upgrade-insecure-requests` apply); an `http:` origin (e.g. a LAN IP or
+ * `*.lan` hostname) means they must NOT be emitted — a browser discards
+ * `Secure` cookies delivered over plain HTTP, and HSTS/UIR are HTTPS-only
+ * semantics. The origin is already validated to an absolute http(s) origin
+ * by the settings leaf, so `new URL` cannot fail here.
+ */
+function resolvePublicWebOrigin(s: ResolvedSettings): PublicWebOriginConfig {
+  const origin = s.app.PUBLIC_WEB_ORIGIN ?? defaultDevWebOrigin(s);
+  return { origin, isSecure: new URL(origin).protocol === "https:" };
 }
 
 let cachedConfig: AppRuntimeConfig | null = null;

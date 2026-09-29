@@ -14,6 +14,7 @@ import {
   buildPublicConfig,
   resetRuntimeConfigForTest,
   loadRuntimeConfig,
+  parseTrustedProxyCidrs,
   resolveTrustProxyOption,
 } from "./runtimeConfig.js";
 
@@ -32,7 +33,6 @@ const ENV_KEYS = [
   "DATABASE_URL",
   "TEST_DATABASE_URL",
   "JWT_SECRET",
-  "COOKIE_SECURE",
   "CORS_ORIGIN",
   "HEARTBEAT_SCAN_INTERVAL_MS",
   "HEARTBEAT_TIMEOUT_MS",
@@ -601,127 +601,121 @@ describe("runtimeConfig", () => {
     });
   });
 
-  // COOKIE_SECURE boolean parsing is owned by the
-  // "cookie secure authority matrix (#568)" describe below.
-
-  describe("cookie secure authority matrix (#568)", () => {
-    const PROD = {
+  // Transport policy: the canonical browser-visible origin (PUBLIC_WEB_ORIGIN)
+  // is the ONE authority for HTTPS-specific behavior (cookie Secure, HSTS,
+  // CSP upgrade-insecure-requests). APP_MODE is a runtime-mode signal and
+  // must NOT imply HTTPS — production supports both HTTP and HTTPS ingress.
+  describe("transport policy matrix — canonical origin scheme", () => {
+    const prodWithOrigin = (origin: string) => ({
       APP_MODE: "production",
       DATABASE_URL: "postgresql://p:p@h:5432/proddb",
       JWT_SECRET: "production-secret",
-      CORS_ORIGIN: "https://example.com",
-      PUBLIC_WEB_ORIGIN: "https://example.com",
-    };
-
-    // ── Production invariant: cookieSecure is ALWAYS true ──
-    it("production + COOKIE_SECURE unset → true", () => {
-      const config = loadRuntimeConfig(PROD);
-      expect(config.authSecret.cookieSecure).toBe(true);
+      CORS_ORIGIN: origin,
+      PUBLIC_WEB_ORIGIN: origin,
     });
 
-    it("production + COOKIE_SECURE=false → true (critical regression)", () => {
-      const config = loadRuntimeConfig({
-        ...PROD,
-        COOKIE_SECURE: "false",
-      });
-      expect(config.authSecret.cookieSecure).toBe(true);
+    // ── Production + HTTP canonical origin (LAN HTTP is a supported mode) ──
+    it("production + http://192.168.1.20 → external transport NOT secure", () => {
+      const config = loadRuntimeConfig(prodWithOrigin("http://192.168.1.20"));
+      expect(config.publicWebOrigin.isSecure).toBe(false);
     });
 
-    it("production + COOKIE_SECURE=true → true", () => {
-      const config = loadRuntimeConfig({
-        ...PROD,
-        COOKIE_SECURE: "true",
-      });
-      expect(config.authSecret.cookieSecure).toBe(true);
+    it("production + http://exam.school.lan → external transport NOT secure", () => {
+      const config = loadRuntimeConfig(
+        prodWithOrigin("http://exam.school.lan"),
+      );
+      expect(config.publicWebOrigin.isSecure).toBe(false);
     });
 
-    it("production + COOKIE_SECURE=1 → true", () => {
-      const config = loadRuntimeConfig({
-        ...PROD,
-        COOKIE_SECURE: "1",
-      });
-      expect(config.authSecret.cookieSecure).toBe(true);
+    it("production + http://exam.school.lan:8080 (non-default port) → external transport NOT secure", () => {
+      const config = loadRuntimeConfig(
+        prodWithOrigin("http://exam.school.lan:8080"),
+      );
+      expect(config.publicWebOrigin.isSecure).toBe(false);
     });
 
-    // ── Development: COOKIE_SECURE controls the flag ──
-    it("development + unset → false", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "development",
-        ...DEV_DB,
-      });
-      expect(config.authSecret.cookieSecure).toBe(false);
+    // ── Production + HTTPS canonical origin: hardening preserved ──
+    it("production + https://exam.example.edu → external transport secure", () => {
+      const config = loadRuntimeConfig(
+        prodWithOrigin("https://exam.example.edu"),
+      );
+      expect(config.publicWebOrigin.isSecure).toBe(true);
     });
 
-    it("development + false → false", () => {
+    it("production + https://exam.example.edu:8443 → external transport secure", () => {
+      const config = loadRuntimeConfig(
+        prodWithOrigin("https://exam.example.edu:8443"),
+      );
+      expect(config.publicWebOrigin.isSecure).toBe(true);
+    });
+
+    // ── Non-production modes preserve their existing dev-origin behavior ──
+    it("development default origin (http localhost dev web) → NOT secure", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
         ...DEV_DB,
-        COOKIE_SECURE: "false",
       });
-      expect(config.authSecret.cookieSecure).toBe(false);
+      expect(config.publicWebOrigin.isSecure).toBe(false);
     });
 
-    it("development + true → true", () => {
+    it("development + https PUBLIC_WEB_ORIGIN → secure", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
         ...DEV_DB,
-        COOKIE_SECURE: "true",
+        PUBLIC_WEB_ORIGIN: "https://localhost:5173",
       });
-      expect(config.authSecret.cookieSecure).toBe(true);
+      expect(config.publicWebOrigin.isSecure).toBe(true);
     });
 
-    it("development + 1 → true", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "development",
-        ...DEV_DB,
-        COOKIE_SECURE: "1",
-      });
-      expect(config.authSecret.cookieSecure).toBe(true);
-    });
-
-    // ── Test: COOKIE_SECURE controls the flag ──
-    it("test + unset → false", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-      });
-      expect(config.authSecret.cookieSecure).toBe(false);
-    });
-
-    it("test + true → true", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-        COOKIE_SECURE: "true",
-      });
-      expect(config.authSecret.cookieSecure).toBe(true);
-    });
-
-    it("test + false → false", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-        COOKIE_SECURE: "false",
-      });
-      expect(config.authSecret.cookieSecure).toBe(false);
-    });
-
-    // ── E2E: COOKIE_SECURE controls the flag ──
-    it("e2e + unset → false", () => {
+    it("e2e default origin → NOT secure (host-native E2E stays HTTP)", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "e2e",
         TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
       });
-      expect(config.authSecret.cookieSecure).toBe(false);
+      expect(config.publicWebOrigin.isSecure).toBe(false);
     });
 
-    it("e2e + true → true", () => {
+    // INVARIANT: the COOKIE_SECURE override was removed — production cookie
+    // transport has ONE authority (the canonical origin scheme). A stale
+    // COOKIE_SECURE value in the environment must be inert, never a second
+    // authority that can contradict PUBLIC_WEB_ORIGIN.
+    it("stale COOKIE_SECURE env is inert under an http canonical origin", () => {
       const config = loadRuntimeConfig({
-        APP_MODE: "e2e",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
+        ...prodWithOrigin("http://192.168.1.20"),
         COOKIE_SECURE: "true",
       });
-      expect(config.authSecret.cookieSecure).toBe(true);
+      expect(config.publicWebOrigin.isSecure).toBe(false);
+    });
+  });
+
+  describe("bundled production proxy-trust baseline", () => {
+    function readFile(rel: string): string {
+      return readFileSync(join(REPO_ROOT, rel), "utf8");
+    }
+
+    // INVARIANT: the bundled production topology always puts the web nginx
+    // edge in front of the API, so the default TRUSTED_PROXY_CIDRS must
+    // name the exam-net subnet — otherwise every candidate collapses onto
+    // the edge's bridge IP for rate-limit and audit identity. ONE topology
+    // fact: compose derives both consumers from the same
+    // ${EXAM_DOCKER_SUBNET:-<literal>} default; this pins the coupling so
+    // the two defaults cannot drift apart.
+    it("docker-compose.yml derives TRUSTED_PROXY_CIDRS and the exam-net subnet from the same EXAM_DOCKER_SUBNET default", () => {
+      const compose = readFile("docker-compose.yml");
+      const subnetDefault = compose.match(
+        /^\s*- subnet:\s*\$\{EXAM_DOCKER_SUBNET:-(\S+)\}/m,
+      )?.[1];
+      expect(subnetDefault).toMatch(/^\d+\.\d+\.\d+\.\d+\/\d+$/);
+      const trustDefault = compose.match(
+        /TRUSTED_PROXY_CIDRS:\s*\$\{TRUSTED_PROXY_CIDRS:-\$\{EXAM_DOCKER_SUBNET:-(\S+)\}\}/,
+      )?.[1];
+      expect(trustDefault).toBe(subnetDefault);
+    });
+
+    it("the bundled default subnet is a bounded, parser-accepted trusted-proxy entry", () => {
+      expect(parseTrustedProxyCidrs("172.28.0.0/24")).toEqual([
+        "172.28.0.0/24",
+      ]);
     });
   });
 

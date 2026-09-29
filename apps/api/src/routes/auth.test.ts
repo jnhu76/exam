@@ -161,8 +161,8 @@ describe("auth routes", () => {
     }
   });
 
-  it("POST /api/auth/login sets Secure cookie when COOKIE_SECURE=true", async () => {
-    vi.stubEnv("COOKIE_SECURE", "true");
+  it("POST /api/auth/login sets Secure cookie when the canonical origin is https", async () => {
+    vi.stubEnv("PUBLIC_WEB_ORIGIN", "https://localhost:3100");
     resetRuntimeConfigForTest();
     const response = await ctx.app.inject({
       method: "POST",
@@ -180,9 +180,13 @@ describe("auth routes", () => {
     expect(cookieStr).toMatch(/Secure/);
   });
 
-  it("POST /api/auth/login omits Secure flag outside production when COOKIE_SECURE!=true", async () => {
-    vi.stubEnv("NODE_ENV", "test");
-    vi.stubEnv("COOKIE_SECURE", "false");
+  it("POST /api/auth/login omits Secure flag in production when the canonical origin is http (F1 regression)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_MODE", "production");
+    vi.stubEnv("JWT_SECRET", "test-production-secret");
+    vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
+    vi.stubEnv("CORS_ORIGIN", "http://exam.school.lan");
+    vi.stubEnv("PUBLIC_WEB_ORIGIN", "http://exam.school.lan");
     resetRuntimeConfigForTest();
     const response = await ctx.app.inject({
       method: "POST",
@@ -200,14 +204,40 @@ describe("auth routes", () => {
     expect(cookieStr).not.toMatch(/Secure/);
   });
 
-  it("POST /api/auth/login sets Secure cookie in production", async () => {
+  it("POST /api/auth/login keeps HttpOnly SameSite=Strict Path=/ in production on an http canonical origin", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_MODE", "production");
+    vi.stubEnv("JWT_SECRET", "test-production-secret");
+    vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
+    vi.stubEnv("CORS_ORIGIN", "http://exam.school.lan");
+    vi.stubEnv("PUBLIC_WEB_ORIGIN", "http://exam.school.lan");
+    resetRuntimeConfigForTest();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const setCookie = response.headers["set-cookie"];
+    const cookieStr = Array.isArray(setCookie)
+      ? setCookie.join(";")
+      : setCookie;
+    expect(cookieStr).toMatch(/HttpOnly/);
+    expect(cookieStr).toMatch(/SameSite=Strict/i);
+    expect(cookieStr).toMatch(/Path=\//);
+    expect(cookieStr).not.toMatch(/Secure/);
+  });
+
+  it("POST /api/auth/login sets Secure cookie in production with an https canonical origin", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("APP_MODE", "production");
     vi.stubEnv("JWT_SECRET", "test-production-secret");
     vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
     vi.stubEnv("CORS_ORIGIN", "https://example.com");
     vi.stubEnv("PUBLIC_WEB_ORIGIN", "https://example.com");
-    vi.stubEnv("COOKIE_SECURE", "false");
     resetRuntimeConfigForTest();
     const response = await ctx.app.inject({
       method: "POST",

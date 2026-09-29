@@ -47,10 +47,12 @@ function originOf(request: FastifyRequest): string | null {
 /**
  * Builds a Content-Security-Policy header string. In production mode inline
  * scripts are disabled; in development `'unsafe-inline'` is allowed for
- * convenience. Adds `upgrade-insecure-requests` when secure cookies are
- * enabled.
+ * convenience. Adds `upgrade-insecure-requests` only when the canonical
+ * browser origin is `https:` — the directive upgrades http subresource and
+ * navigation requests, which is wrong (breaking) for a legitimately
+ * HTTP-served document.
  */
-function buildCsp(isProduction: boolean, cookieSecure: boolean): string {
+function buildCsp(isProduction: boolean, transportSecure: boolean): string {
   const baseDirectives = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -68,7 +70,7 @@ function buildCsp(isProduction: boolean, cookieSecure: boolean): string {
   // attributes at runtime; tightening it requires removing those emissions first.
   const styleSrc = "style-src 'self' 'unsafe-inline'";
   const directives = [...baseDirectives, scriptSrc, styleSrc];
-  if (cookieSecure) {
+  if (transportSecure) {
     directives.push("upgrade-insecure-requests");
   }
   return directives.join("; ");
@@ -103,7 +105,11 @@ function buildPermissionsPolicy(): string {
 export default function setupSecurity(app: FastifyInstance): void {
   const config = getRuntimeConfig();
   const isProduction = config.app.isProduction;
-  const cookieSecure = config.authSecret.cookieSecure;
+  // ONE transport-policy authority: the canonical browser-visible origin's
+  // scheme (runtimeConfig). HTTPS-specific headers (HSTS,
+  // upgrade-insecure-requests) follow it, never APP_MODE — a production
+  // deployment with an http:// canonical origin must not emit them.
+  const transportSecure = config.publicWebOrigin.isSecure;
 
   app.addContentTypeParser(
     "application/json",
@@ -174,9 +180,9 @@ export default function setupSecurity(app: FastifyInstance): void {
     reply.header("Permissions-Policy", buildPermissionsPolicy());
     reply.header(
       "Content-Security-Policy",
-      buildCsp(isProduction, cookieSecure),
+      buildCsp(isProduction, transportSecure),
     );
-    if (cookieSecure) {
+    if (transportSecure) {
       reply.header(
         "Strict-Transport-Security",
         "max-age=31536000; includeSubDomains",
