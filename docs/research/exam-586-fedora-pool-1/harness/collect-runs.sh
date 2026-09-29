@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# EXAM-586 RESEARCH ONLY: copy completed runs' evidence from the host run
-# root into the repo research results/ directory (logs gzipped; PG data roots
-# and env files with secrets are NOT copied). Idempotent per run.
+# EXAM-586 RESEARCH ONLY: copy completed runs' bounded evidence from the
+# host run root into the repo research results/ directory.
+#
+# Repository material policy: Git keeps research source + small normalized
+# text evidence only. Raw per-request logs (requests.jsonl), database dumps
+# (candidates.sql) and container service logs (app/web/db.log) stay
+# host-side under EXAM586_RUNS_ROOT; their integrity is recorded per run in
+# SHA256SUMS and referenced by 10-evidence-ledger.md. Idempotent per run.
 set -euo pipefail
 HARNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNS_ROOT="${EXAM586_RUNS_ROOT:-/home/jnhu/exam-586/runs}"
@@ -12,17 +17,12 @@ for run_dir in "$RUNS_ROOT"/*/; do
   [ -f "$run_dir/meta.json" ] || continue
   out="$DEST/$run"
   mkdir -p "$out"
-  for f in meta.json requests.jsonl driver-summary.json correctness.json \
+  for f in meta.json driver-summary.json correctness.json summary586.json \
            pg-before.json pg-after.json pg-settings.txt pg-version.txt \
-           pg-activity.jsonl pg-locks.jsonl docker-stats.txt \
-           candidates.sql SHA256SUMS INVALID_REASON.txt summary586.json \
+           pg-activity.jsonl pg-locks.jsonl pg-qtext.jsonl \
+           docker-stats.txt SHA256SUMS INVALID_REASON.txt \
            pool-witness.txt timing-count.txt oracle.log; do
     [ -f "$run_dir/$f" ] && cp -f "$run_dir/$f" "$out/" || true
-  done
-  for l in app web db; do
-    if [ -s "$run_dir/$l.log" ] && [ ! -f "$out/$l.log.gz" ]; then
-      gzip -9 -c "$run_dir/$l.log" > "$out/$l.log.gz"
-    fi
   done
   echo "collected $run"
 done
