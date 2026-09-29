@@ -1,8 +1,15 @@
 # #586 — 05 Main Matrix Results (3 pool sizes × 3 scales)
 
-Status: FINAL. 9/9 cells VALID, zero invalid cells, no replacement runs
-needed. Raw evidence per cell in `results/main-0X/` (per-run root on the
-experiment host: `/home/jnhu/exam-586/runs/<run-id>/`).
+Status: FINAL (collected data); **MAIN_MATRIX_REPLICATION = INCOMPLETE**.
+The frozen schedule (02) defines 27 measured bursts (3 replicate cycles ×
+3 pools × 3 scales); the campaign executed **9 of 27** — one full block
+cycle, i.e. every (pool, scale) pair measured exactly once. Every cell is
+VALID (zero invalid cells, no replacement runs needed), but no treatment
+cell was independently replicated; single-measurement differences across
+pools are descriptive, and the frozen 3-repetition confirmation rule is
+not met (see 09 Known limitations, 10 ledger). Raw evidence per cell in
+`results/main-0X/` (per-run root on the experiment host:
+`/home/jnhu/exam-586/runs/<run-id>/`).
 
 ## Matrix (http submit ms; EXAM586_TIMING join; sampler-derived PG stats)
 
@@ -35,13 +42,17 @@ answers, distinct candidate source IPs = N).
    grows 364 → 810 → 1044 ms: more PG concurrency buys median throughput
    and pays for it with longer per-transaction holds.
 2. **S100 — p99 flat.** 4284 / 4266 / 4400 ms across 10/20/30 — no
-   material difference (≤ 2.7%), well within the observed A/A replicate
-   spread at this scale. p50 improves (4027 → 3177 ms) for the same
-   reason as S50.
+   material difference (≤ 2.7%), and the spread is within the A/A
+   replicate spread observed at S100 (04: four A/A cells at S100). p50
+   improves (4027 → 3177 ms) for the same reason as S50. Single
+   measurement per pool — descriptive, not a replicated contrast.
 3. **S200 — larger pools make the tail dramatically WORSE.** p99:
    pool 10 = 6578 ms; pool 20 = 17940 ms; pool 30 = 17119 ms — a 2.6–2.7×
    degradation. txHold p99 explodes from 443 ms (pool 10) to ~10 s
-   (pools 20/30). The saturation fraction rises 0.40 → 0.59–0.61.
+   (pools 20/30). The saturation fraction rises 0.40 → 0.59–0.61. This
+   effect is large and mechanistically consistent with the lock-convoy
+   model (07); per the frozen replication rule it still requires
+   independent confirmation (unexecuted replicate cycles 2–3).
 4. **Post-commit grade read** (`postCommitReadMs`) shows the same shape
    (pool 10 / S200 p50 ≈ 2094 ms vs ≤ 437 ms elsewhere) — it re-queues on
    the same pool after the submit tx, so pool queueing is visible there,
@@ -53,6 +64,8 @@ The only cell where pool admission is the dominant visible queue is
 pool 10 / S200 (acq p99 4793 ms ≈ 73% of http p99 6578 ms). Raising the
 cap was expected to relieve exactly that queue. Instead, the released
 concurrency re-materialized as ~10 s transaction holds (06) and the tail
-got worse. Pool size is not the binding constraint at any tested scale;
-the binding constraint is a single serialization point inside the
-submit transaction (07).
+got worse. Within the tested mechanism, pool size is not the binding
+constraint at any tested scale; the binding constraint is a single
+serialization point inside the submit transaction (07). These are
+single-measurement observations per (pool, scale) cell — see the
+replication status above.

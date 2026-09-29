@@ -63,3 +63,15 @@ A replacement for an INVALID run is appended to this schedule as
 `main-XXb` / `aa-XXb` in the same (pool, scale, rep) cell, and the appended
 entry is recorded in `results/INVALIDATIONS.md` with the original run id and
 `INVALID_REASON.txt`. Failed raw evidence is never deleted (§17, §28).
+
+## Execution status (recorded post-campaign; does not alter the frozen plan)
+
+- A/A gate: all 8 planned bursts executed, gate PASS (04).
+- Main matrix: **9 of the 27 planned bursts executed** — one complete
+  3-block cycle (main-01 … main-09 exactly as listed above). Every
+  (pool, scale) pair was measured exactly once, in one of the three
+  replicate blocks; the further two cycles required for 3-repetition
+  confirmation were not run.
+- `MAIN_MATRIX_REPLICATION = INCOMPLETE` (05, 09, 10).
+- No INVALID main or A/A cells; no replacements were needed (the only
+  INVALID runs were rig-shakedown smokes, replaced by `smoke-S20-r0f`).

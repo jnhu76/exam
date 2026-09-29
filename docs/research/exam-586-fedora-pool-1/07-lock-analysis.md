@@ -1,6 +1,8 @@
 # #586 — 07 Lock Analysis (hot-row identification)
 
-Status: FINAL. Sources: in-db `\watch` samplers (200 ms) in the diag runs
+Status: FINAL. Corrected 2026-09-29: waiter-concurrency terminology
+("77–89") replaced by the audited per-instant bounds; row/instant counts
+disambiguated. Sources: in-db `\watch` samplers (200 ms) in the diag runs
 `results/diag-p20-S200/` and `results/diag2-p20-S200/` (both pool=20,
 N=200 — the configuration with the worst tail). The main-matrix cells ran
 with the activity sampler only; the relation-level and query-text
@@ -10,7 +12,8 @@ raw dirs retained).
 
 ## Sampler evidence
 
-**Ungranted locks by relation** (diag-p20-S200, 315 sample lines):
+**Ungranted locks by relation** (diag-p20-S200: 315 physical sampler rows
+across 154 distinct sampling instants, 200 ms cadence):
 
 | locktype | relation | wait_event | weighted waiter-instants | share |
 | --- | --- | --- | --- | --- |
@@ -19,15 +22,47 @@ raw dirs retained).
 | tuple | exams | Lock/transactionid | 9 | 0.3% |
 | transactionid | — | Client/ClientRead etc. | 10 | 0.4% |
 
-**Query text of tuple-lock waiters** (diag2-p20-S200, 163 sample lines):
+"weighted waiter-instants" = sum over sampler rows of the grouped backend
+count at each instant; it is a cumulative observation count, NOT a
+concurrency level. The relation-level rows sum to 2614 over 154 instants
+(2462 of them on the exams tuple, i.e. 2453 + 9).
 
-| waiters | statement (truncated 100 chars) |
+**Query text of tuple-lock waiters** (diag2-p20-S200: 163 physical rows
+across 156 instants):
+
+| weighted waiter-instants | statement (truncated 100 chars) |
 | --- | --- |
 | 2461 | `select "id","organization_id","title","description","course_id","status","timing_mode", … from "exams" …` (locking read) |
 | 32 | `insert into "exam_attempts" (…)` — START-phase FK key-share behind the same row |
 
-Peak concurrent waiters ≈ 77–89 — i.e. essentially the whole in-flight
-submit population, not a single background session.
+**Peak simultaneous waiting backends** — audited per instant
+(2026-09-29, correcting earlier wording):
+
+| quantity | value | source |
+| --- | --- | --- |
+| max distinct backends in `wait_event_type='Lock'` at one instant | **19** | diag2 activity sampler (`pg_stat_activity` rows with `Lock` wait, grouped counts summed per timestamp) |
+| max simultaneous waiters on the exams tuple row at one instant | **18** | diag2 qtext sampler (sum of grouped counts per timestamp); diag locks sampler exams-tuple sum = 18 |
+| max backends of any state at one instant | 21 | diag2 activity sampler (pool 20 + 1 background, e.g. autovacuum) |
+
+The pool cap for both diagnostic runs is 20, so ~18–19 simultaneously
+blocked backends means **essentially the entire pool is parked on the
+exams row** during the convoy — not the entire 200-candidate in-flight
+population. An earlier draft of this document stated "peak concurrent
+waiters ≈ 77–89"; the raw-sampler audit could not reproduce that figure
+as any per-instant concurrency quantity (all per-instant bounds are
+≤ 21, and the app cannot exceed its pool cap). What the samplers do
+contain is a per-instant waiter count of 16–18 during the long plateau
+(e.g. 68 instants at 17, 49 at 16 for exams-tuple); summed over the
+0.2 s cadence this yields ~80–90 waiter-instants per second — the
+likely origin of the 77–89 figure. It was a cumulative lock-wait
+observation rate, not simultaneous waiters, and is corrected here.
+
+Sampler counting note: per-instant sums count grouped rows; a waiting
+backend can hold more than one ungranted lock row (tuple + transactionid),
+so row sums can exceed the distinct-PID count. The distinct-PID bound is
+provided by the activity sampler (19). No sampler recorded per-PID rows,
+so `COUNT(DISTINCT pid)` per instant is bounded here, not enumerated;
+per-instant sums ≤ pool cap + background is the strongest available form.
 
 ## The contended statement
 
@@ -80,7 +115,15 @@ bigger pool (parallel EA/answer work) while p99 stays flat or worsens.
 The submit tail is gated by a single-row serialization point that is part
 of the ADR-008/EXAM-558 correctness design, not by the connection pool
 cap. A pool change cannot remove the convoy; it can only make it longer
-(more simultaneous contenders) or shorter (fewer). Any material tail
-improvement must change the serialization point's scope or remove work
-from its critical section — structural options outside this experiment's
-mandate (see 09-decision.md).
+(more simultaneous contenders) or shorter (fewer). Two bounded follow-up
+directions exist, and this experiment selects neither:
+
+1. **Narrow the serialization point's lock scope** — test whether the
+   EXAM-558 deadline-authority read can use a shared Exam row lock
+   (`FOR SHARE`) so same-exam candidate transactions coexist while
+   exam-authority writers still serialize. This is the directly derived
+   hypothesis; it was tested in the separate #558 lock-mode gate
+   (`docs/research/exam-558-lock-mode-1/`) — #586 discovered the
+   hypothesis and does not itself prove it.
+2. **Remove work from the critical section / restructure grading** —
+   explicitly NOT authorized by #586 (`11-followup-boundary.md`).
