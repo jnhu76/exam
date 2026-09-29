@@ -2,10 +2,6 @@
 
 [English](INSTALL.md) · **简体中文**
 
-> [!NOTE]
-> 本文是 `INSTALL.md` 的简体中文阅读版本。若本文与当前代码、Docker 配置、脚本或部署契约出现冲突，
-> 请按 [`docs/README.md`](docs/README.md) 的 authority 模型处理；实际安装命令与环境变量接线以当前代码和部署配置为准。
-
 本指南用于把 Exam 从零部署到可运行状态。高级配置、升级与日常运维请继续阅读
 [部署文档](docs/deployment/) 和 [运维文档](docs/operations/)。
 
@@ -17,7 +13,7 @@
 | Docker Compose | v2 | Docker Desktop 已包含 |
 | Node.js | 24.15.x | 仅用于运行 `init-production-env.mjs` |
 
-平台面向 **LAN / 本地部署的单实例运行模式**。Windows 和 macOS 可通过 Docker Desktop 用于评估；生产环境推荐 Linux。
+平台面向 **LAN / on-premise（本地部署）的单实例部署**。Windows 和 macOS 可通过 Docker Desktop 用于评估；生产环境推荐 Linux。
 
 ## 标准 Docker 安装
 
@@ -37,10 +33,10 @@ node scripts/init-production-env.mjs
 docker compose --env-file .env.production up -d
 ```
 
-该命令会拉取预构建发布镜像，并启动 `web`（nginx 边缘 + 静态 SPA）、API 与 PostgreSQL
+该命令会拉取预构建发布镜像，并启动 `web`（nginx 公共入口 + 静态 SPA）、API 与 PostgreSQL
 （#585 拓扑；`web` 是唯一对外发布的服务，监听 `EXAM_PORT`，默认 80）。无需本地构建。
 
-每个 Exam 版本都会发布一对版本号一致的成对镜像（API 镜像与 Web 镜像）。
+每个 Exam 版本都会发布一个版本匹配的 API / Web 镜像对，并使用同一个版本标签。
 `init-production-env.mjs` 已经把两个镜像引用写入 `.env.production`
 （`EXAM_IMAGE` / `EXAM_WEB_IMAGE`），正常安装不需要在两者之间做选择；
 手动修改镜像引用属于高级覆盖场景（registry mirror、离线 `docker load`），
@@ -75,12 +71,12 @@ docker compose --env-file .env.production exec app \
   --name 'System Admin' --organization-name 'My Organization'
 ```
 
-请把 `<STRONG_PASSWORD>` 替换成真实的强密码。该命令还会创建内部默认 organization，
-从而解除邮件 outbox loop 的初始化阻塞。
+请把 `<STRONG_PASSWORD>` 替换成真实的强密码。该命令还会创建内部默认组织，
+使邮件 outbox 处理循环能够开始工作。
 
 ### 5. 打开应用
 
-访问 `http://localhost`（`web` nginx 边缘，同时服务静态 SPA，监听 `EXAM_PORT`，默认 80），使用刚刚创建的账号登录。
+访问 `http://localhost`（`web` nginx 公共入口，监听 `EXAM_PORT`，默认 80），使用刚刚创建的账号登录。
 
 ### 另一种方式：Launchpad 首次安装页
 
@@ -119,11 +115,12 @@ PUBLIC_WEB_ORIGIN=http://192.168.1.5:8080
 
 如果需要 HTTPS，内置的 `web` nginx 已提供带注释的 HTTPS 模板——但该配置
 **烘焙在 `exam-web` 镜像内**，修改 checkout 里的 `deploy/nginx/web.conf`
-不会改变已经拉取的镜像。启用方式：复制 `deploy/nginx/web.conf` 并取消其中 443
-server block 的注释，把修改后的副本与证书链（挂载到 `/etc/nginx/certs/fullchain.pem`）、
-私钥（挂载到 `/etc/nginx/certs/privkey.pem`）一起覆盖挂载到 `web` 服务的
-`/etc/nginx/conf.d/default.conf`，并发布 443 端口（建议放在 compose override 文件
-`docker-compose.override.yml` 中，`docker compose` 会自动合并）。应用本身不负责 TLS 终止。
+不会改变已经拉取的镜像。启用方式：复制 `deploy/nginx/web.conf`，取消其中 443
+`server` 块的注释，把修改后的副本覆盖挂载到 `web` 服务的
+`/etc/nginx/conf.d/default.conf`，同时挂载证书链到 `/etc/nginx/certs/fullchain.pem`、
+私钥到 `/etc/nginx/certs/privkey.pem`，并发布 443 端口。建议把这些挂载和 443 端口
+放在 Compose override 文件 `docker-compose.override.yml` 中；`docker compose` 会自动合并它。
+应用本身不负责 TLS 终止。
 
 ## 可选能力
 
@@ -146,7 +143,7 @@ docker compose --env-file .env.production --profile redis up -d
 
 ### 邮件（SMTP）
 
-邮件投递也是可选能力。默认关闭时，outbox 会进入 `sent` 状态，但不会向外部 SMTP 投递。
+邮件投递是可选能力。默认关闭时，outbox 仍会处理到 `sent` 状态，但不会向外部 SMTP 投递。
 
 开启真实邮件：
 
@@ -166,7 +163,7 @@ SMTP_PASSWORD=<password>
 - **端口冲突**：修改 `.env.production` 中的 `EXAM_PORT`。
 - **容器无法启动**：查看 `docker compose --env-file .env.production logs app`。
 - **WSL2 / Docker Desktop 问题**：见 [`docs/docker-troubleshooting.md`](docs/docker-troubleshooting.md)。
-- **中国大陆镜像**：构建时可使用 `--build-arg NPM_REGISTRY=https://registry.npmmirror.com`；完整构建参数见 [`Dockerfile`](Dockerfile)。
+- **中国大陆 npm 镜像源**：构建时可使用 `--build-arg NPM_REGISTRY=https://registry.npmmirror.com`；完整构建参数见 [`Dockerfile`](Dockerfile)。
 
 ## 下一步
 
