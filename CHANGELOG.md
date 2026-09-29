@@ -8,6 +8,20 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-09-29
+
+### Added
+
+- Frozen Exam semantic authority (EXSEM-001..020) with ADR-021 as the
+  adoption/supersession record, plus the production conformance repair that
+  enforces it (#642, #643).
+- Production nginx reverse-proxy edge with an operator-declared trusted
+  client-IP profile (`TRUSTED_PROXY_CIDRS`) and a dedicated static-Web image
+  and service (`EXAM_WEB_IMAGE`) (#585, PR #628).
+- `.env.production.example` replaces `.env.deploy.example` as the production
+  deployment env template.
+- Worker-scoped migrated-database reuse for ordinary `@exam/db` tests (#648).
+
 ### Changed
 
 - Compose project identities are pinned (#631): the dev stack
@@ -18,6 +32,38 @@ for repository releases from `v0.0.1` onward.
   `exam` containers once before `up -d` (upgrade guide §2.2 step 0c);
   contributor source-build rehearsals set `EXAM_DATA_ROOT` outside the
   checkout.
+- The deployment env file is renamed to `.env.production`; an existing
+  `.env.deploy` must be renamed before `init-production-env` runs, and that
+  script only fills blank values — it never re-secrets an existing file
+  (upgrade guide §2.2 step 0b).
+- Configuration authority is consolidated to one owner per runtime concern;
+  invalid explicit values fail fast instead of silently defaulting (#632).
+- Candidate-facing result and export contracts use the submitted-answer and
+  secret-safe authority (EXSEM-007/008/009/017); missing draft-question
+  references are distinguished from absent ones (EXSEM-004); demo seed
+  grading facts align with the durable workset (EXSEM-020).
+- Production ingress is a single edge: `/` proxies to the static Web runtime
+  and only `/api/` reaches Fastify, with request-time upstream resolution so
+  an upgrade cannot leave a stale upstream address.
+- AttemptDetail capability composition reflects the actor's effective
+  capability set for Proctor-reachable flows (#612).
+- The recovery TLA+ model treats an applied `CandidateTakeSnapshot` as the
+  page business authority and models canonical deadline crossing without
+  materializing durable state (#656).
+
+### Fixed
+
+- Recovery scope discoverability mismatch between the admin and candidate
+  projections (#606).
+- Worker-DB bootstrap lifetime for the API-coverage hook-timeout family
+  (#604).
+- The `testDbWorkerScoped.failurePath` beforeAll `pg_stat_activity` race
+  (#650).
+- Test evidence and authority/comment drift across the #609–#625 wave
+  (#613/#614/#615/#620/#621/#624).
+- Formal-model drift against the frozen semantic authority, including an
+  over-constrained recovery invariant that had erased a legitimate
+  asynchronous deadline window (#656).
 
 ### Removed
 
@@ -27,6 +73,14 @@ for repository releases from `v0.0.1` onward.
   run `pnpm --filter @exam/api db:seed:e2e` against the e2e/test database
   (the host runner and CI already do). Production first admin:
   `bootstrap-admin` (deployment runbook §5).
+- Residual deployment/backup/contract infrastructure beyond the minimal
+  operator surface, including the PITR enablement helper and two superseded
+  `docs/deployment/` documents.
+- `docker-compose.build.yml`, `docker-compose.test.yml`, and
+  `.env.test.example`; the dev-test topology is host-native (#626).
+- Stale `timeGrant` / `GrantExtension` / `TimeGrantNeverDecreases` formal
+  scaffold and the dead recovery actions `MarkDisrupted`, `NetworkDown`, and
+  `NetworkUp`.
 
 ## [0.0.5] - 2026-09-22
 
@@ -362,7 +416,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/jnhu76/exam/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/jnhu76/exam/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/jnhu76/exam/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/jnhu76/exam/compare/v0.0.2...v0.0.3
