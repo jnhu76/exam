@@ -55,14 +55,19 @@ describe("settings model shape", () => {
     expect(binding("SMTP_PORT")).toBe("operator");
     expect(binding("PUBLIC_WEB_ORIGIN")).toBe("derived");
     expect(binding("CORS_ORIGIN")).toBe("derived");
+    // Topology-derived: the deployment owns the trusted-proxy value (the
+    // bundled production Compose defaults it to its own pinned subnet).
+    expect(binding("TRUSTED_PROXY_CIDRS")).toBe("derived");
     expect(binding("NODE_ENV")).toBe("fixed");
     expect(binding("APP_PORT")).toBe("fixed");
     expect(binding("VITE_PORT")).toBe("dev-only");
     expect(binding("DEV_API_PORT")).toBe("dev-only");
     expect(binding("DATABASE_URL")).toBe("composed");
     expect(binding("APP_MODE")).toBe("fixed");
-    expect(binding("COOKIE_SECURE")).toBe("dev-only");
     expect(binding("API_DOCS_ENABLED")).toBe("dev-only");
+    // COOKIE_SECURE was deleted: cookie transport derives from the canonical
+    // origin scheme (runtimeConfig), never from a second env authority.
+    expect(settingsLeaves().get("COOKIE_SECURE")).toBeUndefined();
   });
 
   it("documents raw defaults for the leaves that have one", () => {
@@ -71,7 +76,6 @@ describe("settings model shape", () => {
     expect(raw("APP_TIMEZONE")).toBe("Asia/Shanghai");
     expect(raw("EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS")).toBe("8000");
     expect(raw("HEARTBEAT_TIMEOUT_MS")).toBe("60000");
-    expect(raw("COOKIE_SECURE")).toBe("false");
     expect(raw("SMTP_REQUIRE_TLS")).toBe("true");
     expect(raw("REDIS_STARTUP_TIMEOUT_MS")).toBe("8000");
     // Dependent / delegated leaves have no static default.
@@ -92,7 +96,6 @@ describe("resolveSettings primitives", () => {
     expect(s.app.DEADLINE_SCAN_INTERVAL_MS).toBeUndefined();
     expect(s.app.RATE_LIMIT_MAX).toBe(100);
     expect(s.app.RATE_LIMIT_WINDOW_MS).toBe(60000);
-    expect(s.app.COOKIE_SECURE).toBe(false);
     expect(s.app.VITE_PORT).toBe("5173");
     expect(s.redis.REDIS_URL).toBeNull();
     expect(s.redis.REDIS_MODE).toBeUndefined();
@@ -173,11 +176,11 @@ describe("resolveSettings primitives", () => {
     );
     // Truthy booleans never throw — a typo means false, not startup death.
     expect(
-      resolveSettings({ COOKIE_SECURE: "yes" }, DEV).app.COOKIE_SECURE,
+      resolveSettings({ EMAIL_ENABLED: "yes" }, DEV).email.EMAIL_ENABLED,
     ).toBe(false);
-    expect(resolveSettings({ COOKIE_SECURE: "1" }, DEV).app.COOKIE_SECURE).toBe(
-      true,
-    );
+    expect(
+      resolveSettings({ EMAIL_ENABLED: "1" }, DEV).email.EMAIL_ENABLED,
+    ).toBe(true);
   });
 
   it("enums fail fast with the documented message shape", () => {

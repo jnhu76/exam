@@ -77,31 +77,42 @@ describe("security plugin: response headers", () => {
     await app.close();
   });
 
-  it("HSTS header is set when COOKIE_SECURE=true", async () => {
-    vi.stubEnv("COOKIE_SECURE", "true");
+  it("HSTS and upgrade-insecure-requests when the canonical origin is https", async () => {
+    stubProductionEnv();
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/ping" });
 
     const hsts = String(res.headers["strict-transport-security"] ?? "");
     expect(hsts).toMatch(/max-age=\d+/);
-
-    await app.close();
-  });
-
-  it("CSP includes upgrade-insecure-requests when COOKIE_SECURE=true", async () => {
-    vi.stubEnv("COOKIE_SECURE", "true");
-    const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/ping" });
-
     const csp = String(res.headers["content-security-policy"]);
     expect(csp).toContain("upgrade-insecure-requests");
 
     await app.close();
   });
 
-  it("HSTS header is omitted when COOKIE_SECURE!=true", async () => {
+  it("no HSTS and no upgrade-insecure-requests when the canonical origin is http (production LAN HTTP)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_MODE", "production");
+    vi.stubEnv("JWT_SECRET", "test-secret");
+    vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
+    vi.stubEnv("CORS_ORIGIN", "http://exam.school.lan");
+    vi.stubEnv("PUBLIC_WEB_ORIGIN", "http://exam.school.lan");
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/ping" });
+
+    expect(res.headers["strict-transport-security"]).toBeUndefined();
+    const csp = String(res.headers["content-security-policy"]);
+    expect(csp).not.toContain("upgrade-insecure-requests");
+    // Production CSP script hardening is mode-owned and stays: no inline
+    // scripts (style-src 'unsafe-inline' remains a deliberate exception).
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
+
+    await app.close();
+  });
+
+  it("HSTS header is omitted when the dev default origin is http", async () => {
     vi.stubEnv("NODE_ENV", "test");
-    vi.stubEnv("COOKIE_SECURE", "false");
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/ping" });
 

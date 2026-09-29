@@ -61,7 +61,13 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-}
-      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      # Bundled-topology default: the web nginx edge is the only public
+      # ingress, so the app's trusted-proxy set is exactly the stack's own
+      # pinned bridge subnet (see networks.exam-net.ipam below). INVARIANT:
+      # keep this fallback and that subnet the same literal — pinned together
+      # by runtimeConfig.test.ts ("bundled production proxy-trust baseline").
+      # Override only for an EXTERNAL proxy topology (runbook §2).
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.28.0.0/24}
       HEARTBEAT_SCAN_INTERVAL_MS: ${HEARTBEAT_SCAN_INTERVAL_MS:-}
       HEARTBEAT_TIMEOUT_MS: ${HEARTBEAT_TIMEOUT_MS:-}
       # Unset → defaults to HEARTBEAT_SCAN_INTERVAL_MS inside the app.
@@ -169,3 +175,12 @@ services:
 networks:
   exam-net:
     driver: bridge
+    ipam:
+      config:
+        # Pinned subnet: the bundled deployment's client-IP trust boundary.
+        # The app's default TRUSTED_PROXY_CIDRS must stay this exact literal
+        # (see the app environment above) so request.ip is the real LAN
+        # client out of the box. An explicit-subnet collision with another
+        # Docker network fails LOUDLY at `up` ("Pool overlaps..."), never
+        # silently; operators can override both via a compose override file.
+        - subnet: 172.28.0.0/24

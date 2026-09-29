@@ -688,12 +688,15 @@ export const SETTINGS = {
     DEV_API_PORT: tcpPortLeaf(3000, { binding: "dev-only" }),
     // VITE_PORT owns the dev web port; string-valued (used to build origins).
     VITE_PORT: stringLeaf("5173", { trim: true, binding: "dev-only" }),
-    COOKIE_SECURE: truthyLeaf({ binding: "dev-only" }),
     API_DOCS_ENABLED: truthyLeaf({ binding: "dev-only" }),
     RATE_LIMIT_DISABLED: truthyLeaf({ binding: "dev-only" }),
     RATE_LIMIT_MAX: posIntLeaf(100),
     RATE_LIMIT_WINDOW_MS: posIntLeaf(60 * 1000),
-    TRUSTED_PROXY_CIDRS: stringLeaf("", { trim: true }),
+    // Topology-derived (NOT operator): the deployment owns the trusted-proxy
+    // value because it is a network fact the application cannot know — the
+    // bundled production Compose derives it from its own pinned bridge
+    // subnet; direct-LAN topologies leave it unset (socket-peer identity).
+    TRUSTED_PROXY_CIDRS: stringLeaf("", { trim: true, binding: "derived" }),
     APP_TIMEZONE: timezoneLeaf("Asia/Shanghai"),
     HEARTBEAT_SCAN_INTERVAL_MS: posIntLeaf(30000),
     HEARTBEAT_TIMEOUT_MS: posIntLeaf(60000),
