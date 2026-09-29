@@ -1,0 +1,128 @@
+{
+  "gate": "A_A_GATE_PASS",
+  "groupA": [
+    "/home/jnhu/exam-586/runs/aa-01",
+    "/home/jnhu/exam-586/runs/aa-04",
+    "/home/jnhu/exam-586/runs/aa-05",
+    "/home/jnhu/exam-586/runs/aa-08"
+  ],
+  "groupAp": [
+    "/home/jnhu/exam-586/runs/aa-02",
+    "/home/jnhu/exam-586/runs/aa-03",
+    "/home/jnhu/exam-586/runs/aa-06",
+    "/home/jnhu/exam-586/runs/aa-07"
+  ],
+  "rows": [
+    {
+      "metric": "HTTP p99",
+      "medianA": 8214.824,
+      "medianAp": 8378.861,
+      "replicateSpreadA": 0.530428040819864,
+      "replicateSpreadAp": 0.5284484370847063,
+      "pooledSpread": 0.530428040819864,
+      "relativeShift": 0.01996841320033153,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "HTTP p95",
+      "medianA": 8135.032,
+      "medianAp": 8293.299,
+      "replicateSpreadA": 0.5411383753622604,
+      "replicateSpreadAp": 0.5396390507565203,
+      "pooledSpread": 0.5411383753622604,
+      "relativeShift": 0.019454994153680124,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "HTTP p50",
+      "medianA": 8039.971,
+      "medianAp": 8196.479,
+      "replicateSpreadA": 0.5482374252344939,
+      "replicateSpreadAp": 0.5470979673101096,
+      "pooledSpread": 0.5482374252344939,
+      "relativeShift": 0.019466239368276305,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "TX_ACQUIRE_PROXY p99",
+      "medianA": 6185.755314000002,
+      "medianAp": 6278.381915000005,
+      "replicateSpreadA": 0.6360633174569826,
+      "replicateSpreadAp": 0.6253303187275119,
+      "pooledSpread": 0.6360633174569826,
+      "relativeShift": 0.014974177977969004,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "TX_ACQUIRE_PROXY p95",
+      "medianA": 5906.195206000004,
+      "medianAp": 5958.579138000001,
+      "replicateSpreadA": 0.646809348109446,
+      "replicateSpreadAp": 0.6286343657184787,
+      "pooledSpread": 0.646809348109446,
+      "relativeShift": 0.008869319447278182,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "TX_HOLD p99",
+      "medianA": 500.1045279999962,
+      "medianAp": 520.8838340000075,
+      "replicateSpreadA": 0.17690826226632794,
+      "replicateSpreadAp": 0.24538795342993056,
+      "pooledSpread": 0.24538795342993056,
+      "relativeShift": 0.04154992573874763,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "TX_HOLD p95",
+      "medianA": 437.2072830000034,
+      "medianAp": 444.82364499999676,
+      "replicateSpreadA": 0.023509409380086808,
+      "replicateSpreadAp": 0.06855306668779469,
+      "pooledSpread": 0.06855306668779469,
+      "relativeShift": 0.017420482906258743,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "PG active max",
+      "medianA": 10,
+      "medianAp": 10,
+      "replicateSpreadA": 0,
+      "replicateSpreadAp": 0,
+      "pooledSpread": 0,
+      "relativeShift": 0,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "PG total connections max",
+      "medianA": 11,
+      "medianAp": 10,
+      "replicateSpreadA": 0.09090909090909091,
+      "replicateSpreadAp": 0.1,
+      "pooledSpread": 0.1,
+      "relativeShift": -0.09090909090909091,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "serialization/deadlock retries",
+      "medianA": 0,
+      "medianAp": 0,
+      "replicateSpreadA": null,
+      "replicateSpreadAp": null,
+      "pooledSpread": null,
+      "relativeShift": null,
+      "withinObservedVariance": true
+    },
+    {
+      "metric": "PG container CPU p95",
+      "medianA": 86.7,
+      "medianAp": 88.22,
+      "replicateSpreadA": 0.2292964244521339,
+      "replicateSpreadAp": 0.07401949671276356,
+      "pooledSpread": 0.2292964244521339,
+      "relativeShift": 0.017531718569780808,
+      "withinObservedVariance": true
+    }
+  ],
+  "finished_at": "2026-09-29T13:15:10.242Z"
+}

@@ -1,0 +1,235 @@
+{
+  "run_dir": "/home/jnhu/exam-586/runs/smoke-S20-r0f",
+  "meta": {
+    "run_id": "smoke-S20-r0f",
+    "git_sha": "d8ee5285284c2866f3903a2a40c9816e4592f28c",
+    "app_image": "exam-586-app:87b07a44",
+    "web_image": "exam-586-web:87b07a44",
+    "app_image_id_digest": "sha256:3e7fcff5bdba5a7112cfa77ca230d3c0d61fdc27ca1656bce50c1be4097bed34 exam-586-app@sha256:3e7fcff5bdba5a7112cfa77ca230d3c0d61fdc27ca1656bce50c1be4097bed34",
+    "web_image_id_digest": "sha256:7c26b1cca7a4983274d78746e282e19eb783ccccb807c848218ee520575a7d2d exam-586-web@sha256:7c26b1cca7a4983274d78746e282e19eb783ccccb807c848218ee520575a7d2d",
+    "driver_image": "exam-586-driver:87b07a44",
+    "fedora": "Fedora release 44 (Forty Four)",
+    "kernel": "7.2.5-200.fc44.x86_64",
+    "docker": "29.7.2",
+    "compose": "5.5.0",
+    "pool_mode": "unset",
+    "effective_pool_max": "postgres.js_default_10",
+    "scale": 20,
+    "replicate": 0,
+    "app_mode": "production",
+    "rate_limiter": "production defaults ON (global 100/min/IP, login 10/min/IP), in-process store (Redis off = compose default, P6-010)",
+    "redis": "off",
+    "exam_data_root": "/home/jnhu/exam-586/runs/smoke-S20-r0f/data",
+    "public_test_port": 18080,
+    "burst_window": {
+      "start": "2026-09-29T20:20:26+08:00",
+      "end": "2026-09-29T20:20:52+08:00"
+    },
+    "status": "valid",
+    "invalid_reason": "",
+    "driver_exit": 0,
+    "finished_at": "2026-09-29T20:20:56+08:00"
+  },
+  "http": {
+    "n": 20,
+    "p50": 631.96,
+    "p90": 941.363,
+    "p95": 978.812,
+    "p99": 978.812,
+    "max": 978.812,
+    "median": 631.96,
+    "ok2xx": 20,
+    "e429": 0,
+    "e5xx": 0,
+    "timeouts": 0,
+    "connErrors": 0
+  },
+  "timing": {
+    "records": 21,
+    "txAcquireProxyMs": {
+      "n": 21,
+      "p50": 26.36107600000105,
+      "p90": 191.19369700000243,
+      "p95": 231.35407300000224,
+      "p99": 264.16638899999816,
+      "max": 264.16638899999816,
+      "median": 26.36107600000105
+    },
+    "lockPhaseMs": {
+      "n": 21,
+      "p50": 8.147463999999673,
+      "p90": 17.65312800000538,
+      "p95": 17.911096000003454,
+      "p99": 18.21166799999628,
+      "max": 18.21166799999628,
+      "median": 8.147463999999673
+    },
+    "reconciliationPhaseMs": {
+      "n": 21,
+      "p50": 358.3905289999966,
+      "p90": 386.2258159999983,
+      "p95": 389.83242099999916,
+      "p99": 395.9829269999973,
+      "max": 395.9829269999973,
+      "median": 358.3905289999966
+    },
+    "submitPhaseMs": {
+      "n": 21,
+      "p50": 17.716169999999693,
+      "p90": 20.534508999997342,
+      "p95": 20.808874000002106,
+      "p99": 25.40370400000029,
+      "max": 25.40370400000029,
+      "median": 17.716169999999693
+    },
+    "auditPhaseMs": {
+      "n": 21,
+      "p50": 1.3880590000044322,
+      "p90": 2.1736410000012256,
+      "p95": 2.318606999999247,
+      "p99": 2.528994000000239,
+      "max": 2.528994000000239,
+      "median": 1.3880590000044322
+    },
+    "gradingSnapshotPhaseMs": {
+      "n": 21,
+      "p50": 5.002873999997973,
+      "p90": 5.239826999997604,
+      "p95": 6.622149000000718,
+      "p99": 6.79109199999948,
+      "max": 6.79109199999948,
+      "median": 5.002873999997973
+    },
+    "finalizePhaseMs": {
+      "n": 21,
+      "p50": 13.90124300000025,
+      "p90": 18.963698999999906,
+      "p95": 19.762453999999707,
+      "p99": 21.9291019999946,
+      "max": 21.9291019999946,
+      "median": 13.90124300000025
+    },
+    "txHoldMs": {
+      "n": 21,
+      "p50": 412.18799299999955,
+      "p90": 431.60449399999925,
+      "p95": 436.0568190000049,
+      "p99": 443.0404800000033,
+      "max": 443.0404800000033,
+      "median": 412.18799299999955
+    },
+    "txTotalMs": {
+      "n": 21,
+      "p50": 461.1457719999962,
+      "p90": 607.7949940000035,
+      "p95": 647.8782449999999,
+      "p99": 690.4712020000006,
+      "max": 690.4712020000006,
+      "median": 461.1457719999962
+    },
+    "postCommitReadMs": {
+      "n": 21,
+      "p50": 27.126280000004044,
+      "p90": 191.01860200000374,
+      "p95": 215.384404000004,
+      "p99": 256.6276230000003,
+      "max": 256.6276230000003,
+      "median": 27.126280000004044
+    },
+    "handlerTotalMs": {
+      "n": 21,
+      "p50": 557.9391360000009,
+      "p90": 784.2668110000013,
+      "p95": 792.1662169999981,
+      "p99": 827.1677420000051,
+      "max": 827.1677420000051,
+      "median": 557.9391360000009
+    },
+    "retriesTotal": 0,
+    "txWithRetries": 0,
+    "httpStatusOk": 21
+  },
+  "pg": {
+    "sampleInstants": 132,
+    "activeMax": 10,
+    "idleMax": 10,
+    "idleInTxMax": 2,
+    "totalMax": 10,
+    "satFraction": 0.10606060606060606,
+    "waitEvents": {
+      "idle/Client/ClientRead": 118,
+      "active/-/-": 12,
+      "idle/-/-": 1,
+      "active/IO/WalSync": 5,
+      "active/Client/ClientRead": 7,
+      "idle in transaction/Client/ClientRead": 11,
+      "active/LWLock/WALWrite": 1,
+      "active/Lock/transactionid": 17,
+      "active/Lock/tuple": 16,
+      "idle in transaction/-/-": 2
+    }
+  },
+  "locks": {
+    "lockSamples": 0,
+    "lockMaxSimultaneous": 0,
+    "lockEvents": {}
+  },
+  "docker": {
+    "app": {
+      "cpu": {
+        "n": 9,
+        "p50": 0.87,
+        "p90": 121.18,
+        "p95": 121.18,
+        "p99": 121.18,
+        "max": 121.18,
+        "median": 0.87
+      }
+    },
+    "db": {
+      "cpu": {
+        "n": 9,
+        "p50": 1.97,
+        "p90": 71.84,
+        "p95": 71.84,
+        "p99": 71.84,
+        "max": 71.84,
+        "median": 1.97
+      }
+    },
+    "web": {
+      "cpu": {
+        "n": 9,
+        "p50": 0,
+        "p90": 3.43,
+        "p95": 3.43,
+        "p99": 3.43,
+        "max": 3.43,
+        "median": 0
+      }
+    }
+  },
+  "pgDelta": {
+    "xact_commit": 1533,
+    "xact_rollback": 7,
+    "deadlocks": 0
+  },
+  "correctness": {
+    "run": "smoke-S20-r0f",
+    "statusCounts": {
+      "graded": 20
+    },
+    "attemptsChecked": 20,
+    "dupActive": 0,
+    "dupTerminal": 0,
+    "distinctAuditIps": 21,
+    "distinctCandidateIps": 20,
+    "findings": [],
+    "pass": true,
+    "finished_at": "2026-09-29T12:20:55.770Z"
+  },
+  "valid": true,
+  "pool": "unset",
+  "scale": 20,
+  "replicate": 0
+}

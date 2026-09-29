@@ -152,8 +152,14 @@ SELECT 'SELECT now(), state, coalesce(wait_event_type,''-''), coalesce(wait_even
   > "$RUN_DIR/.watch-activity.sql"
 ( echo "SET application_name='exam586-sampler';"; cat "$RUN_DIR/.watch-activity.sql"; printf '\\watch 0.2\n' ) \
   | $COMPOSE exec -T db psql -U exam -d exam -qAt -F '|' > "$RUN_DIR/pg-activity.jsonl" 2>"$RUN_DIR/pg-activity.err" & SAMPLER_PIDS+=($!)
+# Query-text sampler: which statements wait on Lock/tuple (hot-row diagnosis).
 $COMPOSE exec -T db psql -U exam -d exam -At -c "
-SELECT 'SELECT now(), w.wait_event_type::text, w.wait_event::text, count(*)::int FROM pg_locks w JOIN pg_stat_activity a ON a.pid = w.pid WHERE w.granted = false AND a.datname = current_database() AND a.pid <> pg_backend_pid() AND coalesce(a.application_name,'''') <> ''exam586-sampler'' GROUP BY w.wait_event_type, w.wait_event'" \
+SELECT 'SELECT now(), left(regexp_replace(coalesce(query,''''''''),''[[:space:]]+'','' '',''g''),100), a_pid_count::int FROM (SELECT query, count(*)::int a_pid_count FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND coalesce(application_name,'''') <> ''exam586-sampler'' AND wait_event_type = ''Lock'' AND wait_event = ''tuple'' GROUP BY query) q'" \
+  > "$RUN_DIR/.watch-qtext.sql"
+( echo "SET application_name='exam586-sampler';"; cat "$RUN_DIR/.watch-qtext.sql"; printf '\\watch 0.2\n' ) \
+  | $COMPOSE exec -T db psql -U exam -d exam -qAt -F '|' > "$RUN_DIR/pg-qtext.jsonl" 2>"$RUN_DIR/pg-qtext.err" & SAMPLER_PIDS+=($!)
+$COMPOSE exec -T db psql -U exam -d exam -At -c "
+SELECT 'SELECT now(), l.locktype::text, coalesce(n.relname::text,''-''), a.wait_event_type::text, coalesce(a.wait_event::text,''-''), count(*)::int FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid LEFT JOIN pg_class n ON n.oid = l.relation WHERE l.granted = false AND a.datname = current_database() AND a.pid <> pg_backend_pid() AND coalesce(a.application_name,'''') <> ''exam586-sampler'' GROUP BY l.locktype, n.relname, a.wait_event_type, a.wait_event'" \
   > "$RUN_DIR/.watch-locks.sql"
 ( echo "SET application_name='exam586-sampler';"; cat "$RUN_DIR/.watch-locks.sql"; printf '\\watch 0.2\n' ) \
   | $COMPOSE exec -T db psql -U exam -d exam -qAt -F '|' > "$RUN_DIR/pg-locks.jsonl" 2>"$RUN_DIR/pg-locks.err" & SAMPLER_PIDS+=($!)

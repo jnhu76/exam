@@ -1,0 +1,11 @@
+default_transaction_isolation|read committed||default
+effective_cache_size|524288|8kB|default
+fsync|on||default
+full_page_writes|on||default
+maintenance_work_mem|65536|kB|default
+max_connections|100||configuration file
+shared_buffers|16384|8kB|configuration file
+superuser_reserved_connections|3||default
+synchronous_commit|on||default
+wal_level|replica||default
+work_mem|4096|kB|default

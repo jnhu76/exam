@@ -1,0 +1,443 @@
+2026-09-29 20:34:37.713452+08|idle|Client|ClientRead|12
+2026-09-29 20:34:37.913513+08|idle|Client|ClientRead|12
+2026-09-29 20:34:38.113526+08|idle|Client|ClientRead|12
+2026-09-29 20:34:38.313556+08|idle|Client|ClientRead|12
+2026-09-29 20:34:38.513582+08|idle|Client|ClientRead|12
+2026-09-29 20:34:38.713519+08|idle|Client|ClientRead|12
+2026-09-29 20:34:38.913643+08|active|-|-|1
+2026-09-29 20:34:38.913643+08|idle|Client|ClientRead|11
+2026-09-29 20:34:39.113624+08|idle|Client|ClientRead|12
+2026-09-29 20:34:39.313595+08|idle|Client|ClientRead|12
+2026-09-29 20:34:39.5136+08|idle|Client|ClientRead|12
+2026-09-29 20:34:39.713612+08|idle|Client|ClientRead|12
+2026-09-29 20:34:39.913607+08|idle|Client|ClientRead|12
+2026-09-29 20:34:40.113593+08|idle|Client|ClientRead|12
+2026-09-29 20:34:40.3136+08|idle|Client|ClientRead|12
+2026-09-29 20:34:40.513599+08|idle|Client|ClientRead|12
+2026-09-29 20:34:40.713612+08|idle|Client|ClientRead|12
+2026-09-29 20:34:40.913628+08|idle|Client|ClientRead|12
+2026-09-29 20:34:41.113604+08|idle|Client|ClientRead|12
+2026-09-29 20:34:41.313599+08|idle|Client|ClientRead|12
+2026-09-29 20:34:41.513603+08|idle|Client|ClientRead|12
+2026-09-29 20:34:41.713627+08|idle|Client|ClientRead|12
+2026-09-29 20:34:41.913602+08|idle|Client|ClientRead|12
+2026-09-29 20:34:42.113593+08|idle|Client|ClientRead|12
+2026-09-29 20:34:42.313607+08|idle|Client|ClientRead|12
+2026-09-29 20:34:42.513594+08|idle|Client|ClientRead|12
+2026-09-29 20:34:42.713598+08|idle|Client|ClientRead|12
+2026-09-29 20:34:42.91361+08|idle|Client|ClientRead|12
+2026-09-29 20:34:43.113593+08|idle|Client|ClientRead|12
+2026-09-29 20:34:43.313601+08|idle|Client|ClientRead|12
+2026-09-29 20:34:43.513588+08|idle|Client|ClientRead|12
+2026-09-29 20:34:43.713574+08|idle|Client|ClientRead|12
+2026-09-29 20:34:43.913625+08|idle|Client|ClientRead|12
+2026-09-29 20:34:44.113599+08|idle|Client|ClientRead|12
+2026-09-29 20:34:44.313601+08|idle|Client|ClientRead|12
+2026-09-29 20:34:44.513601+08|idle|Client|ClientRead|12
+2026-09-29 20:34:44.713597+08|idle|Client|ClientRead|12
+2026-09-29 20:34:44.913604+08|idle|Client|ClientRead|12
+2026-09-29 20:34:45.113592+08|idle|Client|ClientRead|12
+2026-09-29 20:34:45.313586+08|idle|Client|ClientRead|12
+2026-09-29 20:34:45.513606+08|idle|Client|ClientRead|12
+2026-09-29 20:34:45.71355+08|idle|Client|ClientRead|12
+2026-09-29 20:34:45.913591+08|idle|Client|ClientRead|12
+2026-09-29 20:34:46.113522+08|idle|Client|ClientRead|12
+2026-09-29 20:34:46.313614+08|idle|Client|ClientRead|12
+2026-09-29 20:34:46.513598+08|idle|Client|ClientRead|12
+2026-09-29 20:34:46.713589+08|idle|Client|ClientRead|12
+2026-09-29 20:34:46.913639+08|idle|Client|ClientRead|12
+2026-09-29 20:34:47.113577+08|idle|Client|ClientRead|12
+2026-09-29 20:34:47.313594+08|idle|Client|ClientRead|12
+2026-09-29 20:34:47.513605+08|idle|Client|ClientRead|12
+2026-09-29 20:34:47.713601+08|idle|Client|ClientRead|12
+2026-09-29 20:34:47.913599+08|idle|Client|ClientRead|12
+2026-09-29 20:34:48.113595+08|idle|Client|ClientRead|12
+2026-09-29 20:34:48.313592+08|idle|Client|ClientRead|12
+2026-09-29 20:34:48.513592+08|idle|Client|ClientRead|12
+2026-09-29 20:34:48.7136+08|idle|Client|ClientRead|12
+2026-09-29 20:34:48.913531+08|idle|Client|ClientRead|12
+2026-09-29 20:34:49.11354+08|active|Client|ClientRead|4
+2026-09-29 20:34:49.11354+08|idle|Client|ClientRead|8
+2026-09-29 20:34:49.315225+08|active|Client|ClientRead|2
+2026-09-29 20:34:49.315225+08|idle|Client|ClientRead|10
+2026-09-29 20:34:49.513561+08|idle|Client|ClientRead|12
+2026-09-29 20:34:49.713557+08|idle|Client|ClientRead|12
+2026-09-29 20:34:49.913554+08|idle|Client|ClientRead|12
+2026-09-29 20:34:50.113546+08|idle|Client|ClientRead|12
+2026-09-29 20:34:50.313517+08|idle|Client|ClientRead|12
+2026-09-29 20:34:50.513525+08|idle|Client|ClientRead|12
+2026-09-29 20:34:50.713464+08|active|IO|WalSync|1
+2026-09-29 20:34:50.713464+08|idle|Client|ClientRead|11
+2026-09-29 20:34:50.913495+08|idle|Client|ClientRead|12
+2026-09-29 20:34:51.113561+08|idle|Client|ClientRead|12
+2026-09-29 20:34:51.313487+08|idle|Client|ClientRead|12
+2026-09-29 20:34:51.513506+08|idle|Client|ClientRead|12
+2026-09-29 20:34:51.713533+08|idle|Client|ClientRead|12
+2026-09-29 20:34:51.913582+08|idle|Client|ClientRead|12
+2026-09-29 20:34:52.113565+08|active|Client|ClientRead|6
+2026-09-29 20:34:52.113565+08|idle|Client|ClientRead|4
+2026-09-29 20:34:52.113565+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:34:52.313504+08|active|IO|WalSync|1
+2026-09-29 20:34:52.313504+08|active|Lock|transactionid|1
+2026-09-29 20:34:52.313504+08|active|Lock|tuple|16
+2026-09-29 20:34:52.313504+08|active|-|-|1
+2026-09-29 20:34:52.313504+08|idle in transaction|-|-|1
+2026-09-29 20:34:52.513484+08|active|IO|WalSync|1
+2026-09-29 20:34:52.513484+08|active|Lock|transactionid|1
+2026-09-29 20:34:52.513484+08|active|Lock|tuple|16
+2026-09-29 20:34:52.513484+08|active|-|-|1
+2026-09-29 20:34:52.513484+08|idle|Client|ClientRead|1
+2026-09-29 20:34:52.71351+08|active|IO|WalSync|1
+2026-09-29 20:34:52.71351+08|active|Lock|transactionid|1
+2026-09-29 20:34:52.71351+08|active|Lock|tuple|18
+2026-09-29 20:34:52.913597+08|active|Client|ClientRead|1
+2026-09-29 20:34:52.913597+08|active|Lock|transactionid|1
+2026-09-29 20:34:52.913597+08|active|Lock|tuple|17
+2026-09-29 20:34:52.913597+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:34:53.113553+08|active|Client|ClientRead|6
+2026-09-29 20:34:53.113553+08|idle in transaction|Client|ClientRead|14
+2026-09-29 20:34:53.313581+08|active|Lock|transactionid|1
+2026-09-29 20:34:53.313581+08|active|Lock|tuple|17
+2026-09-29 20:34:53.313581+08|active|-|-|1
+2026-09-29 20:34:53.313581+08|idle|Client|ClientRead|1
+2026-09-29 20:34:53.513481+08|active|Lock|transactionid|1
+2026-09-29 20:34:53.513481+08|active|Lock|tuple|16
+2026-09-29 20:34:53.513481+08|idle|Client|ClientRead|1
+2026-09-29 20:34:53.513481+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:34:53.713514+08|active|Lock|transactionid|1
+2026-09-29 20:34:53.713514+08|active|Lock|tuple|16
+2026-09-29 20:34:53.713514+08|active|-|-|2
+2026-09-29 20:34:53.713514+08|idle|Client|ClientRead|1
+2026-09-29 20:34:53.913526+08|active|IO|WalSync|1
+2026-09-29 20:34:53.913526+08|active|Lock|transactionid|1
+2026-09-29 20:34:53.913526+08|active|Lock|tuple|17
+2026-09-29 20:34:53.913526+08|active|-|-|1
+2026-09-29 20:34:54.113544+08|active|Client|ClientRead|1
+2026-09-29 20:34:54.113544+08|active|Lock|transactionid|1
+2026-09-29 20:34:54.113544+08|active|Lock|tuple|16
+2026-09-29 20:34:54.113544+08|active|-|-|2
+2026-09-29 20:34:54.313541+08|active|Lock|transactionid|1
+2026-09-29 20:34:54.313541+08|active|Lock|tuple|16
+2026-09-29 20:34:54.313541+08|active|-|-|2
+2026-09-29 20:34:54.313541+08|idle|Client|ClientRead|1
+2026-09-29 20:34:54.513547+08|active|Lock|transactionid|1
+2026-09-29 20:34:54.513547+08|active|Lock|tuple|17
+2026-09-29 20:34:54.513547+08|idle|Client|ClientRead|1
+2026-09-29 20:34:54.513547+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:34:54.713502+08|active|IO|WalSync|1
+2026-09-29 20:34:54.713502+08|active|Lock|transactionid|1
+2026-09-29 20:34:54.713502+08|active|Lock|tuple|17
+2026-09-29 20:34:54.713502+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:34:54.913537+08|active|Client|ClientRead|3
+2026-09-29 20:34:54.913537+08|active|Lock|transactionid|1
+2026-09-29 20:34:54.913537+08|active|Lock|tuple|16
+2026-09-29 20:34:55.113536+08|active|IO|WalSync|1
+2026-09-29 20:34:55.113536+08|active|Lock|transactionid|1
+2026-09-29 20:34:55.113536+08|active|Lock|tuple|17
+2026-09-29 20:34:55.113536+08|active|-|-|1
+2026-09-29 20:34:55.313507+08|active|Lock|transactionid|1
+2026-09-29 20:34:55.313507+08|active|Lock|tuple|15
+2026-09-29 20:34:55.313507+08|idle|Client|ClientRead|2
+2026-09-29 20:34:55.313507+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:34:55.513519+08|active|Client|ClientRead|12
+2026-09-29 20:34:55.513519+08|active|Lock|transactionid|1
+2026-09-29 20:34:55.513519+08|active|-|-|2
+2026-09-29 20:34:55.513519+08|idle in transaction|Client|ClientRead|5
+2026-09-29 20:34:55.713516+08|active|Client|ClientRead|2
+2026-09-29 20:34:55.713516+08|active|Lock|transactionid|1
+2026-09-29 20:34:55.713516+08|active|Lock|tuple|17
+2026-09-29 20:34:55.913496+08|active|Lock|transactionid|1
+2026-09-29 20:34:55.913496+08|active|Lock|tuple|16
+2026-09-29 20:34:55.913496+08|idle|Client|ClientRead|1
+2026-09-29 20:34:55.913496+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:34:56.113544+08|active|Lock|transactionid|1
+2026-09-29 20:34:56.113544+08|active|Lock|tuple|17
+2026-09-29 20:34:56.113544+08|active|-|-|2
+2026-09-29 20:34:56.313464+08|active|Lock|transactionid|1
+2026-09-29 20:34:56.313464+08|active|Lock|tuple|17
+2026-09-29 20:34:56.313464+08|active|-|-|2
+2026-09-29 20:34:56.513547+08|active|Lock|transactionid|1
+2026-09-29 20:34:56.513547+08|active|Lock|tuple|16
+2026-09-29 20:34:56.513547+08|idle|Client|ClientRead|1
+2026-09-29 20:34:56.513547+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:34:56.513547+08|idle in transaction|-|-|1
+2026-09-29 20:34:56.713552+08|active|IO|WalSync|1
+2026-09-29 20:34:56.713552+08|active|Lock|transactionid|1
+2026-09-29 20:34:56.713552+08|active|Lock|tuple|17
+2026-09-29 20:34:56.713552+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:34:56.913505+08|active|Client|ClientRead|2
+2026-09-29 20:34:56.913505+08|active|Lock|transactionid|1
+2026-09-29 20:34:56.913505+08|active|Lock|tuple|16
+2026-09-29 20:34:56.913505+08|idle|Client|ClientRead|1
+2026-09-29 20:34:57.113545+08|active|Client|ClientRead|1
+2026-09-29 20:34:57.113545+08|active|Lock|transactionid|1
+2026-09-29 20:34:57.113545+08|active|Lock|tuple|16
+2026-09-29 20:34:57.113545+08|active|-|-|1
+2026-09-29 20:34:57.113545+08|idle|Client|ClientRead|1
+2026-09-29 20:34:57.313541+08|active|IO|WalSync|1
+2026-09-29 20:34:57.313541+08|active|Lock|transactionid|1
+2026-09-29 20:34:57.313541+08|active|Lock|tuple|17
+2026-09-29 20:34:57.313541+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:34:57.513524+08|active|Lock|transactionid|1
+2026-09-29 20:34:57.513524+08|active|Lock|tuple|11
+2026-09-29 20:34:57.513524+08|active|-|-|1
+2026-09-29 20:34:57.513524+08|idle|Client|ClientRead|7
+2026-09-29 20:34:57.713542+08|active|Lock|transactionid|1
+2026-09-29 20:34:57.713542+08|active|Lock|tuple|17
+2026-09-29 20:34:57.713542+08|active|-|-|2
+2026-09-29 20:34:57.913595+08|active|Lock|transactionid|1
+2026-09-29 20:34:57.913595+08|active|Lock|tuple|17
+2026-09-29 20:34:57.913595+08|active|-|-|1
+2026-09-29 20:34:57.913595+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:34:58.113526+08|active|Client|ClientRead|2
+2026-09-29 20:34:58.113526+08|active|Lock|transactionid|1
+2026-09-29 20:34:58.113526+08|active|Lock|tuple|16
+2026-09-29 20:34:58.113526+08|active|-|-|1
+2026-09-29 20:34:58.313561+08|active|Lock|transactionid|1
+2026-09-29 20:34:58.313561+08|active|Lock|tuple|16
+2026-09-29 20:34:58.313561+08|active|-|-|2
+2026-09-29 20:34:58.313561+08|idle in transaction|-|-|1
+2026-09-29 20:34:58.513578+08|active|IO|WalSync|1
+2026-09-29 20:34:58.513578+08|active|Lock|transactionid|1
+2026-09-29 20:34:58.513578+08|active|Lock|tuple|17
+2026-09-29 20:34:58.513578+08|idle in transaction|-|-|1
+2026-09-29 20:34:58.713524+08|active|Client|ClientRead|1
+2026-09-29 20:34:58.713524+08|active|Lock|transactionid|1
+2026-09-29 20:34:58.713524+08|active|Lock|tuple|17
+2026-09-29 20:34:58.713524+08|idle|Client|ClientRead|1
+2026-09-29 20:34:58.913578+08|active|IO|WalSync|1
+2026-09-29 20:34:58.913578+08|active|Lock|transactionid|1
+2026-09-29 20:34:58.913578+08|active|Lock|tuple|17
+2026-09-29 20:34:58.913578+08|active|-|-|1
+2026-09-29 20:34:59.11358+08|active|IO|WalSync|1
+2026-09-29 20:34:59.11358+08|active|Lock|transactionid|1
+2026-09-29 20:34:59.11358+08|active|Lock|tuple|17
+2026-09-29 20:34:59.11358+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:34:59.31356+08|active|Lock|transactionid|1
+2026-09-29 20:34:59.31356+08|active|Lock|tuple|16
+2026-09-29 20:34:59.31356+08|idle|Client|ClientRead|1
+2026-09-29 20:34:59.31356+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:34:59.513518+08|active|Client|ClientRead|1
+2026-09-29 20:34:59.513518+08|active|Lock|transactionid|1
+2026-09-29 20:34:59.513518+08|active|Lock|tuple|16
+2026-09-29 20:34:59.513518+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:34:59.713575+08|active|Lock|transactionid|1
+2026-09-29 20:34:59.713575+08|active|Lock|tuple|13
+2026-09-29 20:34:59.713575+08|active|-|-|1
+2026-09-29 20:34:59.713575+08|idle|Client|ClientRead|4
+2026-09-29 20:34:59.713575+08|idle in transaction|-|-|1
+2026-09-29 20:34:59.91356+08|active|Client|ClientRead|8
+2026-09-29 20:34:59.91356+08|active|-|-|1
+2026-09-29 20:34:59.91356+08|idle|Client|ClientRead|1
+2026-09-29 20:34:59.91356+08|idle in transaction|Client|ClientRead|10
+2026-09-29 20:35:00.113584+08|active|Lock|transactionid|1
+2026-09-29 20:35:00.113584+08|active|Lock|tuple|17
+2026-09-29 20:35:00.113584+08|active|-|-|1
+2026-09-29 20:35:00.113584+08|idle|-|-|1
+2026-09-29 20:35:00.313561+08|active|IO|WalSync|1
+2026-09-29 20:35:00.313561+08|active|Lock|transactionid|1
+2026-09-29 20:35:00.313561+08|active|Lock|tuple|17
+2026-09-29 20:35:00.313561+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:00.513581+08|active|Client|ClientRead|1
+2026-09-29 20:35:00.513581+08|active|Lock|transactionid|1
+2026-09-29 20:35:00.513581+08|active|Lock|tuple|17
+2026-09-29 20:35:00.513581+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:00.713526+08|active|Client|ClientRead|1
+2026-09-29 20:35:00.713526+08|active|Lock|transactionid|1
+2026-09-29 20:35:00.713526+08|active|Lock|tuple|16
+2026-09-29 20:35:00.713526+08|idle|Client|ClientRead|1
+2026-09-29 20:35:00.713526+08|idle in transaction|-|-|1
+2026-09-29 20:35:00.913535+08|active|Client|ClientRead|1
+2026-09-29 20:35:00.913535+08|active|Lock|transactionid|1
+2026-09-29 20:35:00.913535+08|active|Lock|tuple|16
+2026-09-29 20:35:00.913535+08|active|-|-|1
+2026-09-29 20:35:00.913535+08|idle in transaction|-|-|1
+2026-09-29 20:35:01.113515+08|active|Lock|transactionid|1
+2026-09-29 20:35:01.113515+08|active|Lock|tuple|17
+2026-09-29 20:35:01.113515+08|active|-|-|1
+2026-09-29 20:35:01.113515+08|idle|-|-|1
+2026-09-29 20:35:01.313537+08|active|IO|WalSync|1
+2026-09-29 20:35:01.313537+08|active|Lock|transactionid|1
+2026-09-29 20:35:01.313537+08|active|Lock|tuple|17
+2026-09-29 20:35:01.313537+08|active|-|-|1
+2026-09-29 20:35:01.513493+08|active|Lock|transactionid|1
+2026-09-29 20:35:01.513493+08|active|Lock|tuple|17
+2026-09-29 20:35:01.513493+08|active|-|-|1
+2026-09-29 20:35:01.513493+08|idle|Client|ClientRead|1
+2026-09-29 20:35:01.713574+08|active|Client|ClientRead|1
+2026-09-29 20:35:01.713574+08|active|Lock|transactionid|1
+2026-09-29 20:35:01.713574+08|active|Lock|tuple|17
+2026-09-29 20:35:01.713574+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:01.913539+08|active|Lock|transactionid|1
+2026-09-29 20:35:01.913539+08|active|Lock|tuple|15
+2026-09-29 20:35:01.913539+08|active|-|-|2
+2026-09-29 20:35:01.913539+08|idle|Client|ClientRead|1
+2026-09-29 20:35:01.913539+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:02.113513+08|active|Client|ClientRead|2
+2026-09-29 20:35:02.113513+08|active|-|-|3
+2026-09-29 20:35:02.113513+08|idle|Client|ClientRead|15
+2026-09-29 20:35:02.313529+08|active|Lock|transactionid|1
+2026-09-29 20:35:02.313529+08|active|Lock|tuple|17
+2026-09-29 20:35:02.313529+08|active|-|-|1
+2026-09-29 20:35:02.313529+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:02.513524+08|active|Client|ClientRead|1
+2026-09-29 20:35:02.513524+08|active|Lock|transactionid|1
+2026-09-29 20:35:02.513524+08|active|Lock|tuple|17
+2026-09-29 20:35:02.513524+08|idle|Client|ClientRead|1
+2026-09-29 20:35:02.713556+08|active|Lock|transactionid|1
+2026-09-29 20:35:02.713556+08|active|Lock|tuple|16
+2026-09-29 20:35:02.713556+08|active|-|-|2
+2026-09-29 20:35:02.713556+08|idle|-|-|1
+2026-09-29 20:35:02.913501+08|active|IO|WalSync|1
+2026-09-29 20:35:02.913501+08|active|Lock|transactionid|1
+2026-09-29 20:35:02.913501+08|active|Lock|tuple|17
+2026-09-29 20:35:02.913501+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:03.113531+08|active|Lock|transactionid|1
+2026-09-29 20:35:03.113531+08|active|Lock|tuple|16
+2026-09-29 20:35:03.113531+08|active|-|-|2
+2026-09-29 20:35:03.113531+08|idle|Client|ClientRead|1
+2026-09-29 20:35:03.313535+08|active|Client|ClientRead|1
+2026-09-29 20:35:03.313535+08|active|Lock|transactionid|1
+2026-09-29 20:35:03.313535+08|active|Lock|tuple|16
+2026-09-29 20:35:03.313535+08|idle|Client|ClientRead|1
+2026-09-29 20:35:03.313535+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:03.513532+08|active|Client|ClientRead|1
+2026-09-29 20:35:03.513532+08|active|Lock|transactionid|1
+2026-09-29 20:35:03.513532+08|active|Lock|tuple|16
+2026-09-29 20:35:03.513532+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:35:03.713571+08|active|Client|ClientRead|2
+2026-09-29 20:35:03.713571+08|active|Lock|transactionid|1
+2026-09-29 20:35:03.713571+08|active|Lock|tuple|16
+2026-09-29 20:35:03.713571+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:03.913506+08|active|Lock|transactionid|1
+2026-09-29 20:35:03.913506+08|active|Lock|tuple|16
+2026-09-29 20:35:03.913506+08|idle|Client|ClientRead|1
+2026-09-29 20:35:03.913506+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:35:04.113546+08|active|IO|WalSync|1
+2026-09-29 20:35:04.113546+08|active|Lock|transactionid|1
+2026-09-29 20:35:04.113546+08|active|Lock|tuple|11
+2026-09-29 20:35:04.113546+08|idle|Client|ClientRead|7
+2026-09-29 20:35:04.313622+08|idle|Client|ClientRead|20
+2026-09-29 20:35:04.513593+08|idle|Client|ClientRead|20
+2026-09-29 20:35:04.713594+08|idle|Client|ClientRead|20
+2026-09-29 20:35:04.913614+08|idle|Client|ClientRead|20
+2026-09-29 20:35:05.113607+08|idle|Client|ClientRead|20
+2026-09-29 20:35:05.313647+08|idle|Client|ClientRead|20
+2026-09-29 20:35:05.51361+08|idle|Client|ClientRead|20
+2026-09-29 20:35:05.713606+08|idle|Client|ClientRead|20
+2026-09-29 20:35:05.913615+08|idle|Client|ClientRead|20
+2026-09-29 20:35:06.113585+08|idle|Client|ClientRead|20
+2026-09-29 20:35:06.313528+08|idle|Client|ClientRead|20
+2026-09-29 20:35:06.513594+08|idle|Client|ClientRead|20
+2026-09-29 20:35:06.713606+08|idle|Client|ClientRead|20
+2026-09-29 20:35:06.913605+08|idle|Client|ClientRead|20
+2026-09-29 20:35:07.1136+08|idle|Client|ClientRead|20
+2026-09-29 20:35:07.313603+08|idle|Client|ClientRead|20
+2026-09-29 20:35:07.513607+08|idle|Client|ClientRead|20
+2026-09-29 20:35:07.713609+08|idle|Client|ClientRead|20
+2026-09-29 20:35:07.913615+08|idle|Client|ClientRead|20
+2026-09-29 20:35:08.113592+08|idle|Client|ClientRead|20
+2026-09-29 20:35:08.313605+08|idle|Client|ClientRead|20
+2026-09-29 20:35:08.51363+08|idle|Client|ClientRead|20
+2026-09-29 20:35:08.713568+08|idle|Client|ClientRead|20
+2026-09-29 20:35:08.91358+08|idle|Client|ClientRead|20
+2026-09-29 20:35:09.113599+08|idle|Client|ClientRead|20
+2026-09-29 20:35:09.313617+08|idle|Client|ClientRead|20
+2026-09-29 20:35:09.51361+08|idle|Client|ClientRead|20
+2026-09-29 20:35:09.713626+08|idle|Client|ClientRead|20
+2026-09-29 20:35:09.913587+08|idle|Client|ClientRead|20
+2026-09-29 20:35:10.113614+08|idle|Client|ClientRead|20
+2026-09-29 20:35:10.313608+08|idle|Client|ClientRead|20
+2026-09-29 20:35:10.513602+08|idle|Client|ClientRead|20
+2026-09-29 20:35:10.713589+08|idle|Client|ClientRead|20
+2026-09-29 20:35:10.913597+08|idle|Client|ClientRead|20
+2026-09-29 20:35:11.113609+08|idle|Client|ClientRead|20
+2026-09-29 20:35:11.313613+08|idle|Client|ClientRead|20
+2026-09-29 20:35:11.513599+08|idle|Client|ClientRead|20
+2026-09-29 20:35:11.713606+08|idle|Client|ClientRead|20
+2026-09-29 20:35:11.913637+08|idle|Client|ClientRead|20
+2026-09-29 20:35:12.113564+08|idle|Client|ClientRead|20
+2026-09-29 20:35:12.313612+08|idle|Client|ClientRead|20
+2026-09-29 20:35:12.5136+08|idle|Client|ClientRead|20
+2026-09-29 20:35:12.713604+08|idle|Client|ClientRead|20
+2026-09-29 20:35:12.913613+08|idle|Client|ClientRead|20
+2026-09-29 20:35:13.1136+08|idle|Client|ClientRead|20
+2026-09-29 20:35:13.313609+08|idle|Client|ClientRead|20
+2026-09-29 20:35:13.513615+08|idle|Client|ClientRead|20
+2026-09-29 20:35:13.713602+08|idle|Client|ClientRead|20
+2026-09-29 20:35:13.913612+08|idle|Client|ClientRead|20
+2026-09-29 20:35:14.113594+08|idle|Client|ClientRead|20
+2026-09-29 20:35:14.313527+08|active|Client|ClientRead|8
+2026-09-29 20:35:14.313527+08|idle|Client|ClientRead|6
+2026-09-29 20:35:14.313527+08|idle in transaction|Client|ClientRead|6
+2026-09-29 20:35:14.513588+08|active|Lock|transactionid|1
+2026-09-29 20:35:14.513588+08|active|Lock|tuple|16
+2026-09-29 20:35:14.513588+08|active|-|-|3
+2026-09-29 20:35:14.713607+08|active|Client|ClientRead|1
+2026-09-29 20:35:14.713607+08|active|Lock|transactionid|1
+2026-09-29 20:35:14.713607+08|active|Lock|tuple|16
+2026-09-29 20:35:14.713607+08|idle in transaction|Client|ClientRead|2
+2026-09-29 20:35:14.913618+08|active|Lock|transactionid|1
+2026-09-29 20:35:14.913618+08|active|Lock|tuple|18
+2026-09-29 20:35:14.913618+08|idle in transaction|-|-|1
+2026-09-29 20:35:15.113622+08|active|Lock|transactionid|1
+2026-09-29 20:35:15.113622+08|active|Lock|tuple|18
+2026-09-29 20:35:15.113622+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:15.313583+08|active|Lock|transactionid|1
+2026-09-29 20:35:15.313583+08|active|Lock|tuple|18
+2026-09-29 20:35:15.313583+08|active|-|-|1
+2026-09-29 20:35:15.513625+08|active|Lock|transactionid|1
+2026-09-29 20:35:15.513625+08|active|Lock|tuple|18
+2026-09-29 20:35:15.513625+08|active|-|-|1
+2026-09-29 20:35:15.713573+08|active|Lock|transactionid|1
+2026-09-29 20:35:15.713573+08|active|Lock|tuple|18
+2026-09-29 20:35:15.713573+08|active|-|-|1
+2026-09-29 20:35:15.913611+08|active|Lock|transactionid|1
+2026-09-29 20:35:15.913611+08|active|Lock|tuple|18
+2026-09-29 20:35:15.913611+08|active|-|-|1
+2026-09-29 20:35:16.113592+08|active|Lock|transactionid|1
+2026-09-29 20:35:16.113592+08|active|Lock|tuple|17
+2026-09-29 20:35:16.113592+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:16.113592+08|idle in transaction|-|-|1
+2026-09-29 20:35:16.313573+08|active|Lock|transactionid|1
+2026-09-29 20:35:16.313573+08|active|Lock|tuple|18
+2026-09-29 20:35:16.313573+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:16.513606+08|active|Lock|transactionid|1
+2026-09-29 20:35:16.513606+08|active|Lock|tuple|18
+2026-09-29 20:35:16.513606+08|idle in transaction|-|-|1
+2026-09-29 20:35:16.71362+08|active|Lock|transactionid|1
+2026-09-29 20:35:16.71362+08|active|Lock|tuple|18
+2026-09-29 20:35:16.71362+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:16.913618+08|active|Lock|transactionid|1
+2026-09-29 20:35:16.913618+08|active|Lock|tuple|18
+2026-09-29 20:35:16.913618+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:17.11358+08|active|Lock|transactionid|1
+2026-09-29 20:35:17.11358+08|active|Lock|tuple|17
+2026-09-29 20:35:17.11358+08|active|-|-|2
+2026-09-29 20:35:17.313538+08|active|Client|ClientRead|1
+2026-09-29 20:35:17.313538+08|active|Lock|transactionid|1
+2026-09-29 20:35:17.313538+08|active|Lock|tuple|17
+2026-09-29 20:35:17.313538+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:17.513538+08|active|Lock|transactionid|1
+2026-09-29 20:35:17.513538+08|active|Lock|tuple|17
+2026-09-29 20:35:17.513538+08|active|-|-|1
+2026-09-29 20:35:17.513538+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:17.713609+08|active|Client|ClientRead|1
+2026-09-29 20:35:17.713609+08|active|Lock|transactionid|1
+2026-09-29 20:35:17.713609+08|active|Lock|tuple|16
+2026-09-29 20:35:17.713609+08|idle|Client|ClientRead|1
+2026-09-29 20:35:17.713609+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:17.913572+08|active|Lock|transactionid|1
+2026-09-29 20:35:17.913572+08|active|Lock|tuple|12
+2026-09-29 20:35:17.913572+08|idle|Client|ClientRead|6
+2026-09-29 20:35:17.913572+08|idle in transaction|-|-|1
+2026-09-29 20:35:18.113585+08|active|Client|ClientRead|1
+2026-09-29 20:35:18.113585+08|active|Lock|transactionid|1
+2026-09-29 20:35:18.113585+08|active|Lock|tuple|7
+2026-09-29 20:35:18.113585+08|idle|Client|ClientRead|11
+2026-09-29 20:35:18.313606+08|active|Lock|transactionid|1
+2026-09-29 20:35:18.313606+08|active|Lock|tuple|2
+2026-09-29 20:35:18.313606+08|idle|Client|ClientRead|16
+2026-09-29 20:35:18.313606+08|idle in transaction|Client|ClientRead|1
+2026-09-29 20:35:18.513608+08|idle|Client|ClientRead|20
+2026-09-29 20:35:18.71361+08|idle|Client|ClientRead|20

@@ -76,6 +76,9 @@ for (const [path, label] of METRICS) {
   if (medA != null && medAp != null && pooled != null) {
     shift = (medAp - medA) / Math.abs(medA);
     within = Math.abs(shift) <= Math.max(pooled, 0.1);
+  } else if (medA === 0 && medAp === 0) {
+    // Degenerate but decisive: both groups identical at zero — no shift.
+    within = true;
   }
   if (within === false) fail = true;
   rows.push({

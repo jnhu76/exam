@@ -1,0 +1,55 @@
+[run-cell main-05] 2026-09-29T20:41:31+08:00 starting db
+ Network exam-586_exam-net Creating 
+ Network exam-586_exam-net Creating 
+ Network exam-586_exam-net Created 
+ Network exam-586_exam-net Created 
+ Container exam-586-db-1 Creating 
+ Container exam-586-db-1 Created 
+ Container exam-586-db-1 Starting 
+ Container exam-586-db-1 Started 
+[run-cell main-05] 2026-09-29T20:42:09+08:00 db healthy; starting app+web (entrypoint migrates)
+ Container exam-586-db-1 Running 
+ Container exam-586-app-1 Creating 
+ Container exam-586-app-1 Created 
+ Container exam-586-web-1 Creating 
+ Container exam-586-web-1 Created 
+ Container exam-586-db-1 Waiting 
+ Container exam-586-db-1 Healthy 
+ Container exam-586-app-1 Starting 
+ Container exam-586-app-1 Started 
+ Container exam-586-app-1 Waiting 
+ Container exam-586-app-1 Healthy 
+ Container exam-586-web-1 Starting 
+ Container exam-586-web-1 Started 
+[run-cell main-05] 2026-09-29T20:42:46+08:00 app ready via nginx ingress
+[run-cell main-05] 2026-09-29T20:42:48+08:00 driver setup
+GEN_SEED_OK candidates=50+warmup
+[run-cell main-05] 2026-09-29T20:43:12+08:00 driver measure (pool=30 scale=50 rep=2)
+[run-cell main-05] 2026-09-29T21:06:05+08:00 starting db
+ Network exam-586_exam-net Creating 
+ Network exam-586_exam-net Creating 
+ Network exam-586_exam-net Created 
+ Network exam-586_exam-net Created 
+ Container exam-586-db-1 Creating 
+ Container exam-586-db-1 Created 
+ Container exam-586-db-1 Starting 
+ Container exam-586-db-1 Started 
+[run-cell main-05] 2026-09-29T21:06:16+08:00 db healthy; starting app+web (entrypoint migrates)
+ Container exam-586-db-1 Running 
+ Container exam-586-app-1 Creating 
+ Container exam-586-app-1 Created 
+ Container exam-586-web-1 Creating 
+ Container exam-586-web-1 Created 
+ Container exam-586-db-1 Waiting 
+ Container exam-586-db-1 Healthy 
+ Container exam-586-app-1 Starting 
+ Container exam-586-app-1 Started 
+ Container exam-586-app-1 Waiting 
+ Container exam-586-app-1 Healthy 
+ Container exam-586-web-1 Starting 
+ Container exam-586-web-1 Started 
+[run-cell main-05] 2026-09-29T21:06:24+08:00 app ready via nginx ingress
+[run-cell main-05] 2026-09-29T21:06:26+08:00 driver setup
+GEN_SEED_OK candidates=50+warmup
+[run-cell main-05] 2026-09-29T21:06:28+08:00 driver measure (pool=30 scale=50 rep=2)
+[run-cell main-05] 2026-09-29T21:07:06+08:00 cell done: status=valid (data root retained: /home/jnhu/exam-586/runs/main-05/data)

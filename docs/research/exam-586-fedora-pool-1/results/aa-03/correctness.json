@@ -1,0 +1,14 @@
+{
+  "run": "aa-03",
+  "statusCounts": {
+    "graded": 200
+  },
+  "attemptsChecked": 200,
+  "dupActive": 0,
+  "dupTerminal": 0,
+  "distinctAuditIps": 201,
+  "distinctCandidateIps": 200,
+  "findings": [],
+  "pass": true,
+  "finished_at": "2026-09-29T12:26:25.827Z"
+}

@@ -1,0 +1,14 @@
+{
+  "run": "main-01",
+  "statusCounts": {
+    "graded": 50
+  },
+  "attemptsChecked": 50,
+  "dupActive": 0,
+  "dupTerminal": 0,
+  "distinctAuditIps": 51,
+  "distinctCandidateIps": 50,
+  "findings": [],
+  "pass": true,
+  "finished_at": "2026-09-29T12:34:12.312Z"
+}

@@ -33,12 +33,24 @@ run_cell() { # <cellId> <pool> <scale> <rep>
 }
 
 # Frozen schedule (02-experiment-schedule.md) — do not reorder.
-run_cell smoke-S20-r0  unset 20 0   # rig shakedown, never treatment
-# ...remaining schedule appended by the operator after smoke validation.
-if [ -n "${EXAM586_ONLY:-}" ]; then
-  case "$EXAM586_ONLY" in
-    aa-*) run_cell "$EXAM586_ONLY" "${EXAM586_ONLY_POOL:-unset}" "${EXAM586_ONLY_SCALE:-100}" "${EXAM586_ONLY_REP:-1}" ;;
-    *) log "unknown EXAM586_ONLY cell"; exit 2 ;;
-  esac
-fi
+# Rig shakedown smoke-S20-r0f ran VALID before this campaign (retained).
+# ── A/A gate (§15): A = unset (canonical implicit), A' = explicit 10 ──
+run_cell aa-01 unset 100 1
+run_cell aa-02 10    100 1
+run_cell aa-03 10    200 1
+run_cell aa-04 unset 200 1
+run_cell aa-05 unset 200 2
+run_cell aa-06 10    200 2
+run_cell aa-07 10    100 2
+run_cell aa-08 unset 100 2
+# ── Main matrix (§16/§17): 3 replicate blocks, counterbalanced ──
+run_cell main-01 10 50  1
+run_cell main-02 20 100 1
+run_cell main-03 30 200 1
+run_cell main-04 20 200 2
+run_cell main-05 30 50  2
+run_cell main-06 10 100 2
+run_cell main-07 30 100 3
+run_cell main-08 10 200 3
+run_cell main-09 20 50  3
 log "campaign phase complete"

@@ -1,0 +1,1 @@
+EXAM586_POOL {"env":"10","mode":"research_explicit","effectivePoolMax":10}

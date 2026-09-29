@@ -1,0 +1,48 @@
+[campaign] 2026-09-29T20:22:38+08:00 === cell aa-01: pool=unset scale=100 rep=1 ===
+[campaign] 2026-09-29T20:23:48+08:00 cell aa-01 VALID
+[campaign] 2026-09-29T20:23:48+08:00 === cell aa-02: pool=10 scale=100 rep=1 ===
+[campaign] 2026-09-29T20:24:59+08:00 cell aa-02 VALID
+[campaign] 2026-09-29T20:24:59+08:00 === cell aa-03: pool=10 scale=200 rep=1 ===
+[campaign] 2026-09-29T20:26:28+08:00 cell aa-03 VALID
+[campaign] 2026-09-29T20:26:28+08:00 === cell aa-04: pool=unset scale=200 rep=1 ===
+[campaign] 2026-09-29T20:27:57+08:00 cell aa-04 VALID
+[campaign] 2026-09-29T20:27:57+08:00 === cell aa-05: pool=unset scale=200 rep=2 ===
+[campaign] 2026-09-29T20:29:25+08:00 cell aa-05 VALID
+[campaign] 2026-09-29T20:29:25+08:00 === cell aa-06: pool=10 scale=200 rep=2 ===
+[campaign] 2026-09-29T20:30:55+08:00 cell aa-06 VALID
+[campaign] 2026-09-29T20:30:55+08:00 === cell aa-07: pool=10 scale=100 rep=2 ===
+[campaign] 2026-09-29T20:32:05+08:00 cell aa-07 VALID
+[campaign] 2026-09-29T20:32:05+08:00 === cell aa-08: pool=unset scale=100 rep=2 ===
+[campaign] 2026-09-29T20:33:14+08:00 cell aa-08 VALID
+[campaign] 2026-09-29T20:33:14+08:00 === cell main-01: pool=10 scale=50 rep=1 ===
+[campaign] 2026-09-29T20:34:14+08:00 cell main-01 VALID
+[campaign] 2026-09-29T20:34:14+08:00 === cell main-02: pool=20 scale=100 rep=1 ===
+[campaign] 2026-09-29T20:35:24+08:00 cell main-02 VALID
+[campaign] 2026-09-29T20:35:24+08:00 === cell main-03: pool=30 scale=200 rep=1 ===
+[campaign] 2026-09-29T20:37:30+08:00 cell main-03 VALID
+[campaign] 2026-09-29T20:37:30+08:00 === cell main-04: pool=20 scale=200 rep=2 ===
+[campaign] 2026-09-29T20:41:31+08:00 cell main-04 VALID
+[campaign] 2026-09-29T20:41:31+08:00 === cell main-05: pool=30 scale=50 rep=2 ===
+[campaign] 2026-09-29T21:06:05+08:00 skip aa-01 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip aa-02 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip aa-03 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip aa-04 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip aa-05 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip aa-06 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip aa-07 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip aa-08 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip main-01 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip main-02 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip main-03 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 skip main-04 (already done)
+[campaign] 2026-09-29T21:06:05+08:00 === cell main-05: pool=30 scale=50 rep=2 ===
+[campaign] 2026-09-29T21:07:06+08:00 cell main-05 VALID
+[campaign] 2026-09-29T21:07:06+08:00 === cell main-06: pool=10 scale=100 rep=2 ===
+[campaign] 2026-09-29T21:08:16+08:00 cell main-06 VALID
+[campaign] 2026-09-29T21:08:16+08:00 === cell main-07: pool=30 scale=100 rep=3 ===
+[campaign] 2026-09-29T21:09:25+08:00 cell main-07 VALID
+[campaign] 2026-09-29T21:09:25+08:00 === cell main-08: pool=10 scale=200 rep=3 ===
+[campaign] 2026-09-29T21:10:55+08:00 cell main-08 VALID
+[campaign] 2026-09-29T21:10:55+08:00 === cell main-09: pool=20 scale=50 rep=3 ===
+[campaign] 2026-09-29T21:11:56+08:00 cell main-09 VALID
+[campaign] 2026-09-29T21:11:56+08:00 campaign phase complete

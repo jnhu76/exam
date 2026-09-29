@@ -1,0 +1,14 @@
+{
+  "run": "smoke-S20-r0f",
+  "statusCounts": {
+    "graded": 20
+  },
+  "attemptsChecked": 20,
+  "dupActive": 0,
+  "dupTerminal": 0,
+  "distinctAuditIps": 21,
+  "distinctCandidateIps": 20,
+  "findings": [],
+  "pass": true,
+  "finished_at": "2026-09-29T12:20:55.770Z"
+}

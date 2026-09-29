@@ -1,0 +1,1 @@
+EXAM586_POOL {"env":"","mode":"canonical_implicit","effectivePoolMax":"postgres.js_default"}
