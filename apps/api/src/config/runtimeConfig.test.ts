@@ -695,20 +695,24 @@ describe("runtimeConfig", () => {
 
     // INVARIANT: the bundled production topology always puts the web nginx
     // edge in front of the API, so the default TRUSTED_PROXY_CIDRS must
-    // exactly name the pinned exam-net subnet — otherwise every candidate
-    // collapses onto the edge's bridge IP for rate-limit and audit identity.
-    // Two literals, one fact: this pins them together.
-    it("docker-compose.yml defaults TRUSTED_PROXY_CIDRS to the pinned exam-net subnet", () => {
+    // name the exam-net subnet — otherwise every candidate collapses onto
+    // the edge's bridge IP for rate-limit and audit identity. ONE topology
+    // fact: compose derives both consumers from the same
+    // ${EXAM_DOCKER_SUBNET:-<literal>} default; this pins the coupling so
+    // the two defaults cannot drift apart.
+    it("docker-compose.yml derives TRUSTED_PROXY_CIDRS and the exam-net subnet from the same EXAM_DOCKER_SUBNET default", () => {
       const compose = readFile("docker-compose.yml");
-      const subnet = compose.match(/^\s*- subnet:\s*(\S+)/m)?.[1];
-      expect(subnet).toMatch(/^\d+\.\d+\.\d+\.\d+\/\d+$/);
-      const fallback = compose.match(
-        /TRUSTED_PROXY_CIDRS:\s*\$\{TRUSTED_PROXY_CIDRS:-(\S+)\}/,
+      const subnetDefault = compose.match(
+        /^\s*- subnet:\s*\$\{EXAM_DOCKER_SUBNET:-(\S+)\}/m,
       )?.[1];
-      expect(fallback).toBe(subnet);
+      expect(subnetDefault).toMatch(/^\d+\.\d+\.\d+\.\d+\/\d+$/);
+      const trustDefault = compose.match(
+        /TRUSTED_PROXY_CIDRS:\s*\$\{TRUSTED_PROXY_CIDRS:-\$\{EXAM_DOCKER_SUBNET:-(\S+)\}\}/,
+      )?.[1];
+      expect(trustDefault).toBe(subnetDefault);
     });
 
-    it("the pinned bundled subnet is a bounded, parser-accepted trusted-proxy entry", () => {
+    it("the bundled default subnet is a bounded, parser-accepted trusted-proxy entry", () => {
       expect(parseTrustedProxyCidrs("172.28.0.0/24")).toEqual([
         "172.28.0.0/24",
       ]);

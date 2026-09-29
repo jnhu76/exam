@@ -167,15 +167,23 @@ never terminates it and no certificate automation is bundled.
   an `https://` canonical origin keeps all of them. Note the operator
   migration constraint: a hostname whose HSTS policy browsers have learned
   cannot be downgraded to HTTP-only until the policy expires (runbook §2).
-- `TRUSTED_PROXY_CIDRS` names the web→app hop **only — never the candidate
-  client network**. The bundled topology needs no operator value:
-  `docker-compose.yml` pins the `exam-net` bridge subnet (`172.28.0.0/24`)
-  and defaults `TRUSTED_PROXY_CIDRS` to it, so `request.ip` is the real
-  LAN client out of the box. The web edge **replaces** `X-Forwarded-For`
-  with the real client address (appending would let a client forge its
-  audit/rate-limit identity) and overwrites `X-Forwarded-Host` /
-  `X-Forwarded-Proto`, so client-supplied forwarding headers never survive
-  as authoritative identity. Override the default ONLY when candidates
+- `TRUSTED_PROXY_CIDRS` must never cover the candidate client network.
+  The bundled topology needs no operator value: `docker-compose.yml` pins
+  the `exam-net` bridge subnet (`EXAM_DOCKER_SUBNET`, default
+  `172.28.0.0/24`) and derives the `TRUSTED_PROXY_CIDRS` default from the
+  same value, so `request.ip` is the real LAN client out of the box.
+  Precise scope: the bundled default trusts every container on the bridge
+  (web, app, db, redis, and any future service attached to `exam-net`) —
+  wider than the web→app hop alone. External clients cannot exploit that:
+  the web edge **replaces** `X-Forwarded-For` with the real client address
+  (appending would let a client forge its audit/rate-limit identity) and
+  overwrites `X-Forwarded-Host` / `X-Forwarded-Proto`, so client-supplied
+  forwarding headers never survive as authoritative identity — but any
+  container attached to `exam-net` is a trusted peer, so the bridge must
+  remain stack infrastructure only. If the default subnet overlaps the
+  host's LAN, VPN, or existing Docker networks, set `EXAM_DOCKER_SUBNET`
+  to a free subnet — the bridge and the trust default follow it together
+  (runbook §2). Override `TRUSTED_PROXY_CIDRS` itself ONLY when candidates
   reach the API through an external proxy (runbook §2 "Rate-limit
   identity, trusted proxies, and sizing").
 - Set `CORS_ORIGIN` and `PUBLIC_WEB_ORIGIN` to the address users will

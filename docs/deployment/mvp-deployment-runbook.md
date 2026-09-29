@@ -110,7 +110,8 @@ if any is unset. There is NO default database password in production
 | `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` | 30000 / 60000 | in-process heartbeat scanner |
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed rate limiter; Redis-backed shared state when the `redis` profile is enabled and the runtime is ready — local in-memory fallback only in `optional` mode; `required` mode fails closed with 503 `RATE_LIMIT_UNAVAILABLE` (never falls back to local). See §10 |
-| `TRUSTED_PROXY_CIDRS` | bundled-topology default: the Compose-pinned `exam-net` subnet (`172.28.0.0/24`) | CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). `docker-compose.yml` derives the default from its own pinned bridge subnet, so the bundled #585 topology is correct with no operator lookup. Override ONLY for an external-proxy topology (see "Rate-limit identity, trusted proxies, and sizing" below) |
+| `EXAM_DOCKER_SUBNET` | `172.28.0.0/24` | The bundled stack's Docker bridge subnet (`exam-net`) — the ONE topology fact from which the bundled `TRUSTED_PROXY_CIDRS` default is also derived, so overriding it moves both together. Change it only on collision: overlap with another Docker network fails at `up` ("Pool overlaps..."), but overlap with a host LAN/VPN route may succeed and then silently break container networking — pick a free RFC1918 subnet in `.env.production` and re-run `up` |
+| `TRUSTED_PROXY_CIDRS` | bundled-topology default: derived from `EXAM_DOCKER_SUBNET` (default `172.28.0.0/24`) | CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). `docker-compose.yml` derives the default from the same `EXAM_DOCKER_SUBNET` value that names the bridge subnet, so the bundled #585 topology is correct with no operator lookup. Override ONLY for an external-proxy topology (see "Rate-limit identity, trusted proxies, and sizing" below) |
 
 ### Email (in-process outbox loop + sender)
 
@@ -187,7 +188,7 @@ depends on the deployment topology:
 
 | Topology | `request.ip` | Verdict |
 | --- | --- | --- |
-| Bundled web nginx edge (#585 default compose, unmodified) | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default, correct out of the box: Compose pins `exam-net` to `172.28.0.0/24` and defaults `TRUSTED_PROXY_CIDRS` to it — no lookup needed |
+| Bundled web nginx edge (#585 default compose, unmodified) | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default, correct out of the box: Compose pins `exam-net` via `EXAM_DOCKER_SUBNET` (default `172.28.0.0/24`) and derives the `TRUSTED_PROXY_CIDRS` default from the same value — no lookup needed. The bundled trust set is the whole `exam-net` bridge (every stack container is a trusted peer), never the candidate network |
 | Bundled web nginx edge with `TRUSTED_PROXY_CIDRS` overridden to empty | the edge's bridge IP (all candidates collapse) | Misconfigured — do not clear the default for the bundled topology |
 | Shared NAT (many candidates behind one egress IP) | the shared IP | Supported with sizing: the whole cohort shares one identity; size `RATE_LIMIT_MAX` by the rule below and stagger logins (the login budget is 10/min/IP) |
 | Reverse proxy WITH trusted client-IP wiring | per-candidate IP | Supported: set `TRUSTED_PROXY_CIDRS` to the proxy's addresses |
@@ -219,8 +220,12 @@ limit and audit identity behind a proxy:
 
 With the wiring in place, the client IP is the first address scanning
 `X-Forwarded-For` from the right that is NOT one of the configured proxies —
-entries a candidate injects are skipped **provided every configured CIDR
-covers only the proxy→API link** (pinned by `rateLimit.topology.test.ts`).
+entries a candidate injects are skipped **provided no configured CIDR covers
+a candidate client network**; each configured CIDR should name forwarding
+infrastructure only (the over-broad hazard is pinned by
+`rateLimit.topology.test.ts`). The bundled default already holds that line:
+it names the stack's own bridge — peers are stack infrastructure, never
+candidates — and the edge replaces the header before the app sees it.
 
 > **Load-bearing precondition:** never include the candidate client network
 > in `TRUSTED_PROXY_CIDRS`. The walk skips EVERY address matching a trusted
@@ -897,6 +902,11 @@ inside the BROWSER only — so the cookie policy sees the real thing (an
 on the local machine. The spec asserts the persisted cookie state
 (non-`Secure`, `HttpOnly`, `SameSite=Strict`) and a real authenticated
 roundtrip; failure artifacts land in `apps/e2e/test-results/`.
+CI runs this same rehearsal on every PR as the
+`production-transport-regression` workflow job — the regular E2E shards
+cannot run this spec (they are `APP_MODE=e2e` on `http://localhost`, a
+browser secure context), so this job is the only automated browser-level
+transport gate.
 
 ### Release artifact evidence
 
