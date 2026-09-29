@@ -239,11 +239,11 @@ docker compose --env-file .env.production up -d
 docker compose --env-file .env.production logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
-# 6. Verify the default stack — web (running), app / db (healthy).
+# 6. Verify the default stack — web (healthy), app / db (healthy).
 #    The in-process email outbox loop waits for the first organization
 #    to be bootstrapped (step 7).
 docker compose --env-file .env.production ps
-# Expected: web (running, publishes EXAM_PORT), app (healthy),
+# Expected: web (healthy, publishes EXAM_PORT), app (healthy),
 #           db (healthy)
 #
 # Health layers (#547) — read them separately:
@@ -513,7 +513,7 @@ docker compose --env-file .env.production up -d
 
 # Verify
 docker compose --env-file .env.production ps
-# Expected: web (running, publishes EXAM_PORT), app (healthy),
+# Expected: web (healthy, publishes EXAM_PORT), app (healthy),
 #           db (healthy)
 
 # API health (liveness — process alive)
@@ -579,8 +579,9 @@ healthcheck:
   - marks each container healthy / unhealthy (visible via 'docker compose ps',
     'docker inspect', and Compose UI);
   - gates STARTUP of dependent services: web waits for app healthy
-    (#585). Health state does NOT route runtime traffic — once started, web
-    proxies to app/web unconditionally — and does NOT by itself restart
+    (#585). Health state does NOT route runtime traffic — once started,
+    web routes API requests to app and serves the SPA from its local
+    filesystem unconditionally — and does NOT by itself restart
     anything.
 ```
 
@@ -729,7 +730,7 @@ docker compose --env-file .env.production --profile redis up -d
 
 # 3. Verify all four services:
 docker compose --env-file .env.production ps
-# Expected: web (running, publishes EXAM_PORT), app (healthy),
+# Expected: web (healthy, publishes EXAM_PORT), app (healthy),
 #           db (healthy), redis (healthy)
 ```
 

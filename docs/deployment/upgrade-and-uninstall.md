@@ -183,7 +183,7 @@ docker compose --env-file .env.production up -d
 ### 2.6 Post-upgrade verification checklist
 
 ```text
-[ ] docker compose --env-file .env.production ps      # web running; app + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
+[ ] docker compose --env-file .env.production ps      # web + app + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
 [ ] curl -s http://localhost:${EXAM_PORT:-80}/api/health   # {"status":"ok"} (through the web nginx edge, #585)
 [ ] Log in as an existing Admin; open a candidate + a recent result.
 [ ] Watch migration logs (first boot):

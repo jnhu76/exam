@@ -64,7 +64,7 @@ Wait until you see `Server listening at http://0.0.0.0:3000`.
 docker compose --env-file .env.production ps
 ```
 
-Expected: `web` (running), `app` (healthy),
+Expected: `web` (healthy), `app` (healthy),
 `db` (healthy).
 
 ### 4. Bootstrap the first Admin

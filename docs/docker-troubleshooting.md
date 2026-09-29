@@ -82,7 +82,7 @@ Verify instead of guessing:
 ```bash
 # Always pass the deployment env file: the base compose interpolates
 # required variables (${EXAM_IMAGE:?...}) and aborts without it.
-docker compose --env-file .env.production ps          # web running; app/db healthy
+docker compose --env-file .env.production ps          # web/app/db healthy
 docker compose --env-file .env.production logs app    # migrations + 'Server listening'?
 curl -i http://localhost/               # expect 200 + text/html (SPA served by web)
 curl -I http://localhost/assets/        # expect 200 for a built asset

@@ -64,7 +64,7 @@ Server listening at http://0.0.0.0:3000
 docker compose --env-file .env.production ps
 ```
 
-预期看到：`web` 为 running，`app`、`db` 均为 healthy。
+预期看到：`web`、`app`、`db` 均为 healthy。
 
 ### 4. 初始化第一个 Admin
 
