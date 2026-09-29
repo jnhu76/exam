@@ -471,3 +471,113 @@ jobs:
           path: e2e-diagnostics/
           retention-days: 1
           if-no-files-found: ignore
+
+  # Browser-level transport gate for the LAN HTTP contract: the host-native
+  # E2E stack runs APP_MODE=e2e on http://localhost — a browser secure
+  # context where a Secure cookie is accepted anyway — so it cannot observe
+  # transport regressions by construction (this blind spot is exactly how
+  # the original defect survived). This job rehearses the REAL production
+  # Compose topology from this checkout (source-built images,
+  # APP_MODE=production) and drives production-lan-http.spec.ts through a
+  # NON-localhost origin that Chromium alone resolves to the loopback
+  # (E2E_HOST_MAP). Local equivalent: runbook §11 "Production transport
+  # rehearsal". No EXAM_DOCKER_SUBNET is set here on purpose — the bundled
+  # default topology is the regression surface.
+  production-transport-regression:
+    name: Production transport regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify-build
+
+    env:
+      REHEARSAL_PORT: 18080
+      REHEARSAL_ORIGIN: http://exam.test:18080
+      REHEARSAL_TOKEN: ci-production-transport-rehearsal
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.15.x"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('apps/e2e/package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install Playwright system dependencies
+        run: pnpm --filter @exam/e2e exec playwright install-deps chromium
+
+      - name: Install Playwright Chromium on cache miss
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @exam/e2e exec playwright install chromium
+
+      - name: Build production images from this checkout
+        run: |
+          docker build --target runner -t exam-local:dev .
+          docker build --target web-runner -t exam-local:web-dev .
+
+      - name: Write rehearsal .env.production
+        run: |
+          cat > .env.production <<EOF
+          EXAM_IMAGE=exam-local:dev
+          EXAM_WEB_IMAGE=exam-local:web-dev
+          EXAM_PORT=${REHEARSAL_PORT}
+          EXAM_DATA_ROOT=${{ runner.temp }}/exam-prod-rehearsal
+          POSTGRES_PASSWORD=ci-rehearsal-postgres
+          JWT_SECRET=ci-rehearsal-jwt-secret
+          CORS_ORIGIN=${REHEARSAL_ORIGIN}
+          PUBLIC_WEB_ORIGIN=${REHEARSAL_ORIGIN}
+          LAUNCHPAD_SETUP_TOKEN=${REHEARSAL_TOKEN}
+          EOF
+
+      - name: Launch production Compose stack
+        run: |
+          docker compose --env-file .env.production -f docker-compose.yml up -d --wait --wait-timeout 180
+          docker compose --env-file .env.production -f docker-compose.yml ps
+
+      - name: Run production LAN HTTP transport spec
+        run: |
+          E2E_BASE_URL=${REHEARSAL_ORIGIN} \
+          E2E_HOST_MAP=exam.test=127.0.0.1 \
+          E2E_PROD_LAUNCHPAD_TOKEN=${REHEARSAL_TOKEN} \
+          E2E_TRACE=1 \
+          pnpm --filter @exam/e2e exec playwright test production-lan-http
+
+      - name: Capture stack logs on failure
+        if: failure()
+        run: |
+          mkdir -p production-transport-diagnostics
+          docker compose --env-file .env.production -f docker-compose.yml logs --no-color app web \
+            > production-transport-diagnostics/stack.log 2>&1 || true
+
+      - name: Tear down production stack
+        if: always()
+        run: docker compose --env-file .env.production -f docker-compose.yml down -v --remove-orphans
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: production-transport-diagnostics
+          path: |
+            production-transport-diagnostics/
+            apps/e2e/test-results/
+          retention-days: 1
+          if-no-files-found: ignore
