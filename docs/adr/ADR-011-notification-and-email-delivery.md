@@ -1278,7 +1278,11 @@ query cost at 10k backlog: 11.9 ms per 100-row claim (EXPLAIN ANALYZE).
 - `EMAIL_ENABLED=false` deployments no longer ship a resident no-op
   container; the loop still runs in-process and marks enqueued rows `sent`
   via `DisabledEmailSender` (ADR-011 §12 Approach A unchanged).
-- The supported topology is `app + db` with no `email-worker` service; the
+- The supported email-delivery runtime has no separate `email-worker`
+  service: delivery runs in-process inside `app`. In the current
+  production deployment, `app` participates in the
+  `nginx + web + app + db` default stack; the complete production
+  topology is owned by the deployment documentation, not this ADR. The
   app service must forward `EMAIL_ENABLED`.
 - Diagnostics, `worker_heartbeats`, and `buildEmailStatus` are unchanged.
 - New runtime knob: `EMAIL_FAKE_DELAY_MS` (non-negative, default 0) —

@@ -31,7 +31,12 @@ with a China registry (e.g. npmmirror):
 
 ```bash
 # The operator stack runs the prebuilt release images (EXAM_IMAGE /
-# EXAM_WEB_IMAGE); building THIS checkout is an explicit docker build:
+# EXAM_WEB_IMAGE) — one release version ships a matched API + Web image
+# pair; building THIS checkout is an explicit docker build. The command
+# below builds only the `runner` target as a minimal reproduction probe
+# for the shared builder / dependency-download path: building either
+# production target reproduces the same failure, and the full two-image
+# source build is documented in docs/deployment/README.md.
 docker build --target runner \
   --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
   -t exam-local:dev .
@@ -44,6 +49,9 @@ The build installs `ca-certificates` (base) and `python3 make g++`
 mirror:
 
 ```bash
+# Same minimal probe as above; both apt installs (base and builder
+# stages) sit on the path this target exercises — it is not the
+# complete production source build:
 docker build --target runner \
   --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
   --build-arg DEBIAN_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian \
