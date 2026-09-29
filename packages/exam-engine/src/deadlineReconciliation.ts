@@ -199,16 +199,20 @@ export async function ensureAttemptDeadlineReconciled(
   }
 
   // INVARIANT (EXAM-558): this is the deadline decision's serialization
-  // point. The Exam authority must be read under the row lock so an expired/
+  // point. The Exam authority must be read under a row lock so an expired/
   // not-expired decision can never be evaluated from a `closeAt` that a
-  // concurrently committed exam command has already replaced. Under
+  // concurrently committed exam command has already replaced. The lock is
+  // SHARED (FOR SHARE): it still conflicts with exam-authority writers
+  // (FOR UPDATE / UPDATE), so writer serialization is identical — under
   // REPEATABLE READ, a closeAt change committed after this transaction's
   // snapshot raises 40001 here — BEFORE any freeze write — and
   // `executeInTransaction` retries the whole transaction onto the new
   // authority; a writer committing only after this lock queues behind it
-  // (candidate-wins linearization). Correctness must not rest on incidental
-  // FK/RI behavior. Lock order: Enrollment → Attempt → Exam.
-  const exam = await examRepo.findByIdForUpdate(attempt.examId);
+  // (candidate-wins linearization) — while concurrent same-exam candidate
+  // readers coexist instead of queueing on one another (the reader convoy
+  // this lock mode exists to remove). Correctness must not rest on
+  // incidental FK/RI behavior. Lock order: Enrollment → Attempt → Exam.
+  const exam = await examRepo.findByIdForShare(attempt.examId);
   if (!exam) {
     throw new NotFoundError("Exam not found");
   }
@@ -371,8 +375,11 @@ export async function prepareReconciledAttemptMutation(
   //
   // This may re-lock the Exam row the reconciliation seam already locked; a
   // same-tx re-lock of a held row is a no-op. Kept intentionally so the
-  // deadline decision always serializes on the locked Exam authority.
-  const exam = await examRepo.findByIdForUpdate(attempt.examId);
+  // deadline decision always serializes on the locked Exam authority. The
+  // lock is SHARED (FOR SHARE), matching the reconciliation seam above:
+  // writer conflicts and the 40001 stale-snapshot abort are unchanged;
+  // same-exam candidate readers coexist.
+  const exam = await examRepo.findByIdForShare(attempt.examId);
   if (!exam) {
     throw new NotFoundError("Exam not found");
   }

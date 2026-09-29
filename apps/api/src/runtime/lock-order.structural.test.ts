@@ -503,7 +503,7 @@ describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
     expect(assertIdx).toBeGreaterThanOrEqual(0);
     const protectedOps = [
       "attemptRepo.findById(",
-      "examRepo.findByIdForUpdate(",
+      "examRepo.findByIdForShare(",
       "submitAttempt(",
       "readGradingSnapshot(",
       "finalizeGrading(",
@@ -528,10 +528,16 @@ describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
       body,
       "ensureAttemptDeadlineReconciled body not found",
     ).not.toBeNull();
-    expect(body!).toMatch(/examRepo\.findByIdForUpdate\(/);
-    // A plain `examRepo.findById(` in the seam body would reintroduce the
-    // #558 stale-authority gap. The regex cannot match inside
-    // `findByIdForUpdate(` (the character after findById is F, not "(").
+    // The EXAM-558 authority read is the SHARED row lock (FOR SHARE): same
+    // writer serialization and 40001 stale-snapshot abort as FOR UPDATE,
+    // while same-exam candidate readers coexist. A revert to
+    // `findByIdForUpdate(` here would reintroduce the reader-reader Exam
+    // convoy (deadlock-free, but S200 submit p99 ~2.8× worse in the
+    // exam-558-lock-mode-1 research); a plain `examRepo.findById(` would
+    // reintroduce the #558 stale-authority gap. The negative regex cannot
+    // match inside `findByIdForShare(` (the character after findById is F,
+    // not "(").
+    expect(body!).toMatch(/examRepo\.findByIdForShare\(/);
     expect(body!).not.toMatch(/examRepo\.findById\(/);
   });
 

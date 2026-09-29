@@ -11,10 +11,14 @@
  * ordering-dependent exams-FK RI-check 40001 (measured on the audit branch,
  * including a durable stale-freeze interleaving). The fix gives the seam the
  * serialization point itself: EA affinity assertion → Attempt (via the
- * capability) → Exam FOR UPDATE → deadline decision, so the canonical lock
- * order Enrollment → Attempt → Exam holds on every caller and the 40001 +
- * whole-tx retry comes from the DESIGNED lock, never from incidental FK/RI
- * behavior.
+ * capability) → locked Exam authority read → deadline decision, so the
+ * canonical lock order Enrollment → Attempt → Exam holds on every caller and
+ * the 40001 + whole-tx retry comes from the DESIGNED lock, never from
+ * incidental FK/RI behavior. Since the exam-558-lock-mode-1 research the
+ * locked read is SHARED (FOR SHARE — see
+ * candidate-deadline-authority-share-lock.concurrency.test.ts): identical
+ * writer serialization and stale-snapshot abort, while same-exam candidate
+ * readers coexist.
  *
  * Schedules (no sleeps gate any outcome — interleavings are forced by
  * deferred park points inside the transaction composition and by an
@@ -646,9 +650,10 @@ describe("EXAM-558 — take/submit deadline authority vs concurrent closeAt chan
     // The candidate's submit arrives past the OLD closeAt (its stale
     // authority says "expired" — the pre-fix code froze durably in exactly
     // this interleaving). The extension commits while the orchestrator is
-    // parked at the EA seam. Post-fix, the reconciliation's Exam FOR UPDATE
-    // raises 40001 against the committed extension and the whole-tx retry
-    // completes the candidate's manual submit under the extended window.
+    // parked at the EA seam. Post-fix, the reconciliation's locked Exam
+    // authority read raises 40001 against the committed extension and the
+    // whole-tx retry completes the candidate's manual submit under the
+    // extended window.
     const closeAt = new Date(Date.now() + 60 * MINUTE_MS);
     const extendedCloseAt = new Date(closeAt.getTime() + 30 * MINUTE_MS);
     const fixture = await setupFixture(ctx, closeAt);
@@ -715,10 +720,10 @@ describe("EXAM-558 — take/submit deadline authority vs concurrent closeAt chan
     // Same freeze geometry through /take: the composition's injected now is
     // past the old closeAt, so the stale authority says "expired". The
     // extension commits while the take is parked between the EA seam and the
-    // reconciliation. The reconciliation's Exam FOR UPDATE must abort the
-    // stale pass (≥2 composition passes proves the whole-tx 40001 retry
-    // fired); the surviving pass observes the extended authority and does not
-    // freeze.
+    // reconciliation. The reconciliation's locked Exam authority read must
+    // abort the stale pass (≥2 composition passes proves the whole-tx 40001
+    // retry fired); the surviving pass observes the extended authority and
+    // does not freeze.
     const closeAt = new Date(Date.now() + 60 * MINUTE_MS);
     const extendedCloseAt = new Date(closeAt.getTime() + 30 * MINUTE_MS);
     const fixture = await setupFixture(ctx, closeAt);
