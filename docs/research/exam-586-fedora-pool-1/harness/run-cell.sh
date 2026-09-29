@@ -33,7 +33,8 @@ case "$POOL" in
   10|20|30) POOL_ENV="$POOL" ;;
   *) echo "FATAL: bad pool '$POOL'" >&2; exit 2 ;;
 esac
-case "$SCALE" in 50|100|200) ;; *) echo "FATAL: bad scale" >&2; exit 2 ;; esac
+case "$SCALE" in 20|50|100|200) ;; *) echo "FATAL: bad scale" >&2; exit 2 ;; esac
+# scale 20 is smoke-only (rig shakedown, never treatment — 02-experiment-schedule.md)
 
 # ── Isolation proof: the run dir must be under the experiment namespace ──
 case "$RUN_DIR" in
@@ -129,11 +130,11 @@ $COMPOSE exec -T db psql -U exam -d exam -At -c "SHOW server_version" > "$RUN_DI
 # ── 5. Driver setup (HTTP: course, questions, exams, publish) ──────────
 log "driver setup"
 docker run --rm --name "${PROJECT}-drv-setup" \
-  --network "${PROJECT}_exam-net" --ulimit nofile=4096:8192 \
+  --network "${PROJECT}_exam-net" --cap-add NET_ADMIN --ulimit nofile=4096:8192 \
   -v "$RUN_DIR:/data/run" \
   -e RUN_DIR=/data/run -e BASE_URL=http://web -e ORIGIN="$ORIGIN" \
   -e RUN_ID="$RUN_ID" -e POOL_DESC="$POOL" -e N="$SCALE" \
-  "$EXAM586_DRIVER_IMAGE" node /h/driver.mjs setup > "$RUN_DIR/driver-setup.log" 2>&1 \
+  "$EXAM586_DRIVER_IMAGE" setup > "$RUN_DIR/driver-setup.log" 2>&1 \
   || { log "FATAL driver setup failed"; echo "driver_setup_failed" > "$RUN_DIR/INVALID_REASON.txt"; exit 4; }
 
 # ── 6. Seed candidates (bulk SQL through docker exec; PG unpublished) ──
@@ -174,11 +175,11 @@ FROM pg_stat_database WHERE datname = current_database()" > "$RUN_DIR/pg-before.
 log "driver measure (pool=$POOL scale=$SCALE rep=$REP)"
 BURST_START="$(date --iso-8601=seconds)"
 docker run --rm --name "${PROJECT}-drv-measure" \
-  --network "${PROJECT}_exam-net" --ulimit nofile=4096:8192 \
+  --network "${PROJECT}_exam-net" --cap-add NET_ADMIN --ulimit nofile=4096:8192 \
   -v "$RUN_DIR:/data/run" \
   -e RUN_DIR=/data/run -e BASE_URL=http://web -e ORIGIN="$ORIGIN" \
   -e RUN_ID="$RUN_ID" -e POOL_DESC="$POOL" -e N="$SCALE" \
-  "$EXAM586_DRIVER_IMAGE" node /h/driver.mjs measure > "$RUN_DIR/driver-measure.log" 2>&1
+  "$EXAM586_DRIVER_IMAGE" measure > "$RUN_DIR/driver-measure.log" 2>&1
 DRIVER_EXIT=$?
 BURST_END="$(date --iso-8601=seconds)"
 
@@ -207,7 +208,7 @@ if [ "$DRIVER_EXIT" -ne 0 ]; then
 fi
 
 RUN_ID="$RUN_ID" N="$SCALE" COMPOSE_ARGS="--env-file $RUN_DIR/env -f $REPO/docker-compose.yml -f $HARNESS/compose.586-research.yml" \
-  node "$HARNESS/oracles.mjs" "$RUN_DIR" || {
+  node "$HARNESS/oracles.mjs" "$RUN_DIR" > "$RUN_DIR/oracle.log" 2>&1 || {
     [ "$VALID" = "valid" ] && { VALID="INVALID"; INVALID_REASON="correctness_oracle_failed (§30: performance result disqualified)"; echo "$INVALID_REASON" > "$RUN_DIR/INVALID_REASON.txt"; }
   }
 
@@ -240,7 +241,7 @@ cat > "$RUN_DIR/meta.json" <<EOF
   "docker": "$(docker version --format '{{.Server.Version}}')",
   "compose": "$(docker compose version --short)",
   "pool_mode": "$POOL",
-  "effective_pool_max": ${POOL_ENV:-"postgres.js_default_10"},
+  "effective_pool_max": "${POOL_ENV:-postgres.js_default_10}",
   "scale": $SCALE,
   "replicate": $REP,
   "app_mode": "production",

@@ -12,8 +12,10 @@
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { validate as validateUuid } from "node:crypto";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const validateUuid = (s) => typeof s === "string" && UUID_RE.test(s);
 const RUN_DIR = process.argv[2];
 if (!RUN_DIR) {
   console.error("usage: oracles.mjs <runDir>");
@@ -39,10 +41,12 @@ for (const id of [examId, orgId]) {
   }
 }
 
-/** Runs one SQL statement, returns TSV rows (first field = col name when header). */
+/** Runs one SQL statement, returns pipe-separated rows. */
 function psqlRows(sql) {
+  // The SQL contains single quotes only (UUID literals, status strings) —
+  // safe inside double quotes; real newlines are fine for psql -c.
   const out = execSync(
-    `docker compose -p exam-586 ${COMPOSE_ARGS} exec -T db psql -U exam -d exam -At -F '|' -v ON_ERROR_STOP=1 -c ${JSON.stringify(sql)}`,
+    `docker compose -p exam-586 ${COMPOSE_ARGS} exec -T db psql -U exam -d exam -At -F '|' -v ON_ERROR_STOP=1 -c "${sql}"`,
     { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
   return out
@@ -103,7 +107,7 @@ if (dupTerminal !== 0)
 // exam_enrollments pins candidateId ↔ userId; attempts must map 1:1 onto the
 // seeded candidates with the deterministic score and answer content.
 const attRows = psqlRows(
-  `SELECT a.id::text, e.candidate_id::text, a.score::text,
+  `SELECT a.id::text, e.candidate_id::text, a.total_score::text,
           COALESCE(a.answers::text, '[]')
    FROM exam_attempts a
    JOIN exam_enrollments e ON e.candidate_id = a.candidate_id AND e.exam_id = a.exam_id

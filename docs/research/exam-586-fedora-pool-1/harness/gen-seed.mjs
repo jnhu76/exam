@@ -11,7 +11,11 @@
  *
  * Usage: gen-seed.mjs <runDir> <orgId> <examId> <warmupExamId> <N>
  */
-import { randomUUID, validate as validateUuid } from "node:crypto";
+import { randomUUID } from "node:crypto";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const validateUuid = (s) => UUID_RE.test(s);
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -128,6 +132,7 @@ writeFileSync(
   JSON.stringify(
     {
       candidates: candidates.map((c) => ({
+        i: c.i,
         username: c.username,
         password: c.password,
         ip: c.ip,

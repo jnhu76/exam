@@ -306,12 +306,34 @@ async function setup() {
 }
 
 // ─────────────────────────── measure mode ──────────────────────────
+import { execSync } from "node:child_process";
+
+/**
+ * Binds each candidate's secondary source IP to the container interface so
+ * the per-candidate identities reach nginx as real distinct $remote_addr
+ * values. Requires NET_ADMIN (`docker run --cap-add NET_ADMIN`); "File
+ * exists" is tolerated for idempotent re-runs.
+ */
+function bindCandidateIps(ips, iface) {
+  for (const ip of [...new Set(ips)]) {
+    try {
+      execSync(`ip addr add ${ip}/16 dev ${iface}`, { stdio: "pipe" });
+    } catch (err) {
+      if (!String(err.stderr ?? err.message).includes("File exists")) throw err;
+    }
+  }
+}
+
 async function measure() {
   if (!N) fail("measure requires N");
   const { warmup } = readJson("candidates.json");
   const candidates = readJson("candidates.json").candidates;
   if (candidates.length !== N)
     fail(`candidate population mismatch ${candidates.length} != ${N}`);
+  bindCandidateIps(
+    candidates.map((c) => c.ip),
+    process.env.DRIVER_IFACE ?? "eth0",
+  );
 
   const samples = new Samples(join(RUN_DIR, "requests.jsonl"));
   const base = { run_id: RUN_ID, pool: POOL_DESC, n: SCALE };
