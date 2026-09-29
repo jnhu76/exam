@@ -18,7 +18,7 @@
     "test": "turbo test",
     "coverage": "turbo coverage",
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
-    "db:down": "docker compose -f docker-compose.dev.yml down",
+    "db:down": "docker compose -f docker-compose.dev.yml down -v",
     "db:reset": "docker compose -f docker-compose.dev.yml down -v && docker compose -f docker-compose.dev.yml up -d",
     "db:generate": "pnpm --filter @exam/db db:generate",
     "db:migrate": "pnpm --filter @exam/db db:migrate",

@@ -64,8 +64,8 @@ Vite 开发服务器会自动把 `/api/*` 请求代理到 API。
 | 命令 | 用途 |
 | --- | --- |
 | `pnpm db:up` | 启动/复用开发容器：PostgreSQL + Redis，宿主机端口仅绑定环回（`DB_HOST_PORT` / `REDIS_HOST_PORT`，默认 5432 / 6379） |
-| `pnpm db:down` | 拆除开发 Compose 栈（`docker compose down`）——开发数据库状态是一次性的，之后不可再访问 |
-| `pnpm db:reset` | 拆除并立即启动全新栈；数据重建用 `pnpm db:migrate` + `pnpm db:seed` |
+| `pnpm db:down` | 拆除开发 Compose 栈并销毁其一次性卷/数据（`docker compose down -v`）——开发数据库状态被销毁，不会保留 |
+| `pnpm db:reset` | 销毁一次性栈/卷并立即启动全新栈；数据重建用 `pnpm db:migrate` + `pnpm db:seed` |
 | `pnpm db:migrate` | 执行迁移 |
 | `pnpm db:push` | 直接推送 schema 变更 |
 | `pnpm db:studio` | 打开 Drizzle Studio |
@@ -73,9 +73,8 @@ Vite 开发服务器会自动把 `/api/*` 请求代理到 API。
 
 开发数据库状态显式**一次性**：Postgres 容器没有命名卷。`stop` / `restart` /
 宿主机重启后再跑 `pnpm db:up` 会复用既有容器并保留数据；`pnpm db:down`
-移除容器，下次 `db:up` 会挂载全新的匿名卷——两种情况下旧数据都不可再访问
-（测试 `exam_test` 库由测试 harness 自建自愈）。数据重建 =
-`pnpm db:migrate` + `pnpm db:seed`。
+拆除栈并**销毁**其一次性容器卷/数据（`down -v`）。数据重建 =
+`pnpm db:migrate` + `pnpm db:seed`（测试 `exam_test` 库由测试 harness 自建自愈）。
 
 开发环境的 `DATABASE_URL` 由统一 DB resolver（`packages/db/src/databaseUrl.ts`）根据
 `DB_HOST_PORT` 构造；如果显式设置 `DATABASE_URL`，则显式值优先。

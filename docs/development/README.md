@@ -71,8 +71,8 @@ The Vite dev server proxies `/api/*` requests to the API automatically.
 | Command | Purpose |
 | --- | --- |
 | `pnpm db:up` | Start/reuse the dev containers: PostgreSQL + Redis, loopback-only host ports (`DB_HOST_PORT` / `REDIS_HOST_PORT`, defaults 5432 / 6379) |
-| `pnpm db:down` | Tear down the dev Compose stack (`docker compose down`) — dev database state is disposable and NOT reachable afterwards |
-| `pnpm db:reset` | Tear down and immediately start a fresh stack; reconstruct data with `pnpm db:migrate` + `pnpm db:seed` |
+| `pnpm db:down` | Tear down the dev Compose stack and destroy its disposable volumes/data (`docker compose down -v`) — dev database state is destroyed, not kept |
+| `pnpm db:reset` | Destroy the disposable stack/volumes and immediately start a fresh stack; reconstruct data with `pnpm db:migrate` + `pnpm db:seed` |
 | `pnpm db:migrate` | Run migrations |
 | `pnpm db:push` | Push schema changes directly |
 | `pnpm db:studio` | Open Drizzle Studio |
@@ -83,12 +83,12 @@ production rehearsal from this checkout can never recreate its containers.
 Dev database state is explicitly **disposable**: the Postgres container
 holds no named volume. `pnpm db:up` after `stop` / `restart` / a host
 reboot reuses the existing container and keeps its data; `pnpm db:down`
-removes the container, and the next `db:up` mounts a fresh anonymous
-volume — the old state is unreachable either way (the test `exam_test`
-database is self-provisioned by the test harness). Reconstruction is
-`pnpm db:migrate` + `pnpm db:seed`. A dev stack created before the pin
-lives under project `exam` and is untouched by `pnpm db:up`; start it
-explicitly with `docker compose -p exam -f docker-compose.dev.yml up -d`.
+tears down the stack AND destroys its disposable container volumes/data
+(`down -v`). Reconstruction is `pnpm db:migrate` + `pnpm db:seed` (the
+test `exam_test` database is self-provisioned by the test harness). A dev
+stack created before the pin lives under project `exam` and is untouched
+by `pnpm db:up`; start it explicitly with
+`docker compose -p exam -f docker-compose.dev.yml up -d`.
 
 The dev `DATABASE_URL` is constructed from `DB_HOST_PORT` by the single
 source DB resolver (`packages/db/src/databaseUrl.ts`). An explicit
