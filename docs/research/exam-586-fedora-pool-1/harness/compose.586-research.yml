@@ -1,0 +1,27 @@
+# EXAM-586 RESEARCH ONLY / NON_CANONICAL compose override (#586).
+#
+# Used exclusively by the exam-586 experiment harness:
+#   docker compose -p exam-586 --env-file <run env> \
+#     -f docker-compose.yml -f compose.586-research.yml ...
+#
+# It adds ONLY:
+#   1. the two research env vars forwarded to the app (empty = unset =
+#      byte-identical canonical behavior; values validated fail-fast in
+#      apps/api/src/lib/research586.ts);
+#   2. a pinned /16 subnet for exam-net so TRUSTED_PROXY_CIDRS and the
+#      driver's per-candidate secondary source IPs are deterministic
+#      (the production compose itself leaves the subnet to Docker's pool).
+#
+# The production docker-compose.yml is never modified by this experiment.
+
+services:
+  app:
+    environment:
+      EXAM_586_RESEARCH_POOL_MAX: ${EXAM_586_RESEARCH_POOL_MAX:-}
+      EXAM_586_TIMING: ${EXAM_586_TIMING:-}
+
+networks:
+  exam-net:
+    ipam:
+      config:
+        - subnet: 172.31.0.0/16

@@ -79,6 +79,11 @@ import {
   createTimeAdjustmentRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
+// EXAM-586 RESEARCH ONLY / NON_CANONICAL (#586): neutral submit timing seam.
+import {
+  beginResearch586Submit,
+  endResearch586Submit,
+} from "../lib/research586.js";
 import { formatZodError, getRequestContext } from "./helpers.js";
 import { reconcileExamForRead } from "./reconciliation.js";
 // #301 §21: the frozen snapshot question is the authority for the answer
@@ -1132,36 +1137,51 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = getRequestContext(request);
-      const { attemptId } = parsed.data;
+      // EXAM-586 RESEARCH ONLY / NON_CANONICAL: neutral per-submit timing
+      // record (no-op unless EXAM_586_TIMING=1); the structured
+      // EXAM586_TIMING line is emitted once, after the grading transaction
+      // has fully resolved.
+      beginResearch586Submit();
+      let submitHttpStatus: number | null = null;
+      try {
+        const ctx = getRequestContext(request);
+        const { attemptId } = parsed.data;
 
-      const candidateProfile = await createCandidateRepo(
-        fastify.db,
-      ).findByUserId(ctx, ctx.actorId);
-      if (!candidateProfile) {
-        throw new NotFoundError("Candidate profile not found");
+        const candidateProfile = await createCandidateRepo(
+          fastify.db,
+        ).findByUserId(ctx, ctx.actorId);
+        if (!candidateProfile) {
+          throw new NotFoundError("Candidate profile not found");
+        }
+
+        const now = fastify.now();
+        const { attempt } = await submitAndGradeAttempt(
+          fastify.db,
+          ctx,
+          attemptId,
+          candidateProfile.id,
+          now,
+          { request },
+        );
+        const exam = (await createExamRepo(fastify.db).findById(
+          ctx,
+          attempt.examId,
+        )) as Exam | null;
+        if (!exam) {
+          throw new NotFoundError("Exam not found");
+        }
+
+        const responseBody = LoadAttemptResponseSchema.parse(
+          toCandidateAttemptResponse(attempt, now, exam),
+        );
+        submitHttpStatus = 200;
+        return responseBody;
+      } finally {
+        endResearch586Submit({
+          reqId: request.id,
+          httpStatus: submitHttpStatus,
+        });
       }
-
-      const now = fastify.now();
-      const { attempt } = await submitAndGradeAttempt(
-        fastify.db,
-        ctx,
-        attemptId,
-        candidateProfile.id,
-        now,
-        { request },
-      );
-      const exam = (await createExamRepo(fastify.db).findById(
-        ctx,
-        attempt.examId,
-      )) as Exam | null;
-      if (!exam) {
-        throw new NotFoundError("Exam not found");
-      }
-
-      return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt, now, exam),
-      );
     },
   );
 

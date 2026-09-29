@@ -1,0 +1,12 @@
+# EXAM-586 RESEARCH ONLY driver image (#586): node + iproute2 so the
+# container can bind per-candidate secondary source IPs on exam-net
+# (NET_ADMIN is granted at `docker run`, never baked in).
+FROM node:24.15.0-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends iproute2 \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /h
+COPY driver.mjs ./driver.mjs
+ENTRYPOINT ["node", "/h/driver.mjs"]

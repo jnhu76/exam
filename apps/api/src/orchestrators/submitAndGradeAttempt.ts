@@ -1,7 +1,7 @@
 import type { RequestContext, ExamAttempt } from "@exam/domain";
 import type { FastifyRequest } from "fastify";
 import { InvalidStateTransitionError, NotFoundError } from "@exam/domain";
-import type { Database } from "@exam/db/src/types.js";
+import type { Database, TransactionDatabase } from "@exam/db/src/types.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -24,6 +24,13 @@ import {
   createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
+// EXAM-586 RESEARCH ONLY / NON_CANONICAL: neutral performance.now() marks.
+// Inert unless EXAM_586_TIMING=1; never touches the postgres.js Query objects.
+import {
+  countResearch586TxInvocation,
+  markResearch586,
+  setResearch586AttemptId,
+} from "../lib/research586.js";
 
 export interface SubmitAndGradeResult {
   attempt: ExamAttempt;
@@ -59,205 +66,255 @@ export async function submitAndGradeAttempt(
   now: Date,
   audit?: { request: FastifyRequest },
 ): Promise<SubmitAndGradeResult> {
+  // EXAM-586 RESEARCH ONLY: per-request timing marks (no-op when disabled).
+  setResearch586AttemptId(attemptId);
+  markResearch586("beforeTx");
   const alreadyGraded = await executeInTransaction(db, async (tx) => {
-    // P3-FORMAL-P0-D2: build the engine repo pair ONCE, mint the
-    // transaction-affine EA capability via the canonical seam (Enrollment
-    // FOR UPDATE before Attempt FOR UPDATE), and thread the SAME repo
-    // object instances + capability to every affinity-dependent consumer.
-    const txAttemptRepo = createAttemptRepo(tx);
-    const txEnrollmentRepo = createEnrollmentRepo(tx);
-    const { exams, enrollments, attempts } = createExamEngineRepos(
-      {
-        examRepo: createExamRepo(tx),
-        attemptRepo: txAttemptRepo,
-        enrollmentRepo: txEnrollmentRepo,
-      },
-      ctx,
-    );
-    const cap = await lockEnrollmentAndAttempt(
-      enrollments,
-      attempts,
-      attemptId,
-    );
-
-    // Re-read mutable attempt state inside this tx (the seam already holds the
-    // Attempt lock; REPEATABLE READ sees own writes). Ownership check + status
-    // branch use this fresh read.
-    const lockedAttempt = await attempts.findById(attemptId);
-    if (!lockedAttempt || lockedAttempt.candidateId !== candidateProfileId) {
-      throw new NotFoundError("Attempt not found");
-    }
-
-    const status = lockedAttempt.status;
-    // `graded` is the only truly terminal, nothing-more-to-do state.
-    if (status === "graded") {
-      return true;
-    }
-    // `in_progress`/`disrupted` need the submit transition first; `submitted`
-    // is a crash-recovery case (submit landed but grading didn't) and is
-    // graded directly without re-submitting. Both then run the SAME
-    // locked-tx grading block below (the freeze barrier).
-    if (
-      status === "in_progress" ||
-      status === "disrupted" ||
-      status === "submitted"
-    ) {
-      const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-        createAttemptGradingEntryRepo(tx),
+    // EXAM-586 RESEARCH ONLY: counted on EVERY invocation (executeInTransaction
+    // re-invokes this callback per 40001/40P01 retry); txEnter/txExit are
+    // overwritten per attempt, so TX_HOLD decomposes the COMMITTING attempt
+    // while `retries` carries the invocation count separately.
+    countResearch586TxInvocation();
+    markResearch586("txEnter");
+    try {
+      return await runSubmitAndGradeTx(tx, {
         ctx,
-      );
-
-      // R1/R9: build interruption repos for resolution. These are needed for
-      // both reconciliation and submit terminalization.
-      const episodeRepo = createInterruptionEpisodeRepoAdapter(
-        createAttemptInterruptionRepo(tx),
-        ctx,
-      );
-      const eventRepo = createInterruptionEventRepoAdapter(
-        createAttemptInterruptionEventRepo(tx),
-        ctx,
-      );
-
-      // Build the resolution based on the locked attempt's status.
-      // For disrupted: active_interruption with candidate_submit_terminalization.
-      // For in_progress: mode none (no active interruption).
-      const buildResolution = (
-        attemptStatus: ExamAttempt["status"],
-      ): SubmitInterruptionResolution => {
-        if (attemptStatus === "disrupted") {
-          return {
-            mode: "active_interruption",
-            episodeRepo,
-            eventRepo,
-            hint: {
-              policy:
-                lockedAttempt.interruptionTimingPolicySnapshot?.policy ??
-                "strict",
-              eligibleSeconds: null,
-              adjustmentId: null,
-              reasonCode: "candidate_submit_terminalization",
-            },
-          };
-        }
-        return { mode: "none", episodeRepo, eventRepo };
-      };
-
-      // Lazy deadline reconciliation before submit. If the attempt
-      // is past its effective deadline, freeze it as deadline-submitted
-      // (submittedAt = effectiveDeadline, submissionReason='deadline') and
-      // return that frozen result. The candidate's submit then returns the
-      // existing deadline-submitted snapshot — no new answer payload accepted.
-      //
-      // After reconciliation the returned attempt carries the authoritative
-      // current state. Use its status directly instead of the stale
-      // pre-reconciliation `status` captured above, so we never issue a
-      // redundant second submitAttempt call.
-      let currentStatus: ExamAttempt["status"] = status;
-      if (status === "in_progress" || status === "disrupted") {
-        const reconciled = await ensureAttemptDeadlineReconciled(
-          exams,
-          enrollments,
-          attempts,
-          gradingWorksetRepo,
-          cap,
-          now,
-          buildResolution(status),
-        );
-        const reconciledStatus = reconciled.status;
-        // If reconciliation already froze the attempt, skip the remaining
-        // submit+grade work. This avoids redundant readGradingSnapshot,
-        // computeGradingResult, and finalizeGrading calls that would extend
-        // the FOR UPDATE lock unnecessarily.
-        if (reconciledStatus === "graded" || reconciledStatus === "submitted") {
-          return true;
-        }
-        currentStatus = reconciledStatus;
-      }
-
-      if (currentStatus === "in_progress" || currentStatus === "disrupted") {
-        // Reconciliation did not freeze (deadline not yet expired), or this
-        // is the `submitted` crash-recovery path that skipped reconciliation.
-        // Submit flips the row to `submitted` under the same lock. After this,
-        // any concurrent saveAnswer sees `submitted` and is rejected
-        // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.
-        // P3-L0-2E: submitAttempt owns grading workset materialization.
-        await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
-          source: "candidate",
-          minSubmitAfterStartMinutes:
-            (await exams.findById(lockedAttempt.examId))
-              ?.minSubmitAfterStartMinutes ?? null,
-          resolution: buildResolution(currentStatus),
-        });
-        if (audit) {
-          await recordAtomicHttpAudit(tx, audit.request, ctx, {
-            action: "attempt.submit",
-            targetType: "attempt",
-            targetId: attemptId,
-          });
-        }
-      }
-
-      // Branch on the authoritative gradingStatus established at
-      // the submit/freeze barrier. A pending_manual attempt MUST hold at
-      // submitted — the manual-grading queue owns the final transition. No
-      // question-type rescan here; the freeze barrier is the single
-      // classification authority. Both the fresh-submit case (submitAttempt
-      // just wrote pending_manual) and the crash-recovery `submitted` case
-      // (carrying its previously-established gradingStatus) are covered.
-      const postSubmit = await attempts.findByIdForUpdate(attemptId);
-      if (!postSubmit) {
-        throw new NotFoundError("Attempt not found after submit");
-      }
-
-      if (postSubmit.gradingStatus === "pending_manual") {
-        return false;
-      }
-
-      // Re-read the grading snapshot from the SAME transaction so the answers
-      // feeding the score are the locked, post-submit answers. This is the
-      // freeze barrier: the score is derived from exactly the answer set that
-      // existed when the submit lock was held. (For the crash-recovery
-      // `submitted` path this re-runs objective auto-grading deterministically.)
-      const snapshot = await readGradingSnapshot(
-        exams,
-        enrollments,
-        attempts,
         attemptId,
-      );
-      if (!snapshot) {
-        throw new NotFoundError("Attempt not found after submit");
-      }
-
-      // Slice 4: finalizeGrading is the single terminal authority — it loads
-      // the grading workset and aggregates via `aggregateGradingEntries`. No
-      // externally computed result is supplied (that would be a second score
-      // authority). The gradingWorksetRepo is tx-scoped (created above) and
-      // reads the same committed entries the freeze barrier materialized.
-      // P3-FORMAL-P0-D2: the capability is the EA protocol authority threaded
-      // into finalizeGrading → finalizeTerminalGrading.
-      await finalizeGrading(
-        enrollments,
-        attempts,
-        gradingWorksetRepo,
-        cap,
-        snapshot.exam,
+        candidateProfileId,
         now,
-      );
-      return false;
+        audit,
+      });
+    } finally {
+      markResearch586("txExit");
     }
-    throw new InvalidStateTransitionError(
-      `Cannot submit attempt in ${status} state`,
-    );
   });
+  markResearch586("txResolved");
 
   // Read the final committed attempt state for the response. Outside the tx
   // is safe here: this is a pure read of the now-committed result, and no
   // further mutation depends on it.
+  markResearch586("beforePostCommitRead");
   const attemptRepo = createAttemptRepo(db);
   const attempt = await attemptRepo.findById(ctx, attemptId);
+  markResearch586("afterPostCommitRead");
   if (!attempt) {
     throw new NotFoundError("Attempt not found after grading");
   }
 
   return { attempt: attempt as ExamAttempt, alreadyGraded };
+}
+
+/**
+ * The submit/grading transaction body (ADR-008 freeze barrier), executed by
+ * {@link submitAndGradeAttempt} inside executeInTransaction. Split out as a
+ * named procedure so the retry/acquire wrapper stays thin; the body is the
+ * original transaction scope verbatim (plus EXAM-586 research timing marks).
+ */
+async function runSubmitAndGradeTx(
+  tx: TransactionDatabase,
+  args: {
+    ctx: RequestContext;
+    attemptId: string;
+    candidateProfileId: string;
+    now: Date;
+    audit?: { request: FastifyRequest } | undefined;
+  },
+): Promise<boolean> {
+  const { ctx, attemptId, candidateProfileId, now, audit } = args;
+  // P3-FORMAL-P0-D2: build the engine repo pair ONCE, mint the
+  // transaction-affine EA capability via the canonical seam (Enrollment
+  // FOR UPDATE before Attempt FOR UPDATE), and thread the SAME repo
+  // object instances + capability to every affinity-dependent consumer.
+  const txAttemptRepo = createAttemptRepo(tx);
+  const txEnrollmentRepo = createEnrollmentRepo(tx);
+  const { exams, enrollments, attempts } = createExamEngineRepos(
+    {
+      examRepo: createExamRepo(tx),
+      attemptRepo: txAttemptRepo,
+      enrollmentRepo: txEnrollmentRepo,
+    },
+    ctx,
+  );
+  markResearch586("beforeLock");
+  const cap = await lockEnrollmentAndAttempt(enrollments, attempts, attemptId);
+  markResearch586("afterLock");
+
+  // Re-read mutable attempt state inside this tx (the seam already holds the
+  // Attempt lock; REPEATABLE READ sees own writes). Ownership check + status
+  // branch use this fresh read.
+  const lockedAttempt = await attempts.findById(attemptId);
+  if (!lockedAttempt || lockedAttempt.candidateId !== candidateProfileId) {
+    throw new NotFoundError("Attempt not found");
+  }
+
+  const status = lockedAttempt.status;
+  // `graded` is the only truly terminal, nothing-more-to-do state.
+  if (status === "graded") {
+    return true;
+  }
+  // `in_progress`/`disrupted` need the submit transition first; `submitted`
+  // is a crash-recovery case (submit landed but grading didn't) and is
+  // graded directly without re-submitting. Both then run the SAME
+  // locked-tx grading block below (the freeze barrier).
+  if (
+    status === "in_progress" ||
+    status === "disrupted" ||
+    status === "submitted"
+  ) {
+    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+      createAttemptGradingEntryRepo(tx),
+      ctx,
+    );
+
+    // R1/R9: build interruption repos for resolution. These are needed for
+    // both reconciliation and submit terminalization.
+    const episodeRepo = createInterruptionEpisodeRepoAdapter(
+      createAttemptInterruptionRepo(tx),
+      ctx,
+    );
+    const eventRepo = createInterruptionEventRepoAdapter(
+      createAttemptInterruptionEventRepo(tx),
+      ctx,
+    );
+
+    // Build the resolution based on the locked attempt's status.
+    // For disrupted: active_interruption with candidate_submit_terminalization.
+    // For in_progress: mode none (no active interruption).
+    const buildResolution = (
+      attemptStatus: ExamAttempt["status"],
+    ): SubmitInterruptionResolution => {
+      if (attemptStatus === "disrupted") {
+        return {
+          mode: "active_interruption",
+          episodeRepo,
+          eventRepo,
+          hint: {
+            policy:
+              lockedAttempt.interruptionTimingPolicySnapshot?.policy ??
+              "strict",
+            eligibleSeconds: null,
+            adjustmentId: null,
+            reasonCode: "candidate_submit_terminalization",
+          },
+        };
+      }
+      return { mode: "none", episodeRepo, eventRepo };
+    };
+
+    // Lazy deadline reconciliation before submit. If the attempt
+    // is past its effective deadline, freeze it as deadline-submitted
+    // (submittedAt = effectiveDeadline, submissionReason='deadline') and
+    // return that frozen result. The candidate's submit then returns the
+    // existing deadline-submitted snapshot — no new answer payload accepted.
+    //
+    // After reconciliation the returned attempt carries the authoritative
+    // current state. Use its status directly instead of the stale
+    // pre-reconciliation `status` captured above, so we never issue a
+    // redundant second submitAttempt call.
+    let currentStatus: ExamAttempt["status"] = status;
+    if (status === "in_progress" || status === "disrupted") {
+      markResearch586("beforeReconciliation");
+      const reconciled = await ensureAttemptDeadlineReconciled(
+        exams,
+        enrollments,
+        attempts,
+        gradingWorksetRepo,
+        cap,
+        now,
+        buildResolution(status),
+      );
+      markResearch586("afterReconciliation");
+      const reconciledStatus = reconciled.status;
+      // If reconciliation already froze the attempt, skip the remaining
+      // submit+grade work. This avoids redundant readGradingSnapshot,
+      // computeGradingResult, and finalizeGrading calls that would extend
+      // the FOR UPDATE lock unnecessarily.
+      if (reconciledStatus === "graded" || reconciledStatus === "submitted") {
+        return true;
+      }
+      currentStatus = reconciledStatus;
+    }
+
+    if (currentStatus === "in_progress" || currentStatus === "disrupted") {
+      // Reconciliation did not freeze (deadline not yet expired), or this
+      // is the `submitted` crash-recovery path that skipped reconciliation.
+      // Submit flips the row to `submitted` under the same lock. After this,
+      // any concurrent saveAnswer sees `submitted` and is rejected
+      // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.
+      // P3-L0-2E: submitAttempt owns grading workset materialization.
+      markResearch586("beforeSubmitAttempt");
+      await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
+        source: "candidate",
+        minSubmitAfterStartMinutes:
+          (await exams.findById(lockedAttempt.examId))
+            ?.minSubmitAfterStartMinutes ?? null,
+        resolution: buildResolution(currentStatus),
+      });
+      markResearch586("afterSubmitAttempt");
+      if (audit) {
+        markResearch586("beforeAudit");
+        await recordAtomicHttpAudit(tx, audit.request, ctx, {
+          action: "attempt.submit",
+          targetType: "attempt",
+          targetId: attemptId,
+        });
+        markResearch586("afterAudit");
+      }
+    }
+
+    // Branch on the authoritative gradingStatus established at
+    // the submit/freeze barrier. A pending_manual attempt MUST hold at
+    // submitted — the manual-grading queue owns the final transition. No
+    // question-type rescan here; the freeze barrier is the single
+    // classification authority. Both the fresh-submit case (submitAttempt
+    // just wrote pending_manual) and the crash-recovery `submitted` case
+    // (carrying its previously-established gradingStatus) are covered.
+    const postSubmit = await attempts.findByIdForUpdate(attemptId);
+    if (!postSubmit) {
+      throw new NotFoundError("Attempt not found after submit");
+    }
+
+    if (postSubmit.gradingStatus === "pending_manual") {
+      return false;
+    }
+
+    // Re-read the grading snapshot from the SAME transaction so the answers
+    // feeding the score are the locked, post-submit answers. This is the
+    // freeze barrier: the score is derived from exactly the answer set that
+    // existed when the submit lock was held. (For the crash-recovery
+    // `submitted` path this re-runs objective auto-grading deterministically.)
+    markResearch586("beforeGradingSnapshot");
+    const snapshot = await readGradingSnapshot(
+      exams,
+      enrollments,
+      attempts,
+      attemptId,
+    );
+    markResearch586("afterGradingSnapshot");
+    if (!snapshot) {
+      throw new NotFoundError("Attempt not found after submit");
+    }
+
+    // Slice 4: finalizeGrading is the single terminal authority — it loads
+    // the grading workset and aggregates via `aggregateGradingEntries`. No
+    // externally computed result is supplied (that would be a second score
+    // authority). The gradingWorksetRepo is tx-scoped (created above) and
+    // reads the same committed entries the freeze barrier materialized.
+    // P3-FORMAL-P0-D2: the capability is the EA protocol authority threaded
+    // into finalizeGrading → finalizeTerminalGrading.
+    markResearch586("beforeFinalize");
+    await finalizeGrading(
+      enrollments,
+      attempts,
+      gradingWorksetRepo,
+      cap,
+      snapshot.exam,
+      now,
+    );
+    markResearch586("afterFinalize");
+    return false;
+  }
+  throw new InvalidStateTransitionError(
+    `Cannot submit attempt in ${status} state`,
+  );
 }
