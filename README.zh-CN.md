@@ -59,6 +59,10 @@ docker compose --env-file .env.production up -d        # 拉取预构建镜像�
 docker compose --env-file .env.production ps           # 等待 app / web / db 进入 healthy，nginx 为 running
 ```
 
+每个 Exam 版本都会发布一对版本号一致的成对镜像（API 镜像与 Web 镜像）。
+`init-production-env.mjs` 会依据 `.release-version` 自动填写两个镜像引用，
+正常安装不需要在两者之间做选择。
+
 初始化第一个 Admin。系统没有公开自助注册入口：
 
 ```bash

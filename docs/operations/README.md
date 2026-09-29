@@ -23,8 +23,9 @@ runbook §17 for details.
 
 ## Upgrade and Uninstall
 
-Upgrades use the prebuilt image pin: `git pull` → re-generate env →
-pull new image → `docker compose up -d` (migrations run on app start).
+Upgrades use the prebuilt release image pins (`EXAM_IMAGE` /
+`EXAM_WEB_IMAGE`): `git pull` → re-generate env → pull the new release
+images → `docker compose up -d` (migrations run on app start).
 
 See
 [`upgrade-and-uninstall.md`](../deployment/upgrade-and-uninstall.md)

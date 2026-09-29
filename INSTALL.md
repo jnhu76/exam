@@ -41,7 +41,16 @@ docker compose --env-file .env.production up -d
 This pulls the prebuilt release images and starts the nginx edge, the
 static web server, the API, and PostgreSQL (#585 topology; nginx is the
 only published service, on `EXAM_PORT`, default 80).
-No local build is required. Watch the startup logs:
+No local build is required.
+
+Each Exam release publishes a matched image pair — the API image and the
+Web image under one version tag. `init-production-env.mjs` already pinned
+both in `.env.production` (`EXAM_IMAGE` / `EXAM_WEB_IMAGE`), so a normal
+install never chooses between them; manually editing the pins is an
+advanced override (registry mirror, offline `docker load`) covered in the
+[deployment guide](docs/deployment/README.md).
+
+Watch the startup logs:
 
 ```bash
 docker compose --env-file .env.production logs --tail=50 -f app

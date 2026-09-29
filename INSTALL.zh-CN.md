@@ -39,6 +39,13 @@ docker compose --env-file .env.production up -d
 
 该命令会拉取预构建发布镜像，并启动 nginx 边缘代理、静态 Web 服务、API 与 PostgreSQL
 （#585 拓扑；nginx 是唯一对外发布的服务，监听 `EXAM_PORT`，默认 80）。无需本地构建。
+
+每个 Exam 版本都会发布一对版本号一致的成对镜像（API 镜像与 Web 镜像）。
+`init-production-env.mjs` 已经把两个镜像引用写入 `.env.production`
+（`EXAM_IMAGE` / `EXAM_WEB_IMAGE`），正常安装不需要在两者之间做选择；
+手动修改镜像引用属于高级覆盖场景（registry mirror、离线 `docker load`），
+详见[部署指南](docs/deployment/README.md)。
+
 可以查看启动日志：
 
 ```bash

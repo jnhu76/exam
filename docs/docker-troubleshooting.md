@@ -30,8 +30,8 @@ The build downloads packages from `registry.npmjs.org` by default. Override
 with a China registry (e.g. npmmirror):
 
 ```bash
-# The operator stack runs a prebuilt image (EXAM_IMAGE); building THIS
-# checkout is an explicit docker build:
+# The operator stack runs the prebuilt release images (EXAM_IMAGE /
+# EXAM_WEB_IMAGE); building THIS checkout is an explicit docker build:
 docker build --target runner \
   --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
   -t exam-local:dev .

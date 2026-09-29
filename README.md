@@ -69,6 +69,11 @@ docker compose --env-file .env.production up -d        # pull prebuilt images, s
 docker compose --env-file .env.production ps           # wait for app + web + db (healthy), nginx (running)
 ```
 
+Each Exam release publishes a matched pair of images — the API image and
+the Web image under the same version tag. `init-production-env.mjs` fills
+both image references from `.release-version`, so a normal install never
+chooses between them.
+
 Bootstrap the first Admin — there is no public self-register path:
 
 ```bash

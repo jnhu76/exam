@@ -65,8 +65,8 @@ Upgrade prerequisites:
    `./scripts/db-backup.sh backup /mnt/nas/exam-$(date +%Y%m%d).dump`
    (see the runbook backup section). A pre-upgrade backup is the rollback
    precondition (§2.4).
-3. Ensure the target image is available: online installs `pull` it
-   automatically; air-gapped installs must `docker load` it beforehand
+3. Ensure the target release images are available: online installs `pull`
+   them automatically; air-gapped installs must `docker load` them beforehand
    (runbook §3 — the loaded references must equal `EXAM_IMAGE` /
    `EXAM_WEB_IMAGE`).
 
@@ -102,7 +102,7 @@ docker compose -p exam -f docker-compose.yml down --remove-orphans
 #     (§1) — `down` never touches it. Idempotent: a no-op once no old
 #     `exam` containers remain.
 
-# 1. Re-pin the image (operator image pin follows .release-version):
+# 1. Re-pin the release images (canonical pins follow .release-version):
 node scripts/init-production-env.mjs
 #   - canonical pin (ghcr.io/jnhu76/exam:vX.Y.Z) -> re-derived to the NEW
 #     version automatically;
@@ -112,7 +112,7 @@ node scripts/init-production-env.mjs
 # 2. Pre-upgrade backup (runbook backup section).
 ./scripts/db-backup.sh backup /mnt/nas/exam-$(date +%Y%m%d).dump
 
-# 3. Pull the new pinned image (no-op when already loaded locally):
+# 3. Pull the new pinned release images (no-op when already loaded locally):
 docker compose --env-file .env.production pull
 
 # 4. Upgrade (migrations run automatically on app start — see §2.3):
@@ -155,7 +155,7 @@ docker compose --env-file .env.production up -d
 
 - Migrations are **forward-only**; there are no generated down migrations.
   Rollback = **restore the pre-upgrade DB backup + redeploy the previous
-  image tag**:
+  release image pair**:
   ```bash
   # 1. Restore the pre-upgrade backup (stops the app, rebuilds the DB,
   #    restarts, waits for health):
@@ -170,13 +170,13 @@ docker compose --env-file .env.production up -d
   sed -i 's|^EXAM_IMAGE=.*|EXAM_IMAGE=ghcr.io/jnhu76/exam:v<PREVIOUS>|' .env.production
   sed -i 's|^EXAM_WEB_IMAGE=.*|EXAM_WEB_IMAGE=ghcr.io/jnhu76/exam-web:v<PREVIOUS>|' .env.production
 
-  # 3. Pull + start the previous image:
+  # 3. Pull + start the previous release images:
   docker compose --env-file .env.production pull
   docker compose --env-file .env.production up -d
   ```
 - After an upgrade has applied migrations, the OLD binary is only safe
   against the restored pre-upgrade backup (schema from the future may be
-  incompatible with the old image). Never roll back the image while
+  incompatible with the old image). Never roll back the release images while
   keeping an already-migrated database.
 
 ### 2.6 Post-upgrade verification checklist
