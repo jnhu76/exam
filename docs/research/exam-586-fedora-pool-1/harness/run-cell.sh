@@ -144,23 +144,18 @@ $COMPOSE exec -T db psql -U exam -d exam -v ON_ERROR_STOP=1 -q < "$RUN_DIR/candi
   || { log "FATAL candidate seed failed"; echo "seed_failed" > "$RUN_DIR/INVALID_REASON.txt"; exit 4; }
 
 # ── 7. Samplers: pg_stat_activity (200ms) + lock waits + docker stats ──
-$COMPOSE exec -T db psql -U exam -d exam -At -F '|' -c "
-SELECT now(), state, coalesce(wait_event_type,'-'), coalesce(wait_event,'-'), count(*)::int
-FROM pg_stat_activity
-WHERE datname = current_database() AND pid <> pg_backend_pid()
-  AND coalesce(application_name,'') <> 'exam586-sampler'
-GROUP BY state, wait_event_type, wait_event ORDER BY state" > "$RUN_DIR/.watch-activity.sql"
+# Long-lived `\watch` psql sessions INSIDE the db container (one exec each,
+# application_name-tagged and excluded from their own samples).
+$COMPOSE exec -T db psql -U exam -d exam -At -c "
+SELECT 'SELECT now(), state, coalesce(wait_event_type,''-''), coalesce(wait_event,''-''), count(*)::int FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND coalesce(application_name,'''') <> ''exam586-sampler'' GROUP BY state, wait_event_type, wait_event ORDER BY state'" \
+  > "$RUN_DIR/.watch-activity.sql"
 ( echo "SET application_name='exam586-sampler';"; cat "$RUN_DIR/.watch-activity.sql"; printf '\\watch 0.2\n' ) \
-  | $COMPOSE exec -T db psql -U exam -d exam -q > "$RUN_DIR/pg-activity.jsonl" 2>"$RUN_DIR/pg-activity.err" & SAMPLER_PIDS+=($!)
-$COMPOSE exec -T db psql -U exam -d exam -At -F '|' -c "
-SELECT now(), w.wait_event_type::text, w.wait_event::text, count(*)::int
-FROM pg_locks w
-JOIN pg_stat_activity a ON a.pid = w.pid
-WHERE w.granted = false AND a.datname = current_database() AND a.pid <> pg_backend_pid()
-  AND coalesce(a.application_name,'') <> 'exam586-sampler'
-GROUP BY w.wait_event_type, w.wait_event" > "$RUN_DIR/.watch-locks.sql"
+  | $COMPOSE exec -T db psql -U exam -d exam -qAt -F '|' > "$RUN_DIR/pg-activity.jsonl" 2>"$RUN_DIR/pg-activity.err" & SAMPLER_PIDS+=($!)
+$COMPOSE exec -T db psql -U exam -d exam -At -c "
+SELECT 'SELECT now(), w.wait_event_type::text, w.wait_event::text, count(*)::int FROM pg_locks w JOIN pg_stat_activity a ON a.pid = w.pid WHERE w.granted = false AND a.datname = current_database() AND a.pid <> pg_backend_pid() AND coalesce(a.application_name,'''') <> ''exam586-sampler'' GROUP BY w.wait_event_type, w.wait_event'" \
+  > "$RUN_DIR/.watch-locks.sql"
 ( echo "SET application_name='exam586-sampler';"; cat "$RUN_DIR/.watch-locks.sql"; printf '\\watch 0.2\n' ) \
-  | $COMPOSE exec -T db psql -U exam -d exam -q > "$RUN_DIR/pg-locks.jsonl" 2>"$RUN_DIR/pg-locks.err" & SAMPLER_PIDS+=($!)
+  | $COMPOSE exec -T db psql -U exam -d exam -qAt -F '|' > "$RUN_DIR/pg-locks.jsonl" 2>"$RUN_DIR/pg-locks.err" & SAMPLER_PIDS+=($!)
 ( while true; do
     echo "SAMPLE $(date --iso-8601=seconds) load:$(cut -d' ' -f1-3 /proc/loadavg)"
     docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}' \
@@ -196,6 +191,12 @@ FROM pg_stat_database WHERE datname = current_database()" > "$RUN_DIR/pg-after.j
 
 # ── 11. Stop samplers, oracles, inspect, meta ──────────────────────────
 for pid in "${SAMPLER_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
+sleep 1
+# Belt-and-braces: terminate any surviving in-container \watch sampler
+# backends so nothing leaks past the cell (OWNERSHIP: this cell's backends only).
+$COMPOSE exec -T db psql -U exam -d exam -At -c \
+  "SELECT count(*) FROM (SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'exam586-sampler') t" \
+  > "$RUN_DIR/sampler-terminated.txt" 2>/dev/null || true
 sleep 1
 
 VALID="valid"

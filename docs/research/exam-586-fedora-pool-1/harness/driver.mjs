@@ -315,7 +315,7 @@ async function measure() {
 
   const samples = new Samples(join(RUN_DIR, "requests.jsonl"));
   const base = { run_id: RUN_ID, pool: POOL_DESC, n: SCALE };
-  const record = (r, candidate, endpoint, phase) =>
+  const record = (r, candidate, endpoint, phase, extra) =>
     samples.write({
       ...base,
       ts: new Date().toISOString(),
@@ -327,6 +327,7 @@ async function measure() {
       timeout: r.timedOut === true,
       error_class: errorClassOf(r),
       retry_count: 0,
+      ...extra,
     });
 
   // ── WARMUP (phase "setup", never treatment) ──
@@ -469,6 +470,8 @@ async function measure() {
       states[i].username,
       "POST /api/attempts/:id/submit",
       "SUBMIT_BURST",
+      // Join key for the server-side EXAM586_TIMING decomposition.
+      { attemptId: states[i].attemptId, candidate_index: i },
     ),
   );
 
