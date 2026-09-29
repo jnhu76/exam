@@ -1,12 +1,38 @@
 # RecoveryProtocol — Formal Model
 
-Authority: `docs/adr/ADR-012-candidate-recovery-contract.md` (binding).
+Authority: `docs/adr/ADR-012-candidate-recovery-contract.md` (binding) and
+`docs/architecture/exam-semantic-boundaries.md` (EXSEM-001..020, adopted by
+ADR-021) — in particular EXSEM-011 (server time is the only deadline
+authority), EXSEM-013/014 (effective state = stored facts + canonical time;
+reconcile-or-evaluate before state-sensitive mutation), and EXSEM-008
+(first-submit freeze).
 Implementation reference: REC-I3 (`apps/web/src/exam/useAttemptRestore.ts`,
-`apps/web/src/pages/exam/TakeExamPage.tsx`, `apps/api/src/routes/attempts.candidate.ts`,
-`packages/exam-engine/src/{attemptCommands,deadlineReconciliation}.ts`).
+`apps/web/src/pages/exam/TakeExamPage.tsx`,
+`apps/api/src/routes/attempts.candidate.ts`,
+`packages/exam-engine/src/{attemptCommands,deadlineReconciliation,restoreInterruption}.ts`).
 
 This is an **executable consistency check** over selected recovery-protocol
 semantics, not a proof that the TypeScript implementation is a refinement.
+
+---
+
+## Policy scope (binding)
+
+The recovery timeline modeled here covers candidate recovery safety for:
+
+- **strict**
+- **operator_incident** candidate restore behavior
+
+It does **NOT** verify **bounded_grace** compensation reachability.
+Under bounded_grace, an authorized time adjustment may extend the effective
+deadline before final reconciliation and therefore rescue an interruption
+that was already expired pre-adjustment. That reachability class (a deadline
+that is not monotone across the rescue window) is intentionally outside this
+model: `deadlinePassed` is monotone here, so a grace-rescued restore is
+unrepresentable by construction. Properties in this TLA+ family must not be
+interpreted as proofs covering every candidate interruption-time policy.
+bounded_grace currently has no formal owner; giving it one would be a
+separate decision (ADR-013 §5/§7 semantics).
 
 ---
 
@@ -22,7 +48,62 @@ submission; UI recovery phase transitions.
 
 Not modeled (out of scope): React `useEffect`/`useRef`, DOM nodes, Fastify
 routes, PostgreSQL tables, HTTP serialization, RBAC, grading algorithms,
-real answer content, telemetry transport, IndexedDB/SQLite, desktop runtime.
+real answer content, telemetry transport, IndexedDB/SQLite, desktop runtime,
+numeric time/grant arithmetic (operator grants are owned by
+`formal/tla/operator-grant/`), and bounded_grace compensation (see
+"Policy scope" above).
+
+---
+
+## Effective-state conformance (EXSEM-013/014)
+
+`deadlinePassed` is the canonical server-time fact. Stored status may lag it
+(lazy materialization is legal), but every state-sensitive server decision
+in the model evaluates or reconciles the canonical effective state first,
+mirroring the production command paths which reconcile inside their
+transactions:
+
+- **GET** (`ServerReturnSnapshot`): a command-style GET with side effects —
+  serving an expired, not-yet-terminal attempt first materializes the
+  terminal deadline outcome (shared `DeadlineReconcileEffect`), then freezes
+  the delivery from the reconciled status. An expired attempt is never
+  served editable. (Production: `attempts.candidate.ts` GET /take runs
+  `ensureAttemptDeadlineReconciled` in a locked transaction before building
+  the snapshot; `isEditable = in_progress ∧ ¬expired`.)
+- **Submit** (`SubmitAttempt`): guarded by `¬deadlinePassed[a]` — the
+  candidate command is never the freeze authority for an expired attempt;
+  production reconciles inside the submit transaction and returns the
+  deadline-attributed freeze (the candidate POST becomes an idempotent
+  return). This bounds **server mutation legality**, not what the page
+  currently displays: the client projection may still lag editable while
+  the expired submit is already illegal.
+- **Restore** (`ProcessRestore` guard / `RejectRestoreDeadlineWon`
+  terminalization): a deadline-won restore materializes the terminal
+  deadline outcome via the same `DeadlineReconcileEffect` — it never leaves
+  a perpetual `disrupted + expired` authoritative state (production
+  composes policy evaluation → adjustment-if-applicable → reconciliation
+  inside the restore transaction, ADR-013 §7).
+- **Canonical time crossing** (`DeadlinePasses`): models the canonical
+  server-time fact only — it materializes nothing. The client runtime may
+  subsequently notice the deadline and trigger auto-submit asynchronously
+  (`TakeExamPage` countdown expiry → flush → POST submit → server-side
+  deadline submission → authoritative reload → terminal page), but that
+  workflow is **not** collapsed into this action: it may be delayed or
+  fail, so stored status and the page projection may lag canonical expiry
+  (EXSEM-013 lazy materialization).
+- **Snapshot authority at apply time** (`ApplyAuthoritativeReload`): an
+  applied `CandidateTakeSnapshot` is the page's business authority until
+  another authoritative server response replaces it. A response legitimately
+  produced *before* expiry may be applied *after* the deadline crosses and
+  still render editable — an allowed transient UI lag, and explicitly **not**
+  a grant of mutation authority. Apply time reads neither live server state
+  nor the canonical clock; the page never reconstructs business lock state
+  from a clock (production's `deriveTakeExamView` takes `isLocked` from
+  `snapshot.isEditable` and passes `canSave`/`canSubmit` through unchanged).
+
+All terminalization sites share one operator, `DeadlineReconcileEffect`, so
+they cannot drift apart. It is applied by the server paths only — canonical
+time crossing never applies it.
 
 ---
 
@@ -38,8 +119,13 @@ into focused configurations, each exhaustive over a smaller action set:
 | `RecoveryProtocolRouteSwitchSafety.cfg` | `RouteSwitchSpec` | adds **NavigateTo** for cross-attempt races; loss/deadline/grade excluded |
 | `RecoveryProtocolSubmissionSafety.cfg` | `SubmissionSpec` | submit / freeze / grade; deadline reconcile |
 
-The **union** of these covers the full action set; each is independently
-exhaustive. Run all three via `pnpm formal:recovery` (the `all` mode).
+The **union** of these three action sets equals the full action set
+declared in the module (16 actions). Each configuration is exhaustive over
+its own action set; per-action *enabledness* still varies by configuration —
+e.g. deadline-guarded actions (`RejectRestoreDeadlineWon`, the
+reconciliation branches) are inert in Core/RouteSwitch because
+`DeadlinePasses` runs only in Submission/Liveness. Run all three via
+`pnpm formal:recovery` (the `all` mode).
 
 ---
 
@@ -58,7 +144,10 @@ State predicates (INVARIANTs):
 - `NoStalePageLoadApply` / `NoStaleRestoreApply` — when a snapshot is
   applied, its attempt/generation match the current route/generation. (A
   stale delivery may sit pending; what is forbidden is letting it become
-  the applied snapshot.)
+  the applied snapshot.) These two are **intentional semantic aliases**:
+  they name distinct obligations (page-load path vs restore/reload path of
+  the same stale-apply isolation) and distinct counterexample targets; the
+  formulas coincide today and are kept as two names deliberately.
 - `EditableRequiresCurrentAuthoritativeSnapshot` — `uiState = "editable"`
   requires `clientSnapshotAttempt = routeAttempt`, current generation, and
   `clientSnapshotEditable`.
@@ -81,16 +170,6 @@ Cross-state constraints (PROPERTYs — checked as temporal formulas):
 - `SubmittedSnapshotImmutable` — once a submitted snapshot is non-NoSnapshot,
   it never changes.
 - `ServerVersionNeverDecreases` — `[][serverVersion'[a] >= serverVersion[a]]_vars`.
-- `TimeGrantNeverDecreases` — `[][timeGrant'[a] >= timeGrant[a]]_vars`.
-  **Currently vacuous in REC-F1:** `GrantExtension` (the only action that
-  mutates `timeGrant`) is intentionally NOT in any gated `Next` variant —
-  target-only time-compensation is deferred to REC-I4. `timeGrant` therefore
-  stays at its initial value across all reachable states, so the property
-  holds trivially. It is retained as a PROPERTY (not demoted to an
-  invariant) so that, once REC-I4 introduces a reachable time-compensation
-  action into a gated `Next`, this same property becomes a meaningful
-  cross-state check with no config surgery. See "Known runtime/model
-  mismatches" §1.
 
 ---
 
@@ -115,13 +194,19 @@ committed runner. See `counterexamples/README.md`.
 ## Delivery record — frozen server state
 
 A `Delivery` freezes the server state at the moment the response was
-produced (`statusAtResponse`, `editableAtResponse`). `ApplyAuthoritativeReload`
-reads the FROZEN values, never the live server state — otherwise a delayed
-response would magically carry the latest state and stale-snapshot-content
-could not be modeled (only stale request identity). Only the two fields
-actually read at apply time are carried; carrying more needlessly multiplies
-distinct delivery records. `pendingDeliveries` is capped (`MAX_DELIVERIES`)
-so it stays finite.
+produced (`statusAtResponse`, `editableAtResponse`).
+`ApplyAuthoritativeReload` reads the FROZEN values, never the live server
+state — otherwise a delayed response would magically carry the latest state
+and stale-snapshot-content could not be modeled (only stale request
+identity). Only the two fields actually read at apply time are carried;
+carrying more needlessly multiplies distinct delivery records.
+`pendingDeliveries` is capped (`MAX_DELIVERIES`) so it stays finite.
+
+The served status passed to `MakeDelivery` is the **post-reconciliation**
+status (`ReconciledServeStatus`), so a canonically expired attempt is
+served terminal, never editable — the delivery freezes the *effective*
+server state at response time, which is exactly what the production GET
+returns.
 
 ---
 
@@ -131,8 +216,13 @@ so it stays finite.
 `StartPageLoad`, `StartRestore`, `ServerReturnSnapshot`, `ProcessRestore`,
 `RejectRestoreDeadlineWon`, `StartAuthoritativeReload`,
 `ApplyAnyAuthoritativeReload`, `ConsumePostAck`. Explicit environmental
-assumptions: network eventually stays available; user does not navigate
-away / unmount; environment eventually delivers a non-lost response.
+assumptions: the network eventually stays available; the user does not
+navigate away / unmount; the environment eventually delivers a non-lost
+response. Network availability is a documented assumption, not a modeled
+toggle (the former constant `networkUp` variable and its unreachable
+`NetworkDown`/`NetworkUp` toggling actions were removed as dead surface in
+the Issue #656 F6 cleanup; the variable was constant TRUE in every spec, so
+no property or fairness obligation changed).
 
 **Liveness result: PARTIAL (failed).** TLC finds a counterexample. The
 runner reports this as a FAILURE (exit non-zero) — it is NOT wrapped as
@@ -174,25 +264,34 @@ protocol's correctness guarantees) is unaffected.
 | NetOutcomes | {acknowledged, lost} (defined in module) |
 | AnswerValues | {ans0, ans1} |
 | MAX_VERSION | 3 |
-| MAX_GRANT | 1 |
 | MAX_DELIVERIES | 2 |
-| MarkDisrupted | once per attempt |
 
-State-space statistics (TLC v2.19 / TLA+ v1.7.4, 1–2 workers):
+State-space statistics (TLC2 v2.19 / TLA+ v1.7.4). The three safety
+figures are deterministic (recorded with `FORMAL_WORKERS=1`); the liveness
+figure is approximate because TLC reports the count at the point the
+temporal counterexample is discovered.
 
 ```text
 CoreSafety       :   4,679 distinct states, depth 25 — PASS
 RouteSwitchSafety:  31,158 distinct states, depth 26 — PASS (includes NavigateTo)
 SubmissionSafety :  88,936 distinct states, depth 26 — PASS
-Liveness         :  14,653 distinct states         — PARTIAL (property violated)
+Liveness         : ≈30–32k distinct states          — PARTIAL (property violated, documented)
 ```
+
+The independent-review correction removed the artificial atomic deadline
+collapse, which restores the legitimate `editable + deadlinePassed`
+transient window to the reachable graph: SubmissionSafety is back to
+88,936 distinct states (the collapsed model pruned to 81,140), matching the
+figure previously recorded for the pre-repair model. Core and RouteSwitch
+are unchanged (both exclude `DeadlinePasses`). The liveness PARTIAL verdict
+and its root cause are unchanged.
 
 Counterexample reproduction (each produces the NAMED violation):
 
 ```text
 LegacyWrongAttemptRestore       :     10 distinct — NoWrongAttemptRestore violated
-LegacyGlobalInFlight            :  1,127 distinct — NoCrossAttemptRestoreBlocking violated (INVARIANT)
-LegacyStalePageLoad             :     63 distinct — NoStalePageLoadApply violated
+LegacyGlobalInFlight            :  1,129 distinct — NoCrossAttemptRestoreBlocking violated (INVARIANT)
+LegacyStalePageLoad             :     48 distinct — NoStalePageLoadApply violated
 LegacyNoReloadAfterPostFailure :    100 distinct — PostOutcomeIsNotPageAuthority violated
 ```
 
@@ -224,22 +323,16 @@ violation / counterexample not reproduced / tool error → non-zero.
 
 ---
 
-## Known runtime/model mismatches
+## Known runtime/model boundaries
 
-1. **REC-I4 (time-compensation) deferred.** `ProcessRestore` leaves
-   `timeGrant` unchanged in the model. The runtime may still grant time
-   inside `restoreAttempt`; the TARGET model separates `ProcessRestore` from
-   `GrantExtension` and intentionally keeps `GrantExtension` OUT of every
-   gated `Next`. As a result `TimeGrantNeverDecreases` is **target-only and
-   currently vacuous** — `timeGrant` is constant at its initial value across
-   all reachable states. The property is retained as a PROPERTY precisely so
-   it becomes a meaningful cross-state check once REC-I4 introduces a
-   reachable time-compensation action; no REC-F1 widening of scope is
-   implied. Recorded, NOT modeled as target.
-   RecoveryProtocol's `timeGrant` properties remain locally vacuous in the
-   recovery model. The independent operator-grant model owns command,
-   idempotency, and cross-tab semantics (see
-   `formal/tla/operator-grant/`).
+1. **Operator time grants are owned elsewhere.** REC-I4 landed: operator
+   time compensation is an explicit, ledger-backed command owned by the
+   `formal/tla/operator-grant/` family (ADR-013 §8/§9 — command identity,
+   idempotency, retry, ledger↔effect atomicity, cross-tab safety). This
+   model deliberately contains no grant mechanism; the former
+   `timeGrant`/`GrantExtension`/`TimeGrantNeverDecreases` scaffold was
+   stale (unreachable in every gated `Next`) and has been removed. Restore
+   never implicitly compensates time.
 2. **Liveness PARTIAL** — see above.
 3. `NavigateTo` preserves in-flight requests in both modes (the real
    implementation does not cancel old POSTs). The generation token makes
@@ -247,6 +340,19 @@ violation / counterexample not reproduced / tool error → non-zero.
    switch affects ONLY the guard (`RestoreStartGuard`), not navigation
    behavior — ensuring target and legacy face the same reachable state
    and differ only in guard logic (clean A/B comparison).
+4. **No client-clock business-state invariant.** The model deliberately
+   does not constrain `uiState` by `deadlinePassed`. An applied
+   `CandidateTakeSnapshot` stays the page's business authority until another
+   authoritative server response replaces it, so `editable + deadlinePassed`
+   is a reachable transient — the client has not yet completed
+   auto-submit → server reconciliation → authoritative reload. Asserting
+   `uiState = "editable" ⇒ ¬deadlinePassed[routeAttempt]` would be stronger
+   than the contract: it would erase that window and conflate canonical
+   expiry with the currently installed page projection. The obligation that
+   *is* enforced is server-side — `SubmitAttempt` is guarded by
+   `¬deadlinePassed[a]`, and a GET running after expiry reconciles before
+   serving. Do not re-add a clock-derived client lock state to compensate.
+5. **bounded_grace is out of policy scope** — see "Policy scope" above.
 
 ---
 
@@ -267,3 +373,6 @@ The runner parses TLC output for the named violation; any other result
    environment assumption. Do NOT use `SF_vars(LoseResponse)`.
 2. Consider TLC symmetry sets over `Attempts` to allow a single unified
    safety Next if desired.
+3. bounded_grace deadline-rescue reachability has no formal owner anywhere
+   in `formal/`; if that coverage is ever required, it needs its own model
+   family (see "Policy scope").
