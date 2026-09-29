@@ -1281,7 +1281,7 @@ query cost at 10k backlog: 11.9 ms per 100-row claim (EXPLAIN ANALYZE).
 - The supported email-delivery runtime has no separate `email-worker`
   service: delivery runs in-process inside `app`. In the current
   production deployment, `app` participates in the
-  `nginx + web + app + db` default stack; the complete production
+  `web + app + db` default stack; the complete production
   topology is owned by the deployment documentation, not this ADR. The
   app service must forward `EMAIL_ENABLED`.
 - Diagnostics, `worker_heartbeats`, and `buildEmailStatus` are unchanged.

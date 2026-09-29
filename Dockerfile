@@ -77,9 +77,9 @@ WORKDIR /app
 
 COPY --from=builder /out/ ./
 # No SPA bundle here (#585): the API image is API-only. The built web
-# frontend ships in the web-runner image above and is served by the `web`
-# service behind nginx — the API must never become a second, shadowing SPA
-# origin.
+# frontend ships in the web-runner image below — the sole public edge,
+# serving the SPA and routing /api/** here — the API must never become a
+# second, shadowing SPA origin.
 COPY docker-entrypoint.sh ./
 
 RUN chmod +x /app/docker-entrypoint.sh
@@ -95,11 +95,10 @@ ENV APP_MODE=production
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-# Production Web runtime (#585): nginx serving the built SPA on :4173 — a
-# separate service from the API runner above. The canonical production
-# ingress (deploy/nginx/edge.conf) routes / -> web:4173 and /api/** ->
-# app:3000. The web config is BAKED in here; the edge config is
-# runtime-mounted by docker-compose.yml. INVARIANT: every build of the API
+# Production Web runtime (#585): the sole public ingress — one nginx
+# serving the built SPA and routing /api/** -> app:3000, as a separate
+# service from the API runner above. deploy/nginx/web.conf is BAKED in
+# here; there is no separate edge config. INVARIANT: every build of the API
 # image (release.yml, docker-compose.yml operator source-build path) pins
 # `target: runner` explicitly — a targetless build would select this final
 # stage and ship nginx as the API.
@@ -108,4 +107,4 @@ FROM nginx:1.30.5-alpine3.24 AS web-runner
 COPY deploy/nginx/web.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
 
-EXPOSE 4173
+EXPOSE 80

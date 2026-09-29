@@ -65,8 +65,8 @@ inbox notifications.
 ```bash
 git clone https://github.com/jnhu76/exam.git && cd exam
 node scripts/init-production-env.mjs                      # create .env.production, fill secrets
-docker compose --env-file .env.production up -d        # pull prebuilt images, start nginx + web + app + db
-docker compose --env-file .env.production ps           # wait for app + web + db (healthy), nginx (running)
+docker compose --env-file .env.production up -d        # pull prebuilt images, start web + app + db
+docker compose --env-file .env.production ps           # wait for all three (healthy)
 ```
 
 Each Exam release publishes a matched pair of images — the API image and
@@ -83,8 +83,8 @@ docker compose --env-file .env.production exec app \
   --name 'System Admin' --organization-name 'My Organization'
 ```
 
-Open `http://localhost` (the nginx edge, host `EXAM_PORT`, default 80) and
-log in.
+Open `http://localhost` (the `web` nginx edge — static SPA + API proxy,
+host `EXAM_PORT`, default 80) and log in.
 
 ### Local development
 

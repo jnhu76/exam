@@ -38,8 +38,8 @@ secrets are never rotated on re-run.
 docker compose --env-file .env.production up -d
 ```
 
-This pulls the prebuilt release images and starts the nginx edge, the
-static web server, the API, and PostgreSQL (#585 topology; nginx is the
+This pulls the prebuilt release images and starts `web` (nginx edge +
+static SPA), the API, and PostgreSQL (#585 topology; `web` is the
 only published service, on `EXAM_PORT`, default 80).
 No local build is required.
 
@@ -64,7 +64,7 @@ Wait until you see `Server listening at http://0.0.0.0:3000`.
 docker compose --env-file .env.production ps
 ```
 
-Expected: `nginx` (running), `app` (healthy), `web` (healthy),
+Expected: `web` (healthy), `app` (healthy),
 `db` (healthy).
 
 ### 4. Bootstrap the first Admin
@@ -81,7 +81,7 @@ internal default organization, which unblocks the email outbox loop.
 
 ### 5. Open the application
 
-Navigate to `http://localhost` (the nginx edge on `EXAM_PORT`, default
+Navigate to `http://localhost` (the `web` nginx edge on `EXAM_PORT`, default
 80) and log in with the credentials you just created.
 
 ### Alternative: Launchpad first-install page
@@ -124,10 +124,16 @@ Replace `192.168.1.5` with your machine's actual LAN address. The
 browser uses `PUBLIC_WEB_ORIGIN` for email action links, so set it to
 the address users will access.
 
-For HTTPS, the bundled nginx edge carries a commented HTTPS template:
-mount the certificate chain at `/etc/nginx/certs/fullchain.pem` and the
-key at `/etc/nginx/certs/privkey.pem`, uncomment the 443 server block in
-`deploy/nginx/edge.conf`, and publish 443 in `docker-compose.yml`. The
+For HTTPS, the bundled `web` nginx carries a commented HTTPS template —
+but that configuration is **baked into the `exam-web` image**, so editing
+`deploy/nginx/web.conf` in the checkout never changes an already-pulled
+image. To activate: copy `deploy/nginx/web.conf`, uncomment its 443 server
+block, mount the edited copy over `/etc/nginx/conf.d/default.conf` on the
+`web` service together with the certificate chain at
+`/etc/nginx/certs/fullchain.pem` and the key at
+`/etc/nginx/certs/privkey.pem`, and publish 443 — a compose override file
+(`docker-compose.override.yml`, merged automatically by `docker compose`)
+is the cleanest place for the mounts and the 443 port. The
 application does not terminate TLS itself.
 
 ## Optional Capabilities
