@@ -1,6 +1,7 @@
 # Production stack. Run with: docker compose --env-file .env.production ...
-# nginx is the only public ingress (host ${EXAM_PORT:-80}); app (:3000, API)
-# and web (:4173, static SPA) are internal services on exam-net.
+# web is the only public ingress (host ${EXAM_PORT:-80}): one nginx serving
+# the static SPA and routing /api/** to app (:3000, API). app and db are
+# internal services on exam-net.
 # Pinned so prod never shares the directory-derived `exam` project with the
 # dev stack (docker-compose.dev.yml, `exam-dev`) when run from one checkout.
 name: exam-prod
@@ -89,34 +90,23 @@ services:
     stop_grace_period: 45s
 
   web:
-    # Dedicated static SPA runtime (web.conf baked into the image).
+    # ONLY public ingress (#585): one nginx serving the static SPA and
+    # routing /api/** -> app:3000. The config (deploy/nginx/web.conf) is
+    # BAKED into the image. HTTPS is a commented template in web.conf —
+    # activation mounts certs plus an overriding conf (runtime mount), never
+    # an edit to the already-pulled image.
     image: ${EXAM_WEB_IMAGE:?EXAM_WEB_IMAGE is required (node scripts/init-production-env.mjs)}
-    expose:
-      - "4173"
+    ports:
+      - "${EXAM_PORT:-80}:80"
+    depends_on:
+      app:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4173/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    networks:
-      - exam-net
-    restart: unless-stopped
-
-  nginx:
-    # Only public ingress: /api/** -> app:3000, /* -> web:4173. HTTPS is a
-    # commented template in deploy/nginx/edge.conf (mount certs + publish
-    # 443 to activate); the active profile is HTTP only.
-    image: nginx:1.30.5-alpine3.24
-    ports:
-      - "${EXAM_PORT:-80}:80"
-    volumes:
-      - ./deploy/nginx/edge.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      app:
-        condition: service_healthy
-      web:
-        condition: service_healthy
     networks:
       - exam-net
     restart: unless-stopped

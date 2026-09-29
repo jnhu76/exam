@@ -35,12 +35,13 @@ OS:        Linux (Docker host). Windows/macOS via Docker Desktop acceptable
            for evaluation only.
 Software:  Docker Engine ≥ 25.x, Docker Compose v2.
 Network:   internal LAN only. The platform must remain offline-capable.
-           Public ingress is the bundled nginx edge (#585): host EXAM_PORT
-           (default 80) -> /api/** to the API, everything else to the static
-           SPA. The app does not terminate TLS; HTTPS is a commented template
-           in deploy/nginx/edge.conf (mount /etc/nginx/certs/fullchain.pem +
-           privkey.pem, uncomment the 443 block, publish 443 — no ACME/
-           Certbot is bundled).
+           Public ingress is the `web` service — one nginx serving the
+           static SPA and routing /api/** to the API (#585): host EXAM_PORT
+           (default 80). The app does not terminate TLS; HTTPS is a
+           commented template baked into deploy/nginx/web.conf (mount
+           /etc/nginx/certs/fullchain.pem + privkey.pem plus an overriding
+           nginx conf, publish 443 — no ACME/Certbot is bundled; see
+           docs/deployment/README.md "Network / TLS").
 Postgres:  provided by the 'db' service (postgres:18.4-bookworm). The
            bundled docker-compose.yml composes DATABASE_URL for the app
            from POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB, so the
@@ -97,9 +98,9 @@ if any is unset. There is NO default database password in production
 
 | Variable | Default | Notes |
 |---|---|---|
-| `CORS_ORIGIN` | `http://localhost` | Browser origin allowlist (credentials:true); comma-separated → array. #585: nginx owns public :80, so the default carries no port suffix; a remapped `EXAM_PORT` or LAN/hostname access MUST set it to the exact origin users browse |
+| `CORS_ORIGIN` | `http://localhost` | Browser origin allowlist (credentials:true); comma-separated → array. #585: web owns public :80, so the default carries no port suffix; a remapped `EXAM_PORT` or LAN/hostname access MUST set it to the exact origin users browse |
 | `PUBLIC_WEB_ORIGIN` | `http://localhost` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). Same #585 default; set explicitly for remapped/LAN/HTTPS access |
-| `EXAM_PORT` | 80 | Host port published by the `nginx` edge (`${EXAM_PORT:-80}:80`) — the only published service (#585). The container API stays on 3000 (`APP_PORT` is container-internal only; never host-published). Local dev uses `DEV_API_PORT` instead — see docs/development/ports.md |
+| `EXAM_PORT` | 80 | Host port published by the `web` nginx edge (`${EXAM_PORT:-80}:80`) — the only published service (#585). The container API stays on 3000 (`APP_PORT` is container-internal only; never host-published). Local dev uses `DEV_API_PORT` instead — see docs/development/ports.md |
 | `HOST` | 0.0.0.0 | API bind host |
 | `APP_MODE` / `NODE_ENV` | compose-pinned `production` | `docker-compose.yml` fixes both to `production` (values in `.env.production` are not read): CSRF, HSTS, Secure cookies, and fail-fast required env are always on in the deployed stack |
 | `DEPLOYMENT_MODE` | singleTenant | `multiTenant` is rejected at boot (Phase 4 only) |
@@ -109,7 +110,7 @@ if any is unset. There is NO default database password in production
 | `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` | 30000 / 60000 | in-process heartbeat scanner |
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed rate limiter; Redis-backed shared state when the `redis` profile is enabled and the runtime is ready — local in-memory fallback only in `optional` mode; `required` mode fails closed with 503 `RATE_LIMIT_UNAVAILABLE` (never falls back to local). See §10 |
-| `TRUSTED_PROXY_CIDRS` | unset (socket-peer identity) | deployments with a proxy in front of the API: CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). #585 default topology: the bundled nginx edge IS such a proxy — set this to the Compose bridge subnet (see below). Unset collapses all candidates onto the edge IP. See "Rate-limit identity, trusted proxies, and sizing" above |
+| `TRUSTED_PROXY_CIDRS` | unset (socket-peer identity) | deployments with a proxy in front of the API: CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). #585 default topology: the bundled web nginx edge IS such a proxy — set this to the Compose bridge subnet (see below). Unset collapses all candidates onto the edge IP. See "Rate-limit identity, trusted proxies, and sizing" above |
 
 ### Email (in-process outbox loop + sender)
 
@@ -147,8 +148,8 @@ depends on the deployment topology:
 
 | Topology | `request.ip` | Verdict |
 | --- | --- | --- |
-| Bundled nginx edge (#585 default compose) + `TRUSTED_PROXY_CIDRS` = the Compose bridge subnet | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default — one lookup: `docker network inspect exam-prod_exam-net` (pinned project name, #631) and set the subnet (e.g. `172.19.0.0/16`) in `.env.production` |
-| Bundled nginx edge WITHOUT `TRUSTED_PROXY_CIDRS` | the edge's bridge IP (all candidates collapse) | Misconfigured — the app cannot trust its only ingress; set the subnet as above |
+| Bundled web nginx edge (#585 default compose) + `TRUSTED_PROXY_CIDRS` = the Compose bridge subnet | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default — one lookup: `docker network inspect exam-prod_exam-net` (pinned project name, #631) and set the subnet (e.g. `172.19.0.0/16`) in `.env.production` |
+| Bundled web nginx edge WITHOUT `TRUSTED_PROXY_CIDRS` | the edge's bridge IP (all candidates collapse) | Misconfigured — the app cannot trust its only ingress; set the subnet as above |
 | Shared NAT (many candidates behind one egress IP) | the shared IP | Supported with sizing: the whole cohort shares one identity; size `RATE_LIMIT_MAX` by the rule below and stagger logins (the login budget is 10/min/IP) |
 | Reverse proxy WITH trusted client-IP wiring | per-candidate IP | Supported: set `TRUSTED_PROXY_CIDRS` to the proxy's addresses |
 | Reverse proxy WITHOUT trusted client-IP wiring | the proxy IP (all candidates collapse) | Degraded by config — wire `TRUSTED_PROXY_CIDRS` (below) |
@@ -227,7 +228,7 @@ node scripts/init-production-env.mjs
 # SMTP_USER=...
 # SMTP_PASSWORD=...
 
-# 4. Pull and start the default stack (nginx + web + app + db) from the
+# 4. Pull and start the default stack (web + app + db) from the
 #    prebuilt release images. Compose runs the images pinned in .env.production
 #    as EXAM_IMAGE / EXAM_WEB_IMAGE, which step 2 derived from
 #    .release-version (see "Image acquisition" below). No local build
@@ -238,12 +239,12 @@ docker compose --env-file .env.production up -d
 docker compose --env-file .env.production logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
-# 6. Verify the default stack — nginx (running), app / web / db (healthy).
+# 6. Verify the default stack — web (healthy), app / db (healthy).
 #    The in-process email outbox loop waits for the first organization
 #    to be bootstrapped (step 7).
 docker compose --env-file .env.production ps
-# Expected: nginx (running, publishes EXAM_PORT), app (healthy),
-#           web (healthy), db (healthy)
+# Expected: web (healthy, publishes EXAM_PORT), app (healthy),
+#           db (healthy)
 #
 # Health layers (#547) — read them separately:
 #   /api/health = LIVENESS (process responsive; stays 200 through DB loss).
@@ -258,7 +259,7 @@ docker compose --env-file .env.production ps
 # events from the app logs — see docs/operations/README.md "Active Alerting".
 ```
 
-`CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost` (nginx
+`CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN` default to `http://localhost` (web
 owns public 80); set both in `.env.production` to your machine's address for
 LAN access (e.g. `http://192.168.1.5:80`), or to
 `http://localhost:<EXAM_PORT>` when you remap the port.
@@ -507,13 +508,13 @@ DB.
 ## 6. Start services
 
 ```bash
-# Normal start (default stack: nginx + web + app + db; Redis is optional — §10)
+# Normal start (default stack: web + app + db; Redis is optional — §10)
 docker compose --env-file .env.production up -d
 
 # Verify
 docker compose --env-file .env.production ps
-# Expected: nginx (running, publishes EXAM_PORT), app (healthy),
-#           web (healthy), db (healthy)
+# Expected: web (healthy, publishes EXAM_PORT), app (healthy),
+#           db (healthy)
 
 # API health (liveness — process alive)
 curl -s http://localhost:${EXAM_PORT:-80}/api/health
@@ -531,12 +532,11 @@ chaining these dependencies — the drizzle migration journal tracks state,
 it does NOT lock concurrent runners:
 
 ```text
-default topology (#585 service split; #320 CONVERGE):
-  db (healthy) ← app (healthy)            # app entrypoint migrates before binding
-  app (healthy) ─┐
-  web (healthy) ─┴→ nginx (the ONLY public ingress)
-                   # nginx fans OUT: /api/** → app:3000, everything else →
-                   # web:4173. app and web are siblings behind the edge —
+default topology (#585; #320 CONVERGE):
+  db (healthy) ← app (healthy)   # app entrypoint migrates before binding
+  app (healthy) ← web (the ONLY public ingress)
+                   # web = one nginx: /api/** → app:3000, everything else
+                   # → local SPA files (try_files deep-link fallback).
                    # NOT an app→web proxy chain.
 
 optional redis profile (--profile redis):
@@ -569,19 +569,19 @@ The implemented MVP separates **liveness**, **readiness**, and
 
 The Compose `app` healthcheck polls `GET /api/ready` every 30s (5s timeout,
 3 retries, 30s start period) — the API leg ONLY. The SPA HTML proof is NOT
-part of it: the separate `web` service carries its own healthcheck
-(`wget http://127.0.0.1:4173/`), so `web (healthy)` is the SPA-servable
-signal (#585 service split). The `nginx` edge is the service that depends on
-those health states: `depends_on` holds nginx startup until both `app` and
-`web` are healthy.
+part of it: the `web` service carries its own healthcheck
+(`wget http://127.0.0.1:80/`), so `web (healthy)` is the public-edge +
+SPA-servable signal (#585). The `web` service depends on the app health
+state: `depends_on` holds web startup until `app` is healthy.
 
 ```text
 healthcheck:
   - marks each container healthy / unhealthy (visible via 'docker compose ps',
     'docker inspect', and Compose UI);
-  - gates STARTUP of dependent services: nginx waits for app + web healthy
-    (#585). Health state does NOT route runtime traffic — once started, nginx
-    proxies to app/web unconditionally — and does NOT by itself restart
+  - gates STARTUP of dependent services: web waits for app healthy
+    (#585). Health state does NOT route runtime traffic — once started,
+    web routes API requests to app and serves the SPA from its local
+    filesystem unconditionally — and does NOT by itself restart
     anything.
 ```
 
@@ -703,7 +703,7 @@ holds only ephemeral coordination state:
   degraded); fail closed (503 `RATE_LIMIT_UNAVAILABLE`) in `required` mode.
 - Session/JWT = stateless cookie + JWT (no Redis session store).
 
-The default topology is `nginx + web + app + db`. The `redis` Compose
+The default topology is `web + app + db`. The `redis` Compose
 service is gated behind the `redis` profile (P6-010): a bare
 `docker compose up` does NOT start it, and the `app` service does NOT
 depend on redis health. The API defaults `REDIS_URL` to empty (disabled).
@@ -730,8 +730,8 @@ docker compose --env-file .env.production --profile redis up -d
 
 # 3. Verify all four services:
 docker compose --env-file .env.production ps
-# Expected: nginx (running, publishes EXAM_PORT), app (healthy),
-#           web (healthy), db (healthy), redis (healthy)
+# Expected: web (healthy, publishes EXAM_PORT), app (healthy),
+#           db (healthy), redis (healthy)
 ```
 
 The `redis` service exists for the optional shared rate limiter and

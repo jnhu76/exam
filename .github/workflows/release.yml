@@ -121,8 +121,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      # #585: the static-Web image (nginx serving apps/web/dist on :4173)
-      # is published beside the API image; the operator pins are
+      # #585: the Web image (nginx: static SPA + sole public edge) is
+      # published beside the API image; the operator pins are
       # EXAM_IMAGE / EXAM_WEB_IMAGE, both derived from .release-version by
       # scripts/init-production-env.mjs. Same tag strategy and no-latest
       # policy as above.
@@ -138,7 +138,7 @@ jobs:
             latest=false
           labels: |
             org.opencontainers.image.title=exam-web
-            org.opencontainers.image.description=Exam static web runtime (nginx, SPA on 4173)
+            org.opencontainers.image.description=Exam web runtime (nginx edge, static SPA)
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/jnhu76/exam

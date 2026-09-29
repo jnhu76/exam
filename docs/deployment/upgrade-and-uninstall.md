@@ -13,7 +13,8 @@
 > `docker compose --env-file .env.production ...`.
 >
 > **Prebuilt images (#321):** the stack runs `ghcr.io/jnhu76/exam:vX.Y.Z`
-> (API) and `ghcr.io/jnhu76/exam-web:vX.Y.Z` (static SPA, #585), pinned in
+> (API) and `ghcr.io/jnhu76/exam-web:vX.Y.Z` (nginx edge + static SPA,
+> #585), pinned in
 > `.env.production` as `EXAM_IMAGE` / `EXAM_WEB_IMAGE` (derived from
 > `.release-version` by `node scripts/init-production-env.mjs`; an explicit
 > non-canonical value — mirror / offline load — wins). There is no
@@ -95,7 +96,7 @@ mv .env.deploy .env.production   # only if .env.production does not exist yet
 #     now runs as project `exam-prod` (dev stack: `exam-dev`). The next
 #     `up -d` creates NEW containers under that name; the old stateless
 #     `exam` containers keep holding the published ports and must be
-#     removed once, or the new nginx cannot bind:
+#     removed once, or the new web container cannot bind:
 docker compose -p exam -f docker-compose.yml down --remove-orphans
 #
 #     Data safety: the data root is a bind mount outside the containers
@@ -182,8 +183,8 @@ docker compose --env-file .env.production up -d
 ### 2.6 Post-upgrade verification checklist
 
 ```text
-[ ] docker compose --env-file .env.production ps      # nginx running; app + web + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
-[ ] curl -s http://localhost:${EXAM_PORT:-80}/api/health   # {"status":"ok"} (through the nginx edge, #585)
+[ ] docker compose --env-file .env.production ps      # web + app + db healthy (no worker service — email delivery is in-process, #320 CONVERGE)
+[ ] curl -s http://localhost:${EXAM_PORT:-80}/api/health   # {"status":"ok"} (through the web nginx edge, #585)
 [ ] Log in as an existing Admin; open a candidate + a recent result.
 [ ] Watch migration logs (first boot):
     docker compose --env-file .env.production logs app | grep -i migrat

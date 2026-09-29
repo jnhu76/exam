@@ -15,42 +15,43 @@
 ## Production Topology (#585)
 
 ```text
-                    host :EXAM_PORT (default 80)
-                              │
-┌─────────────────────────────┼───────────────────────────┐
-│  Docker Compose (nginx is the ONLY public ingress)      │
-│  ┌─────────┐   /api/** ──► ┌─────────┐                  │
-│  │  nginx  │──────────────►│   app   │  API (Fastify)   │
-│  │ (edge)  │   /* ──────►  └────┬────┘  :3000          │
-│  └────┬────┘              ┌────┴────┐                  │
-│       │            /* ──► │   web   │  static SPA      │
-│       │                   │ (nginx) │  :4173           │
-│       │                   └─────────┘                  │
-│  ┌─────────┐  ┌─────────┐  ┌───────────┐               │
-│  │   db    │  │  redis  │  │ app runs  │                │
-│  │ (PG 18) │  │ (7, opt)│  │ migrations│                │
-│  └─────────┘  └─────────┘  └───────────┘               │
-│                                                        │
-│  Services: nginx + web + app + db (default)            │
-│            + redis (--profile redis)                   │
-│                                                        │
-│  Host port: EXAM_PORT → nginx 80 (nothing else published)│
-│  Data: ${EXAM_DATA_ROOT}/postgres (bind mount)         │
-└────────────────────────────────────────────────────────┘
+              host :EXAM_PORT (default 80)
+                        │
+┌───────────────────────┼──────────────────────────────┐
+│  Docker Compose (web is the ONLY public ingress)     │
+│                                                      │
+│  ┌──────────────────┐  /api/** ──► ┌─────────┐       │
+│  │       web        │───────────► │   app   │       │
+│  │   nginx edge +   │             │  (API)  │ :3000 │
+│  │   static SPA     │  /* ──►     └────┬────┘       │
+│  │ (deep-link       │   local files    │            │
+│  │  fallback)       │                  │            │
+│  └──────────────────┘      ┌───────────┴──────────┐ │
+│                            │  app runs migrations │ │
+│                            └──────────────────────┘ │
+│  ┌─────────┐   ┌─────────┐                           │
+│  │   db    │   │  redis  │                           │
+│  │ (PG 18) │   │ (7,opt) │                           │
+│  └─────────┘   └─────────┘                           │
+│                                                      │
+│  Services: web + app + db (default)                  │
+│            + redis (--profile redis)                 │
+│                                                      │
+│  Host port: EXAM_PORT → web 80 (nothing else published)│
+│  Data: ${EXAM_DATA_ROOT}/postgres (bind mount)       │
+└──────────────────────────────────────────────────────┘
 ```
 
-- `nginx` is the sole public ingress (`deploy/nginx/edge.conf`,
-  runtime-mounted read-only): `/api/**` → app:3000, `/*` → web:4173.
-  Upstreams resolve through Docker DNS at request time, so app/web
-  recreations never strand the edge on a stale address.
-- The `web` service is a dedicated static runtime: nginx serving the
-  built SPA from the `web-runner` image (`deploy/nginx/web.conf` is
-  baked in; never `vite preview`).
+- `web` is the sole public ingress: one nginx serving the built SPA with
+  deep-link fallback and routing `/api/**` → app:3000. Its configuration
+  (`deploy/nginx/web.conf`) is baked into the `web-runner` image (never
+  `vite preview`); the API upstream resolves through Docker DNS at request
+  time, so app recreations never strand the edge on a stale address.
 - The `app` container runs the API only (no bundled SPA), database
   migrations on startup, and the in-process email outbox loop. There is
   no separate email worker service.
-- `app`, `web`, and `db` publish no host ports; `nginx` health-gates its
-  startup on both upstreams being healthy.
+- `app` and `db` publish no host ports; `web` health-gates its startup on
+  the app being healthy.
 - Compose project identities are pinned (#631): production runs as project
   `exam-prod`, the dev stack (`docker-compose.dev.yml`) as `exam-dev` — a
   production rehearsal from a developer checkout can never recreate dev
@@ -62,12 +63,18 @@
 
 Each Exam release publishes two coordinated images as one version-matched
 pair: `ghcr.io/jnhu76/exam:vX.Y.Z` (API) and
-`ghcr.io/jnhu76/exam-web:vX.Y.Z` (static SPA). A normal install never
-chooses between them — `init-production-env.mjs` derives both pins
-(`EXAM_IMAGE` / `EXAM_WEB_IMAGE`) in `.env.production` from
+`ghcr.io/jnhu76/exam-web:vX.Y.Z` (nginx edge + static SPA). A normal
+install never chooses between them — `init-production-env.mjs` derives
+both pins (`EXAM_IMAGE` / `EXAM_WEB_IMAGE`) in `.env.production` from
 `.release-version`, and Compose starts the pair together. Manually editing
 the pins is an advanced override (registry mirror, offline `docker load`,
 rollback pinning) — see the runbook §3 "Image acquisition".
+
+> Non-normative future-compatibility note: the built SPA is the Web product
+> artifact. The `exam-web` OCI image is the current LAN/on-premise packaging
+> of that artifact with nginx. No CDN or horizontal-scaling mechanism is
+> part of the supported deployment today; the independently built SPA
+> remains the future extraction seam.
 
 ```bash
 node scripts/init-production-env.mjs
@@ -131,25 +138,29 @@ source build, contributor verification).
 
 ## Network / TLS (#585)
 
-- The bundled `nginx` edge is the only public ingress and terminates
+- The bundled `web` nginx edge is the only public ingress and terminates
   plain HTTP on `EXAM_PORT` (default 80).
 - The application does **not** terminate TLS. HTTPS is a commented
-  template inside `deploy/nginx/edge.conf`: mount the certificate chain
-  at `/etc/nginx/certs/fullchain.pem` and the key at
-  `/etc/nginx/certs/privkey.pem`, uncomment the 443 server block, and
-  publish 443 in `docker-compose.yml`. No ACME/Certbot is bundled.
-- `TRUSTED_PROXY_CIDRS` must name the nginx→app hop **only — never the
+  template inside `deploy/nginx/web.conf`, which is **baked into the
+  `exam-web` image** — editing the checkout file never changes an
+  already-pulled image. To activate: mount the certificate chain at
+  `/etc/nginx/certs/fullchain.pem` and the key at
+  `/etc/nginx/certs/privkey.pem`, mount an overriding nginx configuration
+  (a copy of `web.conf` with the 443 server block uncommented) over
+  `/etc/nginx/conf.d/default.conf`, and publish 443 on the `web` service
+  — for example via a compose override file. No ACME/Certbot is bundled.
+- `TRUSTED_PROXY_CIDRS` must name the web→app hop **only — never the
   candidate client network**. In the bundled topology the client-visible
   peer of the app is the Compose bridge; resolve the actual subnet with
   `docker network inspect exam-prod_exam-net` and set e.g.
-  `TRUSTED_PROXY_CIDRS=172.19.0.0/16`. The edge **replaces**
+  `TRUSTED_PROXY_CIDRS=172.19.0.0/16`. The web edge **replaces**
   `X-Forwarded-For` with the real client address (appending would let a
   client forge its audit/rate-limit identity), so with the narrow CIDR
   `request.ip` is the true client and a client-sent `X-Forwarded-For`
   is ignored. See the runbook §2 "Rate-limit identity, trusted proxies,
   and sizing".
 - Set `CORS_ORIGIN` and `PUBLIC_WEB_ORIGIN` to the address users will
-  access. The default is `http://localhost` (nginx owns public 80); a
+  access. The default is `http://localhost` (web owns public 80); a
   remapped `EXAM_PORT` or LAN address must set both explicitly (e.g.
   `http://192.168.1.5:8080`).
 
