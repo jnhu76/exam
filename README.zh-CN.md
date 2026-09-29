@@ -55,9 +55,13 @@ Exam 是一个面向局域网 / 本地部署、当前采用单租户运行模式
 ```bash
 git clone https://github.com/jnhu76/exam.git && cd exam
 node scripts/init-production-env.mjs                      # 生成 .env.production，并填写必要密钥
-docker compose --env-file .env.production up -d        # 拉取预构建镜像并启动 app + db
-docker compose --env-file .env.production ps           # 等待 app / db 进入 healthy
+docker compose --env-file .env.production up -d        # 拉取预构建镜像并启动 nginx + web + app + db
+docker compose --env-file .env.production ps           # 等待 app / web / db 进入 healthy，nginx 为 running
 ```
+
+每个 Exam 版本都会发布一对版本号一致的成对镜像（API 镜像与 Web 镜像）。
+`init-production-env.mjs` 会依据 `.release-version` 自动填写两个镜像引用，
+正常安装不需要在两者之间做选择。
 
 初始化第一个 Admin。系统没有公开自助注册入口：
 
@@ -68,7 +72,7 @@ docker compose --env-file .env.production exec app \
   --name 'System Admin' --organization-name 'My Organization'
 ```
 
-打开 `http://localhost:3000` 并登录。
+打开 `http://localhost`（nginx 边缘代理，监听 `EXAM_PORT`，默认 80）并登录。
 
 ### 本地开发
 

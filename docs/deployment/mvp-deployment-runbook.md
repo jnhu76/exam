@@ -57,8 +57,10 @@ Redis:     OPTIONAL — a bare 'docker compose up' starts no Redis and needs
 SMTP:      OPTIONAL. Leave EMAIL_ENABLED=false to drain the outbox to 'sent'
            status without external delivery. Set EMAIL_ENABLED=true +
            EMAIL_TRANSPORT=smtp + SMTP_* to enable real Email delivery.
-Backups:   operator-supplied pg_dump schedule against the 'pgdata' volume
-           (see §11).
+Backups:   operator-supplied pg_dump schedule against the bundled 'db'
+           service; PostgreSQL data lives in the bind-mounted data root
+           (${EXAM_DATA_ROOT:-./data}/postgres), not a named volume
+           (see §17).
 ```
 
 ---
@@ -89,7 +91,7 @@ if any is unset. There is NO default database password in production
 |---|---|---|
 | `POSTGRES_PASSWORD` | Database superuser password; composed into `DATABASE_URL` for the API | required, no default (P6-007) — generate with `node scripts/init-production-env.mjs` |
 | `JWT_SECRET` | Signs the `auth-token` cookie JWT | non-empty; no default in production — generate with `node scripts/init-production-env.mjs` |
-| `DATABASE_URL` | PostgreSQL connection for the API | composed by Compose from `POSTGRES_*`; set explicitly only when using external Postgres |
+| `DATABASE_URL` | PostgreSQL connection for the API | application-level connection string; in the supported deployment Compose composes it from `POSTGRES_*` for the bundled `db` service (Prerequisites) — external Postgres is NOT a supported path, so there is no supported manual override |
 
 ### Optional (with safe defaults)
 
@@ -236,8 +238,9 @@ docker compose --env-file .env.production up -d
 docker compose --env-file .env.production logs --tail=50 -f app
 # Look for: 'Running database migrations...', 'Server listening at http://0.0.0.0:3000'
 
-# 6. Verify app + db are healthy. The in-process email outbox loop waits for
-#    the first organization to be bootstrapped (step 7).
+# 6. Verify the default stack — nginx (running), app / web / db (healthy).
+#    The in-process email outbox loop waits for the first organization
+#    to be bootstrapped (step 7).
 docker compose --env-file .env.production ps
 # Expected: nginx (running, publishes EXAM_PORT), app (healthy),
 #           web (healthy), db (healthy)
@@ -303,25 +306,29 @@ container).
 
 ### Image acquisition (#321)
 
-The `app` and `web` services run the **prebuilt release images**
+One Exam release publishes a **version-matched image pair**: the API image
+(`ghcr.io/jnhu76/exam:vX.Y.Z`) and the Web image
+(`ghcr.io/jnhu76/exam-web:vX.Y.Z`). A normal install never chooses between
+them — `init-production-env.mjs` fills both pins and Compose starts the pair
+together. The `app` and `web` services run the pair
 pinned in `.env.production` as `EXAM_IMAGE` / `EXAM_WEB_IMAGE`.
 `node scripts/init-production-env.mjs` derives both pins from the repository's
 `.release-version` (`ghcr.io/jnhu76/exam{,-web}:vX.Y.Z`); an explicit
 non-canonical pin value wins (private registry mirrors, offline loads),
 while a canonical `ghcr.io/jnhu76/exam{,-web}:vX.Y.Z` pin follows
-`.release-version` on the next init-production-env run (the upgrade path). The image is published automatically
+`.release-version` on the next init-production-env run (the upgrade path). Both images are published automatically
 by the release workflow (`.github/workflows/release.yml`) when the release
 tag is cut — same commit as the GitHub Release, the enforced-immutable git
-tag, and a `sha-<commit>` alias tag. There is deliberately NO `latest` tag;
+tag, and per-image `sha-<commit>` alias tags. There is deliberately NO `latest` tag;
 the semantic-version pin is the authority. Compose `${EXAM_IMAGE:?...}`
 refuses to start the stack when the pin is missing. If the pinned tag has
 not been published yet, use the source-build path below.
 
 #### Online pull (default)
 
-`docker compose --env-file .env.production up -d` pulls the pinned image once
-(outbound access to ghcr.io at install/upgrade time only); afterwards the
-image is cached locally and the platform runtime has no network dependency.
+`docker compose --env-file .env.production up -d` pulls the pinned images once
+(outbound access to ghcr.io at install/upgrade time only); afterwards both
+images are cached locally and the platform runtime has no network dependency.
 
 Two one-time registry facts (maintainer side, not per-install):
 
@@ -416,7 +423,7 @@ docker compose --env-file .env.production exec db sh -c \
 
 **Failed migration recovery:** inspect the drizzle journal for the last
 applied migration; re-running migrate is safe. If the schema is corrupted,
-restore from the latest `pg_dump` backup (§11) and re-run migrate.
+restore from the latest `pg_dump` backup (§17) and re-run migrate.
 
 ---
 
@@ -500,7 +507,7 @@ DB.
 ## 6. Start services
 
 ```bash
-# Normal start (default stack: app + db; Redis is optional — §10)
+# Normal start (default stack: nginx + web + app + db; Redis is optional — §10)
 docker compose --env-file .env.production up -d
 
 # Verify
@@ -696,7 +703,7 @@ holds only ephemeral coordination state:
   degraded); fail closed (503 `RATE_LIMIT_UNAVAILABLE`) in `required` mode.
 - Session/JWT = stateless cookie + JWT (no Redis session store).
 
-The default topology is `app + db`. The `redis` Compose
+The default topology is `nginx + web + app + db`. The `redis` Compose
 service is gated behind the `redis` profile (P6-010): a bare
 `docker compose up` does NOT start it, and the `app` service does NOT
 depend on redis health. The API defaults `REDIS_URL` to empty (disabled).
@@ -901,7 +908,7 @@ docker compose --env-file .env.production restart app
 docker compose --env-file .env.production logs --tail=100 app
 # Re-running migrate is idempotent:
 docker compose --env-file .env.production exec app node dist/scripts/migrate.js
-# If schema is corrupted, restore from backup (§11 backup/restore) and
+# If schema is corrupted, restore from backup (§17 backup/restore) and
 # re-run migrate.
 
 # Admin password reset

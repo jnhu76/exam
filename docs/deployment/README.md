@@ -60,10 +60,14 @@
 
 ### Prebuilt image (recommended for operators)
 
-The `app` and `web` services run prebuilt release images pinned by
-`EXAM_IMAGE` / `EXAM_WEB_IMAGE` in `.env.production`. The `init-production-env.mjs`
-script derives both pins from `.release-version`
-(`ghcr.io/jnhu76/exam{,-web}:vX.Y.Z`).
+Each Exam release publishes two coordinated images as one version-matched
+pair: `ghcr.io/jnhu76/exam:vX.Y.Z` (API) and
+`ghcr.io/jnhu76/exam-web:vX.Y.Z` (static SPA). A normal install never
+chooses between them — `init-production-env.mjs` derives both pins
+(`EXAM_IMAGE` / `EXAM_WEB_IMAGE`) in `.env.production` from
+`.release-version`, and Compose starts the pair together. Manually editing
+the pins is an advanced override (registry mirror, offline `docker load`,
+rollback pinning) — see the runbook §3 "Image acquisition".
 
 ```bash
 node scripts/init-production-env.mjs
