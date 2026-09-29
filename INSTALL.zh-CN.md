@@ -37,7 +37,8 @@ node scripts/init-production-env.mjs
 docker compose --env-file .env.production up -d
 ```
 
-该命令会拉取预构建发布镜像，并启动应用与 PostgreSQL，无需本地构建。
+该命令会拉取预构建发布镜像，并启动 nginx 边缘代理、静态 Web 服务、API 与 PostgreSQL
+（#585 拓扑；nginx 是唯一对外发布的服务，监听 `EXAM_PORT`，默认 80）。无需本地构建。
 可以查看启动日志：
 
 ```bash
@@ -56,7 +57,7 @@ Server listening at http://0.0.0.0:3000
 docker compose --env-file .env.production ps
 ```
 
-预期看到：`app` 为 healthy，`db` 为 healthy。
+预期看到：`nginx` 为 running，`app`、`web`、`db` 均为 healthy。
 
 ### 4. 初始化第一个 Admin
 
@@ -72,7 +73,7 @@ docker compose --env-file .env.production exec app \
 
 ### 5. 打开应用
 
-访问 `http://localhost:3000`，使用刚刚创建的账号登录。
+访问 `http://localhost`（nginx 边缘代理，监听 `EXAM_PORT`，默认 80），使用刚刚创建的账号登录。
 
 ### 另一种方式：Launchpad 首次安装页
 
@@ -80,18 +81,18 @@ docker compose --env-file .env.production exec app \
 
 1. 在启动服务前，把 `LAUNCHPAD_SETUP_TOKEN=<openssl rand -hex 32>` 写入 `.env.production`。
 2. 执行 `docker compose --env-file .env.production up -d`。
-3. 打开 `http://localhost:3000/launchpad` 并完成表单。
+3. 打开 `http://localhost/launchpad` 并完成表单。
 4. 初始化完成后，`/launchpad` 会跳转到 `/login`，不会再次开放。
 
 ## 验证安装
 
 ```bash
 # API 存活检查
-curl -s http://localhost:3000/api/health
+curl -s http://localhost/api/health
 # 预期：{"status":"ok"}
 
 # 公共配置
-curl -s http://localhost:3000/api/system/public-config
+curl -s http://localhost/api/system/public-config
 ```
 
 然后通过 Web UI 登录，并创建一个测试 Candidate、Course、Question 和 Exam，验证完整流程。
@@ -101,15 +102,18 @@ curl -s http://localhost:3000/api/system/public-config
 如果局域网内其他设备需要访问，请在启动服务前设置 `.env.production`：
 
 ```bash
-EXAM_PORT=3000
-CORS_ORIGIN=http://192.168.1.5:3000
-PUBLIC_WEB_ORIGIN=http://192.168.1.5:3000
+EXAM_PORT=8080
+CORS_ORIGIN=http://192.168.1.5:8080
+PUBLIC_WEB_ORIGIN=http://192.168.1.5:8080
 ```
 
 把 `192.168.1.5` 替换成部署机器的真实局域网地址。浏览器生成邮件操作链接时会使用
 `PUBLIC_WEB_ORIGIN`，因此它应当填写用户实际访问的地址。
 
-如果需要 HTTPS，请在应用前方部署 nginx、Caddy 等反向代理。Exam 本身不负责 TLS 终止。
+如果需要 HTTPS，内置的 nginx 边缘代理已提供带注释的 HTTPS 模板：把证书链挂载到
+`/etc/nginx/certs/fullchain.pem`，私钥挂载到 `/etc/nginx/certs/privkey.pem`，取消
+`deploy/nginx/edge.conf` 中 443 server block 的注释，并在 `docker-compose.yml` 中发布
+443 端口。应用本身不负责 TLS 终止。
 
 ## 可选能力
 
