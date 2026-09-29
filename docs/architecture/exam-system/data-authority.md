@@ -170,9 +170,9 @@ The `packages/exam-engine/src/` layer contains **no explicit `db.transaction` ca
 | Exam close/unpublish/extend/cancel/archive | `executeInTransaction` → lock exam → reconcile → command | REPEATABLE READ | Atomic |
 | Exam create/update | Single repo call (no explicit tx) | N/A | Best-effort |
 | Attempt start | `executeInTransaction` → `startOrRestoreAttempt()` | READ COMMITTED | Best-effort |
-| Save answer | `executeInTransaction` → EA lock → reconcile (Exam FOR UPDATE in seam) → `saveAnswer()` | REPEATABLE READ | None |
-| Submit + grade | `executeInTransaction` → EA lock → reconcile (Exam FOR UPDATE in seam) → `submitAttempt()` → `finalizeGrading()` | REPEATABLE READ | Atomic |
-| Deadline reconciliation | `executeInTransaction` → EA lock → `ensureAttemptDeadlineReconciled()` → Exam FOR UPDATE (in-seam serialization point) → deadline decision | REPEATABLE READ | Atomic |
+| Save answer | `executeInTransaction` → EA lock → reconcile (Exam FOR SHARE in seam) → `saveAnswer()` | REPEATABLE READ | None |
+| Submit + grade | `executeInTransaction` → EA lock → reconcile (Exam FOR SHARE in seam) → `submitAttempt()` → `finalizeGrading()` | REPEATABLE READ | Atomic |
+| Deadline reconciliation | `executeInTransaction` → EA lock → `ensureAttemptDeadlineReconciled()` → Exam FOR SHARE (in-seam serialization point) → deadline decision | REPEATABLE READ | Atomic |
 | Manual grading | `executeInTransaction` → `gradeQuestion()` → `finalizeTerminalGrading()` | REPEATABLE READ | Atomic |
 | Force submit | `executeInTransaction` → EA lock → `submitAttempt()` → grade | REPEATABLE READ | Atomic |
 | Email claim | `executeInTransaction` → `claimDue()` (atomic CTE) | READ COMMITTED | None |
@@ -186,13 +186,14 @@ To avoid deadlocks, all code paths MUST acquire locks in a consistent order:
 Enrollment → Attempt → Exam
 ```
 
-Deadline reconciliation is self-serializing (#558): `ensureAttemptDeadlineReconciled()` asserts the EA capability affinity (proving the Enrollment → Attempt locks in the same transaction) and then acquires the Exam row lock itself, before any deadline decision. Callers must not rely on having locked the Exam row themselves; a same-transaction re-lock of the already-held Exam row is a safe no-op. No path may acquire the Exam lock before the Attempt lock.
+Deadline reconciliation is self-serializing (#558): `ensureAttemptDeadlineReconciled()` asserts the EA capability affinity (proving the Enrollment → Attempt locks in the same transaction) and then takes the Exam row lock itself, before any deadline decision. The candidate/read-side authority read is a SHARED lock (`examRepo.findByIdForShare`, `FOR SHARE`): it conflicts with Exam-authority writers exactly like `FOR UPDATE` (writer serialization and the REPEATABLE READ 40001 stale-snapshot abort are unchanged), while concurrent same-exam candidate readers coexist instead of queueing on one another. Callers must not rely on having locked the Exam row themselves; a same-transaction re-lock of the already-held Exam row is a safe no-op. No path may acquire the Exam lock before the Attempt lock.
 
 ### 9.4 Row-lock acquisition methods
 
 | Repository | Method | Lock |
 |------------|--------|------|
-| `examRepo` | `findByIdForUpdate(ctx, examId)` | `FOR UPDATE` |
+| `examRepo` | `findByIdForShare(ctx, examId)` — candidate deadline-authority read (#558) | `FOR SHARE` |
+| `examRepo` | `findByIdForUpdate(ctx, examId)` — exam-authority mutations (publish/close/extend/…), scanner recheck, restore, publish-results | `FOR UPDATE` |
 | `attemptRepo` | `findByIdForUpdate(ctx, attemptId)` | `FOR UPDATE` |
 | `enrollmentRepo` | `findByExamAndCandidateForUpdate(ctx, examId, candidateId)` | `FOR UPDATE` |
 | `emailOutboxRepo` | `claimDue()` | `FOR UPDATE SKIP LOCKED` |
