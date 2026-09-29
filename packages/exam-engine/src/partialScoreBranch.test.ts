@@ -190,6 +190,7 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
     const examRepo: ExamRepository = {
       findById: () => exam,
       findByIdForUpdate: () => exam,
+      findByIdForShare: () => exam,
       update: () => exam,
     };
     const attemptRepo: AttemptRepository = {
@@ -290,6 +291,7 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
     const examRepo: ExamRepository = {
       findById: () => exam,
       findByIdForUpdate: () => exam,
+      findByIdForShare: () => exam,
       update: () => exam,
     };
     const attemptRepo: AttemptRepository = {

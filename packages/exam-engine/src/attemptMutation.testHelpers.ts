@@ -262,6 +262,13 @@ export function makeExamRepo(exams: Exam[]): ExamRepository {
     findByIdForUpdate(examId) {
       return store.find((e) => e.id === examId) ?? null;
     },
+    // In-memory stand-in for the shared-lock authority read; lock-mode
+    // semantics (SHARE/SHARE coexistence, SHARE vs writer exclusion) are
+    // proven against real PostgreSQL by the deadline-authority concurrency
+    // suites, not by this fake.
+    findByIdForShare(examId) {
+      return store.find((e) => e.id === examId) ?? null;
+    },
     update() {
       throw new Error("not used");
     },

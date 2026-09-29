@@ -49,6 +49,17 @@ export interface ExamRepository {
    * preserved; no Exam → Attempt path.
    */
   findByIdForUpdate(examId: string): Promise<Exam | null> | Exam | null;
+  /**
+   * Loads an exam under a shared row lock (FOR SHARE) — the EXAM-558
+   * deadline-authority candidate/read-side read. The shared lock still
+   * conflicts with exam-authority writers (FOR UPDATE / UPDATE), so the
+   * deadline decision serializes against concurrent exam commands exactly
+   * as with findByIdForUpdate; concurrent same-exam candidate readers
+   * coexist instead of queueing on one another. Not for exam mutation
+   * paths — those keep findByIdForUpdate exclusivity. Lock order
+   * Enrollment → Attempt → Exam must be preserved; no Exam → Attempt path.
+   */
+  findByIdForShare(examId: string): Promise<Exam | null> | Exam | null;
   update(
     examId: string,
     data: Partial<Exam>,

@@ -213,6 +213,7 @@ function makeRepos(
   const examRepo: ExamRepository = {
     findById: () => exam,
     findByIdForUpdate: () => exam,
+    findByIdForShare: () => exam,
     update: () => exam,
   };
   const attemptRepo: AttemptRepository = {

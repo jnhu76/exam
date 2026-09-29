@@ -212,6 +212,30 @@ export function createExamRepo(db: Database) {
       return (rows[0] as ExamSelect | undefined) ?? null;
     },
     /**
+     * Finds an exam by `id` with a shared (`FOR SHARE`) row lock, scoped to
+     * the tenant.
+     *
+     * EXAM-558 candidate/read-side deadline-authority read: the shared lock
+     * still conflicts with exam-authority writers (FOR UPDATE / UPDATE), so
+     * the deadline decision serializes against concurrent exam commands
+     * exactly as `findByIdForUpdate` does, but concurrent same-exam
+     * candidate readers coexist instead of queueing on one another. Not for
+     * exam mutation paths — admin close/extend/unpublish/archive keep
+     * `findByIdForUpdate` exclusivity.
+     */
+    async findByIdForShare(
+      ctx: TenantContext | RequestContext,
+      examId: string,
+    ): Promise<ExamSelect | null> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select()
+        .from(exams)
+        .for("share")
+        .where(and(eq(exams.organizationId, orgId), eq(exams.id, examId)));
+      return (rows[0] as ExamSelect | undefined) ?? null;
+    },
+    /**
      * Batch-loads candidate eligibility chains for multiple exam ids.
      * Returns a Map<examId, { examId, candidateProfileId, ownerUserId, enrollmentId }>
      * for exams where the actor has a valid enrollment. Missing or ineligible

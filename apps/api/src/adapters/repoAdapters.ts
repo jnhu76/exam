@@ -41,6 +41,8 @@ export function createExamRepoAdapter(
       (await repo.findById(ctx, examId)) as Exam | null,
     findByIdForUpdate: async (examId) =>
       (await repo.findByIdForUpdate(ctx, examId)) as Exam | null,
+    findByIdForShare: async (examId) =>
+      (await repo.findByIdForShare(ctx, examId)) as Exam | null,
     update: async (examId, data) =>
       (await repo.update(
         ctx,

@@ -102,6 +102,9 @@ function makeRepo(initial: Exam): ExamRepository {
     findByIdForUpdate(id: string) {
       return id === current.id ? current : null;
     },
+    findByIdForShare(id: string) {
+      return id === current.id ? current : null;
+    },
     update(_id: string, data: Partial<Exam>) {
       current = { ...current, ...data };
       return current;

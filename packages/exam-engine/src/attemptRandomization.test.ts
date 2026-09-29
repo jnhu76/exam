@@ -276,6 +276,9 @@ function makeExamRepo(exams: Exam[]): ExamRepository {
     findByIdForUpdate(examId) {
       return store.find((e) => e.id === examId) ?? null;
     },
+    findByIdForShare(examId) {
+      return store.find((e) => e.id === examId) ?? null;
+    },
     update() {
       throw new Error("not used");
     },
