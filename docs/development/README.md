@@ -44,7 +44,9 @@ packages/
 # 1. Install dependencies
 pnpm install
 
-# 2. Start PostgreSQL (+ Redis for optional features)
+# 2. Start PostgreSQL + Redis (loopback-only host ports; the Redis
+#    container is a zero-config convenience for opt-in consumers — the
+#    application's Redis mode stays off unless REDIS_URL is configured)
 pnpm db:up
 
 # 3. Run migrations
@@ -68,9 +70,9 @@ The Vite dev server proxies `/api/*` requests to the API automatically.
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm db:up` | Start PostgreSQL container (port `DB_HOST_PORT`, default 5432) |
-| `pnpm db:down` | Stop PostgreSQL container |
-| `pnpm db:reset` | Reset dev database (down + up) |
+| `pnpm db:up` | Start/reuse the dev containers: PostgreSQL + Redis, loopback-only host ports (`DB_HOST_PORT` / `REDIS_HOST_PORT`, defaults 5432 / 6379) |
+| `pnpm db:down` | Tear down the dev Compose stack (`docker compose down`) — dev database state is disposable and NOT reachable afterwards |
+| `pnpm db:reset` | Tear down and immediately start a fresh stack; reconstruct data with `pnpm db:migrate` + `pnpm db:seed` |
 | `pnpm db:migrate` | Run migrations |
 | `pnpm db:push` | Push schema changes directly |
 | `pnpm db:studio` | Open Drizzle Studio |
@@ -78,11 +80,15 @@ The Vite dev server proxies `/api/*` requests to the API automatically.
 
 The dev stack runs as the pinned Compose project `exam-dev` (#631), so a
 production rehearsal from this checkout can never recreate its containers.
-A dev stack created before the pin lives under project `exam` and is
-untouched by `pnpm db:up`; start it explicitly with
-`docker compose -p exam -f docker-compose.dev.yml up -d` (its data volume
-is preserved) or recreate fresh data with `pnpm db:migrate` +
-`pnpm db:seed`.
+Dev database state is explicitly **disposable**: the Postgres container
+holds no named volume. `pnpm db:up` after `stop` / `restart` / a host
+reboot reuses the existing container and keeps its data; `pnpm db:down`
+removes the container, and the next `db:up` mounts a fresh anonymous
+volume — the old state is unreachable either way (the test `exam_test`
+database is self-provisioned by the test harness). Reconstruction is
+`pnpm db:migrate` + `pnpm db:seed`. A dev stack created before the pin
+lives under project `exam` and is untouched by `pnpm db:up`; start it
+explicitly with `docker compose -p exam -f docker-compose.dev.yml up -d`.
 
 The dev `DATABASE_URL` is constructed from `DB_HOST_PORT` by the single
 source DB resolver (`packages/db/src/databaseUrl.ts`). An explicit

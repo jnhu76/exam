@@ -9,8 +9,8 @@ changing product defaults.
 | ----- | ----------------- | ------------: | ----------------------------------- | ------: |
 | dev   | API               |           n/a | `DEV_API_PORT` (API bind + Vite proxy target) | 3000 |
 | dev   | Vite              |           n/a | `VITE_PORT` (also owns API dev CORS / PUBLIC_WEB_ORIGIN default) | 5173 |
-| dev   | PostgreSQL Docker |          5432 | `DB_HOST_PORT` (dev compose publish + constructed dev `DATABASE_URL`) | 5432 |
-| dev   | Redis Docker      |          6379 | `REDIS_HOST_PORT` (dev compose publish; point `REDIS_URL` at the same port) | 6379 |
+| dev   | PostgreSQL Docker |          5432 | `DB_HOST_PORT` (dev compose publish — loopback-only — + constructed dev `DATABASE_URL`) | 5432 |
+| dev   | Redis Docker      |          6379 | `REDIS_HOST_PORT` (dev compose publish — loopback-only; point `REDIS_URL` at the same port when opting in) | 6379 |
 | Docker | nginx edge       |            80 | `EXAM_PORT` (the ONLY host publish; also owns default `CORS_ORIGIN` / `PUBLIC_WEB_ORIGIN`) | 80 |
 | Docker | Exam app (API)   |          3000 | internal only (`app:3000` behind the edge) | — |
 | Docker | static web (SPA) |          4173 | internal only (`web:4173` behind the edge) | — |

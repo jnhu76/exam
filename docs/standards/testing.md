@@ -214,14 +214,20 @@ production deployment itself is the acceptance surface (§1.6).
 
 | Context | Value | Purpose |
 |---------|-------|---------|
-| CI verify | `redis://localhost:6379` | API tests that use Redis |
+| CI verify | `redis://localhost:6379` | API tests that use Redis (a CI service container supplies it) |
 | CI E2E | Not set | E2E doesn't need Redis |
 | Docker | `redis://redis:6379` | Container internal |
-| Local dev | `redis://localhost:6379` | Dev runtime |
+| Local dev | Unset by default; opt-in `redis://localhost:<REDIS_HOST_PORT>` (the `pnpm db:up` Redis, loopback-only) | The container being available ≠ the application's Redis mode being enabled: `REDIS_URL` unset → Redis mode `off` (in-memory rate limiting), so a developer must export `REDIS_URL` explicitly to exercise Redis-dependent behavior |
 
 **Rules:**
-- Redis is required for API tests that exercise rate limiting, session storage, or pub/sub.
-- If Redis is unreachable, API tests that depend on it will fail. Tests that don't use Redis (pure unit tests) are unaffected.
+- API tests that exercise Redis-backed rate limiting, session storage, or
+  pub/sub are Redis-**gated**: they run only when Redis is configured AND
+  reachable.
+- Redis-gated suites **SKIP — never fail —** when `REDIS_URL` is unset or
+  Redis is unreachable (live reachability probe, e.g.
+  `apps/api/src/routes/redis.test.ts`,
+  `apps/api/src/plugins/rateLimit.redis.test.ts`); tests that don't use
+  Redis (pure unit tests) are unaffected.
 - `@exam/db` tests do NOT require Redis.
 - `@exam/auth` tests do NOT require Redis.
 
