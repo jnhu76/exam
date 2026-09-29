@@ -213,6 +213,7 @@ function setupMocks(opts: {
   const examRepo = {
     findById: async () => exam,
     findByIdForUpdate: async () => exam,
+    findByIdForShare: async () => exam,
     update: async () => exam,
   } as unknown as ExamRepository;
 
