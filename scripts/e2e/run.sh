@@ -601,7 +601,9 @@ run_cleanup() {
   #         under KEEP_SERVER or worker-DB retention — a kept server / kept
   #         DB needs its compose). ----
   # DEV_COMPOSE_WAS_UP defaults to "1" (prevent teardown): an UNKNOWN startup
-  # state must never `down -v` dev volumes; teardown requires an explicit
+  # state must never `down -v` the dev compose — its containers hold the
+  # in-use disposable dev/worker databases (the dev file declares no named
+  # volume); teardown requires an explicit
   # "0". Subshell scopes the `cd`; no `local` inside it. `compose ps` /
   # `down` failures are loud: they set CLEANUP_FAILURE via the subshell rc.
   if [[ "${KEEP_SERVER:-0}" != "1" && "$preserve_worker_dbs" != "1" && \

@@ -5,15 +5,21 @@ services:
   db:
     image: postgres:18.4-bookworm
     ports:
-      # DB_HOST_PORT owns the dev host port (default 5432).
-      - "${DB_HOST_PORT:-5432}:5432"
+      # DB_HOST_PORT owns the dev host port (default 5432). Loopback-only:
+      # the consumers are host-native processes (pnpm dev, vitest, run.sh);
+      # there is no supported scenario for LAN access to the dev database.
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam
       POSTGRES_DB: exam
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
-    command: postgres -c default_transaction_isolation='repeatable read'
+    # Application transactions declare their isolation explicitly
+    # (executeInTransaction defaults to "repeatable read"); CI's bare
+    # PostgreSQL containers prove no server-side default is required, so
+    # dev must not silently differ from production (READ COMMITTED) for
+    # sessions that skip executeInTransaction.
     # No initdb mount: the test `exam_test` database is self-provisioned by
     # the test harness (testDbBootstrap.ts), which also heals an already-
     # initialized container — an initdb script could not.
@@ -26,8 +32,11 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      # REDIS_HOST_PORT owns the dev host port (default 6379).
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      # REDIS_HOST_PORT owns the dev host port (default 6379). Loopback-only:
+      # the container is a zero-configuration convenience for opt-in
+      # consumers (Redis-gated test suites, optional-mode rehearsal); no
+      # supported scenario needs LAN access to an unauthenticated Redis.
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
     environment:
       TZ: ${TZ:-Asia/Shanghai}
     healthcheck:

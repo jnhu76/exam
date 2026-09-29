@@ -38,7 +38,8 @@ packages/
 # 1. 安装依赖
 pnpm install
 
-# 2. 启动 PostgreSQL（以及可选功能需要的 Redis）
+# 2. 启动 PostgreSQL + Redis（宿主机端口仅绑定环回；Redis 容器是可选消费者的
+#    零配置便利——应用侧 Redis 模式在未配置 REDIS_URL 时保持关闭）
 pnpm db:up
 
 # 3. 执行迁移
@@ -62,13 +63,18 @@ Vite 开发服务器会自动把 `/api/*` 请求代理到 API。
 
 | 命令 | 用途 |
 | --- | --- |
-| `pnpm db:up` | 启动 PostgreSQL 容器（端口由 `DB_HOST_PORT` 控制，默认 5432） |
-| `pnpm db:down` | 停止 PostgreSQL 容器 |
-| `pnpm db:reset` | 重置开发数据库（down + up） |
+| `pnpm db:up` | 启动/复用开发容器：PostgreSQL + Redis，宿主机端口仅绑定环回（`DB_HOST_PORT` / `REDIS_HOST_PORT`，默认 5432 / 6379） |
+| `pnpm db:down` | 拆除开发 Compose 栈并销毁其一次性卷/数据（`docker compose down -v`）——开发数据库状态被销毁，不会保留 |
+| `pnpm db:reset` | 销毁一次性栈/卷并立即启动全新栈；数据重建用 `pnpm db:migrate` + `pnpm db:seed` |
 | `pnpm db:migrate` | 执行迁移 |
 | `pnpm db:push` | 直接推送 schema 变更 |
 | `pnpm db:studio` | 打开 Drizzle Studio |
 | `pnpm db:generate` | 生成迁移文件 |
+
+开发数据库状态显式**一次性**：Postgres 容器没有命名卷。`stop` / `restart` /
+宿主机重启后再跑 `pnpm db:up` 会复用既有容器并保留数据；`pnpm db:down`
+拆除栈并**销毁**其一次性容器卷/数据（`down -v`）。数据重建 =
+`pnpm db:migrate` + `pnpm db:seed`（测试 `exam_test` 库由测试 harness 自建自愈）。
 
 开发环境的 `DATABASE_URL` 由统一 DB resolver（`packages/db/src/databaseUrl.ts`）根据
 `DB_HOST_PORT` 构造；如果显式设置 `DATABASE_URL`，则显式值优先。
