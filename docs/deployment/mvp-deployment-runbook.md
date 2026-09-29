@@ -99,10 +99,10 @@ if any is unset. There is NO default database password in production
 | Variable | Default | Notes |
 |---|---|---|
 | `CORS_ORIGIN` | `http://localhost` | Browser origin allowlist (credentials:true); comma-separated → array. #585: web owns public :80, so the default carries no port suffix; a remapped `EXAM_PORT` or LAN/hostname access MUST set it to the exact origin users browse |
-| `PUBLIC_WEB_ORIGIN` | `http://localhost` | Used to build Email action links; validated as absolute origin (scheme+host[+port], no path). Same #585 default; set explicitly for remapped/LAN/HTTPS access |
+| `PUBLIC_WEB_ORIGIN` | `http://localhost` | The canonical browser-visible origin and the ONE transport-policy authority: used to build Email action links AND to decide cookie `Secure`, HSTS, and CSP `upgrade-insecure-requests` by its scheme. Validated as absolute origin (scheme+host[+port], no path). Same #585 default; set explicitly for remapped/LAN/HTTPS access. See "Transport modes (HTTP LAN / HTTPS ingress)" below |
 | `EXAM_PORT` | 80 | Host port published by the `web` nginx edge (`${EXAM_PORT:-80}:80`) — the only published service (#585). The container API stays on 3000 (`APP_PORT` is container-internal only; never host-published). Local dev uses `DEV_API_PORT` instead — see docs/development/ports.md |
 | `HOST` | 0.0.0.0 | API bind host |
-| `APP_MODE` / `NODE_ENV` | compose-pinned `production` | `docker-compose.yml` fixes both to `production` (values in `.env.production` are not read): CSRF, HSTS, Secure cookies, and fail-fast required env are always on in the deployed stack |
+| `APP_MODE` / `NODE_ENV` | compose-pinned `production` | `docker-compose.yml` fixes both to `production` (values in `.env.production` are not read): CSRF origin enforcement and fail-fast required env are always on. HTTPS-specific behavior (cookie `Secure`, HSTS, CSP `upgrade-insecure-requests`) is NOT mode-owned — it follows the `PUBLIC_WEB_ORIGIN` scheme (see "Transport modes (HTTP LAN / HTTPS ingress)" below) |
 | `DEPLOYMENT_MODE` | singleTenant | `multiTenant` is rejected at boot (Phase 4 only) |
 | `APP_TIMEZONE` / `TZ` | Asia/Shanghai | display/log/diagnostics only; does not change business-time comparison semantics |
 | `REDIS_URL` | unset (disabled) | optional; see §10 (enable with `--profile redis`; authenticated URL required) |
@@ -110,7 +110,7 @@ if any is unset. There is NO default database password in production
 | `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` | 30000 / 60000 | in-process heartbeat scanner |
 | `DEADLINE_SCAN_INTERVAL_MS` | (inherits HEARTBEAT) | in-process deadline scanner |
 | `RATE_LIMIT_*` | 100 / 60000 / disabled in e2e | IP-keyed rate limiter; Redis-backed shared state when the `redis` profile is enabled and the runtime is ready — local in-memory fallback only in `optional` mode; `required` mode fails closed with 503 `RATE_LIMIT_UNAVAILABLE` (never falls back to local). See §10 |
-| `TRUSTED_PROXY_CIDRS` | unset (socket-peer identity) | deployments with a proxy in front of the API: CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). #585 default topology: the bundled web nginx edge IS such a proxy — set this to the Compose bridge subnet (see below). Unset collapses all candidates onto the edge IP. See "Rate-limit identity, trusted proxies, and sizing" above |
+| `TRUSTED_PROXY_CIDRS` | bundled-topology default: the Compose-pinned `exam-net` subnet (`172.28.0.0/24`) | CIDRs whose sockets may rewrite the client IP via `X-Forwarded-For` (comma-separated; bare IP = one host; malformed/host-bits entries fail fast). `docker-compose.yml` derives the default from its own pinned bridge subnet, so the bundled #585 topology is correct with no operator lookup. Override ONLY for an external-proxy topology (see "Rate-limit identity, trusted proxies, and sizing" below) |
 
 ### Email (in-process outbox loop + sender)
 
@@ -140,6 +140,45 @@ settings model is the single source.
 > to start cleanly
 > when a stale shell env is suspected.
 
+### Transport modes (HTTP LAN / HTTPS ingress)
+
+There is ONE application runtime (`APP_MODE=production`); TLS is a property
+of the ingress, never an application mode. The canonical browser-visible
+origin (`PUBLIC_WEB_ORIGIN`) decides every HTTPS-specific behavior:
+
+| Canonical origin | Cookie `Secure` | HSTS | CSP `upgrade-insecure-requests` |
+|---|---|---|---|
+| `http://192.168.1.20` (LAN IP) | no | no | no |
+| `http://exam.school.lan` / `:8080` | no | no | no |
+| `https://exam.example.edu` | yes | yes | yes |
+
+**Mode A — controlled / isolated LAN HTTP (`http://...`). SUPPORTED.** No
+certificate is required. On HTTP, transport confidentiality and integrity
+are absent: an attacker able to observe or modify LAN traffic can capture
+login credentials and session cookies, read exam questions and candidate
+answers in transit, and tamper with submissions. Suitability is a network
+property:
+
+- controlled / physically isolated exam LAN → supported operating point;
+- ordinary semi-trusted institution LAN → supported with that exposure in
+  mind (prefer Mode B where certificates are available);
+- shared or student-controlled Wi-Fi / hostile LAN → use HTTPS (Mode B) or
+  network isolation.
+
+**Mode B — HTTPS ingress (`https://...`).** TLS terminates at the `web`
+nginx edge; the application stays `APP_MODE=production` and the internal
+app hop remains HTTP. Certificate provisioning is an operator/ingress
+concern — see the "Network / TLS" section of `docs/deployment/README.md`
+for the activation mount layout (no ACME/Certbot is bundled).
+
+**HSTS downgrade constraint (Mode B → Mode A).** If a hostname has ever
+been served over HTTPS, browsers may have stored its HSTS policy (up to one
+year, `includeSubDomains`). Switching that hostname to HTTP-only afterwards
+makes browsers refuse the plain-HTTP site until the policy expires — an
+HTTP-delivered header CANNOT clear stored HSTS state. Plan hostname/transport
+changes accordingly (use a different hostname for a permanent HTTP-only
+deployment, or restore HTTPS).
+
 ### Rate-limit identity, trusted proxies, and sizing (#546)
 
 The rate limiter keys on `request.ip`, and the audit trail records the same
@@ -148,8 +187,8 @@ depends on the deployment topology:
 
 | Topology | `request.ip` | Verdict |
 | --- | --- | --- |
-| Bundled web nginx edge (#585 default compose) + `TRUSTED_PROXY_CIDRS` = the Compose bridge subnet | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default — one lookup: `docker network inspect exam-prod_exam-net` (pinned project name, #631) and set the subnet (e.g. `172.19.0.0/16`) in `.env.production` |
-| Bundled web nginx edge WITHOUT `TRUSTED_PROXY_CIDRS` | the edge's bridge IP (all candidates collapse) | Misconfigured — the app cannot trust its only ingress; set the subnet as above |
+| Bundled web nginx edge (#585 default compose, unmodified) | each candidate's real IP (the edge replaces `X-Forwarded-For` with `$remote_addr`) | Supported default, correct out of the box: Compose pins `exam-net` to `172.28.0.0/24` and defaults `TRUSTED_PROXY_CIDRS` to it — no lookup needed |
+| Bundled web nginx edge with `TRUSTED_PROXY_CIDRS` overridden to empty | the edge's bridge IP (all candidates collapse) | Misconfigured — do not clear the default for the bundled topology |
 | Shared NAT (many candidates behind one egress IP) | the shared IP | Supported with sizing: the whole cohort shares one identity; size `RATE_LIMIT_MAX` by the rule below and stagger logins (the login budget is 10/min/IP) |
 | Reverse proxy WITH trusted client-IP wiring | per-candidate IP | Supported: set `TRUSTED_PROXY_CIDRS` to the proxy's addresses |
 | Reverse proxy WITHOUT trusted client-IP wiring | the proxy IP (all candidates collapse) | Degraded by config — wire `TRUSTED_PROXY_CIDRS` (below) |
@@ -763,17 +802,36 @@ curl -s http://localhost:${EXAM_PORT:-80}/api/system/public-config
 #    Log in with the bootstrapped admin credentials (§5 — never the
 #    default-credential dev/test seed).
 
-# 3b. Scripted no-browser login check (optional): in production every POST
-#     must carry the browser-equivalent Origin header — CSRF Origin
-#     enforcement rejects other origins with 403 CSRF_ORIGIN_REJECTED
-#     (browsers send Origin automatically, so the UI path above needs
-#     nothing). The value must be the configured CORS_ORIGIN.
-curl -s -o /dev/null -w 'HTTP %{http_code}\n' -X POST \
+# 3b. Scripted no-browser login + cookie-transport check (optional): in
+#     production every POST must carry the browser-equivalent Origin header —
+#     CSRF Origin enforcement rejects other origins with 403
+#     CSRF_ORIGIN_REJECTED (browsers send Origin automatically, so the UI
+#     path above needs nothing). The value must be the configured
+#     CORS_ORIGIN. This check must PROVE the emitted auth cookie is usable
+#     under the deployment's transport — "Set-Cookie exists" alone is not
+#     enough (a Secure cookie delivered from an http:// canonical origin is
+#     discarded by browsers, which is what once broke LAN HTTP login).
+ORIGIN='<CORS_ORIGIN value, e.g. http://192.168.1.5>'
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' -c /tmp/exam-smoke-jar -X POST \
   "http://localhost:${EXAM_PORT:-80}/api/auth/login" \
   -H 'Content-Type: application/json' \
-  -H 'Origin: <CORS_ORIGIN value, e.g. http://localhost:18080>' \
+  -H "Origin: ${ORIGIN}" \
   -d '{"username":"<admin-username>","password":"<strong-password>"}'
 #    Expect HTTP 200 and a Set-Cookie: auth-token=... header.
+#    Transport check: capture the emitted attributes and compare them with
+#    PUBLIC_WEB_ORIGIN —
+curl -s -D - -o /dev/null -X POST \
+  "http://localhost:${EXAM_PORT:-80}/api/auth/login" \
+  -H 'Content-Type: application/json' -H "Origin: ${ORIGIN}" \
+  -d '{"username":"<admin-username>","password":"<strong-password>"}' \
+  | grep -i 'set-cookie: auth-token'
+#      origin is http://...  → the cookie must NOT carry `Secure`
+#      origin is https://... → the cookie MUST carry `Secure`
+#    Then prove the cookie is actually usable (authenticated roundtrip):
+curl -s -b /tmp/exam-smoke-jar \
+  "http://localhost:${EXAM_PORT:-80}/api/auth/me"
+#    Expect HTTP 200 with the logged-in user's profile JSON (401 means the
+#    browser-equivalent cookie flow is broken — do not accept the deployment).
 
 # 4. In the admin console:
 #    - Create a Candidate
@@ -805,6 +863,40 @@ application runs on the host with `APP_MODE=e2e` against the isolated
 `exam_e2e*` databases, and Compose supplies only the PostgreSQL/Redis
 dependencies. There is no Docker-app-image E2E path (issue #636).
 **Never** run E2E against the production database.
+
+### Production transport rehearsal (browser-visible)
+
+The e2e stack above runs `APP_MODE=e2e` on `http://localhost`, which is a
+browser secure context — it cannot see transport regressions (a `Secure`
+auth cookie is discarded by browsers on plain-HTTP NON-localhost origins).
+The ONE browser-level production check lives in
+`apps/e2e/e2e/production-lan-http.spec.ts` and runs against a real
+production Compose stack rehearsed from this checkout (source build):
+
+```bash
+docker build --target runner -t exam-local:dev .
+docker build --target web-runner -t exam-local:web-dev .
+# .env.production: EXAM_IMAGE=exam-local:dev EXAM_WEB_IMAGE=exam-local:web-dev
+#   EXAM_PORT=<free port, e.g. 18080>
+#   CORS_ORIGIN=http://exam.test:18080
+#   PUBLIC_WEB_ORIGIN=http://exam.test:18080   (http scheme = LAN HTTP mode)
+#   LAUNCHPAD_SETUP_TOKEN=<token>
+#   EXAM_DATA_ROOT="${TMPDIR:-/tmp}/exam-prod-rehearsal"
+docker compose --env-file .env.production -f docker-compose.yml up -d
+
+E2E_BASE_URL=http://exam.test:18080 \
+E2E_HOST_MAP=exam.test=127.0.0.1 \
+E2E_PROD_LAUNCHPAD_TOKEN=<token> \
+E2E_TRACE=1 \
+pnpm --filter @exam/e2e exec playwright test production-lan-http --trace retain-on-failure
+```
+
+`E2E_HOST_MAP` maps the non-localhost canonical origin to the loopback
+inside the BROWSER only — so the cookie policy sees the real thing (an
+`http://exam.test` origin is NOT a secure context) while the stack stays
+on the local machine. The spec asserts the persisted cookie state
+(non-`Secure`, `HttpOnly`, `SameSite=Strict`) and a real authenticated
+roundtrip; failure artifacts land in `apps/e2e/test-results/`.
 
 ### Release artifact evidence
 

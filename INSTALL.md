@@ -122,7 +122,12 @@ PUBLIC_WEB_ORIGIN=http://192.168.1.5:8080
 
 Replace `192.168.1.5` with your machine's actual LAN address. The
 browser uses `PUBLIC_WEB_ORIGIN` for email action links, so set it to
-the address users will access.
+the address users will access. Its scheme is also the transport-policy
+authority: an `http://` origin ships auth cookies without `Secure` and
+no HSTS (supported on a controlled or appropriately trusted LAN — on
+HTTP an attacker able to observe or modify LAN traffic can capture
+credentials, sessions, and exam content); an `https://` origin keeps
+all HTTPS hardening.
 
 For HTTPS, the bundled `web` nginx carries a commented HTTPS template —
 but that configuration is **baked into the `exam-web` image**, so editing
