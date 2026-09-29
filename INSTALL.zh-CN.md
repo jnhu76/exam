@@ -37,8 +37,8 @@ node scripts/init-production-env.mjs
 docker compose --env-file .env.production up -d
 ```
 
-该命令会拉取预构建发布镜像，并启动 nginx 边缘代理、静态 Web 服务、API 与 PostgreSQL
-（#585 拓扑；nginx 是唯一对外发布的服务，监听 `EXAM_PORT`，默认 80）。无需本地构建。
+该命令会拉取预构建发布镜像，并启动 `web`（nginx 边缘 + 静态 SPA）、API 与 PostgreSQL
+（#585 拓扑；`web` 是唯一对外发布的服务，监听 `EXAM_PORT`，默认 80）。无需本地构建。
 
 每个 Exam 版本都会发布一对版本号一致的成对镜像（API 镜像与 Web 镜像）。
 `init-production-env.mjs` 已经把两个镜像引用写入 `.env.production`
@@ -64,7 +64,7 @@ Server listening at http://0.0.0.0:3000
 docker compose --env-file .env.production ps
 ```
 
-预期看到：`nginx` 为 running，`app`、`web`、`db` 均为 healthy。
+预期看到：`web` 为 running，`app`、`db` 均为 healthy。
 
 ### 4. 初始化第一个 Admin
 
@@ -80,7 +80,7 @@ docker compose --env-file .env.production exec app \
 
 ### 5. 打开应用
 
-访问 `http://localhost`（nginx 边缘代理，监听 `EXAM_PORT`，默认 80），使用刚刚创建的账号登录。
+访问 `http://localhost`（`web` nginx 边缘，同时服务静态 SPA，监听 `EXAM_PORT`，默认 80），使用刚刚创建的账号登录。
 
 ### 另一种方式：Launchpad 首次安装页
 
@@ -117,10 +117,13 @@ PUBLIC_WEB_ORIGIN=http://192.168.1.5:8080
 把 `192.168.1.5` 替换成部署机器的真实局域网地址。浏览器生成邮件操作链接时会使用
 `PUBLIC_WEB_ORIGIN`，因此它应当填写用户实际访问的地址。
 
-如果需要 HTTPS，内置的 nginx 边缘代理已提供带注释的 HTTPS 模板：把证书链挂载到
-`/etc/nginx/certs/fullchain.pem`，私钥挂载到 `/etc/nginx/certs/privkey.pem`，取消
-`deploy/nginx/edge.conf` 中 443 server block 的注释，并在 `docker-compose.yml` 中发布
-443 端口。应用本身不负责 TLS 终止。
+如果需要 HTTPS，内置的 `web` nginx 已提供带注释的 HTTPS 模板——但该配置
+**烘焙在 `exam-web` 镜像内**，修改 checkout 里的 `deploy/nginx/web.conf`
+不会改变已经拉取的镜像。启用方式：复制 `deploy/nginx/web.conf` 并取消其中 443
+server block 的注释，把修改后的副本与证书链（挂载到 `/etc/nginx/certs/fullchain.pem`）、
+私钥（挂载到 `/etc/nginx/certs/privkey.pem`）一起覆盖挂载到 `web` 服务的
+`/etc/nginx/conf.d/default.conf`，并发布 443 端口（建议放在 compose override 文件
+`docker-compose.override.yml` 中，`docker compose` 会自动合并）。应用本身不负责 TLS 终止。
 
 ## 可选能力
 

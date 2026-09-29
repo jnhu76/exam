@@ -67,7 +67,7 @@ the security repo.
 
 ### Port 80 already in use
 
-The nginx edge maps `${EXAM_PORT:-80}` (#585 — the only published
+The `web` service maps `${EXAM_PORT:-80}` (#585 — the only published
 service). Change the host port in `.env.production`:
 
 ```dotenv
@@ -82,16 +82,16 @@ Verify instead of guessing:
 ```bash
 # Always pass the deployment env file: the base compose interpolates
 # required variables (${EXAM_IMAGE:?...}) and aborts without it.
-docker compose --env-file .env.production ps          # nginx running; app/web/db healthy
+docker compose --env-file .env.production ps          # web running; app/db healthy
 docker compose --env-file .env.production logs app    # migrations + 'Server listening'?
-curl -i http://localhost/               # expect 200 + text/html (SPA via the edge)
+curl -i http://localhost/               # expect 200 + text/html (SPA served by web)
 curl -I http://localhost/assets/        # expect 200 for a built asset
 ```
 
 `app: healthy` means the readiness gate (`/api/ready` — mandatory
 dependencies usable, e.g. PostgreSQL reachable) holds; `web: healthy`
-means the SPA is servable on 4173; `nginx` only starts once both are
-true, so a running edge means the web app is being served and the
+means the SPA is servable on container 80, and web only starts once app
+is healthy, so a running web edge means the web app is being served and the
 deployment readiness state holds. If the browser still cannot reach it,
 check that the container's published port is reachable from the host
 (firewall / WSL2 localhost forwarding on Windows).
@@ -101,7 +101,7 @@ check that the container's published port is reachable from the host
 - Run the Quick Start from inside WSL2 (Ubuntu). `docker compose --env-file
   .env.production up -d` works from PowerShell too, but
   `node scripts/init-production-env.mjs` needs Node on the host PATH.
-- On Windows, Docker Desktop usually exposes `localhost` (the nginx edge,
+- On Windows, Docker Desktop usually exposes `localhost` (the web nginx edge,
   `EXAM_PORT`) to the host
   automatically. If not, access the container via the WSL2 IP
   (`ip addr show eth0 | grep inet` inside WSL) or run the browser inside WSL.
