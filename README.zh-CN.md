@@ -21,17 +21,12 @@
 
 ---
 
-> [!NOTE]
-> 本文是 `README.md` 的简体中文阅读版本，不是独立的运行时或产品事实权威。
-> 若本文与当前实现、契约或 Accepted ADR 出现冲突，应按 [`docs/README.md`](docs/README.md)
-> 定义的 authority 模型处理；实际命令与接线以代码、`package.json` scripts、Docker 配置和 CI workflow 为准。
-
 ## ✨ Exam 是什么？
 
-Exam 是一个面向局域网 / 本地部署、当前采用单租户运行模式的考试与测评平台。
+Exam 是一个面向 LAN / on-premise（本地部署）的单租户考试与测评平台。
 一个机构部署一个实例，考生通过局域网参加考试。产品运行时不依赖云端服务、外部 API 或遥测服务。
 
-系统支持开放式测验和严格监考场景，提供客观题自动评分、主观题人工评分，以及结果发布与站内通知。
+系统支持开卷测验和严格监考考试，提供客观题自动评分、主观题人工评分，以及结果发布与站内通知。
 
 ## 🧩 核心能力
 
@@ -39,13 +34,13 @@ Exam 是一个面向局域网 / 本地部署、当前采用单租户运行模式
 - **计时模式** — 时间窗口、截止时间、不限时
 - **答案保存协议** — 带版本号、幂等与冲突检测的答案持久化，并包含客户端离线兜底
 - **自动评分** — 单选、多选、判断、填空
-- **人工评分** — 主观文本题与基于 rubric 的评分
+- **人工评分** — 主观文本题与基于评分量规（rubric）的评分
 - **结果发布** — 即时发布、评分完成后发布或人工发布；支持站内通知和可选邮件投递
-- **考生恢复** — 心跳检测中断、考生自助恢复、管理员 Recovery Center
+- **考生恢复** — 基于心跳检测异常中断的考试作答、考生自助恢复、管理员恢复中心
 - **身份生命周期** — 员工邀请、邮件密码重置、账号启用 / 停用
-- **基于角色与能力的访问控制** — Admin、Teacher、Candidate、Proctor、Grader、Maintainer，并支持作用域权限
+- **基于角色的访问控制** — Admin、Teacher、Candidate、Proctor、Grader、Maintainer，并支持作用域权限
 - **运维控制面** — 诊断、备份证据台账、恢复就绪状态、结构化审计日志
-- **邮件投递** — 进程内 outbox loop、重试、锁恢复和可选 SMTP
+- **邮件投递** — 进程内 outbox 处理循环、重试、锁恢复和可选 SMTP
 - **Docker 部署** — 预构建镜像、单命令启动、可选 Redis
 
 ## 🚀 快速开始
@@ -59,7 +54,7 @@ docker compose --env-file .env.production up -d        # 拉取预构建镜像�
 docker compose --env-file .env.production ps           # 等待三个服务全部进入 healthy
 ```
 
-每个 Exam 版本都会发布一对版本号一致的成对镜像（API 镜像与 Web 镜像）。
+每个 Exam 版本都会发布一个版本匹配的 API / Web 镜像对，并使用相同的版本标签。
 `init-production-env.mjs` 会依据 `.release-version` 自动填写两个镜像引用，
 正常安装不需要在两者之间做选择。
 
@@ -72,7 +67,7 @@ docker compose --env-file .env.production exec app \
   --name 'System Admin' --organization-name 'My Organization'
 ```
 
-打开 `http://localhost`（`web` nginx 边缘，同时服务静态 SPA，监听 `EXAM_PORT`，默认 80）并登录。
+打开 `http://localhost`（`web` nginx 公共入口：静态 SPA + API 代理，监听宿主机 `EXAM_PORT`，默认 80）并登录。
 
 ### 本地开发
 
@@ -93,7 +88,7 @@ pnpm dev             # API :3000，Web :5173
 | 文档 | 用途 |
 | --- | --- |
 | [INSTALL.zh-CN.md](INSTALL.zh-CN.md) | 首次安装：从零到可运行 |
-| [`docs/deployment/`](docs/deployment/) | 生产部署、拓扑与 runbook |
+| [`docs/deployment/`](docs/deployment/) | 生产部署、拓扑与运行手册（runbook） |
 | [`docs/operations/`](docs/operations/) | 备份、升级、诊断、邮件 |
 | [`docs/development/README.zh-CN.md`](docs/development/README.zh-CN.md) | 本地开发、测试、E2E 与常用命令 |
 | [`docs/SPEC.md`](docs/SPEC.md) | 产品规范：不变量与领域模型 |
@@ -110,7 +105,7 @@ pnpm dev             # API :3000，Web :5173
 | 层 | 技术 |
 | --- | --- |
 | 前端 | React 19 + Vite + TypeScript + shadcn/ui + TailwindCSS v4 |
-| 后端 | Node.js 24.15 + Fastify + TypeScript + Zod |
+| 后端 | Node.js 24.15 + Fastify + TypeScript + Zod 校验 |
 | 数据库 | PostgreSQL 18.4 + Drizzle ORM |
 | 缓存 | Redis 7 — 可选，用于共享限流 |
 | 认证 | HTTP-only Cookie + JWT，argon2 密码哈希 |
@@ -138,4 +133,4 @@ AI 编码代理在修改仓库前必须阅读并遵守 [AGENTS.md](AGENTS.md)。
 ## ⚖️ 许可证
 
 本项目采用 [GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0）。
-法律条款以 `LICENSE` 为唯一权威文本。
+法律条款以 `LICENSE` 为权威文本。

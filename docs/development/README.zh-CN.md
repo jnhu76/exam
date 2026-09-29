@@ -3,7 +3,10 @@
 [English](README.md) · **简体中文**
 
 > 本文面向 Exam 贡献者，介绍本地开发、测试、代码质量与架构入口。
-> 它是 `README.md` 的简体中文阅读版本，不是第二套工程规则；实际命令以 `package.json` scripts、CI workflow、代码、[`docs/standards/`](../standards/) 中的规范和 [`AGENTS.md`](../../AGENTS.md)（代理行为）为准；存在语义化 `pnpm` 命令时优先使用，不直接复述底层调用。
+>
+> 本指南是便于阅读的工程投影。命令的精确接线由 `package.json` scripts 负责，测试生命周期语义由
+> [`docs/standards/testing.md`](../standards/testing.md) 负责，Agent 行为由
+> [`AGENTS.md`](../../AGENTS.md) 负责。存在语义化 `pnpm` 命令时，应优先使用它，而不是直接调用底层命令。
 
 ## 前置要求
 
@@ -24,11 +27,11 @@ apps/
 
 packages/
   domain/         领域类型、枚举、错误（不依赖框架）
-  contracts/      Zod Schema、API 契约
-  db/             Drizzle ORM、迁移、repositories
+  contracts/      Zod schema、API 契约
+  db/             Drizzle ORM、迁移、repository
   auth/           Session、RBAC、argon2 密码哈希
-  authz/          Capability 授权与 scope resolver
-  exam-engine/    Timer、答题协议、评分引擎
+  authz/          基于 capability 的授权、scope resolver
+  exam-engine/    Timer、答案协议、评分引擎
   import-export/  CSV / Excel 导入导出
 ```
 
@@ -38,8 +41,8 @@ packages/
 # 1. 安装依赖
 pnpm install
 
-# 2. 启动 PostgreSQL + Redis（宿主机端口仅绑定环回；Redis 容器是可选消费者的
-#    零配置便利——应用侧 Redis 模式在未配置 REDIS_URL 时保持关闭）
+# 2. 启动 PostgreSQL + Redis（宿主机端口仅绑定环回；Redis 容器为需要它的可选消费者
+#    提供零配置便利，但应用侧 Redis 模式在未配置 REDIS_URL 时仍保持关闭）
 pnpm db:up
 
 # 3. 执行迁移
@@ -64,19 +67,26 @@ Vite 开发服务器会自动把 `/api/*` 请求代理到 API。
 | 命令 | 用途 |
 | --- | --- |
 | `pnpm db:up` | 启动/复用开发容器：PostgreSQL + Redis，宿主机端口仅绑定环回（`DB_HOST_PORT` / `REDIS_HOST_PORT`，默认 5432 / 6379） |
-| `pnpm db:down` | 拆除开发 Compose 栈并销毁其一次性卷/数据（`docker compose down -v`）——开发数据库状态被销毁，不会保留 |
-| `pnpm db:reset` | 销毁一次性栈/卷并立即启动全新栈；数据重建用 `pnpm db:migrate` + `pnpm db:seed` |
+| `pnpm db:down` | 拆除开发 Compose 栈并销毁其可丢弃的卷和数据（`docker compose down -v`）——开发数据库状态会被销毁，不会保留 |
+| `pnpm db:reset` | 销毁可丢弃的栈/卷并立即启动全新栈；使用 `pnpm db:migrate` + `pnpm db:seed` 重建数据 |
 | `pnpm db:migrate` | 执行迁移 |
 | `pnpm db:push` | 直接推送 schema 变更 |
 | `pnpm db:studio` | 打开 Drizzle Studio |
 | `pnpm db:generate` | 生成迁移文件 |
 
-开发数据库状态显式**一次性**：Postgres 容器没有命名卷。`stop` / `restart` /
-宿主机重启后再跑 `pnpm db:up` 会复用既有容器并保留数据；`pnpm db:down`
-拆除栈并**销毁**其一次性容器卷/数据（`down -v`）。数据重建 =
-`pnpm db:migrate` + `pnpm db:seed`（测试 `exam_test` 库由测试 harness 自建自愈）。
+开发栈固定使用 Compose project `exam-dev`（#631），因此从同一 checkout 启动生产演练
+不会重建它的开发容器。开发数据库状态被明确设计为**可丢弃**：Postgres 容器没有命名卷。
+在 `stop` / `restart` / 宿主机重启之后运行 `pnpm db:up`，会复用既有容器并保留数据；
+`pnpm db:down` 则会拆除整个栈，并销毁其可丢弃的容器卷和数据（`down -v`）。
+数据重建方式是 `pnpm db:migrate` + `pnpm db:seed`（测试用 `exam_test` 数据库由测试 harness 自行创建）。
+固定 project 之前创建的旧开发栈属于 `exam` project，`pnpm db:up` 不会触碰它；
+如需启动该旧栈，应显式运行：
 
-开发环境的 `DATABASE_URL` 由统一 DB resolver（`packages/db/src/databaseUrl.ts`）根据
+```bash
+docker compose -p exam -f docker-compose.dev.yml up -d
+```
+
+开发环境的 `DATABASE_URL` 由单一来源的 DB resolver（`packages/db/src/databaseUrl.ts`）根据
 `DB_HOST_PORT` 构造；如果显式设置 `DATABASE_URL`，则显式值优先。
 
 ## Seed 与演示数据
@@ -84,7 +94,7 @@ Vite 开发服务器会自动把 `/api/*` 请求代理到 API。
 | 命令 | 用途 |
 | --- | --- |
 | `pnpm db:seed` | 基础 seed：Admin + 2 个 Candidate |
-| `pnpm db:seed:demo` | 完整演示数据：5 用户、3 Course、10 Question、4 Exam |
+| `pnpm db:seed:demo` | 完整演示数据：5 个用户、3 门课程、10 道题、4 场考试 |
 | `pnpm db:seed:demo:verify` | 验证 demo seed 完整性 |
 
 可在 seed 前通过 `.env` 设置自定义账号信息（`SEED_ORG_NAME`、
@@ -128,34 +138,34 @@ pnpm --filter api dev   # 仅 API
 测试契约、环境变量、数据库生命周期与 CI 基础设施的权威说明位于
 [`docs/standards/testing.md`](../standards/testing.md)。
 
-快速记忆：
+快速摘要：
 
-- Unit / component：`pnpm test`
-- 依赖 DB 的测试（`@exam/db`、`@exam/api`）：需要先运行 `pnpm db:up`
+- Unit / component 测试：`pnpm test`
+- 依赖 DB 的测试（`@exam/db`、`@exam/api`）：需要运行中的 PostgreSQL，可通过 `pnpm db:up` 启动
 - 完整验证：`pnpm verify`（format + lint + typecheck + coverage + build）
 
 ## 代码质量
 
-代码质量、依赖图约束和 AI 编码规则的权威说明位于
+代码质量规则、依赖图约束和 AI 编码规则位于
 [`docs/standards/code-quality.md`](../standards/code-quality.md)。
 
-常用门禁：
+常用检查：
 
 ```bash
-pnpm lint:arch          # 架构边界
+pnpm lint:arch          # 架构边界检查
 pnpm lint:db-config     # 数据库配置一致性
-pnpm lint:env-contract  # 环境变量契约
+pnpm lint:env-contract  # 环境变量契约检查
 ```
 
 ## E2E
 
-Playwright 浏览器测试只有一条 canonical 入口：
+Playwright 浏览器测试只有一个 canonical 的宿主机原生 runner：
 
-- **本地（host-native）**：`pnpm e2e`（即 `bash scripts/e2e/run.sh`）— 在宿主机
-  运行 API dev server + 主机 Chromium；Compose 只负责 PostgreSQL / Redis 依赖。
-  CI 用 service containers 执行同样的产品契约。
+- **本地 / CI 一致**（`pnpm e2e` → `bash scripts/e2e/run.sh`）— 在宿主机运行 API dev server + Chromium；
+  Compose 只负责 PostgreSQL / Redis 依赖。CI 使用 service containers 执行相同的产品契约，
+  而不是开发 Compose 栈。
 
-完整 E2E 契约见
+完整 E2E 指南见
 [`docs/standards/testing.md`](../standards/testing.md)。
 
 ## 架构入口
@@ -163,15 +173,15 @@ Playwright 浏览器测试只有一条 canonical 入口：
 | 文档 | 用途 |
 | --- | --- |
 | [`docs/SPEC.md`](../SPEC.md) | 产品规范：不变量、领域模型 |
-| [`docs/architecture/authorization.md`](../architecture/authorization.md) | Capability 授权模型 |
+| [`docs/architecture/authorization.md`](../architecture/authorization.md) | 基于 capability 的授权模型 |
 | [`docs/architecture/exam-runtime.md`](../architecture/exam-runtime.md) | Exam / Attempt / Answer / Submit 协议 |
 | [`docs/operations/email-config.md`](../operations/email-config.md) | Email outbox / SMTP 运维参考 |
 | [`docs/architecture/frontend.md`](../architecture/frontend.md) | 当前前端架构 |
-| [`docs/standards/ui-system.md`](../standards/ui-system.md) | UI 系统约束与视觉 authority |
+| [`docs/standards/ui-system.md`](../standards/ui-system.md) | UI 系统约束与视觉权威 |
 | [`docs/adr/README.md`](../adr/README.md) | ADR 索引 |
 | [`docs/contracts/api-contract.md`](../contracts/api-contract.md) | Runtime-first API contract policy |
 
 ## AI / Agent 指南
 
 AI 编码代理修改仓库前必须阅读并遵守 [`AGENTS.md`](../../AGENTS.md)。
-其中规定工作模式、authority 边界、数据库安全、测试策略与修改原则。
+其中规定工作模式、授权边界、数据库安全、测试策略与修改原则。
