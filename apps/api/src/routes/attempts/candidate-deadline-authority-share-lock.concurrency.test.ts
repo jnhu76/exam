@@ -132,6 +132,125 @@ async function blockingPids(sql: PostgresSql, pid: number): Promise<number[]> {
   return Array.isArray(blockers) ? blockers.map(Number) : [];
 }
 
+/** A backend that the holder PID is currently blocking, as pg_stat_activity reports it. */
+interface BlockedBackend {
+  pid: number;
+  query: string;
+  state: string;
+  waitEventType: string | null;
+  waitEvent: string | null;
+}
+
+/**
+ * Bounded deterministic observation of the T2 positive oracle: attribute the
+ * extend writer BLOCKER-FIRST — a backend that holder PID A is DIRECTLY
+ * blocking (`pg_blocking_pids`), confirmed as the exams FOR UPDATE authority
+ * read by stable query fragments. Never "the first global ungranted
+ * pg_locks row": in a parallel run an unrelated backend can own an
+ * ungranted lock, so global first-row ordering does not identify the writer.
+ * Polls because the extend handler may still be inside its auth /
+ * pre-transaction prefix when the caller's race resolves; on timeout it
+ * fails with the full lock-state diagnostics instead of an empty assertion.
+ */
+async function waitForExamWriterBlockedBy(
+  sql: PostgresSql,
+  holderPid: number,
+  timeoutMs: number,
+  intervalMs: number,
+): Promise<BlockedBackend> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const rows = await sql`
+      SELECT DISTINCT
+        a.pid AS pid,
+        a.query AS query,
+        a.state AS state,
+        a.wait_event_type AS wait_event_type,
+        a.wait_event AS wait_event
+      FROM pg_stat_activity a
+      WHERE a.datname = current_database()
+        AND ${holderPid} = ANY(pg_blocking_pids(a.pid))`;
+    const writer = rows.find(
+      (r) =>
+        /exams/i.test(String(r.query)) && /for\s+update/i.test(String(r.query)),
+    );
+    if (writer) {
+      return {
+        pid: Number(writer.pid),
+        query: String(writer.query),
+        state: String(writer.state),
+        waitEventType:
+          writer.wait_event_type == null
+            ? null
+            : String(writer.wait_event_type),
+        waitEvent: writer.wait_event == null ? null : String(writer.wait_event),
+      };
+    }
+    if (Date.now() >= deadline) {
+      const seen = rows
+        .map(
+          (r) =>
+            `pid ${r.pid}: ${String(r.query).replace(/\s+/g, " ").slice(0, 120)}`,
+        )
+        .join(" | ");
+      const state = await describeExamLockState(sql, holderPid);
+      throw new Error(
+        `no exams FOR UPDATE writer blocked by holder PID ${holderPid} within ${timeoutMs}ms` +
+          (seen ? `; backends blocked by A did not match: ${seen}` : "") +
+          `\n${state}`,
+      );
+    }
+    await delay(intervalMs);
+  }
+}
+
+/**
+ * Failure diagnostics for the T2 blocker oracle: the holder PID, the
+ * relevant pg_stat_activity rows, every ungranted lock in this database,
+ * and the blocking relationships behind those waiters. Test-only output.
+ */
+async function describeExamLockState(
+  sql: PostgresSql,
+  holderPid: number,
+): Promise<string> {
+  const activity = await sql`
+    SELECT pid, state, wait_event_type, wait_event, left(query, 160) AS query
+    FROM pg_stat_activity
+    WHERE datname = current_database()
+      AND pid <> pg_backend_pid()
+      AND (pid = ${holderPid} OR state <> 'idle')
+    ORDER BY pid`;
+  const ungranted = await sql`
+    SELECT l.pid AS pid, l.locktype AS locktype, l.mode AS mode
+    FROM pg_locks l
+    WHERE l.granted = false
+      AND l.database = (
+        SELECT oid FROM pg_database WHERE datname = current_database()
+      )
+    ORDER BY l.pid`;
+  const relationships: string[] = [];
+  for (const row of ungranted) {
+    const blockers = await blockingPids(sql, Number(row.pid));
+    relationships.push(
+      `  pid ${row.pid} waits on [${blockers.join(", ")}] (${row.locktype}/${row.mode})`,
+    );
+  }
+  return [
+    `holder PID: ${holderPid}`,
+    "pg_stat_activity (holder or non-idle):",
+    ...activity.map(
+      (r) =>
+        `  pid=${r.pid} state=${r.state} wait=${r.wait_event_type ?? "-"}/${r.wait_event ?? "-"} query=${String(r.query).replace(/\s+/g, " ")}`,
+    ),
+    "ungranted pg_locks in this database:",
+    ...(ungranted.length > 0
+      ? ungranted.map((r) => `  pid ${r.pid} ${r.locktype}/${r.mode}`)
+      : ["  (none)"]),
+    "blocking relationships:",
+    ...(relationships.length > 0 ? relationships : ["  (none)"]),
+  ].join("\n");
+}
+
 /** All teardown steps run and every error surfaces (no swallowed cleanup). */
 async function teardownAll(
   ...steps: Array<() => Promise<unknown>>
@@ -723,7 +842,8 @@ describe("EXAM-558 — deadline-authority Exam read is a shared (FOR SHARE) row 
         return res;
       });
 
-    // Bounded negative observation + positive lock evidence.
+    // Bounded negative observation (not the proof): the extend response must
+    // not settle while A parks.
     const outcome = await Promise.race([
       extendPromise.then(() => "settled" as const),
       delay(1500).then(() => "blocked" as const),
@@ -731,17 +851,13 @@ describe("EXAM-558 — deadline-authority Exam read is a shared (FOR SHARE) row 
     expect(outcome).toBe("blocked");
     expect(extendSettled).toBe(false);
 
-    // The writer is provably waiting: it holds at least one ungranted lock
-    // (a row-lock waiter queues on the holder's transactionid; the ungranted
-    // entry is not always a tuple row), and pg_blocking_pids attributes the
-    // block to A directly.
-    const waiting = await sqlProbe`
-      SELECT l.pid AS pid, l.locktype AS locktype, l.mode AS mode
-      FROM pg_locks l
-      WHERE l.granted = false AND l.pid <> ${pidA}`;
-    expect(waiting.length).toBeGreaterThanOrEqual(1);
-    const writerPid = Number(waiting[0]!.pid);
-    expect(await blockingPids(sqlProbe, writerPid)).toContain(pidA);
+    // Positive oracle, blocker-first: the waiter is attributed by the
+    // blocker relationship — a backend that A blocks, parked at the exams
+    // FOR UPDATE authority read the extend route takes
+    // (executeAdminExamTransition → findByIdForUpdate).
+    const writer = await waitForExamWriterBlockedBy(sqlProbe, pidA, 2000, 25);
+    expect(writer.waitEventType).toBe("Lock");
+    expect(extendSettled).toBe(false);
 
     park.wait.resolve();
     const extendRes = await extendPromise;
