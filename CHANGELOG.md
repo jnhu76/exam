@@ -8,6 +8,71 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-09-30
+
+### Added
+
+- `EXAM_DOCKER_SUBNET` (default `172.28.0.0/24`) as the single bundled
+  topology override: `docker-compose.yml` derives both the `exam-net` IPAM
+  subnet and the bundled `TRUSTED_PROXY_CIDRS` default from the same value,
+  so LAN/VPN/Docker-subnet collisions are fixed in one place (#665).
+- A production LAN HTTP browser regression
+  (`apps/e2e/e2e/production-lan-http.spec.ts`) with a dedicated CI job: it
+  drives launchpad bootstrap, real UI login, and cookie assertions against a
+  real production Compose stack through a non-localhost HTTP origin (#665).
+- Deployment documentation for the one-release/two-image model
+  (`ghcr.io/jnhu76/exam:vX.Y.Z` + `ghcr.io/jnhu76/exam-web:vX.Y.Z`) and the
+  bind-mounted PostgreSQL data root (#659).
+
+### Changed
+
+- Production edge topology (#662, #661): the standalone edge nginx is merged
+  into the web runtime. `exam-web` serves the static SPA **and** is the sole
+  public production edge; the default stack is `web + app + db` (redis
+  optional via `--profile redis`). The `nginx` service, the `web:4173` hop,
+  and `deploy/nginx/edge.conf` are deleted — no parallel nginx authority
+  remains. Release artifacts are unchanged (same `exam` + `exam-web` image
+  pair), and the #585 edge security semantics (single public ingress,
+  `X-Forwarded-For` replace, request-time upstream DNS, one published host
+  port) are preserved, now baked into the image.
+- Transport policy derives from the canonical public origin (#665):
+  auth-cookie `Secure`, HSTS, and CSP `upgrade-insecure-requests` follow the
+  `PUBLIC_WEB_ORIGIN` scheme instead of `APP_MODE`. Plain-HTTP LAN
+  deployments (isolated or appropriately trusted LAN) work again; TLS
+  remains an ingress property and `APP_MODE` stays `production` for both
+  transports.
+- The bundled `TRUSTED_PROXY_CIDRS` default is deployment-derived from
+  `EXAM_DOCKER_SUBNET` (#665); an explicit operator value still wins, and
+  the empty default no longer collapses every client onto the edge bridge
+  IP under the bundled topology.
+- Deployment documentation converged to the shipped topology (#659):
+  zh-CN README/INSTALL synced to the nginx public-entrypoint shape,
+  image-pair and persistence wording corrected, external-PostgreSQL wording
+  removed, ADR-011's stale topology sentence corrected. zh-CN semantic
+  parity repaired across README/INSTALL/development guide (#664).
+- Development Compose boundaries tightened (#663): PostgreSQL/Redis host
+  publication is loopback-only, the silent `repeatable read` server
+  override is removed, and `pnpm db:down` tears down the disposable stack
+  with `down -v`.
+
+### Fixed
+
+- Plain-HTTP LAN production login: browsers discarded the forced-`Secure`
+  auth cookie, so login returned 200 but the session never persisted (#665).
+- Rate-limit identity and audit IP collapsed onto the edge bridge IP under
+  the bundled topology with an empty `TRUSTED_PROXY_CIDRS` (#665).
+- HSTS and CSP `upgrade-insecure-requests` followed production mode instead
+  of the actual browser-visible transport (#665).
+
+### Removed
+
+- The standalone production `nginx` service, the `web:4173` hop, and
+  `deploy/nginx/edge.conf` (#662).
+- `COOKIE_SECURE` (#665); a stale value in the environment is inert and
+  pinned by test.
+- The dev `postgres -c default_transaction_isolation='repeatable read'`
+  server override (#663).
+
 ## [0.0.6] - 2026-09-29
 
 ### Added
@@ -416,7 +481,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/jnhu76/exam/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/jnhu76/exam/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/jnhu76/exam/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/jnhu76/exam/compare/v0.0.3...v0.0.4
