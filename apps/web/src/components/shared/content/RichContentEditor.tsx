@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Editor } from "@tiptap/core";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { NodeSelection, Selection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -85,6 +85,7 @@ export function richEditorExtensions() {
     BulletList,
     OrderedList,
     ListItem,
+    // Grammar tables are unspanned; never offer header rows.
     Table.configure({ resizable: false }),
     TableRow,
     TableHeader,
@@ -97,37 +98,39 @@ export function richEditorExtensions() {
         maxSize: 50,
         maxExpand: 1000,
       },
-      // Grammar tables are unspanned; never offer header rows.
     }),
   ];
 }
 
 /**
- * INVARIANT: after a toolbar math insert the caret never rests on the
- * inserted node. Tiptap's insertContent leaves a block atom (blockMath)
- * under a NodeSelection whenever it replaces a trailing textblock (insert at
- * document end or into an empty paragraph). ProseMirror replaces a selected
- * atom with the next inline input, so the candidate's next keystroke or
- * inline-formula insert silently destroyed the visible blockMath before it
- * was ever serialized — the adapter then honestly persisted the
- * post-destruction document and the UI reported "saved" (#676). Mid-paragraph
- * inserts split the paragraph and land a TextSelection, which is safe; this
- * guard is a no-op there. For the NodeSelection case it gives the atom a
- * following textblock (creating a trailing paragraph when the atom ends the
- * document) and moves the caret into it.
+ * INVARIANT: after a toolbar math insert the caret never rests on a math
+ * atom. Tiptap's insertContent leaves an atom (blockMath) under a
+ * NodeSelection whenever it replaces a trailing textblock (insert at document
+ * end or into an empty paragraph); ProseMirror replaces a selected atom with
+ * the next inline input, so the candidate's next keystroke or formula insert
+ * silently destroyed the visible node before serialization (#676). A plain
+ * near() is not enough: with another atom directly ahead (e.g. consecutive
+ * blockMath nodes restored from a draft) it lands the caret on that
+ * neighbour, recreating the hazard one position over. The forward scan here
+ * is therefore text-only and skips atoms; when no textblock lies ahead, the
+ * atom first gets a following paragraph. Mid-paragraph inserts already land a
+ * TextSelection; the guard is a no-op there.
  */
 export function settleCursorAfterMathInsert(editor: Editor): void {
   const { selection } = editor.state;
   if (!(selection instanceof NodeSelection)) return;
   const after = selection.to;
-  if (after >= editor.state.doc.content.size) {
+  let target = Selection.findFrom(editor.state.doc.resolve(after), 1, true);
+  if (!target) {
     editor.chain().insertContentAt(after, { type: "paragraph" }).run();
+    target = Selection.findFrom(editor.state.doc.resolve(after), 1, true);
   }
-  const $after = editor.state.doc.resolve(after);
+  if (!target) return;
+  const next = target;
   editor
     .chain()
     .command(({ tr, dispatch }) => {
-      if (dispatch) tr.setSelection(TextSelection.near($after, 1));
+      if (dispatch) tr.setSelection(next);
       return true;
     })
     .run();

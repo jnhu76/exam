@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
@@ -26,15 +26,28 @@ import {
 
 const LATEX = "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}";
 
+const liveEditors: Editor[] = [];
+
 function createEditor(content?: unknown): Editor {
-  return new Editor({
+  const editor = new Editor({
     extensions: richEditorExtensions(),
     content: content ?? {
       type: "doc",
       content: [{ type: "paragraph", content: [] }],
     },
   });
+  liveEditors.push(editor);
+  return editor;
 }
+
+// A failing test must not leak a live ProseMirror view into later tests —
+// document-level listener pollution can mask or mimic downstream failures.
+afterEach(() => {
+  for (const editor of liveEditors) {
+    if (!editor.isDestroyed) editor.destroy();
+  }
+  liveEditors.length = 0;
+});
 
 function insertMath(editor: Editor, displayMode: boolean, latex: string) {
   editor
@@ -173,6 +186,43 @@ describe("#676 regression — a visible blockMath survives the candidate's next 
     expect(doc.content.some((block) => block.type === "blockMath")).toBe(true);
     editor.destroy();
   });
+
+  it("consecutive blockMath: re-inserting over a selected atom keeps the caret off its neighbour", () => {
+    // Persisted reality: successive toolbar inserts leave adjacent blockMath
+    // nodes (the paragraphs between them are canonicalized away), so a
+    // restored document can have another atom directly after the selection.
+    // A plain near() would land the caret ON that neighbour atom and the
+    // next inline input would destroy it — the #676 mechanism one position
+    // over.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "blockMath", attrs: { latex: "x^2" } },
+        { type: "blockMath", attrs: { latex: "y^2" } },
+      ],
+    });
+    editor
+      .chain()
+      .command(({ tr, dispatch }) => {
+        if (dispatch) tr.setSelection(NodeSelection.create(tr.doc, 0));
+        return true;
+      })
+      .run();
+    // Raw insertContent without focus() so the NodeSelection precondition is
+    // deterministic in jsdom.
+    editor.commands.insertContent({
+      type: "blockMath",
+      attrs: { latex: LATEX },
+    });
+    settleCursorAfterMathInsert(editor);
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    editor.commands.insertContent({ type: "text", text: "续" });
+    const maths = (editor.getJSON().content ?? [])
+      .filter((block) => block.type === "blockMath")
+      .map((block) => block.attrs?.latex);
+    expect(maths).toEqual([LATEX, "y^2"]);
+    editor.destroy();
+  });
 });
 
 describe("malformed LaTeX — bounded rendering, source preserved (#677 F1)", () => {
@@ -213,9 +263,9 @@ describe("schema ↔ adapter structural guard — no editor-emittable node is si
    * Every node the production schema can emit, with the canonical type the
    * adapter must produce for it. tableHeader has a documented downgrade
    * (grammar tables are unspanned); everything else maps 1:1. If the editor
-   * grammar grows, this table and the adapter must grow together — an
-   * unmapped node makes tiptapToContentDocument throw (fail-safe) and these
-   * cases fail.
+   * grammar grows, the schema pin above and this table (plus the adapter)
+   * must grow together: a probed node without an adapter mapping makes
+   * tiptapToContentDocument throw — fail-safe, never silent.
    */
   const NODE_TO_CANONICAL: Record<string, string> = {
     paragraph: "paragraph",
