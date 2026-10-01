@@ -92,7 +92,7 @@ async function assembleExam(
     latestStartOffsetMinutes: null,
     resultPublicationMode: "immediate",
   });
-  expect(examRes.status()).toBe(201);
+  expect(examRes.status(), await examRes.text()).toBe(201);
   const examId = (await examRes.json()).id as string;
   const publishRes = await adminPost(
     request,
@@ -288,6 +288,125 @@ test.describe("issue 301 rich content product loop", () => {
     await expect(
       restoredEditor.locator(".katex, [data-latex]"),
     ).not.toHaveCount(0);
+
+    await submitExam(page);
+  });
+
+  test("#676 block formula: insert → keep editing → save → reload → still there → submit", async ({
+    page,
+    request,
+  }) => {
+    const adminToken = await adminApiToken(request);
+    const courseId = await seedCourseId(request, adminToken);
+    const candidate = await provisionCandidate(request, `bm-${STAMP}`);
+
+    // ── UI authoring: text_response with answerMode = rich ──────────────
+    await loginAsAdmin(page);
+    await page.goto("/admin/questions");
+    await page.getByRole("button", { name: /新增题目/ }).click();
+    await page.waitForURL(/\/admin\/questions\/new/);
+
+    await page.getByRole("button", { name: "所属课程" }).click();
+    await page.getByPlaceholder("搜索课程名称或代码...").fill("基础安全培训");
+    await page.getByRole("option", { name: "基础安全培训" }).click();
+    await pickSelect(page, "题目类型", "文本作答题");
+
+    const PROMPT = `676独立公式作答题-${STAMP}`;
+    await page.getByPlaceholder("输入题目内容").fill(PROMPT);
+    await page
+      .getByPlaceholder("请描述评分时应考虑的关键点、完整性、准确性或论证质量")
+      .fill(RUBRIC);
+    await page.getByRole("spinbutton").fill("20");
+    await pickSelect(page, "作答模式", "富文本");
+
+    const createResponse = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        res.url().endsWith("/api/questions"),
+      { timeout: 15_000 },
+    );
+    await page.getByRole("button", { name: /^保存$/ }).click();
+    const createdRes = await createResponse;
+    expect(createdRes.status()).toBe(201);
+    const createdBody = (await createdRes.json()) as { id: string };
+    expect(createdBody.id, JSON.stringify(createdBody)).toBeTruthy();
+    const questionId = createdBody.id;
+
+    const { examId } = await assembleExam(
+      request,
+      adminToken,
+      courseId,
+      `676独立公式产品环-${STAMP}`,
+      [questionId],
+      candidate.profileId,
+      20,
+    );
+
+    // ── Candidate: the exact #676 sequence ──────────────────────────────
+    await candidateLogin(page, candidate);
+    const startResponse = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        /\/api\/attempts\/[^/]+\/start$/.test(res.url()),
+      { timeout: 15_000 },
+    );
+    await startExamFromList(page, examId);
+    const startRes = await startResponse;
+    expect([200, 201]).toContain(startRes.status());
+    const attemptId = ((await startRes.json()) as { id: string }).id;
+
+    const section = page.getByTestId("take-question-section");
+    const editor = section.locator(".ProseMirror");
+    await expect(editor).toHaveCount(1);
+
+    // Prose, then the BLOCK formula — inserted at document end (the
+    // pre-repair hazard: the atom is left selected), then IMMEDIATELY
+    // continue editing, which used to replace the selected atom.
+    await editor.click();
+    await page.keyboard.type("676独立公式作答：证明 ");
+    const BLOCK_LATEX = "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}";
+    await page.getByPlaceholder("输入 LaTeX").fill(BLOCK_LATEX);
+    await page.getByRole("button", { name: "独立公式" }).click();
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    // The destruction trigger: typing + an inline formula right after.
+    await page.keyboard.type("证毕，又 ");
+    await page.getByPlaceholder("输入 LaTeX").fill("E=mc^2");
+    await page.getByRole("button", { name: "行内公式" }).click();
+    await waitForSaveSaved(page);
+
+    // The block formula is STILL VISIBLE after further editing.
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+
+    // Persisted draft carries the blockMath node with the exact source.
+    const candidateToken = await candidateApiToken(request, candidate);
+    const takeRes = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(takeRes.ok()).toBeTruthy();
+    const draftJson = JSON.stringify(
+      (
+        (await takeRes.json()) as {
+          questions: Array<{ answerValue: unknown }>;
+        }
+      ).questions[0]?.answerValue,
+    );
+    expect(draftJson).toContain("blockMath");
+    expect(draftJson).toContain("\\\\sum_{i=1}^{n} i");
+    expect(draftJson).toContain("inlineMath");
+
+    // Reload: the editor restores the draft with the block formula rendered,
+    // and post-reload continued editing must not destroy the formula.
+    await page.reload();
+    const restored = page
+      .getByTestId("take-question-section")
+      .locator(".ProseMirror");
+    await expect(restored).toHaveCount(1);
+    await expect(restored.locator("[data-type='block-math']")).toHaveCount(1);
+    await restored.click();
+    await page.keyboard.type("复核通过");
+    await waitForSaveSaved(page);
+    await expect(restored.locator("[data-type='block-math']")).toHaveCount(1);
 
     await submitExam(page);
   });

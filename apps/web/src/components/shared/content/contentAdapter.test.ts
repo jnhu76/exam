@@ -35,7 +35,11 @@ const richDoc: ContentDocumentV1 = {
         // other marks on one run (kernel normalize enforces this).
         { type: "text", text: "solve ", marks: ["bold"] },
         { type: "text", text: "x", marks: ["inlineCode"] },
+        { type: "text", text: "or", marks: ["italic"] },
+        { type: "text", text: "why", marks: ["underline"] },
         { type: "inlineMath", latex: "x^2-1=0" },
+        { type: "hardBreak" },
+        { type: "text", text: "end" },
       ],
     },
     {
@@ -111,13 +115,129 @@ describe("contentDocumentToTiptap", () => {
     const para = json.content?.[0];
     expect(para?.content?.[0]?.marks).toEqual([{ type: "bold" }]);
     expect(para?.content?.[1]?.marks).toEqual([{ type: "code" }]);
-    expect(para?.content?.[2]?.attrs).toEqual({ latex: "x^2-1=0" });
+    expect(para?.content?.[2]?.marks).toEqual([{ type: "italic" }]);
+    expect(para?.content?.[3]?.marks).toEqual([{ type: "underline" }]);
+    expect(para?.content?.[4]?.attrs).toEqual({ latex: "x^2-1=0" });
+    expect(para?.content?.[5]?.type).toBe("hardBreak");
     expect(json.content?.[2]?.attrs).toEqual({ language: "python" });
   });
 
   it("round-trips through tiptapToContentDocument to the identical canonical doc", () => {
     const json = contentDocumentToTiptap(richDoc);
     expect(tiptapToContentDocument(json)).toEqual(richDoc);
+  });
+});
+
+describe("math mapping — candidate-visible math must persist verbatim (#676)", () => {
+  const LATEX = "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}";
+
+  it("maps Tiptap inlineMath JSON to canonical inlineMath with the latex preserved", () => {
+    const out = tiptapToContentDocument(
+      doc([
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "前" },
+            { type: "inlineMath", attrs: { latex: LATEX } },
+          ],
+        },
+      ]),
+    );
+    const para = para0(out.content[0]);
+    expect(para.content[1]).toEqual({ type: "inlineMath", latex: LATEX });
+  });
+
+  it("maps Tiptap blockMath JSON to canonical blockMath with the latex preserved", () => {
+    const out = tiptapToContentDocument(
+      doc([{ type: "blockMath", attrs: { latex: LATEX } }]),
+    );
+    expect(out.content[0]).toEqual({ type: "blockMath", latex: LATEX });
+  });
+
+  it("round-trips inline math: canonical → Tiptap → canonical", () => {
+    const source: ContentDocumentV1 = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "答：" },
+            { type: "inlineMath", latex: LATEX },
+          ],
+        },
+      ],
+    };
+    expect(tiptapToContentDocument(contentDocumentToTiptap(source))).toEqual(
+      source,
+    );
+  });
+
+  it("round-trips block math: canonical → Tiptap → canonical", () => {
+    const source: ContentDocumentV1 = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "解：" }] },
+        { type: "blockMath", latex: LATEX },
+      ],
+    };
+    expect(tiptapToContentDocument(contentDocumentToTiptap(source))).toEqual(
+      source,
+    );
+  });
+
+  it("preserves malformed latex verbatim — rendering validity is not a persistence requirement", () => {
+    const out = tiptapToContentDocument(
+      doc([
+        {
+          type: "paragraph",
+          content: [{ type: "inlineMath", attrs: { latex: "\\frac{" } }],
+        },
+        { type: "blockMath", attrs: { latex: "{{{{{" } },
+      ]),
+    );
+    expect(out.content[0]).toEqual({
+      type: "paragraph",
+      content: [{ type: "inlineMath", latex: "\\frac{" }],
+    });
+    expect(out.content[1]).toEqual({ type: "blockMath", latex: "{{{{{" });
+  });
+
+  it("downgrades a blockMath pasted into a table cell to its latex text (documented projection, no silent loss)", () => {
+    const out = tiptapToContentDocument(
+      doc([
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableCell",
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [{ type: "text", text: "c" }],
+                    },
+                    { type: "blockMath", attrs: { latex: LATEX } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const table = out.content[0];
+    if (!table || table.type !== "table") throw new Error("expected table");
+    const cell = table.content[0]?.content[0];
+    if (!cell || cell.type !== "tableCell") throw new Error("expected cell");
+    // The latex SURVIVES as text — degraded placement, never erased.
+    expect(cell.content[1]).toEqual({
+      type: "paragraph",
+      content: [{ type: "text", text: LATEX }],
+    });
   });
 });
 

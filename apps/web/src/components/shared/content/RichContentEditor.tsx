@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import type { Editor } from "@tiptap/core";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -64,6 +66,74 @@ export function isAuthoritativeReplacement(
 }
 
 /**
+ * The extension set defining the editor-side grammar. Single authority for
+ * the component and the reality tests, so tests always exercise the exact
+ * schema production uses. Fresh instances per call — configure() is not
+ * idempotent across documents.
+ */
+export function richEditorExtensions() {
+  return [
+    Document,
+    Paragraph,
+    Text,
+    HardBreak,
+    Bold,
+    Italic,
+    Underline,
+    Code,
+    CodeBlock,
+    BulletList,
+    OrderedList,
+    ListItem,
+    Table.configure({ resizable: false }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    Mathematics.configure({
+      katexOptions: {
+        throwOnError: false,
+        trust: false,
+        strict: "ignore",
+        maxSize: 50,
+        maxExpand: 1000,
+      },
+      // Grammar tables are unspanned; never offer header rows.
+    }),
+  ];
+}
+
+/**
+ * INVARIANT: after a toolbar math insert the caret never rests on the
+ * inserted node. Tiptap's insertContent leaves a block atom (blockMath)
+ * under a NodeSelection whenever it replaces a trailing textblock (insert at
+ * document end or into an empty paragraph). ProseMirror replaces a selected
+ * atom with the next inline input, so the candidate's next keystroke or
+ * inline-formula insert silently destroyed the visible blockMath before it
+ * was ever serialized — the adapter then honestly persisted the
+ * post-destruction document and the UI reported "saved" (#676). Mid-paragraph
+ * inserts split the paragraph and land a TextSelection, which is safe; this
+ * guard is a no-op there. For the NodeSelection case it gives the atom a
+ * following textblock (creating a trailing paragraph when the atom ends the
+ * document) and moves the caret into it.
+ */
+export function settleCursorAfterMathInsert(editor: Editor): void {
+  const { selection } = editor.state;
+  if (!(selection instanceof NodeSelection)) return;
+  const after = selection.to;
+  if (after >= editor.state.doc.content.size) {
+    editor.chain().insertContentAt(after, { type: "paragraph" }).run();
+  }
+  const $after = editor.state.doc.resolve(after);
+  editor
+    .chain()
+    .command(({ tr, dispatch }) => {
+      if (dispatch) tr.setSelection(TextSelection.near($after, 1));
+      return true;
+    })
+    .run();
+}
+
+/**
  * WYSIWYG rich-text editor. The EDIT surface — the ONLY place
  * Tiptap/ProseMirror is imported, always reached through the lazy wrapper
  * (RichContentEditorLazy) so plain-mode bundles never download it.
@@ -99,34 +169,7 @@ export default function RichContentEditor({
   const currentEditorDocumentRef = useRef<ContentDocumentV1 | null>(document);
 
   const editor = useEditor({
-    extensions: [
-      Document,
-      Paragraph,
-      Text,
-      HardBreak,
-      Bold,
-      Italic,
-      Underline,
-      Code,
-      CodeBlock,
-      BulletList,
-      OrderedList,
-      ListItem,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      Mathematics.configure({
-        katexOptions: {
-          throwOnError: false,
-          trust: false,
-          strict: "ignore",
-          maxSize: 50,
-          maxExpand: 1000,
-        },
-        // Grammar tables are unspanned; never offer header rows.
-      }),
-    ],
+    extensions: richEditorExtensions(),
     content: contentDocumentToTiptap(document),
     editable: !disabled,
     onUpdate: ({ editor }) => {
@@ -187,6 +230,7 @@ export default function RichContentEditor({
         attrs: { latex },
       })
       .run();
+    settleCursorAfterMathInsert(editor);
     if (mathInputRef.current) mathInputRef.current.value = "";
   }
 

@@ -265,4 +265,102 @@ describe("rich answer save protocol", () => {
       expect(res.statusCode).toBe(400);
     }
   });
+
+  it("#676: inline and block math survive save → draft → submit freeze → grading entry", async () => {
+    const INLINE_LATEX = "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}";
+    const BLOCK_LATEX = "\\int_0^1 x\\,dx = \\frac{1}{2}";
+    // JSON.stringify escapes backslashes — match against the escaped form.
+    const jsonContains = (value: unknown, latex: string): boolean =>
+      JSON.stringify(value).includes(JSON.stringify(latex).slice(1, -1));
+    const mixedDoc = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "解：", marks: ["bold"] },
+            { type: "inlineMath", latex: INLINE_LATEX },
+            { type: "text", text: "即证。", marks: ["italic"] },
+          ],
+        },
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "步骤" }],
+                },
+              ],
+            },
+          ],
+        },
+        { type: "codeBlock", language: null, text: "print(1)\n" },
+        { type: "blockMath", latex: BLOCK_LATEX },
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableCell",
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [{ type: "text", text: "符号" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    // Save → accepted → the draft in exam_attempts.answers carries BOTH math
+    // source payloads verbatim.
+    const saveRes = await save(
+      richQId,
+      savePayload(richQId, mixedDoc, 20_001, 1),
+    );
+    expect(saveRes.statusCode, saveRes.body).toBe(200);
+    expect(saveRes.json().accepted).toBe(true);
+    const draft = await draftAnswer(richQId);
+    expect(jsonContains(draft, INLINE_LATEX)).toBe(true);
+    expect(jsonContains(draft, BLOCK_LATEX)).toBe(true);
+    expect(draft).toEqual(mixedDoc);
+
+    // Submit → the freeze (exam_attempts.submitted_answers) keeps both.
+    const submitRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/submit`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(submitRes.statusCode, submitRes.body).toBe(200);
+    const attemptRow = await ctx.db
+      .select({ submitted: schema.examAttempts.submittedAnswers })
+      .from(schema.examAttempts)
+      .where(eq(schema.examAttempts.id, attemptId));
+    expect(jsonContains(attemptRow[0]?.submitted, INLINE_LATEX)).toBe(true);
+    expect(jsonContains(attemptRow[0]?.submitted, BLOCK_LATEX)).toBe(true);
+
+    // Grading-visible candidateAnswer (attempt_grading_entries) keeps both —
+    // the grader must see exactly what the candidate saw.
+    const entries = await ctx.db
+      .select({ candidateAnswer: schema.attemptGradingEntries.candidateAnswer })
+      .from(schema.attemptGradingEntries)
+      .where(eq(schema.attemptGradingEntries.attemptId, attemptId));
+    const entryForQuestion = entries.find((e) =>
+      jsonContains(e.candidateAnswer, BLOCK_LATEX),
+    );
+    expect(entryForQuestion).toBeDefined();
+    expect(jsonContains(entryForQuestion?.candidateAnswer, INLINE_LATEX)).toBe(
+      true,
+    );
+  });
 });
