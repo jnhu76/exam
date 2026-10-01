@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import type { Editor } from "@tiptap/core";
+import { NodeSelection, Selection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -64,6 +66,77 @@ export function isAuthoritativeReplacement(
 }
 
 /**
+ * The extension set defining the editor-side grammar. Single authority for
+ * the component and the reality tests, so tests always exercise the exact
+ * schema production uses. Fresh instances per call — configure() is not
+ * idempotent across documents.
+ */
+export function richEditorExtensions() {
+  return [
+    Document,
+    Paragraph,
+    Text,
+    HardBreak,
+    Bold,
+    Italic,
+    Underline,
+    Code,
+    CodeBlock,
+    BulletList,
+    OrderedList,
+    ListItem,
+    // Grammar tables are unspanned; never offer header rows.
+    Table.configure({ resizable: false }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    Mathematics.configure({
+      katexOptions: {
+        throwOnError: false,
+        trust: false,
+        strict: "ignore",
+        maxSize: 50,
+        maxExpand: 1000,
+      },
+    }),
+  ];
+}
+
+/**
+ * INVARIANT: after a toolbar math insert the caret never rests on a math
+ * atom. Tiptap's insertContent leaves an atom (blockMath) under a
+ * NodeSelection whenever it replaces a trailing textblock (insert at document
+ * end or into an empty paragraph); ProseMirror replaces a selected atom with
+ * the next inline input, so the candidate's next keystroke or formula insert
+ * silently destroyed the visible node before serialization (#676). A plain
+ * near() is not enough: with another atom directly ahead (e.g. consecutive
+ * blockMath nodes restored from a draft) it lands the caret on that
+ * neighbour, recreating the hazard one position over. The forward scan here
+ * is therefore text-only and skips atoms; when no textblock lies ahead, the
+ * atom first gets a following paragraph. Mid-paragraph inserts already land a
+ * TextSelection; the guard is a no-op there.
+ */
+export function settleCursorAfterMathInsert(editor: Editor): void {
+  const { selection } = editor.state;
+  if (!(selection instanceof NodeSelection)) return;
+  const after = selection.to;
+  let target = Selection.findFrom(editor.state.doc.resolve(after), 1, true);
+  if (!target) {
+    editor.chain().insertContentAt(after, { type: "paragraph" }).run();
+    target = Selection.findFrom(editor.state.doc.resolve(after), 1, true);
+  }
+  if (!target) return;
+  const next = target;
+  editor
+    .chain()
+    .command(({ tr, dispatch }) => {
+      if (dispatch) tr.setSelection(next);
+      return true;
+    })
+    .run();
+}
+
+/**
  * WYSIWYG rich-text editor. The EDIT surface — the ONLY place
  * Tiptap/ProseMirror is imported, always reached through the lazy wrapper
  * (RichContentEditorLazy) so plain-mode bundles never download it.
@@ -99,34 +172,7 @@ export default function RichContentEditor({
   const currentEditorDocumentRef = useRef<ContentDocumentV1 | null>(document);
 
   const editor = useEditor({
-    extensions: [
-      Document,
-      Paragraph,
-      Text,
-      HardBreak,
-      Bold,
-      Italic,
-      Underline,
-      Code,
-      CodeBlock,
-      BulletList,
-      OrderedList,
-      ListItem,
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      Mathematics.configure({
-        katexOptions: {
-          throwOnError: false,
-          trust: false,
-          strict: "ignore",
-          maxSize: 50,
-          maxExpand: 1000,
-        },
-        // Grammar tables are unspanned; never offer header rows.
-      }),
-    ],
+    extensions: richEditorExtensions(),
     content: contentDocumentToTiptap(document),
     editable: !disabled,
     onUpdate: ({ editor }) => {
@@ -187,6 +233,7 @@ export default function RichContentEditor({
         attrs: { latex },
       })
       .run();
+    settleCursorAfterMathInsert(editor);
     if (mathInputRef.current) mathInputRef.current.value = "";
   }
 
