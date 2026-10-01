@@ -296,36 +296,52 @@ function blocksFromTiptap(nodes: JSONContent[] | undefined): ContentBlock[] {
             content: (node.content ?? []).map((row) => ({
               type: "tableRow",
               // tableHeader downgrades to tableCell (grammar has no header).
-              // Cells hold paragraphs only; richer pasted blocks degrade to
-              // their plain-text projection.
+              // Cells hold paragraphs only; a blockMath child keeps its math
+              // semantics as an inlineMath paragraph — the same downgrade
+              // list items use (#673 C14) — while other off-grammar blocks
+              // degrade to their plain-text projection.
               content: (row.content ?? []).map((cell) => ({
                 type: "tableCell",
                 content: (cell.content ?? []).flatMap(
                   (child): ContentParagraph[] => {
-                    if (child.type === "paragraph") {
-                      return [
-                        {
-                          type: "paragraph",
-                          content: inlinesFromTiptap(child.content),
-                        },
-                      ];
-                    }
-                    try {
-                      const projected = plainTextProjection({
-                        docVersion: CONTENT_DOC_VERSION,
-                        type: "doc",
-                        content: blocksFromTiptap([child]),
-                      });
-                      return [
-                        {
-                          type: "paragraph",
-                          content: [
-                            { type: "text", text: projected.trimEnd() },
-                          ],
-                        },
-                      ];
-                    } catch {
-                      return [];
+                    switch (child.type) {
+                      case "paragraph":
+                        return [
+                          {
+                            type: "paragraph",
+                            content: inlinesFromTiptap(child.content),
+                          },
+                        ];
+                      case "blockMath":
+                        return [
+                          {
+                            type: "paragraph",
+                            content: [
+                              {
+                                type: "inlineMath",
+                                latex:
+                                  typeof child.attrs?.latex === "string"
+                                    ? child.attrs.latex
+                                    : "",
+                              },
+                            ],
+                          },
+                        ];
+                      default: {
+                        const projected = plainTextProjection({
+                          docVersion: CONTENT_DOC_VERSION,
+                          type: "doc",
+                          content: blocksFromTiptap([child]),
+                        });
+                        return [
+                          {
+                            type: "paragraph",
+                            content: [
+                              { type: "text", text: projected.trimEnd() },
+                            ],
+                          },
+                        ];
+                      }
                     }
                   },
                 ),

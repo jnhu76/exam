@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
+import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
-import { NodeSelection, Selection } from "@tiptap/pm/state";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey, Selection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -99,42 +101,110 @@ export function richEditorExtensions() {
         maxExpand: 1000,
       },
     }),
+    SettleMathSelectionAfterPasteDrop,
   ];
 }
 
 /**
- * INVARIANT: after a toolbar math insert the caret never rests on a math
- * atom. Tiptap's insertContent leaves an atom (blockMath) under a
- * NodeSelection whenever it replaces a trailing textblock (insert at document
- * end or into an empty paragraph); ProseMirror replaces a selected atom with
- * the next inline input, so the candidate's next keystroke or formula insert
- * silently destroyed the visible node before serialization (#676). A plain
- * near() is not enough: with another atom directly ahead (e.g. consecutive
- * blockMath nodes restored from a draft) it lands the caret on that
- * neighbour, recreating the hazard one position over. The forward scan here
- * is therefore text-only and skips atoms; when no textblock lies ahead, the
- * atom first gets a following paragraph. Mid-paragraph inserts already land a
- * TextSelection; the guard is a no-op there.
+ * The math atoms of the frozen grammar. Both are selectable ProseMirror
+ * atoms, so both can end up under an operation-produced NodeSelection.
  */
-export function settleCursorAfterMathInsert(editor: Editor): void {
-  const { selection } = editor.state;
-  if (!(selection instanceof NodeSelection)) return;
-  const after = selection.to;
-  let target = Selection.findFrom(editor.state.doc.resolve(after), 1, true);
-  if (!target) {
-    editor.chain().insertContentAt(after, { type: "paragraph" }).run();
-    target = Selection.findFrom(editor.state.doc.resolve(after), 1, true);
+const MATH_NODE_NAMES = new Set(["blockMath", "inlineMath"]);
+
+/**
+ * INVARIANT: an operation-produced math selection never survives to ordinary
+ * typing. ProseMirror replaces a selected atom with the next inline input, so
+ * a caret left on an implicitly selected formula silently destroys it — the
+ * #676 loss class, reachable at every boundary that inserts or moves a math
+ * atom programmatically:
+ *   - toolbar insert replacing a trailing textblock (#676);
+ *   - editor creation / authoritative setContent of a textblock-less draft
+ *     (the canonical normalizer strips paragraphs between consecutive block
+ *     formulas, so persisted drafts genuinely have this shape) (#673 C12);
+ *   - paste or drop of a math atom (#673 C13 — prosemirror-view NodeSelects
+ *     a dropped single node and leaves a pasted atom selected whenever no
+ *     text cursor follows it).
+ * EXPLICIT user selection (click, arrow keys) is ordinary ProseMirror
+ * semantics and never passes through this guard (#679).
+ *
+ * Normalization scans for the nearest TEXT cursor (forward, then backward;
+ * the text-only scan skips atoms, so a neighbouring formula is never
+ * selected). When the document holds no textblock at all, a trailing
+ * paragraph is appended as a typing landing zone. That paragraph is
+ * editor-only: it canonicalizes away on the next emitted document (trailing
+ * empty paragraphs are not canonical), and the restore paths dispatch it
+ * quiet, so establishing the caret never triggers an autosave by itself.
+ */
+export function settleImplicitMathSelection(
+  editor: Editor,
+  options: { quiet?: boolean } = {},
+): void {
+  const tr = implicitMathSelectionFix(editor.state);
+  if (!tr) return;
+  if (options.quiet) {
+    // Restore boundary: the settlement is not a user edit — no update emit
+    // (no autosave echo) and no history entry the candidate would have to
+    // undo through.
+    tr.setMeta("preventUpdate", true);
+    tr.setMeta("addToHistory", false);
   }
-  if (!target) return;
-  const next = target;
-  editor
-    .chain()
-    .command(({ tr, dispatch }) => {
-      if (dispatch) tr.setSelection(next);
-      return true;
-    })
-    .run();
+  editor.view.dispatch(tr);
 }
+
+/**
+ * The decision of settleImplicitMathSelection as a pure transaction builder,
+ * shared with the paste/drop plugin (whose fix joins the paste transaction
+ * instead of dispatching its own). Returns null when the state needs no fix.
+ */
+function implicitMathSelectionFix(state: EditorState): Transaction | null {
+  const { selection, doc, schema } = state;
+  if (!(selection instanceof NodeSelection)) return null;
+  if (!MATH_NODE_NAMES.has(selection.node.type.name)) return null;
+  const tr = state.tr;
+  const target =
+    Selection.findFrom(doc.resolve(selection.to), 1, true) ??
+    Selection.findFrom(doc.resolve(selection.from), -1, true);
+  if (target) {
+    tr.setSelection(target);
+    return tr;
+  }
+  // No text cursor anywhere in the document — give ordinary typing a
+  // landing zone that cannot replace the atom.
+  const end = doc.content.size;
+  const paragraph = schema.nodes.paragraph?.create();
+  if (!paragraph) return null;
+  tr.insert(end, paragraph);
+  const landing = Selection.findFrom(tr.doc.resolve(end), 1, true);
+  if (!landing) return null;
+  tr.setSelection(landing);
+  return tr;
+}
+
+/**
+ * C13 boundary: paste and drop are the two non-toolbar operations the view
+ * itself dispatches, and both tag their transactions with a `uiEvent` meta.
+ * Normalizing ONLY those transactions keeps explicit user selection untouched
+ * — every other NodeSelection path (click, keyboard, plugin) is unaffected.
+ */
+const SettleMathSelectionAfterPasteDrop = Extension.create({
+  name: "settleMathSelectionAfterPasteDrop",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("settleMathSelectionAfterPasteDrop"),
+        appendTransaction: (transactions, _oldState, newState) => {
+          const operationProduced = transactions.some(
+            (tr) =>
+              tr.getMeta("uiEvent") === "paste" ||
+              tr.getMeta("uiEvent") === "drop",
+          );
+          if (!operationProduced) return null;
+          return implicitMathSelectionFix(newState);
+        },
+      }),
+    ];
+  },
+});
 
 /**
  * WYSIWYG rich-text editor. The EDIT surface — the ONLY place
@@ -203,6 +273,15 @@ export default function RichContentEditor({
 
   useEffect(() => {
     if (!editor) return;
+    // C12 restore boundary: editor creation adopts the persisted draft with
+    // Selection.atStart — a textblock-less draft opens with its first formula
+    // under a NodeSelection the next keystroke would destroy. Quiet: no
+    // update emit, so establishing a safe caret never autosaves by itself.
+    settleImplicitMathSelection(editor, { quiet: true });
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
     if (
       !isAuthoritativeReplacement(document, currentEditorDocumentRef.current)
     ) {
@@ -218,6 +297,10 @@ export default function RichContentEditor({
     editor.commands.setContent(contentDocumentToTiptap(document), {
       emitUpdate: false,
     });
+    // Same restore boundary as creation: the adopted document must not open
+    // ordinary typing onto a selected math atom, and the settlement must not
+    // itself trigger a save (quiet).
+    settleImplicitMathSelection(editor, { quiet: true });
   }, [editor, document]);
 
   const mathInputRef = useRef<HTMLInputElement>(null);
@@ -233,7 +316,9 @@ export default function RichContentEditor({
         attrs: { latex },
       })
       .run();
-    settleCursorAfterMathInsert(editor);
+    // Not quiet: the insert is a real edit and the settlement's possible
+    // landing paragraph belongs to it.
+    settleImplicitMathSelection(editor);
     if (mathInputRef.current) mathInputRef.current.value = "";
   }
 
