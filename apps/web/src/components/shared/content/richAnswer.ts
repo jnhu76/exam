@@ -92,12 +92,17 @@ export function classifyPersistedRichAnswer(input: {
 }
 
 /**
- * Binary projection of `classifyPersistedRichAnswer` for read-only
+ * Binary projection of `classifyPersistedRichAnswer` for READ-ONLY
  * rendering: the canonical document when the value is interpretable Rich
  * (`rich_valid` or `rich_noncanonical`), null otherwise. Callers render
  * their controlled corrupt/unsupported fallback for null — a rich-mode
  * value must never fall through to the plain formatter, and a corrupt value
  * must never render as an empty document.
+ *
+ * This projection grants DISPLAY, never editability: the editable seam
+ * (RichTextAnswerInput) classifies directly and fails closed on
+ * `rich_noncanonical` too, because mounting it would expose the editor's
+ * canonicalizing onUpdate as a silent repair write.
  */
 export function resolveRichAnswerDocument(
   answer: unknown,

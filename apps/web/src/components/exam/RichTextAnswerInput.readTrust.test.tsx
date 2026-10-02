@@ -4,7 +4,7 @@ import type { ContentDocumentV1 } from "@exam/domain";
 import { RichTextAnswerInput } from "./RichTextAnswerInput";
 
 /**
- * Phase-D3 read-trust regressions (#669 PC-F03/F04/F05, R1–R5).
+ * Phase-D3 read-trust regressions (#669 PC-F03/F04/F05, F1, R1–R5).
  *
  * The persisted-read authority (classifyPersistedRichAnswer) decides what may
  * mount the candidate editor. The dangerous edge these tests guard is the
@@ -18,6 +18,12 @@ import { RichTextAnswerInput } from "./RichTextAnswerInput";
  * or corrupt values — on initial mount, on reload/restore re-application,
  * and on STALE_VERSION serverAnswer adoption alike (they all arrive through
  * the same `value` prop seam).
+ *
+ * F1 (#669 D3 focused review): `rich_noncanonical` fails closed too. The
+ * editor's onUpdate re-serializes through canonicalization, so mounting a
+ * noncanonical persisted value would turn read classification into a silent
+ * repair write; for the PC-F01 closure class the canonicalized form itself
+ * exceeds CONTENT_LIMITS, yielding an editor whose output can never save.
  */
 
 const VALID: ContentDocumentV1 = {
@@ -57,6 +63,40 @@ const UNSUPPORTED_VERSION = {
   docVersion: 2,
   type: "doc",
   content: [{ type: "paragraph", content: [{ type: "text", text: "v2" }] }],
+};
+
+/** Schema-valid but noncanonical: unsorted marks, split same-mark runs.
+ * Canonicalizable — an editable mount would silently normalize it on the
+ * first onUpdate even without a semantic edit. */
+const NONCANONICAL = {
+  docVersion: 1,
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "答", marks: ["italic", "bold"] },
+        { type: "text", text: "案", marks: ["italic", "bold"] },
+      ],
+    },
+  ],
+};
+
+/** PC-F01 closure class: two schema-legal same-mark runs whose normalized
+ * merge exceeds the textRun limit — an editable mount would emit a value
+ * the write seam's canonical boundary always rejects. */
+const PCF01_NONCANONICAL = {
+  docVersion: 1,
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "a".repeat(10001), marks: ["bold"] },
+        { type: "text", text: "b".repeat(10001), marks: ["bold"] },
+      ],
+    },
+  ],
 };
 
 async function expectIntegrityState(
@@ -105,6 +145,30 @@ describe("RichTextAnswerInput — typed read adoption (Phase D3)", () => {
     render(
       <RichTextAnswerInput
         value={UNSUPPORTED_VERSION}
+        answerMode="rich"
+        onChange={onChange}
+      />,
+    );
+    await expectIntegrityState(onChange);
+  }, 15000);
+
+  it("F1-A: a canonicalizable rich_noncanonical value never mounts and emits no silent canonical repair", async () => {
+    const onChange = vi.fn();
+    render(
+      <RichTextAnswerInput
+        value={NONCANONICAL}
+        answerMode="rich"
+        onChange={onChange}
+      />,
+    );
+    await expectIntegrityState(onChange);
+  }, 15000);
+
+  it("F1-B: the PC-F01 canonical-closure class never exposes an editable surface", async () => {
+    const onChange = vi.fn();
+    render(
+      <RichTextAnswerInput
+        value={PCF01_NONCANONICAL}
         answerMode="rich"
         onChange={onChange}
       />,
