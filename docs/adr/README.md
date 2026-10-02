@@ -196,7 +196,7 @@ unrelated ADR cleanup.
 | [ADR-009](ADR-009-frontend-state-machine-adoption.md) | Frontend state-machine adoption | PROPOSED |
 | [ADR-011](ADR-011-notification-and-email-delivery.md) | Inbox notification and asynchronous Email delivery | ACCEPTED |
 | [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future offline-resilient client | DEFERRED |
-| [ADR-019](ADR-019-content-document-model.md) | Rich-content/document authority model | ACCEPTED (2026-09-25) |
+| [ADR-019](ADR-019-content-document-model.md) | Rich-content/document authority model | ACCEPTED, amended (2026-10-02) |
 
 ### F. Product composition
 
@@ -282,7 +282,7 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future Offline-Resilient Client Data and Recovery Model | DEFERRED | none | none |
 | [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational Authority and Maintainer Boundary | ACCEPTED through revision 4 | none | none |
 | [ADR-018](ADR-018-operational-observability-window.md) | Operational Observability Window | ACCEPTED | none | none |
-| [ADR-019](ADR-019-content-document-model.md) | Content Document Model | ACCEPTED (2026-09-25) | none | none |
+| [ADR-019](ADR-019-content-document-model.md) | Content Document Model | ACCEPTED, amended (2026-10-02) | none | none |
 | [ADR-020](ADR-020-http-surface-routing-authority.md) | HTTP Surface Routing & Policy Authority | ACCEPTED | none | none |
 | [ADR-021](ADR-021-exam-semantic-authority-adoption.md) | Exam Semantic Authority Adoption | ACCEPTED | Stale assertions listed in its supersession table (incl. ADR-008 Phase-2 scope statements) | none |
 | [ADR-022](ADR-022-product-capability-composition.md) | Bounded Product Capability Composition | ACCEPTED | none | none |

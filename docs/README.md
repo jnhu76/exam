@@ -19,6 +19,7 @@ has one authority:
 | Fact type | Authority |
 | --- | --- |
 | Cross-boundary Exam semantics (fact ownership, freeze/transfer points, candidate boundary, supported-capability rule) | [`architecture/exam-semantic-boundaries.md`](architecture/exam-semantic-boundaries.md) — EXSEM-001..020, adopted by [ADR-021](adr/ADR-021-exam-semantic-authority-adoption.md) |
+| Rich content / document semantics (V1 grammar, canonicalization, limits, read/write/render integration) | [`architecture/rich-content-semantic-contract.md`](architecture/rich-content-semantic-contract.md) — adopted by [ADR-019](adr/ADR-019-content-document-model.md) |
 | A specific architectural decision | Accepted ADRs under [`docs/adr/`](adr/) |
 | External behavior, data format, and frozen semantics | [`docs/contracts/`](contracts/), generated OpenAPI, and contract tests |
 | Product invariants and domain model | [`docs/SPEC.md`](SPEC.md) |
@@ -59,6 +60,7 @@ guidance.
 | [`architecture/exam-semantic-boundaries.md`](architecture/exam-semantic-boundaries.md) | **Cross-boundary Exam semantic authority** — EXSEM-001..020 frozen invariants: fact ownership, authority freeze/transfer points, legitimately live facts, candidate-observable boundary, effective-state rule, supported-capability definition (adopted by [ADR-021](adr/ADR-021-exam-semantic-authority-adoption.md)) |
 | [`architecture/authorization.md`](architecture/authorization.md) | Capability-based authorization model |
 | [`architecture/exam-runtime.md`](architecture/exam-runtime.md) | Exam / Attempt / Answer / Submit / Grading / Result visibility protocol |
+| [`architecture/rich-content-semantic-contract.md`](architecture/rich-content-semantic-contract.md) | **Rich V1 semantic and integration authority** — closed grammar, canonicalization, limits, read/write/render/export/capability seams (adopted by [ADR-019](adr/ADR-019-content-document-model.md)) |
 | [`architecture/exam-system/README.md`](architecture/exam-system/README.md) | Exam-system architecture map and known limitations |
 | [`architecture/exam-system/candidate-recovery.md`](architecture/exam-system/candidate-recovery.md) | Candidate recovery sequences and authority boundaries |
 | [`architecture/exam-system/state-and-authority.md`](architecture/exam-system/state-and-authority.md) | Lifecycle, policy, timestamp, and evidence dimensions |
