@@ -313,6 +313,7 @@ export function preflightContentDocumentStructure(value: unknown): string[] {
   // Serialized size. JSON.stringify also detects cycles — a cyclic value can
   // never be a document and would break downstream serialization anyway.
   let serialized: string | undefined;
+  let oversized = false;
   try {
     serialized = JSON.stringify(value);
   } catch {
@@ -321,7 +322,8 @@ export function preflightContentDocumentStructure(value: unknown): string[] {
     );
   }
   if (serialized !== undefined) {
-    if (serialized.length > CONTENT_LIMITS.serializedChars) {
+    oversized = serialized.length > CONTENT_LIMITS.serializedChars;
+    if (oversized) {
       violations.push(
         `serialized document exceeds ${CONTENT_LIMITS.serializedChars} chars`,
       );
@@ -341,6 +343,14 @@ export function preflightContentDocumentStructure(value: unknown): string[] {
   }
   if (!Array.isArray(envelope.content)) {
     violations.push("content must be an array");
+  }
+
+  // An oversized payload is already rejected — its verdict is final, so the
+  // hostile structure is never traversed (F1 review finding). Everything
+  // below only ever sees a payload inside the serialized budget, which is
+  // what bounds the walk: every raw JSON value costs at least one character.
+  if (oversized) {
+    return violations;
   }
 
   // Iterative DFS over the RAW value (every object/array, regardless of node

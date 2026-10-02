@@ -359,6 +359,19 @@ describe("preflightContentDocumentStructure", () => {
     expect(violations.length).toBeGreaterThan(0);
   });
 
+  it("stops at the serialization gate — an oversized payload never enters the raw walk", () => {
+    // Oversized AND deeper than the raw depth budget: if the walk ran, it
+    // would append a "nesting exceeds" violation on top of the size one.
+    // The gate's verdict is final, so the serialized-size violation must be
+    // the ONLY one — proving the hostile structure was never traversed.
+    let bomb: unknown = "x".repeat(200_000);
+    for (let i = 0; i < 50; i++) bomb = [bomb];
+    const hostile = { docVersion: 1, type: "doc", content: bomb };
+    expect(preflightContentDocumentStructure(hostile)).toEqual([
+      `serialized document exceeds ${CONTENT_LIMITS.serializedChars} chars`,
+    ]);
+  });
+
   it("rejects a cyclic structure instead of throwing", () => {
     const cyclic: Record<string, unknown> = { docVersion: 1, type: "doc" };
     cyclic["self"] = cyclic;
