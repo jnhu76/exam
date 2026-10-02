@@ -279,12 +279,18 @@ function pushBlockViolations(
 // The wire schema (ContentDocumentV1Schema) is recursive (z.lazy over the
 // list/table grammar). A hostile payload nested thousands of levels deep can
 // overflow the RECURSIVE parser before the post-parse limit check ever runs.
-// This preflight runs BEFORE any schema parse: it is iterative (explicit
-// stack, no recursion → no stack overflow) and bounded, so the recursive
-// parser never sees a structure deeper/larger than these budgets.
+// This preflight runs BEFORE any schema parse and owns exactly the budgets
+// the recursive parser needs to be safe (RC-04):
+//   - non-JSON / cycle rejection (JSON.stringify);
+//   - serialized size, which is also the traversal bound: every raw JSON
+//     value serializes to at least one character, so the raw walk below can
+//     never visit more than CONTENT_LIMITS.serializedChars units;
+//   - raw nesting depth — nested arrays cost ~1 character per level, so
+//     serialization size alone cannot bound recursion.
+// Grammar-node budgets (node count, per-run text length, …) belong to
+// CONTENT_LIMITS and are enforced after the parse: preflight must not define
+// a smaller legal document set than the contract it fronts (#673 C1).
 
-/** Raw-walk node budget. Grammar-valid documents stay far below it (arrays and envelope included). */
-const PREFLIGHT_NODE_BUDGET = CONTENT_LIMITS.totalNodes * 2 + 64;
 /**
  * Raw nesting budget. The raw walk counts the ARRAY levels interleaved
  * between the object levels, so a document at grammar depth g peaks at raw
@@ -299,7 +305,7 @@ const PREFLIGHT_RAW_DEPTH_BUDGET = (CONTENT_LIMITS.depth + 2) * 2 + 3;
  * to enter the recursive ContentDocumentV1Schema parse. Returns every
  * violation (empty array = safe to parse). Pure; does not replace the schema
  * — it only makes sure the recursive parser never receives a structure that
- * is dangerously deep, oversized, or cyclic.
+ * is dangerously deep or oversized.
  */
 export function preflightContentDocumentStructure(value: unknown): string[] {
   const violations: string[] = [];
@@ -339,20 +345,13 @@ export function preflightContentDocumentStructure(value: unknown): string[] {
 
   // Iterative DFS over the RAW value (every object/array, regardless of node
   // type): the recursive Zod parser's depth is driven by raw JSON nesting,
-  // not by grammar-correct nesting, so the bound must apply to both.
+  // not by grammar-correct nesting. Only depth is checked here — the
+  // traversal cost is already bounded by the serialized-size gate above.
   const stack: Array<{ node: unknown; depth: number }> = [
     { node: value, depth: 0 },
   ];
-  let nodes = 0;
   while (stack.length > 0) {
     const { node, depth } = stack.pop()!;
-    nodes += 1;
-    if (nodes > PREFLIGHT_NODE_BUDGET) {
-      violations.push(
-        `document exceeds ${PREFLIGHT_NODE_BUDGET} structural nodes`,
-      );
-      return violations;
-    }
     if (depth > PREFLIGHT_RAW_DEPTH_BUDGET) {
       violations.push(
         `document nesting exceeds ${PREFLIGHT_RAW_DEPTH_BUDGET} levels`,
@@ -360,13 +359,6 @@ export function preflightContentDocumentStructure(value: unknown): string[] {
       return violations;
     }
     if (Array.isArray(node)) {
-      // Fan-out bound: reject a huge array without iterating its elements.
-      if (node.length > PREFLIGHT_NODE_BUDGET) {
-        violations.push(
-          `document array fan-out exceeds ${PREFLIGHT_NODE_BUDGET} elements`,
-        );
-        return violations;
-      }
       for (const child of node) {
         stack.push({ node: child, depth: depth + 1 });
       }
