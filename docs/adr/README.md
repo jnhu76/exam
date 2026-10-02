@@ -130,11 +130,14 @@ Architecture decisions
 |   +-- ADR-017 operational authority / maintainer boundary
 |   `-- ADR-018 operational observability window
 |
-`-- E. Application, client & content evolution
-    +-- ADR-009 frontend state-machine adoption
-    +-- ADR-011 notification / email delivery
-    +-- ADR-016 future offline-resilient client
-    `-- ADR-019 content document model
++-- E. Application, client & content evolution
+|   +-- ADR-009 frontend state-machine adoption
+|   +-- ADR-011 notification / email delivery
+|   +-- ADR-016 future offline-resilient client
+|   `-- ADR-019 content document model
+|
+`-- F. Product composition
+    `-- ADR-022 bounded product capability composition
 ```
 
 **Grouping is navigation only.** It does not create `depends on`, `specializes`,
@@ -195,6 +198,12 @@ unrelated ADR cleanup.
 | [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future offline-resilient client | DEFERRED |
 | [ADR-019](ADR-019-content-document-model.md) | Rich-content/document authority model | ACCEPTED (2026-09-25) |
 
+### F. Product composition
+
+| ADR | Primary responsibility | Status |
+| --- | --- | --- |
+| [ADR-022](ADR-022-product-capability-composition.md) | Bounded product capability composition and Minimal/Standard presets over one Exam semantic kernel | ACCEPTED |
+
 ## ADR review and optimization order
 
 Review order is a **maintenance strategy**, not authority precedence. Prefer
@@ -246,6 +255,8 @@ These paths are navigation only:
 - **Operations:** ADR-010 -> ADR-017 -> ADR-018.
 - **Client/content:** ADR-009 / ADR-016 / ADR-019 according to the capability;
   ADR-011 owns current notification/delivery specialization.
+- **Product composition:** ADR-021 -> ADR-022, then consult ADR-010/019 and the
+  relevant capability-specific authority.
 
 ## Numeric index
 
@@ -274,9 +285,10 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-019](ADR-019-content-document-model.md) | Content Document Model | ACCEPTED (2026-09-25) | none | none |
 | [ADR-020](ADR-020-http-surface-routing-authority.md) | HTTP Surface Routing & Policy Authority | ACCEPTED | none | none |
 | [ADR-021](ADR-021-exam-semantic-authority-adoption.md) | Exam Semantic Authority Adoption | ACCEPTED | Stale assertions listed in its supersession table (incl. ADR-008 Phase-2 scope statements) | none |
+| [ADR-022](ADR-022-product-capability-composition.md) | Bounded Product Capability Composition | ACCEPTED | none | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-022**.
+ADR numbers are stable and never reused. The next free number is **ADR-023**.
 Files that are audits *about* an ADR belong under `docs/archive/`, not in this
 folder with a conflicting ADR number.
