@@ -713,6 +713,14 @@ describe("#673 C15 input-rule boundary — typed $$ / $$$ rules never leave a se
       .filter((block) => block.type === "blockMath")
       .map((block) => block.attrs?.latex);
 
+  /** Concatenated text of every top-level block, in document order. */
+  const topLevelTexts = (editor: Editor) =>
+    // getJSON() types its children as schema node classes; the shape is the
+    // plain JSON tree the editor serializes, so read it as JSONContent.
+    ((editor.getJSON() as JSONContent).content ?? []).map((block) =>
+      (block.content ?? []).map((inline) => inline.text ?? "").join(""),
+    );
+
   it("$$$x^2$$$ typed into the only paragraph: atom settles, next input preserves it", () => {
     const editor = createEditor();
     typeText(editor, "$$$x^2$$$");
@@ -775,6 +783,37 @@ describe("#673 C15 input-rule boundary — typed $$ / $$$ rules never leave a se
     editor.destroy();
   });
 
+  it("$$$x^2$$$ typed before an existing formula: text continues after the NEW formula in order", () => {
+    // #681 review F4: the rule replaces the whole textblock and the mapped
+    // caret (assoc 0 through the replacement) lands at the END of the
+    // produced atom, so with a second formula directly after,
+    // Selection.near NodeSelects that NEIGHBOUR instead. The settlement's
+    // "after" must anchor at the operation-produced formula — not at
+    // whichever atom got NodeSelected — or continued typing skips past the
+    // neighbour and reorders the answer.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [] },
+        { type: "blockMath", attrs: { latex: "y^2" } },
+      ],
+    });
+    editor.commands.setTextSelection(1); // inside the leading paragraph
+    typeText(editor, "$$$x^2$$$");
+    expect(blockLatexes(editor)).toEqual(["x^2", "y^2"]);
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    typeChar(editor, "答");
+    // Full document order, not just formula survival: the produced formula
+    // stays first and the prose lands directly after it.
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "blockMath", latex: "x^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+      { type: "blockMath", latex: "y^2" },
+    ]);
+    editor.destroy();
+  });
+
   it("Backspace right after the block rule undoes it: typed source restored", () => {
     // #681 review F2: tiptap's Backspace binding runs undoInputRule() first,
     // which replays the input-rules plugin's stored undo receipt. The plugin
@@ -810,6 +849,27 @@ describe("#673 C15 input-rule boundary — typed $$ / $$$ rules never leave a se
       { type: "paragraph", content: [{ type: "text", text: "前文" }] },
       { type: "paragraph", content: [{ type: "text", text: "$$$y^2$$$" }] },
     ]);
+    editor.destroy();
+  });
+
+  it("undoInputRule restores the exact pre-rule editor structure, settlement paragraph included", () => {
+    // #681 review F5: the receipt's transform records only the RULE
+    // transaction, so stock undoInputRule inverted the rule but left the
+    // settlement's landing paragraph behind — a residue the canonical
+    // projection hides (trailing empty paragraphs canonicalize away). The
+    // undo must fold the settlement's document steps into the receipt so
+    // the EDITOR returns to the exact pre-rule structure and continued
+    // typing stays inside the restored paragraph, exactly as with a stock
+    // input rule.
+    const editor = createEditor();
+    typeText(editor, "$$$x^2$$$");
+    expect(blockLatexes(editor)).toEqual(["x^2"]);
+    expect(editor.commands.undoInputRule()).toBe(true);
+    expect(blockTypes(editor)).toEqual(["paragraph"]);
+    expect(topLevelTexts(editor)).toEqual(["$$$x^2$$$"]);
+    typeChar(editor, "a");
+    expect(blockTypes(editor)).toEqual(["paragraph"]);
+    expect(topLevelTexts(editor)).toEqual(["$$$x^2$$$a"]);
     editor.destroy();
   });
 

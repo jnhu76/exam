@@ -3,6 +3,8 @@ import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { NodeSelection, Plugin, PluginKey, Selection } from "@tiptap/pm/state";
+import { ReplaceStep } from "@tiptap/pm/transform";
+import type { Transform } from "@tiptap/pm/transform";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -138,7 +140,9 @@ const MATH_NODE_NAMES = new Set(["blockMath", "inlineMath"]);
  *     must CONTINUE AFTER the formula. Backward search is forbidden — text
  *     landing ahead of a just-produced formula reorders the answer — so when
  *     no text cursor lies ahead, a paragraph is appended directly after the
- *     atom as the typing landing zone.
+ *     atom as the typing landing zone. The anchor is the operation-PRODUCED
+ *     atom, not merely the selected one: input rules anchor at the receipt's
+ *     replacement because their mapped selection can drift onto a neighbour.
  *
  * The text-only scan skips atoms, so a neighbouring formula is never
  * selected. The landing paragraph is editor-only: it canonicalizes away on
@@ -165,19 +169,54 @@ export function settleImplicitMathSelection(
 type MathSettlementLanding = "nearest" | "after";
 
 /**
+ * The undo receipt tiptap's input-rules plugin stores in its state meta
+ * (`run()` records it after a rule's handler mutated the transaction): the
+ * rule transaction itself, the keystroke range, and the typed text.
+ */
+type InputRuleReceipt = {
+  transform: Transform;
+  from: number;
+  to: number;
+  text: string;
+};
+
+/**
+ * The document position just after the math atom an input rule produced, or
+ * null when the receipt's steps inserted no math atom. The rule's mapped
+ * selection may drift onto a NEIGHBOURING atom (Selection.near through the
+ * whole-textblock replacement), so the "after" anchor cannot be read off the
+ * selection — it must come from the receipt's own replacement steps.
+ */
+function inputRuleProducedMathEnd(receipt: InputRuleReceipt): number | null {
+  const { steps, mapping } = receipt.transform;
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const step = steps[i];
+    if (!(step instanceof ReplaceStep)) continue;
+    const produced = step.slice.content.firstChild;
+    if (!produced || !MATH_NODE_NAMES.has(produced.type.name)) continue;
+    return mapping.slice(i + 1).map(step.from + step.slice.size, 1);
+  }
+  return null;
+}
+
+/**
  * The decision of settleImplicitMathSelection as a pure transaction builder,
  * shared with the paste/drop plugin (whose fix joins the paste transaction
  * instead of dispatching its own). Returns null when the state needs no fix.
+ * `producedMathEnd` overrides the selected atom as the "after" anchor when
+ * the caller knows the operation-produced atom's end (input rules).
  */
 function implicitMathSelectionFix(
   state: EditorState,
   landing: MathSettlementLanding = "after",
+  producedMathEnd?: number,
 ): Transaction | null {
   const { selection, doc, schema } = state;
   if (!(selection instanceof NodeSelection)) return null;
   if (!MATH_NODE_NAMES.has(selection.node.type.name)) return null;
   const tr = state.tr;
-  const forward = Selection.findFrom(doc.resolve(selection.to), 1, true);
+  const atomEnd = producedMathEnd ?? selection.to;
+  const forward = Selection.findFrom(doc.resolve(atomEnd), 1, true);
   if (forward) {
     tr.setSelection(forward);
     return tr;
@@ -193,7 +232,7 @@ function implicitMathSelectionFix(
   // it cannot replace. Restore adopts the document as a whole and parks the
   // caret at the document end; operations own the atom they produced, so
   // their landing zone goes directly after it (see the policy note above).
-  const insertPos = landing === "after" ? selection.to : doc.content.size;
+  const insertPos = landing === "after" ? atomEnd : doc.content.size;
   const paragraph = schema.nodes.paragraph?.create();
   if (!paragraph) return null;
   tr.insert(insertPos, paragraph);
@@ -248,16 +287,42 @@ const SettleMathSelectionAfterOperation = Extension.create({
             });
           });
           if (!operationProduced) return null;
-          const fix = implicitMathSelectionFix(newState);
+          // INVARIANT (#681 review F4): "after" means after the
+          // operation-PRODUCED math node. Input rules are the special case —
+          // the rule's mapped selection can drift onto a neighbouring atom —
+          // so the anchor comes from the receipt's replacement, not from the
+          // NodeSelection; toolbar/paste/drop select their own target, and
+          // keep the selection anchor.
+          const producedMathEnd =
+            receiptPlugin && receipt
+              ? inputRuleProducedMathEnd(receipt as InputRuleReceipt)
+              : null;
+          const fix = implicitMathSelectionFix(
+            newState,
+            "after",
+            producedMathEnd ?? undefined,
+          );
           if (!fix) return null;
-          // Preserve the input-rules undo receipt across the settlement: the
-          // plugin's reducer drops it on any foreign selectionSet/docChanged
-          // transaction, and the Backspace binding tries undoInputRule()
-          // first — without this copy the rule-made formula could not be
-          // undone back to its typed source. The receipt's transform still
-          // references the rule's own transaction, whose replacement range
-          // the settlement (insertion strictly AFTER the atom) never shifts.
-          if (receiptPlugin) fix.setMeta(receiptPlugin, receipt);
+          if (receiptPlugin && receipt) {
+            // Preserve the input-rules undo receipt across the settlement: the
+            // plugin's reducer drops it on any foreign selectionSet/docChanged
+            // transaction, and the Backspace binding tries undoInputRule()
+            // first — without this copy the rule-made formula could not be
+            // undone back to its typed source.
+            //
+            // The receipt's transform must also COVER the settlement:
+            // undoInputRule inverts only the recorded transform's steps, so a
+            // landing paragraph inserted here would otherwise survive the undo
+            // as structure residue (#681 review F5). The receipt's transform
+            // doc is the post-rule document the fix steps were computed
+            // against, so they apply onto it verbatim; the eq guard keeps a
+            // larger batch from folding steps that could not invert cleanly.
+            const recorded = receipt as InputRuleReceipt;
+            if (recorded.transform.doc.eq(newState.doc)) {
+              for (const step of fix.steps) recorded.transform.step(step);
+            }
+            fix.setMeta(receiptPlugin, receipt);
+          }
           return fix;
         },
       }),

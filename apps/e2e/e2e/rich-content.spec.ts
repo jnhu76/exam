@@ -705,25 +705,50 @@ async function setupProsePlusFormula(
   };
 }
 
-const persistedBlockMathCount = async (
+/** The persisted answer document, stringified — order-sensitive probes read
+ *  it directly (content array order mirrors the authored reading order). */
+const persistedAnswerJson = async (
   request: APIRequestContext,
   candidateToken: string,
   attemptId: string,
-): Promise<number> => {
+): Promise<string> => {
   const take = await request.get(
     `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
     { headers: { Cookie: `auth-token=${candidateToken}` } },
   );
   expect(take.ok()).toBeTruthy();
-  const json = JSON.stringify(
+  return JSON.stringify(
     (
       (await take.json()) as {
         questions: Array<{ answerValue: unknown }>;
       }
     ).questions[0]?.answerValue,
   );
-  return (json.match(/blockMath/g) ?? []).length;
 };
+
+const persistedBlockMathCount = async (
+  request: APIRequestContext,
+  candidateToken: string,
+  attemptId: string,
+): Promise<number> =>
+  (
+    (await persistedAnswerJson(request, candidateToken, attemptId)).match(
+      /blockMath/g,
+    ) ?? []
+  ).length;
+
+/** The editor's top-level block sequence — paragraphs and math atoms in
+ *  document order, the full reading-order assertion the count checks alone
+ *  cannot make (#681 review F4). */
+const editorBlockOrder = (editor: ReturnType<Page["locator"]>) =>
+  editor.evaluate((root) =>
+    Array.from(root.children).map((el) => {
+      const h = el as HTMLElement;
+      return h.dataset.type === "block-math"
+        ? `blockMath:${h.dataset.latex}`
+        : h.tagName.toLowerCase();
+    }),
+  );
 
 test.describe("#673 C13 — paste/drag math boundaries in the real editor", () => {
   /**
@@ -840,10 +865,33 @@ test.describe("#673 C15 — typed math input rules in the real editor", () => {
     await expect(
       editor.locator("[data-type='block-math'][data-latex='x^2-1=0']"),
     ).toHaveCount(1);
+    // INVARIANT (#681 review F4): prose continues after the PRODUCED formula
+    // — assert the full block reading order, not just formula survival. The
+    // empty paragraph between the formulas is the Enter-split leftover the
+    // rule did not occupy; it canonicalizes away on save.
+    await expect(editorBlockOrder(editor)).resolves.toEqual([
+      "p",
+      "blockMath:x^2-1=0",
+      "p",
+      "blockMath:w^2",
+      "p",
+    ]);
     await waitForSaveSaved(page);
     expect(
       await persistedBlockMathCount(request, candidateToken, attemptId),
     ).toBe(2);
+    // The persisted answer keeps that order end-to-end.
+    const persistedShape1 = await persistedAnswerJson(
+      request,
+      candidateToken,
+      attemptId,
+    );
+    expect(persistedShape1.indexOf("x^2-1=0")).toBeLessThan(
+      persistedShape1.indexOf("w^2"),
+    );
+    expect(persistedShape1.indexOf("ok")).toBeGreaterThan(
+      persistedShape1.indexOf("w^2"),
+    );
 
     // Shape 2 — the rule replaces the document's only textblock: the
     // settlement appends the typing landing paragraph (editor-only,
@@ -859,10 +907,24 @@ test.describe("#673 C15 — typed math input rules in the real editor", () => {
     await expect(
       editor.locator("[data-type='block-math'][data-latex='x^2']"),
     ).toHaveCount(1);
+    // Same reading-order invariant for the settlement-landing shape (#681
+    // review F4): the formula first, the prose directly after it.
+    await expect(editorBlockOrder(editor)).resolves.toEqual([
+      "blockMath:x^2",
+      "p",
+    ]);
     await waitForSaveSaved(page);
     expect(
       await persistedBlockMathCount(request, candidateToken, attemptId),
     ).toBe(1);
+    const persistedShape2 = await persistedAnswerJson(
+      request,
+      candidateToken,
+      attemptId,
+    );
+    expect(persistedShape2.indexOf("done")).toBeGreaterThan(
+      persistedShape2.indexOf("x^2"),
+    );
   });
 });
 
