@@ -4,7 +4,7 @@
 - **Mode**: 调查/审计 + harness 施工 (discovery-only per #669 Phase C authorization). **No production file modified**; all changes are research harness, fixtures, and this ledger.
 - **Oracle**: `docs/architecture/rich-content-semantic-contract.md` (frozen Phase-B authority) + ADR-019. The implementation is the system under test; the oracle was never inverted and never edited.
 - **Method**: property campaigns (seeded, bounded) + measured boundaries + real-PostgreSQL route rigs + real-editor (Tiptap/jsdom) mounts + real KaTeX render seam. Real production functions only; no normalize/limits/schema logic reimplemented.
-- **Reviewability**: full branch patch for focused harness review exported at `/home/hoo/669-phase-c-corrections.patch` (see §11).
+- **Reviewability**: the harness/source patch (11 code files, excluding the already-accepted ledger) is committed in-repo at `docs/research/rich-phase-c-harness-source.patch` so it is readable wherever this branch is; a working-copy copy also exists at `/home/hoo/669-phase-c-corrections.patch` (see §11).
 - **Status**: campaigns COMPLETE; Gate-1 review round 1 = CHANGE_REQUIRED (F1–F3 blockers, F4 clarify). Evidence-correction pass applied in §4/§12 (reachability taxonomy restored to the registered scale, PC-F06 reclassified as resource observation, D2/D4 authority boundary corrected, PC-F08 split malformed vs trust-gated). Awaiting focused re-review before Phase D.
 
 ---
@@ -38,10 +38,10 @@
 | B | CONTENT_LIMITS vs preflight (RC-04) | L2 | deterministic ramps + binary search | 7 families × (ramp + binsearch) | **PC-F02** (all 7 families) | RC-04 VIOLATED: preflight hides a strictly smaller legal set |
 | C | Normalization equivalence (RC-02 corollaries) | L1 | fixed corpus | 12 equivalence + 13 non-equivalence pairs | 0 | equivalence relations hold; inlineCode+bold normalization is deterministic |
 | K | Unicode integrity (RC-02/§4) | L1/L2 | 0x66900001 + fixed corpus | UTF-16/astral/CJK/lone-surrogate/ZWJ/bidi/NFC-NFD/CRLF corpora + sweep | astral/CJK variants of the merge class (folded into **PC-F01**) | all other Unicode semantics preserved verbatim; UTF-16 accounting correct at limit (10000 emoji = 20000 units) |
-| D | Editor ⇄ canonical round trip (RC-02) | client, real Tiptap | 0x67300001, 0x68100001 | 300 generated + boundary (1800 nodes) + off-grammar probe | probe only → **PC-F07** | round trip lossless on the grammar; off-grammar block: adapter no-throw → `undefined` entry → editor mounts silently |
+| D | Editor ⇄ canonical round trip (RC-02) | CLIENT_COMPONENT (jsdom, real Tiptap) | 0x67300001, 0x68100001 | 300 generated + boundary (1800 nodes) + off-grammar probe | probe only → **PC-F07** | round trip lossless on the grammar; off-grammar block: adapter no-throw → `undefined` entry → editor mounts silently |
 | E | SaveAnswer protocol (§12/§13) | L2 (pure core + production canonicalizer) | fixed corpus | precedence matrix, replay, CAS, B-F01 interaction | **PC-F01 downstream chain** (no protocol-order defect) | precedence matches §13 exactly; replay/CONFLICTING_PAYLOAD/CAS semantics correct; B-F01 canonical (over-limit) is accepted once, persisted, replayed, and served as `latestAnswer` |
 | F | Mutable-attempt replay (§12) | L3/L4 (real route + PostgreSQL) | fixed rig, N=30 accepted saves | replay seq 1 / 17 / unknown | semantic 0; resource observation → **PC-F06** | prior ACK + byte-identical row on replay; unknown seq → CAS; receipts grow unbounded full-payload (NOT a contract counterexample — §12 freezes no storage representation) |
-| G | Typed persisted-read trust (§7) | client, real editor | 11-state corpus | 11 classifier states + 3 mount counterexamples | **PC-F03, PC-F04, PC-F05** | shared classifier collapses §7's 7 states to 2; candidate mount path violates §7 three ways |
+| G | Typed persisted-read trust (§7) | CLIENT_COMPONENT (jsdom, real Tiptap) | 11-state corpus | 11 classifier states + 3 mount counterexamples | **PC-F03, PC-F04, PC-F05** | shared classifier collapses §7's 7 states to 2; candidate mount path violates §7 three ways |
 | H | Submit freeze / grading parity (§8) | L4 | 5 rigs | draft/frozen/workset parity + live-question mutation | 0 | draft == submitted frozen == workset candidateAnswer, verbatim; frozen snapshot immune to live question mutation |
 | I | Corrupt value behavior (§7/§8) | L4 | corrupt + unsupported_version rigs | take snapshot / submit / workset | 0 (chain evidence for G) | corrupt drafts are served verbatim at every read seam → reaches the client mount path of G unchanged |
 | J | Export semantics (§14) | L4 | JSON + CSV rigs | raw-evidence assertions, projection counting | 0 | export emits raw structured frozen evidence (JSON object; CSV JSON-stringified cell); semantic projection appears only once as question content, never as answer projection — no C7 behavioral defect on current master (contract decision still open, Phase D4) |
@@ -132,7 +132,7 @@ Rendering observation (classified; no violation)
 - **Invariant**: §7 — `CORRUPT_PERSISTED_RICH != EMPTY_DOCUMENT`; the mount authority must surface a typed integrity state, not an editable blank.
 - **Evidence**: counterexample 2 (`richPhaseC.readTrust.test.tsx:136-156`): mounting `RichTextAnswerInput` with a `docVersion: 2` envelope emits, on the first onChange, the canonical **empty** document `{docVersion:1, type:"doc", content:[{type:"paragraph", content:[]}]}` — the exact C4 overwrite shape: one autosave later the v2 value is silently replaced.
 - **Mapping**: §7; #673 C4; seam `RichTextAnswerInput.tsx`.
-- **Reachability**: `L3 PROVEN` for the delivery chain — Campaign I persists an `unsupported_version` draft by direct DB write and the real take-snapshot route serves it verbatim (`richPhaseC.freezeCorruptExportCampaign.test.ts`). Mount behavior itself: `CLIENT_COMPONENT + REAL_EDITOR` (not L5). `ANOMALOUS_PERSISTED_STATE_REQUIRED` (downgrade / direct write); `SUPPORTED_CURRENT_WRITER = NO` (schema rejects `docVersion: 2`).
+- **Reachability**: delivery chain `L4 + L3 EXECUTED` — Campaign I persists an `unsupported_version` draft to **real PostgreSQL by direct write** (the anomalous channel; `ANOMALOUS_PERSISTED_STATE_REQUIRED`, `SUPPORTED_CURRENT_WRITER = NO` — schema rejects `docVersion: 2`) and the real take-snapshot route serves it verbatim (`richPhaseC.freezeCorruptExportCampaign.test.ts`). Mount behavior itself: `CLIENT_COMPONENT + REAL_EDITOR` (not L5).
 - **Severity**: **P2** — silent data replacement for a value the contract types as corrupt.
 
 ### PC-F05 — Corrupt envelope-shaped value passes the shallow gate into the editor
@@ -140,7 +140,7 @@ Rendering observation (classified; no violation)
 - **Invariant**: §7 typed read; deep validation belongs to the read trust boundary, not to caller discretion.
 - **Evidence**: counterexample 3: `isContentDocumentV1(CORRUPT_ENVELOPE) === true` (envelope matches), so the value enters the editor and the editor **mounts silently**; Campaign D's probe shows the same silence deeper in the stack — `contentDocumentToTiptap` does not throw on an unknown block (`blockToTiptap` has no default branch, `contentAdapter.ts:73-113`), produces an `undefined` entry, and the editor still mounts (`PHASE-C-D-PROBE {"adapterThrew":false,"undefinedEntries":1,"editorOutcome":"mounted"}`).
 - **Mapping**: §7; #673 C4; seams `RichTextAnswerInput.tsx` + `contentAdapter.ts`.
-- **Reachability**: `L3 PROVEN` for the delivery chain (Campaign I: corrupt draft persisted by direct DB write, served verbatim by the real take-snapshot route). Mount behavior: `CLIENT_COMPONENT + REAL_EDITOR`. `ANOMALOUS_PERSISTED_STATE_REQUIRED`; `SUPPORTED_CURRENT_WRITER = NO`.
+- **Reachability**: delivery chain `L4 + L3 EXECUTED` (Campaign I: corrupt draft persisted to real PostgreSQL by direct write — `ANOMALOUS_PERSISTED_STATE_REQUIRED`, `SUPPORTED_CURRENT_WRITER = NO` — and served verbatim by the real take-snapshot route). Kernel gate `L1 EXECUTED` (`isContentDocumentV1(CORRUPT_ENVELOPE) === true` driven directly). Mount behavior: `CLIENT_COMPONENT + REAL_EDITOR` (not L5).
 - **Severity**: **P3** — no data loss by itself, but it is the enabler that delivers deep-invalid structures to the renderer (and to PC-F04's overwrite).
 
 ### PC-F06 — RESOURCE OBSERVATION: clientSeq receipts store full payloads and grow unbounded (§12; #673 C5)
@@ -158,7 +158,7 @@ Rendering observation (classified; no violation)
 - **Invariant**: RC-02's corollary that structural ignorance must be *typed*, not silent; §7's fail-closed rendering for unknown blocks (the static renderer does fail closed with `此内容包含当前版本不支持的元素` — the **editable** path does not).
 - **Evidence**: Campaign D probe (above); `blockToTiptap` covers paragraph/bulletList/orderedList/codeBlock/blockMath/table and has no default branch.
 - **Mapping**: RC-02/§15; #673 E8 (non-canonical adapter fixture gap) + C4 mechanism inventory; seam `contentAdapter.ts:73-113`.
-- **Reachability**: `CLIENT_COMPONENT + REAL_EDITOR` (jsdom Tiptap mount; registered scale has no component slot). `ANOMALOUS_PERSISTED_STATE_REQUIRED`; `SUPPORTED_CURRENT_WRITER = NO` — the wire schema's strict block enum rejects unknown blocks, so no supported writer can persist one; `L3 / L4 = NOT EXECUTED` and not reachable through the supported stack.
+- **Reachability**: `L1 EXECUTED` (adapter pure function `contentDocumentToTiptap` driven directly on an off-grammar block — no throw, `undefined` entry) + `CLIENT_COMPONENT + REAL_EDITOR` (jsdom Tiptap mount; registered scale has no component slot). `ANOMALOUS_PERSISTED_STATE_REQUIRED`; `SUPPORTED_CURRENT_WRITER = NO` — the wire schema's strict block enum rejects unknown blocks, so no supported writer can persist one; `L3 / L4 = NOT EXECUTED` and not reachable through the supported stack.
 - **Severity**: **P3** — silent-ignore is the wrong failure mode for a typed contract but requires an anomalous persisted value.
 
 ### PC-F08 — RENDERING OBSERVATION (classified per Gate-1 review): trust-gated failures drop parsed arguments; §15 malformed-source invariant HELD
@@ -167,9 +167,11 @@ Campaign L's existing 20-case corpus already separates the two input classes the
 
 - **Class A — syntactically malformed (parse errors)**: `\frac{1}{` (malformed brace), `x^` (truncated superscript) → expectation `error-render`, asserting the **complete HTML-escaped source is visible** in the output. These assertions PASS: **§15 "preserve source on malformed input" is satisfied — no violation.**
 - **Class A′ — valid syntax, expansion-overflow failure**: `\def\x{\x}\x`, `\def\a{\a\a}\a` → also `error-render` with full source visible (and bounded by `maxExpand: 1000`). Source preservation holds here too.
-- **Class B — syntactically valid but trust-disallowed / unsupported commands** (10 cases: `\href`, `\includegraphics`, `\htmlClass`, `\htmlId`, `\htmlStyle`, `\htmlData`, `\input`, `\write18`, `\notacommand{…}`) → KaTeX renders **only the failing command token**; parsed arguments are dropped. This is a **fidelity observation only**: §15's frozen obligation covers malformed input, not trust-denied valid input.
+- **Class B — syntactically valid but trust-disallowed / unsupported commands** (9 cases: `\href`, `\includegraphics`, `\htmlClass`, `\htmlId`, `\htmlStyle`, `\htmlData`, `\input`, `\write18`, `\notacommand{…}`) → KaTeX renders **only the failing command token**; parsed arguments are dropped. This is a **fidelity observation only**: §15's frozen obligation covers malformed input, not trust-denied valid input.
 
-**Verdict: `CONTRACT_VIOLATION = NO`. `malformed-source-preserved = HELD (4/4 cases)` · `trust-gated-fidelity = ARGUMENTS_DROPPED (10/10 cases)`.** Security posture confirmed: inert (no attacker-influenced `style`/event/active content in any of the 20 outputs; `trust: false`, `strict: "ignore"`, `throwOnError: false`, `maxSize: 50`, `maxExpand: 1000` all observed effective).
+**Verdict: `CONTRACT_VIOLATION = NO`. `malformed-source-preserved = HELD (4/4 cases)` · `trust-gated-fidelity = ARGUMENTS_DROPPED (9/9 cases)`.** Security posture confirmed: inert (no attacker-influenced `style`/event/active content in any of the 20 outputs; `trust: false`, `strict: "ignore"`, `throwOnError: false`, `maxSize: 50`, `maxExpand: 1000` all observed effective).
+
+One-off local witness (2026-10-02, Gate-1 correction audit): a temporary uncommitted harness file drove the same production seam over all 13 A/A′/B cases and recorded machine output — class A/A′ `fullEscapedSourcePresent = true` (4/4); class B `fullEscapedSourcePresent = false`, `tokenPresent = true`, **every parsed argument group absent** (9/9). This upgrades the bring-up observation (§9.4) into dated executed evidence; the file was deleted immediately after the run and is not part of the suite.
 
 - **Mapping**: §15; #673 C9 (CONFIRMED_EVIDENCE_GAP) — closed by executing the real seam (the prior test exercised only the lazy/Suspense fallback).
 - **Reachability**: `L1 PROVEN` (production pure-function seam `katexRenderToHtml` — the same `renderToString` path the renderer uses, not the Suspense fallback).
@@ -190,7 +192,7 @@ PR #681's closures (produced-atom anchor, never-cross-block merge policy, settle
 | `ResultPage`, `GradingDetailPage`, `AttemptDetailPage` | shared classifier `resolveRichAnswerDocument` (`richAnswer.ts`) → binary valid/null, fails closed; static renderer placeholders unknown blocks | yes (binary collapse of the 7 typed states is lossy but fail-closed) |
 | `RichTextAnswerInput` (candidate mount/restore) | local shallow gate `isContentDocumentV1` + unconditional `plainTextToDocument(string)` | **no — PC-F03/04/05** |
 | take snapshot / submit freeze / grading workset | verbatim pass-through (Campaigns H/I: byte-identical) | n/a (raw evidence by design; the trust decision is delegated to the client, where the mount path fails it) |
-| admin export (JSON/CSV) | raw structured frozen evidence, no validation gate (Campaign J) | per §14 this is the open **contract decision** (Phase D4), not a behavioral defect found |
+| admin export (JSON/CSV) | raw structured frozen evidence, no validation gate (Campaign J) | per §14 the exposure/labeling decision (Phase D4 — implementation only; the raw-evidence ≠ semantic-projection invariant is already frozen), not a behavioral defect found |
 | SaveAnswer route | production canonicalizer (preflight → schema → normalize) | writes canonical values — except the PC-F01 merge class, which persists a value the same seam later rejects |
 
 ## 8. No-counterexample areas (negative results, with budgets)
@@ -201,7 +203,7 @@ PR #681's closures (produced-atom anchor, never-cross-block merge policy, settle
 - **SaveAnswer precedence**: exact §13 order observed, including deadline ≥ canonicalization and terminal lifecycle short-circuit (canonicalizer never invoked for voided/submitted).
 - **Replay/CAS**: prior-ACK zero-write replay (byte-identical row) and correct unknown-seq CAS at L4.
 - **Freeze parity**: draft/frozen/workset byte-identical; live question mutation does not leak into frozen snapshots.
-- **Export**: no semantic projection masquerading as answer evidence (C7's decision remains open by choice, not by defect).
+- **Export**: no semantic projection masquerading as answer evidence (C7's exposure/labeling decision remains open by choice, Phase D4 — not by defect).
 - **Editor round trip**: 300-case lossless; 1800-node document round-trips in <1s.
 - **KaTeX security**: inert and bounded on the full corpus.
 - **KaTeX malformed-source preservation (§15)**: full escaped source visible on all 4 malformed/expansion-overflow cases (Class A/A′ of PC-F08) — the frozen invariant HOLDS; only trust-gated valid input (Class B) degrades to token-only rendering.
@@ -248,7 +250,7 @@ Last full run at base `6c50ebfe`: API 69/69, web 31/31, all gates green.
 For the focused harness source review (Gate-1 follow-up item 6), the full branch patch is exported:
 
 ```bash
-git diff origin/master...research/669-rich-phase-c-adversarial-discovery > /home/hoo/669-phase-c-corrections.patch
+git diff origin/master...research/669-rich-phase-c-adversarial-discovery -- . ':(exclude)docs'   > docs/research/rich-phase-c-harness-source.patch
 ```
 
 ## 12. Phase-D work packages (proposals; Gate 1 review decides)
