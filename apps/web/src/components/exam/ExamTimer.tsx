@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
-/** Displays a countdown timer that fires onTimeout when the deadline is reached. */
+/**
+ * Displays a countdown timer that fires onTimeout when the deadline is reached.
+ *
+ * Single-line h-9 chip (#675): shares the Button system's control geometry
+ * with the adjacent save indicator and submit button in the take-page
+ * topbar, so the row renders at one consistent height.
+ */
 export function ExamTimer({
   deadlineAt,
   onTimeout,
@@ -36,12 +42,12 @@ export function ExamTimer({
     <div
       role="timer"
       aria-label={t("candidateRuntime.timer.remaining")}
-      className={`rounded-md border px-3 py-1.5 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-card text-foreground"}`}
+      className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-3 ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-card text-foreground"}`}
     >
-      <div className="type-metadata">
+      <span className="type-metadata">
         {t("candidateRuntime.timer.remaining")}
-      </div>
-      <span className="type-numeric font-mono text-xl font-medium leading-tight">
+      </span>
+      <span className="type-numeric font-mono text-sm font-medium">
         {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
       </span>
     </div>

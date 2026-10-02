@@ -453,6 +453,11 @@ describe("StatsCard", () => {
 });
 
 describe("SaveIndicator", () => {
+  it("renders idle state", () => {
+    render(<SaveIndicator state="idle" />);
+    expect(screen.getByText("等待保存")).toBeInTheDocument();
+  });
+
   it("renders saving state", () => {
     render(<SaveIndicator status="saving" />);
     expect(screen.getByText("保存中...")).toBeInTheDocument();
@@ -466,6 +471,20 @@ describe("SaveIndicator", () => {
   it("renders error state", () => {
     render(<SaveIndicator status="error" />);
     expect(screen.getByText("保存失败")).toBeInTheDocument();
+  });
+
+  // #675: the chip shares the Button system's h-9 control geometry with the
+  // adjacent timer and submit button. The feedback layer owns only the color
+  // triple, so every state renders the same height classes — switching save
+  // state must not change the chip's geometry.
+  it("keeps h-9 control geometry stable across all four states", () => {
+    for (const state of ["idle", "saving", "saved", "error"] as const) {
+      const { container, unmount } = render(<SaveIndicator state={state} />);
+      const el = container.firstElementChild as HTMLElement;
+      expect(el.className).toContain("h-9");
+      expect(el.className).not.toMatch(/\bpy-/);
+      unmount();
+    }
   });
 });
 
