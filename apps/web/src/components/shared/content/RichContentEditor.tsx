@@ -1,6 +1,16 @@
 import { useEffect, useRef } from "react";
+import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
-import { NodeSelection, Selection } from "@tiptap/pm/state";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
+import {
+  NodeSelection,
+  Plugin,
+  PluginKey,
+  Selection,
+  TextSelection,
+} from "@tiptap/pm/state";
+import { ReplaceStep } from "@tiptap/pm/transform";
+import type { Transform } from "@tiptap/pm/transform";
 import { EditorContent, useEditor } from "@tiptap/react";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -99,42 +109,256 @@ export function richEditorExtensions() {
         maxExpand: 1000,
       },
     }),
+    SettleMathSelectionAfterOperation,
   ];
 }
 
 /**
- * INVARIANT: after a toolbar math insert the caret never rests on a math
- * atom. Tiptap's insertContent leaves an atom (blockMath) under a
- * NodeSelection whenever it replaces a trailing textblock (insert at document
- * end or into an empty paragraph); ProseMirror replaces a selected atom with
- * the next inline input, so the candidate's next keystroke or formula insert
- * silently destroyed the visible node before serialization (#676). A plain
- * near() is not enough: with another atom directly ahead (e.g. consecutive
- * blockMath nodes restored from a draft) it lands the caret on that
- * neighbour, recreating the hazard one position over. The forward scan here
- * is therefore text-only and skips atoms; when no textblock lies ahead, the
- * atom first gets a following paragraph. Mid-paragraph inserts already land a
- * TextSelection; the guard is a no-op there.
+ * The math atoms of the frozen grammar. Both are selectable ProseMirror
+ * atoms, so both can end up under an operation-produced NodeSelection.
  */
-export function settleCursorAfterMathInsert(editor: Editor): void {
-  const { selection } = editor.state;
-  if (!(selection instanceof NodeSelection)) return;
-  const after = selection.to;
-  let target = Selection.findFrom(editor.state.doc.resolve(after), 1, true);
-  if (!target) {
-    editor.chain().insertContentAt(after, { type: "paragraph" }).run();
-    target = Selection.findFrom(editor.state.doc.resolve(after), 1, true);
+const MATH_NODE_NAMES = new Set(["blockMath", "inlineMath"]);
+
+/**
+ * INVARIANT: an operation-produced math selection never survives to ordinary
+ * typing. ProseMirror replaces a selected atom with the next inline input, so
+ * a caret left on an implicitly selected formula silently destroys it — the
+ * #676 loss class, reachable at every boundary that inserts or moves a math
+ * atom programmatically:
+ *   - toolbar insert replacing a trailing textblock (#676);
+ *   - editor creation / authoritative setContent of a textblock-less draft
+ *     (the canonical normalizer strips paragraphs between consecutive block
+ *     formulas, so persisted drafts genuinely have this shape) (#673 C12);
+ *   - paste or drop of a math atom (#673 C13 — prosemirror-view NodeSelects
+ *     a dropped single node and leaves a pasted atom selected whenever no
+ *     text cursor follows it);
+ *   - the Mathematics input rules converting typed `$$…$$` / `$$$…$$$` text
+ *     into an atom (#673 C15 — the rule consumes the keystroke inside
+ *     handleTextInput and, when it replaces the whole textblock, maps the
+ *     caret onto the new atom).
+ * EXPLICIT user selection (click, arrow keys) is ordinary ProseMirror
+ * semantics and never passes through this guard (#679).
+ *
+ * Two landing policies, because the two boundaries own different invariants:
+ *   - "nearest" (RESTORE): adoption of a persisted draft only needs a safe
+ *     caret; the nearest text cursor wins, backward included.
+ *   - "after" (OPERATIONS that produce or move a formula): prose typed next
+ *     must CONTINUE DIRECTLY AFTER the formula — the caret takes the text
+ *     position at the atom's end or the paragraph flush against it, and when
+ *     neither exists a landing paragraph is appended at the atom's end. The
+ *     scan never crosses a block (#681 review F6): reaching a distant
+ *     paragraph past a neighbouring formula/list/table moves the candidate's
+ *     typing across blocks they did not type past. Backward search is
+ *     forbidden — text landing ahead of a just-produced formula reorders the
+ *     answer. The anchor is the operation-PRODUCED atom, not merely the
+ *     selected one: input rules anchor at the receipt's replacement because
+ *     their mapped selection can drift onto a neighbour.
+ *
+ * The text-only scan skips atoms, so a neighbouring formula is never
+ * selected. The landing paragraph is editor-only: it canonicalizes away on
+ * the next emitted document (trailing empty paragraphs are not canonical),
+ * and the restore paths dispatch it quiet, so establishing the caret never
+ * triggers an autosave by itself.
+ */
+export function settleImplicitMathSelection(
+  editor: Editor,
+  options: { quiet?: boolean; landing?: MathSettlementLanding } = {},
+): void {
+  const tr = implicitMathSelectionFix(editor.state, options.landing ?? "after");
+  if (!tr) return;
+  if (options.quiet) {
+    // Restore boundary: the settlement is not a user edit — no update emit
+    // (no autosave echo) and no history entry the candidate would have to
+    // undo through.
+    tr.setMeta("preventUpdate", true);
+    tr.setMeta("addToHistory", false);
   }
-  if (!target) return;
-  const next = target;
-  editor
-    .chain()
-    .command(({ tr, dispatch }) => {
-      if (dispatch) tr.setSelection(next);
-      return true;
-    })
-    .run();
+  editor.view.dispatch(tr);
 }
+
+type MathSettlementLanding = "nearest" | "after";
+
+/**
+ * The undo receipt tiptap's input-rules plugin stores in its state meta
+ * (`run()` records it after a rule's handler mutated the transaction): the
+ * rule transaction itself, the keystroke range, and the typed text.
+ */
+type InputRuleReceipt = {
+  transform: Transform;
+  from: number;
+  to: number;
+  text: string;
+};
+
+/**
+ * The document position just after the math atom an input rule produced, or
+ * null when the receipt's steps inserted no math atom. The rule's mapped
+ * selection may drift onto a NEIGHBOURING atom (Selection.near through the
+ * whole-textblock replacement), so the "after" anchor cannot be read off the
+ * selection — it must come from the receipt's own replacement steps.
+ */
+function inputRuleProducedMathEnd(receipt: InputRuleReceipt): number | null {
+  const { steps, mapping } = receipt.transform;
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const step = steps[i];
+    if (!(step instanceof ReplaceStep)) continue;
+    const produced = step.slice.content.firstChild;
+    if (!produced || !MATH_NODE_NAMES.has(produced.type.name)) continue;
+    return mapping.slice(i + 1).map(step.from + step.slice.size, 1);
+  }
+  return null;
+}
+
+/**
+ * The decision of settleImplicitMathSelection as a pure transaction builder,
+ * shared with the paste/drop plugin (whose fix joins the paste transaction
+ * instead of dispatching its own). Returns null when the state needs no fix.
+ * `producedMathEnd` overrides the selected atom as the "after" anchor when
+ * the caller knows the operation-produced atom's end (input rules).
+ */
+function implicitMathSelectionFix(
+  state: EditorState,
+  landing: MathSettlementLanding = "after",
+  producedMathEnd?: number,
+): Transaction | null {
+  const { selection, doc, schema } = state;
+  if (!(selection instanceof NodeSelection)) return null;
+  if (!MATH_NODE_NAMES.has(selection.node.type.name)) return null;
+  const tr = state.tr;
+  const atomEnd = producedMathEnd ?? selection.to;
+  const $end = doc.resolve(atomEnd);
+  if (landing === "after") {
+    // INVARIANT (#681 review F4/F6): continuation is DIRECTLY after the
+    // operation-produced formula. The caret takes the text position at the
+    // atom's end (inline atoms) or the paragraph flush against it; when
+    // neither exists, a landing paragraph is appended at the atom's end. No
+    // unrestricted scan — textOnly findFrom skips atoms, so a distant
+    // paragraph past a neighbouring formula/list/table would move the
+    // candidate's typing across blocks they did not type past.
+    if ($end.parent.inlineContent) {
+      tr.setSelection(TextSelection.create(doc, atomEnd));
+      return tr;
+    }
+    const next = $end.nodeAfter;
+    if (next?.type === schema.nodes.paragraph) {
+      tr.setSelection(TextSelection.create(doc, atomEnd + 1));
+      return tr;
+    }
+  } else {
+    // Restore only needs a safe caret: the nearest text cursor wins,
+    // backward included.
+    const forward = Selection.findFrom($end, 1, true);
+    if (forward) {
+      tr.setSelection(forward);
+      return tr;
+    }
+    const backward = Selection.findFrom(doc.resolve(selection.from), -1, true);
+    if (backward) {
+      tr.setSelection(backward);
+      return tr;
+    }
+  }
+  // No text cursor directly ahead of the atom — give ordinary typing a
+  // landing zone it cannot replace. Operations append it directly after the
+  // atom (see the policy note above); restore, adopting the document as a
+  // whole, parks the caret at the document end.
+  const insertPos = landing === "after" ? atomEnd : doc.content.size;
+  const paragraph = schema.nodes.paragraph?.create();
+  if (!paragraph) return null;
+  tr.insert(insertPos, paragraph);
+  const caret = Selection.findFrom(tr.doc.resolve(insertPos), 1, true);
+  if (!caret) return null;
+  tr.setSelection(caret);
+  return tr;
+}
+
+/**
+ * The operation boundary: transactions the view or the input-rule machinery
+ * dispatch without a user selection gesture, which can leave a math atom
+ * under a NodeSelection.
+ *   - paste / drop: the view tags both with a `uiEvent` meta (#673 C13);
+ *   - math input rules: the rules run inside `handleTextInput`, and tiptap
+ *     tags the transaction with the input-rules plugin's own state meta
+ *     (`spec.isInputRules` — the same marker `undoInputRule` reads) (#673
+ *     C15).
+ * Normalizing ONLY those transactions keeps explicit user selection
+ * untouched — every other NodeSelection path (click, keyboard, plugin) is
+ * unaffected (#679).
+ */
+const SettleMathSelectionAfterOperation = Extension.create({
+  name: "settleMathSelectionAfterOperation",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("settleMathSelectionAfterOperation"),
+        appendTransaction: (transactions, _oldState, newState) => {
+          const inputRulePlugins = newState.plugins.filter(
+            (plugin) =>
+              "isInputRules" in plugin.spec &&
+              plugin.spec.isInputRules === true,
+          );
+          let receiptPlugin: (typeof inputRulePlugins)[number] | null = null;
+          let receipt: unknown;
+          const operationProduced = transactions.some((tr) => {
+            if (
+              tr.getMeta("uiEvent") === "paste" ||
+              tr.getMeta("uiEvent") === "drop"
+            ) {
+              return true;
+            }
+            return inputRulePlugins.some((plugin) => {
+              const meta = tr.getMeta(plugin);
+              if (meta === undefined) return false;
+              // Keep the LAST receipt: a batch may hold several rule runs and
+              // the plugin state mirrors exactly the newest one.
+              receiptPlugin = plugin;
+              receipt = meta;
+              return true;
+            });
+          });
+          if (!operationProduced) return null;
+          // INVARIANT (#681 review F4): "after" means after the
+          // operation-PRODUCED math node. Input rules are the special case —
+          // the rule's mapped selection can drift onto a neighbouring atom —
+          // so the anchor comes from the receipt's replacement, not from the
+          // NodeSelection; toolbar/paste/drop select their own target, and
+          // keep the selection anchor.
+          const producedMathEnd =
+            receiptPlugin && receipt
+              ? inputRuleProducedMathEnd(receipt as InputRuleReceipt)
+              : null;
+          const fix = implicitMathSelectionFix(
+            newState,
+            "after",
+            producedMathEnd ?? undefined,
+          );
+          if (!fix) return null;
+          if (receiptPlugin && receipt) {
+            // Preserve the input-rules undo receipt across the settlement: the
+            // plugin's reducer drops it on any foreign selectionSet/docChanged
+            // transaction, and the Backspace binding tries undoInputRule()
+            // first — without this copy the rule-made formula could not be
+            // undone back to its typed source.
+            //
+            // The receipt's transform must also COVER the settlement:
+            // undoInputRule inverts only the recorded transform's steps, so a
+            // landing paragraph inserted here would otherwise survive the undo
+            // as structure residue (#681 review F5). The receipt's transform
+            // doc is the post-rule document the fix steps were computed
+            // against, so they apply onto it verbatim; the eq guard keeps a
+            // larger batch from folding steps that could not invert cleanly.
+            const recorded = receipt as InputRuleReceipt;
+            if (recorded.transform.doc.eq(newState.doc)) {
+              for (const step of fix.steps) recorded.transform.step(step);
+            }
+            fix.setMeta(receiptPlugin, receipt);
+          }
+          return fix;
+        },
+      }),
+    ];
+  },
+});
 
 /**
  * WYSIWYG rich-text editor. The EDIT surface — the ONLY place
@@ -203,6 +427,15 @@ export default function RichContentEditor({
 
   useEffect(() => {
     if (!editor) return;
+    // C12 restore boundary: editor creation adopts the persisted draft with
+    // Selection.atStart — a textblock-less draft opens with its first formula
+    // under a NodeSelection the next keystroke would destroy. Quiet: no
+    // update emit, so establishing a safe caret never autosaves by itself.
+    settleImplicitMathSelection(editor, { quiet: true, landing: "nearest" });
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
     if (
       !isAuthoritativeReplacement(document, currentEditorDocumentRef.current)
     ) {
@@ -218,6 +451,10 @@ export default function RichContentEditor({
     editor.commands.setContent(contentDocumentToTiptap(document), {
       emitUpdate: false,
     });
+    // Same restore boundary as creation: the adopted document must not open
+    // ordinary typing onto a selected math atom, and the settlement must not
+    // itself trigger a save (quiet).
+    settleImplicitMathSelection(editor, { quiet: true, landing: "nearest" });
   }, [editor, document]);
 
   const mathInputRef = useRef<HTMLInputElement>(null);
@@ -233,7 +470,9 @@ export default function RichContentEditor({
         attrs: { latex },
       })
       .run();
-    settleCursorAfterMathInsert(editor);
+    // Not quiet: the insert is a real edit and the settlement's possible
+    // landing paragraph belongs to it.
+    settleImplicitMathSelection(editor);
     if (mathInputRef.current) mathInputRef.current.value = "";
   }
 

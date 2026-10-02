@@ -411,6 +411,129 @@ test.describe("issue 301 rich content product loop", () => {
     await submitExam(page);
   });
 
+  test("#673 C12: reloading an all-formula draft must not let the first keystroke destroy a formula", async ({
+    page,
+    request,
+  }) => {
+    const adminToken = await adminApiToken(request);
+    const courseId = await seedCourseId(request, adminToken);
+    const candidate = await provisionCandidate(request, `c12-${STAMP}`);
+
+    await loginAsAdmin(page);
+    await page.goto("/admin/questions");
+    await page.getByRole("button", { name: /新增题目/ }).click();
+    await page.waitForURL(/\/admin\/questions\/new/);
+    await page.getByRole("button", { name: "所属课程" }).click();
+    await page.getByPlaceholder("搜索课程名称或代码...").fill("基础安全培训");
+    await page.getByRole("option", { name: "基础安全培训" }).click();
+    await pickSelect(page, "题目类型", "文本作答题");
+
+    const PROMPT = `C12全公式作答题-${STAMP}`;
+    await page.getByPlaceholder("输入题目内容").fill(PROMPT);
+    await page
+      .getByPlaceholder("请描述评分时应考虑的关键点、完整性、准确性或论证质量")
+      .fill(RUBRIC);
+    await page.getByRole("spinbutton").fill("20");
+    await pickSelect(page, "作答模式", "富文本");
+    const createResponse = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        res.url().endsWith("/api/questions"),
+      { timeout: 15_000 },
+    );
+    await page.getByRole("button", { name: /^保存$/ }).click();
+    const createdRes = await createResponse;
+    expect(createdRes.status()).toBe(201);
+    const questionId = ((await createdRes.json()) as { id: string }).id;
+
+    const { examId } = await assembleExam(
+      request,
+      adminToken,
+      courseId,
+      `C12全公式产品环-${STAMP}`,
+      [questionId],
+      candidate.profileId,
+      20,
+    );
+
+    // ── Candidate: save an answer that is ONLY two block formulas ────────
+    await candidateLogin(page, candidate);
+    const startResponse = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        /\/api\/attempts\/[^/]+\/start$/.test(res.url()),
+      { timeout: 15_000 },
+    );
+    await startExamFromList(page, examId);
+    const startRes = await startResponse;
+    expect([200, 201]).toContain(startRes.status());
+    const attemptId = ((await startRes.json()) as { id: string }).id;
+
+    const section = page.getByTestId("take-question-section");
+    const editor = section.locator(".ProseMirror");
+    await expect(editor).toHaveCount(1);
+    // Two consecutive toolbar inserts leave the canonical draft as
+    // [blockMath, blockMath] — no paragraph, no text cursor (the normalizer
+    // strips the paragraphs between them).
+    await page.getByPlaceholder("输入 LaTeX").fill("x^2-1=0");
+    await page.getByRole("button", { name: "独立公式" }).click();
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    await page.getByPlaceholder("输入 LaTeX").fill("y^2+z^2");
+    await page.getByRole("button", { name: "独立公式" }).click();
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
+    await waitForSaveSaved(page);
+
+    // Persisted hazard shape: the draft is exactly the two formulas.
+    const candidateToken = await candidateApiToken(request, candidate);
+    const takeDraft = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(takeDraft.ok()).toBeTruthy();
+    const draftContent = (
+      (await takeDraft.json()) as {
+        questions: Array<{
+          answerValue: { content: Array<{ type: string }> } | null;
+        }>;
+      }
+    ).questions[0]?.answerValue?.content;
+    expect(draftContent?.map((block) => block.type)).toEqual([
+      "blockMath",
+      "blockMath",
+    ]);
+
+    // ── Reload, then IMMEDIATELY type ordinary prose ─────────────────────
+    await page.reload();
+    const restored = section.locator(".ProseMirror");
+    await expect(restored).toHaveCount(1);
+    await expect(restored.locator("[data-type='block-math']")).toHaveCount(2);
+    // The candidate's natural move: click the writing area (not a formula)
+    // and type. Before the repair the restored draft had NO writing area —
+    // the caret opened on the first formula and prose destroyed it.
+    await restored.locator("p").last().click();
+    await page.keyboard.type("复核通过，两式均成立 ");
+    await waitForSaveSaved(page);
+    await expect(restored.locator("[data-type='block-math']")).toHaveCount(2);
+
+    // The persisted answer still carries both formulas as math nodes.
+    const takeAfter = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    const afterJson = JSON.stringify(
+      (
+        (await takeAfter.json()) as {
+          questions: Array<{ answerValue: unknown }>;
+        }
+      ).questions[0]?.answerValue,
+    );
+    expect(afterJson).toContain("x^2-1=0");
+    expect(afterJson).toContain("y^2+z^2");
+    expect((afterJson.match(/blockMath/g) ?? []).length).toBe(2);
+
+    await submitExam(page);
+  });
+
   test("math-rich single_choice prompt renders statically for candidates", async ({
     page,
     request,
@@ -497,6 +620,311 @@ test.describe("issue 301 rich content product loop", () => {
     await section.getByRole("radio").first().check();
     await waitForSaveSaved(page);
     await submitExam(page);
+  });
+});
+
+/**
+ * Shared fixture for the #673 C13/C15 math-boundary browser tests (and the
+ * same shape C12 builds inline): a rich text_response question, an assembled
+ * exam, a started attempt, and an editor holding prose plus one toolbar
+ * blockMath.
+ */
+async function setupProsePlusFormula(
+  page: Page,
+  request: APIRequestContext,
+  tag: string,
+): Promise<{
+  attemptId: string;
+  questionId: string;
+  candidateToken: string;
+}> {
+  const adminToken = await adminApiToken(request);
+  const courseId = await seedCourseId(request, adminToken);
+  const candidate = await provisionCandidate(request, tag);
+
+  await loginAsAdmin(page);
+  await page.goto("/admin/questions");
+  await page.getByRole("button", { name: /新增题目/ }).click();
+  await page.waitForURL(/\/admin\/questions\/new/);
+  await page.getByRole("button", { name: "所属课程" }).click();
+  await page.getByPlaceholder("搜索课程名称或代码...").fill("基础安全培训");
+  await page.getByRole("option", { name: "基础安全培训" }).click();
+  await pickSelect(page, "题目类型", "文本作答题");
+  const PROMPT = `C13${tag}-${STAMP}`;
+  await page.getByPlaceholder("输入题目内容").fill(PROMPT);
+  await page
+    .getByPlaceholder("请描述评分时应考虑的关键点、完整性、准确性或论证质量")
+    .fill(RUBRIC);
+  await page.getByRole("spinbutton").fill("20");
+  await pickSelect(page, "作答模式", "富文本");
+  const createResponse = page.waitForResponse(
+    (res) =>
+      res.request().method() === "POST" && res.url().endsWith("/api/questions"),
+    { timeout: 15_000 },
+  );
+  await page.getByRole("button", { name: /^保存$/ }).click();
+  const createdRes = await createResponse;
+  expect(createdRes.status()).toBe(201);
+  const questionId = ((await createdRes.json()) as { id: string }).id;
+
+  const { examId } = await assembleExam(
+    request,
+    adminToken,
+    courseId,
+    `C13产品环-${STAMP}-${tag}`,
+    [questionId],
+    candidate.profileId,
+    20,
+  );
+
+  await candidateLogin(page, candidate);
+  const startResponse = page.waitForResponse(
+    (res) =>
+      res.request().method() === "POST" &&
+      /\/api\/attempts\/[^/]+\/start$/.test(res.url()),
+    { timeout: 15_000 },
+  );
+  await startExamFromList(page, examId);
+  const startRes = await startResponse;
+  expect([200, 201]).toContain(startRes.status());
+  const attemptId = ((await startRes.json()) as { id: string }).id;
+
+  const editor = page
+    .getByTestId("take-question-section")
+    .locator(".ProseMirror");
+  await expect(editor).toHaveCount(1);
+  await editor.click();
+  await page.keyboard.type("结论：");
+  await page.getByPlaceholder("输入 LaTeX").fill("x^2-1=0");
+  await page.getByRole("button", { name: "独立公式" }).click();
+  await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+  return {
+    attemptId,
+    questionId,
+    candidateToken: await candidateApiToken(request, candidate),
+  };
+}
+
+/** The persisted answer document, stringified — order-sensitive probes read
+ *  it directly (content array order mirrors the authored reading order). */
+const persistedAnswerJson = async (
+  request: APIRequestContext,
+  candidateToken: string,
+  attemptId: string,
+): Promise<string> => {
+  const take = await request.get(
+    `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+    { headers: { Cookie: `auth-token=${candidateToken}` } },
+  );
+  expect(take.ok()).toBeTruthy();
+  return JSON.stringify(
+    (
+      (await take.json()) as {
+        questions: Array<{ answerValue: unknown }>;
+      }
+    ).questions[0]?.answerValue,
+  );
+};
+
+const persistedBlockMathCount = async (
+  request: APIRequestContext,
+  candidateToken: string,
+  attemptId: string,
+): Promise<number> =>
+  (
+    (await persistedAnswerJson(request, candidateToken, attemptId)).match(
+      /blockMath/g,
+    ) ?? []
+  ).length;
+
+/** The editor's top-level block sequence — paragraphs and math atoms in
+ *  document order, the full reading-order assertion the count checks alone
+ *  cannot make (#681 review F4). */
+const editorBlockOrder = (editor: ReturnType<Page["locator"]>) =>
+  editor.evaluate((root) =>
+    Array.from(root.children).map((el) => {
+      const h = el as HTMLElement;
+      return h.dataset.type === "block-math"
+        ? `blockMath:${h.dataset.latex}`
+        : h.tagName.toLowerCase();
+    }),
+  );
+
+test.describe("#673 C13 — paste/drag math boundaries in the real editor", () => {
+  /**
+   * Reachability was proven deterministicly against the production schema
+   * (apps/web richContentEditor.reality.test.ts): the editor's own copy
+   * markup (data-type="block-math") pastes back as a math atom, a pasted
+   * block atom with no text cursor after it stays NodeSelected, and a
+   * dropped node is NodeSelected by prosemirror-view itself. These browser
+   * tests replay the same boundaries with REAL clipboard/drag events.
+   */
+
+  test("copy a formula and paste it into prose — pasted formula survives typing", async ({
+    page,
+    request,
+  }) => {
+    const { attemptId, candidateToken } = await setupProsePlusFormula(
+      page,
+      request,
+      `p-${STAMP.slice(-6)}`,
+    );
+    const section = page.getByTestId("take-question-section");
+    const editor = section.locator(".ProseMirror");
+
+    // Click the formula (explicit selection — the copy source), copy it.
+    await editor.locator("[data-type='block-math']").click();
+    await page.keyboard.press("ControlOrMeta+c");
+    // Park the caret after the prose, then paste the copy.
+    await editor.locator("p").last().click();
+    await page.keyboard.press("ControlOrMeta+v");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
+    // The destruction trigger pre-repair: the paste left the copy
+    // NodeSelected, and the leading ASCII keystroke replaces it with plain
+    // text (CJK input goes through the DOM-change path, which does not
+    // reliably destroy a selected atom — the oracle needs the keypress
+    // path, so the first keys are ASCII; CJK prose may follow them).
+    await page.keyboard.type("ok 证毕 ");
+    await waitForSaveSaved(page);
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
+    expect(
+      await persistedBlockMathCount(request, candidateToken, attemptId),
+    ).toBe(2);
+  });
+
+  test("drag a formula to another block — dropped formula survives typing", async ({
+    page,
+    request,
+  }) => {
+    const { attemptId, candidateToken } = await setupProsePlusFormula(
+      page,
+      request,
+      `d-${STAMP.slice(-6)}`,
+    );
+    const section = page.getByTestId("take-question-section");
+    const editor = section.locator(".ProseMirror");
+
+    // A node drag carries the atom only when the node selection precedes the
+    // drag (dragstart uses the selection's content) — click, then drag.
+    const formula = editor.locator("[data-type='block-math']");
+    await formula.click();
+    await page.dragAndDrop("[data-type='block-math']", ".ProseMirror p", {
+      targetPosition: { x: 10, y: 4 },
+    });
+    // The move relocates the (single) formula — it must still be there.
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    // prosemirror-view NodeSelects a dropped node; the leading ASCII
+    // keystroke used to destroy it via the keypress path (CJK input does
+    // not reliably exercise that destruction — see the paste test above).
+    await page.keyboard.type("ok 移动后继续作答 ");
+    await waitForSaveSaved(page);
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    expect(
+      await persistedBlockMathCount(request, candidateToken, attemptId),
+    ).toBe(1);
+  });
+});
+
+test.describe("#673 C15 — typed math input rules in the real editor", () => {
+  /**
+   * The production Mathematics extension installs input rules ($$x$$ →
+   * inlineMath, $$$x$$$ → blockMath) that tiptap runs inside
+   * handleTextInput. The block rule replaces the whole textblock and the
+   * mapped selection lands on a math atom — the new one when it ends the
+   * document, or the NEXT atom when one follows — so the next ordinary
+   * ASCII keystroke ran through prosemirror-view's keypress handler
+   * (tr.insertText → replaceSelectionWith) and replaced that formula with
+   * plain text. Deterministic reachability and the settlement are proven
+   * against the production schema (apps/web richContentEditor.reality.test.ts);
+   * this is the real-event layer: type the rule sequence with the keyboard,
+   * then keep typing.
+   */
+  test("typing $$$w^2$$$ then ordinary prose — every formula survives", async ({
+    page,
+    request,
+  }) => {
+    const { attemptId, candidateToken } = await setupProsePlusFormula(
+      page,
+      request,
+      `i-${STAMP.slice(-6)}`,
+    );
+    const section = page.getByTestId("take-question-section");
+    const editor = section.locator(".ProseMirror");
+
+    // Shape 1 — the rule replaces a paragraph that sits BEFORE the existing
+    // toolbar formula: the mapped selection lands on that neighbour, so
+    // pre-repair this keystroke destroyed a formula the candidate never
+    // touched. ASCII input exercises the keypress destruction path.
+    await editor.locator("p").last().click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("$$$w^2$$$");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
+    await page.keyboard.type("ok ");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
+    await expect(
+      editor.locator("[data-type='block-math'][data-latex='x^2-1=0']"),
+    ).toHaveCount(1);
+    // INVARIANT (#681 review F4): prose continues after the PRODUCED formula
+    // — assert the full block reading order, not just formula survival. The
+    // empty paragraph between the formulas is the Enter-split leftover the
+    // rule did not occupy; it canonicalizes away on save.
+    await expect(editorBlockOrder(editor)).resolves.toEqual([
+      "p",
+      "blockMath:x^2-1=0",
+      "p",
+      "blockMath:w^2",
+      "p",
+    ]);
+    await waitForSaveSaved(page);
+    expect(
+      await persistedBlockMathCount(request, candidateToken, attemptId),
+    ).toBe(2);
+    // The persisted answer keeps that order end-to-end.
+    const persistedShape1 = await persistedAnswerJson(
+      request,
+      candidateToken,
+      attemptId,
+    );
+    expect(persistedShape1.indexOf("x^2-1=0")).toBeLessThan(
+      persistedShape1.indexOf("w^2"),
+    );
+    expect(persistedShape1.indexOf("ok")).toBeGreaterThan(
+      persistedShape1.indexOf("w^2"),
+    );
+
+    // Shape 2 — the rule replaces the document's only textblock: the
+    // settlement appends the typing landing paragraph (editor-only,
+    // canonicalizes away), and the rule-made formula survives the next
+    // keystrokes with the text landing right after it.
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type("$$$x^2$$$");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    await page.keyboard.type("done ");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    await expect(
+      editor.locator("[data-type='block-math'][data-latex='x^2']"),
+    ).toHaveCount(1);
+    // Same reading-order invariant for the settlement-landing shape (#681
+    // review F4): the formula first, the prose directly after it.
+    await expect(editorBlockOrder(editor)).resolves.toEqual([
+      "blockMath:x^2",
+      "p",
+    ]);
+    await waitForSaveSaved(page);
+    expect(
+      await persistedBlockMathCount(request, candidateToken, attemptId),
+    ).toBe(1);
+    const persistedShape2 = await persistedAnswerJson(
+      request,
+      candidateToken,
+      attemptId,
+    );
+    expect(persistedShape2.indexOf("done")).toBeGreaterThan(
+      persistedShape2.indexOf("x^2"),
+    );
   });
 });
 

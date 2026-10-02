@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
-import { NodeSelection } from "@tiptap/pm/state";
+import {
+  DOMParser as ProseMirrorDOMParser,
+  Node as ProseMirrorNode,
+} from "@tiptap/pm/model";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import type {
   ContentBlock,
   ContentDocumentV1,
@@ -13,7 +17,7 @@ import {
 } from "./contentAdapter";
 import {
   richEditorExtensions,
-  settleCursorAfterMathInsert,
+  settleImplicitMathSelection,
 } from "./RichContentEditor";
 
 /**
@@ -60,7 +64,7 @@ function insertMath(editor: Editor, displayMode: boolean, latex: string) {
     .run();
   // Production toolbar path: insertMath in RichContentEditor runs the same
   // settlement after every insert.
-  settleCursorAfterMathInsert(editor);
+  settleImplicitMathSelection(editor);
 }
 
 const blockTypes = (editor: Editor) =>
@@ -160,6 +164,29 @@ describe("#676 regression — a visible blockMath survives the candidate's next 
     editor.destroy();
   });
 
+  it("block insert at document end after prose: next text stays AFTER the formula", () => {
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+      ],
+    });
+    editor.commands.setTextSelection(3); // caret after 前文, at document end
+    insertMath(editor, true, "y^2");
+    editor.chain().focus().insertContent({ type: "text", text: "答" }).run();
+    // INVARIANT (#681 review F1): an operation that produces a formula
+    // (toolbar insert, input rule, paste, drop) must leave ordinary typing
+    // continuing AFTER it — prose typed later never reorders ahead of the
+    // formula, which would change the answer's reading order.
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+      { type: "blockMath", latex: "y^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+    ]);
+    editor.destroy();
+  });
+
   it("block insert into an empty paragraph, then an inline formula insert", () => {
     const editor = createEditor();
     insertMath(editor, true, LATEX);
@@ -214,7 +241,7 @@ describe("#676 regression — a visible blockMath survives the candidate's next 
       type: "blockMath",
       attrs: { latex: LATEX },
     });
-    settleCursorAfterMathInsert(editor);
+    settleImplicitMathSelection(editor);
     expect(editor.state.selection instanceof NodeSelection).toBe(false);
     editor.commands.insertContent({ type: "text", text: "续" });
     const maths = (editor.getJSON().content ?? [])
@@ -254,6 +281,635 @@ describe("restore control — a reloaded document never opens with the atom sele
       }),
     );
     expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    editor.destroy();
+  });
+});
+
+describe("C12 restore — a draft must never open ordinary typing onto a selected formula", () => {
+  /**
+   * Persisted reality: the canonical normalizer strips paragraphs between
+   * successive toolbar inserts, so drafts genuinely exist with the shape
+   * [blockMath…]. Editor creation and authoritative setContent adopt such a
+   * document with `Selection.atStart`, which NodeSelects the first atom —
+   * and ProseMirror replaces a selected atom with the next inline input, so
+   * the candidate's first keystroke destroyed the formula (C12). The
+   * component normalizes both restore paths through
+   * settleImplicitMathSelection (quiet: establishing the caret must not
+   * itself trigger a save); these tests exercise the exact production
+   * schema and call it the same way.
+   */
+  const shapes: Array<{
+    name: string;
+    latexes: string[];
+    trailingProse: boolean;
+  }> = [
+    { name: "[blockMath]", latexes: ["x^2"], trailingProse: false },
+    {
+      name: "[blockMath, blockMath]",
+      latexes: ["x^2", "y^2"],
+      trailingProse: false,
+    },
+    {
+      name: "[blockMath, blockMath, blockMath]",
+      latexes: ["x^2", "y^2", "z^2"],
+      trailingProse: false,
+    },
+    {
+      name: "[paragraph, blockMath]",
+      latexes: ["y^2"],
+      trailingProse: true,
+    },
+    {
+      name: "[blockMath, paragraph]",
+      latexes: ["x^2"],
+      trailingProse: true,
+    },
+  ];
+
+  /**
+   * [paragraph, blockMath] needs the formula AFTER a prose paragraph and
+   * [blockMath, paragraph] BEFORE it; build those two explicitly instead of
+   * over-generalizing a builder.
+   */
+  function shapeContent(
+    shape: (typeof shapes)[number],
+  ): Parameters<typeof contentDocumentToTiptap>[0] {
+    switch (shape.name) {
+      case "[paragraph, blockMath]":
+        return {
+          docVersion: 1,
+          type: "doc",
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+            { type: "blockMath", latex: shape.latexes[0]! },
+          ],
+        };
+      case "[blockMath, paragraph]":
+        return {
+          docVersion: 1,
+          type: "doc",
+          content: [
+            { type: "blockMath", latex: shape.latexes[0]! },
+            { type: "paragraph", content: [{ type: "text", text: "后文" }] },
+          ],
+        };
+      default:
+        return {
+          docVersion: 1,
+          type: "doc",
+          content: shape.latexes.map((latex) => ({
+            type: "blockMath" as const,
+            latex,
+          })),
+        };
+    }
+  }
+
+  function assertSafeRestoredState(editor: Editor, latexes: string[]) {
+    // The restore normalization must not leave an implicitly selected atom…
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    expect(editor.state.selection instanceof TextSelection).toBe(true);
+    // …and ordinary typing right after restore must not destroy any formula.
+    editor.commands.insertContent({ type: "text", text: "答" });
+    const survivingLatexes = (editor.getJSON().content ?? [])
+      .filter((block) => block.type === "blockMath")
+      .map((block) => block.attrs?.latex);
+    expect(survivingLatexes).toEqual(latexes);
+  }
+
+  it.each(shapes)(
+    "$name: initial editor creation is safe to type into",
+    (shape) => {
+      const editor = createEditor(contentDocumentToTiptap(shapeContent(shape)));
+      settleImplicitMathSelection(editor, { quiet: true, landing: "nearest" });
+      assertSafeRestoredState(editor, shape.latexes);
+      editor.destroy();
+    },
+  );
+
+  it.each(shapes)(
+    "$name: authoritative setContent replacement is safe to type into",
+    (shape) => {
+      const editor = createEditor();
+      // Authoritative external replacement (draft restore, server
+      // reconciliation): emitUpdate:false, then the component settles the
+      // selection the same quiet way.
+      editor.commands.setContent(contentDocumentToTiptap(shapeContent(shape)), {
+        emitUpdate: false,
+      });
+      settleImplicitMathSelection(editor, { quiet: true, landing: "nearest" });
+      assertSafeRestoredState(editor, shape.latexes);
+      editor.destroy();
+    },
+  );
+
+  it("quiet restore settlement fires no update — establishing the caret never autosaves", () => {
+    let updates = 0;
+    const editor = new Editor({
+      extensions: richEditorExtensions(),
+      content: {
+        type: "doc",
+        content: [
+          { type: "blockMath", attrs: { latex: "x^2" } },
+          { type: "blockMath", attrs: { latex: "y^2" } },
+        ],
+      },
+      onUpdate: () => {
+        updates += 1;
+      },
+    });
+    liveEditors.push(editor);
+    settleImplicitMathSelection(editor, { quiet: true, landing: "nearest" });
+    expect(updates).toBe(0);
+    // The landing paragraph exists editor-side as a typing target…
+    expect(blockTypes(editor)).toEqual(["blockMath", "blockMath", "paragraph"]);
+    // …and canonicalizes away (trailing empty paragraph), so the next real
+    // edit emits exactly the persisted draft plus the typed content.
+    const canonical = tiptapToContentDocument(editor.getJSON());
+    expect(canonical.content.map((block) => block.type)).toEqual([
+      "blockMath",
+      "blockMath",
+    ]);
+    // Contrast on a second editor: the non-quiet toolbar path DOES emit —
+    // the spy works and the quiet restore path is the exception, not a
+    // broken listener.
+    const toolbarEditor = new Editor({
+      extensions: richEditorExtensions(),
+      content: {
+        type: "doc",
+        content: [
+          { type: "blockMath", attrs: { latex: "x^2" } },
+          { type: "blockMath", attrs: { latex: "y^2" } },
+        ],
+      },
+      onUpdate: () => {
+        updates += 1;
+      },
+    });
+    liveEditors.push(toolbarEditor);
+    settleImplicitMathSelection(toolbarEditor);
+    expect(updates).toBe(1);
+  });
+});
+
+describe("C13 paste/drop boundary — operation-produced math selections normalize", () => {
+  /**
+   * prosemirror-view parses pasted/dropped text/html through the schema's
+   * parse rules (parseFromClipboard); the editor's own copy serialization is
+   * the schema toDOM (data-type + data-latex), so copying a formula within
+   * the editor produces HTML that pastes back as a math atom. jsdom cannot
+   * deliver real clipboard/drag DOM events (no DataTransfer, no layout for
+   * posAtCoords), so each probe replays the exact transaction the view
+   * builds at that boundary — the dispatch lines mirror prosemirror-view's
+   * doPaste/handleDrop — and asserts the production plugin normalized the
+   * result. The real-event layer is proven in
+   * apps/e2e/e2e/rich-content.spec.ts.
+   */
+
+  /** The single-node fast path doPaste takes (sliceSingleNode). */
+  function nodeFromClipboardHtml(editor: Editor, html: string) {
+    const el = document.createElement("div");
+    el.innerHTML = html;
+    const slice = ProseMirrorDOMParser.fromSchema(editor.schema).parseSlice(el);
+    if (!slice || slice.content.childCount !== 1) {
+      throw new Error("expected a single-node clipboard slice");
+    }
+    return slice.content.firstChild as ProseMirrorNode;
+  }
+
+  const blockLatexes = (editor: Editor) =>
+    (editor.getJSON().content ?? [])
+      .filter((block) => block.type === "blockMath")
+      .map((block) => block.attrs?.latex);
+
+  it("the editor's own copy markup parses back into a math atom (reachability)", () => {
+    const editor = createEditor();
+    const node = nodeFromClipboardHtml(
+      editor,
+      `<span data-type="inline-math" data-latex="x^2"></span>`,
+    );
+    expect(node.type.name).toBe("inlineMath");
+    expect(node.attrs.latex).toBe("x^2");
+    editor.destroy();
+  });
+
+  it("pasting a copied block formula over an atom selection keeps every formula typable", () => {
+    // Restored all-math draft: the candidate clicks the first formula
+    // (explicit selection) to copy it, then pastes over the selection.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "blockMath", attrs: { latex: "x^2" } },
+        { type: "blockMath", attrs: { latex: "y^2" } },
+      ],
+    });
+    const node = nodeFromClipboardHtml(
+      editor,
+      `<div data-type="block-math" data-latex="x^2"></div>`,
+    );
+    // doPaste: sliceSingleNode → replaceSelectionWith + paste metas.
+    editor.view.dispatch(
+      editor.state.tr
+        .replaceSelectionWith(node)
+        .scrollIntoView()
+        .setMeta("paste", true)
+        .setMeta("uiEvent", "paste"),
+    );
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    editor.commands.insertContent({ type: "text", text: "答" });
+    expect(blockLatexes(editor)).toEqual(["x^2", "y^2"]);
+    editor.destroy();
+  });
+
+  it("dropping a dragged formula leaves a safe text cursor, formula intact", () => {
+    // dragstart within a node selection carries the atom; moving (not
+    // copying) also deletes the source. handleDrop inserts it at the
+    // dropPoint and NodeSelects the dropped node only when $pos.nodeAfter
+    // matches it — i.e. at a block boundary, which is where the hazard
+    // lives (prosemirror-view handleDrop).
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+        { type: "blockMath", attrs: { latex: "x^2" } },
+      ],
+    });
+    // doc positions: paragraph("前文") spans 0..4, the atom sits at 4..5.
+    const atom = editor.state.doc.nodeAt(4);
+    if (!atom || atom.type.name !== "blockMath") {
+      throw new Error("fixture bug: expected the blockMath at pos 4");
+    }
+    const tr = editor.state.tr;
+    tr.delete(4, 4 + atom.nodeSize); // move=true: source removed
+    const dropPos = tr.mapping.map(0); // dropped at the doc's block boundary
+    tr.replaceRangeWith(dropPos, dropPos, atom);
+    if (!tr.doc.resolve(dropPos).nodeAfter?.eq(atom)) {
+      throw new Error(
+        "fixture bug: drop point must precede the atom — got " +
+          JSON.stringify(tr.doc.toJSON().content),
+      );
+    }
+    // prosemirror-view handleDrop: a dropped single selectable node whose
+    // nodeAfter matches is NodeSelected at the drop point.
+    tr.setSelection(new NodeSelection(tr.doc.resolve(dropPos)));
+    editor.view.dispatch(tr.setMeta("uiEvent", "drop"));
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    expect(editor.state.selection instanceof TextSelection).toBe(true);
+    editor.commands.insertContent({ type: "text", text: "答" });
+    expect(blockLatexes(editor)).toEqual(["x^2"]);
+    // The move relocated the formula ahead of the prose, so continued typing
+    // lands between them — after the produced/moved formula, never before it.
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "blockMath", latex: "x^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答前文" }] },
+    ]);
+    editor.destroy();
+  });
+
+  it("pasting a block formula at a prose caret leaves a safe text cursor", () => {
+    // The common flow: copy a formula, park the caret after prose, paste.
+    // The pasted block atom closes the paragraph, and with no text cursor
+    // directly ahead the view leaves the atom NodeSelected.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+        { type: "blockMath", attrs: { latex: "x^2" } },
+        { type: "paragraph", content: [{ type: "text", text: "后文" }] },
+      ],
+    });
+    editor.commands.setTextSelection(3); // caret after "前文"
+    const node = nodeFromClipboardHtml(
+      editor,
+      `<div data-type="block-math" data-latex="y^2"></div>`,
+    );
+    editor.view.dispatch(
+      editor.state.tr
+        .replaceSelectionWith(node)
+        .scrollIntoView()
+        .setMeta("uiEvent", "paste"),
+    );
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    editor.commands.insertContent({ type: "text", text: "答" });
+    expect(blockLatexes(editor)).toEqual(["y^2", "x^2"]);
+    // Surrounding prose survived the paste and the typing.
+    const text = JSON.stringify(editor.getJSON());
+    expect(text).toContain("前文");
+    expect(text).toContain("后文");
+    editor.destroy();
+  });
+
+  it("pasting a block formula at document end keeps subsequent text after it", () => {
+    // Forward-miss shape of the paste boundary: the atom lands at document
+    // end with no text cursor after it (the NodeSelection hazard), and prose
+    // behind it must not become the landing zone — the settlement appends
+    // the typing paragraph after the pasted formula instead.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+      ],
+    });
+    editor.commands.setTextSelection(3); // caret after 前文, at document end
+    const node = nodeFromClipboardHtml(
+      editor,
+      `<div data-type="block-math" data-latex="y^2"></div>`,
+    );
+    editor.view.dispatch(
+      editor.state.tr
+        .replaceSelectionWith(node)
+        .scrollIntoView()
+        .setMeta("uiEvent", "paste"),
+    );
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    editor.commands.insertContent({ type: "text", text: "答" });
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+      { type: "blockMath", latex: "y^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+    ]);
+    editor.destroy();
+  });
+
+  it("plain-text LaTeX paste produces text, never a math node (not-reachable boundary)", () => {
+    const editor = createEditor({
+      type: "doc",
+      content: [{ type: "paragraph", content: [] }],
+    });
+    // Plain-text clipboard content carries no math markup; the schema's
+    // parse rules cannot build a math atom from it.
+    editor.view.dispatch(
+      editor.state.tr
+        .replaceSelectionWith(editor.schema.text("$x^2$ \\frac{a}{b}"))
+        .setMeta("uiEvent", "paste"),
+    );
+    const canonical = tiptapToContentDocument(editor.getJSON());
+    expect(JSON.stringify(canonical)).not.toContain("inlineMath");
+    expect(JSON.stringify(canonical)).not.toContain("blockMath");
+    expect(canonical.content[0]).toEqual({
+      type: "paragraph",
+      content: [{ type: "text", text: "$x^2$ \\frac{a}{b}" }],
+    });
+    editor.destroy();
+  });
+
+  it("explicit user node selection is left alone — no operation meta, no normalization", () => {
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "blockMath", attrs: { latex: "x^2" } },
+        { type: "blockMath", attrs: { latex: "y^2" } },
+      ],
+    });
+    // A click/arrow-key selection is an ordinary transaction with no
+    // paste/drop meta; the C13 plugin must never rewrite it (#679).
+    editor.view.dispatch(
+      editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, 0)),
+    );
+    expect(editor.state.selection instanceof NodeSelection).toBe(true);
+    editor.destroy();
+  });
+});
+
+describe("#673 C15 input-rule boundary — typed $$ / $$$ rules never leave a selected atom", () => {
+  /**
+   * The production `Mathematics` extension installs input rules
+   * (`$$x$$` → inlineMath, `$$$x$$$` → blockMath) and tiptap runs them
+   * inside the `handleTextInput` prop. The block rule consumes the final
+   * keystroke and replaces the whole textblock; when no text cursor
+   * survives after the new atom, the mapped selection lands on it
+   * (TextSelection.map → Selection.near → NodeSelection) and the next
+   * ordinary input replaces the formula — the #676 loss class reached from
+   * typing alone. jsdom cannot type, so the probe replays the exact
+   * `handleTextInput` + `insertText` fallback prosemirror-view uses per
+   * keystroke (both the keypress and the DOM-change path), like the C13
+   * probes; the real-event layer is proven in apps/e2e/rich-content.spec.ts.
+   */
+  function typeChar(editor: Editor, ch: string): boolean {
+    const view = editor.view;
+    const sel = view.state.selection;
+    const sameParent =
+      sel instanceof TextSelection && sel.$from.sameParent(sel.$to);
+    const from = sel.from;
+    const to = sel.to;
+    const deflt = sameParent
+      ? () => view.state.tr.insertText(ch, from, to)
+      : () => view.state.tr.insertText(ch);
+    const handled = view.someProp("handleTextInput", (f) =>
+      f(view, from, to, ch, deflt),
+    );
+    if (!handled) view.dispatch(deflt());
+    return Boolean(handled);
+  }
+
+  function typeText(editor: Editor, text: string) {
+    for (const ch of text) typeChar(editor, ch);
+  }
+
+  const blockLatexes = (editor: Editor) =>
+    (editor.getJSON().content ?? [])
+      .filter((block) => block.type === "blockMath")
+      .map((block) => block.attrs?.latex);
+
+  /** Concatenated text of every top-level block, in document order. */
+  const topLevelTexts = (editor: Editor) =>
+    // getJSON() types its children as schema node classes; the shape is the
+    // plain JSON tree the editor serializes, so read it as JSONContent.
+    ((editor.getJSON() as JSONContent).content ?? []).map((block) =>
+      (block.content ?? []).map((inline) => inline.text ?? "").join(""),
+    );
+
+  it("$$$x^2$$$ typed into the only paragraph: atom settles, next input preserves it", () => {
+    const editor = createEditor();
+    typeText(editor, "$$$x^2$$$");
+    // The block rule fired and produced the atom…
+    expect(blockLatexes(editor)).toEqual(["x^2"]);
+    // …and the settlement normalized the rule-produced selection: ordinary
+    // typing continues in the appended landing paragraph, not onto the atom.
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    typeChar(editor, "答");
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "blockMath", latex: "x^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+    ]);
+    editor.destroy();
+  });
+
+  it("$$$y^2$$$ typed as the last paragraph after prose: next text continues AFTER the formula", () => {
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+        { type: "paragraph", content: [] },
+      ],
+    });
+    editor.commands.setTextSelection(5); // inside the second, empty paragraph
+    typeText(editor, "$$$y^2$$$");
+    expect(blockLatexes(editor)).toEqual(["y^2"]);
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    typeChar(editor, "答");
+    // INVARIANT (#681 review F1): the input rule PRODUCED the formula, so the
+    // settlement must not rewind the caret into the preceding paragraph —
+    // post-hoc prose landing before the formula would reorder the answer.
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+      { type: "blockMath", latex: "y^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+    ]);
+    editor.destroy();
+  });
+
+  it("$$x^2$$ inline rule is untouched: text cursor after the atom, next input appends", () => {
+    const editor = createEditor();
+    typeText(editor, "$$x^2$$");
+    // The inline rule never produces a NodeSelection; the settlement is a
+    // no-op and the caret stays a real text cursor after the atom.
+    expect(editor.state.selection instanceof TextSelection).toBe(true);
+    typeChar(editor, "答");
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      {
+        type: "paragraph",
+        content: [
+          { type: "inlineMath", latex: "x^2" },
+          { type: "text", text: "答" },
+        ],
+      },
+    ]);
+    editor.destroy();
+  });
+
+  it("$$$x^2$$$ typed before an existing formula: text continues after the NEW formula in order", () => {
+    // #681 review F4: the rule replaces the whole textblock and the mapped
+    // caret (assoc 0 through the replacement) lands at the END of the
+    // produced atom, so with a second formula directly after,
+    // Selection.near NodeSelects that NEIGHBOUR instead. The settlement's
+    // "after" must anchor at the operation-produced formula — not at
+    // whichever atom got NodeSelected — or continued typing skips past the
+    // neighbour and reorders the answer.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [] },
+        { type: "blockMath", attrs: { latex: "y^2" } },
+      ],
+    });
+    editor.commands.setTextSelection(1); // inside the leading paragraph
+    typeText(editor, "$$$x^2$$$");
+    expect(blockLatexes(editor)).toEqual(["x^2", "y^2"]);
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    typeChar(editor, "答");
+    // Full document order, not just formula survival: the produced formula
+    // stays first and the prose lands directly after it.
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "blockMath", latex: "x^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+      { type: "blockMath", latex: "y^2" },
+    ]);
+    editor.destroy();
+  });
+
+  it("$$$x^2$$$ typed before formula+prose: text continues DIRECTLY after the new formula", () => {
+    // #681 review F6: the "after" continuation must not CROSS the
+    // neighbouring atom to reach a distant textblock — textOnly findFrom
+    // skips atoms, so the prose typed after the produced formula landed past
+    // the neighbour, inside 后文. Directly after means the paragraph flush
+    // against the atom, or a landing paragraph appended at the atom's end.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [] },
+        { type: "blockMath", attrs: { latex: "y^2" } },
+        { type: "paragraph", content: [{ type: "text", text: "后文" }] },
+      ],
+    });
+    editor.commands.setTextSelection(1); // inside the leading paragraph
+    typeText(editor, "$$$x^2$$$");
+    expect(blockLatexes(editor)).toEqual(["x^2", "y^2"]);
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    typeChar(editor, "答");
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "blockMath", latex: "x^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+      { type: "blockMath", latex: "y^2" },
+      { type: "paragraph", content: [{ type: "text", text: "后文" }] },
+    ]);
+    editor.destroy();
+  });
+
+  it("Backspace right after the block rule undoes it: typed source restored", () => {
+    // #681 review F2: tiptap's Backspace binding runs undoInputRule() first,
+    // which replays the input-rules plugin's stored undo receipt. The plugin
+    // clears that receipt on any foreign selectionSet/docChanged transaction,
+    // so the settlement appended after the rule MUST carry the receipt meta
+    // over — otherwise the rule-made formula cannot be undone back to its
+    // $$$…$$$ source and Backspace falls through to plain deletion.
+    const editor = createEditor();
+    typeText(editor, "$$$x^2$$$");
+    expect(blockLatexes(editor)).toEqual(["x^2"]);
+    expect(editor.commands.undoInputRule()).toBe(true);
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "$$$x^2$$$" }] },
+    ]);
+    editor.destroy();
+  });
+
+  it("Backspace after the block rule with preceding prose: source restored, prose intact", () => {
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+        { type: "paragraph", content: [] },
+      ],
+    });
+    editor.commands.setTextSelection(5);
+    typeText(editor, "$$$y^2$$$");
+    expect(blockLatexes(editor)).toEqual(["y^2"]);
+    expect(editor.commands.undoInputRule()).toBe(true);
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+      { type: "paragraph", content: [{ type: "text", text: "$$$y^2$$$" }] },
+    ]);
+    editor.destroy();
+  });
+
+  it("undoInputRule restores the exact pre-rule editor structure, settlement paragraph included", () => {
+    // #681 review F5: the receipt's transform records only the RULE
+    // transaction, so stock undoInputRule inverted the rule but left the
+    // settlement's landing paragraph behind — a residue the canonical
+    // projection hides (trailing empty paragraphs canonicalize away). The
+    // undo must fold the settlement's document steps into the receipt so
+    // the EDITOR returns to the exact pre-rule structure and continued
+    // typing stays inside the restored paragraph, exactly as with a stock
+    // input rule.
+    const editor = createEditor();
+    typeText(editor, "$$$x^2$$$");
+    expect(blockLatexes(editor)).toEqual(["x^2"]);
+    expect(editor.commands.undoInputRule()).toBe(true);
+    expect(blockTypes(editor)).toEqual(["paragraph"]);
+    expect(topLevelTexts(editor)).toEqual(["$$$x^2$$$"]);
+    typeChar(editor, "a");
+    expect(blockTypes(editor)).toEqual(["paragraph"]);
+    expect(topLevelTexts(editor)).toEqual(["$$$x^2$$$a"]);
+    editor.destroy();
+  });
+
+  it("ordinary typing after the block rule clears the undo receipt (stock semantics)", () => {
+    const editor = createEditor();
+    typeText(editor, "$$$x^2$$$");
+    typeChar(editor, "答");
+    // Further real input is stock tiptap semantics: the receipt is gone and
+    // Backspace is a plain deletion, not a rule undo.
+    expect(editor.commands.undoInputRule()).toBe(false);
+    expect(blockLatexes(editor)).toEqual(["x^2"]);
     editor.destroy();
   });
 });
@@ -415,7 +1071,7 @@ describe("schema ↔ adapter structural guard — no editor-emittable node is si
       const json = NODE_INSTANCE[nodeType];
       if (!json) throw new Error(`no instance fixture for ${nodeType}`);
       editor.commands.insertContent(json);
-      settleCursorAfterMathInsert(editor);
+      settleImplicitMathSelection(editor);
       const canonical = tiptapToContentDocument(editor.getJSON());
       const expected = NODE_TO_CANONICAL[nodeType];
       const found = JSON.stringify(canonical).includes(`"type":"${expected}"`);
@@ -445,6 +1101,52 @@ describe("schema ↔ adapter structural guard — no editor-emittable node is si
       ["underline"],
       ["inlineCode"],
     ]);
+    editor.destroy();
+  });
+});
+
+describe("C14 table-cell math fidelity — cell blockMath survives as math", () => {
+  it("a blockMath inside a real editor cell canonicalizes to inline math, not text", () => {
+    // The editor schema allows a blockMath inside a table cell (authoring or
+    // paste); the adapter must downgrade it to an inlineMath paragraph — the
+    // list-item policy — so the candidate's formula reloads as a formula.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableCell",
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [{ type: "text", text: "c" }],
+                    },
+                    { type: "blockMath", attrs: { latex: "x^2" } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const doc = tiptapToContentDocument(editor.getJSON());
+    const table = doc.content[0];
+    if (!table || table.type !== "table") throw new Error("expected table");
+    const cell = table.content[0]?.content[0];
+    if (!cell || cell.type !== "tableCell") throw new Error("expected cell");
+    expect(cell.content).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "c" }] },
+      { type: "paragraph", content: [{ type: "inlineMath", latex: "x^2" }] },
+    ]);
+    // …and the canonical cell restores into the editor (reload renders the
+    // formula through the Mathematics extension, not as literal text).
+    expect(tiptapToContentDocument(contentDocumentToTiptap(doc))).toEqual(doc);
     editor.destroy();
   });
 });

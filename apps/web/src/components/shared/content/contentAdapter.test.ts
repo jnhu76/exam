@@ -204,7 +204,11 @@ describe("math mapping — candidate-visible math must persist verbatim (#676)",
     expect(out.content[1]).toEqual({ type: "blockMath", latex: "{{{{{" });
   });
 
-  it("downgrades a blockMath pasted into a table cell to its latex text (documented projection, no silent loss)", () => {
+  it("downgrades a blockMath in a table cell to inline math — the formula stays math (#673 C14)", () => {
+    // Canonical cells hold paragraphs only, but the editor schema lets a
+    // blockMath land in a cell (authoring/paste). The downgrade must keep
+    // the mathematical semantics (inlineMath), never degrade the LaTeX
+    // source to plain text.
     const out = tiptapToContentDocument(
       doc([
         {
@@ -233,11 +237,167 @@ describe("math mapping — candidate-visible math must persist verbatim (#676)",
     if (!table || table.type !== "table") throw new Error("expected table");
     const cell = table.content[0]?.content[0];
     if (!cell || cell.type !== "tableCell") throw new Error("expected cell");
-    // The latex SURVIVES as text — degraded placement, never erased.
-    expect(cell.content[1]).toEqual({
-      type: "paragraph",
-      content: [{ type: "text", text: LATEX }],
-    });
+    expect(cell.content).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "c" }] },
+      { type: "paragraph", content: [{ type: "inlineMath", latex: LATEX }] },
+    ]);
+  });
+
+  it.each([
+    {
+      name: "inlineMath in a cell paragraph",
+      tiptapCell: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "值 " },
+            { type: "inlineMath", attrs: { latex: "a^2+b^2" } },
+          ],
+        },
+      ],
+      canonicalCell: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "值 " },
+            { type: "inlineMath", latex: "a^2+b^2" },
+          ],
+        },
+      ],
+    },
+    {
+      name: "prose paragraph then blockMath in a cell",
+      tiptapCell: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "结论：" }],
+        },
+        { type: "blockMath", attrs: { latex: "E=mc^2" } },
+      ],
+      canonicalCell: [
+        { type: "paragraph", content: [{ type: "text", text: "结论：" }] },
+        {
+          type: "paragraph",
+          content: [{ type: "inlineMath", latex: "E=mc^2" }],
+        },
+      ],
+    },
+    {
+      name: "multiple formulas in one cell keep order",
+      tiptapCell: [
+        { type: "blockMath", attrs: { latex: "x=1" } },
+        {
+          type: "paragraph",
+          content: [
+            { type: "inlineMath", attrs: { latex: "y=2" } },
+            { type: "text", text: " 且 " },
+            { type: "inlineMath", attrs: { latex: "z=3" } },
+          ],
+        },
+        { type: "blockMath", attrs: { latex: "w=4" } },
+      ],
+      canonicalCell: [
+        { type: "paragraph", content: [{ type: "inlineMath", latex: "x=1" }] },
+        {
+          type: "paragraph",
+          content: [
+            { type: "inlineMath", latex: "y=2" },
+            { type: "text", text: " 且 " },
+            { type: "inlineMath", latex: "z=3" },
+          ],
+        },
+        { type: "paragraph", content: [{ type: "inlineMath", latex: "w=4" }] },
+      ],
+    },
+    {
+      name: "malformed LaTeX in a cell is preserved verbatim",
+      tiptapCell: [{ type: "blockMath", attrs: { latex: "\\frac{" } }],
+      canonicalCell: [
+        {
+          type: "paragraph",
+          content: [{ type: "inlineMath", latex: "\\frac{" }],
+        },
+      ],
+    },
+  ])("table cell math fidelity: $name", ({ tiptapCell, canonicalCell }) => {
+    const out = tiptapToContentDocument(
+      doc([
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [{ type: "tableCell", content: tiptapCell }],
+            },
+          ],
+        },
+      ]),
+    );
+    const table = out.content[0];
+    if (!table || table.type !== "table") throw new Error("expected table");
+    const cell = table.content[0]?.content[0];
+    if (!cell || cell.type !== "tableCell") throw new Error("expected cell");
+    expect(cell.content).toEqual(canonicalCell);
+
+    // Restoration: the canonical cell maps back into the editor and converts
+    // identically — the math is re-renderable as math after reload.
+    expect(tiptapToContentDocument(contentDocumentToTiptap(out))).toEqual(out);
+  });
+
+  it("table + list + blockMath + inlineMath: the two downgrade policies agree", () => {
+    // The list-item and table-cell downgrades must not drift: a blockMath
+    // pasted into either container becomes inline math in a paragraph in
+    // both, so a mixed document survives editor → canonical → editor.
+    const source: ContentDocumentV1 = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "解：" },
+            { type: "inlineMath", latex: "x^2-1=0" },
+          ],
+        },
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "inlineMath", latex: "x=\\pm 1" }],
+                },
+              ],
+            },
+          ],
+        },
+        { type: "blockMath", latex: "\\int_0^1 x\\,dx" },
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableCell",
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [{ type: "inlineMath", latex: "\\tfrac{1}{2}" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(tiptapToContentDocument(contentDocumentToTiptap(source))).toEqual(
+      source,
+    );
   });
 });
 
