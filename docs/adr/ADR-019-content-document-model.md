@@ -2,9 +2,11 @@
 
 ## Status
 
-**ACCEPTED** (2026-09-25, issue #614 G3 — the shipped implementation is
-ratified; the authoring-time "PROPOSED … pending human acceptance" marker is
-superseded by this acceptance). Decision history below is preserved.
+**ACCEPTED, amended (2026-10-02).** Original representation decision ratified
+2026-09-25 (issue #614 G3). The 2026-10-02 Phase-B amendment adopts
+[`docs/architecture/rich-content-semantic-contract.md`](../architecture/rich-content-semantic-contract.md)
+as the normative Rich V1 semantic and integration authority; see §Amendment
+below.
 
 Implementation evidence at acceptance (master `b673bb22`):
 
@@ -34,7 +36,7 @@ Implementation evidence at acceptance (master `b673bb22`):
 | Decision owners | jnhu76 |
 | Supersedes | — |
 | Superseded by | — |
-| Related decisions | ADR-008 (submit answer freeze barrier), ADR-012 (candidate recovery contract) |
+| Related decisions | ADR-008 (submit answer freeze barrier), ADR-012 (candidate recovery contract), [`rich-content-semantic-contract.md`](../architecture/rich-content-semantic-contract.md) (Phase-B adoption) |
 
 ## Context
 
@@ -138,3 +140,18 @@ entirely (KaTeX is self-contained and meets the offline constraint).
   null for legacy rows); migration is append-only.
 - Audit metadata must never embed raw rich answer payloads (ADR-010
   discipline); grading reads only frozen snapshot/entry data.
+
+## Amendment — Phase-B semantic contract adoption (2026-10-02)
+
+This ADR retains its accepted core representation decision (dual-mode slots,
+closed V1 grammar, single canonical kernel, static renderer). The following are
+added by the Phase-B authority pass:
+
+1. **Normative semantic authority.** [`docs/architecture/rich-content-semantic-contract.md`](../architecture/rich-content-semantic-contract.md) is adopted as the single normative explanation of Rich V1 semantics and protocol integration. ADR-019 remains the adoption/decision record; the architecture document owns the detailed semantic contract.
+2. **Canonicalization closure.** Successful canonicalization of a Rich value must produce a value that the same semantic system accepts: schema, limits, idempotence, and safe read/replay. This closure property is required but not yet fully implemented; B-F01 is recorded as a known counterexample.
+3. **Authority boundaries.** Rich representation authority does not own:
+   - Attempt lifecycle or effective-deadline authority;
+   - SaveAnswer replay / receipt / persistence mechanism;
+   - submission locking, terminal transition, or grading-result authority;
+   - capability enablement, permission, or admission logic.
+4. **Implementation deviations.** Adoption of the Phase-B contract does not itself fix known implementation deviations, including the B-F01 closure failure. Repairs are Phase-C/D follow-up work.
