@@ -610,6 +610,108 @@ describe("C13 paste/drop boundary — operation-produced math selections normali
   });
 });
 
+describe("#673 C15 input-rule boundary — typed $$ / $$$ rules never leave a selected atom", () => {
+  /**
+   * The production `Mathematics` extension installs input rules
+   * (`$$x$$` → inlineMath, `$$$x$$$` → blockMath) and tiptap runs them
+   * inside the `handleTextInput` prop. The block rule consumes the final
+   * keystroke and replaces the whole textblock; when no text cursor
+   * survives after the new atom, the mapped selection lands on it
+   * (TextSelection.map → Selection.near → NodeSelection) and the next
+   * ordinary input replaces the formula — the #676 loss class reached from
+   * typing alone. jsdom cannot type, so the probe replays the exact
+   * `handleTextInput` + `insertText` fallback prosemirror-view uses per
+   * keystroke (both the keypress and the DOM-change path), like the C13
+   * probes; the real-event layer is proven in apps/e2e/rich-content.spec.ts.
+   */
+  function typeChar(editor: Editor, ch: string): boolean {
+    const view = editor.view;
+    const sel = view.state.selection;
+    const sameParent =
+      sel instanceof TextSelection && sel.$from.sameParent(sel.$to);
+    const from = sel.from;
+    const to = sel.to;
+    const deflt = sameParent
+      ? () => view.state.tr.insertText(ch, from, to)
+      : () => view.state.tr.insertText(ch);
+    const handled = view.someProp("handleTextInput", (f) =>
+      f(view, from, to, ch, deflt),
+    );
+    if (!handled) view.dispatch(deflt());
+    return Boolean(handled);
+  }
+
+  function typeText(editor: Editor, text: string) {
+    for (const ch of text) typeChar(editor, ch);
+  }
+
+  const blockLatexes = (editor: Editor) =>
+    (editor.getJSON().content ?? [])
+      .filter((block) => block.type === "blockMath")
+      .map((block) => block.attrs?.latex);
+
+  it("$$$x^2$$$ typed into the only paragraph: atom settles, next input preserves it", () => {
+    const editor = createEditor();
+    typeText(editor, "$$$x^2$$$");
+    // The block rule fired and produced the atom…
+    expect(blockLatexes(editor)).toEqual(["x^2"]);
+    // …and the settlement normalized the rule-produced selection: ordinary
+    // typing continues in the appended landing paragraph, not onto the atom.
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    typeChar(editor, "答");
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "blockMath", latex: "x^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+    ]);
+    editor.destroy();
+  });
+
+  it("$$$y^2$$$ typed as the last paragraph after prose: formula survives the next input", () => {
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "前文" }] },
+        { type: "paragraph", content: [] },
+      ],
+    });
+    editor.commands.setTextSelection(5); // inside the second, empty paragraph
+    typeText(editor, "$$$y^2$$$");
+    expect(blockLatexes(editor)).toEqual(["y^2"]);
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    typeChar(editor, "答");
+    // The caret settles at the nearest textual cursor (the preceding
+    // paragraph — the same semantics as the C12 restore settlement); the
+    // formula keeps its own block and survives.
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "前文答" }] },
+      { type: "blockMath", latex: "y^2" },
+    ]);
+    editor.destroy();
+  });
+
+  it("$$x^2$$ inline rule is untouched: text cursor after the atom, next input appends", () => {
+    const editor = createEditor();
+    typeText(editor, "$$x^2$$");
+    // The inline rule never produces a NodeSelection; the settlement is a
+    // no-op and the caret stays a real text cursor after the atom.
+    expect(editor.state.selection instanceof TextSelection).toBe(true);
+    typeChar(editor, "答");
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      {
+        type: "paragraph",
+        content: [
+          { type: "inlineMath", latex: "x^2" },
+          { type: "text", text: "答" },
+        ],
+      },
+    ]);
+    editor.destroy();
+  });
+});
+
 describe("schema ↔ adapter structural guard — no editor-emittable node is silently lost", () => {
   /**
    * Every node the production schema can emit, with the canonical type the

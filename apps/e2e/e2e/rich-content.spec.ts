@@ -623,6 +623,108 @@ test.describe("issue 301 rich content product loop", () => {
   });
 });
 
+/**
+ * Shared fixture for the #673 C13/C15 math-boundary browser tests (and the
+ * same shape C12 builds inline): a rich text_response question, an assembled
+ * exam, a started attempt, and an editor holding prose plus one toolbar
+ * blockMath.
+ */
+async function setupProsePlusFormula(
+  page: Page,
+  request: APIRequestContext,
+  tag: string,
+): Promise<{
+  attemptId: string;
+  questionId: string;
+  candidateToken: string;
+}> {
+  const adminToken = await adminApiToken(request);
+  const courseId = await seedCourseId(request, adminToken);
+  const candidate = await provisionCandidate(request, tag);
+
+  await loginAsAdmin(page);
+  await page.goto("/admin/questions");
+  await page.getByRole("button", { name: /新增题目/ }).click();
+  await page.waitForURL(/\/admin\/questions\/new/);
+  await page.getByRole("button", { name: "所属课程" }).click();
+  await page.getByPlaceholder("搜索课程名称或代码...").fill("基础安全培训");
+  await page.getByRole("option", { name: "基础安全培训" }).click();
+  await pickSelect(page, "题目类型", "文本作答题");
+  const PROMPT = `C13${tag}-${STAMP}`;
+  await page.getByPlaceholder("输入题目内容").fill(PROMPT);
+  await page
+    .getByPlaceholder("请描述评分时应考虑的关键点、完整性、准确性或论证质量")
+    .fill(RUBRIC);
+  await page.getByRole("spinbutton").fill("20");
+  await pickSelect(page, "作答模式", "富文本");
+  const createResponse = page.waitForResponse(
+    (res) =>
+      res.request().method() === "POST" && res.url().endsWith("/api/questions"),
+    { timeout: 15_000 },
+  );
+  await page.getByRole("button", { name: /^保存$/ }).click();
+  const createdRes = await createResponse;
+  expect(createdRes.status()).toBe(201);
+  const questionId = ((await createdRes.json()) as { id: string }).id;
+
+  const { examId } = await assembleExam(
+    request,
+    adminToken,
+    courseId,
+    `C13产品环-${STAMP}-${tag}`,
+    [questionId],
+    candidate.profileId,
+    20,
+  );
+
+  await candidateLogin(page, candidate);
+  const startResponse = page.waitForResponse(
+    (res) =>
+      res.request().method() === "POST" &&
+      /\/api\/attempts\/[^/]+\/start$/.test(res.url()),
+    { timeout: 15_000 },
+  );
+  await startExamFromList(page, examId);
+  const startRes = await startResponse;
+  expect([200, 201]).toContain(startRes.status());
+  const attemptId = ((await startRes.json()) as { id: string }).id;
+
+  const editor = page
+    .getByTestId("take-question-section")
+    .locator(".ProseMirror");
+  await expect(editor).toHaveCount(1);
+  await editor.click();
+  await page.keyboard.type("结论：");
+  await page.getByPlaceholder("输入 LaTeX").fill("x^2-1=0");
+  await page.getByRole("button", { name: "独立公式" }).click();
+  await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+  return {
+    attemptId,
+    questionId,
+    candidateToken: await candidateApiToken(request, candidate),
+  };
+}
+
+const persistedBlockMathCount = async (
+  request: APIRequestContext,
+  candidateToken: string,
+  attemptId: string,
+): Promise<number> => {
+  const take = await request.get(
+    `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+    { headers: { Cookie: `auth-token=${candidateToken}` } },
+  );
+  expect(take.ok()).toBeTruthy();
+  const json = JSON.stringify(
+    (
+      (await take.json()) as {
+        questions: Array<{ answerValue: unknown }>;
+      }
+    ).questions[0]?.answerValue,
+  );
+  return (json.match(/blockMath/g) ?? []).length;
+};
+
 test.describe("#673 C13 — paste/drag math boundaries in the real editor", () => {
   /**
    * Reachability was proven deterministicly against the production schema
@@ -632,103 +734,6 @@ test.describe("#673 C13 — paste/drag math boundaries in the real editor", () =
    * dropped node is NodeSelected by prosemirror-view itself. These browser
    * tests replay the same boundaries with REAL clipboard/drag events.
    */
-
-  async function setupProsePlusFormula(
-    page: Page,
-    request: APIRequestContext,
-    tag: string,
-  ): Promise<{
-    attemptId: string;
-    questionId: string;
-    candidateToken: string;
-  }> {
-    const adminToken = await adminApiToken(request);
-    const courseId = await seedCourseId(request, adminToken);
-    const candidate = await provisionCandidate(request, tag);
-
-    await loginAsAdmin(page);
-    await page.goto("/admin/questions");
-    await page.getByRole("button", { name: /新增题目/ }).click();
-    await page.waitForURL(/\/admin\/questions\/new/);
-    await page.getByRole("button", { name: "所属课程" }).click();
-    await page.getByPlaceholder("搜索课程名称或代码...").fill("基础安全培训");
-    await page.getByRole("option", { name: "基础安全培训" }).click();
-    await pickSelect(page, "题目类型", "文本作答题");
-    const PROMPT = `C13${tag}-${STAMP}`;
-    await page.getByPlaceholder("输入题目内容").fill(PROMPT);
-    await page
-      .getByPlaceholder("请描述评分时应考虑的关键点、完整性、准确性或论证质量")
-      .fill(RUBRIC);
-    await page.getByRole("spinbutton").fill("20");
-    await pickSelect(page, "作答模式", "富文本");
-    const createResponse = page.waitForResponse(
-      (res) =>
-        res.request().method() === "POST" &&
-        res.url().endsWith("/api/questions"),
-      { timeout: 15_000 },
-    );
-    await page.getByRole("button", { name: /^保存$/ }).click();
-    const createdRes = await createResponse;
-    expect(createdRes.status()).toBe(201);
-    const questionId = ((await createdRes.json()) as { id: string }).id;
-
-    const { examId } = await assembleExam(
-      request,
-      adminToken,
-      courseId,
-      `C13产品环-${STAMP}-${tag}`,
-      [questionId],
-      candidate.profileId,
-      20,
-    );
-
-    await candidateLogin(page, candidate);
-    const startResponse = page.waitForResponse(
-      (res) =>
-        res.request().method() === "POST" &&
-        /\/api\/attempts\/[^/]+\/start$/.test(res.url()),
-      { timeout: 15_000 },
-    );
-    await startExamFromList(page, examId);
-    const startRes = await startResponse;
-    expect([200, 201]).toContain(startRes.status());
-    const attemptId = ((await startRes.json()) as { id: string }).id;
-
-    const editor = page
-      .getByTestId("take-question-section")
-      .locator(".ProseMirror");
-    await expect(editor).toHaveCount(1);
-    await editor.click();
-    await page.keyboard.type("结论：");
-    await page.getByPlaceholder("输入 LaTeX").fill("x^2-1=0");
-    await page.getByRole("button", { name: "独立公式" }).click();
-    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
-    return {
-      attemptId,
-      questionId,
-      candidateToken: await candidateApiToken(request, candidate),
-    };
-  }
-
-  const persistedBlockMathCount = async (
-    request: APIRequestContext,
-    candidateToken: string,
-    attemptId: string,
-  ): Promise<number> => {
-    const take = await request.get(
-      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
-      { headers: { Cookie: `auth-token=${candidateToken}` } },
-    );
-    expect(take.ok()).toBeTruthy();
-    const json = JSON.stringify(
-      (
-        (await take.json()) as {
-          questions: Array<{ answerValue: unknown }>;
-        }
-      ).questions[0]?.answerValue,
-    );
-    return (json.match(/blockMath/g) ?? []).length;
-  };
 
   test("copy a formula and paste it into prose — pasted formula survives typing", async ({
     page,
@@ -785,6 +790,72 @@ test.describe("#673 C13 — paste/drag math boundaries in the real editor", () =
     await page.keyboard.type("移动后继续作答 ");
     await waitForSaveSaved(page);
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    expect(
+      await persistedBlockMathCount(request, candidateToken, attemptId),
+    ).toBe(1);
+  });
+});
+
+test.describe("#673 C15 — typed math input rules in the real editor", () => {
+  /**
+   * The production Mathematics extension installs input rules ($$x$$ →
+   * inlineMath, $$$x$$$ → blockMath) that tiptap runs inside
+   * handleTextInput. The block rule replaces the whole textblock and the
+   * mapped selection lands on a math atom — the new one when it ends the
+   * document, or the NEXT atom when one follows — so the next ordinary
+   * ASCII keystroke ran through prosemirror-view's keypress handler
+   * (tr.insertText → replaceSelectionWith) and replaced that formula with
+   * plain text. Deterministic reachability and the settlement are proven
+   * against the production schema (apps/web richContentEditor.reality.test.ts);
+   * this is the real-event layer: type the rule sequence with the keyboard,
+   * then keep typing.
+   */
+  test("typing $$$w^2$$$ then ordinary prose — every formula survives", async ({
+    page,
+    request,
+  }) => {
+    const { attemptId, candidateToken } = await setupProsePlusFormula(
+      page,
+      request,
+      `i-${STAMP.slice(-6)}`,
+    );
+    const section = page.getByTestId("take-question-section");
+    const editor = section.locator(".ProseMirror");
+
+    // Shape 1 — the rule replaces a paragraph that sits BEFORE the existing
+    // toolbar formula: the mapped selection lands on that neighbour, so
+    // pre-repair this keystroke destroyed a formula the candidate never
+    // touched. ASCII input exercises the keypress destruction path.
+    await editor.locator("p").last().click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("$$$w^2$$$");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
+    await page.keyboard.type("ok ");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
+    await expect(
+      editor.locator("[data-type='block-math'][data-latex='x^2-1=0']"),
+    ).toHaveCount(1);
+    await waitForSaveSaved(page);
+    expect(
+      await persistedBlockMathCount(request, candidateToken, attemptId),
+    ).toBe(2);
+
+    // Shape 2 — the rule replaces the document's only textblock: the
+    // settlement appends the typing landing paragraph (editor-only,
+    // canonicalizes away), and the rule-made formula survives the next
+    // keystrokes with the text landing right after it.
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type("$$$x^2$$$");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    await page.keyboard.type("done ");
+    await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+    await expect(
+      editor.locator("[data-type='block-math'][data-latex='x^2']"),
+    ).toHaveCount(1);
+    await waitForSaveSaved(page);
     expect(
       await persistedBlockMathCount(request, candidateToken, attemptId),
     ).toBe(1);

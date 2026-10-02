@@ -101,7 +101,7 @@ export function richEditorExtensions() {
         maxExpand: 1000,
       },
     }),
-    SettleMathSelectionAfterPasteDrop,
+    SettleMathSelectionAfterOperation,
   ];
 }
 
@@ -123,7 +123,11 @@ const MATH_NODE_NAMES = new Set(["blockMath", "inlineMath"]);
  *     formulas, so persisted drafts genuinely have this shape) (#673 C12);
  *   - paste or drop of a math atom (#673 C13 — prosemirror-view NodeSelects
  *     a dropped single node and leaves a pasted atom selected whenever no
- *     text cursor follows it).
+ *     text cursor follows it);
+ *   - the Mathematics input rules converting typed `$$…$$` / `$$$…$$$` text
+ *     into an atom (#673 C15 — the rule consumes the keystroke inside
+ *     handleTextInput and, when it replaces the whole textblock, maps the
+ *     caret onto the new atom).
  * EXPLICIT user selection (click, arrow keys) is ordinary ProseMirror
  * semantics and never passes through this guard (#679).
  *
@@ -181,22 +185,37 @@ function implicitMathSelectionFix(state: EditorState): Transaction | null {
 }
 
 /**
- * C13 boundary: paste and drop are the two non-toolbar operations the view
- * itself dispatches, and both tag their transactions with a `uiEvent` meta.
- * Normalizing ONLY those transactions keeps explicit user selection untouched
- * — every other NodeSelection path (click, keyboard, plugin) is unaffected.
+ * The operation boundary: transactions the view or the input-rule machinery
+ * dispatch without a user selection gesture, which can leave a math atom
+ * under a NodeSelection.
+ *   - paste / drop: the view tags both with a `uiEvent` meta (#673 C13);
+ *   - math input rules: the rules run inside `handleTextInput`, and tiptap
+ *     tags the transaction with the input-rules plugin's own state meta
+ *     (`spec.isInputRules` — the same marker `undoInputRule` reads) (#673
+ *     C15).
+ * Normalizing ONLY those transactions keeps explicit user selection
+ * untouched — every other NodeSelection path (click, keyboard, plugin) is
+ * unaffected (#679).
  */
-const SettleMathSelectionAfterPasteDrop = Extension.create({
-  name: "settleMathSelectionAfterPasteDrop",
+const SettleMathSelectionAfterOperation = Extension.create({
+  name: "settleMathSelectionAfterOperation",
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: new PluginKey("settleMathSelectionAfterPasteDrop"),
+        key: new PluginKey("settleMathSelectionAfterOperation"),
         appendTransaction: (transactions, _oldState, newState) => {
+          const inputRulePlugins = newState.plugins.filter(
+            (plugin) =>
+              "isInputRules" in plugin.spec &&
+              plugin.spec.isInputRules === true,
+          );
           const operationProduced = transactions.some(
             (tr) =>
               tr.getMeta("uiEvent") === "paste" ||
-              tr.getMeta("uiEvent") === "drop",
+              tr.getMeta("uiEvent") === "drop" ||
+              inputRulePlugins.some(
+                (plugin) => tr.getMeta(plugin) !== undefined,
+              ),
           );
           if (!operationProduced) return null;
           return implicitMathSelectionFix(newState);
