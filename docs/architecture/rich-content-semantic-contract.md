@@ -4,12 +4,10 @@
 > what a Rich `ContentDocumentV1` value means, how it enters the system, how it is
 > read back, and how it composes with the surrounding Exam protocols.
 >
-> Adopted as normative authority by
-> [ADR-019](../adr/ADR-019-content-document-model.md) (Phase-B amendment).
->
-> Status: Phase-B authority candidate awaiting independent review. Production
-> code behavior is not changed by this document; known deviations are recorded
-> explicitly.
+> Status: **normative**, adopted by
+> [ADR-019](../adr/ADR-019-content-document-model.md) (Phase-B amendment,
+> 2026-10-02). Adoption does not itself change production code behavior; known
+> implementation deviations are recorded explicitly (§4).
 
 ## 1. Scope and authority
 
@@ -209,11 +207,23 @@ Persisted Rich values must be classified into typed read states. Conceptually:
 | Read state | Meaning |
 | --- | --- |
 | `empty` | The document slot is absent / null and represents an intentionally empty value. |
-| `plain` / explicitly sourced legacy plain | The slot is a plain string or legacy plain answer; Rich authority is not invoked. |
+| `plain` | The slot's answer mode is Plain: a plain string is the legitimate representation, and Rich authority is not invoked. |
+| `legacy_plain` | A plain string in a slot / source where Rich is authoritative, legitimate only when provenance explicitly establishes the legacy plain case (rules below). |
 | `rich_valid` | A canonical V1 document that passes schema and limits. |
 | `rich_noncanonical` | A schema-recognizable V1 document that violates a canonical invariant (e.g., unnormalized marks, unsorted text runs). It is not silently repaired at read time. |
 | `unsupported_version` | A document envelope with a `docVersion` the current system chooses not to interpret as V1. |
 | `corrupt` | Not a recognizable document at all (bad JSON, wrong envelope, hostile structure, or inconsistent stored shape). |
+
+`plain` and `legacy_plain` are distinct trust decisions, not one state:
+
+- `plain` follows from the slot's answer mode. It is never inferred from
+  `typeof value === "string"` alone.
+- `legacy_plain` requires explicit source / mode provenance establishing that
+  the value was written by the legacy plain protocol for that slot. Without
+  that evidence, a plain string where Rich is authoritative is classified
+  `corrupt` (inconsistent stored shape) — it must not be adopted as a valid
+  plain answer by candidate restore, reload, recovery, `STALE_VERSION`
+  adoption, grading / result rendering, or export.
 
 Critical normative rule:
 
@@ -486,7 +496,7 @@ are not moved into this semantic contract.
 
 ## 19. Internal consistency checklist
 
-Before acceptance, the document must still satisfy:
+This contract must continue to satisfy:
 
 - **A:** Rich does not own authorization, deadlines, attempt state, grading
   state, or result visibility. ✓
