@@ -1189,7 +1189,12 @@ export function TakeExamPage() {
               })}
             </span>
           </div>
-          <div className="overflow-x-auto xl:overflow-visible">
+          {/* INVARIANT (#683): the current-question ring (ring-2 ring-offset-2)
+              paints 2–4px OUTSIDE the button box as ink overflow, which scroll
+              containers clip on the left/top. p-1 gives the ring room inside
+              the clip boundary; -m-1 keeps the buttons at the same visual
+              position. Keep both classes paired with the ring geometry. */}
+          <div className="-m-1 overflow-x-auto p-1 xl:overflow-visible">
             <QuestionNavigator
               items={snapshot.questions.map((q, i) => ({
                 id: q.id,
