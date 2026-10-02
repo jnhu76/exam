@@ -314,4 +314,66 @@ describe("rich content write authority", () => {
     });
     expect(res.statusCode, res.body).toBe(201);
   });
+
+  it("rejects a rich prompt whose canonical form violates the text-run limit (PC-F01 closure at the authoring seam)", async () => {
+    // The Phase-C merge-class seed: two adjacent unmarked runs, each within
+    // textRun, whose normalized merge is a 20001-char run. The persisted
+    // document is the canonical form, so the write must fail instead of
+    // persisting a document the schema rejects on read-back.
+    const mergeSeed = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "a".repeat(20000) },
+            { type: "text", text: "b" },
+          ],
+        },
+      ],
+    };
+    const res = await createQuestion({
+      type: "text_response",
+      contentDocument: mergeSeed,
+      options: [],
+      standardAnswer: null,
+      rubric: "r",
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("keeps a rich prompt at the exact canonical text-run boundary creatable", async () => {
+    const atLimit = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "a".repeat(19999) },
+            { type: "text", text: "b" },
+          ],
+        },
+      ],
+    };
+    const res = await createQuestion({
+      type: "text_response",
+      contentDocument: atLimit,
+      options: [],
+      standardAnswer: null,
+      rubric: "r",
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    expect(res.json().contentDocument).toEqual({
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "a".repeat(19999) + "b" }],
+        },
+      ],
+    });
+  });
 });

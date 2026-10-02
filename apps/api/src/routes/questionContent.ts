@@ -1,10 +1,10 @@
 import {
-  normalizeContentDocument,
   plainTextProjection,
   type ContentDocumentV1,
   type ContentMode,
   type QuestionType,
 } from "@exam/domain";
+import { canonicalizeContentDocument } from "@exam/contracts";
 import { ValidationError } from "@exam/domain";
 
 /**
@@ -12,10 +12,11 @@ import { ValidationError } from "@exam/domain";
  *
  * Every question/option content write — create, update, and the merged
  * update re-validation — resolves through this seam. For a Rich write the
- * document is normalized into canonical form and `content` is DERIVED as its
- * plain-text projection; the client's `content`, if any, is never trusted.
- * For a Plain write `content_document` is persisted as NULL so legacy and
- * plain rows stay indistinguishable.
+ * document is canonicalized (normalized AND re-validated on the canonical
+ * form, so no write can persist a document outside schema/limits — RC-03)
+ * and `content` is DERIVED as its plain-text projection; the client's
+ * `content`, if any, is never trusted. For a Plain write `content_document`
+ * is persisted as NULL so legacy and plain rows stay indistinguishable.
  *
  * Hostile-depth protection is a schema-level closure: `ContentDocumentV1Schema`
  * — which types every rich slot in the create/update request schemas — runs
@@ -50,11 +51,16 @@ export interface ResolvedQuestionContent {
 
 function resolveOption(option: OptionWriteInput): ResolvedOption {
   if (option.contentDocument != null) {
-    const document = normalizeContentDocument(option.contentDocument);
+    const canonical = canonicalizeContentDocument(option.contentDocument);
+    if (!canonical.ok) {
+      throw new ValidationError(
+        `option ${option.id} contentDocument violates canonical limits: ${canonical.reason}`,
+      );
+    }
     return {
       id: option.id,
-      content: plainTextProjection(document),
-      contentDocument: document,
+      content: plainTextProjection(canonical.value),
+      contentDocument: canonical.value,
       ...(option.isCorrect !== undefined
         ? { isCorrect: option.isCorrect }
         : {}),
@@ -88,10 +94,15 @@ export function resolveQuestionContentWrite(input: {
   const options = (input.options ?? []).map(resolveOption);
 
   if (input.contentDocument != null) {
-    const document = normalizeContentDocument(input.contentDocument);
+    const canonical = canonicalizeContentDocument(input.contentDocument);
+    if (!canonical.ok) {
+      throw new ValidationError(
+        `contentDocument violates canonical limits: ${canonical.reason}`,
+      );
+    }
     return {
-      content: plainTextProjection(document),
-      contentDocument: document,
+      content: plainTextProjection(canonical.value),
+      contentDocument: canonical.value,
       answerMode: input.answerMode ?? null,
       options,
     };

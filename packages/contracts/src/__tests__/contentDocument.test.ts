@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { AnswerModeEnum, ContentDocumentV1Schema } from "../contentDocument.js";
+import {
+  AnswerModeEnum,
+  ContentDocumentV1Schema,
+  canonicalizeContentDocument,
+} from "../contentDocument.js";
 import {
   CreateQuestionRequestSchema,
   UpdateQuestionRequestSchema,
 } from "../question.js";
 import { QuestionSnapshotSchema } from "../attempt.js";
-import type { ContentDocumentV1 } from "@exam/domain";
+import {
+  CONTENT_LIMITS,
+  normalizeContentDocument,
+  type ContentDocumentV1,
+} from "@exam/domain";
 
 function doc(content: unknown[]): ContentDocumentV1 {
   return { docVersion: 1, type: "doc", content } as ContentDocumentV1;
@@ -417,6 +425,74 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
     const parsed = ContentDocumentV1Schema.safeParse(grammarBomb(500));
     const message = parsed.error?.issues[0]?.message ?? "";
     expect(message).toMatch(/nesting exceeds|depth exceeds|structural/);
+  });
+
+  it("accepts a within-limits document the removed raw-node budget used to reject (#673 C1 / PC-F02)", () => {
+    // 677 plain paragraphs = 1354 grammar nodes < totalNodes(2000), ~41k
+    // serialized chars < serializedChars: the measured minimal failure of
+    // the Phase-C raw-node-budget campaign, now asserted at the PUBLIC
+    // parse entry shared by route validation, read classification, and
+    // client guards. Within-limit documents must never fail here.
+    const legal = {
+      docVersion: 1,
+      type: "doc",
+      content: Array.from({ length: 677 }, () => ({
+        type: "paragraph",
+        content: [{ type: "text", text: "0123456789".repeat(3) }],
+      })),
+    };
+    const parsed = ContentDocumentV1Schema.safeParse(legal);
+    expect(parsed.success).toBe(true);
+  });
+
+  describe("canonicalizeContentDocument (RC-03 closure seam)", () => {
+    function runsDocument(
+      runs: Array<{ text: string; marks?: string[] }>,
+    ): ContentDocumentV1 {
+      return {
+        docVersion: 1,
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: runs.map((run) => ({
+              type: "text" as const,
+              text: run.text,
+              ...(run.marks ? { marks: run.marks as never[] } : {}),
+            })),
+          },
+        ],
+      };
+    }
+
+    it("returns the RC-03 fixed point for legal input", () => {
+      const legal = canonicalizeContentDocument(
+        runsDocument([{ text: "x" }, { text: "y" }]),
+      );
+      expect(legal.ok).toBe(true);
+      if (legal.ok) {
+        expect(legal.value).toEqual(runsDocument([{ text: "xy" }]));
+        expect(normalizeContentDocument(legal.value)).toEqual(legal.value);
+      }
+    });
+
+    it("rejects the merge class on the canonical form with the limit violation", () => {
+      // Two schema-valid unmarked runs whose merge is a 20001-char run:
+      // rejected on the representation that would be persisted.
+      const overMerge = canonicalizeContentDocument(
+        runsDocument([
+          { text: "a".repeat(CONTENT_LIMITS.textRun) },
+          { text: "b" },
+        ]),
+      );
+      expect(overMerge.ok).toBe(false);
+      if (!overMerge.ok) {
+        // The first canonical-limit issue names the textRun ceiling — via
+        // the zod max message or the limits walker, both driven by
+        // CONTENT_LIMITS.textRun.
+        expect(overMerge.reason).toContain(String(CONTENT_LIMITS.textRun));
+      }
+    });
   });
 
   it("still accepts the deepest legal grammar document (7 nested lists = tree depth 16)", () => {
