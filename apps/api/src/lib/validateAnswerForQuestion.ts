@@ -1,6 +1,8 @@
-import { ContentDocumentV1Schema } from "@exam/contracts";
 import {
-  normalizeContentDocument,
+  ContentDocumentV1Schema,
+  canonicalizeContentDocument,
+} from "@exam/contracts";
+import {
   preflightContentDocumentStructure,
   type QuestionSnapshot,
 } from "@exam/domain";
@@ -14,9 +16,11 @@ import {
  * FROZEN QuestionSnapshot the attempt carries — never the live question row.
  *
  * For rich text_response answers this is also the CANONICALIZATION seam: the
- * returned value is the normalized ContentDocumentV1, so every downstream
- * consumer (answersEqual idempotency, draft persistence, submit freeze,
- * grading workset) only ever sees canonical documents (#301 §22).
+ * returned value is the canonical ContentDocumentV1, re-validated after
+ * normalization so no accepted answer can persist a canonical form outside
+ * schema/limits (RC-03 closure). Every downstream consumer (answersEqual
+ * idempotency, draft persistence, submit freeze, grading workset) only ever
+ * sees canonical documents (#301 §22).
  *
  * `null` remains valid for every type — it is the protocol's "cleared"
  * answer (buildSubmittedAnswersSnapshot normalizes it for unanswered
@@ -140,8 +144,18 @@ export function validateAnswerForQuestion(
           reason: "rich text_response answer must be a valid ContentDocumentV1",
         };
       }
-      // Canonicalize BEFORE equality/idempotency/persistence (#301 §22).
-      return { ok: true, value: normalizeContentDocument(parsed.data) };
+      // Canonical closure (RC-03, #669 Phase D1): normalization can merge
+      // adjacent same-mark runs, so legality is re-decided on the canonical
+      // value that will actually be persisted. Rejection keeps the existing
+      // INVALID_ANSWER-mapped category.
+      const canonical = canonicalizeContentDocument(parsed.data);
+      if (!canonical.ok) {
+        return {
+          ok: false,
+          reason: "rich text_response answer must be a valid ContentDocumentV1",
+        };
+      }
+      return { ok: true, value: canonical.value };
     }
   }
 }

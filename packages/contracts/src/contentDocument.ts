@@ -4,6 +4,7 @@ import {
   CONTENT_DOC_VERSION,
   CONTENT_LIMITS,
   checkContentDocumentLimits,
+  normalizeContentDocument,
   preflightContentDocumentStructure,
   type ContentBlockMath,
   type ContentBlock,
@@ -16,8 +17,8 @@ import {
   type ContentOrderedList,
   type ContentParagraph,
   type ContentTable,
-  type ContentTableCell,
   type ContentTableRow,
+  type ContentTableCell,
   type ContentTextRun,
 } from "@exam/domain";
 
@@ -229,6 +230,38 @@ const RawPreflightSchema: z.ZodType<unknown, z.ZodTypeDef, unknown> =
 export const ContentDocumentV1Schema = RawPreflightSchema.pipe(
   RecursiveContentDocumentV1Schema,
 );
+
+/**
+ * Canonicalization closure seam (RC-03, #669 Phase D1): normalizes a
+ * schema-valid document and re-validates the canonical output through the
+ * one Rich authority (ContentDocumentV1Schema = grammar + CONTENT_LIMITS).
+ *
+ * Normalization can change the measured shape — adjacent same-mark text
+ * runs merge, duplicate marks dedup — so a schema-valid input can normalize
+ * to a canonical value outside the contract's limits. Every durable Rich
+ * write boundary (answer canonicalization, question/option content writes)
+ * must persist THIS function's accepted value and nothing else: legality is
+ * decided on the representation that will actually be stored.
+ *
+ * Outer protocols own the wire/error mapping: SaveAnswer turns `ok: false`
+ * into its INVALID_ANSWER category; authoring turns it into a
+ * ValidationError.
+ */
+export function canonicalizeContentDocument(
+  doc: ContentDocumentV1,
+): { ok: true; value: ContentDocumentV1 } | { ok: false; reason: string } {
+  const canonical = normalizeContentDocument(doc);
+  const parsed = ContentDocumentV1Schema.safeParse(canonical);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason:
+        parsed.error.issues[0]?.message ??
+        "document is not a valid ContentDocumentV1",
+    };
+  }
+  return { ok: true, value: parsed.data };
+}
 
 /** Type identity between the wire schema and the domain grammar. */
 type AssertExact<A, B> = [A] extends [B]
