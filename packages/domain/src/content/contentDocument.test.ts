@@ -344,16 +344,17 @@ describe("preflightContentDocumentStructure", () => {
     expect(violations.some((v) => v.includes("nesting exceeds"))).toBe(true);
   });
 
-  it("rejects a huge array fan-out without iterating every element", () => {
-    // 200k elements is ~100× the preflight node budget (4064): large enough
-    // that iterating it would be the measurable cost, small enough that the
-    // fixture itself allocates fast under parallel test load.
+  it("rejects a serialized-oversized array fan-out at the serialization gate", () => {
+    // 200k empty objects serialize to ~600k chars — past serializedChars —
+    // so the value is rejected before the raw walk runs. The walk itself is
+    // inherently bounded: every raw JSON value costs at least one serialized
+    // character, so a payload that passes the size gate cannot make the walk
+    // visit more than CONTENT_LIMITS.serializedChars units.
     const hostile = {
       docVersion: 1,
       type: "doc",
       content: new Array(200_000).fill(0).map(() => ({})),
     };
-    // Budget-bounded: must return long before touching all elements.
     const violations = preflightContentDocumentStructure(hostile);
     expect(violations.length).toBeGreaterThan(0);
   });
@@ -385,5 +386,102 @@ describe("preflightContentDocumentStructure", () => {
     const legal = doc(node);
     expect(checkContentDocumentLimits(legal)).toEqual([]);
     expect(preflightContentDocumentStructure(legal)).toEqual([]);
+  });
+
+  // ── RC-04 / PC-F02 regressions (#669 Phase D1; evidence #686) ─────
+  //
+  // Phase C (#673 C1) proved the preflight raw-walk node budget rejected
+  // documents CONTENT_LIMITS accepts: every object, array, and scalar
+  // string counted as one raw unit, so legal documents at ~30% of the
+  // serialized budget and well under totalNodes failed with "document
+  // exceeds 4064 structural nodes". The fixtures below are the measured
+  // failure scales of that campaign, kept fixed and deterministic. The
+  // invariant: within authoritative CONTENT_LIMITS ⇒ preflight accepts.
+
+  it("accepts within-limits documents the raw-node budget used to reject (#673 C1 / PC-F02)", () => {
+    // Plain runs: 700 paragraphs = 1400 grammar nodes < totalNodes.
+    const plainRuns = doc(
+      ...Array.from({ length: 700 }, () =>
+        paragraph("012345678901234567890123456789"),
+      ),
+    );
+    expect(checkContentDocumentLimits(plainRuns)).toEqual([]);
+    expect(preflightContentDocumentStructure(plainRuns)).toEqual([]);
+
+    // Fully marked runs: 500 paragraphs = 1000 grammar nodes; every mark
+    // string is a raw unit the old budget charged against the document.
+    const markedRuns = doc(
+      ...Array.from({ length: 500 }, () =>
+        paragraph("01234567890123456789", [
+          "bold",
+          "italic",
+          "underline",
+        ] as never[]),
+      ),
+    );
+    expect(checkContentDocumentLimits(markedRuns)).toEqual([]);
+    expect(preflightContentDocumentStructure(markedRuns)).toEqual([]);
+
+    // Duplicate marks: 12 repeated "bold" marks per run pass the schema
+    // (only inlineCode exclusivity is restricted) and normalization dedups
+    // them — 300 paragraphs of this shape are grammar-legal and were
+    // rejected purely by raw-unit accounting.
+    const duplicateMarks = doc(
+      ...Array.from({ length: 300 }, () =>
+        paragraph("01234567890123456789", Array(12).fill("bold") as never[]),
+      ),
+    );
+    expect(checkContentDocumentLimits(duplicateMarks)).toEqual([]);
+    expect(preflightContentDocumentStructure(duplicateMarks)).toEqual([]);
+
+    // Empty paragraphs: pure container overhead, one third of a raw unit
+    // per grammar node.
+    const emptyParagraphs = doc(
+      ...Array.from({ length: 1400 }, () => ({
+        type: "paragraph" as const,
+        content: [],
+      })),
+    );
+    expect(checkContentDocumentLimits(emptyParagraphs)).toEqual([]);
+    expect(preflightContentDocumentStructure(emptyParagraphs)).toEqual([]);
+
+    // Marked table: 16 rows × 20 cells = 320 cells ≤ tableCells, 977
+    // grammar nodes < totalNodes.
+    const markedTable = doc({
+      type: "table",
+      content: Array.from({ length: 16 }, () => ({
+        type: "tableRow" as const,
+        content: Array.from({ length: 20 }, () => ({
+          type: "tableCell" as const,
+          content: [
+            paragraph("0123456789", ["bold", "italic", "underline"] as never[]),
+          ],
+        })),
+      })),
+    });
+    expect(checkContentDocumentLimits(markedTable)).toEqual([]);
+    expect(preflightContentDocumentStructure(markedTable)).toEqual([]);
+  });
+
+  it("leaves node-count rejection to the limits authority, not preflight (RC-04 boundary)", () => {
+    // 1100 paragraphs × 2 runs = 2200 grammar nodes > totalNodes(2000),
+    // ~105k serialized chars < serializedChars: the only authority that
+    // rejects this document is CONTENT_LIMITS — preflight must stay clean
+    // so the schema's own limit walker produces the violation.
+    const overNodeBudget = doc(
+      ...Array.from({ length: 1100 }, () => ({
+        type: "paragraph" as const,
+        content: [
+          { type: "text" as const, text: "abcde" },
+          { type: "text" as const, text: "fghij" },
+        ],
+      })),
+    );
+    expect(preflightContentDocumentStructure(overNodeBudget)).toEqual([]);
+    expect(
+      checkContentDocumentLimits(overNodeBudget).some((violation) =>
+        violation.includes("nodes"),
+      ),
+    ).toBe(true);
   });
 });

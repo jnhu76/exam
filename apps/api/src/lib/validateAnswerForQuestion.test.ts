@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { QuestionSnapshot } from "@exam/domain";
+import {
+  ContentDocumentV1Schema,
+  canonicalizeContentDocument,
+} from "@exam/contracts";
+import {
+  CONTENT_LIMITS,
+  normalizeContentDocument,
+  type ContentDocumentV1,
+  type QuestionSnapshot,
+} from "@exam/domain";
 import { validateAnswerForQuestion } from "./validateAnswerForQuestion.js";
 
 function snapshot(overrides: Partial<QuestionSnapshot>): QuestionSnapshot {
@@ -156,6 +165,207 @@ describe("validateAnswerForQuestion (#301 §21/§44)", () => {
         ok: true,
         value: null,
       });
+    }
+  });
+});
+
+describe("rich canonical closure (RC-03, #669 Phase D1)", () => {
+  const RICH = snapshot({
+    type: "text_response",
+    answerMode: "rich",
+    options: [],
+    standardAnswer: null,
+  });
+  const T = CONTENT_LIMITS.textRun;
+
+  /** One-paragraph document from text runs; runs merge when marks match. */
+  function runsDocument(
+    runs: Array<{ text: string; marks?: string[] }>,
+  ): ContentDocumentV1 {
+    return {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: runs.map((run) => ({
+            type: "text" as const,
+            text: run.text,
+            ...(run.marks ? { marks: run.marks as never[] } : {}),
+          })),
+        },
+      ],
+    };
+  }
+
+  it("rejects the PC-F01 merge-class seed before durable acceptance (#669/#686)", () => {
+    // The Phase-C minimized counterexample: two adjacent unmarked runs,
+    // each within textRun, whose canonical merge is a 20001-char run that
+    // ContentDocumentV1Schema rejects. Durable acceptance must decide on
+    // that canonical form, so the seed must be rejected, not persisted.
+    const seed = runsDocument([{ text: "a".repeat(T) }, { text: "b" }]);
+    expect(
+      ContentDocumentV1Schema.safeParse(normalizeContentDocument(seed)).success,
+    ).toBe(false);
+    expect(validateAnswerForQuestion(RICH, seed).ok).toBe(false);
+  });
+
+  it("keeps the canonical textRun boundary closed from both sides", () => {
+    // Largest accepted canonical form: two merged runs totalling exactly T.
+    const atLimit = validateAnswerForQuestion(
+      RICH,
+      runsDocument([{ text: "a".repeat(T - 1) }, { text: "b" }]),
+    );
+    expect(atLimit.ok).toBe(true);
+    if (atLimit.ok) {
+      expect(atLimit.value).toEqual(
+        runsDocument([{ text: "a".repeat(T - 1) + "b" }]),
+      );
+      expect(ContentDocumentV1Schema.safeParse(atLimit.value).success).toBe(
+        true,
+      );
+    }
+
+    // First rejected canonical boundary: one char past the limit exists
+    // only after the merge, never in any input run.
+    expect(
+      validateAnswerForQuestion(
+        RICH,
+        runsDocument([{ text: "a".repeat(T - 1) }, { text: "bc" }]),
+      ).ok,
+    ).toBe(false);
+
+    // A single run at the limit stays legal; one char more is not.
+    expect(
+      validateAnswerForQuestion(RICH, runsDocument([{ text: "a".repeat(T) }]))
+        .ok,
+    ).toBe(true);
+    expect(
+      validateAnswerForQuestion(
+        RICH,
+        runsDocument([{ text: "a".repeat(T + 1) }]),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("decides legality on the canonical form normalization produces", () => {
+    // Duplicate marks are schema-legal; canonicalization dedups them to
+    // ["bold"] AND merges adjacent runs, so the canonical text length is
+    // the sum. Exactly-at-limit merges stay legal; one char over is not.
+    const dup = (n: number) => Array(n).fill("bold");
+    const atLimit = validateAnswerForQuestion(
+      RICH,
+      runsDocument([
+        { text: "a".repeat(T - 1), marks: dup(3) },
+        { text: "b", marks: dup(2) },
+      ]),
+    );
+    expect(atLimit.ok).toBe(true);
+    if (atLimit.ok) {
+      expect(atLimit.value).toEqual(
+        runsDocument([{ text: "a".repeat(T - 1) + "b", marks: ["bold"] }]),
+      );
+    }
+    expect(
+      validateAnswerForQuestion(
+        RICH,
+        runsDocument([
+          { text: "a".repeat(T - 1), marks: dup(3) },
+          { text: "bc", marks: dup(2) },
+        ]),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("merge bridges only adjacent identical runs; hardBreak still separates (fixed point holds)", () => {
+    const separated: ContentDocumentV1 = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "a".repeat(T) },
+            { type: "hardBreak" },
+            { type: "text", text: "b" },
+          ],
+        },
+      ],
+    };
+    const result = validateAnswerForQuestion(RICH, separated);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const parsed = ContentDocumentV1Schema.safeParse(result.value);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        // RC-03 fixed point: canonicalizing an accepted canonical value
+        // again succeeds and changes nothing.
+        expect(normalizeContentDocument(parsed.data)).toEqual(parsed.data);
+      }
+    }
+  });
+
+  it("property: every accepted answer stays schema-legal after canonicalization (seeded, bounded)", () => {
+    // Generator only constructs candidates; acceptance and canonical
+    // legality are decided exclusively by production functions. Text-run
+    // lengths are boundary-biased so same-mark neighbours land around the
+    // merge limit. Seed 0x66900001 from the Phase-C campaign lineage.
+    let a = 0x66900001 >>> 0;
+    const rand = () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const intBetween = (lo: number, hi: number) =>
+      lo + Math.floor(rand() * (hi - lo + 1));
+    const pick = <T>(xs: readonly T[]): T =>
+      xs[Math.floor(rand() * xs.length)]!;
+
+    for (let i = 0; i < 300; i++) {
+      const candidate: ContentDocumentV1 = {
+        docVersion: 1,
+        type: "doc",
+        content: Array.from({ length: intBetween(1, 3) }, () => ({
+          type: "paragraph" as const,
+          content: Array.from({ length: intBetween(1, 4) }, () => {
+            const kind = pick([
+              "text",
+              "text",
+              "text",
+              "hardBreak",
+              "math",
+            ] as const);
+            if (kind === "hardBreak") return { type: "hardBreak" as const };
+            if (kind === "math")
+              return { type: "inlineMath" as const, latex: "x" };
+            const len =
+              rand() < 0.34
+                ? Math.max(1, Math.round(T / 2) + intBetween(-60, 60))
+                : intBetween(1, 40);
+            const marks = pick([
+              undefined,
+              ["bold"],
+              ["bold", "italic"],
+              ["bold", "bold"],
+              ["underline", "underline", "underline"],
+            ] as const);
+            return {
+              type: "text" as const,
+              text: "x".repeat(len),
+              ...(marks ? { marks: [...marks] } : {}),
+            };
+          }),
+        })),
+      };
+      const result = validateAnswerForQuestion(RICH, candidate);
+      if (result.ok) {
+        const parsed = ContentDocumentV1Schema.safeParse(result.value);
+        expect(
+          parsed.success,
+          `accepted candidate #${i} must stay legal after canonicalization`,
+        ).toBe(true);
+      }
     }
   });
 });
