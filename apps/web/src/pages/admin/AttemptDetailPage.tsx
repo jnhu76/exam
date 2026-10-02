@@ -231,11 +231,13 @@ type AttemptResultResponse =
 /** Attempt statuses an admin may flag for misconduct. */
 const FLAGGABLE_STATUSES = new Set(["in_progress", "disrupted"]);
 
-/** Converts an answer value to a display-friendly string. Rich documents (issue 301) collapse to their plain-text projection for the compact table cells — but only when the FROZEN answerMode is rich (issue 301 corrective pass), and only after the document passes the bounded preflight (the projection itself recurses). */
+/** Converts an answer value to a display-friendly string. Rich documents (issue 301) collapse to their plain-text projection for the compact table cells — but only when the FROZEN answerMode is rich (issue 301 corrective pass), and only after the read authority accepts the document. A rich-mode value the authority cannot interpret keeps the integrity notice; it must not masquerade as a plain answer (§7 read contract). */
 function formatAnswer(value: unknown, answerMode?: string | null): string {
   if (value == null) return "—";
   const richDocument = resolveRichAnswerDocument(value, answerMode);
   if (richDocument) return plainTextProjection(richDocument);
+  if (answerMode === "rich")
+    return i18n.t("content.unsupportedAnswer" as never);
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.join(", ");
   return String(value);
