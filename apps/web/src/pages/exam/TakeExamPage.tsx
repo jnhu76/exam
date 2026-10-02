@@ -1139,12 +1139,12 @@ export function TakeExamPage() {
             {!view.isLocked && view.timingMode === "deadline" && (
               <div
                 data-testid="deadline-static"
-                className="rounded-md border border-border bg-card px-3 py-1.5 text-right"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3"
               >
-                <div className="type-metadata">
+                <span className="type-metadata">
                   {t("candidateRuntime.timer.cutoff")}
-                </div>
-                <span className="type-numeric text-sm font-medium leading-tight">
+                </span>
+                <span className="type-numeric text-sm font-medium">
                   {view.effectiveDeadline
                     ? formatDateTime(view.effectiveDeadline)
                     : "—"}
@@ -1154,7 +1154,7 @@ export function TakeExamPage() {
             {!view.isLocked && view.timingMode === "untimed" && (
               <div
                 data-testid="untimed-badge"
-                className="rounded-md border border-border bg-card px-3 py-1.5"
+                className="inline-flex h-9 items-center rounded-md border border-border bg-card px-3"
               >
                 <span className="type-metadata">
                   {t("candidateRuntime.timer.untimed")}

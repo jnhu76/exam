@@ -95,13 +95,15 @@ describe("ExamTimer", () => {
     expect(onTimeout).toHaveBeenCalledOnce();
   });
 
-  // Characterization (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §14): the timer renders a
-  // compact remaining-time label and a zero-padded MM:SS numeric value. The
-  // label uses the type-metadata recipe; the value uses a mono tabular-numeric
-  // stack. These tests pin the durable content/structure/role invariants, not
-  // the old arbitrary text-[11px] class (retired in W4A) nor the dead
-  // leading-none companion (removed in RECON-1 — type-metadata owns line-height
-  // under cascade policy A, so leading-none was ineffective and contradictory).
+  // Characterization (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §14, re-pinned by #675):
+  // the timer renders as a single-line h-9 chip — a compact remaining-time
+  // type-metadata label beside a mono tabular-numeric MM:SS value — sharing
+  // the Button system's control geometry with the save indicator and the
+  // submit button in the topbar row. These tests pin the durable
+  // content/structure/role invariants, not a specific font-size utility on
+  // the value (the old arbitrary text-[11px] class retired in W4A; the dead
+  // leading-none companion was removed in RECON-1 — type-metadata owns
+  // line-height under cascade policy A).
   it("renders the remaining-time label alongside the MM:SS value", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
@@ -134,16 +136,33 @@ describe("ExamTimer", () => {
 
     const label = screen.getByText("剩余时间");
     const value = screen.getByText("30:00");
-    // The label and value are separate elements, preserving numeric/label
-    // hierarchy: the label is the compact secondary text, the value is the
-    // prominent numeric.
-    expect(label.tagName).toBe("DIV");
+    // Single-line layout (#675): label and value are sibling inline spans in
+    // one row, preserving the numeric/label hierarchy — the label is the
+    // compact secondary text, the value is the prominent numeric.
+    expect(label.tagName).toBe("SPAN");
     expect(value.tagName).toBe("SPAN");
     // The numeric value owns the tabular-nums numeric role via the type-numeric
-    // recipe (its defining property); the label does not. This is the durable
-    // role distinction that survives the label's typography-recipe migration.
+    // recipe (its defining property); the label stays on the type-metadata
+    // recipe. This is the durable role distinction that survives the layout
+    // change.
     expect(value.className).toContain("type-numeric");
+    expect(label.className).toContain("type-metadata");
     expect(label.className).not.toContain("type-numeric");
+  });
+
+  // #675: the timer shares the Button system's h-9 control geometry with the
+  // adjacent save indicator and submit button. The height is fixed on the
+  // chip itself — not derived from vertical padding — so the row stays
+  // height-aligned regardless of content.
+  it("uses the established h-9 control geometry, not padding-derived height", () => {
+    const { container } = render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    const wrapper = container.firstElementChild;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper!.className).toContain("h-9");
+    expect(wrapper!.className).not.toMatch(/\bpy-/);
   });
 
   it("activates the low-time state at the 300s threshold", () => {

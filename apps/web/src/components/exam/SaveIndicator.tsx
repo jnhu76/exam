@@ -42,6 +42,11 @@ const stateIconMap: Record<SaveState, LucideIcon> = {
 /**
  * Inline indicator showing the current answer save status
  * (idle, saving, saved, or error) with an icon and label.
+ *
+ * INVARIANT: h-9 is the Button system's control height (#675) — the
+ * take-page topbar row aligns this chip, the exam timer, and the submit
+ * button on one shared geometry. States change only data-feedback-tone
+ * (color), never geometry.
  */
 export function SaveIndicator({
   state,
@@ -58,7 +63,7 @@ export function SaveIndicator({
   return (
     <span
       data-feedback-tone={stateToneMap[resolved]}
-      className="inline-flex min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium"
+      className="inline-flex h-9 min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-medium"
     >
       <AppIcon
         icon={Icon}
