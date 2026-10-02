@@ -2,7 +2,13 @@ import { useEffect, useRef } from "react";
 import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
-import { NodeSelection, Plugin, PluginKey, Selection } from "@tiptap/pm/state";
+import {
+  NodeSelection,
+  Plugin,
+  PluginKey,
+  Selection,
+  TextSelection,
+} from "@tiptap/pm/state";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import type { Transform } from "@tiptap/pm/transform";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -137,12 +143,16 @@ const MATH_NODE_NAMES = new Set(["blockMath", "inlineMath"]);
  *   - "nearest" (RESTORE): adoption of a persisted draft only needs a safe
  *     caret; the nearest text cursor wins, backward included.
  *   - "after" (OPERATIONS that produce or move a formula): prose typed next
- *     must CONTINUE AFTER the formula. Backward search is forbidden — text
- *     landing ahead of a just-produced formula reorders the answer — so when
- *     no text cursor lies ahead, a paragraph is appended directly after the
- *     atom as the typing landing zone. The anchor is the operation-PRODUCED
- *     atom, not merely the selected one: input rules anchor at the receipt's
- *     replacement because their mapped selection can drift onto a neighbour.
+ *     must CONTINUE DIRECTLY AFTER the formula — the caret takes the text
+ *     position at the atom's end or the paragraph flush against it, and when
+ *     neither exists a landing paragraph is appended at the atom's end. The
+ *     scan never crosses a block (#681 review F6): reaching a distant
+ *     paragraph past a neighbouring formula/list/table moves the candidate's
+ *     typing across blocks they did not type past. Backward search is
+ *     forbidden — text landing ahead of a just-produced formula reorders the
+ *     answer. The anchor is the operation-PRODUCED atom, not merely the
+ *     selected one: input rules anchor at the receipt's replacement because
+ *     their mapped selection can drift onto a neighbour.
  *
  * The text-only scan skips atoms, so a neighbouring formula is never
  * selected. The landing paragraph is editor-only: it canonicalizes away on
@@ -216,22 +226,42 @@ function implicitMathSelectionFix(
   if (!MATH_NODE_NAMES.has(selection.node.type.name)) return null;
   const tr = state.tr;
   const atomEnd = producedMathEnd ?? selection.to;
-  const forward = Selection.findFrom(doc.resolve(atomEnd), 1, true);
-  if (forward) {
-    tr.setSelection(forward);
-    return tr;
-  }
-  if (landing === "nearest") {
+  const $end = doc.resolve(atomEnd);
+  if (landing === "after") {
+    // INVARIANT (#681 review F4/F6): continuation is DIRECTLY after the
+    // operation-produced formula. The caret takes the text position at the
+    // atom's end (inline atoms) or the paragraph flush against it; when
+    // neither exists, a landing paragraph is appended at the atom's end. No
+    // unrestricted scan — textOnly findFrom skips atoms, so a distant
+    // paragraph past a neighbouring formula/list/table would move the
+    // candidate's typing across blocks they did not type past.
+    if ($end.parent.inlineContent) {
+      tr.setSelection(TextSelection.create(doc, atomEnd));
+      return tr;
+    }
+    const next = $end.nodeAfter;
+    if (next?.type === schema.nodes.paragraph) {
+      tr.setSelection(TextSelection.create(doc, atomEnd + 1));
+      return tr;
+    }
+  } else {
+    // Restore only needs a safe caret: the nearest text cursor wins,
+    // backward included.
+    const forward = Selection.findFrom($end, 1, true);
+    if (forward) {
+      tr.setSelection(forward);
+      return tr;
+    }
     const backward = Selection.findFrom(doc.resolve(selection.from), -1, true);
     if (backward) {
       tr.setSelection(backward);
       return tr;
     }
   }
-  // No text cursor ahead of the atom — give ordinary typing a landing zone
-  // it cannot replace. Restore adopts the document as a whole and parks the
-  // caret at the document end; operations own the atom they produced, so
-  // their landing zone goes directly after it (see the policy note above).
+  // No text cursor directly ahead of the atom — give ordinary typing a
+  // landing zone it cannot replace. Operations append it directly after the
+  // atom (see the policy note above); restore, adopting the document as a
+  // whole, parks the caret at the document end.
   const insertPos = landing === "after" ? atomEnd : doc.content.size;
   const paragraph = schema.nodes.paragraph?.create();
   if (!paragraph) return null;

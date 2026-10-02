@@ -814,6 +814,35 @@ describe("#673 C15 input-rule boundary — typed $$ / $$$ rules never leave a se
     editor.destroy();
   });
 
+  it("$$$x^2$$$ typed before formula+prose: text continues DIRECTLY after the new formula", () => {
+    // #681 review F6: the "after" continuation must not CROSS the
+    // neighbouring atom to reach a distant textblock — textOnly findFrom
+    // skips atoms, so the prose typed after the produced formula landed past
+    // the neighbour, inside 后文. Directly after means the paragraph flush
+    // against the atom, or a landing paragraph appended at the atom's end.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [] },
+        { type: "blockMath", attrs: { latex: "y^2" } },
+        { type: "paragraph", content: [{ type: "text", text: "后文" }] },
+      ],
+    });
+    editor.commands.setTextSelection(1); // inside the leading paragraph
+    typeText(editor, "$$$x^2$$$");
+    expect(blockLatexes(editor)).toEqual(["x^2", "y^2"]);
+    expect(editor.state.selection instanceof NodeSelection).toBe(false);
+    typeChar(editor, "答");
+    const doc = tiptapToContentDocument(editor.getJSON());
+    expect(doc.content).toEqual([
+      { type: "blockMath", latex: "x^2" },
+      { type: "paragraph", content: [{ type: "text", text: "答" }] },
+      { type: "blockMath", latex: "y^2" },
+      { type: "paragraph", content: [{ type: "text", text: "后文" }] },
+    ]);
+    editor.destroy();
+  });
+
   it("Backspace right after the block rule undoes it: typed source restored", () => {
     // #681 review F2: tiptap's Backspace binding runs undoInputRule() first,
     // which replays the input-rules plugin's stored undo receipt. The plugin
