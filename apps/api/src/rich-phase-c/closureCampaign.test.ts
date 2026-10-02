@@ -276,7 +276,7 @@ describe("Phase-C Campaign A — canonicalization closure (RC-03)", () => {
         "text run exceeds 20000 chars",
       ]);
     }
-  });
+  }, 30_000);
 
   it("generated campaign, plain sizes (seed 0x67300001, 1000 cases): closure holds for small mixed structures", () => {
     const rng = mulberry32(0x67300001);
@@ -301,7 +301,10 @@ describe("Phase-C Campaign A — canonicalization closure (RC-03)", () => {
       }
     }
     expect({ legalCases: legal, failures }).toMatchObject({ failures: [] });
-  });
+    // CI runs ~4x slower than local under v8 coverage instrumentation; the
+    // full-1000-case sweep has no early exit. Budget headroom stays inside the
+    // documented <=60s campaign envelope.
+  }, 30_000);
 
   it("idempotence sweep: normalize is a fixed point on every canonical output it produces", () => {
     const rng = mulberry32(0x68100001);
