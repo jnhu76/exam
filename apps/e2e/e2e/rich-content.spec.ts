@@ -755,8 +755,11 @@ test.describe("#673 C13 — paste/drag math boundaries in the real editor", () =
     await page.keyboard.press("ControlOrMeta+v");
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
     // The destruction trigger pre-repair: the paste left the copy
-    // NodeSelected, so this keystroke replaced it with plain text.
-    await page.keyboard.type("证毕 ");
+    // NodeSelected, and the leading ASCII keystroke replaces it with plain
+    // text (CJK input goes through the DOM-change path, which does not
+    // reliably destroy a selected atom — the oracle needs the keypress
+    // path, so the first keys are ASCII; CJK prose may follow them).
+    await page.keyboard.type("ok 证毕 ");
     await waitForSaveSaved(page);
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
     expect(
@@ -785,9 +788,10 @@ test.describe("#673 C13 — paste/drag math boundaries in the real editor", () =
     });
     // The move relocates the (single) formula — it must still be there.
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
-    // prosemirror-view NodeSelects a dropped node; this keystroke used to
-    // destroy it.
-    await page.keyboard.type("移动后继续作答 ");
+    // prosemirror-view NodeSelects a dropped node; the leading ASCII
+    // keystroke used to destroy it via the keypress path (CJK input does
+    // not reliably exercise that destruction — see the paste test above).
+    await page.keyboard.type("ok 移动后继续作答 ");
     await waitForSaveSaved(page);
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
     expect(
