@@ -417,7 +417,18 @@ raw / source / mode / integrity / projection
 ```
 
 but exact field names are API / implementation design unless already frozen by
-an external contract. They are left for Phase D if not already required.
+an external contract.
+
+As-built (Phase D4): the JSON attempt export keeps the raw `candidateAnswer`
+as the authoritative evidence and adds `candidateAnswerMode` /
+`candidateAnswerIntegrity` / `candidateAnswerProjection` per question result;
+the CSV attempt export appends `考生答案模式` / `考生答案状态` after its frozen
+columns and renders its answer cell from the classified projection — never
+from the raw value — so `unsupported_version` / `corrupt` cells carry the
+not-applicable marker instead of stored text. Both routes classify through the
+shared persisted-answer classifier against the frozen snapshot `answerMode`
+(§7); the export seam owns representation only and does not re-derive Rich
+semantics from the runtime shape.
 
 Required invariant:
 
@@ -487,6 +498,7 @@ are not moved into this semantic contract.
 | --- | --- |
 | Rich V1 grammar, limits, normalization, equivalence | This document + [`packages/domain/src/content/contentDocument.ts`](../../packages/domain/src/content/contentDocument.ts) implementation |
 | Wire schema / type identity | [`packages/contracts/src/contentDocument.ts`](../../packages/contracts/src/contentDocument.ts) |
+| Persisted-answer read classification (§7) | [`packages/contracts/src/persistedRichAnswer.ts`](../../packages/contracts/src/persistedRichAnswer.ts) — the single shared classifier consumed by web read paths and API export (Phase D4) |
 | Cross-boundary Exam semantics | [`exam-semantic-boundaries.md`](exam-semantic-boundaries.md) / ADR-021 |
 | Product capability composition | [`product-capability-composition.md`](product-capability-composition.md) / ADR-022 |
 | Attempt lifecycle / SaveAnswer / submit / grading / result | [`exam-runtime.md`](exam-runtime.md), ADR-005, ADR-006, ADR-008, ADR-012 |
