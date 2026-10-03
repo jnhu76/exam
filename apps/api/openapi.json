@@ -33924,6 +33924,26 @@
                             "type": "string"
                           },
                           "candidateAnswer": {},
+                          "candidateAnswerMode": {
+                            "type": "string",
+                            "enum": ["plain", "rich"]
+                          },
+                          "candidateAnswerIntegrity": {
+                            "type": "string",
+                            "enum": [
+                              "empty",
+                              "plain",
+                              "legacy_plain",
+                              "rich_valid",
+                              "rich_noncanonical",
+                              "unsupported_version",
+                              "corrupt"
+                            ]
+                          },
+                          "candidateAnswerProjection": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "standardAnswer": {},
                           "score": {
                             "type": "number",
@@ -33937,7 +33957,15 @@
                             "nullable": true
                           }
                         },
-                        "required": ["order", "type", "content", "maxScore"],
+                        "required": [
+                          "order",
+                          "type",
+                          "content",
+                          "candidateAnswerMode",
+                          "candidateAnswerIntegrity",
+                          "candidateAnswerProjection",
+                          "maxScore"
+                        ],
                         "additionalProperties": false
                       }
                     }

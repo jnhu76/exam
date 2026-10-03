@@ -1,5 +1,5 @@
 import { plainTextToDocument } from "@exam/domain";
-import { classifyPersistedRichAnswer } from "@/components/shared/content/richAnswer";
+import { classifyPersistedRichAnswer } from "@exam/contracts";
 import { RichContentEditorLazy } from "@/components/shared/content/RichContentEditorLazy";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useTranslation } from "react-i18next";
