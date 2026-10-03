@@ -5,6 +5,7 @@ import { render } from "@testing-library/react";
 import type { ContentBlock, ContentDocumentV1 } from "@exam/domain";
 import { describe, expect, it } from "vitest";
 import { ContentRenderer } from "./ContentRenderer";
+import { ContentDocumentRenderer } from "./ContentDocumentRenderer";
 import { MathRenderer } from "./MathRenderer";
 
 /**
@@ -20,6 +21,13 @@ import { MathRenderer } from "./MathRenderer";
  * These assertions are structural (DOM shape), not behavioral: jsdom never
  * executes injected handlers anyway, so "no on* attribute / no script element"
  * is the actual invariant we can prove here.
+ *
+ * Layering (#669 Phase D5-A): schema/limit-offending documents are rejected
+ * by the ContentRenderer trust boundary before rendering (see
+ * ContentRenderer.trust.test.tsx). The per-node fail-safes below are
+ * defense in depth: they pin ContentDocumentRenderer's own behavior for
+ * documents it would receive only if the boundary were bypassed, so a
+ * boundary regression can never silently turn into raw-HTML or crash output.
  */
 
 function doc(blocks: ContentBlock[]): ContentDocumentV1 {
@@ -102,6 +110,9 @@ describe("ContentRenderer — hostile HTML-looking strings stay inert text", () 
   });
 
   it("rich text runs render hostile strings as escaped text, including inside marks", () => {
+    // Marks are a valid combination (the grammar forbids inlineCode + other
+    // marks; that off-grammar case fails closed at the trust boundary — see
+    // ContentRenderer.trust.test.tsx D5A-R5).
     const hostileDoc = doc([
       para('<iframe src="javascript:alert(1)"></iframe>'),
       {
@@ -110,7 +121,7 @@ describe("ContentRenderer — hostile HTML-looking strings stay inert text", () 
           {
             type: "text",
             text: "<img src=x onerror=alert(1)>",
-            marks: ["bold", "italic", "underline", "inlineCode"],
+            marks: ["bold", "italic", "underline"],
           },
         ],
       },
@@ -192,7 +203,7 @@ describe("ContentRenderer — hostile HTML-looking strings stay inert text", () 
   });
 });
 
-describe("ContentRenderer — corrupt-data fail-safes", () => {
+describe("ContentDocumentRenderer — defense-in-depth fail-safes (boundary bypassed)", () => {
   const UNSUPPORTED = "此内容包含当前版本不支持的元素";
 
   it("replaces an unknown block node with the controlled placeholder", () => {
@@ -201,7 +212,7 @@ describe("ContentRenderer — corrupt-data fail-safes", () => {
       para("after"),
     ] as unknown as ContentBlock[]);
     const { container } = render(
-      <ContentRenderer content="" document={hostile} />,
+      <ContentDocumentRenderer document={hostile} />,
     );
     expect(container.textContent).toContain(UNSUPPORTED);
     expect(container.textContent).toContain("after");
@@ -210,8 +221,7 @@ describe("ContentRenderer — corrupt-data fail-safes", () => {
 
   it("drops an unknown inline node and ignores an unknown mark while keeping sibling content", () => {
     const { container } = render(
-      <ContentRenderer
-        content=""
+      <ContentDocumentRenderer
         document={doc([
           {
             type: "paragraph",
@@ -239,7 +249,19 @@ describe("ContentRenderer — corrupt-data fail-safes", () => {
     expect(container.querySelector("strong")?.textContent).toBe("styled");
   });
 
-  it("survives corrupt oversize input (deep tree, huge text run) without crashing", () => {
+  it("renders an oversize text run as escaped verbatim text if it is ever reached", () => {
+    const huge = "<script>".repeat(20000);
+    const { container } = render(
+      <ContentDocumentRenderer document={doc([para(huge)])} />,
+    );
+    assertInert(container);
+  });
+});
+
+describe("ContentRenderer — boundary fail-closed on oversize/hostile-structured documents", () => {
+  it("survives corrupt oversize input (deep tree, huge text run) through the trust boundary without crashing", () => {
+    // Beyond CONTENT_LIMITS.depth (16): the trust resolver rejects the tree
+    // before the renderer ever walks it.
     let block: ContentBlock = para("leaf");
     for (let i = 0; i < 60; i++) {
       block = {
@@ -250,15 +272,21 @@ describe("ContentRenderer — corrupt-data fail-safes", () => {
     const { container, unmount } = render(
       <ContentRenderer content="" document={doc([block])} />,
     );
-    expect(container.textContent).toContain("leaf");
-    assertInert(container);
+    expect(
+      container.querySelector("[data-testid='content-integrity-notice']"),
+    ).not.toBeNull();
     unmount();
 
+    // Beyond CONTENT_LIMITS.textRun (20000): same boundary rejection.
     const huge = "<script>".repeat(20000);
     const hugeRender = render(
       <ContentRenderer content="" document={doc([para(huge)])} />,
     );
-    assertInert(hugeRender.container);
+    expect(
+      hugeRender.container.querySelector(
+        "[data-testid='content-integrity-notice']",
+      ),
+    ).not.toBeNull();
     hugeRender.unmount();
   });
 });

@@ -1194,3 +1194,104 @@ test.describe("editor identity, reconciliation, grading closure", () => {
     expect(JSON.stringify(finalAnswer)).not.toContain("丁作答");
   });
 });
+
+test.describe("#669 D5 math render security (browser evidence)", () => {
+  /**
+   * jsdom cannot prove "no network fetch is initiated by math rendering"
+   * (D5-B M5): this test renders trust-disallowed / remote-referencing /
+   * HTML-like latex through the real static read path in a real browser and
+   * asserts the page initiates zero cross-origin requests and mounts no
+   * active/remote element for the adversarial payload. Complements the
+   * library-level characterization in
+   * apps/web/src/components/shared/content/MathRenderer.evidence.test.tsx.
+   */
+  test("adversarial math renders inert with zero external network fetches", async ({
+    page,
+    request,
+  }) => {
+    const adminToken = await adminApiToken(request);
+    const courseId = await seedCourseId(request, adminToken);
+    const createRes = await adminPost(request, adminToken, "/api/questions", {
+      courseId,
+      score: 5,
+      difficulty: 1,
+      type: "single_choice",
+      contentDocument: {
+        docVersion: 1,
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: `D5B安全-${STAMP}：` },
+              {
+                type: "inlineMath",
+                latex:
+                  "\\includegraphics[width=5em]{https://evil.example/x.png}",
+              },
+            ],
+          },
+          {
+            type: "blockMath",
+            latex:
+              "\\href{https://evil.example}{click}<img src=x onerror=alert(1)>",
+          },
+        ],
+      },
+      options: [
+        {
+          id: "opt-a",
+          content: "选项A",
+          contentDocument: null,
+          isCorrect: true,
+        },
+        {
+          id: "opt-b",
+          content: "选项B",
+          contentDocument: null,
+          isCorrect: false,
+        },
+      ],
+      standardAnswer: "opt-a",
+      rubric: null,
+    });
+    expect(createRes.status(), await createRes.text()).toBe(201);
+    const { id: questionId } = (await createRes.json()) as { id: string };
+
+    // Record every http(s) request the real browser issues while the
+    // adversarial prompt renders; anything not aimed at the app origin is a
+    // violation of the no-remote-content invariant.
+    const externalRequests: string[] = [];
+    page.on("request", (req) => {
+      const url = new URL(req.url());
+      if (
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        url.origin !== BASE_URL
+      ) {
+        externalRequests.push(req.url());
+      }
+    });
+
+    await loginAsAdmin(page);
+    await page.goto(`${BASE_URL}/admin/questions/${questionId}/edit`);
+
+    // The adversarial math renders its inert projection on the real read
+    // path (the trust-disallowed command stays as visible token text).
+    await expect(page.locator(".katex").first()).toBeVisible();
+    await expect(
+      page.getByText("\\includegraphics", { exact: false }).first(),
+    ).toBeVisible();
+
+    // No active/remote node may reference the adversarial payload anywhere
+    // on the page.
+    await expect(page.locator("img[src*='evil.example']")).toHaveCount(0);
+    await expect(page.locator("a[href*='evil.example']")).toHaveCount(0);
+    await expect(
+      page.locator("iframe, frame, object, embed, applet"),
+    ).toHaveCount(0);
+
+    // The strongest form of the no-remote-content property: the whole page
+    // loaded without a single cross-origin request.
+    expect(externalRequests, `${externalRequests.join("\n")}`).toEqual([]);
+  });
+});

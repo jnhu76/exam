@@ -981,6 +981,7 @@ Error: Test timed out in 5000ms.
 
 - 2026-07-25：P5-N1 review 修复阶段，`pnpm verify` 全量 coverage 下单次出现（1/1598），standalone 立即 3/3 PASS（1.2s）。
 - 2026-09-19：#550 corrective-1 campaign 门禁（`pnpm test`，plain turbo 无 coverage）单次出现——同机数分钟前刚结束 95-min production-mode soak 测量，turbo 15 包并行负载击穿 5s 默认 testTimeout；standalone `npx vitest run tests/concurrency/ea-lock-order.test.ts` 立即 3/3 PASS（tests 1.8s），全量 `pnpm test` 复跑 EXIT=0（2,813 passed / 12 skipped）。与 2026-08-31 条目同机制（宿主负载型，操作背景引入），无代码改动、不调 timeout、不 skip。
+- 2026-10-03：#669 Phase D5 门禁（`pnpm verify`，coverage + `API_TEST_MAX_WORKERS=4`）单次出现，错误与 2026-07-25 首次登记完全一致（`Test timed out in 5000ms` @ `tests/concurrency/ea-lock-order.test.ts:292`）；standalone 立即 3/3 PASS（tests 1.5s）。与 D5 改动（Rich 静态读信任、KaTeX 证据、文档）无因果，机制同前两条（coverage 插桩 + 并行负载），无代码改动、不调 timeout、不 skip；全量 verify 复跑通过。
 
 ---
 
