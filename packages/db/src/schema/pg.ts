@@ -45,6 +45,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -2482,6 +2483,75 @@ export const attemptCommandReceipts = pgTable(
 );
 
 /**
+ * SaveAnswer replay receipts (#669 Phase D2) — the idempotency state of the
+ * answer save protocol, one immutable row per accepted
+ * (attempt, question, clientSeq) replay key.
+ *
+ * INVARIANT (frozen replay semantics, rich-content-semantic-contract §12):
+ * during the mutable lifetime of an Attempt an accepted clientSeq MUST NOT
+ * silently become unknown. There is deliberately NO retention bound: no TTL,
+ * no LRU, no window eviction. Rows survive past the attempt's terminal state;
+ * removal happens only through the attempt cascade (no independent GC).
+ *
+ * Identity representation: `answer_identity` holds the sha256 hex of the
+ * deterministic serialization of the D1-accepted canonical answer. It is the
+ * storage representation of canonical identity, not its semantic definition
+ * (structural identity after normalization stays the Rich authority).
+ * Pre-D2 rows backfilled from the JSONB receipt history carry the legacy
+ * payload in `legacy_answer` instead (bounded compatibility source; identity
+ * is derived at read time and never written back) — exactly one of the two
+ * representations is present per row (CHECK).
+ *
+ * The composite PK is the protocol invariant "one replay key → at most one
+ * accepted canonical identity", enforced in the database, and doubles as the
+ * O(1) replay-lookup index (org+attempt equality prefix).
+ */
+export const examAnswerSaveReceipts = pgTable(
+  "exam_answer_save_receipts",
+  {
+    organizationId: text("organization_id").notNull(),
+    attemptId: text("attempt_id").notNull(),
+    questionId: text("question_id").notNull(),
+    clientSeq: integer("client_seq").notNull(),
+    answerIdentity: text("answer_identity"),
+    legacyAnswer: jsonb("legacy_answer"),
+    acceptedVersion: integer("accepted_version").notNull(),
+    savedAt: timestamp("saved_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.organizationId,
+        table.attemptId,
+        table.questionId,
+        table.clientSeq,
+      ],
+      name: "exam_answer_save_receipts_pk",
+    }),
+    check(
+      "exam_answer_save_receipts_client_seq_check",
+      sql`${table.clientSeq} >= 0`,
+    ),
+    check(
+      "exam_answer_save_receipts_identity_repr_check",
+      sql`(${table.answerIdentity} IS NOT NULL AND ${table.legacyAnswer} IS NULL)
+        OR (${table.answerIdentity} IS NULL AND ${table.legacyAnswer} IS NOT NULL)`,
+    ),
+    // Receipts are protocol metadata of their attempt, not independent
+    // evidence: they follow the attempt row's lifetime (cascade on delete),
+    // unlike attempt_command_receipts which are audit-grade (no action).
+    foreignKey({
+      columns: [table.organizationId, table.attemptId],
+      foreignColumns: [examAttempts.organizationId, examAttempts.id],
+      name: "exam_answer_save_receipts_org_attempt_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
  * Durable exam admission membership (requireQueue runtime).
  *
  * PROCESS MEMORY IS NOT PRODUCT STATE: admission authority lives only in this
@@ -2706,6 +2776,7 @@ export const schema = {
   teacherCourseAssignments,
   graderExamAssignments,
   attemptCommandReceipts,
+  examAnswerSaveReceipts,
   examAdmissions,
   backupRuns,
   backupRunEvents,
