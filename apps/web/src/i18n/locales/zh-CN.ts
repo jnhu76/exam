@@ -132,6 +132,7 @@ const zhCN = {
     unsupportedBlock: "此内容包含当前版本不支持的元素",
     unsupportedAnswer: "此作答内容无法以富文本安全显示",
     unsafeEditableAnswer: "此作答内容无法安全加载编辑",
+    unsafeDocument: "此内容无法安全显示",
     mathLoading: "公式加载中",
     mode: {
       label: "内容模式",
