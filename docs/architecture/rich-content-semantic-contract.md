@@ -456,6 +456,21 @@ Phase-E acceptance requires permanent executable evidence for:
 - bounded expansion / resource usage;
 - no active / remote content path.
 
+As-built (Phase D5): every static prompt / option read path classifies a
+non-null `contentDocument` through the shared static read authority
+(`packages/contracts/src/persistedQuestionContent.ts`) inside
+`ContentRenderer` before any document rendering — only `rich_valid` /
+`rich_noncanonical` (read-only DISPLAY) reach the document renderer;
+`unsupported_version` / `corrupt` fail closed to a controlled integrity
+notice and never fall back to the plain `content` projection. Math
+rendering goes through one encapsulated KaTeX seam with trust disabled and
+explicit expansion / size bounds (implementation parameters, not frozen
+vocabulary). The permanent executable evidence lives at the library /
+React-seam / composition layers in
+`apps/web/src/components/shared/content/MathRenderer.evidence.test.tsx`
+and at the browser network level in `apps/e2e/e2e/rich-content.spec.ts`
+(D5 math render security).
+
 ## 16. Audit / telemetry
 
 Audit / telemetry must not become a second answer-persistence surface. Raw Rich
@@ -499,6 +514,7 @@ are not moved into this semantic contract.
 | Rich V1 grammar, limits, normalization, equivalence | This document + [`packages/domain/src/content/contentDocument.ts`](../../packages/domain/src/content/contentDocument.ts) implementation |
 | Wire schema / type identity | [`packages/contracts/src/contentDocument.ts`](../../packages/contracts/src/contentDocument.ts) |
 | Persisted-answer read classification (§7) | [`packages/contracts/src/persistedRichAnswer.ts`](../../packages/contracts/src/persistedRichAnswer.ts) — the single shared classifier consumed by web read paths and API export (Phase D4) |
+| Static question-content read classification (§7) | [`packages/contracts/src/persistedQuestionContent.ts`](../../packages/contracts/src/persistedQuestionContent.ts) — consumed by the `ContentRenderer` render trust boundary (Phase D5) |
 | Cross-boundary Exam semantics | [`exam-semantic-boundaries.md`](exam-semantic-boundaries.md) / ADR-021 |
 | Product capability composition | [`product-capability-composition.md`](product-capability-composition.md) / ADR-022 |
 | Attempt lifecycle / SaveAnswer / submit / grading / result | [`exam-runtime.md`](exam-runtime.md), ADR-005, ADR-006, ADR-008, ADR-012 |
