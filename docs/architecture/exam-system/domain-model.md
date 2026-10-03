@@ -262,7 +262,7 @@ The following fields are written by `publishExam()` and MUST NOT change after pu
 
 Each `AnswerRecord` in `answers` carries a monotonic `version` field. The Save Answer protocol uses `baseVersion` for optimistic concurrency: a save with `baseVersion < currentVersion` is rejected as `STALE_VERSION`.
 
-Idempotency is tracked by `clientSeq`: the pair `(questionId, clientSeq)` is stored in `clientSeqHistory` and checked for replay. Same key + same payload = idempotent replay (accepted, no write). Same key + different payload = `CONFLICTING_PAYLOAD`.
+Idempotency is tracked by `clientSeq`: every accepted save persists one immutable replay receipt for its `(organization, attempt, questionId, clientSeq)` key in `exam_answer_save_receipts` (#669 Phase D2), and replay is recognized by looking up the request's key in that table. Same key + same canonical answer identity = idempotent replay (accepted, no write). Same key + different canonical answer identity = `CONFLICTING_PAYLOAD`. The legacy inline `clientSeq` / `clientSeqHistory` JSONB fields are migration representation only: migration 0044 backfilled them into the receipt table and stripped them from the draft records; current code never writes them.
 
 ### 8.5 Submitted answer authority
 

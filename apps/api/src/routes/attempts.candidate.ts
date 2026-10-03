@@ -912,11 +912,13 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const exam = examRow as unknown as Exam;
 
       // D2 (#669): accepted clientSeq bookkeeping lives in
-      // exam_answer_save_receipts, not the draft JSONB. Receipts are
-      // append-only with monotonically growing clientSeq under the EA lock,
-      // so reading them after the reconciliation transaction commits sees a
-      // quiescent, complete view — restored+1 can never collide with an
-      // accepted key.
+      // exam_answer_save_receipts, not the draft JSONB. MAX(clientSeq)
+      // seeds the client's next key above every receipt visible at this
+      // read. The read is NOT a concurrency snapshot: the server does not
+      // enforce clientSeq monotonicity, and a save accepted after this
+      // query may consume a later key. That race stays fail-closed — the
+      // colliding key resolves through the frozen replay/conflict protocol
+      // (known replay or CONFLICTING_PAYLOAD), never a silent overwrite.
       const clientSeqByQuestion = await createAttemptRepo(
         fastify.db,
       ).findMaxClientSeqByQuestion(ctx, attempt.id);

@@ -241,7 +241,7 @@ Limitations of the current identity:
   to reproduce the same `clientSeq` for replay.
 - There is no server-issued receipt identity separate from the composite key.
 
-### Target semantic identity (TARGET — OPEN_DECISION, owned by REC-I2a)
+### Target semantic identity (TARGET — REC-I2a RESOLVED, see amendment)
 
 The target protocol requires:
 
@@ -254,6 +254,14 @@ to use the existing `(attemptId, questionId, clientSeq)` composite identity
 with enhanced validation, is an **OPEN_DECISION** owned by REC-I2a. REC-I1
 must NOT embed a specific operationId format into the IndexedDB schema before
 this decision is frozen.
+
+> **D2 amendment (#669 Phase D2 — REC-I2a resolution)**: the operationId
+> decision is RESOLVED: the mechanism retains the composite
+> `(attemptId, questionId, clientSeq)` identity with enhanced validation
+> (strict baseVersion / `FUTURE_VERSION` rejection; replay receipts in
+> `exam_answer_save_receipts`), and no separate `operationId` wire field is
+> introduced. The OPEN_DECISION statements in this section are the historical
+> acceptance-time record, preserved verbatim.
 
 ### Operation fields (semantic model — NOT a wire format)
 
