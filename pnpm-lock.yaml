@@ -440,6 +440,9 @@ importers:
       '@exam/authz':
         specifier: workspace:*
         version: link:../authz
+      '@exam/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@exam/domain':
         specifier: workspace:*
         version: link:../domain

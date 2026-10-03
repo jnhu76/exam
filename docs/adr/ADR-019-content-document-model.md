@@ -135,7 +135,11 @@ entirely (KaTeX is self-contained and meets the offline constraint).
 ## Compliance notes
 
 - Publish gates reject fill_blank+rich, `answerMode` outside text_response,
-  and rich questions whose `content` diverges from the derived projection.
+  rich questions whose `content` diverges from the derived projection, and
+  persisted question/option Rich that fails the shared §7 read
+  classification (noncanonical / unsupported-version / corrupt) before any
+  projection (Phase D5.1; canonicality at publish follows from the
+  single-write-seam rule above).
 - Snapshot evolution is additive (`contentDocument`/`answerMode` default to
   null for legacy rows); migration is append-only.
 - Audit metadata must never embed raw rich answer payloads (ADR-010
