@@ -66,6 +66,15 @@ function inlineToTiptap(inline: ContentInline): JSONContent {
       return { type: "hardBreak" };
     case "inlineMath":
       return { type: "inlineMath", attrs: { latex: inline.latex } };
+    default:
+      // The closed grammar types this switch as exhaustive; a hit means the
+      // input was never a schema-valid ContentDocumentV1. Fail loudly instead
+      // of returning undefined, which would silently shrink the mounted
+      // document (PC-F07): editability must be earned from the whole
+      // semantic document, never from its surviving fragments.
+      throw new Error(
+        `unmappable inline node: ${(inline as { type?: unknown }).type ?? "missing"}`,
+      );
   }
 }
 
@@ -109,6 +118,13 @@ function blockToTiptap(block: ContentBlock): JSONContent {
           })),
         })),
       };
+    default:
+      // See inlineToTiptap: an unknown block must fail the conversion
+      // explicitly, never disappear into an undefined content entry while
+      // the rest of the document mounts (PC-F07).
+      throw new Error(
+        `unmappable block node: ${(block as { type?: unknown }).type ?? "missing"}`,
+      );
   }
 }
 

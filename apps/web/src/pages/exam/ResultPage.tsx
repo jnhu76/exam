@@ -4,7 +4,6 @@ import { CircleCheck, CircleX } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { useNavigate, useParams } from "react-router";
 import type { CandidateAttemptResultResponse } from "@exam/contracts";
-import { isContentDocumentV1 } from "@exam/domain";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
 import { resolveRichAnswerDocument } from "@/components/shared/content/richAnswer";
@@ -71,7 +70,11 @@ function AnswerText({
   if (richDocument) {
     return <ContentDocumentRenderer document={richDocument} />;
   }
-  if (answerMode === "rich" && isContentDocumentV1(answer)) {
+  // A rich-mode value the read authority cannot interpret (corrupt or
+  // unsupported version) shows the integrity notice — it must never fall
+  // through to the plain formatter (§7 read contract). null/undefined keeps
+  // the unanswered em-dash below.
+  if (answerMode === "rich" && answer != null) {
     return (
       <span className="text-muted-foreground">
         {t("content.unsupportedAnswer")}

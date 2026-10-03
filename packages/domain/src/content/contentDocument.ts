@@ -681,9 +681,12 @@ export function plainTextToDocument(text: string): ContentDocumentV1 {
 /**
  * Structural guard for persisted answer payloads: true when `value` looks
  * like a ContentDocumentV1 envelope (correct version tag + node array).
- * Deliberately shallow — deep validation stays at the write boundary; this
- * exists so read-side consumers (renderer answer branch) can route rich
- * answers to ContentDocumentRenderer without importing the wire schema.
+ * Deliberately shallow — a true result is a SHAPE HINT ONLY, never trust
+ * proof: it does not establish that the value is a valid, in-limits, or
+ * canonical document. Deep validation stays at the read/write trust
+ * boundaries (the persisted-read classifier and the write canonicalizer);
+ * no consumer may decide that a value IS trusted Rich because this
+ * returned true (#669 Phase D3).
  */
 export function isContentDocumentV1(
   value: unknown,

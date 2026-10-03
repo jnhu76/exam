@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import type { ContentDocumentV1 } from "@exam/domain";
-import { isContentDocumentV1 } from "@exam/domain";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
 import { resolveRichAnswerDocument } from "@/components/shared/content/richAnswer";
@@ -511,10 +510,10 @@ export function GradingDetailPage() {
                         <ContentDocumentRenderer document={richDocument} />
                       );
                     }
-                    if (
-                      q.answerMode === "rich" &&
-                      isContentDocumentV1(q.candidateAnswer)
-                    ) {
+                    // A rich-mode value the read authority cannot interpret
+                    // (corrupt or unsupported version) keeps the integrity
+                    // notice — never the plain formatter (§7 read contract).
+                    if (q.answerMode === "rich" && q.candidateAnswer != null) {
                       return (
                         <span className="text-muted-foreground">
                           {i18n.t("content.unsupportedAnswer" as never)}

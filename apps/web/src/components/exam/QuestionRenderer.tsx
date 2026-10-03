@@ -70,6 +70,7 @@ export function QuestionRenderer({
         <RichTextAnswerInput
           key={question.originalQuestionId}
           value={answer}
+          answerMode={question.answerMode}
           onChange={onChange}
           disabled={disabled}
         />

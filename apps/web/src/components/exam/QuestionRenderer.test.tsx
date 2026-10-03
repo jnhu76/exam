@@ -104,7 +104,11 @@ describe("QuestionRenderer — rich text_response (issue 301)", () => {
     }
   }, 15000);
 
-  it("upgrades a legacy plain-string draft into the editor instead of dropping it", async () => {
+  it("fails closed on an unexplained string in a rich slot (PC-F03: no runtime-shape legacy adoption)", async () => {
+    // §7 read contract: a plain string where Rich is authoritative is corrupt
+    // unless explicit provenance establishes legacy_plain — which no runtime
+    // shape provides. The rich input must show the integrity state instead of
+    // adopting the string as answer content.
     render(
       <QuestionRenderer
         question={{
@@ -116,12 +120,8 @@ describe("QuestionRenderer — rich text_response (issue 301)", () => {
         onChange={() => {}}
       />,
     );
-    const editor = await vi.waitFor(() => {
-      const el = document.querySelector<HTMLElement>(".ProseMirror");
-      if (!el) throw new Error("ProseMirror surface not mounted yet");
-      return el;
-    });
-    expect(editor.textContent).toContain("旧草稿");
+    await screen.findByTestId("rich-answer-integrity-error");
+    expect(document.querySelector(".ProseMirror")).toBeNull();
   }, 15000);
 
   it("keeps the plain textarea when answerMode is plain", () => {

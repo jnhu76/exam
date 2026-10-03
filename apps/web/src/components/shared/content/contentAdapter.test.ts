@@ -128,6 +128,45 @@ describe("contentDocumentToTiptap", () => {
   });
 });
 
+describe("contentDocumentToTiptap — fail-closed conversion (PC-F07, #669 Phase D3)", () => {
+  // Schema-valid canonical documents are closed-grammar, so these inputs can
+  // never arise from a classifier-accepted document; the throws are the
+  // defense-in-depth boundary that keeps an unknown node from disappearing
+  // into an undefined content entry while the rest of the doc mounts.
+  it("throws explicitly on an off-grammar block instead of silently dropping it", () => {
+    const offGrammar = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        { type: "script" },
+        { type: "paragraph", content: [{ type: "text", text: "after" }] },
+      ],
+    } as unknown as ContentDocumentV1;
+    expect(() => contentDocumentToTiptap(offGrammar)).toThrow(
+      /unmappable block node: script/,
+    );
+  });
+
+  it("throws explicitly on an unknown inline node instead of emitting an undefined entry", () => {
+    const offGrammar = {
+      docVersion: 1,
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "mysteryInline", text: "x" }] },
+      ],
+    } as unknown as ContentDocumentV1;
+    expect(() => contentDocumentToTiptap(offGrammar)).toThrow(
+      /unmappable inline node: mysteryInline/,
+    );
+  });
+
+  it("still converts a legitimate canonical document losslessly (positive control)", () => {
+    const json = contentDocumentToTiptap(richDoc);
+    expect(json.content).toHaveLength(richDoc.content.length);
+    expect(tiptapToContentDocument(json)).toEqual(richDoc);
+  });
+});
+
 describe("math mapping — candidate-visible math must persist verbatim (#676)", () => {
   const LATEX = "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}";
 
