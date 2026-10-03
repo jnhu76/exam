@@ -27,6 +27,7 @@ import type {
   InterruptionEventRepository,
   TimeAdjustmentRepository,
 } from "@exam/exam-engine";
+import { canonicalAnswerIdentity } from "@exam/exam-engine";
 
 /**
  * Adapts the DB exam repo to the ExamRepository interface expected by
@@ -159,6 +160,36 @@ export function createAttemptRepoAdapter(
     refreshLastActivityIfInProgress: async (id, now) => {
       const row = await repo.refreshLastActivityIfInProgress(ctx, id, now);
       return row ? hydrateAttemptFromDb(row) : null;
+    },
+    // Replay receipts (#669 Phase D2). Rows backfilled by migration 0044
+    // carry the legacy payload instead of a digest; identity is derived here
+    // with the same engine authority and never written back.
+    findAnswerReceipt: async (attemptId, questionId, clientSeq) => {
+      const row = await repo.findAnswerReceiptByKey(
+        ctx,
+        attemptId,
+        questionId,
+        clientSeq,
+      );
+      if (!row) return null;
+      return {
+        questionId: row.questionId,
+        clientSeq: row.clientSeq,
+        answerIdentity:
+          row.answerIdentity ?? canonicalAnswerIdentity(row.legacyAnswer),
+        version: row.acceptedVersion,
+        savedAt: row.savedAt,
+      };
+    },
+    appendAnswerReceipt: async (attemptId, receipt) => {
+      await repo.appendAnswerSaveReceipt(ctx, {
+        attemptId,
+        questionId: receipt.questionId,
+        clientSeq: receipt.clientSeq,
+        answerIdentity: receipt.answerIdentity,
+        acceptedVersion: receipt.version,
+        savedAt: receipt.savedAt,
+      });
     },
   };
 }

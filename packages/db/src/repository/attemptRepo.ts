@@ -2,6 +2,7 @@ import type { Database } from "../types.js";
 import { pgNum } from "../types.js";
 import {
   examAttempts,
+  examAnswerSaveReceipts,
   candidateProfiles,
   users,
   exams,
@@ -20,6 +21,35 @@ import { and, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 type AttemptSelect = typeof examAttempts.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
 type UserSelect = typeof users.$inferSelect;
+
+/**
+ * One SaveAnswer replay receipt row (`exam_answer_save_receipts`, #669 Phase
+ * D2). Post-D2 rows carry `answerIdentity` (sha256 hex of the deterministic
+ * serialization of the canonical answer); rows backfilled by migration 0044
+ * carry the legacy payload in `legacyAnswer` instead — exactly one of the two
+ * is present (DB CHECK). The adapter layer derives identity for legacy rows
+ * with the same JS authority and never writes it back.
+ */
+export interface AnswerSaveReceiptRow {
+  organizationId: string;
+  attemptId: string;
+  questionId: string;
+  clientSeq: number;
+  answerIdentity: string | null;
+  legacyAnswer: unknown;
+  acceptedVersion: number;
+  savedAt: Date;
+}
+
+/** Input for appending one new replay receipt (identity representation). */
+export interface AppendAnswerSaveReceiptInput {
+  attemptId: string;
+  questionId: string;
+  clientSeq: number;
+  answerIdentity: string;
+  acceptedVersion: number;
+  savedAt: Date;
+}
 
 /**
  * Creates the exam attempt repository with CRUD plus lookup methods
@@ -56,6 +86,86 @@ export function createAttemptRepo(db: Database) {
   return {
     ...repo,
     findByIds,
+    /**
+     * O(1) indexed replay-receipt lookup for ONE (attempt, question,
+     * clientSeq) key (#669 Phase D2). The composite PK serves the lookup
+     * (org+attempt equality prefix) — replay recognition is bounded by the
+     * lookup key, never proportional to the attempt's receipt history. Must
+     * be created on the caller's transaction handle so the read participates
+     * in the SaveAnswer protocol commit.
+     */
+    async findAnswerReceiptByKey(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+      questionId: string,
+      clientSeq: number,
+    ): Promise<AnswerSaveReceiptRow | null> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select()
+        .from(examAnswerSaveReceipts)
+        .where(
+          and(
+            eq(examAnswerSaveReceipts.organizationId, orgId),
+            eq(examAnswerSaveReceipts.attemptId, attemptId),
+            eq(examAnswerSaveReceipts.questionId, questionId),
+            eq(examAnswerSaveReceipts.clientSeq, clientSeq),
+          ),
+        )
+        .limit(1);
+      return (rows[0] as AnswerSaveReceiptRow | undefined) ?? null;
+    },
+    /**
+     * Highest accepted clientSeq per question for one attempt (#669 Phase
+     * D2): the candidate take-snapshot projection restores the client's
+     * next-clientSeq bookkeeping from this after a reload. MAX (not
+     * "latest accepted") so restored+1 cannot collide with ANY accepted
+     * receipt; identical to the pre-D2 inline value for the supported
+     * monotonic client (ADR-012). Served by the composite PK's org+attempt
+     * prefix; empty map when the attempt has no receipts.
+     */
+    async findMaxClientSeqByQuestion(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+    ): Promise<Map<string, number>> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          questionId: examAnswerSaveReceipts.questionId,
+          maxSeq: sql<number>`max(${examAnswerSaveReceipts.clientSeq})::int`,
+        })
+        .from(examAnswerSaveReceipts)
+        .where(
+          and(
+            eq(examAnswerSaveReceipts.organizationId, orgId),
+            eq(examAnswerSaveReceipts.attemptId, attemptId),
+          ),
+        )
+        .groupBy(examAnswerSaveReceipts.questionId);
+      return new Map(rows.map((r) => [r.questionId, Number(r.maxSeq)]));
+    },
+    /**
+     * Appends one immutable replay receipt. Called inside the SaveAnswer
+     * transaction so receipt creation and the accepted answers write commit
+     * atomically; the composite PK rejects a duplicate replay key (one key →
+     * at most one accepted canonical identity) at the database.
+     */
+    async appendAnswerSaveReceipt(
+      ctx: TenantContext | RequestContext,
+      receipt: AppendAnswerSaveReceiptInput,
+    ): Promise<void> {
+      const orgId = resolveOrganizationId(ctx);
+      await db.insert(examAnswerSaveReceipts).values({
+        organizationId: orgId,
+        attemptId: receipt.attemptId,
+        questionId: receipt.questionId,
+        clientSeq: receipt.clientSeq,
+        answerIdentity: receipt.answerIdentity,
+        legacyAnswer: null,
+        acceptedVersion: receipt.acceptedVersion,
+        savedAt: receipt.savedAt,
+      });
+    },
     /**
      * Batch-loads own-attempt ownership chains for multiple attempt ids.
      * Returns a Map<attemptId, { ownerUserId, examId }> for attempts where

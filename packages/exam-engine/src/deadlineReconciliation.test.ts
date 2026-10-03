@@ -1,3 +1,4 @@
+import { noAnswerReceiptStore } from "./attemptMutation.testHelpers.js";
 import { describe, expect, it } from "vitest";
 import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 import type {
@@ -237,6 +238,7 @@ function makeRepos(
       attemptStore[idx] = { ...attemptStore[idx]!, ...data };
       return attemptStore[idx]!;
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress: async (id, now) => {
       const idx = attemptStore.findIndex((a) => a.id === id);
       if (idx === -1) return null;

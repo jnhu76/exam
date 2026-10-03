@@ -21,6 +21,7 @@ import type {
 import { startOrRestoreAttempt } from "./attemptCommands.js";
 import type { StartOrRestoreDependencies } from "./attemptCommands.js";
 import {
+  noAnswerReceiptStore,
   makeAttempt,
   makeEnrollment,
   makeEnrollmentRepo,
@@ -79,6 +80,7 @@ function makeStartAttemptRepo(existing?: ExamAttempt): AttemptRepository & {
       created = { ...created, ...data };
       return created;
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress(id, now) {
       const target = created && created.id === id ? created : findStored(id);
       if (!target || target.status !== "in_progress") return null;

@@ -1,3 +1,4 @@
+import { noAnswerReceiptStore } from "./attemptMutation.testHelpers.js";
 import { describe, expect, it } from "vitest";
 import {
   gradeAttemptIdempotent,
@@ -155,6 +156,7 @@ function makeRepos(
       storedAttempt = { ...storedAttempt, ...data };
       return storedAttempt;
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress: () => storedAttempt,
   };
   const enrollmentRepo: EnrollmentRepository = {
@@ -357,6 +359,7 @@ describe("gradeAttemptIdempotent — auto command path", () => {
       findByEnrollmentAndAttemptNo: () => null,
       create: () => attempt,
       update: () => null,
+      ...noAnswerReceiptStore(),
       refreshLastActivityIfInProgress: () => attempt,
     };
     const enrollmentRepo: EnrollmentRepository = {
@@ -432,6 +435,7 @@ describe("gradeAttemptIdempotent — auto command path", () => {
         attemptCallCount++;
         return gradedAttempt;
       },
+      ...noAnswerReceiptStore(),
       refreshLastActivityIfInProgress: () => attempt,
     };
     const enrollmentRepo: EnrollmentRepository = {
@@ -672,6 +676,7 @@ function makeTransactionalRepos(
         Object.assign(stagedAttempt, data);
         return { ...committedAttempt, ...stagedAttempt };
       },
+      ...noAnswerReceiptStore(),
       refreshLastActivityIfInProgress: () => ({
         ...committedAttempt,
         ...stagedAttempt,
@@ -939,6 +944,7 @@ describe("readGradingSnapshot", () => {
       findByEnrollmentAndAttemptNo: () => null,
       create: () => makeAttempt(),
       update: () => null,
+      ...noAnswerReceiptStore(),
       refreshLastActivityIfInProgress: () => null,
     };
     const snapshot = await readGradingSnapshot(

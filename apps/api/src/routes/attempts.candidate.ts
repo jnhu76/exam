@@ -911,7 +911,23 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // (serialized as the canonical client countdown gate).
       const exam = examRow as unknown as Exam;
 
-      const snapshot = buildCandidateTakeSnapshot(attempt, exam, fastify.now());
+      // D2 (#669): accepted clientSeq bookkeeping lives in
+      // exam_answer_save_receipts, not the draft JSONB. MAX(clientSeq)
+      // seeds the client's next key above every receipt visible at this
+      // read. The read is NOT a concurrency snapshot: the server does not
+      // enforce clientSeq monotonicity, and a save accepted after this
+      // query may consume a later key. That race stays fail-closed — the
+      // colliding key resolves through the frozen replay/conflict protocol
+      // (known replay or CONFLICTING_PAYLOAD), never a silent overwrite.
+      const clientSeqByQuestion = await createAttemptRepo(
+        fastify.db,
+      ).findMaxClientSeqByQuestion(ctx, attempt.id);
+      const snapshot = buildCandidateTakeSnapshot(
+        attempt,
+        exam,
+        fastify.now(),
+        clientSeqByQuestion,
+      );
 
       // Cache-Control: no-store — GET may trigger deadline reconciliation
       reply.header("Cache-Control", "no-store");

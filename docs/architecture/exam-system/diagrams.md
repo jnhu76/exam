@@ -323,13 +323,22 @@ sequenceDiagram
     Prep-->>Route: {attempt, mutationContext}
 
     Route->>Save: saveAnswer(attempts, mutationContext, request)
-    Save->>Save: processSaveAnswer(state, request)
-    Note over Save: Idempotent check via clientSeqMap<br/>Version check via baseVersion
-    alt accepted
-        Save->>DB: UPDATE attempt.answers + lastActivityAt
-        Save-->>Route: {accepted: true, serverVersion}
-    else rejected
-        Save-->>Route: {accepted: false, conflict: reason}
+    Save->>DB: SELECT immutable replay receipt (org, attempt, question, clientSeq)
+    Save->>Save: processSaveAnswer(state + knownReceipt, request)
+    Note over Save: terminal + deadline guards → canonicalize answer<br/>identity = digest of the accepted canonical value<br/>canonicalization failure → INVALID_ANSWER (before replay/version)
+    alt known receipt + same canonical identity
+        Save-->>Route: prior ACK replayed verbatim (accepted, zero write)
+    else known receipt + different identity
+        Save-->>Route: {accepted: false, conflict: CONFLICTING_PAYLOAD}
+    else unknown clientSeq → baseVersion CAS
+        alt baseVersion == currentVersion
+            Note over Save,DB: one protocol commit — same transaction
+            Save->>DB: UPDATE attempt.answers + lastActivityAt
+            Save->>DB: INSERT exam_answer_save_receipts (immutable receipt)
+            Save-->>Route: {accepted: true, serverVersion}
+        else baseVersion != currentVersion
+            Save-->>Route: {accepted: false, conflict: STALE_VERSION / FUTURE_VERSION}
+        end
     end
 
     Route-->>Candidate: 200/409 + response

@@ -1,3 +1,4 @@
+import { noAnswerReceiptStore } from "./attemptMutation.testHelpers.js";
 import { describe, expect, it } from "vitest";
 import type {
   AttemptInterruption,
@@ -226,6 +227,7 @@ function makeAttemptRepo(attempts: ExamAttempt[] = []): AttemptRepository {
       store[idx] = { ...store[idx]!, ...data };
       return store[idx]!;
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress(id, now) {
       const idx = store.findIndex((a) => a.id === id);
       if (idx === -1) return null;

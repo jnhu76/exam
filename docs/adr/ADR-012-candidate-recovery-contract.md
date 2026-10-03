@@ -228,7 +228,9 @@ composite key:
 ```
 
 `clientSeq` is a per-question client-assigned monotonic integer. The server
-persists `clientSeqHistory` for replay detection but does NOT independently
+persists one immutable replay receipt per accepted
+`(organization, attempt, question, clientSeq)` key in
+`exam_answer_save_receipts` (#669 Phase D2), but does NOT independently
 validate monotonicity or assign a server-side operation identifier. The
 current response does not return a standalone `operationId` field.
 
@@ -239,7 +241,7 @@ Limitations of the current identity:
   to reproduce the same `clientSeq` for replay.
 - There is no server-issued receipt identity separate from the composite key.
 
-### Target semantic identity (TARGET — OPEN_DECISION, owned by REC-I2a)
+### Target semantic identity (TARGET — REC-I2a RESOLVED, see amendment)
 
 The target protocol requires:
 
@@ -252,6 +254,14 @@ to use the existing `(attemptId, questionId, clientSeq)` composite identity
 with enhanced validation, is an **OPEN_DECISION** owned by REC-I2a. REC-I1
 must NOT embed a specific operationId format into the IndexedDB schema before
 this decision is frozen.
+
+> **D2 amendment (#669 Phase D2 — REC-I2a resolution)**: the operationId
+> decision is RESOLVED: the mechanism retains the composite
+> `(attemptId, questionId, clientSeq)` identity with enhanced validation
+> (strict baseVersion / `FUTURE_VERSION` rejection; replay receipts in
+> `exam_answer_save_receipts`), and no separate `operationId` wire field is
+> introduced. The OPEN_DECISION statements in this section are the historical
+> acceptance-time record, preserved verbatim.
 
 ### Operation fields (semantic model — NOT a wire format)
 
@@ -285,10 +295,13 @@ one stable identity. Retries of the same logical operation reuse the same
 identity. The mechanism (composite key vs standalone field) is decided by
 REC-I2a.
 
-**Idempotent replay (CURRENT_INVARIANT)**: Same identity + same semantic
-payload → return the original accepted result without another write.
-Implemented via `(questionId, clientSeq)` idempotency key and `answersEqual`
-comparison in `processSaveAnswer`.
+**Idempotent replay (CURRENT_INVARIANT)**: Same identity + same canonical
+answer identity → return the original accepted result without another write.
+Implemented via the `(questionId, clientSeq)` idempotency key and
+canonical-answer-identity comparison in `processSaveAnswer` (#669 Phase D2:
+the receipt stores a collision-resistant digest of the deterministic
+serialization of the accepted canonical value; identity remains DEFINED by
+structural identity after normalization, per the Rich semantic contract §12).
 
 **Conflicting replay (CURRENT_INVARIANT)**: Same identity + different
 semantic payload → reject as conflicting payload. Implemented via

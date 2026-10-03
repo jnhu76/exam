@@ -134,11 +134,19 @@ export function toCandidateAttemptResponse(
  * Implements L0 §6.1: derived capabilities, answerSource routing, and
  * security projection. The transport contract (`Cache-Control: no-store`)
  * belongs to the route handler, not this pure builder.
+ *
+ * `clientSeqByQuestion` (highest accepted clientSeq per questionId) is the
+ * INVARIANT source for `currentClientSeq`: since #669 Phase D2 the draft
+ * JSONB no longer carries clientSeq receipts — the accepted-seq bookkeeping
+ * lives in `exam_answer_save_receipts` and the route supplies it. Without it
+ * a reloaded client would restart its clientSeq counter and replay an
+ * already-accepted key.
  */
 export function buildCandidateTakeSnapshot(
   attempt: ExamAttempt,
   exam: Exam,
   now: Date,
+  clientSeqByQuestion?: ReadonlyMap<string, number>,
 ) {
   const attemptStatus = attempt.status;
   const gradingStatus: GradingStatus = attempt.gradingStatus ?? "auto_graded";
@@ -189,21 +197,12 @@ export function buildCandidateTakeSnapshot(
     }
   }
 
-  // Build answer metadata lookup (clientSeq, version) for restoring
-  // client-side state on page reload.
-  const answerMetaMap = new Map<
-    string,
-    { clientSeq?: number; version: number }
-  >();
-  for (const a of attempt.answers as Array<{
-    questionId: string;
-    clientSeq?: number;
-    version: number;
-  }>) {
-    answerMetaMap.set(a.questionId, {
-      ...(a.clientSeq !== undefined ? { clientSeq: a.clientSeq } : {}),
-      version: a.version,
-    });
+  // Draft answer version lookup for restoring client-side state on page
+  // reload. clientSeq is deliberately NOT read here: the persisted
+  // AnswerRecord is a pure record since D2 — see the builder doc comment.
+  const answerVersionMap = new Map<string, number>();
+  for (const a of attempt.answers) {
+    answerVersionMap.set(a.questionId, a.version);
   }
 
   // Build questions with answerSource routing (CandidateTakeSnapshotSchema
@@ -219,11 +218,8 @@ export function buildCandidateTakeSnapshot(
       if (answerMap.has(q.originalQuestionId)) {
         answerValue = answerMap.get(q.originalQuestionId);
         answerSource = "draft";
-        const meta = answerMetaMap.get(q.originalQuestionId);
-        if (meta) {
-          currentClientSeq = meta.clientSeq;
-          currentVersion = meta.version;
-        }
+        currentVersion = answerVersionMap.get(q.originalQuestionId);
+        currentClientSeq = clientSeqByQuestion?.get(q.originalQuestionId);
       }
     } else if (attemptStatus === "submitted" || attemptStatus === "graded") {
       // Submitted answers — only from submitted_answers column

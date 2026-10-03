@@ -347,7 +347,7 @@ Each protocol is documented with:
 | **Input contract** | `{ attemptId, questionId, answer, clientSeq, clientSavedAt, baseVersion }` |
 | **Preconditions** | Attempt is `in_progress`; `now < effectiveDeadline`; question is in the attempt's snapshot |
 | **State transition** | None (attempt stays `in_progress`) |
-| **Writes** | `exam_attempts.answers` (new AnswerRecord); `exam_attempts.lastActivityAt` |
+| **Writes** | `exam_attempts.answers` (new AnswerRecord); `exam_attempts.lastActivityAt`; `exam_answer_save_receipts` INSERT (one immutable replay receipt, same transaction) |
 | **Transaction boundary** | `executeInTransaction` → `lockEnrollmentAndAttempt` → `prepareReconciledAttemptMutation` → `saveAnswer()` |
 | **Idempotency behavior** | **Idempotent** per `(questionId, clientSeq)` — same key + same payload = replay (accepted, no write). Same key + different payload = `CONFLICTING_PAYLOAD`. |
 | **Audit event** | None (versioned answer state is authority; per ADR-006 audit contract) |

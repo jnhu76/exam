@@ -1,3 +1,4 @@
+import { noAnswerReceiptStore } from "./attemptMutation.testHelpers.js";
 import { describe, expect, it } from "vitest";
 import type {
   AttemptGradingEntry,
@@ -249,6 +250,7 @@ function makeRepos(
       storedAttempt = { ...storedAttempt, ...data };
       return storedAttempt;
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress: (_id, now) => {
       if (storedAttempt.status !== "in_progress") return null;
       storedAttempt = { ...storedAttempt, lastActivityAt: now };
