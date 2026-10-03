@@ -228,7 +228,9 @@ composite key:
 ```
 
 `clientSeq` is a per-question client-assigned monotonic integer. The server
-persists `clientSeqHistory` for replay detection but does NOT independently
+persists one immutable replay receipt per accepted
+`(organization, attempt, question, clientSeq)` key in
+`exam_answer_save_receipts` (#669 Phase D2), but does NOT independently
 validate monotonicity or assign a server-side operation identifier. The
 current response does not return a standalone `operationId` field.
 
@@ -285,10 +287,13 @@ one stable identity. Retries of the same logical operation reuse the same
 identity. The mechanism (composite key vs standalone field) is decided by
 REC-I2a.
 
-**Idempotent replay (CURRENT_INVARIANT)**: Same identity + same semantic
-payload → return the original accepted result without another write.
-Implemented via `(questionId, clientSeq)` idempotency key and `answersEqual`
-comparison in `processSaveAnswer`.
+**Idempotent replay (CURRENT_INVARIANT)**: Same identity + same canonical
+answer identity → return the original accepted result without another write.
+Implemented via the `(questionId, clientSeq)` idempotency key and
+canonical-answer-identity comparison in `processSaveAnswer` (#669 Phase D2:
+the receipt stores a collision-resistant digest of the deterministic
+serialization of the accepted canonical value; identity remains DEFINED by
+structural identity after normalization, per the Rich semantic contract §12).
 
 **Conflicting replay (CURRENT_INVARIANT)**: Same identity + different
 semantic payload → reject as conflicting payload. Implemented via
