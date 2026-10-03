@@ -911,7 +911,21 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // (serialized as the canonical client countdown gate).
       const exam = examRow as unknown as Exam;
 
-      const snapshot = buildCandidateTakeSnapshot(attempt, exam, fastify.now());
+      // D2 (#669): accepted clientSeq bookkeeping lives in
+      // exam_answer_save_receipts, not the draft JSONB. Receipts are
+      // append-only with monotonically growing clientSeq under the EA lock,
+      // so reading them after the reconciliation transaction commits sees a
+      // quiescent, complete view — restored+1 can never collide with an
+      // accepted key.
+      const clientSeqByQuestion = await createAttemptRepo(
+        fastify.db,
+      ).findMaxClientSeqByQuestion(ctx, attempt.id);
+      const snapshot = buildCandidateTakeSnapshot(
+        attempt,
+        exam,
+        fastify.now(),
+        clientSeqByQuestion,
+      );
 
       // Cache-Control: no-store — GET may trigger deadline reconciliation
       reply.header("Cache-Control", "no-store");

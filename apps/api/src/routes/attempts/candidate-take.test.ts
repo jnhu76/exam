@@ -115,6 +115,72 @@ describe("P3-PROTO-2: CandidateTakeSnapshot endpoint", () => {
       const q = body.questions[0];
       expect(q.answerSource).toBe("draft");
       expect(q.answerValue).toBe("b");
+      // D2 (#669): currentClientSeq is restored from the replay-receipt
+      // table now that the draft JSONB no longer carries clientSeq.
+      expect(q.currentClientSeq).toBe(1);
+      expect(q.currentVersion).toBe(1);
+    });
+
+    it("restores currentClientSeq after multiple accepted saves (reloaded-client regression)", async () => {
+      // Mirrors the E2E refresh-during-exam contract: after a reload the
+      // client must continue AFTER its last accepted clientSeq, never replay
+      // an already-accepted key. Continues the shared attempt from the
+      // previous test (q[0] is at clientSeq 1, version 1).
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startRes.json().id as string;
+      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
+
+      const secondSave = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "c",
+          clientSeq: 2,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 1,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(secondSave.statusCode).toBe(200);
+      expect(secondSave.json().accepted).toBe(true);
+      expect(secondSave.json().serverVersion).toBe(2);
+
+      // A reloaded client sends clientSeq 3 (currentClientSeq 2 + 1); the
+      // server must treat it as a fresh save, not a replay of seq 1 or 2.
+      const reloadedSave = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "a",
+          clientSeq: 3,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 2,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(reloadedSave.statusCode).toBe(200);
+      expect(reloadedSave.json().accepted).toBe(true);
+      expect(reloadedSave.json().serverVersion).toBe(3);
+
+      const takeRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/attempts/${attemptId}/take`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(takeRes.statusCode).toBe(200);
+      const q = takeRes.json().questions[0];
+      expect(q.answerSource).toBe("draft");
+      expect(q.answerValue).toBe("a");
+      expect(q.currentClientSeq).toBe(3);
+      expect(q.currentVersion).toBe(3);
     });
 
     it("returns answerSource=submitted after submitting", async () => {

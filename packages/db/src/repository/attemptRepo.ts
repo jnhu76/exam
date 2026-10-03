@@ -116,6 +116,35 @@ export function createAttemptRepo(db: Database) {
       return (rows[0] as AnswerSaveReceiptRow | undefined) ?? null;
     },
     /**
+     * Highest accepted clientSeq per question for one attempt (#669 Phase
+     * D2): the candidate take-snapshot projection restores the client's
+     * next-clientSeq bookkeeping from this after a reload. MAX (not
+     * "latest accepted") so restored+1 cannot collide with ANY accepted
+     * receipt; identical to the pre-D2 inline value for the supported
+     * monotonic client (ADR-012). Served by the composite PK's org+attempt
+     * prefix; empty map when the attempt has no receipts.
+     */
+    async findMaxClientSeqByQuestion(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+    ): Promise<Map<string, number>> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          questionId: examAnswerSaveReceipts.questionId,
+          maxSeq: sql<number>`max(${examAnswerSaveReceipts.clientSeq})::int`,
+        })
+        .from(examAnswerSaveReceipts)
+        .where(
+          and(
+            eq(examAnswerSaveReceipts.organizationId, orgId),
+            eq(examAnswerSaveReceipts.attemptId, attemptId),
+          ),
+        )
+        .groupBy(examAnswerSaveReceipts.questionId);
+      return new Map(rows.map((r) => [r.questionId, Number(r.maxSeq)]));
+    },
+    /**
      * Appends one immutable replay receipt. Called inside the SaveAnswer
      * transaction so receipt creation and the accepted answers write commit
      * atomically; the composite PK rejects a duplicate replay key (one key →
