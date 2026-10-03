@@ -25,6 +25,10 @@ import {
   getRequestContext,
 } from "./helpers.js";
 import { cookieAuth } from "./attempts.shared.js";
+import {
+  formatPlainExportValue,
+  resolveExportAnswerView,
+} from "../lib/attemptExportAnswer.js";
 import { recordSensitiveReadAudit } from "../audit/auditWriter.js";
 import { grantWithOperationRaceRecovery } from "../orchestrators/operatorGrantExecution.js";
 import { forceSubmitWithOperationRaceRecovery } from "../orchestrators/forceSubmitExecution.js";
@@ -388,6 +392,8 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   /**
    * GET /admin/attempts/:attemptId/export — Export attempt details (answers +
    * question results) as JSON. Admin-only. Audit event: attempt.exported.
+   * This is the RAW-evidence export: `candidateAnswer` carries the stored
+   * value untouched, with integrity/projection companions for interpretation.
    * For CSV, see GET /admin/attempts/:attemptId/export/csv (split so each
    * response has a single, self-consistent OpenAPI content type).
    */
@@ -431,6 +437,11 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
    * UTF-8 (BOM) CSV file. Admin-only. The OpenAPI `text/csv` media type is
    * applied by the spec builder's post-transform hook (`fixCsvContentTypes` in
    * openapi/swagger.ts, which patches this path). Audit event: attempt.exported.
+   *
+   * The 考生答案 cell holds the CLASSIFIED semantic projection, and the
+   * appended 考生答案模式 / 考生答案状态 columns carry the frozen slot mode
+   * and the §7 integrity state; raw evidence for non-projectable states stays
+   * in the JSON export route. Existing columns keep their positions.
    */
   fastify.get(
     "/admin/attempts/:attemptId/export/csv",
@@ -467,6 +478,13 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       const correctLabel = "是";
       // i18n-copy-allow: data-format — CSV export header/value data contract
       const incorrectLabel = "否";
+      // The candidate answer cell is the CLASSIFIED projection: for
+      // `unsupported_version` / `corrupt` the projection is null, so the cell
+      // shows the not-applicable marker instead of the raw stored value — a
+      // corrupt Rich string must never read as a normal answer (F-05). Raw
+      // evidence stays available through the JSON export route.
+      const csvAnswerCell = (q: AttemptExportQuestionResult): string =>
+        q.candidateAnswerProjection ?? (q.candidateAnswer == null ? "" : "—");
       const csvHeaders = [
         // i18n-copy-allow: data-format — CSV export header/value data contract
         "题号",
@@ -484,17 +502,26 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         "满分",
         // i18n-copy-allow: data-format — CSV export header/value data contract
         "是否正确",
+        // Appended after the frozen columns so positional consumers keep
+        // their offsets: the frozen answer mode and the semantic integrity
+        // of the stored value (seven §7 read states, canonical tokens).
+        // i18n-copy-allow: data-format — CSV export header/value data contract
+        "考生答案模式",
+        // i18n-copy-allow: data-format — CSV export header/value data contract
+        "考生答案状态",
       ];
       const csvRows = exportData.questionResults.map((q) => ({
         题号: q.order,
         题型: q.type,
         题目内容: q.content,
-        考生答案: formatAnswerValue(q.candidateAnswer),
-        标准答案: formatAnswerValue(q.standardAnswer),
+        考生答案: csvAnswerCell(q),
+        标准答案: formatPlainExportValue(q.standardAnswer),
         得分: q.score ?? "—",
         满分: q.maxScore,
         是否正确:
           q.correct == null ? "—" : q.correct ? correctLabel : incorrectLabel,
+        考生答案模式: q.candidateAnswerMode,
+        考生答案状态: q.candidateAnswerIntegrity,
       }));
       const csv = "\uFEFF" + generateCSV(csvHeaders, csvRows);
       reply.header(
@@ -510,6 +537,14 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
  * Builds the attempt export payload (answers + per-question results) shared by
  * the JSON and CSV export routes. Throws NotFoundError if the attempt does not
  * exist in the caller's organization.
+ *
+ * Every candidate answer is classified through the shared persisted-answer
+ * classifier using the FROZEN snapshot answerMode (rich-content-semantic-
+ * contract §7/§14): `candidateAnswer` stays the raw stored evidence, and the
+ * `candidateAnswerMode` / `candidateAnswerIntegrity` /
+ * `candidateAnswerProjection` companions expose the slot context and the
+ * derived — never authoritative — projection. Classification is read-only:
+ * no value is normalized, canonicalized, or repaired here.
  */
 async function buildAttemptExport(
   fastify: FastifyInstance,
@@ -557,11 +592,23 @@ async function buildAttemptExport(
       const gResult = attempt.gradingResult?.find(
         (g) => g.questionId === q.originalQuestionId,
       );
+      const candidateAnswer = answerMap.get(q.originalQuestionId) ?? null;
+      // Classification context is the FROZEN snapshot answerMode — never the
+      // live question bank — so an existing attempt is always interpreted by
+      // the question version it was answered under.
+      const answerView = resolveExportAnswerView({
+        questionType: q.type,
+        answerMode: q.answerMode,
+        value: candidateAnswer,
+      });
       return {
         order: q.order,
         type: q.type,
         content: q.content,
-        candidateAnswer: answerMap.get(q.originalQuestionId) ?? null,
+        candidateAnswer,
+        candidateAnswerMode: answerView.mode,
+        candidateAnswerIntegrity: answerView.integrity,
+        candidateAnswerProjection: answerView.projection,
         standardAnswer: q.standardAnswer,
         score: gResult?.score ?? null,
         maxScore: gResult?.maxScore ?? q.score,
@@ -598,12 +645,4 @@ async function recordExportAudit(
     targetId: attemptId,
     metadata: { format },
   });
-}
-
-/** Formats an answer value as a display string for CSV export. */
-function formatAnswerValue(value: unknown): string {
-  if (value == null || value === "") return "";
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(String).join("; ");
-  return JSON.stringify(value);
 }

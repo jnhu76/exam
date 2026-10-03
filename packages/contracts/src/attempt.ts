@@ -4,6 +4,7 @@ import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
 import { GradingStatusEnum as GradingStatusFromScore } from "./score.js";
 import { InterruptionTimePolicySchema } from "./interruption.js";
 import { AnswerModeEnum, ContentDocumentV1Schema } from "./contentDocument.js";
+import { PERSISTED_RICH_ANSWER_STATES } from "./persistedRichAnswer.js";
 import { TimingModeEnum } from "./exam.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
@@ -894,14 +895,42 @@ export type TimeGrantResponse = z.infer<typeof TimeGrantResponseSchema>;
 // ── Attempt Export (P2E-J4) ────────────────────────────────────────
 
 /**
+ * Integrity classification of an exported candidate answer, exactly the
+ * seven §7 read states of the rich-content semantic contract. `plain` /
+ * `empty` cover typed non-Rich slots (choice ids, booleans, blanks); the
+ * Rich states appear on `text_response` slots and are produced by the shared
+ * persisted-answer classifier (`classifyPersistedRichAnswer`), never derived
+ * from the runtime shape at the export boundary.
+ */
+export const AttemptExportAnswerIntegritySchema = z.enum(
+  PERSISTED_RICH_ANSWER_STATES,
+);
+
+/**
  * Schema for a single question result in the export payload.
  * Represents the candidate's answer, the standard answer, and scoring.
+ *
+ * `candidateAnswer` stays the RAW stored evidence (authoritative, unmutated).
+ * The `candidateAnswer*` companions expose the frozen slot context and the
+ * derived projection so consumers can distinguish what was stored from what
+ * Rich semantics derived from it (`raw evidence != semantic projection`):
+ *
+ * - `candidateAnswerMode` — effective frozen answer mode of the slot
+ *   (`null`/legacy snapshots normalize to plain);
+ * - `candidateAnswerIntegrity` — semantic read state of the stored value;
+ * - `candidateAnswerProjection` — derived human-readable text, present only
+ *   when the integrity state permits a semantic projection; `null` for
+ *   `empty` / `unsupported_version` / `corrupt` (never the raw value dressed
+ *   as plain answer text).
  */
 export const AttemptExportQuestionResultSchema = z.object({
   order: z.number().int(),
   type: z.string(),
   content: z.string(),
   candidateAnswer: z.unknown(),
+  candidateAnswerMode: AnswerModeEnum,
+  candidateAnswerIntegrity: AttemptExportAnswerIntegritySchema,
+  candidateAnswerProjection: z.string().nullable(),
   standardAnswer: z.unknown(),
   score: z.number().nullish(),
   maxScore: z.number(),

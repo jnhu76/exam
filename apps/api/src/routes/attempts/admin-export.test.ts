@@ -580,8 +580,10 @@ describe("attempt routes", () => {
         });
 
         expect(res.statusCode).toBe(200);
-        // Fixture fields are comma-free, so the data row splits cleanly:
-        // 题号,题型,题目内容,考生答案,标准答案,得分,满分,是否正确
+        // Fixture fields are comma-free, so the data row splits cleanly. The
+        // first eight columns are the frozen positional contract (题号,题型,
+        // 题目内容,考生答案,标准答案,得分,满分,是否正确); D4 appended 考生答案模式
+        // and 考生答案状态 after them, so index 3 still holds the answer.
         const dataRow = res.body.trimEnd().split("\n")[1]!.split(",");
         expect(dataRow[3]).toBe("b");
       });
