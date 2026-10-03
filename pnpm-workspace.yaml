@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "docs/research/exam-669-rich-phase-e-1"
 allowBuilds:
   argon2: true
   esbuild: true
