@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   NotFoundError,
   ValidationError,
@@ -9,76 +10,112 @@ import {
   type SaveAnswerResponse,
   type SubmittedAnswersSnapshot,
 } from "@exam/domain";
-import type { AttemptRepository } from "./attemptCommands.js";
+import type { AnswerReceipt, AttemptRepository } from "./attemptCommands.js";
 import type { ReconciledAttemptMutationContext } from "./deadlineReconciliation.js";
 
 /**
- * Stable structural equality for answer values.
+ * Deterministic serialization of a canonical answer value, injective over the
+ * SaveAnswer value domain: every value that can reach persistence is
+ * JSON-serializable (validated shapes: strings, booleans, string arrays,
+ * string-keyed string records, null, canonical ContentDocumentV1), and for
+ * such values distinct values serialize to distinct strings:
  *
- * - Primitives (boolean, string, number, null, undefined): Object.is
- * - Arrays: element-by-element, ordered comparison
- * - Plain objects: sorted-key comparison
+ *   - objects: keys sorted, keys JSON-escaped → key order never matters
+ *     (matches the prior structural-equality semantics);
+ *   - arrays: ordered, delimiters cannot collide with quoted strings;
+ *   - numbers: `String(v)` is the ECMAScript shortest-round-trip form, so one
+ *     JS number maps to exactly one token; -0 is spelled "-0" so it stays
+ *     distinct from 0 (Object.is semantics);
+ *   - booleans/null: distinct tokens.
  *
- * Designed for the Answer Save Protocol idempotency check where the same
- * clientSeq must only be accepted if the payload is structurally identical.
+ * Non-JSON values (undefined, functions, symbols) and non-finite numbers have
+ * no representation and throw: they cannot arrive over the JSON wire or from
+ * the canonicalization seam, so throwing surfaces a defect instead of
+ * silently conflating distinct answers.
  */
-function answersEqual(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true;
-
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!answersEqual(a[i], b[i])) return false;
-    }
-    return true;
-  }
-
-  if (
-    a !== null &&
-    b !== null &&
-    typeof a === "object" &&
-    typeof b === "object" &&
-    !Array.isArray(a) &&
-    !Array.isArray(b)
-  ) {
-    const keysA = Object.keys(a as Record<string, unknown>);
-    const keysB = Object.keys(b as Record<string, unknown>);
-    if (keysA.length !== keysB.length) return false;
-    const sortedA = [...keysA].sort();
-    const sortedB = [...keysB].sort();
-    for (let i = 0; i < sortedA.length; i++) {
-      if (sortedA[i] !== sortedB[i]) return false;
-      const key = sortedA[i] as string;
-      if (
-        !answersEqual(
-          (a as Record<string, unknown>)[key],
-          (b as Record<string, unknown>)[key],
-        )
-      ) {
-        return false;
+function serializeAnswerIdentityValue(value: unknown): string {
+  if (value === null) return "null";
+  switch (typeof value) {
+    case "boolean":
+      return value ? "true" : "false";
+    case "string":
+      return JSON.stringify(value);
+    case "number":
+      if (!Number.isFinite(value)) {
+        throw new Error(
+          "answer identity serialization requires finite JSON numbers",
+        );
       }
-    }
-    return true;
+      return Object.is(value, -0) ? "-0" : String(value);
+    case "object":
+      break;
+    default:
+      throw new Error(
+        `answer identity serialization requires JSON-serializable values, got ${typeof value}`,
+      );
   }
+  if (Array.isArray(value)) {
+    return `[${value
+      .map((element) => serializeAnswerIdentityValue(element))
+      .join(",")}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>).sort(
+    ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+  );
+  return `{${entries
+    .map(
+      ([key, v]) => `${JSON.stringify(key)}:${serializeAnswerIdentityValue(v)}`,
+    )
+    .join(",")}}`;
+}
 
-  return false;
+/**
+ * Canonical answer identity — the storage representation used to decide
+ * "same accepted clientSeq + same canonical answer identity" (frozen replay
+ * semantics, rich-content-semantic-contract §12).
+ *
+ * The SEMANTIC definition of identity remains structural identity of the
+ * D1-accepted canonical value (N(d1) == N(d2), contract §3.1). This digest is
+ * its collision-resistant REPRESENTATION: the serialization above is
+ * injective over the value domain, so digest equality holds whenever canonical
+ * values are equal; the only divergence source is a SHA-256 collision
+ * (~2^-128 birthday bound, ~2^256 work to target) — the standard accepted
+ * risk model for content-addressed identity, not a mathematical exactness
+ * claim. Digest comparison therefore never treats two different canonical
+ * answers as equal in any realistic execution.
+ *
+ * Must be called ONLY on the canonical value accepted by the D1 write
+ * boundary (#669 D2-I): identity of the canonical value, never of the
+ * pre-normalized candidate.
+ */
+export function canonicalAnswerIdentity(value: unknown): string {
+  return createHash("sha256")
+    .update(serializeAnswerIdentityValue(value))
+    .digest("hex");
 }
 
 /** State required by the answer save protocol to evaluate an incoming save request. */
 export interface AnswerState {
   attemptStatus: AttemptStatus;
   answers: AnswerRecord[];
-  clientSeqMap: Map<string, AnswerRecord>;
+  /**
+   * The replay receipt for THIS request's (questionId, clientSeq) key if a
+   * prior save accepted it, else null (#669 Phase D2). The caller resolves it
+   * with one indexed repository lookup — replay recognition is bounded by the
+   * lookup key, not proportional to the attempt's whole receipt history.
+   */
+  knownReceipt: AnswerReceipt | null;
   // Nullable: an untimed attempt's canonical effective deadline is null — no
   // deadline guard applies (null != expired).
   deadlineAt?: Date | null;
   now?: Date;
 }
 
-/** Response from the answer save protocol, including newly created answer and updated idempotency map when accepted. */
+/** Response from the answer save protocol, including newly created answer and replay receipt when accepted. */
 export type ProcessSaveResult = SaveAnswerResponse & {
   newAnswer?: AnswerRecord;
-  newClientSeqMap?: Map<string, AnswerRecord>;
+  /** Receipt for the newly accepted replay key; persisted in the same transaction as `newAnswer`. */
+  newReceipt?: AnswerReceipt;
 };
 
 /**
@@ -148,6 +185,7 @@ export function processSaveAnswer(
   // masked by) a protocol rejection, and equality/idempotency/persistence
   // only ever see canonical values.
   let answer = request.answer;
+  let answerIdentity: string | null = null;
   if (canonicalize) {
     const validation = canonicalize(answer);
     if (!validation.ok) {
@@ -163,28 +201,31 @@ export function processSaveAnswer(
     }
     answer = validation.value;
   }
+  // Identity is computed on the CANONICAL value (post-canonicalization) so
+  // semantically equivalent candidate inputs share one identity (#669 D2-I /
+  // R8) — never on the pre-normalized candidate.
+  answerIdentity = canonicalAnswerIdentity(answer);
 
-  const idempotencyKey = `${request.questionId}:${request.clientSeq}`;
-  const existingBySeq = state.clientSeqMap.get(idempotencyKey);
-  if (existingBySeq) {
-    // Same idempotency key: if the payload is structurally identical,
-    // it's a safe replay — return the prior result.
-    // If the payload differs, the client is misusing this key — reject
-    // as a conflicting payload to prevent silent data loss.
-    if (answersEqual(existingBySeq.answer, answer)) {
+  if (state.knownReceipt) {
+    // Known replay key: same canonical identity → safe replay, return the
+    // prior acknowledgement verbatim with zero new writes. Different identity
+    // → the client is misusing this key; reject as conflicting payload to
+    // prevent silent data loss. (`latestAnswer` is deliberately omitted: the
+    // receipt no longer retains payloads, and the wire contract never
+    // serialized this internal field for CONFLICTING_PAYLOAD anyway.)
+    if (state.knownReceipt.answerIdentity === answerIdentity) {
       return {
         accepted: true,
-        serverVersion: existingBySeq.version,
-        savedAt: existingBySeq.savedAt.toISOString(),
+        serverVersion: state.knownReceipt.version,
+        savedAt: state.knownReceipt.savedAt.toISOString(),
       };
     }
     return {
       accepted: false,
-      serverVersion: existingBySeq.version,
+      serverVersion: state.knownReceipt.version,
       savedAt: savedAtIso,
       conflict: {
         reason: "CONFLICTING_PAYLOAD" as const,
-        latestAnswer: existingBySeq.answer,
       },
     };
   }
@@ -231,15 +272,18 @@ export function processSaveAnswer(
     savedAt: now,
   };
 
-  const newClientSeqMap = new Map(state.clientSeqMap);
-  newClientSeqMap.set(idempotencyKey, newAnswer);
-
   return {
     accepted: true,
     serverVersion: newVersion,
     savedAt: savedAtIso,
     newAnswer,
-    newClientSeqMap,
+    newReceipt: {
+      questionId: request.questionId,
+      clientSeq: request.clientSeq,
+      answerIdentity,
+      version: newVersion,
+      savedAt: now,
+    },
   };
 }
 
@@ -251,128 +295,29 @@ export function processSaveAnswer(
 // independently-tested decision core; the API route delegates the whole action.
 
 /**
- * A draft answer row as persisted on `exam_attempts.answers`. Mirrors the
- * JSONB shape written by prior versions of the save protocol: the engine
- * reconstructs this representation internally and never exposes it as a caller
- * responsibility.
- *
- * `savedAt` may be a Date or an ISO string on read (legacy JSONB); `clientSeq`
- * / `clientSeqHistory` carry the idempotency receipts.
- */
-interface PersistedAnswer extends Omit<AnswerRecord, "savedAt"> {
-  savedAt: Date | string;
-  clientSeq?: number;
-  clientSeqHistory?: PersistedAnswerReceipt[];
-}
-
-/** A single prior client-side save receipt persisted for idempotency replay. */
-interface PersistedAnswerReceipt {
-  clientSeq: number;
-  answer: unknown;
-  version: number;
-  savedAt: Date | string;
-}
-
-/**
- * Normalizes persisted draft answers so `savedAt` is always a Date, recursively
- * through the clientSeq history receipts. Pure.
- */
-function normalizePersistedAnswers(
-  answers: PersistedAnswer[],
-): PersistedAnswer[] {
-  return answers.map((a) => ({
-    ...a,
-    savedAt: typeof a.savedAt === "string" ? new Date(a.savedAt) : a.savedAt,
-    ...(a.clientSeqHistory
-      ? {
-          clientSeqHistory: a.clientSeqHistory.map((receipt) => ({
-            ...receipt,
-            savedAt:
-              typeof receipt.savedAt === "string"
-                ? new Date(receipt.savedAt)
-                : receipt.savedAt,
-          })),
-        }
-      : {}),
-  }));
-}
-
-/**
- * Builds the `questionId:clientSeq` → AnswerRecord lookup used by the
- * idempotency check inside `processSaveAnswer`. Pure.
- */
-function buildClientSeqMap(
-  answers: PersistedAnswer[],
-): Map<string, AnswerRecord> {
-  const map = new Map<string, AnswerRecord>();
-  for (const answer of answers) {
-    for (const receipt of answer.clientSeqHistory ?? []) {
-      map.set(`${answer.questionId}:${receipt.clientSeq}`, {
-        questionId: answer.questionId,
-        answer: receipt.answer,
-        version: receipt.version,
-        savedAt: new Date(receipt.savedAt),
-      });
-    }
-    if (answer.clientSeq !== undefined) {
-      map.set(`${answer.questionId}:${answer.clientSeq}`, {
-        questionId: answer.questionId,
-        answer: answer.answer,
-        version: answer.version,
-        savedAt:
-          answer.savedAt instanceof Date
-            ? answer.savedAt
-            : new Date(answer.savedAt),
-      });
-    }
-  }
-  return map;
-}
-
-/**
- * Reconstructs the persisted draft-answer state for the accepted result: folds
- * the new answer into the existing list, carrying forward the prior answer's
- * clientSeq as a history receipt (when its clientSeq was set). Pure — returns
- * the next persisted answers array without mutating the input.
- *
- * The persisted JSONB column (`exam_attempts.answers`) stores a wider shape than
- * `AnswerRecord` — it additionally carries `clientSeq` / `clientSeqHistory`
- * receipts used for idempotent replay. Those additive fields ride alongside the
- * `AnswerRecord` core; the returned array is typed `AnswerRecord[]` (the
- * declared column shape) with the extra metadata preserved structurally.
- * `savedAt` is always a `Date` here because `normalizePersistedAnswers` has
- * already run on the input prior to this call.
+ * Folds the accepted answer into the persisted draft-answer list (#669 Phase
+ * D2): the persisted element is now a pure `AnswerRecord`. The replay
+ * receipts that used to ride alongside it (`clientSeq` / `clientSeqHistory`
+ * JSONB fields with full payload copies) live in the append-only
+ * `exam_answer_save_receipts` table instead — adding receipt N+1 no longer
+ * rewrites prior receipt state. Pure — returns the next answers array without
+ * mutating the input.
  */
 function applyAcceptedResult(
-  storedAnswers: PersistedAnswer[],
+  storedAnswers: AnswerRecord[],
   newAnswer: AnswerRecord,
   request: SaveAnswerRequest,
 ): AnswerRecord[] {
-  const previousAnswer = storedAnswers.find(
-    (a) => a.questionId === request.questionId,
-  );
-  const previousReceipt =
-    previousAnswer?.clientSeq === undefined
-      ? []
-      : [
-          {
-            clientSeq: previousAnswer.clientSeq,
-            answer: previousAnswer.answer,
-            version: previousAnswer.version,
-            savedAt: previousAnswer.savedAt,
-          },
-        ];
-  const storedNewAnswer = {
-    ...newAnswer,
-    clientSeq: request.clientSeq,
-    clientSeqHistory: [
-      ...(previousAnswer?.clientSeqHistory ?? []),
-      ...previousReceipt,
-    ],
-  };
   return storedAnswers
     .filter((a) => a.questionId !== request.questionId)
-    .concat([storedNewAnswer]) as unknown as AnswerRecord[];
+    .concat([
+      {
+        questionId: request.questionId,
+        answer: newAnswer.answer,
+        version: newAnswer.version,
+        savedAt: newAnswer.savedAt,
+      },
+    ]);
 }
 
 /**
@@ -383,14 +328,16 @@ function applyAcceptedResult(
  *   consume opaque mutation evidence (provenance + repo affinity)
  *     → load authoritative persisted attempt state
  *     → P1: validate questionId ∈ attempt.questionSnapshot (local legality)
- *     → reconstruct AnswerState (normalize + build clientSeqMap)
+ *     → reconstruct AnswerState (one indexed replay-receipt lookup for the
+ *       request's own key)
  *     → invoke the pure `processSaveAnswer` decision core using the CANONICAL
  *       effective deadline from the mutation context (P3), not attempt.deadlineAt
  *       → status guards → deadline guard → canonical answer shape validation /
  *         canonicalization (caller-supplied, frozen-question-bound) →
  *         idempotency / version semantics
- *     → on accept: apply the result and persist `attempt.answers` + heartbeat,
- *       stamped with the context's authoritative checkedAt
+ *     → on accept: apply the result and persist `attempt.answers` + heartbeat
+ *       + the immutable replay receipt, stamped with the context's
+ *       authoritative checkedAt
  *     → return the semantic result
  *
  * Precondition evidence (`mutationContext`): minted by the canonical
@@ -413,11 +360,13 @@ function applyAcceptedResult(
  * EA lock predecessor seam (`lockEnrollmentAndAttempt`), the canonical
  * preparation seam, candidate-ownership checks, and mapping the returned
  * semantic result to the wire contract. It must NOT construct `AnswerState`,
- * rebuild the clientSeqMap, compute the effective deadline, or write
+ * look up replay receipts, compute the effective deadline, or write
  * `attempt.answers` itself.
  *
  * Persistence semantics:
- *   - accepted NEW answer        → single `update({ answers, lastActivityAt })`
+ *   - accepted NEW answer        → one `update({ answers, lastActivityAt })`
+ *                                  + one `appendAnswerReceipt` (same
+ *                                  transaction: one protocol commit)
  *   - accepted idempotent replay → NO WRITE (the prior savedAt is returned)
  *   - any rejection              → NO WRITE (draft answers unchanged)
  *
@@ -471,10 +420,18 @@ export async function saveAnswer(
     throw new ValidationError("问题不在此尝试中");
   }
 
-  const storedAnswers = normalizePersistedAnswers(
-    (attempt.answers ?? []) as PersistedAnswer[],
+  const storedAnswers = (attempt.answers ?? []) as AnswerRecord[];
+
+  // Replay recognition for THIS request's key: one indexed repository lookup,
+  // transactionally consistent with the answers write below (same tx-scoped
+  // repository, proven by the P2 affinity assertion). An accepted clientSeq
+  // MUST NOT become unknown while the attempt is mutable — receipts are
+  // append-only with no retention bound (#669 Phase D2).
+  const knownReceipt = await attemptRepo.findAnswerReceipt(
+    mutationContext.attemptId,
+    request.questionId,
+    request.clientSeq,
   );
-  const clientSeqMap = buildClientSeqMap(storedAnswers);
 
   // P3 — the canonical effective deadline. The pure decision receives the
   // canonical effective deadline from the mutation context (output of
@@ -489,7 +446,7 @@ export async function saveAnswer(
     {
       attemptStatus: attempt.status as AttemptStatus,
       answers: attempt.answers,
-      clientSeqMap,
+      knownReceipt,
       deadlineAt: mutationContext.effectiveDeadline,
       now: mutationContext.checkedAt,
     },
@@ -505,7 +462,13 @@ export async function saveAnswer(
   // Apply ONLY on an accepted NEW answer. An idempotent replay returns
   // accepted:true with no `newAnswer` and must NOT trigger a write — the prior
   // savedAt is returned to the caller verbatim. Rejections never write.
-  if (saveResult.accepted && saveResult.newAnswer) {
+  //
+  // Atomicity (#669 Phase D2 §8): the accepted answer transition and the
+  // replay receipt creation are ONE protocol commit — both writes go through
+  // the same transaction-scoped repository, so a receipt-storage failure
+  // rolls the answer write back (and vice versa). There is no committed state
+  // with only one side of the acceptance.
+  if (saveResult.accepted && saveResult.newAnswer && saveResult.newReceipt) {
     const newAnswers = applyAcceptedResult(
       storedAnswers,
       saveResult.newAnswer,
@@ -515,6 +478,10 @@ export async function saveAnswer(
       answers: newAnswers,
       lastActivityAt: mutationContext.checkedAt,
     });
+    await attemptRepo.appendAnswerReceipt(
+      mutationContext.attemptId,
+      saveResult.newReceipt,
+    );
   }
 
   return saveResult;

@@ -6,6 +6,7 @@ import type {
   QuestionSnapshot,
 } from "@exam/domain";
 import type {
+  AnswerReceipt,
   AttemptRepository,
   EnrollmentRepository,
 } from "./attemptCommands.js";
@@ -166,15 +167,48 @@ export function makeEnrollment(
   };
 }
 
+/**
+ * No-op replay-receipt methods for inline AttemptRepository fakes in suites
+ * that do not exercise the Save Answer protocol (#669 Phase D2). Receipt
+ * behavior coverage lives in makeAttemptRepo and the D2 regression suites.
+ */
+export function noAnswerReceiptStore(): {
+  findAnswerReceipt(): null;
+  appendAnswerReceipt(): Promise<void>;
+} {
+  return {
+    findAnswerReceipt() {
+      return null;
+    },
+    async appendAnswerReceipt() {},
+  };
+}
+
 /** In-memory AttemptRepository fake recording update payloads. */
-export function makeAttemptRepo(attempts: ExamAttempt[]): AttemptRepository & {
+export function makeAttemptRepo(
+  attempts: ExamAttempt[],
+  seededReceipts?: AnswerReceipt[],
+): AttemptRepository & {
   updateCalls: Partial<ExamAttempt>[];
   get(id: string): ExamAttempt;
   /** Count of updates that wrote the draft `answers` field (the save write). */
   draftAnswerWriteCount(): number;
+  /** All receipts appended through the fake, keyed by replay key. */
+  receipts: Map<string, AnswerReceipt>;
 } {
   const store = [...attempts];
   const updateCalls: Partial<ExamAttempt>[] = [];
+  const receipts = new Map<string, AnswerReceipt>();
+  // Seeded receipts bind to the first attempt — replay suites are
+  // single-attempt; the receipts store itself is keyed per attempt.
+  if (seededReceipts && store.length > 0) {
+    for (const receipt of seededReceipts) {
+      receipts.set(
+        `${store[0]!.id}:${receipt.questionId}:${receipt.clientSeq}`,
+        receipt,
+      );
+    }
+  }
   return {
     findById(id) {
       return store.find((a) => a.id === id) ?? null;
@@ -205,7 +239,17 @@ export function makeAttemptRepo(attempts: ExamAttempt[]): AttemptRepository & {
       store[idx] = { ...store[idx]!, lastActivityAt: now };
       return store[idx]!;
     },
+    findAnswerReceipt(attemptId, questionId, clientSeq) {
+      return receipts.get(`${attemptId}:${questionId}:${clientSeq}`) ?? null;
+    },
+    async appendAnswerReceipt(attemptId, receipt) {
+      receipts.set(
+        `${attemptId}:${receipt.questionId}:${receipt.clientSeq}`,
+        receipt,
+      );
+    },
     updateCalls,
+    receipts,
     get(id: string): ExamAttempt {
       const found = store.find((a) => a.id === id);
       if (!found) throw new Error(`attempt ${id} not found in fake store`);
@@ -315,14 +359,18 @@ export interface PreparedHarness extends PreparedAttemptMutation {
  * Full preparation harness: builds in-memory repos, mints the EA capability via
  * the canonical seam, runs the preparation seam, and returns the mutation
  * context plus the post-reconciliation attempt and the repo objects.
+ *
+ * `seededReceipts` pre-populates the fake's replay-receipt store for the
+ * attempt under preparation (#669 Phase D2 suites).
  */
 export async function prepare(
   exam: Exam,
   attempt: ExamAttempt,
   enrollment: ExamEnrollment,
   now: Date,
+  seededReceipts?: AnswerReceipt[],
 ): Promise<PreparedHarness> {
-  const attemptRepo = makeAttemptRepo([attempt]);
+  const attemptRepo = makeAttemptRepo([attempt], seededReceipts);
   const enrollmentRepo = makeEnrollmentRepo([enrollment]);
   const examRepo = makeExamRepo([exam]);
   const gradingWorksetRepo = makeGradingWorksetRepo();

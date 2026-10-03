@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ExamAttempt } from "@exam/domain";
-import { saveAnswer } from "./answerProtocol.js";
+import { canonicalAnswerIdentity, saveAnswer } from "./answerProtocol.js";
+import type { AnswerReceipt } from "./attemptCommands.js";
 import {
   makeExam,
   makeAttempt,
@@ -25,16 +26,19 @@ import {
  * + context mint) for an in-progress attempt and returns it ready to drive
  * `saveAnswer`. The exam window is wide so `now` (10:05) is well within the
  * canonical effective deadline (min(closeAt=12:00, deadlineAt=11:00) = 11:00).
+ * `seededReceipts` pre-populates the replay-receipt store (#669 Phase D2).
  */
 async function harness(
   attemptOverrides: Partial<ExamAttempt> = {},
   now = new Date("2025-01-01T10:05:00Z"),
+  seededReceipts?: AnswerReceipt[],
 ): Promise<PreparedHarness> {
   return prepare(
     makeExam(),
     makeAttempt(attemptOverrides),
     makeEnrollment(),
     now,
+    seededReceipts,
   );
 }
 
@@ -75,15 +79,6 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
       answer: "c",
       version: 2,
       savedAt: new Date("2025-01-01T10:04:00Z"),
-      clientSeq: 2,
-      clientSeqHistory: [
-        {
-          clientSeq: 2,
-          answer: "c",
-          version: 2,
-          savedAt: new Date("2025-01-01T10:04:00Z"),
-        },
-      ],
     };
     const h = await harness({ answers: [existing] }, now);
     const beforeAnswers = h.attemptRepo.get("attempt-1").answers;
@@ -107,22 +102,31 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
   it("3. idempotent replay performs no write and preserves the original savedAt", async () => {
     const originalSavedAt = new Date("2025-01-01T10:04:00Z");
     const now = new Date("2025-01-01T10:05:00Z");
-    const existing = {
-      questionId: "q1",
-      answer: "b",
-      version: 1,
-      savedAt: originalSavedAt,
-      clientSeq: 1,
-      clientSeqHistory: [
+    const h = await harness(
+      {
+        answers: [
+          {
+            questionId: "q1",
+            answer: "b",
+            version: 1,
+            savedAt: originalSavedAt,
+          },
+        ],
+      },
+      now,
+      // The prior acceptance of (q1, clientSeq 1) is replay state in the
+      // receipts store (#669 Phase D2) — identity of the accepted canonical
+      // answer, no payload copy.
+      [
         {
+          questionId: "q1",
           clientSeq: 1,
-          answer: "b",
+          answerIdentity: canonicalAnswerIdentity("b"),
           version: 1,
           savedAt: originalSavedAt,
         },
       ],
-    };
-    const h = await harness({ answers: [existing] }, now);
+    );
     const before = h.attemptRepo.get("attempt-1").answers;
 
     const result = await saveAnswer(h.attemptRepo, h.mutationContext, {
@@ -138,6 +142,7 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
     expect(result.savedAt).toBe(originalSavedAt.toISOString());
     expect(result.serverVersion).toBe(1);
     expect(h.attemptRepo.updateCalls).toHaveLength(0);
+    expect(h.attemptRepo.receipts.size).toBe(1); // no additional receipt
     const after = h.attemptRepo.get("attempt-1").answers;
     expect(after).toBe(before);
     expect(after[0]).toMatchObject({
@@ -150,22 +155,28 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
   it("4. conflicting payload returns a semantic rejection and leaves persisted answers unchanged", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
     const originalSavedAt = new Date("2025-01-01T10:04:00Z");
-    const existing = {
-      questionId: "q1",
-      answer: "b",
-      version: 1,
-      savedAt: originalSavedAt,
-      clientSeq: 1,
-      clientSeqHistory: [
+    const h = await harness(
+      {
+        answers: [
+          {
+            questionId: "q1",
+            answer: "b",
+            version: 1,
+            savedAt: originalSavedAt,
+          },
+        ],
+      },
+      now,
+      [
         {
+          questionId: "q1",
           clientSeq: 1,
-          answer: "b",
+          answerIdentity: canonicalAnswerIdentity("b"),
           version: 1,
           savedAt: originalSavedAt,
         },
       ],
-    };
-    const h = await harness({ answers: [existing] }, now);
+    );
     const beforeAnswers = h.attemptRepo.get("attempt-1").answers;
 
     const result = await saveAnswer(h.attemptRepo, h.mutationContext, {
@@ -179,7 +190,6 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
 
     expect(result.accepted).toBe(false);
     expect(result.conflict?.reason).toBe("CONFLICTING_PAYLOAD");
-    expect(result.conflict?.latestAnswer).toBe("b");
     expect(h.attemptRepo.updateCalls).toHaveLength(0);
     expect(h.attemptRepo.get("attempt-1").answers).toEqual(beforeAnswers);
   });
@@ -313,11 +323,15 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
       baseVersion: 0,
     });
 
+    // The next action call reconstructs state against the receipts persisted
+    // by the first save (#669 Phase D2: replay state lives in the receipts
+    // store, not in the draft-answer JSONB).
     const h1 = await prepare(
       makeExam(),
       h0.attemptRepo.get("attempt-1"),
       makeEnrollment(),
       t1,
+      [...h0.attemptRepo.receipts.values()],
     );
     await saveAnswer(h1.attemptRepo, h1.mutationContext, {
       attemptId: "attempt-1",
@@ -330,7 +344,7 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
 
     // Replay the FIRST clientSeq=1 with the SAME payload "a" — must be accepted
     // as idempotent (NOT treated as a conflicting payload), proving the prior
-    // clientSeq=1 history was preserved by the second save's reconstruction.
+    // clientSeq=1 receipt survived the second save (append-only, no eviction).
     const replay = await saveAnswer(h1.attemptRepo, h1.mutationContext, {
       attemptId: "attempt-1",
       questionId: "q1",
@@ -342,9 +356,13 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
 
     expect(replay.accepted).toBe(true);
     expect(replay.conflict).toBeUndefined();
+    // The replay ACK reproduces the FIRST acceptance's acknowledgement.
+    expect(replay.serverVersion).toBe(1);
+    expect(replay.savedAt).toBe(t0.toISOString());
     // h1's repo recorded exactly one write (the second accepted save at t1);
     // the replay against h1's context performs no additional write.
     expect(h1.attemptRepo.updateCalls).toHaveLength(1);
+    expect(h1.attemptRepo.receipts.size).toBe(2);
     const after = h1.attemptRepo.get("attempt-1");
     expect(after.answers[0]).toMatchObject({
       questionId: "q1",

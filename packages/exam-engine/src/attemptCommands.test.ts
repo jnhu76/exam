@@ -1,3 +1,4 @@
+import { noAnswerReceiptStore } from "./attemptMutation.testHelpers.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   startOrRestoreAttempt,
@@ -315,6 +316,7 @@ function makeAttemptRepo(attempts: ExamAttempt[] = []): AttemptRepository {
       store[idx] = { ...store[idx]!, ...data };
       return store[idx]!;
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress(id, now) {
       const idx = store.findIndex((a) => a.id === id);
       if (idx === -1) return null;
@@ -1380,6 +1382,7 @@ describe("attemptCommands", () => {
             sharedAttempts[idx] = { ...sharedAttempts[idx]!, ...data };
             return sharedAttempts[idx]!;
           },
+          ...noAnswerReceiptStore(),
           refreshLastActivityIfInProgress: (id, tick) => {
             const idx = sharedAttempts.findIndex((a) => a.id === id);
             if (idx === -1) return null;
@@ -1617,6 +1620,7 @@ describe("attemptCommands", () => {
         findByEnrollmentAndAttemptNo: () => null,
         create: () => attempt,
         update: () => null,
+        ...noAnswerReceiptStore(),
         refreshLastActivityIfInProgress: () => attempt,
       };
       const wsRepo = makeWorksetRepo();
@@ -1642,6 +1646,7 @@ describe("attemptCommands", () => {
         findByEnrollmentAndAttemptNo: () => null,
         create: () => attempt,
         update: (id, data) => ({ ...attempt, id, ...data }),
+        ...noAnswerReceiptStore(),
         refreshLastActivityIfInProgress: () => attempt,
       };
       const findByIdSpy = vi.spyOn(attRepo, "findById");
@@ -1689,6 +1694,7 @@ describe("attemptCommands", () => {
           store[idx] = { ...store[idx]!, ...data };
           return store[idx]!;
         },
+        ...noAnswerReceiptStore(),
         refreshLastActivityIfInProgress: (id, now) => {
           const idx = store.findIndex((a) => a.id === id);
           if (idx === -1) return null;
@@ -1770,6 +1776,7 @@ describe("attemptCommands", () => {
           store[idx] = { ...store[idx]!, ...data };
           return store[idx]!;
         },
+        ...noAnswerReceiptStore(),
         refreshLastActivityIfInProgress: (id, now) => {
           const idx = store.findIndex((a) => a.id === id);
           if (idx === -1) return null;

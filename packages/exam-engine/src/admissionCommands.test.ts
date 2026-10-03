@@ -16,6 +16,7 @@ import { startOrRestoreAttempt } from "./attemptCommands.js";
 import { QueueAdmissionRequiredError, ValidationError } from "@exam/domain";
 import type { Exam, ExamAttempt } from "@exam/domain";
 import {
+  noAnswerReceiptStore,
   makeExam,
   makeEnrollment,
   makeExamRepo,
@@ -741,6 +742,7 @@ function makeCreatingAttemptRepo(
       store[idx] = { ...store[idx]!, ...data };
       return store[idx]!;
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress(id, now) {
       const row = store.find((a) => a.id === id && a.status === "in_progress");
       if (!row) return null;

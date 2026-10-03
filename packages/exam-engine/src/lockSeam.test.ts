@@ -1,3 +1,4 @@
+import { noAnswerReceiptStore } from "./attemptMutation.testHelpers.js";
 import { describe, expect, it } from "vitest";
 import { NotFoundError, ValidationError } from "@exam/domain";
 import type { ExamAttempt, ExamEnrollment } from "@exam/domain";
@@ -104,6 +105,7 @@ function makeRecordingRepos(opts: {
     update: () => {
       throw new Error("not used");
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress: () => {
       throw new Error("not used");
     },
@@ -282,6 +284,7 @@ describe("assertCapabilityFor (J2 affinity)", () => {
       update: () => {
         throw new Error("not used");
       },
+      ...noAnswerReceiptStore(),
       refreshLastActivityIfInProgress: () => {
         throw new Error("not used");
       },

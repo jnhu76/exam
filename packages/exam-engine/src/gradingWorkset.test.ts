@@ -1,3 +1,4 @@
+import { noAnswerReceiptStore } from "./attemptMutation.testHelpers.js";
 import { describe, expect, it } from "vitest";
 import type {
   AttemptGradingEntry,
@@ -233,6 +234,7 @@ function makeAttemptRepo(attempt: ExamAttempt): AttemptRepository {
       stored = { ...stored, ...data };
       return stored;
     },
+    ...noAnswerReceiptStore(),
     refreshLastActivityIfInProgress: () => stored,
   };
 }

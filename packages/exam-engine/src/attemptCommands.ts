@@ -64,6 +64,33 @@ import {
   type ExamAdmissionRecord,
 } from "./admissionCommands.js";
 
+/**
+ * One accepted SaveAnswer replay receipt (#669 Phase D2): the semantic minimum
+ * needed to recognize and replay a prior acceptance for one
+ * (attempt, questionId, clientSeq) key.
+ *
+ * SEMANTIC_RECEIPT_FIELDS:
+ *   - answerIdentity — the storage representation of the canonical answer
+ *     identity (sha256 over the deterministic serialization of the
+ *     D1-accepted canonical value). Identity remains DEFINED by structural
+ *     equality of canonical values (rich-content-semantic-contract §3.1/§12);
+ *     the digest is a collision-resistant representation, not the semantic
+ *     authority.
+ *   - version / savedAt — the acknowledgement fields replay must reproduce
+ *     verbatim (prior serverVersion + prior savedAt).
+ *
+ * The full answer payload is deliberately NOT retained: replay equality is
+ * decided on identity, and the CONFLICTING_PAYLOAD `latestAnswer` field is
+ * engine-internal only (never serialized to the wire for that reason).
+ */
+export interface AnswerReceipt {
+  questionId: string;
+  clientSeq: number;
+  answerIdentity: string;
+  version: number;
+  savedAt: Date;
+}
+
 /** Repository interface for persisting exam attempt records. */
 export interface AttemptRepository {
   findById(attemptId: string): Promise<ExamAttempt | null> | ExamAttempt | null;
@@ -97,6 +124,28 @@ export interface AttemptRepository {
     attemptId: string,
     now: Date,
   ): Promise<ExamAttempt | null> | ExamAttempt | null;
+  /**
+   * O(1) indexed replay lookup for ONE replay key (#669 Phase D2) — the
+   * receipt for (attemptId, questionId, clientSeq) if a prior save accepted
+   * it, else null. Receipt and accepted answer mutation share the caller's
+   * transaction: implementations MUST use the same transaction-scoped handle
+   * the rest of this repository uses.
+   */
+  findAnswerReceipt(
+    attemptId: string,
+    questionId: string,
+    clientSeq: number,
+  ): Promise<AnswerReceipt | null> | AnswerReceipt | null;
+  /**
+   * Appends one immutable replay receipt. Part of the SaveAnswer protocol
+   * commit: the caller (saveAnswer) invokes it in the same transaction as the
+   * accepted answers write, so receipt creation and answer acceptance are one
+   * atomic protocol commit. Duplicate keys are rejected by the database
+   * unique constraint (one replay key → at most one accepted canonical
+   * identity) — production paths never reach it because every save serializes
+   * on the Attempt row lock before deciding.
+   */
+  appendAnswerReceipt(attemptId: string, receipt: AnswerReceipt): Promise<void>;
 }
 
 /** Repository interface for persisting exam enrollment records. */

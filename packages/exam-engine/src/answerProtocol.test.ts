@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { processSaveAnswer, type AnswerState } from "./answerProtocol.js";
+import {
+  canonicalAnswerIdentity,
+  processSaveAnswer,
+  type AnswerState,
+} from "./answerProtocol.js";
+import type { AnswerReceipt } from "./attemptCommands.js";
 import type {
   AnswerRecord,
   SaveAnswerRequest,
@@ -13,6 +18,21 @@ function makeAnswerRecord(overrides: Partial<AnswerRecord> = {}): AnswerRecord {
     version: 1,
     savedAt: new Date("2025-01-01T10:00:00Z"),
     ...overrides,
+  };
+}
+
+/**
+ * Builds the replay receipt a prior acceptance of `record` under `clientSeq`
+ * would have persisted: identity is derived from the record's (canonical)
+ * answer with the same production authority the decision core uses.
+ */
+function receiptFor(record: AnswerRecord, clientSeq: number): AnswerReceipt {
+  return {
+    questionId: record.questionId,
+    clientSeq,
+    answerIdentity: canonicalAnswerIdentity(record.answer),
+    version: record.version,
+    savedAt: record.savedAt,
   };
 }
 
@@ -34,7 +54,7 @@ function makeState(overrides: Partial<AnswerState> = {}): AnswerState {
   return {
     attemptStatus: "in_progress" as AttemptStatus,
     answers: [],
-    clientSeqMap: new Map(),
+    knownReceipt: null,
     ...overrides,
   };
 }
@@ -56,7 +76,7 @@ describe("answerProtocol", () => {
       const existing = makeAnswerRecord({ version: 1 });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:1", existing]]),
+        knownReceipt: null,
       });
       const request = makeRequest({ baseVersion: 1 });
 
@@ -70,7 +90,9 @@ describe("answerProtocol", () => {
       const existing = makeAnswerRecord({ version: 3 });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        // No receipt for the request's own key (q1, clientSeq 3) — the save
+        // proceeds to the version CAS, which rejects the stale baseVersion.
+        knownReceipt: null,
       });
       const request = makeRequest({ clientSeq: 3, baseVersion: 1 });
 
@@ -89,7 +111,7 @@ describe("answerProtocol", () => {
       const existing = makeAnswerRecord({ version: 2 });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:1", existing]]),
+        knownReceipt: null,
       });
       const request = makeRequest({ clientSeq: 3, baseVersion: 2 });
 
@@ -104,7 +126,7 @@ describe("answerProtocol", () => {
       const existing = makeAnswerRecord({ version: 2 });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:1", existing]]),
+        knownReceipt: null,
       });
       const request = makeRequest({ clientSeq: 3, baseVersion: 3 });
 
@@ -119,7 +141,7 @@ describe("answerProtocol", () => {
       const existing = makeAnswerRecord({ version: 2 });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:1", existing]]),
+        knownReceipt: null,
       });
       const request = makeRequest({ clientSeq: 3, baseVersion: 999 });
 
@@ -149,7 +171,7 @@ describe("answerProtocol", () => {
       });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        knownReceipt: receiptFor(existing, 2),
       });
       // Replay carries the same clientSeq AND the same payload — the
       // idempotency-key path wins regardless of baseVersion, INCLUDING a
@@ -171,7 +193,7 @@ describe("answerProtocol", () => {
       });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        knownReceipt: receiptFor(existing, 2),
       });
       // Same clientSeq but a DIFFERENT payload is a client-key misuse and
       // stays a conflict even with a future baseVersion.
@@ -195,7 +217,7 @@ describe("answerProtocol", () => {
       });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        knownReceipt: receiptFor(existing, 2),
       });
       const request = makeRequest({ clientSeq: 2, baseVersion: 1 });
 
@@ -289,15 +311,42 @@ describe("answerProtocol", () => {
       expect(result.newAnswer?.version).toBe(1);
     });
 
-    it("updates clientSeqMap on accepted result", () => {
+    it("emits the replay receipt for the accepted key on accepted result", () => {
       const state = makeState();
       const request = makeRequest({ baseVersion: 0 });
 
       const result = processSaveAnswer(state, request);
 
-      expect(result.newClientSeqMap).toBeDefined();
-      expect(result.newClientSeqMap?.get("q1:2")).toBeDefined();
-      expect(result.newClientSeqMap?.get("q1:2")?.answer).toBe("b");
+      expect(result.newReceipt).toBeDefined();
+      expect(result.newReceipt?.questionId).toBe("q1");
+      expect(result.newReceipt?.clientSeq).toBe(2);
+      expect(result.newReceipt?.version).toBe(1);
+      expect(result.newReceipt?.answerIdentity).toBe(
+        canonicalAnswerIdentity("b"),
+      );
+    });
+
+    it("emits the same receipt identity for canonically-equal accepted values", () => {
+      // The receipt identity is computed on the CANONICAL value the D1 write
+      // boundary accepted, so two candidate payloads that canonicalize to the
+      // same value share one identity (#669 D2-I / R8).
+      const canonicalizing = (answer: unknown) =>
+        typeof answer === "string"
+          ? { ok: true as const, value: answer.trim().toUpperCase() }
+          : { ok: false as const, reason: "malformed" };
+      const first = processSaveAnswer(
+        makeState(),
+        makeRequest({ answer: "  hello  ", clientSeq: 1, baseVersion: 0 }),
+        canonicalizing,
+      );
+      const replayIdentity = processSaveAnswer(
+        makeState(),
+        makeRequest({ answer: "HELLO", clientSeq: 1, baseVersion: 0 }),
+        canonicalizing,
+      );
+      expect(first.newReceipt?.answerIdentity).toBe(
+        replayIdentity.newReceipt?.answerIdentity,
+      );
     });
 
     it("rejects same clientSeq with different answer as CONFLICTING_PAYLOAD", () => {
@@ -309,7 +358,7 @@ describe("answerProtocol", () => {
       });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        knownReceipt: receiptFor(existing, 2),
       });
       // Request reuses clientSeq=2 but sends a DIFFERENT answer.
       const request = makeRequest({
@@ -322,7 +371,11 @@ describe("answerProtocol", () => {
 
       expect(result.accepted).toBe(false);
       expect(result.conflict?.reason).toBe("CONFLICTING_PAYLOAD");
-      expect(result.conflict?.latestAnswer).toBe("b");
+      // Receipts retain identity, not payload (#669 Phase D2): the conflict
+      // carries no server answer copy. This field was engine-internal even
+      // before D2 — the wire contract never serialized it for
+      // CONFLICTING_PAYLOAD.
+      expect(result.conflict?.latestAnswer).toBeUndefined();
       expect(result.serverVersion).toBe(2);
     });
 
@@ -334,7 +387,7 @@ describe("answerProtocol", () => {
       });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        knownReceipt: receiptFor(existing, 2),
       });
       const request = makeRequest({
         clientSeq: 2,
@@ -356,7 +409,7 @@ describe("answerProtocol", () => {
       });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        knownReceipt: receiptFor(existing, 2),
       });
       const request = makeRequest({
         clientSeq: 2,
@@ -380,7 +433,7 @@ describe("answerProtocol", () => {
       });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        knownReceipt: receiptFor(existing, 2),
       });
       const request = makeRequest({
         clientSeq: 2,
@@ -402,7 +455,7 @@ describe("answerProtocol", () => {
       });
       const state = makeState({
         answers: [existing],
-        clientSeqMap: new Map([["q1:2", existing]]),
+        knownReceipt: receiptFor(existing, 2),
       });
       const request = makeRequest({
         clientSeq: 2,
@@ -720,7 +773,7 @@ describe("processSaveAnswer — canonical rejection precedence matrix (#301 corr
     const replay = processSaveAnswer(
       makeState({
         answers: [first],
-        clientSeqMap: new Map([["q1:2", first]]),
+        knownReceipt: receiptFor(first, 2),
       }),
       makeRequest({
         answer: { parts: ["hel", "lo"] },
@@ -744,7 +797,7 @@ describe("processSaveAnswer — canonical rejection precedence matrix (#301 corr
     const conflict = processSaveAnswer(
       makeState({
         answers: [first],
-        clientSeqMap: new Map([["q1:2", first]]),
+        knownReceipt: receiptFor(first, 2),
       }),
       makeRequest({
         answer: { text: "DIFFERENT" },
