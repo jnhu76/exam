@@ -32,10 +32,9 @@ import { Mathematics } from "@tiptap/extension-mathematics";
 import "katex/dist/katex.min.css";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import type { ContentDocumentV1 } from "@exam/domain";
+import { contentDocumentsEqual, type ContentDocumentV1 } from "@exam/domain";
 import {
   contentDocumentToTiptap,
-  contentDocumentsEqual,
   tiptapToContentDocument,
 } from "./contentAdapter";
 

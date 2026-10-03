@@ -1,22 +1,24 @@
 import {
-  ContentDocumentV1Schema,
-  canonicalizeContentDocument,
-} from "@exam/contracts";
-import {
   CONTENT_DOC_VERSION,
+  contentDocumentsEqual,
   isContentDocumentV1,
   preflightContentDocumentStructure,
   type ContentDocumentV1,
 } from "@exam/domain";
-import { contentDocumentsEqual } from "./contentAdapter";
+import {
+  ContentDocumentV1Schema,
+  canonicalizeContentDocument,
+} from "./contentDocument.js";
 
 /**
  * FROZEN-SEMANTICS read authority for persisted answers
  * (rich-content-semantic-contract.md §7). Every consumer that interprets a
  * persisted candidate answer — candidate mount/restore/reload/STALE_VERSION
- * adoption, grading, result rendering — must classify through
+ * adoption, grading, result rendering, and API export — must classify through
  * `classifyPersistedRichAnswer` (or its binary projection
- * `resolveRichAnswerDocument`) and must not keep a private read oracle.
+ * `resolveRichAnswerDocument`) and must not keep a private read oracle
+ * (#669 Phase D4: the classifier lives in @exam/contracts so the web read
+ * paths and the server export boundary consume one implementation).
  *
  * The classification needs CONTEXT, not only the value: the slot's frozen
  * `answerMode` decides whether a string is the legitimate representation
@@ -32,7 +34,28 @@ import { contentDocumentsEqual } from "./contentAdapter";
  * noncanonical document is returned as persisted (`rich_noncanonical`), and
  * both `unsupported_version` and `corrupt` carry the raw value so callers can
  * fail closed without losing track of the source truth.
+ *
+ * The classifier decides semantic interpretation ONLY. Representation choices
+ * (e.g. which CSV column shows a plain projection, and what a corrupt row
+ * renders as) belong to each consumer's own policy layer; do not add
+ * export-specific formatting here.
  */
+
+/** The seven §7 read states as a runtime vocabulary (export/DTO consumers). */
+export const PERSISTED_RICH_ANSWER_STATES = [
+  "empty",
+  "plain",
+  "legacy_plain",
+  "rich_valid",
+  "rich_noncanonical",
+  "unsupported_version",
+  "corrupt",
+] as const;
+
+/** One of the seven §7 read states, as a bare token. */
+export type PersistedRichAnswerState =
+  (typeof PERSISTED_RICH_ANSWER_STATES)[number];
+
 export type RichAnswerReadState =
   | { kind: "empty" }
   | { kind: "plain"; text: string }
@@ -41,6 +64,18 @@ export type RichAnswerReadState =
   | { kind: "rich_noncanonical"; document: ContentDocumentV1 }
   | { kind: "unsupported_version"; raw: unknown }
   | { kind: "corrupt"; raw: unknown };
+
+/** Compile-time guard: the state vocabulary and the classified union agree. */
+type AssertExact<A, B> = [A] extends [B]
+  ? [B] extends [A]
+    ? true
+    : false
+  : false;
+const _stateVocabularyIdentity: AssertExact<
+  RichAnswerReadState["kind"],
+  PersistedRichAnswerState
+> = true;
+void _stateVocabularyIdentity;
 
 export function classifyPersistedRichAnswer(input: {
   value: unknown;

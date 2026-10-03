@@ -3,10 +3,12 @@ import { useTranslation } from "react-i18next";
 import { CircleCheck, CircleX } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { useNavigate, useParams } from "react-router";
-import type { CandidateAttemptResultResponse } from "@exam/contracts";
+import {
+  resolveRichAnswerDocument,
+  type CandidateAttemptResultResponse,
+} from "@exam/contracts";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
-import { resolveRichAnswerDocument } from "@/components/shared/content/richAnswer";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";

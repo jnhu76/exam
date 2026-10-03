@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyPersistedRichAnswer,
   resolveRichAnswerDocument,
-} from "./richAnswer";
+} from "./persistedRichAnswer.js";
 
 const validDoc = {
   docVersion: 1,
