@@ -1,0 +1,18 @@
+=== packages/domain ===
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+=== packages/contracts ===
+ Test Files  3 passed (3)
+      Tests  50 passed (50)
+=== packages/exam-engine ===
+ Test Files  2 passed (2)
+      Tests  91 passed (91)
+=== apps/api ===
+ Test Files  4 passed (4)
+      Tests  37 passed (37)
+=== apps/web ===
+ Test Files  4 passed (4)
+      Tests  53 passed (53)
+=== packages/db ===
+ Test Files  1 passed (1)
+      Tests  8 passed (8)

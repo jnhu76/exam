@@ -1,0 +1,15 @@
+{
+  "campaign": "O-publish-trust",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:46:14.170Z",
+  "entries": [
+    {
+      "probe": "E-PB02-healthy",
+      "outcome": "canonical-frozen"
+    },
+    {
+      "probe": "E-PB04-no-repair-no-drift",
+      "outcome": "frozen-held"
+    }
+  ]
+}

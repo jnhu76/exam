@@ -1,0 +1,47 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.7 [39m[90m/home/hoo/Source/exam/docs/research/exam-669-rich-phase-e-1[39m
+
+ [32m✓[39m harness/A-canonicalization-algebra.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 5409[2mms[22m[39m
+     [33m[2m✓[22m[39m property: schema-admissible docs → successful canonicalization is closed over schema/limits/idempotence/readability [33m 2994[2mms[22m[39m
+     [33m[2m✓[22m[39m property: same closure holds over boundary-biased generation near every CONTENT_LIMITS edge [33m 1459[2mms[22m[39m
+     [33m[2m✓[22m[39m deterministic exact-limit grid: classification algebra over every CONTENT_LIMITS edge (accept-closes / schema-legal-reject-stays-noncanonical / schema-reject-stays-corrupt) [33m 915[2mms[22m[39m
+ [32m✓[39m harness/E-editor-differential.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 799[2mms[22m[39m
+     [33m[2m✓[22m[39m property: canonical documents survive contentDocumentToTiptap → tiptapToContentDocument exactly [33m 791[2mms[22m[39m
+ [31m❯[39m harness/B-preflight-differential.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 2289[2mms[22m[39m
+     [33m[2m✓[22m[39m differential: a grammar-shaped, limits-clean document must never be rejected by a preflight-sourced violation [33m 1950[2mms[22m[39m
+[31m     [31m×[31m deterministic exact-limit grid: boundary composition matches the kernel's combined-limit counting; limits-clean entries are preflight-accepted[39m[32m 11[2mms[22m[39m
+     [33m[2m✓[22m[39m property: hostile deep raw arrays never overflow the recursive parser — safeParse always terminates [33m 317[2mms[22m[39m
+     [32m✓[39m property: node-count and serialized-size boundaries stay preflight-clean where limits-clean[32m 5[2mms[22m[39m
+     [32m✓[39m hostile intake census: cyclic / non-JSON / wrong-envelope values are rejected without crashes[32m 1[2mms[22m[39m
+     [32m✓[39m regression 0x67300001: preflight raw-depth budget strictly dominates every grammar-legal depth[32m 3[2mms[22m[39m
+ [32m✓[39m harness/G-saveanswer-precedence.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+ [32m✓[39m harness/C-classifier-differential.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2099[2mms[22m[39m
+     [33m[2m✓[22m[39m property: unmutated schema-admissible docs agree (typically rich_valid / rich_noncanonical) [33m 1957[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m harness/B-preflight-differential.test.ts[2m > [22mCampaign B — preflight/grammar differential (E-RC04)[2m > [22mdeterministic exact-limit grid: boundary composition matches the kernel's combined-limit counting; limits-clean entries are preflight-accepted
+[31m[1mAssertionError[22m: listDepth-8-empty-leaf (depth exactly 16): a limits-clean boundary doc must remain schema-admissible: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m harness/B-preflight-differential.test.ts:[2m119:11[22m[39m
+    [90m117|[39m           [33mContentDocumentV1Schema[39m[33m.[39m[34msafeParse[39m(doc)[33m.[39msuccess[33m,[39m
+    [90m118|[39m           `${name}: a limits-clean boundary doc must remain schema-adm…
+    [90m119|[39m         )[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m           [31m^[39m
+    [90m120|[39m       } [35melse[39m {
+    [90m121|[39m         [34mexpect[39m(
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m4 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m29 passed[39m[22m[90m (30)[39m
+[2m   Start at [22m 00:19:06
+[2m   Duration [22m 12.30s[2m (transform 513ms, setup 0ms, import 1.06s, tests 10.64s, environment 0ms)[22m
+

@@ -1,0 +1,32 @@
+{
+  "campaign": "G-saveanswer-precedence",
+  "seeds": [1720713217],
+  "recordedAt": "2026-10-03T17:45:36.416Z",
+  "enumeration": "exhaustive 4×3×4×4×3×2 = 1152 decision-core combos",
+  "entries": [
+    {
+      "probe": "exhaustive-matrix",
+      "combos": 1152
+    },
+    {
+      "probe": "guards-before-canonicalization",
+      "outcome": "ok"
+    },
+    {
+      "probe": "equivalent-identity-replay",
+      "outcome": "ok"
+    },
+    {
+      "probe": "replay-over-cas",
+      "outcome": "ok"
+    },
+    {
+      "probe": "terminal-over-replay",
+      "outcome": "ok"
+    },
+    {
+      "probe": "conflicting-payload",
+      "outcome": "ok"
+    }
+  ]
+}

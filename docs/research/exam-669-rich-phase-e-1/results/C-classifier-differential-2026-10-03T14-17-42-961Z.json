@@ -1,0 +1,11 @@
+{
+  "campaign": "C-classifier-differential",
+  "seeds": [1721630723, 1745879041],
+  "recordedAt": "2026-10-03T14:17:42.961Z",
+  "entries": [
+    {
+      "probe": "objective-slots-outside-rich",
+      "outcome": "ok"
+    }
+  ]
+}

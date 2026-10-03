@@ -1,0 +1,44 @@
+{
+  "campaign": "A-canonical-algebra",
+  "seeds": [1721630721, 1720713217],
+  "recordedAt": "2026-10-03T14:19:11.558Z",
+  "numRunsMain": 600,
+  "entries": [
+    {
+      "probe": "bf01-adjacent-merge",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "nested-chain-8",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-12",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-14",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-15",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-16",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-17",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-20",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "noncanonical-legal-roundtrip",
+      "outcome": "ok"
+    }
+  ]
+}

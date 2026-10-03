@@ -1,0 +1,31 @@
+{
+  "campaign": "O-publish-trust",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T19:21:49.025Z",
+  "entries": [
+    {
+      "probe": "E-PB02-healthy",
+      "outcome": "canonical-frozen"
+    },
+    {
+      "probe": "E-PB01-corrupt",
+      "outcome": "typed-400-no-freeze"
+    },
+    {
+      "probe": "E-PB01-unsupported",
+      "outcome": "typed-400-no-freeze"
+    },
+    {
+      "probe": "E-PB01-noncanonical",
+      "outcome": "typed-400-no-freeze"
+    },
+    {
+      "probe": "E-PB02-projection-invariant",
+      "outcome": "typed-400-no-freeze"
+    },
+    {
+      "probe": "E-PB04-no-repair-no-drift",
+      "outcome": "frozen-held"
+    }
+  ]
+}

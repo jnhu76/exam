@@ -1,0 +1,27 @@
+
+ RUN  v4.1.7 /home/hoo/Source/exam/docs/research/exam-669-rich-phase-e-1
+
+ ✓ harness/A-canonicalization-algebra.test.ts (7 tests) 5617ms
+     ✓ property: schema-admissible docs → successful canonicalization is closed over schema/limits/idempotence/readability  3130ms
+     ✓ property: same closure holds over boundary-biased generation near every CONTENT_LIMITS edge  1522ms
+     ✓ deterministic exact-limit grid: classification algebra over every CONTENT_LIMITS edge (accept-closes / schema-legal-reject-stays-noncanonical / schema-reject-stays-corrupt)  922ms
+ ✓ harness/D-durable-roundtrip.test.ts (5 tests) 3899ms
+     ✓ property: the wire verdict equals the authority verdict; accepted answers round-trip (E-RT01/02)  1768ms
+     ✓ deterministic exact-limit grid over the wire: the authority branch decides; accepted entries round-trip  1238ms
+ ✓ harness/B-preflight-differential.test.ts (7 tests) 2368ms
+     ✓ differential: a grammar-shaped, limits-clean document must never be rejected by a preflight-sourced violation  1959ms
+     ✓ property: hostile deep raw arrays never overflow the recursive parser — safeParse always terminates  308ms
+ ✓ harness/C-classifier-differential.test.ts (4 tests) 2165ms
+     ✓ property: unmutated schema-admissible docs agree (typically rich_valid / rich_noncanonical)  2029ms
+ ✓ harness/H-replay-longevity.test.ts (6 tests) 1399ms
+     ✓ H1 longevity: seq 1 still ACKs after many later accepted saves (E-RP03, no eviction)  346ms
+ ✓ harness/E-editor-differential.test.ts (7 tests) 812ms
+     ✓ property: canonical documents survive contentDocumentToTiptap → tiptapToContentDocument exactly  804ms
+ ✓ harness/G-saveanswer-precedence.test.ts (6 tests) 59ms
+ ✓ harness/F-durable-writer-census.test.ts (3 tests) 26ms
+
+ Test Files  8 passed (8)
+      Tests  45 passed (45)
+   Start at  02:24:26
+   Duration  21.12s (transform 1.10s, setup 0ms, import 3.22s, tests 16.34s, environment 1ms)
+

@@ -1,0 +1,29 @@
+{
+  "campaign": "H-replay-longevity",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:23:58.231Z",
+  "entries": [
+    {
+      "probe": "H1-longevity",
+      "outcome": "ack-verbatim-after-11-saves"
+    },
+    {
+      "probe": "H2-restart",
+      "outcome": "durable-receipts"
+    },
+    {
+      "probe": "H3-verbatim",
+      "outcome": "zero-write-ack"
+    },
+    {
+      "probe": "H4-concurrent-conflict",
+      "outcome": "single-winner",
+      "winnerIdentity": "ecc76d3b7f04607b8a1e4dd738dd88503fccfdcc016a12ad185bf05d10fbbcb8"
+    },
+    {
+      "probe": "H5-concurrent-cas",
+      "outcome": "single-accept",
+      "winnerSeq": 200
+    }
+  ]
+}

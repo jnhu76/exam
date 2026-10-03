@@ -1,0 +1,15 @@
+{
+  "campaign": "J-frozen-vs-live",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:30:08.048Z",
+  "entries": [
+    {
+      "probe": "J1-snapshot-stability",
+      "outcome": "frozen-across-edit+submit+rebuild"
+    },
+    {
+      "probe": "J3-durable-freeze",
+      "outcome": "frozen-rows-verbatim"
+    }
+  ]
+}

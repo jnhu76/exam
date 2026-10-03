@@ -1,0 +1,127 @@
+{
+  "campaign": "D-durable-roundtrip",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:22:31.828Z",
+  "entries": [
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property",
+      "outcome": "nul-deferred-to-Q"
+    },
+    {
+      "probe": "property-summary",
+      "outcome": "done",
+      "runs": 40,
+      "acceptedRuns": 30,
+      "rejectedRuns": 13,
+      "nulDeferred": 10,
+      "violations": 0
+    },
+    {
+      "probe": "textRun-at-limit",
+      "outcome": "wire-accepted"
+    },
+    {
+      "probe": "textRun-over-limit",
+      "outcome": "wire-rejected"
+    },
+    {
+      "probe": "latex-at-limit",
+      "outcome": "wire-accepted"
+    },
+    {
+      "probe": "latex-over-limit",
+      "outcome": "wire-rejected"
+    },
+    {
+      "probe": "codeBlock-at-limit",
+      "outcome": "wire-accepted"
+    },
+    {
+      "probe": "codeBlock-over-limit",
+      "outcome": "wire-rejected"
+    },
+    {
+      "probe": "listDepth-7-leafed (depth 15)",
+      "outcome": "wire-accepted"
+    },
+    {
+      "probe": "listDepth-8-leafed-paragraph (depth 17 > 16)",
+      "outcome": "wire-rejected"
+    },
+    {
+      "probe": "listDepth-9-leafed-over",
+      "outcome": "wire-rejected"
+    },
+    {
+      "probe": "nodes-exact-2000",
+      "outcome": "wire-accepted"
+    },
+    {
+      "probe": "nodes-over-2000",
+      "outcome": "wire-rejected"
+    },
+    {
+      "probe": "table-max-cells-400 (100 rows × 4 cols)",
+      "outcome": "wire-accepted"
+    },
+    {
+      "probe": "table-100x20-cells-2000-over",
+      "outcome": "wire-rejected"
+    },
+    {
+      "probe": "serialized-at-limit-minus-1",
+      "outcome": "wire-accepted"
+    },
+    {
+      "probe": "serialized-over-limit",
+      "outcome": "wire-rejected"
+    },
+    {
+      "probe": "grid-summary",
+      "outcome": "done",
+      "accepted": 7,
+      "rejected": 8
+    },
+    {
+      "probe": "D-F01-nul-text-run",
+      "outcome": "counterexample-pinned",
+      "detail": "authority-accepted rich answer with U+0000 in a text run: schema + canonicalization accept, wire answers 500 INTERNAL_ERROR; containment held (no durable write, no receipt). §41: recorded, not repaired."
+    }
+  ]
+}

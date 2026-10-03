@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+  "include": [
+    "harness/**/*.ts",
+    "vitest.config.ts",
+    "../../../apps/api/src/types/*.d.ts",
+    "../../../apps/api/src/plugins/db.ts",
+    "../../../apps/api/src/plugins/redis.ts"
+  ]
+}

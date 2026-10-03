@@ -1,0 +1,79 @@
+{
+  "campaign": "Q-unicode-roundtrip",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:55:29.010Z",
+  "entries": [
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"a\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"combining: áëi̊\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"emoji family: 👨‍👩‍👧‍👦 🏳️‍🌈\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"zwj: 👩‍💻\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"bidi: ‎abc‏ ‫x‬\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"newlines: \\r\\n \\n \\r    \""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"cjk: 中文漢字テスト한국어\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"astral: 𝕏𝕐ℤ 𝄞 𝕌𝕟𝕚\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"rtl override: ‮mirrored\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"tab/vt: \\t\\u000b\\f\""
+    },
+    {
+      "probe": "survivable",
+      "outcome": "round-trip",
+      "sample": "\"latex-ish: \\\\frac{中文}{🚀}\""
+    },
+    {
+      "probe": "unrepresentable-nul-bearing",
+      "outcome": "http-500",
+      "reason": "U+0000 cannot be encoded in jsonb text (D-F01 family)",
+      "body": "{\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"服务器内部错误\",\"requestId\":\"req-v\"}}"
+    },
+    {
+      "probe": "unrepresentable-lone-surrogate",
+      "outcome": "http-500",
+      "reason": "unpaired surrogate is not valid UTF-8",
+      "body": "{\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"服务器内部错误\",\"requestId\":\"req-y\"}}"
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "campaign": "U-shadow-oracle-census",
+  "seeds": [],
+  "recordedAt": "2026-10-03T19:21:55.360Z",
+  "entries": [
+    {
+      "probe": "U1-normalizeContentDocument",
+      "outcome": "single-definition",
+      "file": "packages/domain/src/content/contentDocument.ts"
+    },
+    {
+      "probe": "U1-preflightContentDocumentStructure",
+      "outcome": "single-definition",
+      "file": "packages/domain/src/content/contentDocument.ts"
+    },
+    {
+      "probe": "U1-plainTextProjection",
+      "outcome": "single-definition",
+      "file": "packages/domain/src/content/contentDocument.ts"
+    },
+    {
+      "probe": "U1-contentDocumentsEqual",
+      "outcome": "single-definition",
+      "file": "packages/domain/src/content/contentDocument.ts"
+    },
+    {
+      "probe": "U1-canonicalMarks",
+      "outcome": "single-definition",
+      "file": "packages/domain/src/content/contentDocument.ts"
+    },
+    {
+      "probe": "U1-canonicalizeContentDocument",
+      "outcome": "single-definition",
+      "file": "packages/contracts/src/contentDocument.ts"
+    },
+    {
+      "probe": "U1-resolveRichAnswerDocument",
+      "outcome": "single-definition",
+      "file": "packages/contracts/src/persistedRichAnswer.ts"
+    },
+    {
+      "probe": "U1-resolvePersistedQuestionDocument",
+      "outcome": "single-definition",
+      "file": "packages/contracts/src/persistedQuestionContent.ts"
+    },
+    {
+      "probe": "U1-canonicalAnswerIdentity",
+      "outcome": "single-definition",
+      "file": "packages/exam-engine/src/answerProtocol.ts"
+    },
+    {
+      "probe": "U2-limit-literals",
+      "outcome": "authority-only",
+      "violations": 0
+    },
+    {
+      "probe": "U3-docVersion-gates",
+      "outcome": "authority-only",
+      "gateCount": 5
+    },
+    {
+      "probe": "U4-limit-messages",
+      "outcome": "authority-only"
+    },
+    {
+      "probe": "U5-identity-digest",
+      "outcome": "authority-only"
+    },
+    {
+      "probe": "composition",
+      "outcome": "done",
+      "files": 279
+    }
+  ]
+}

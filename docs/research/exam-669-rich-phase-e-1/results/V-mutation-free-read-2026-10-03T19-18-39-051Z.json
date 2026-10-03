@@ -1,0 +1,12 @@
+{
+  "campaign": "V-mutation-free-read",
+  "seeds": [1721630726],
+  "recordedAt": "2026-10-03T19:18:39.051Z",
+  "entries": [
+    {
+      "probe": "V3-response-stability",
+      "outcome": "stable-modulo-serverNow",
+      "surfaces": 5
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.7 [39m[90m/home/hoo/Source/exam/docs/research/exam-669-rich-phase-e-1[39m
+
+ [32m✓[39m harness/B-preflight-differential.test.ts[2m > [22mCampaign B — preflight/grammar differential (E-RC04)[2m > [22mdifferential: a grammar-shaped, limits-clean document must never be rejected by a preflight-sourced violation[33m 39506[2mms[22m[39m
+ [31m×[39m harness/B-preflight-differential.test.ts[2m > [22mCampaign B — preflight/grammar differential (E-RC04)[2m > [22mdeterministic exact-limit grid: limits-clean boundary documents are preflight-accepted[32m 9[2mms[22m[39m
+[31m   → expected 4 to be greater than 5[39m
+ [32m✓[39m harness/B-preflight-differential.test.ts[2m > [22mCampaign B — preflight/grammar differential (E-RC04)[2m > [22mproperty: hostile deep raw arrays never overflow the recursive parser — safeParse always terminates[33m 328[2mms[22m[39m
+ [32m✓[39m harness/B-preflight-differential.test.ts[2m > [22mCampaign B — preflight/grammar differential (E-RC04)[2m > [22mproperty: node-count and serialized-size boundaries stay preflight-clean where limits-clean[32m 6[2mms[22m[39m
+ [32m✓[39m harness/B-preflight-differential.test.ts[2m > [22mCampaign B — preflight/grammar differential (E-RC04)[2m > [22mhostile intake census: cyclic / non-JSON / wrong-envelope values are rejected without crashes[32m 1[2mms[22m[39m
+ [32m✓[39m harness/B-preflight-differential.test.ts[2m > [22mCampaign B — preflight/grammar differential (E-RC04)[2m > [22mregression 0x67300001: preflight raw-depth budget strictly dominates every grammar-legal depth[32m 2[2mms[22m[39m
+ [32m✓[39m harness/C-classifier-differential.test.ts[2m > [22mCampaign C — dual classifier differential (E-RD01..RD03)[2m > [22mproperty: shared Rich-domain judgment is identical across both classifiers (generated corpus)[32m 176[2mms[22m[39m
+ [32m✓[39m harness/C-classifier-differential.test.ts[2m > [22mCampaign C — dual classifier differential (E-RD01..RD03)[2m > [22mproperty: unmutated schema-admissible docs agree (typically rich_valid / rich_noncanonical)[33m 30464[2mms[22m[39m
+ [32m✓[39m harness/C-classifier-differential.test.ts[2m > [22mCampaign C — dual classifier differential (E-RD01..RD03)[2m > [22mregression 0x68100001: near-limit documents agree and unexplained Rich-slot strings stay corrupt in BOTH[32m 1[2mms[22m[39m
+ [32m✓[39m harness/C-classifier-differential.test.ts[2m > [22mCampaign C — dual classifier differential (E-RD01..RD03)[2m > [22mregression: objective typed answers never enter Rich interpretation (export policy, E-EX02)[32m 9[2mms[22m[39m
+ [31m×[39m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mproperty: schema-admissible docs → successful canonicalization is closed over schema/limits/idempotence/readability[33m 244686[2mms[22m[39m
+[31m   → Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+ [32m✓[39m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mproperty: same closure holds over boundary-biased generation near every CONTENT_LIMITS edge[33m 1466[2mms[22m[39m
+ [31m×[39m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mdeterministic exact-limit grid: every CONTENT_LIMITS edge closes or rejects legally (no accept-then-reject)[32m 21[2mms[22m[39m
+[31m   → nodes-over-2000: canonicalize accepted a document the schema rejects[39m
+ [31m×[39m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mproperty: normalize idempotence holds even where canonicalization is rejected[33m 248971[2mms[22m[39m
+[31m   → Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+ [32m✓[39m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mregression 0x66900001 / B-F01 class: adjacent same-mark runs merging past textRun must REJECT, never accept an over-limit canonical[32m 1[2mms[22m[39m
+ [32m✓[39m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mregression 0x67300001: grammar-legal maximum-depth chain (listDepth/depth at limit) closes[32m 1[2mms[22m[39m
+ [32m✓[39m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mregression 0x68100001: unnormalized legal doc stays rich_noncanonical and canonicalizes to rich_valid on write[32m 0[2mms[22m[39m
+ [31m×[39m harness/G-saveanswer-precedence.test.ts[2m > [22mCampaign G — SaveAnswer precedence combinations (E-RP01..04, §13)[2m > [22mexhaustive decision-core matrix: actual == frozen precedence for every combination[32m 22[2mms[22m[39m
+[31m   → combo {"status":"active","deadline":"none","payload":"canonB","receipt":"sameIdA","baseVersion":"low","currentVersion":0}: actual CONFLICTING_PAYLOAD != frozen REPLAY_ACK: expected 'CONFLICTING_PAYLOAD' to be 'REPLAY_ACK' // Object.is equality[39m
+ [32m✓[39m harness/G-saveanswer-precedence.test.ts[2m > [22mCampaign G — SaveAnswer precedence combinations (E-RP01..04, §13)[2m > [22mprecedence proof: lifecycle/deadline guards run BEFORE canonicalization (malformed payload cannot mask them)[32m 1[2mms[22m[39m
+ [32m✓[39m harness/G-saveanswer-precedence.test.ts[2m > [22mCampaign G — SaveAnswer precedence combinations (E-RP01..04, §13)[2m > [22mcanonical identity: same clientSeq + semantically equivalent pre-normalized payload → verbatim prior ACK (E-RP01)[32m 1[2mms[22m[39m
+ [32m✓[39m harness/G-saveanswer-precedence.test.ts[2m > [22mCampaign G — SaveAnswer precedence combinations (E-RP01..04, §13)[2m > [22mknown replay retains precedence over CAS: same identity accepted even with stale/future baseVersion (E-RP04)[32m 0[2mms[22m[39m
+ [32m✓[39m harness/G-saveanswer-precedence.test.ts[2m > [22mCampaign G — SaveAnswer precedence combinations (E-RP01..04, §13)[2m > [22mknown replay never masks terminal lifecycle (§12: terminal guards retain precedence)[32m 0[2mms[22m[39m
+ [32m✓[39m harness/G-saveanswer-precedence.test.ts[2m > [22mCampaign G — SaveAnswer precedence combinations (E-RP01..04, §13)[2m > [22msame clientSeq + truly different canonical identity → CONFLICTING_PAYLOAD regardless of CAS state (E-RP02)[32m 0[2mms[22m[39m
+ [31m×[39m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22mproperty: canonical documents survive contentDocumentToTiptap → tiptapToContentDocument exactly[33m 89270[2mms[22m[39m
+[31m   → Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+ [32m✓[39m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22mdeclared downgrade: blockMath inside a list item maps to an inlineMath paragraph with preserved latex[32m 2[2mms[22m[39m
+ [32m✓[39m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22mdeclared downgrade: blockMath inside a table cell maps to an inlineMath paragraph with preserved latex[32m 1[2mms[22m[39m
+ [32m✓[39m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22munknown marks are DROPPED (declared) while text survives; unknown top-level blocks THROW (fail-closed)[32m 1[2mms[22m[39m
+ [32m✓[39m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22moff-grammar node inside a list item degrades to its DECLARED plain-text projection (no silent loss of semantics without declaration)[32m 0[2mms[22m[39m
+ [31m×[39m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22mpaste-shaped empty-latex blockMath degrades to inlineMath with '' — and the SCHEMA then rejects it downstream (write seam owns rejection)[32m 1[2mms[22m[39m
+[31m   → unmappable block node: listItem[39m
+ [32m✓[39m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22mregression 0x67300001: no supported construct is silently dropped in round-trip (byte census)[32m 1[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 7 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mproperty: schema-admissible docs → successful canonicalization is closed over schema/limits/idempotence/readability
+[31m[1mError[22m: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m harness/A-canonicalization-algebra.test.ts:[2m92:3[22m[39m
+    [90m 90|[39m
+    [90m 91|[39m describe("Campaign A — canonicalization closure algebra (E-RC03)", () …
+    [90m 92|[39m   it("property: schema-admissible docs → successful canonicalization i…
+    [90m   |[39m   [31m^[39m
+    [90m 93|[39m     fc[33m.[39m[34massert[39m(
+    [90m 94|[39m       fc[33m.[39m[34mproperty[39m([34marbitraryDocument[39m([32m"small"[39m)[33m,[39m (d) [33m=>[39m {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mdeterministic exact-limit grid: every CONTENT_LIMITS edge closes or rejects legally (no accept-then-reject)
+[31m[1mError[22m: nodes-over-2000: canonicalize accepted a document the schema rejects[39m
+[36m [2m❯[22m harness/A-canonicalization-algebra.test.ts:[2m124:17[22m[39m
+    [90m122|[39m         [35mconst[39m c [33m=[39m [34mcanonicalizeContentDocument[39m(doc)[33m;[39m
+    [90m123|[39m         [35mif[39m (c[33m.[39mok) {
+    [90m124|[39m           [35mthrow[39m [35mnew[39m [33mError[39m(
+    [90m   |[39m                 [31m^[39m
+    [90m125|[39m             `${name}: canonicalize accepted a document the schema reje…
+    [90m126|[39m           )[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m harness/A-canonicalization-algebra.test.ts[2m > [22mCampaign A — canonicalization closure algebra (E-RC03)[2m > [22mproperty: normalize idempotence holds even where canonicalization is rejected
+[31m[1mError[22m: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m harness/A-canonicalization-algebra.test.ts:[2m151:3[22m[39m
+    [90m149|[39m   })[33m;[39m
+    [90m150|[39m
+    [90m151|[39m   it("property: normalize idempotence holds even where canonicalizatio…
+    [90m   |[39m   [31m^[39m
+    [90m152|[39m     fc[33m.[39m[34massert[39m(
+    [90m153|[39m       fc[33m.[39m[34mproperty[39m([34marbitraryDocument[39m([32m"small"[39m)[33m,[39m (d) [33m=>[39m {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m harness/B-preflight-differential.test.ts[2m > [22mCampaign B — preflight/grammar differential (E-RC04)[2m > [22mdeterministic exact-limit grid: limits-clean boundary documents are preflight-accepted
+[31m[1mAssertionError[22m: expected 4 to be greater than 5[39m
+[36m [2m❯[22m harness/B-preflight-differential.test.ts:[2m112:25[22m[39m
+    [90m110|[39m         limitsClean [33m+=[39m [34m1[39m[33m;[39m
+    [90m111|[39m         [35mconst[39m violations [33m=[39m [34mpreflightContentDocumentStructure[39m(doc)[33m;[39m
+    [90m112|[39m         [34mexpect[39m(
+    [90m   |[39m                         [31m^[39m
+    [90m113|[39m           violations[33m,[39m
+    [90m114|[39m           `${name}: preflight must not shrink the legal set at the bou…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22mproperty: canonical documents survive contentDocumentToTiptap → tiptapToContentDocument exactly
+[31m[1mError[22m: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m harness/E-editor-differential.test.ts:[2m47:3[22m[39m
+    [90m 45|[39m
+    [90m 46|[39m [34mdescribe[39m([32m"Campaign E — editor↔canonical differential (E-RC02)"[39m[33m,[39m () [33m=>[39m {
+    [90m 47|[39m   it("property: canonical documents survive contentDocumentToTiptap → …
+    [90m   |[39m   [31m^[39m
+    [90m 48|[39m     fc[33m.[39m[34massert[39m(
+    [90m 49|[39m       fc[33m.[39m[34mproperty[39m([34marbitraryDocument[39m([32m"small"[39m)[33m,[39m (d) [33m=>[39m {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m harness/E-editor-differential.test.ts[2m > [22mCampaign E — editor↔canonical differential (E-RC02)[2m > [22mpaste-shaped empty-latex blockMath degrades to inlineMath with '' — and the SCHEMA then rejects it downstream (write seam owns rejection)
+[31m[1mError[22m: unmappable block node: listItem[39m
+[36m [2m❯[22m ../../../apps/web/src/components/shared/content/contentAdapter.ts:[2m272:15[22m[39m
+    [90m270|[39m         ][33m;[39m
+    [90m271|[39m       [35mdefault[39m[33m:[39m
+    [90m272|[39m         throw new Error(`unmappable block node: ${node.type ?? "missin…
+    [90m   |[39m               [31m^[39m
+    [90m273|[39m     }
+    [90m274|[39m   })[33m;[39m
+[90m [2m❯[22m blocksFromTiptap ../../../apps/web/src/components/shared/content/contentAdapter.ts:[2m181:24[22m[39m
+[90m [2m❯[22m ../../../apps/web/src/components/shared/content/contentAdapter.ts:[2m333:24[22m[39m
+[90m [2m❯[22m ../../../apps/web/src/components/shared/content/contentAdapter.ts:[2m288:35[22m[39m
+[90m [2m❯[22m listItemsFromTiptap ../../../apps/web/src/components/shared/content/contentAdapter.ts:[2m286:24[22m[39m
+[90m [2m❯[22m ../../../apps/web/src/components/shared/content/contentAdapter.ts:[2m192:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m harness/G-saveanswer-precedence.test.ts[2m > [22mCampaign G — SaveAnswer precedence combinations (E-RP01..04, §13)[2m > [22mexhaustive decision-core matrix: actual == frozen precedence for every combination
+[31m[1mAssertionError[22m: combo {"status":"active","deadline":"none","payload":"canonB","receipt":"sameIdA","baseVersion":"low","currentVersion":0}: actual CONFLICTING_PAYLOAD != frozen REPLAY_ACK: expected 'CONFLICTING_PAYLOAD' to be 'REPLAY_ACK' // Object.is equality[39m
+
+Expected: [32m"REPLAY_ACK"[39m
+Received: [31m"CONFLICTING_PAYLOAD"[39m
+
+[36m [2m❯[22m harness/G-saveanswer-precedence.test.ts:[2m228:19[22m[39m
+    [90m226|[39m                   [32m`[39m[36m${[39mactual[33m.[39mkind[36m}[39m[32m`[39m[33m,[39m
+    [90m227|[39m                   `combo ${JSON.stringify(combo)}: actual ${actual.kin…
+    [90m228|[39m                 )[33m.[39m[34mtoBe[39m(expectedKind)[33m;[39m
+    [90m   |[39m                   [31m^[39m
+    [90m229|[39m                 [35mif[39m (expected[33m.[39mkind [33m===[39m [32m"accepted"[39m) {
+    [90m230|[39m                   [34mexpect[39m(actual[33m.[39mnewAnswer)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[31m7 failed[39m[22m[2m | [22m[1m[32m23 passed[39m[22m[90m (30)[39m
+[2m   Start at [22m 23:55:38
+[2m   Duration [22m 656.54s[2m (transform 465ms, setup 0ms, import 985ms, tests 654.97s, environment 0ms)[22m
+

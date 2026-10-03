@@ -1,0 +1,14 @@
+{
+  "campaign": "R-identity-differential",
+  "seeds": [1721630722],
+  "recordedAt": "2026-10-03T19:02:33.752Z",
+  "entries": [
+    {
+      "probe": "identity-differential-summary",
+      "outcome": "done",
+      "schemaLegalDocs": 57,
+      "eqPairsChecked": 61,
+      "distinctPairsChecked": 57
+    }
+  ]
+}

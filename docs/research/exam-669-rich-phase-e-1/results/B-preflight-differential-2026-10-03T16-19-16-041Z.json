@@ -1,0 +1,60 @@
+{
+  "campaign": "B-preflight-differential",
+  "seeds": [1721630722, 1731198977],
+  "recordedAt": "2026-10-03T16:19:16.042Z",
+  "HIDDEN_STRICTER_SET": "NONE",
+  "differentialPairsChecked": 300,
+  "grammarShapedLimitsClean": 300,
+  "hostileParsed": 80,
+  "differentialDesign": "public schema pipes preflight first; RC-04 is falsified only when a grammar-shaped limits-clean document is rejected with a preflight-sourced violation",
+  "entries": [
+    {
+      "probe": "grid-dirty:textRun-over-limit",
+      "violations": ["text run exceeds 20000 chars"]
+    },
+    {
+      "probe": "grid-dirty:latex-over-limit",
+      "violations": ["latex exceeds 5000 chars"]
+    },
+    {
+      "probe": "grid-dirty:codeBlock-over-limit",
+      "violations": ["code block exceeds 40000 chars"]
+    },
+    {
+      "probe": "limit-edges",
+      "outcome": "ok"
+    },
+    {
+      "probe": "hostile-cyclic",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-null",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-number",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-string",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-array-root",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-undefined-content",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-function-content",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "budget-dominance",
+      "outcome": "ok"
+    }
+  ]
+}

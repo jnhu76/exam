@@ -1,0 +1,14 @@
+{
+  "campaign": "F-durable-writer-census",
+  "seeds": [],
+  "recordedAt": "2026-10-03T18:17:31.168Z",
+  "inventorySize": 7,
+  "sweepRoots": [
+    "apps/api/src",
+    "packages/db/src",
+    "packages/exam-engine/src",
+    "packages/domain/src",
+    "packages/contracts/src"
+  ],
+  "entries": []
+}

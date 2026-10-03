@@ -1,0 +1,45 @@
+{
+  "campaign": "N-math-adversarial",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:40:50.095Z",
+  "entries": [
+    {
+      "probe": "malformed-unbalanced-open",
+      "outcome": "rendered-with-source"
+    },
+    {
+      "probe": "malformed-unbalanced-close",
+      "outcome": "rendered-with-source"
+    },
+    {
+      "probe": "expansion-def-self-recursion",
+      "outcome": "bounded",
+      "outputChars": 181,
+      "elapsedMs": 6
+    },
+    {
+      "probe": "expansion-def-chain",
+      "outcome": "bounded",
+      "outputChars": 205,
+      "elapsedMs": 1
+    },
+    {
+      "probe": "expansion-deep-superscript",
+      "outcome": "bounded",
+      "outputChars": 195,
+      "elapsedMs": 0
+    },
+    {
+      "probe": "expansion-newline-injection",
+      "outcome": "bounded",
+      "outputChars": 554,
+      "elapsedMs": 0
+    },
+    {
+      "probe": "limit-sized-latex-5000",
+      "outcome": "bounded",
+      "outputChars": 5196,
+      "elapsedMs": 11
+    }
+  ]
+}

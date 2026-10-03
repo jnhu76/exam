@@ -1,0 +1,19 @@
+{
+  "campaign": "I-submit-freeze",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:30:17.329Z",
+  "entries": [
+    {
+      "probe": "E-SB01-last-accepted",
+      "outcome": "frozen-verbatim"
+    },
+    {
+      "probe": "E-SB01-cleared-final",
+      "outcome": "frozen-null"
+    },
+    {
+      "probe": "E-SB02-source-census",
+      "outcome": "no-second-canonicalizer"
+    }
+  ]
+}

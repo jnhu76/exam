@@ -1,0 +1,24 @@
+
+ RUN  v4.1.7 /home/hoo/Source/exam/docs/research/exam-669-rich-phase-e-1
+
+ ✓ harness/A-canonicalization-algebra.test.ts (7 tests) 5409ms
+     ✓ property: schema-admissible docs → successful canonicalization is closed over schema/limits/idempotence/readability  2996ms
+     ✓ property: same closure holds over boundary-biased generation near every CONTENT_LIMITS edge  1443ms
+     ✓ deterministic exact-limit grid: classification algebra over every CONTENT_LIMITS edge (accept-closes / schema-legal-reject-stays-noncanonical / schema-reject-stays-corrupt)  930ms
+ ✓ harness/D-durable-roundtrip.test.ts (5 tests) 3770ms
+     ✓ property: the wire verdict equals the authority verdict; accepted answers round-trip (E-RT01/02)  1788ms
+     ✓ deterministic exact-limit grid over the wire: the authority branch decides; accepted entries round-trip  1079ms
+ ✓ harness/B-preflight-differential.test.ts (7 tests) 2356ms
+     ✓ differential: a grammar-shaped, limits-clean document must never be rejected by a preflight-sourced violation  1925ms
+     ✓ property: hostile deep raw arrays never overflow the recursive parser — safeParse always terminates  328ms
+ ✓ harness/C-classifier-differential.test.ts (4 tests) 2076ms
+     ✓ property: unmutated schema-admissible docs agree (typically rich_valid / rich_noncanonical)  1942ms
+ ✓ harness/E-editor-differential.test.ts (7 tests) 772ms
+     ✓ property: canonical documents survive contentDocumentToTiptap → tiptapToContentDocument exactly  765ms
+ ✓ harness/G-saveanswer-precedence.test.ts (6 tests) 61ms
+
+ Test Files  6 passed (6)
+      Tests  36 passed (36)
+   Start at  02:12:08
+   Duration  18.18s (transform 1.08s, setup 0ms, import 2.41s, tests 14.44s, environment 1ms)
+

@@ -1,0 +1,73 @@
+{
+  "campaign": "F-durable-writer-census",
+  "seeds": [],
+  "recordedAt": "2026-10-03T18:17:47.847Z",
+  "inventorySize": 7,
+  "sweepRoots": [
+    "apps/api/src",
+    "packages/db/src",
+    "packages/exam-engine/src",
+    "packages/domain/src",
+    "packages/contracts/src"
+  ],
+  "entries": [
+    {
+      "probe": "W1/W2/W3",
+      "outcome": "replayed",
+      "file": "apps/api/src/routes/question.ts",
+      "delegated": "D5.1 regressions + A/B boundary grids (authority) + this file's three write sites"
+    },
+    {
+      "probe": "W4",
+      "outcome": "replayed",
+      "file": "apps/api/src/routes/attempts.candidate.ts",
+      "delegated": "Campaign D (round-trip) + Campaign H (replay longevity)"
+    },
+    {
+      "probe": "W5",
+      "outcome": "replayed",
+      "file": "packages/exam-engine/src/attemptCommands.ts",
+      "delegated": "E-SB01/02 → Campaign I"
+    },
+    {
+      "probe": "W6",
+      "outcome": "replayed",
+      "file": "packages/exam-engine/src/examCommands.ts",
+      "delegated": "E-PB01..04 → Campaign O"
+    },
+    {
+      "probe": "W7",
+      "outcome": "replayed",
+      "file": "packages/exam-engine/src/gradingWorkset.ts",
+      "delegated": "E-GR01 → Campaign K"
+    },
+    {
+      "probe": "W8",
+      "outcome": "replayed",
+      "file": "apps/api/src/scripts/backfill-submitted-answers.ts",
+      "delegated": "E-WR01 migration-helper clause"
+    },
+    {
+      "probe": "W9",
+      "outcome": "replayed",
+      "file": "apps/api/src/scripts/recover-legacy-grading-workset.ts",
+      "delegated": "E-WR01 admin-tools clause (copy discipline)"
+    },
+    {
+      "probe": "sweep-summary",
+      "outcome": "done",
+      "scanned": 279,
+      "flagged": [],
+      "adjacent": [
+        "packages/db/src/demo-seed.ts",
+        "packages/db/src/demo-seed-verify.ts",
+        "apps/api/src/scripts/__tests__/recover-legacy-grading-workset.test-support.ts",
+        "packages/db/src/testCleanup.ts"
+      ]
+    },
+    {
+      "probe": "standard-answer-classification",
+      "outcome": "reference-answer-slot"
+    }
+  ]
+}

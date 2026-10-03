@@ -1,0 +1,1964 @@
+{
+  "campaign": "A-canonical-algebra",
+  "seeds": [1721630721, 1720713217],
+  "recordedAt": "2026-10-03T16:05:05.428Z",
+  "numRunsMain": 300,
+  "entries": [
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 185
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 140
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 339
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 518
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 141
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 74
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 375
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 135
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 138
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 479
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 122
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 364
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 220
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 99
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 224
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 89
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 130
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 653
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 283
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 98
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 91
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 74
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 296
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 224
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 77
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 118
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 282
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 154
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 121
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 297
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 163
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 79
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 74
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 93
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 108
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 110
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 157
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 131
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 136
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 93
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 91
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 109
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 97
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 268
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 250
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 332
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 269
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 310
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 104
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 134
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 95
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 74
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 240
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 75
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 90
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 155
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 200
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 243
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 117
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 195
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 139
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 90
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 96
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 220
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 94
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 98
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 470
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 94
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 331
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 96
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 150
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 74
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 266
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 192
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 178
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 96
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 94
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 431
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 136
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 211
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 93
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 324
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 89
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 138
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 232
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 74
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 74
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 133
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 242
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-small",
+      "outcome": "accepted",
+      "serialized": 168
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 181
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 104
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 261
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 127
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 10246
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 20349
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 109
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 5901
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 128
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 182
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 144
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 164
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 24196
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 166
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 111
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 145
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 113
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 99
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 99
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 8590
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 260
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 143
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 11467
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 472
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 137
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 163
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 23991
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 145
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "generated-boundary",
+      "outcome": "accepted",
+      "serialized": 16554
+    },
+    {
+      "probe": "textRun-at-limit",
+      "outcome": "accepted",
+      "serialized": 20100
+    },
+    {
+      "probe": "latex-at-limit",
+      "outcome": "accepted",
+      "serialized": 5073
+    },
+    {
+      "probe": "codeBlock-at-limit",
+      "outcome": "accepted",
+      "serialized": 40088
+    },
+    {
+      "probe": "nodes-exact-2000",
+      "outcome": "accepted",
+      "serialized": 42
+    },
+    {
+      "probe": "bf01-adjacent-merge",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "nested-chain-8",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-12",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-14",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-15",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-16",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-17",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "nested-chain-20",
+      "outcome": "schema-rejected"
+    },
+    {
+      "probe": "noncanonical-legal-roundtrip",
+      "outcome": "ok"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+
+ RUN  v4.1.7 /home/hoo/Source/exam/docs/research/exam-669-rich-phase-e-1
+
+ ✓ harness/D-durable-roundtrip.test.ts (5 tests) 3858ms
+     ✓ property: the wire verdict equals the authority verdict; accepted answers round-trip (E-RT01/02)  1787ms
+     ✓ deterministic exact-limit grid over the wire: the authority branch decides; accepted entries round-trip  1120ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  02:11:34
+   Duration  6.51s (transform 1.14s, setup 0ms, import 1.94s, tests 3.86s, environment 0ms)
+

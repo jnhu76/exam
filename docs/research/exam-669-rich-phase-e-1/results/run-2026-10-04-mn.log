@@ -1,0 +1,22 @@
+
+ RUN  v4.1.7 /home/hoo/Source/exam/docs/research/exam-669-rich-phase-e-1
+
+stderr | harness/N-math-adversarial.test.ts > Campaign N — math adversarial (E-RE04/05/06) > E-RE05: malformed latex never throws; parse errors preserve the source text; parseable garbage renders
+No character metrics for '🚀' in style 'Main-Regular' and mode 'text'
+No character metrics for '‮' in style 'Main-Regular' and mode 'text'
+
+stderr | harness/N-math-adversarial.test.ts > Campaign N — math adversarial (E-RE04/05/06) > E-RE03/06: no active or remote content path in any corpus output
+No character metrics for '🚀' in style 'Main-Regular' and mode 'text'
+No character metrics for '‮' in style 'Main-Regular' and mode 'text'
+
+ ✓ harness/N-math-adversarial.test.ts (3 tests) 33ms
+stderr | harness/M-render-trust.test.ts > Campaign M — static render trust (E-RE01/02/03) > E-RE01: rich_valid renders the document structure, never the plain fallback
+react-i18next:: useTranslation: You will need to pass in an i18next instance by using initReactI18next { code: 'NO_I18NEXT_INSTANCE' }
+
+ ✓ harness/M-render-trust.test.ts (4 tests) 31ms
+
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
+   Start at  02:42:56
+   Duration  2.05s (transform 456ms, setup 0ms, import 631ms, tests 64ms, environment 0ms)
+

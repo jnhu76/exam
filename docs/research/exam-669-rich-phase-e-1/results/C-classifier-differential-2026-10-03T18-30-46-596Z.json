@@ -1,0 +1,3015 @@
+{
+  "campaign": "C-classifier-differential",
+  "seeds": [1721630723, 1745879041],
+  "recordedAt": "2026-10-03T18:30:46.597Z",
+  "entries": [
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=0",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "content-not-array",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "missing-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=2",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "wrong-type",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "extra-key",
+      "answer": "corrupt",
+      "question": "corrupt"
+    },
+    {
+      "probe": "docVersion=-1",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=NaN",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "docVersion=1.5",
+      "answer": "unsupported_version",
+      "question": "unsupported_version"
+    },
+    {
+      "probe": "provenance-and-null-mapping",
+      "outcome": "ok"
+    },
+    {
+      "probe": "objective-slots-outside-rich",
+      "outcome": "ok"
+    }
+  ]
+}

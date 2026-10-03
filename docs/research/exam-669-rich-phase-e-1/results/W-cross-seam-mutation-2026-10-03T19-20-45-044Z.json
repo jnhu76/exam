@@ -1,0 +1,133 @@
+{
+  "campaign": "W-cross-seam-mutation",
+  "seeds": [1721630727],
+  "recordedAt": "2026-10-03T19:20:45.044Z",
+  "entries": [
+    {
+      "probe": "chain-property",
+      "outcome": "no-mutation",
+      "docsConsumed": 120,
+      "failClosedSeams": 0,
+      "seamDispositionCounts": {
+        "editor-adapter": 0,
+        "canonicalizer": 0,
+        "answer-classifier": 0,
+        "question-resolver": 0,
+        "answer-resolver": 0,
+        "projection": 0,
+        "katex": 0,
+        "content-renderer": 0
+      }
+    },
+    {
+      "probe": "boundary-corpus",
+      "outcome": "no-mutation",
+      "cases": [
+        {
+          "name": "canonical-math-list",
+          "dispositions": {
+            "editor-adapter": "returned",
+            "canonicalizer": "returned",
+            "answer-classifier": "returned",
+            "question-resolver": "returned",
+            "answer-resolver": "returned",
+            "projection": "returned",
+            "katex": "returned",
+            "content-renderer": "returned"
+          }
+        },
+        {
+          "name": "noncanonical-merged-marks",
+          "dispositions": {
+            "editor-adapter": "returned",
+            "canonicalizer": "returned",
+            "answer-classifier": "returned",
+            "question-resolver": "returned",
+            "answer-resolver": "returned",
+            "projection": "returned",
+            "katex": "returned",
+            "content-renderer": "returned"
+          }
+        },
+        {
+          "name": "corrupt-envelope",
+          "dispositions": {
+            "editor-adapter": "returned",
+            "canonicalizer": "fail-closed-throw",
+            "answer-classifier": "returned",
+            "question-resolver": "returned",
+            "answer-resolver": "returned",
+            "projection": "returned",
+            "katex": "returned",
+            "content-renderer": "returned"
+          }
+        },
+        {
+          "name": "unsupported-v2",
+          "dispositions": {
+            "editor-adapter": "returned",
+            "canonicalizer": "fail-closed-throw",
+            "answer-classifier": "returned",
+            "question-resolver": "returned",
+            "answer-resolver": "returned",
+            "projection": "returned",
+            "katex": "returned",
+            "content-renderer": "returned"
+          }
+        },
+        {
+          "name": "textRun-at-limit",
+          "dispositions": {
+            "editor-adapter": "returned",
+            "canonicalizer": "returned",
+            "answer-classifier": "returned",
+            "question-resolver": "returned",
+            "answer-resolver": "returned",
+            "projection": "returned",
+            "katex": "returned",
+            "content-renderer": "returned"
+          }
+        },
+        {
+          "name": "latex-at-limit",
+          "dispositions": {
+            "editor-adapter": "returned",
+            "canonicalizer": "returned",
+            "answer-classifier": "returned",
+            "question-resolver": "returned",
+            "answer-resolver": "returned",
+            "projection": "returned",
+            "katex": "returned",
+            "content-renderer": "returned"
+          }
+        },
+        {
+          "name": "codeBlock-at-limit",
+          "dispositions": {
+            "editor-adapter": "returned",
+            "canonicalizer": "returned",
+            "answer-classifier": "returned",
+            "question-resolver": "returned",
+            "answer-resolver": "returned",
+            "projection": "returned",
+            "katex": "returned",
+            "content-renderer": "returned"
+          }
+        },
+        {
+          "name": "serialized-at-limit-minus-1",
+          "dispositions": {
+            "editor-adapter": "returned",
+            "canonicalizer": "returned",
+            "answer-classifier": "returned",
+            "question-resolver": "returned",
+            "answer-resolver": "returned",
+            "projection": "returned",
+            "katex": "returned",
+            "content-renderer": "returned"
+          }
+        }
+      ]
+    }
+  ]
+}

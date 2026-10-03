@@ -1,0 +1,45 @@
+
+ RUN  v4.1.7 /home/hoo/Source/exam/docs/research/exam-669-rich-phase-e-1
+
+ ✓ harness/A-canonicalization-algebra.test.ts (7 tests) 7492ms
+     ✓ property: schema-admissible docs → successful canonicalization is closed over schema/limits/idempotence/readability  4026ms
+     ✓ property: same closure holds over boundary-biased generation near every CONTENT_LIMITS edge  2019ms
+     ✓ deterministic exact-limit grid: classification algebra over every CONTENT_LIMITS edge (accept-closes / schema-legal-reject-stays-noncanonical / schema-reject-stays-corrupt)  1368ms
+ ✓ harness/D-durable-roundtrip.test.ts (5 tests) 5664ms
+     ✓ property: the wire verdict equals the authority verdict; accepted answers round-trip (E-RT01/02)  2722ms
+     ✓ deterministic exact-limit grid over the wire: the authority branch decides; accepted entries round-trip  1441ms
+ ✓ harness/L-export-consistency.test.ts (6 tests) 1618ms
+ ✓ harness/B-preflight-differential.test.ts (7 tests) 2816ms
+     ✓ differential: a grammar-shaped, limits-clean document must never be rejected by a preflight-sourced violation  2339ms
+     ✓ property: hostile deep raw arrays never overflow the recursive parser — safeParse always terminates  352ms
+ ✓ harness/C-classifier-differential.test.ts (4 tests) 2829ms
+     ✓ property: unmutated schema-admissible docs agree (typically rich_valid / rich_noncanonical)  2678ms
+ ✓ harness/K-grading-consumer-matrix.test.ts (6 tests) 1985ms
+ ✓ harness/H-replay-longevity.test.ts (6 tests) 2152ms
+     ✓ H1 longevity: seq 1 still ACKs after many later accepted saves (E-RP03, no eviction)  521ms
+ ✓ harness/I-submit-freeze.test.ts (3 tests) 1445ms
+ ✓ harness/J-frozen-vs-live.test.ts (1 test) 1340ms
+     ✓ J1/J2: live bank edits do not move the served snapshot; saves keep working per frozen facts  346ms
+ ✓ harness/E-editor-differential.test.ts (7 tests) 1125ms
+     ✓ property: canonical documents survive contentDocumentToTiptap → tiptapToContentDocument exactly  1114ms
+ ✓ harness/G-saveanswer-precedence.test.ts (6 tests) 75ms
+stderr | harness/N-math-adversarial.test.ts > Campaign N — math adversarial (E-RE04/05/06) > E-RE05: malformed latex never throws; parse errors preserve the source text; parseable garbage renders
+No character metrics for '🚀' in style 'Main-Regular' and mode 'text'
+No character metrics for '‮' in style 'Main-Regular' and mode 'text'
+
+stderr | harness/N-math-adversarial.test.ts > Campaign N — math adversarial (E-RE04/05/06) > E-RE03/06: no active or remote content path in any corpus output
+No character metrics for '🚀' in style 'Main-Regular' and mode 'text'
+No character metrics for '‮' in style 'Main-Regular' and mode 'text'
+
+ ✓ harness/N-math-adversarial.test.ts (3 tests) 31ms
+stderr | harness/M-render-trust.test.ts > Campaign M — static render trust (E-RE01/02/03) > E-RE01: rich_valid renders the document structure, never the plain fallback
+react-i18next:: useTranslation: You will need to pass in an i18next instance by using initReactI18next { code: 'NO_I18NEXT_INSTANCE' }
+
+ ✓ harness/M-render-trust.test.ts (4 tests) 31ms
+ ✓ harness/F-durable-writer-census.test.ts (3 tests) 44ms
+
+ Test Files  14 passed (14)
+      Tests  68 passed (68)
+   Start at  02:43:08
+   Duration  40.83s (transform 1.74s, setup 0ms, import 9.37s, tests 28.65s, environment 2ms)
+

@@ -1,0 +1,36 @@
+{
+  "campaign": "E-editor-differential",
+  "seeds": [1721630721, 1731198977],
+  "recordedAt": "2026-10-03T18:30:51.698Z",
+  "entries": [
+    {
+      "probe": "roundtrip-canonical",
+      "roundTrips": 156,
+      "canonicalizationRejected": 144
+    },
+    {
+      "probe": "list-blockmath-downgrade",
+      "outcome": "declared"
+    },
+    {
+      "probe": "table-blockmath-and-header-downgrade",
+      "outcome": "declared"
+    },
+    {
+      "probe": "unknown-mark-and-top-level",
+      "outcome": "declared/throw"
+    },
+    {
+      "probe": "list-pasted-table-degradation",
+      "outcome": "declared"
+    },
+    {
+      "probe": "empty-latex-degradation-rejected-downstream",
+      "outcome": "declared+schema-reject"
+    },
+    {
+      "probe": "byte-census",
+      "cases": 4
+    }
+  ]
+}

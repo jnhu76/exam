@@ -1,0 +1,27 @@
+{
+  "campaign": "M-render-trust",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:40:49.564Z",
+  "entries": [
+    {
+      "probe": "rich-valid",
+      "outcome": "document-rendered"
+    },
+    {
+      "probe": "rich-noncanonical",
+      "outcome": "display-granted"
+    },
+    {
+      "probe": "closed-corrupt",
+      "outcome": "integrity-notice"
+    },
+    {
+      "probe": "closed-unsupported_version",
+      "outcome": "integrity-notice"
+    },
+    {
+      "probe": "inertness",
+      "outcome": "escaped"
+    }
+  ]
+}

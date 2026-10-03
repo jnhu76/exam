@@ -1,0 +1,47 @@
+{
+  "campaign": "B-preflight-differential",
+  "seeds": [1721630722, 1731198977],
+  "recordedAt": "2026-10-03T15:36:04.342Z",
+  "HIDDEN_STRICTER_SET": "NONE",
+  "schemaAdmissibleChecked": 420,
+  "hostileParsed": 0,
+  "limitEdgeNote": "limit-edge suites assert preflight acceptance only where the full schema accepts",
+  "entries": [
+    {
+      "probe": "limit-edges",
+      "outcome": "ok"
+    },
+    {
+      "probe": "hostile-cyclic",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-null",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-number",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-string",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-array-root",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-undefined-content",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-function-content",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "budget-dominance",
+      "outcome": "ok"
+    }
+  ]
+}

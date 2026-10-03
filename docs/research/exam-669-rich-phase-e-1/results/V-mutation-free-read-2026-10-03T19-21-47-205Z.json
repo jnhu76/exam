@@ -1,0 +1,23 @@
+{
+  "campaign": "V-mutation-free-read",
+  "seeds": [1721630726],
+  "recordedAt": "2026-10-03T19:21:47.205Z",
+  "entries": [
+    {
+      "probe": "V1-full-hammer",
+      "outcome": "rows-byte-identical",
+      "rounds": 3,
+      "surfaces": 5,
+      "receipts": 2
+    },
+    {
+      "probe": "V2-corrupt-frozen-hammer",
+      "outcome": "corruption-survived-unrepaired"
+    },
+    {
+      "probe": "V3-response-stability",
+      "outcome": "stable-modulo-serverNow",
+      "surfaces": 5
+    }
+  ]
+}

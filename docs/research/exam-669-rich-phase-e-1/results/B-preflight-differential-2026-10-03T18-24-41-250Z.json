@@ -1,0 +1,100 @@
+{
+  "campaign": "B-preflight-differential",
+  "seeds": [1721630722, 1731198977],
+  "recordedAt": "2026-10-03T18:24:41.250Z",
+  "HIDDEN_STRICTER_SET": "NONE",
+  "differentialPairsChecked": 300,
+  "grammarShapedLimitsClean": 300,
+  "hostileParsed": 80,
+  "differentialDesign": "public schema pipes preflight first; RC-04 is falsified only when a grammar-shaped limits-clean document is rejected with a preflight-sourced violation",
+  "entries": [
+    {
+      "probe": "grid-dirty:textRun-over-limit",
+      "violations": ["text run exceeds 20000 chars"]
+    },
+    {
+      "probe": "grid-dirty:latex-over-limit",
+      "violations": ["latex exceeds 5000 chars"]
+    },
+    {
+      "probe": "grid-dirty:codeBlock-over-limit",
+      "violations": ["code block exceeds 40000 chars"]
+    },
+    {
+      "probe": "grid-dirty:listDepth-8-leafed-paragraph (depth 17 > 16)",
+      "violations": ["tree depth exceeds 16"]
+    },
+    {
+      "probe": "grid-dirty:listDepth-9-leafed-over",
+      "violations": [
+        "list nesting exceeds 8",
+        "tree depth exceeds 16",
+        "tree depth exceeds 16",
+        "list nesting exceeds 8",
+        "tree depth exceeds 16"
+      ]
+    },
+    {
+      "probe": "grid-dirty:nodes-over-2000",
+      "violations": ["document exceeds 2000 nodes"]
+    },
+    {
+      "probe": "grid-dirty:table-100x20-cells-2000-over",
+      "violations": [
+        "serialized document exceeds 131072 chars",
+        "table exceeds 400 cells",
+        "document exceeds 2000 nodes"
+      ]
+    },
+    {
+      "probe": "grid-dirty:serialized-over-limit",
+      "violations": ["serialized document exceeds 131072 chars"]
+    },
+    {
+      "probe": "exact-limit-grid-preflight",
+      "limitsClean": 7,
+      "limitsDirty": 8
+    },
+    {
+      "probe": "listDepth-8-unreachable",
+      "leafed7SchemaLegal": true,
+      "emptyLeaf8SchemaLegal": false
+    },
+    {
+      "probe": "limit-edges",
+      "outcome": "ok"
+    },
+    {
+      "probe": "hostile-cyclic",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-null",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-number",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-string",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-array-root",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-undefined-content",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "hostile-function-content",
+      "outcome": "rejected"
+    },
+    {
+      "probe": "budget-dominance",
+      "outcome": "ok"
+    }
+  ]
+}

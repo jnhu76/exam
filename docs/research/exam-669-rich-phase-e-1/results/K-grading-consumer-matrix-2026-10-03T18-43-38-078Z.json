@@ -1,0 +1,36 @@
+{
+  "campaign": "K-grading-consumer-matrix",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:43:38.078Z",
+  "entries": [
+    {
+      "probe": "matrix-rich_valid",
+      "outcome": "raw-evidence-served+manual-scoring-ok",
+      "classifierKind": "rich_valid"
+    },
+    {
+      "probe": "matrix-rich_noncanonical",
+      "outcome": "raw-evidence-served+manual-scoring-ok",
+      "classifierKind": "rich_noncanonical"
+    },
+    {
+      "probe": "matrix-corrupt",
+      "outcome": "raw-evidence-served+manual-scoring-ok",
+      "classifierKind": "corrupt"
+    },
+    {
+      "probe": "matrix-unsupported_version",
+      "outcome": "raw-evidence-served+manual-scoring-ok",
+      "classifierKind": "unsupported_version"
+    },
+    {
+      "probe": "matrix-null-empty",
+      "outcome": "raw-evidence-served+manual-scoring-ok",
+      "classifierKind": "empty"
+    },
+    {
+      "probe": "live-edit-isolation",
+      "outcome": "frozen-basis-held"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+
+ RUN  v4.1.7 /home/hoo/Source/exam/docs/research/exam-669-rich-phase-e-1
+
+ ✓ harness/H-replay-longevity.test.ts (6 tests) 1435ms
+     ✓ H1 longevity: seq 1 still ACKs after many later accepted saves (E-RP03, no eviction)  325ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  02:24:11
+   Duration  3.92s (transform 937ms, setup 0ms, import 1.77s, tests 1.44s, environment 0ms)
+

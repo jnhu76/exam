@@ -1,0 +1,28 @@
+{
+  "campaign": "P-dto-openapi-drift",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:48:33.323Z",
+  "entries": [
+    {
+      "probe": "paths-published",
+      "outcome": "ok",
+      "count": 5
+    },
+    {
+      "probe": "saveanswer-unknown-answer",
+      "outcome": "unknown-preserved"
+    },
+    {
+      "probe": "export-integrity-enum",
+      "outcome": "exact-match"
+    },
+    {
+      "probe": "attempt-answer-unknown",
+      "outcome": "unknown-preserved"
+    },
+    {
+      "probe": "runtime-parses-contract",
+      "outcome": "ok"
+    }
+  ]
+}

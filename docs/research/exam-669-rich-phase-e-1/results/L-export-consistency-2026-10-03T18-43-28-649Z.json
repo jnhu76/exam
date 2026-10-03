@@ -1,0 +1,37 @@
+{
+  "campaign": "L-export-consistency",
+  "seeds": [1721630724],
+  "recordedAt": "2026-10-03T18:43:28.649Z",
+  "entries": [
+    {
+      "probe": "matrix-rich_valid",
+      "outcome": "json-raw+csv-projection-consistent",
+      "integrity": "rich_valid"
+    },
+    {
+      "probe": "matrix-rich_noncanonical",
+      "outcome": "json-raw+csv-projection-consistent",
+      "integrity": "rich_noncanonical"
+    },
+    {
+      "probe": "matrix-corrupt",
+      "outcome": "json-raw+csv-projection-consistent",
+      "integrity": "corrupt"
+    },
+    {
+      "probe": "matrix-unsupported_version",
+      "outcome": "json-raw+csv-projection-consistent",
+      "integrity": "unsupported_version"
+    },
+    {
+      "probe": "matrix-empty-null",
+      "outcome": "json-raw+csv-projection-consistent",
+      "integrity": "empty"
+    },
+    {
+      "probe": "matrix-string-on-rich-slot",
+      "outcome": "json-raw+csv-projection-consistent",
+      "integrity": "corrupt"
+    }
+  ]
+}

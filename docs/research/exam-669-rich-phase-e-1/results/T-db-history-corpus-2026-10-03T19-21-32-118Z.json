@@ -1,0 +1,113 @@
+{
+  "campaign": "T-db-history-corpus",
+  "seeds": [1721630725],
+  "recordedAt": "2026-10-03T19:21:32.118Z",
+  "entries": [
+    {
+      "probe": "history-empty-null",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "empty",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-empty-undefined",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "empty",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-plain-on-plain-mode",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "plain",
+      "mode": "plain"
+    },
+    {
+      "probe": "history-string-rich-no-provenance",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-string-rich-with-provenance",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-rich-canonical",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "rich_valid",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-rich-noncanonical",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "rich_noncanonical",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-rich-limit-invalid",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-unsupported-v2",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "unsupported_version",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-unsupported-float",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "unsupported_version",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-corrupt-envelope",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-corrupt-node",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-corrupt-string-docVersion",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-corrupt-number",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-corrupt-array",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "rich"
+    },
+    {
+      "probe": "history-objective-boolean",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "plain"
+    },
+    {
+      "probe": "history-objective-array",
+      "outcome": "verbatim+agreement",
+      "expectedKind": "corrupt",
+      "mode": "plain"
+    },
+    {
+      "probe": "write-seam-over-corrupt-history",
+      "outcome": "accepted+canonicalized"
+    }
+  ]
+}
