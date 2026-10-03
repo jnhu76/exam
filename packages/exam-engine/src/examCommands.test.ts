@@ -12,7 +12,7 @@ import {
   publishResults,
   type ExamRepository,
 } from "./examCommands.js";
-import type { Exam, Question } from "@exam/domain";
+import type { Exam, Question, ContentDocumentV1 } from "@exam/domain";
 import {
   InvalidStateTransitionError,
   ValidationError,
@@ -257,6 +257,171 @@ describe("examCommands", () => {
       await expect(
         publishExam(repo, "exam-1", [divergentOption]),
       ).rejects.toThrow(/rich option b .*plainTextProjection/s);
+    });
+
+    // D5.1: a repository-loaded contentDocument must pass the shared persisted-
+    // Rich read authority BEFORE any projection. These fixtures fabricate
+    // historical/bypassed rows (the supported write seam canonicalizes, so it
+    // can never emit them) and require controlled ValidationErrors, never a
+    // TypeError escaping plainTextProjection.
+    describe("persisted Rich trust at the publish boundary (#669 D5.1)", () => {
+      function publishRepo(question: Question) {
+        return makeRepo(
+          makeExam({
+            questionIds: [question.id],
+            totalScore: question.score,
+            passingScore: 0,
+          }),
+        );
+      }
+
+      // Both fixtures deliberately violate the ContentDocumentV1 shape: the
+      // cast fabricates what a bypassed/historical DB row looks like — the
+      // supported write seam can never emit either.
+      const CORRUPT_DOC = {
+        docVersion: 1,
+        type: "doc",
+        // Paragraph missing its inline list: schema-off-grammar, and exactly
+        // the shape that used to explode inside plainTextProjection.
+        content: [{ type: "paragraph" }],
+      } as unknown as ContentDocumentV1;
+
+      const UNSUPPORTED_DOC = {
+        docVersion: 2,
+        type: "doc",
+        content: [],
+      } as unknown as ContentDocumentV1;
+
+      // Schema-valid but unnormalized: adjacent unmarked text runs must have
+      // merged. Projection is identical pre/post normalization ("ab"), so the
+      // rejection below is the canonicality policy itself, not a projection
+      // mismatch.
+      const NONCANONICAL_DOC = {
+        docVersion: 1 as const,
+        type: "doc" as const,
+        content: [
+          {
+            type: "paragraph" as const,
+            content: [
+              { type: "text" as const, text: "a" },
+              { type: "text" as const, text: "b" },
+            ],
+          },
+        ],
+      };
+
+      it("publishes a canonical rich question whose content matches its projection (R1)", async () => {
+        const doc = makeRichDoc();
+        const richQuestion = makeQuestion("q-rich-ok", {
+          type: "text_response",
+          content: plainTextProjection(doc),
+          contentDocument: doc,
+          answerMode: "rich",
+          options: [],
+          standardAnswer: null,
+          rubric: "按要点给分",
+        });
+        const repo = publishRepo(richQuestion);
+        const result = await publishExam(repo, "exam-1", [richQuestion]);
+        expect(result.status).toBe("published");
+      });
+
+      it("rejects a corrupt persisted question document with ValidationError, not TypeError (R2)", async () => {
+        const corrupt = makeQuestion("q-corrupt", {
+          type: "text_response",
+          content: "Solve ",
+          contentDocument: CORRUPT_DOC,
+          answerMode: "rich",
+          options: [],
+          standardAnswer: null,
+        });
+        await expect(
+          publishExam(publishRepo(corrupt), "exam-1", [corrupt]),
+        ).rejects.toThrow(/corrupt/);
+        await expect(
+          publishExam(publishRepo(corrupt), "exam-1", [corrupt]),
+        ).rejects.toThrow(ValidationError);
+      });
+
+      it("rejects an unsupported persisted question docVersion with ValidationError (R3)", async () => {
+        const future = makeQuestion("q-v2", {
+          type: "text_response",
+          content: "Solve ",
+          contentDocument: UNSUPPORTED_DOC,
+          answerMode: "rich",
+          options: [],
+          standardAnswer: null,
+        });
+        await expect(
+          publishExam(publishRepo(future), "exam-1", [future]),
+        ).rejects.toThrow(/unsupported docVersion/);
+      });
+
+      it("rejects a corrupt persisted OPTION document with ValidationError (R4)", async () => {
+        const corruptOption = makeQuestion("q-opt-corrupt", {
+          type: "single_choice",
+          content: "plain prompt",
+          contentDocument: null,
+          options: [
+            { id: "a", content: "A", contentDocument: null },
+            { id: "b", content: "B", contentDocument: CORRUPT_DOC },
+          ],
+        });
+        await expect(
+          publishExam(publishRepo(corruptOption), "exam-1", [corruptOption]),
+        ).rejects.toThrow(ValidationError);
+        await expect(
+          publishExam(publishRepo(corruptOption), "exam-1", [corruptOption]),
+        ).rejects.toThrow(/corrupt/);
+      });
+
+      it("rejects an unsupported persisted OPTION docVersion with ValidationError (R5)", async () => {
+        const futureOption = makeQuestion("q-opt-v2", {
+          type: "single_choice",
+          content: "plain prompt",
+          contentDocument: null,
+          options: [
+            { id: "a", content: "A", contentDocument: null },
+            { id: "b", content: "B", contentDocument: UNSUPPORTED_DOC },
+          ],
+        });
+        await expect(
+          publishExam(publishRepo(futureOption), "exam-1", [futureOption]),
+        ).rejects.toThrow(/unsupported docVersion/);
+      });
+
+      it("never falls back to the stored content string when the document is corrupt (R6)", async () => {
+        const fallback = makeQuestion("q-fallback", {
+          type: "text_response",
+          // A plausible plain projection that a Plain fallback would accept.
+          content: "apparently valid fallback text",
+          contentDocument: CORRUPT_DOC,
+          answerMode: "rich",
+          options: [],
+          standardAnswer: null,
+        });
+        await expect(
+          publishExam(publishRepo(fallback), "exam-1", [fallback]),
+        ).rejects.toThrow(/corrupt/);
+      });
+
+      it("rejects a schema-valid but noncanonical document at the freeze gate even when its projection matches (R8)", async () => {
+        const noncanonical = makeQuestion("q-noncanon", {
+          type: "text_response",
+          // Deliberately the projection of the RAW document: the rejection
+          // must come from the canonicality policy, not the projection
+          // invariant.
+          content: plainTextProjection(NONCANONICAL_DOC),
+          contentDocument: NONCANONICAL_DOC,
+          answerMode: "rich",
+          options: [],
+          standardAnswer: null,
+          rubric: "按要点给分",
+        });
+        await expect(
+          publishExam(publishRepo(noncanonical), "exam-1", [noncanonical]),
+        ).rejects.toThrow(/not canonical Rich/);
+      });
     });
 
     it("transitions draft → published", async () => {
