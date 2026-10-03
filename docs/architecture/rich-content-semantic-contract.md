@@ -191,6 +191,18 @@ editor / external input
 - Rich validation may produce typed semantic failures internally, but outer
   protocols (SaveAnswer, route validation) own their wire / error mapping.
 
+As-built (Phase D5.1): the exam publish/freeze gate is one such protocol owner
+and classifies every repository-loaded question / option `contentDocument`
+through the same shared static read authority (§7,
+`classifyPersistedQuestionContent`) before its projection invariant —
+`rich_valid` proceeds to the `content == plainTextProjection(document)` freeze
+check, while `rich_noncanonical` / `unsupported_version` / `corrupt` are typed
+publish rejections (`ValidationError`), never a projection crash and never a
+fallback to the stored `content` string. Publication freezes only canonical
+Rich (a noncanonical row bypassed the single write seam and may not become a
+new frozen commitment); publish validates then freezes and never normalizes a
+historical row — repair is a separate explicit migration.
+
 Rich does **not** emit the following lifecycle / authz errors:
 
 - `STALE_VERSION`
@@ -514,7 +526,7 @@ are not moved into this semantic contract.
 | Rich V1 grammar, limits, normalization, equivalence | This document + [`packages/domain/src/content/contentDocument.ts`](../../packages/domain/src/content/contentDocument.ts) implementation |
 | Wire schema / type identity | [`packages/contracts/src/contentDocument.ts`](../../packages/contracts/src/contentDocument.ts) |
 | Persisted-answer read classification (§7) | [`packages/contracts/src/persistedRichAnswer.ts`](../../packages/contracts/src/persistedRichAnswer.ts) — the single shared classifier consumed by web read paths and API export (Phase D4) |
-| Static question-content read classification (§7) | [`packages/contracts/src/persistedQuestionContent.ts`](../../packages/contracts/src/persistedQuestionContent.ts) — consumed by the `ContentRenderer` render trust boundary (Phase D5) |
+| Static question-content read classification (§7) | [`packages/contracts/src/persistedQuestionContent.ts`](../../packages/contracts/src/persistedQuestionContent.ts) — consumed by the `ContentRenderer` render trust boundary (Phase D5) and the exam publish freeze gate (Phase D5.1) |
 | Cross-boundary Exam semantics | [`exam-semantic-boundaries.md`](exam-semantic-boundaries.md) / ADR-021 |
 | Product capability composition | [`product-capability-composition.md`](product-capability-composition.md) / ADR-022 |
 | Attempt lifecycle / SaveAnswer / submit / grading / result | [`exam-runtime.md`](exam-runtime.md), ADR-005, ADR-006, ADR-008, ADR-012 |

@@ -1,6 +1,11 @@
 import type { Exam, Question, QuestionSnapshot } from "@exam/domain";
-import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
-import { plainTextProjection } from "@exam/domain";
+import {
+  InvalidStateTransitionError,
+  ValidationError,
+  plainTextProjection,
+  type ContentDocumentV1,
+} from "@exam/domain";
+import { classifyPersistedQuestionContent } from "@exam/contracts";
 import { assertTransition } from "./examStateMachine.js";
 import { assertExamPolicyValid } from "./examPolicy.js";
 
@@ -95,6 +100,48 @@ export function buildQuestionSnapshot(
 }
 
 /**
+ * Publish freeze gate for repository-loaded Rich content (#669 D5.1). The
+ * document is classified through the single shared persisted-question read
+ * authority (@exam/contracts, Phase D5) BEFORE any projection: `rich_valid`
+ * returns the trusted document, while `rich_noncanonical` /
+ * `unsupported_version` / `corrupt` fail closed as typed ValidationErrors so
+ * a historical/bypassed row can never explode inside `plainTextProjection`.
+ * INVARIANT: publish validates then freezes — a noncanonical row is never
+ * normalized here (repair is a separate migration), and a corrupt document
+ * never degrades into the stored `content` projection field.
+ */
+function assertPublishableRichDocument(
+  subject: string,
+  contentDocument: unknown,
+): ContentDocumentV1 {
+  const read = classifyPersistedQuestionContent(contentDocument);
+  switch (read.kind) {
+    case "rich_valid":
+      return read.document;
+    case "rich_noncanonical":
+      // Publish creates a new frozen commitment, and every durable Rich write
+      // boundary must persist only the canonical write seam's output
+      // (ADR-019; rich-content-semantic-contract.md §2/§8): a noncanonical
+      // row bypassed that seam, so it may not be frozen.
+      throw new ValidationError(
+        `${subject} contentDocument is not canonical Rich; publish freezes only canonical Rich documents`,
+      );
+    case "unsupported_version":
+      throw new ValidationError(
+        `${subject} contentDocument carries an unsupported docVersion`,
+      );
+    case "corrupt":
+      throw new ValidationError(
+        `${subject} contentDocument is corrupt or not valid Rich content`,
+      );
+    case "plain":
+      // Unreachable: every caller gates on contentDocument != null, and only
+      // null classifies as plain. Fail closed rather than widen the contract.
+      throw new ValidationError(`${subject} contentDocument is missing`);
+  }
+}
+
+/**
  * Publishes an exam: validates all preconditions (questions, scores, timing, policies),
  * builds the question snapshot, and transitions the exam to published status.
  */
@@ -150,7 +197,6 @@ export async function publishExam(
   // remain here because they need DB-loaded question facts.
   assertExamPolicyValid(exam);
 
-  const questionSnapshot = buildQuestionSnapshot(exam.questionIds, questions);
   if (questions.some((question) => question.courseId !== exam.courseId)) {
     throw new ValidationError("Exam questions must belong to its course");
   }
@@ -192,8 +238,16 @@ export async function publishExam(
     // #301 B′ projection invariant: for Rich questions the stored `content`
     // must be exactly the deterministic projection of the frozen document.
     // A mismatch means a writer bypassed the server-side derivation seam.
+    // D5.1: the repository-loaded document is classified through the shared
+    // persisted-Rich read authority first — corrupt/unsupported/noncanonical
+    // rows are typed publish rejections, never a TypeError escaping
+    // plainTextProjection.
     if (question.contentDocument != null) {
-      const projection = plainTextProjection(question.contentDocument);
+      const document = assertPublishableRichDocument(
+        `rich question ${question.id}`,
+        question.contentDocument,
+      );
+      const projection = plainTextProjection(document);
       if (question.content !== projection) {
         throw new ValidationError(
           `rich question ${question.id} content must equal plainTextProjection(contentDocument) at publish`,
@@ -203,10 +257,15 @@ export async function publishExam(
     // #301 corrective pass: the SAME projection invariant holds for rich
     // OPTIONS — a divergent frozen option would show candidates one text
     // (plain projection) while the rich renderer draws another. Publish is
-    // the freeze gate: fail closed, never auto-repair.
+    // the freeze gate: fail closed, never auto-repair. D5.1 applies the same
+    // persisted-Rich trust gate as the question-level path above.
     for (const option of question.options) {
       if (option.contentDocument != null) {
-        const optionProjection = plainTextProjection(option.contentDocument);
+        const document = assertPublishableRichDocument(
+          `rich option ${option.id} of question ${question.id}`,
+          option.contentDocument,
+        );
+        const optionProjection = plainTextProjection(document);
         if (option.content !== optionProjection) {
           throw new ValidationError(
             `rich option ${option.id} of question ${question.id} content must equal plainTextProjection(contentDocument) at publish`,
@@ -230,6 +289,10 @@ export async function publishExam(
     // Any other type: publish validation is intentionally permissive here;
     // future subjective types will add their own rubric-style guard as needed.
   }
+  // INVARIANT (D5.1 validation-before-freeze): the frozen snapshot is built
+  // only after every per-question trust/invariant check above passes — a
+  // corrupt Rich row is never materialized into a provisional snapshot.
+  const questionSnapshot = buildQuestionSnapshot(exam.questionIds, questions);
   const totalScore = questionSnapshot.reduce(
     (sum, question) => sum + question.score,
     0,
