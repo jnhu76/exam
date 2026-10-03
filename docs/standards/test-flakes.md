@@ -1358,3 +1358,83 @@ DDL/连接churn，不是套件并行。
 
 - 2026-09-28：全套件基线 test-5 单次（1/59 文件失败）；同日单文件 17 跑 2 败
   （~12%）。3 次同签名 → 按登记规则 #3 升级为 [issue #650](https://github.com/jnhu76/exam/issues/650)。
+
+## 2026-10-03 — `bootstrap-admin.test.ts` 并发首装序列化用例在全仓 turbo 并发负载下 5s 超时（#669 Phase-E 基线运行观察）
+
+### 失败位置
+
+`apps/api/src/scripts/bootstrap-admin.test.ts:488` —
+`bootstrapAdminOnFreshDb (production bootstrap path) > serializes concurrent first-install attempts: exactly one winner, one Admin, one audit`
+
+### 错误
+
+`Error: Test timed out in 5000ms.`（无断言失败；同文件其余 19 用例通过）
+
+### 出现场景
+
+仓库根目录 `pnpm test`（turbo，18 个任务，其中多个 DB-backed package 测试套件
+并发打同一本地 PG 18 容器；docker 于数分钟前冷启动）。发生在 #669 Phase-E
+研究分支 `research/669-rich-phase-e-falsification`（head 67079eff + 研究
+harness，无生产代码改动）的基线全量测试运行中。原始输出已保全：
+`docs/research/exam-669-rich-phase-e-1/results/flake-evidence-2026-10-03-bootstrap-admin.md`。
+
+### 根因假设
+
+宿主负载型 5s 超时家族（BUG-FLAKE-001 / 2026-08-31 姊妹条目 / 2026-07-25
+ea-lock-order 竞争循环超时）的新受害点：turbo 跨 package 并发 + PG 冷缓存下，
+该用例的两个并发 bootstrap 事务竞争 + advisory-lock 序列化收敛超过了 5s 默认
+testTimeout。非 Rich 接缝、非 Phase-E 改动因果（改动仅为 docs/research 研究包
+与 pnpm-workspace 一行）。
+
+### 已知不是的原因
+
+- 同代码同库单文件重跑全绿（20/20，该用例 681ms）——登记规则 #1 成立。
+- 与 Phase-E 研究代码无导入关系（该测试文件不引用 docs/research 下任何模块）。
+
+### 当前缓解
+
+无代码改动（不调 timeout、不 skip、不 retry）。开发机多套件保持串行执行
+（既有缓解，2026-08-31 条目）；turbo 全量并发属同一操作模式面。
+
+### 后续动作
+
+无。同签名在串行执行下复发 ≥3 次时按登记规则 #3 升级为正式跟踪条目；
+届时再评估该用例的收敛预算（advisory-lock 序列化证明类，与
+`ea-lock-order.test.ts` 的 100 轮稳定性证明同族）。
+
+### 复发记录
+
+- 2026-10-03：首次发生（turbo 全量并发运行，单次）。
+
+## 2026-10-04 — `AUTHZ_UNAVAILABLE` 503 瞬态（#669 Phase-E L4 harness 观察，低复发）
+
+### 失败位置
+
+研究 harness `docs/research/exam-669-rich-phase-e-1/harness/Q-unicode-roundtrip.test.ts`
+（GET /api/attempts/:id → 503 AUTHZ_UNAVAILABLE），出现在同测试内一次
+jsonb 不可表示写（D-F01 家族 NUL 500）之后的第一个 GET。
+
+### 错误
+
+`GET attempt failed: 503 {"error":{"code":"AUTHZ_UNAVAILABLE",...}}` —
+`loadAssignmentAuthority`（apps/api/src/authz/assignmentAuthority.ts:284）对
+`listActiveForUser` 的任何 DB 错误 fail-closed 为 503。
+
+### 出现场景
+
+研究 harness L4 campaign（真实 PG，buildTestApp）。早期 harness 形态下 3/3
+次复现且均在同一位置；修复 harness 自身的两个 oracle 缺陷（空文本 run 的
+canonical 塌缩比较、未 await 的 async 断言）并加入 `observedGet` 表征仪器后，
+连续 2 次 campaign 运行 + 专项压力探针（5 次连续 NUL-500 后 40 连发 GET +
+后续写）均未再出现（0/46+ 请求）。
+
+### 根因假设
+
+低概率瞬态：单次连接级错误被 authz fail-closed 放大为 503；未观察到连接池
+持续污染（40/40 GET 全 200）。非 Phase-E 改动因果（研究 harness 无生产代码
+改动）。
+
+### 当前缓解
+
+无生产缓解。表征仪器保留在 Q campaign 的 `observedGet`（记录 503 重试序列与
+持久性），复发时自动产出证据。按登记规则：出现第 2 个样本时升级为独立调查。
