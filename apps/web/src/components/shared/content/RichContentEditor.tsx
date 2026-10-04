@@ -445,6 +445,97 @@ const SettleMathSelectionAfterOperation = Extension.create({
 });
 
 /**
+ * Applies a confirmed formula edit to the editor — the dialog confirm path
+ * for both inserts (target null) and re-edits. Exported for the reality
+ * suite: the mode decision must be proven against the real schema, not a
+ * component mock.
+ */
+export function applyFormulaEdit(
+  editor: Editor,
+  target: FormulaDialogTarget | null,
+  latex: string,
+  display: boolean,
+): void {
+  // FRESH-context clamp (C14): the dialog's blockAllowed is an OPEN-TIME
+  // snapshot and the context can change while the dialog is open
+  // (authoritative replacement / restore), so the persisted node type is
+  // re-derived from the live editor AT CONFIRM TIME. A 独立显示 result never
+  // persists inside a list item or table cell — writing a blockMath there
+  // would only save as math because the canonical adapter silently downgrades
+  // it afterwards, diverging candidate-visible semantics from persisted
+  // semantics. Every final node choice below uses this value, not the raw
+  // choice.
+  const persistableDisplay =
+    display && !editor.isActive("listItem") && !editor.isActive("table");
+  if (target && target.pos !== undefined) {
+    const atom = editor.state.doc.nodeAt(target.pos);
+    if (!atom || !MATH_NODE_NAMES.has(atom.type.name)) {
+      // The targeted atom vanished under the dialog (undo elsewhere,
+      // authoritative replacement) — do not write into a stale position.
+      return;
+    }
+    // Identity guard (review U-R6): a DIFFERENT atom may now sit at the
+    // remembered position (undo of an insert, authoritative replacement).
+    // Type-at-position alone would let the edit land in the wrong formula;
+    // require the opened latex to still match before writing.
+    const targetIsBlock = target.display;
+    if (
+      (atom.type.name === "blockMath") !== targetIsBlock ||
+      atom.attrs.latex !== target.latex
+    ) {
+      return;
+    }
+    const atomIsBlock = atom.type.name === "blockMath";
+    if (persistableDisplay === atomIsBlock) {
+      if (persistableDisplay) {
+        editor
+          .chain()
+          .focus()
+          .updateBlockMath({ latex, pos: target.pos })
+          .run();
+      } else {
+        editor
+          .chain()
+          .focus()
+          .updateInlineMath({ latex, pos: target.pos })
+          .run();
+      }
+      return;
+    }
+    // 行内 ↔ 独立显示 conversion: different node types, so the atom is
+    // replaced in place, then the operation settlement re-runs — the
+    // replacement atom is operation-produced (#676 guard). A clamped
+    // 独立显示 converts the existing blockMath to inline math in place.
+    editor
+      .chain()
+      .insertContentAt(
+        {
+          from: target.pos,
+          to: target.pos + (target.nodeSize ?? atom.nodeSize),
+        },
+        {
+          type: persistableDisplay ? "blockMath" : "inlineMath",
+          attrs: { latex },
+        },
+      )
+      .run();
+    settleImplicitMathSelection(editor);
+    return;
+  }
+  editor
+    .chain()
+    .focus()
+    .insertContent({
+      type: persistableDisplay ? "blockMath" : "inlineMath",
+      attrs: { latex },
+    })
+    .run();
+  // Not quiet: the insert is a real edit and the settlement's possible
+  // landing paragraph belongs to it.
+  settleImplicitMathSelection(editor);
+}
+
+/**
  * WYSIWYG rich-text editor. The EDIT surface — the ONLY place
  * Tiptap/ProseMirror is imported, always reached through the lazy wrapper
  * (RichContentEditorLazy) so plain-mode bundles never download it.
@@ -610,73 +701,7 @@ export default function RichContentEditor({
   /** Applies a confirmed formula edit through the existing math commands. */
   function applyFormula(latex: string, display: boolean) {
     if (!editor) return;
-    // A 独立显示 result never persists in a downgrade context (C14) — the
-    // dialog constrains the choice, and this clamp is the write-side defense.
-    const persistableDisplay =
-      display && !editor.isActive("listItem") && !editor.isActive("table");
-    const target = formulaTargetRef.current;
-    if (target && target.pos !== undefined) {
-      const atom = editor.state.doc.nodeAt(target.pos);
-      if (!atom || !MATH_NODE_NAMES.has(atom.type.name)) {
-        // The targeted atom vanished under the dialog (undo elsewhere,
-        // authoritative replacement) — do not write into a stale position.
-        return;
-      }
-      // Identity guard (review U-R6): a DIFFERENT atom may now sit at the
-      // remembered position (undo of an insert, authoritative replacement).
-      // Type-at-position alone would let the edit land in the wrong formula;
-      // require the opened latex to still match before writing.
-      const targetIsBlock = target.display;
-      if (
-        (atom.type.name === "blockMath") !== targetIsBlock ||
-        atom.attrs.latex !== target.latex
-      ) {
-        return;
-      }
-      const atomIsBlock = atom.type.name === "blockMath";
-      if (display === atomIsBlock) {
-        if (display) {
-          editor
-            .chain()
-            .focus()
-            .updateBlockMath({ latex, pos: target.pos })
-            .run();
-        } else {
-          editor
-            .chain()
-            .focus()
-            .updateInlineMath({ latex, pos: target.pos })
-            .run();
-        }
-        return;
-      }
-      // 行内 ↔ 独立显示 conversion: different node types, so the atom is
-      // replaced in place, then the operation settlement re-runs — the
-      // replacement atom is operation-produced (#676 guard).
-      editor
-        .chain()
-        .insertContentAt(
-          {
-            from: target.pos,
-            to: target.pos + (target.nodeSize ?? atom.nodeSize),
-          },
-          { type: display ? "blockMath" : "inlineMath", attrs: { latex } },
-        )
-        .run();
-      settleImplicitMathSelection(editor);
-      return;
-    }
-    editor
-      .chain()
-      .focus()
-      .insertContent({
-        type: display ? "blockMath" : "inlineMath",
-        attrs: { latex },
-      })
-      .run();
-    // Not quiet: the insert is a real edit and the settlement's possible
-    // landing paragraph belongs to it.
-    settleImplicitMathSelection(editor);
+    applyFormulaEdit(editor, formulaTargetRef.current, latex, display);
   }
 
   if (!editor) return null;
