@@ -5,6 +5,14 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // mathlive's package exports resolve the "node" condition to an SSR
+      // build without MathfieldElement. The formula field only runs in a real
+      // browser, but tests that exercise the dialog surface must resolve the
+      // browser build too. Exact-match regex keeps "mathlive/fonts.css"
+      // (the bundled @font-face assets) on its exports-map entry.
+      "^mathlive$": fileURLToPath(
+        new URL("./node_modules/mathlive/mathlive.min.mjs", import.meta.url),
+      ),
     },
   },
   define: {

@@ -56,7 +56,12 @@ export default defineConfig(({ mode }) => {
               if (
                 id.includes("@tiptap/") ||
                 id.includes("/prosemirror-") ||
-                id.includes("node_modules/katex/")
+                id.includes("node_modules/katex/") ||
+                // MathLive is the visual formula surface (#669 phase U). Like
+                // KaTeX it must stay out of the eager vendor bundle: it is
+                // reachable ONLY through the formula dialog's dynamic import,
+                // so candidates who never open 公式 never download it.
+                id.includes("node_modules/mathlive/")
               ) {
                 return undefined;
               }

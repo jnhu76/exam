@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
@@ -9,6 +9,7 @@ import {
   Selection,
   TextSelection,
 } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import type { Transform } from "@tiptap/pm/transform";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -29,14 +30,26 @@ import {
   TableRow,
 } from "@tiptap/extension-table";
 import { Mathematics } from "@tiptap/extension-mathematics";
+import { Placeholder, UndoRedo } from "@tiptap/extensions";
 import "katex/dist/katex.min.css";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
 import { contentDocumentsEqual, type ContentDocumentV1 } from "@exam/domain";
 import {
   contentDocumentToTiptap,
   tiptapToContentDocument,
 } from "./contentAdapter";
+import { buildEditorCommands } from "./rich-editor/commands";
+import {
+  ListTabGuard,
+  createFormulaActivateExtension,
+  type FormulaActivation,
+} from "./rich-editor/editorExtensions";
+import { RichEditorToolbar } from "./rich-editor/RichEditorToolbar";
+import { TableContextualBar } from "./rich-editor/TableContextualBar";
+import {
+  FormulaEditorDialog,
+  type FormulaDialogTarget,
+} from "./rich-editor/FormulaEditorDialog";
 
 /**
  * Two-way ownership protocol: the Tiptap instance owns its state after mount,
@@ -79,8 +92,18 @@ export function isAuthoritativeReplacement(
  * the component and the reality tests, so tests always exercise the exact
  * schema production uses. Fresh instances per call — configure() is not
  * idempotent across documents.
+ *
+ * `options` carries ONLY presentation wiring that does not affect the grammar:
+ * the placeholder text, and the formula re-edit activation callback (contract
+ * §5.2). Both default to inert so schema-level tests exercise the same node
+ * and mark vocabulary without React context.
  */
-export function richEditorExtensions() {
+export function richEditorExtensions(
+  options: {
+    placeholder?: string;
+    onFormulaActivate?: (activation: FormulaActivation) => void;
+  } = {},
+) {
   return [
     Document,
     Paragraph,
@@ -107,9 +130,43 @@ export function richEditorExtensions() {
         maxSize: 50,
         maxExpand: 1000,
       },
+      ...(options.onFormulaActivate
+        ? {
+            inlineOptions: {
+              onClick: (node: ProseMirrorNode, pos: number) =>
+                options.onFormulaActivate?.(toActivation(node, pos, false)),
+            },
+            blockOptions: {
+              onClick: (node: ProseMirrorNode, pos: number) =>
+                options.onFormulaActivate?.(toActivation(node, pos, true)),
+            },
+          }
+        : {}),
     }),
+    UndoRedo,
+    ...(options.placeholder
+      ? [Placeholder.configure({ placeholder: options.placeholder })]
+      : []),
+    ListTabGuard,
+    ...(options.onFormulaActivate
+      ? [createFormulaActivateExtension(options.onFormulaActivate)]
+      : []),
     SettleMathSelectionAfterOperation,
   ];
+}
+
+/** Narrows a Mathematics onClick payload into the activation seam's shape. */
+function toActivation(
+  node: { attrs: { latex?: unknown }; nodeSize: number },
+  pos: number,
+  display: boolean,
+): FormulaActivation {
+  return {
+    pos,
+    latex: typeof node.attrs.latex === "string" ? node.attrs.latex : "",
+    display,
+    nodeSize: node.nodeSize,
+  };
 }
 
 /**
@@ -370,7 +427,9 @@ const SettleMathSelectionAfterOperation = Extension.create({
  * grammar and surfaced via onChange; the server re-validates on write.
  *
  * Math nodes render through the Mathematics extension with trust disabled —
- * same posture as the read-side KaTeX seam.
+ * same posture as the read-side KaTeX seam. The command bar, formula surface
+ * and table controls are the presentation layer over this editor (contract
+ * docs/design/candidate-rich-editor-ux.md); they add no grammar.
  */
 export default function RichContentEditor({
   document,
@@ -394,8 +453,18 @@ export default function RichContentEditor({
   // applied replacement below re-anchors it.
   const currentEditorDocumentRef = useRef<ContentDocumentV1 | null>(document);
 
+  // The formula surface is React state; the editor extensions are created
+  // once. This ref forwards activation events (atom click / Enter) to the
+  // latest handler without re-creating the editor.
+  const formulaRequestRef = useRef<(activation: FormulaActivation) => void>(
+    () => {},
+  );
+
   const editor = useEditor({
-    extensions: richEditorExtensions(),
+    extensions: richEditorExtensions({
+      placeholder: t("candidateRuntime.answer.subjective.placeholder"),
+      onFormulaActivate: (activation) => formulaRequestRef.current(activation),
+    }),
     content: contentDocumentToTiptap(document),
     editable: !disabled,
     onUpdate: ({ editor }) => {
@@ -413,6 +482,14 @@ export default function RichContentEditor({
     },
     editorProps: {
       attributes: {
+        // Explicit ARIA role: contenteditable's implicit textbox role is not
+        // reliably exposed to programmatic a11y trees (jsdom 29 reflects no
+        // contentEditable IDL property), and the answer surface must be
+        // queryable by role — never again accidentally satisfied by an
+        // unrelated input (the removed bare LaTeX field was what the first
+        // role=textbox assertion matched).
+        role: "textbox",
+        "aria-multiline": "true",
         "aria-label": ariaLabel ?? t("content.editor.label"),
         class:
           "type-body min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
@@ -456,89 +533,121 @@ export default function RichContentEditor({
     settleImplicitMathSelection(editor, { quiet: true, landing: "nearest" });
   }, [editor, document]);
 
-  const mathInputRef = useRef<HTMLInputElement>(null);
+  // ---- formula surface state ----
+  const [formulaOpen, setFormulaOpen] = useState(false);
+  const [formulaTarget, setFormulaTarget] =
+    useState<FormulaDialogTarget | null>(null);
+  const [formulaBlockAllowed, setFormulaBlockAllowed] = useState(true);
+  const formulaTargetRef = useRef<FormulaDialogTarget | null>(null);
+  formulaTargetRef.current = formulaTarget;
 
-  function insertMath(displayMode: boolean) {
-    const latex = mathInputRef.current?.value.trim();
-    if (!latex || !editor) return;
+  /** 独立显示 persists only outside list items / table cells (C14 downgrade). */
+  function blockMathPersistsHere(): boolean {
+    if (!editor) return false;
+    return !editor.isActive("listItem") && !editor.isActive("table");
+  }
+
+  formulaRequestRef.current = (activation: FormulaActivation) => {
+    setFormulaTarget({
+      latex: activation.latex,
+      display: activation.display,
+      pos: activation.pos,
+      nodeSize: activation.nodeSize,
+    });
+    setFormulaBlockAllowed(blockMathPersistsHere());
+    setFormulaOpen(true);
+  };
+
+  const commands = useMemo(
+    () =>
+      buildEditorCommands({
+        openFormula: () => {
+          setFormulaTarget(null);
+          setFormulaBlockAllowed(blockMathPersistsHere());
+          setFormulaOpen(true);
+        },
+      }),
+    // blockMathPersistsHere reads the live editor at invocation time; the
+    // catalogue itself is editor-independent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editor],
+  );
+
+  /** Applies a confirmed formula edit through the existing math commands. */
+  function applyFormula(latex: string, display: boolean) {
+    if (!editor) return;
+    const target = formulaTargetRef.current;
+    if (target && target.pos !== undefined) {
+      const atom = editor.state.doc.nodeAt(target.pos);
+      if (!atom || !MATH_NODE_NAMES.has(atom.type.name)) {
+        // The targeted atom vanished under the dialog (undo elsewhere,
+        // authoritative replacement) — do not write into a stale position.
+        return;
+      }
+      const atomIsBlock = atom.type.name === "blockMath";
+      if (display === atomIsBlock) {
+        if (display) {
+          editor
+            .chain()
+            .focus()
+            .updateBlockMath({ latex, pos: target.pos })
+            .run();
+        } else {
+          editor
+            .chain()
+            .focus()
+            .updateInlineMath({ latex, pos: target.pos })
+            .run();
+        }
+        return;
+      }
+      // 行内 ↔ 独立显示 conversion: different node types, so the atom is
+      // replaced in place, then the operation settlement re-runs — the
+      // replacement atom is operation-produced (#676 guard).
+      editor
+        .chain()
+        .insertContentAt(
+          {
+            from: target.pos,
+            to: target.pos + (target.nodeSize ?? atom.nodeSize),
+          },
+          { type: display ? "blockMath" : "inlineMath", attrs: { latex } },
+        )
+        .run();
+      settleImplicitMathSelection(editor);
+      return;
+    }
     editor
       .chain()
       .focus()
       .insertContent({
-        type: displayMode ? "blockMath" : "inlineMath",
+        type: display ? "blockMath" : "inlineMath",
         attrs: { latex },
       })
       .run();
     // Not quiet: the insert is a real edit and the settlement's possible
     // landing paragraph belongs to it.
     settleImplicitMathSelection(editor);
-    if (mathInputRef.current) mathInputRef.current.value = "";
   }
 
   if (!editor) return null;
 
-  const btn = (command: () => void, label: string) => (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={command}
-    >
-      {label}
-    </Button>
-  );
-
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1">
-        {btn(
-          () => editor.chain().focus().toggleBold().run(),
-          t("content.editor.bold"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleItalic().run(),
-          t("content.editor.italic"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleUnderline().run(),
-          t("content.editor.underline"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleCode().run(),
-          t("content.editor.inlineCode"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleBulletList().run(),
-          t("content.editor.bulletList"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleOrderedList().run(),
-          t("content.editor.orderedList"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleCodeBlock().run(),
-          t("content.editor.codeBlock"),
-        )}
-        {btn(
-          () =>
-            editor
-              .chain()
-              .focus()
-              .insertTable({ rows: 2, cols: 2, withHeaderRow: false })
-              .run(),
-          t("content.editor.table"),
-        )}
-        <input
-          ref={mathInputRef}
-          type="text"
-          placeholder={t("content.editor.latexPlaceholder")}
-          className="w-40 rounded-md border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring"
-        />
-        {btn(() => insertMath(false), t("content.editor.inlineMath"))}
-        {btn(() => insertMath(true), t("content.editor.blockMath"))}
-      </div>
+      <RichEditorToolbar
+        editor={editor}
+        commands={commands}
+        disabled={disabled}
+      />
+      <TableContextualBar editor={editor} disabled={disabled} />
       <EditorContent editor={editor} />
+      <FormulaEditorDialog
+        open={formulaOpen}
+        onOpenChange={setFormulaOpen}
+        target={formulaTarget}
+        blockAllowed={formulaBlockAllowed}
+        onConfirm={applyFormula}
+      />
     </div>
   );
 }
