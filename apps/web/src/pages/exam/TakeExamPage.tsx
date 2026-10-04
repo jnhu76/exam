@@ -15,6 +15,7 @@ import {
   RotateCcw,
   LoaderCircle,
   TimerOff,
+  TriangleAlert,
   WifiOff,
 } from "lucide-react";
 import { routes } from "@/lib/routes";
@@ -54,7 +55,10 @@ import { transientReducer, type TransientState } from "@/exam/transientReducer";
 // authoritative CandidateTakeSnapshot returned by the take endpoint. No
 // frontend reconstruction of isEditable / canSave / answerSource / lock
 // state is permitted.
-import { deriveTakeExamView } from "@/exam/deriveTakeExamView";
+import {
+  deriveTakeExamView,
+  type TakeExamView,
+} from "@/exam/deriveTakeExamView";
 import {
   isTerminalHeartbeatSignal,
   isTerminalSaveRejection,
@@ -131,6 +135,143 @@ function getSaveRejectionDisplay(
 }
 
 type QuestionState = "unanswered" | "answered" | "flagged";
+
+/**
+ * Locked-state presentation branched by the AUTHORITATIVE snapshot lockReason
+ * (#674). Each cause states only what is actually true:
+ *   deadline  → time-up copy; 正在自动提交 ONLY while the auto-submit flow is
+ *               genuinely in flight; a terminal deadline offers a next action.
+ *   disrupted → recovery copy + a valid next action (direct restore retry when
+ *               canResume, else navigation to the exam list per ADR-012);
+ *               NEVER claims time-up or auto-submit.
+ *   submitted / voided → terminal copy + navigation.
+ *   absent    → neutral ended copy without auto-submit claims.
+ * The snapshot remains the business authority; this component only projects
+ * lockReason/canResume/showResult — it invents no business truth.
+ */
+function LockedOverlay({
+  lockReason,
+  canResume,
+  showResult,
+  autoSubmitting,
+  autoSubmitFailed,
+  onRetrySubmit,
+  onRetryRestore,
+  onBackToList,
+  onViewResult,
+}: {
+  lockReason: TakeExamView["lockReason"];
+  canResume: boolean;
+  showResult: boolean;
+  autoSubmitting: boolean;
+  autoSubmitFailed: boolean;
+  onRetrySubmit: () => void;
+  onRetryRestore: () => void;
+  onBackToList: () => void;
+  onViewResult: () => void;
+}) {
+  const { t } = useTranslation();
+  let icon = Lock;
+  let titleKey = "candidateRuntime.status.ended";
+  let descriptionKey: string | null = null;
+  let hintKey: string | null = null;
+  if (lockReason === "deadline") {
+    icon = TimerOff;
+    if (autoSubmitFailed) {
+      titleKey = "candidateRuntime.deadline.autoSubmitTitle";
+      descriptionKey = "candidateRuntime.deadline.retryHint";
+    } else {
+      titleKey = "candidateRuntime.deadline.timeUp";
+      descriptionKey = autoSubmitting
+        ? "candidateRuntime.deadline.autoSubmitting"
+        : "candidateRuntime.deadline.endedHint";
+    }
+  } else if (lockReason === "disrupted") {
+    icon = WifiOff;
+    titleKey = "candidateRuntime.lock.disruptedTitle";
+    descriptionKey = "candidateRuntime.lock.disruptedDescription";
+    hintKey = canResume
+      ? "candidateRuntime.lock.disruptedResumeHint"
+      : "candidateRuntime.lock.disruptedBackHint";
+  } else if (lockReason === "submitted") {
+    titleKey = "candidateRuntime.lock.submittedTitle";
+    descriptionKey = "candidateRuntime.lock.submittedDescription";
+  } else if (lockReason === "voided") {
+    titleKey = "candidateRuntime.lock.voidedTitle";
+    descriptionKey = "candidateRuntime.lock.voidedDescription";
+  }
+
+  return (
+    <div
+      className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm"
+      data-testid="deadline-overlay"
+      data-lock-reason={lockReason ?? "unknown"}
+      role="alert"
+    >
+      <div className="flex flex-col items-center gap-3 px-6 text-center">
+        <AppIcon
+          icon={icon}
+          size="state"
+          className={
+            lockReason === "disrupted" ? undefined : "text-destructive"
+          }
+        />
+        <div className="text-lg font-medium text-foreground">
+          {t(titleKey as never)}
+        </div>
+        {descriptionKey && (
+          <div className="type-secondary">{t(descriptionKey as never)}</div>
+        )}
+        {hintKey && <div className="type-secondary">{t(hintKey as never)}</div>}
+        {lockReason === "deadline" && autoSubmitFailed && (
+          <Button onClick={onRetrySubmit} data-testid="retry-submit-btn">
+            {t("candidateRuntime.actions.retrySubmit")}
+          </Button>
+        )}
+        {lockReason === "disrupted" &&
+          (canResume ? (
+            <Button
+              onClick={onRetryRestore}
+              data-testid="lock-retry-restore-btn"
+            >
+              {t("candidateRuntime.restore.retryRestore")}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={onBackToList}
+              data-testid="lock-back-to-list-btn"
+            >
+              {t("candidateRuntime.lock.backToList")}
+            </Button>
+          ))}
+        {(lockReason === "submitted" ||
+          lockReason === "voided" ||
+          lockReason === "deadline") &&
+          !autoSubmitFailed && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {showResult && lockReason !== "voided" && (
+                <Button
+                  variant="outline"
+                  onClick={onViewResult}
+                  data-testid="lock-view-result-btn"
+                >
+                  {t("candidateRuntime.lock.viewResult")}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={onBackToList}
+                data-testid="lock-back-to-list-btn"
+              >
+                {t("candidateRuntime.lock.backToList")}
+              </Button>
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}
 
 /**
  * REC-I3 restore-failed recovery surface.
@@ -241,7 +382,36 @@ export function TakeExamPage() {
   // Concurrent terminal signals (heartbeat 409 + a settling autosave
   // rejection in the same episode) collapse into at most one active take GET.
   const reconciliationInFlightRef = useRef<Promise<void> | null>(null);
-  const { scheduleSave, flush, getScopeGeneration } = useSubmitFlush(attemptId);
+  const { scheduleSave, flush, getScopeGeneration, failedQuestionIds } =
+    useSubmitFlush(attemptId);
+  // Latest failure set / answers, readable from stable callbacks (heartbeat,
+  // online listener) without stale-closure races.
+  const failedQuestionIdsRef = useRef<string[]>(failedQuestionIds);
+  failedQuestionIdsRef.current = failedQuestionIds;
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+
+  /**
+   * Re-saves every FAILED question through the EXISTING save orchestration
+   * (#677 F6: online recovery + manual retry). No second save implementation
+   * exists: each retry is saveAnswer → debounced coordinator → flush, so
+   * baseVersion / clientSeq / replay semantics and the latest editor snapshot
+   * are preserved by construction.
+   */
+  const retryFailedSaves = useCallback(async () => {
+    if (!attemptId) return;
+    if (viewRef.current && !viewRef.current.canSave) return;
+    const retryIds = failedQuestionIdsRef.current.filter(
+      (questionId) => answersRef.current.get(questionId) !== undefined,
+    );
+    for (const questionId of retryIds) {
+      void saveAnswer(questionId, answersRef.current.get(questionId));
+    }
+    if (retryIds.length > 0) {
+      await flush();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptId, flush]);
 
   /** Returns the current time adjusted by the server clock offset. */
   const nowByServerClock = useCallback(
@@ -597,7 +767,12 @@ export function TakeExamPage() {
       // during the debounce window) decides whether to save. This is the
       // authoritative seam — disabled controls alone are NOT sufficient.
       if (!viewRef.current?.canSave) {
-        return;
+        // Nothing was sent — the answer stays UNACKNOWLEDGED. Resolve the
+        // chip (never leave 保存中 stuck), and reject so the save queue
+        // records the question failed instead of silently marking it saved.
+        setSaveState("idle");
+        setTransientState((s) => transientReducer(s, { type: "RESET" }));
+        throw new Error("save skipped: attempt not saveable");
       }
 
       const saveStartedAt = Date.now();
@@ -881,6 +1056,12 @@ export function TakeExamPage() {
       }
       heartbeatFailureRef.current = 0;
       heartbeatFailureReportedRef.current = false;
+      // Connectivity proven restored (server reachable again) — flush any
+      // failed saves through the existing orchestration (#677 F6). Covers
+      // dropouts where the browser never fired an `online` event.
+      if (failedQuestionIdsRef.current.length > 0) {
+        void retryFailedSaves();
+      }
     } catch (err) {
       // EXAM-519: a terminal heartbeat (409 INVALID_STATE_TRANSITION) is the
       // server reporting the attempt left in_progress — an authority signal,
@@ -909,7 +1090,19 @@ export function TakeExamPage() {
         );
       }
     }
-  }, [attemptId, reconcileAuthoritativeAttempt]);
+  }, [attemptId, reconcileAuthoritativeAttempt, retryFailedSaves]);
+
+  // Browser network restoration: automatically re-save failed answers
+  // (#677 F6 acceptance — no new keystroke required).
+  useEffect(() => {
+    const onOnline = () => {
+      if (failedQuestionIdsRef.current.length > 0) {
+        void retryFailedSaves();
+      }
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [retryFailedSaves]);
 
   useEffect(() => {
     const interval = setInterval(() => void handleHeartbeat(), 30000);
@@ -1113,7 +1306,9 @@ export function TakeExamPage() {
           <div>
             <div className="text-lg font-medium">
               {view.isLocked
-                ? t("candidateRuntime.status.ended")
+                ? view.lockReason === "disrupted"
+                  ? t("candidateRuntime.lock.disruptedTitle")
+                  : t("candidateRuntime.status.ended")
                 : t("candidateRuntime.status.inProgress")}
             </div>
             <div className="type-secondary">
@@ -1247,41 +1442,56 @@ export function TakeExamPage() {
               </Alert>
             )}
 
+            {/* Per-question failure set (#677 F6): driven by the save queue's
+                authoritative failedQuestionIds, NOT the global chip — a later
+                successful save of one question must not hide others' failure.
+                Retry re-invokes the existing save orchestration. */}
+            {failedQuestionIds.length > 0 && !view.isLocked && (
+              <Alert
+                variant="destructive"
+                className="border-destructive/30 bg-destructive/10"
+                data-testid="save-retry-banner"
+              >
+                <AppIcon icon={TriangleAlert} size="inline" />
+                <AlertTitle>
+                  {t("candidateRuntime.saveRetry.bannerTitle")}
+                </AlertTitle>
+                <AlertDescription>
+                  <span>
+                    {t("candidateRuntime.saveRetry.bannerDescription")}
+                  </span>{" "}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    className="mt-1"
+                    onClick={() => void retryFailedSaves()}
+                    data-testid="save-retry-btn"
+                  >
+                    {t("candidateRuntime.saveRetry.retry")}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <section
               className="relative surface-content p-5 md:p-8"
               data-testid="take-question-section"
             >
               {view.isLocked && (
-                <div
-                  className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm"
-                  data-testid="deadline-overlay"
-                >
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <AppIcon
-                      icon={TimerOff}
-                      size="state"
-                      className="text-destructive"
-                    />
-                    <div className="text-lg font-medium text-foreground">
-                      {autoSubmitFailed
-                        ? t("candidateRuntime.deadline.autoSubmitTitle")
-                        : t("candidateRuntime.deadline.timeUp")}
-                    </div>
-                    <div className="type-secondary">
-                      {autoSubmitFailed
-                        ? t("candidateRuntime.deadline.retryHint")
-                        : t("candidateRuntime.deadline.autoSubmitting")}
-                    </div>
-                    {autoSubmitFailed && (
-                      <Button
-                        onClick={() => void handleSubmit()}
-                        data-testid="retry-submit-btn"
-                      >
-                        {t("candidateRuntime.actions.retrySubmit")}
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                <LockedOverlay
+                  lockReason={view.lockReason}
+                  canResume={view.canResume}
+                  showResult={view.showResult}
+                  autoSubmitting={transientState === "submitting" || isFlushing}
+                  autoSubmitFailed={autoSubmitFailed}
+                  onRetrySubmit={() => void handleSubmit()}
+                  onRetryRestore={() => retryRestore()}
+                  onBackToList={() => navigate(routes.exam.list)}
+                  onViewResult={() =>
+                    navigate(routes.exam.result(attemptId ?? ""))
+                  }
+                />
               )}
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
                 <div>

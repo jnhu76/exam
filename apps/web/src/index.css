@@ -332,3 +332,17 @@ h3 {
 [data-slot="pagination"] svg:not([data-app-icon]) {
   stroke-width: 1.5;
 }
+
+/*
+ * Rich editor placeholder (contract docs/design/candidate-rich-editor-ux.md
+ * §7). Tiptap Placeholder decorates the first empty textblock with
+ * `is-editor-empty` + `data-placeholder`; this projects the 请输入答案 hint.
+ * Editor-only projection — never persisted content.
+ */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--text-muted);
+  pointer-events: none;
+}

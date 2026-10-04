@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -258,8 +258,15 @@ describe("EXAM-519 terminal-signal reconciliation", () => {
     expect(takeCalls).toBe(2);
     expect(radioA).toBeDisabled();
     expect(screen.queryByTestId("take-submit-btn")).not.toBeInTheDocument();
-    expect(screen.getByTestId("deadline-overlay")).toBeInTheDocument();
-    expect(screen.getByText("考试已结束")).toBeInTheDocument();
+    const overlay = screen.getByTestId("deadline-overlay");
+    // The overlay branches on the authoritative lockReason (#674): a
+    // submitted attempt shows the terminal copy, not the deadline/auto-submit
+    // one — the header carries the same ended title by design.
+    expect(overlay).toHaveAttribute("data-lock-reason", "submitted");
+    expect(within(overlay).getByText("考试已结束")).toBeInTheDocument();
+    expect(
+      within(overlay).queryByText("系统正在自动提交您的答案..."),
+    ).not.toBeInTheDocument();
     // The generic disconnect banner must NOT appear for a terminal signal.
     expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
     expect(
