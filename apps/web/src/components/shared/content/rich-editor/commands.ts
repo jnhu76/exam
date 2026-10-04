@@ -86,7 +86,11 @@ export interface EditorCommandHooks {
  * silent-downgrade class the phase contract forbids (§6).
  */
 function structureDowngradesHere(editor: Editor): boolean {
-  return editor.isActive("tableCell") || editor.isActive("listItem");
+  return (
+    editor.isActive("tableCell") ||
+    editor.isActive("tableHeader") ||
+    editor.isActive("listItem")
+  );
 }
 
 /**
@@ -95,7 +99,7 @@ function structureDowngradesHere(editor: Editor): boolean {
  * that is the #677 F4 nesting capability, not a downgrade.
  */
 function listDowngradesHere(editor: Editor): boolean {
-  return editor.isActive("tableCell");
+  return editor.isActive("tableCell") || editor.isActive("tableHeader");
 }
 
 export function buildEditorCommands(
@@ -215,7 +219,9 @@ export function buildEditorCommands(
       icon: Sigma,
       kind: "action",
       isActive: () => false,
-      isEnabled: (editor) => editor.isEditable,
+      // A code block persists as plain text (contentAdapter joins its text
+      // runs) — inline math cannot live there (review U-R9).
+      isEnabled: (editor) => editor.isEditable && !editor.isActive("codeBlock"),
       execute: () => {
         hooks.openFormula();
       },

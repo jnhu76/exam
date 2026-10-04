@@ -64,10 +64,12 @@ export function MathFormulaField({
       field.addEventListener("input", () => {
         onInput(field.value);
       });
-      // MathLive handles Escape for its own popups; when it does not consume
-      // the key, bubble it as a dialog-cancel request.
+      // MathLive handles Escape for its own popups (and marks the event
+      // defaultPrevented); only when the key falls through does it close the
+      // dialog — an unconfirmed draft must survive closing an in-field popup
+      // (review U-R8).
       field.addEventListener("keydown", (event: KeyboardEvent) => {
-        if (event.key === "Escape") onEscape();
+        if (event.key === "Escape" && !event.defaultPrevented) onEscape();
       });
       container.appendChild(field);
       fieldRef.current = field;

@@ -354,6 +354,11 @@ export function TakeExamPage() {
   const [isFlushing, setIsFlushing] = useState(false);
   const [flushResult, setFlushResult] = useState<FlushResult | null>(null);
   const [autoSubmitFailed, setAutoSubmitFailed] = useState(false);
+  // True ONLY while the real deadline auto-submit flow (flush + submit) is in
+  // flight — the lock overlay's 正在自动提交 claim keys off this, never off
+  // generic flush state (review U-R4: the submit-dialog flush shares
+  // isFlushing and must not read as auto-submitting).
+  const [deadlineAutoSubmitting, setDeadlineAutoSubmitting] = useState(false);
   const versionsRef = useRef(new Map<string, number>());
   const clientSeqsRef = useRef(new Map<string, number>());
   const submittingRef = useRef(false);
@@ -650,6 +655,7 @@ export function TakeExamPage() {
     setIsFlushing(false);
     setFlushResult(null);
     setAutoSubmitFailed(false);
+    setDeadlineAutoSubmitting(false);
     setIsDisconnected(false);
     // Reset attempt-scoped refs. versionsRef / clientSeqsRef will be rebuilt
     // from the new attempt's snapshot by applySnapshot, but clearing them now
@@ -1166,6 +1172,7 @@ export function TakeExamPage() {
         deadlineHandledRef.current = true;
         void (async () => {
           trackExamEvent("deadline_auto_submit_started", {}, { attemptId });
+          setDeadlineAutoSubmitting(true);
           try {
             await flush();
           } catch {
@@ -1187,6 +1194,8 @@ export function TakeExamPage() {
               );
               setAutoSubmitFailed(true);
               toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
+            } finally {
+              setDeadlineAutoSubmitting(false);
             }
           }
         })();
@@ -1483,7 +1492,7 @@ export function TakeExamPage() {
                   lockReason={view.lockReason}
                   canResume={view.canResume}
                   showResult={view.showResult}
-                  autoSubmitting={transientState === "submitting" || isFlushing}
+                  autoSubmitting={deadlineAutoSubmitting}
                   autoSubmitFailed={autoSubmitFailed}
                   onRetrySubmit={() => void handleSubmit()}
                   onRetryRestore={() => retryRestore()}

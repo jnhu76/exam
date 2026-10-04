@@ -1,5 +1,6 @@
 import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
@@ -73,6 +74,30 @@ export const ListTabGuard = Extension.create({
   },
 });
 
+/**
+ * Keyboard twin of the toolbar's downgrade-context disables (commands.ts,
+ * contract §1): the built-in list/code-block shortcuts stay bound inside
+ * table cells and list items and would create structure the canonical
+ * adapter replaces with plain text on save (review U-R2). Swallowing the
+ * keystroke here preempts the built-in binding (later-registered extensions
+ * resolve first) exactly where the toolbar buttons are disabled — one
+ * predicate per grammar fact, enforced at both entry points.
+ */
+export const DowngradeCommandGuard = Extension.create({
+  name: "downgradeCommandGuard",
+  addKeyboardShortcuts() {
+    const inTableCell = (editor: Editor): boolean =>
+      editor.isActive("tableCell") || editor.isActive("tableHeader");
+    const structureDowngrades = (editor: Editor): boolean =>
+      inTableCell(editor) || editor.isActive("listItem");
+    return {
+      "Mod-Shift-8": () => inTableCell(this.editor),
+      "Mod-Shift-7": () => inTableCell(this.editor),
+      "Mod-Alt-C": () => structureDowngrades(this.editor),
+    };
+  },
+});
+
 /** The math atoms of the frozen grammar, shared by the activation seams. */
 const MATH_NODE_NAMES = new Set(["inlineMath", "blockMath"]);
 
@@ -95,12 +120,14 @@ export interface FormulaActivation {
  */
 export function createFormulaActivateExtension(
   onActivate: (activation: FormulaActivation) => void,
+  options: { atomLabel?: (latex: string) => string } = {},
 ): Extension {
   const ExtensionClass = Extension.create({
     name: "formulaActivate",
     addKeyboardShortcuts() {
       return {
         Enter: () => {
+          if (!this.editor.isEditable) return false;
           const { selection } = this.editor.state;
           if (!(selection instanceof NodeSelection)) return false;
           if (!MATH_NODE_NAMES.has(selection.node.type.name)) return false;
@@ -118,28 +145,44 @@ export function createFormulaActivateExtension(
       };
     },
     addProseMirrorPlugins() {
+      const labelFor = options.atomLabel ?? ((latex: string) => latex);
+      const buildDecorations = (doc: ProseMirrorNode): DecorationSet => {
+        const atoms: Decoration[] = [];
+        doc.descendants((node, pos) => {
+          if (!MATH_NODE_NAMES.has(node.type.name)) return;
+          const latex =
+            typeof node.attrs.latex === "string" ? node.attrs.latex : "";
+          // Accessible name for the atom (#679/contract §4): the
+          // KaTeX-rendered atom is otherwise anonymous to assistive tech.
+          // The label text is i18n-owned (injected by the component); the
+          // latex doubles as the discoverability cue for the click/Enter
+          // re-edit path.
+          const label = labelFor(latex);
+          atoms.push(
+            Decoration.node(pos, pos + node.nodeSize, {
+              "aria-label": label,
+              title: label,
+            }),
+          );
+        });
+        return DecorationSet.create(doc, atoms);
+      };
       return [
         new Plugin({
           key: new PluginKey("formulaAtomAccessibility"),
+          // The set is built once per DOC CHANGE and mapped across
+          // selection-only transactions, instead of re-descending the whole
+          // document on every keystroke (review U-R12).
+          state: {
+            init: (_config, state) => buildDecorations(state.doc),
+            apply: (tr, cached) =>
+              tr.docChanged
+                ? buildDecorations(tr.doc)
+                : cached.map(tr.mapping, tr.doc),
+          },
           props: {
             decorations(state): DecorationSet {
-              const atoms: Decoration[] = [];
-              state.doc.descendants((node, pos) => {
-                if (!MATH_NODE_NAMES.has(node.type.name)) return;
-                const latex =
-                  typeof node.attrs.latex === "string" ? node.attrs.latex : "";
-                // Accessible name for the atom (#679/contract §4): the
-                // KaTeX-rendered atom is otherwise anonymous to assistive
-                // tech. The latex hint doubles as the discoverability cue for
-                // the click/Enter re-edit path.
-                atoms.push(
-                  Decoration.node(pos, pos + node.nodeSize, {
-                    "aria-label": `公式 ${latex}`,
-                    title: `公式 ${latex}`,
-                  }),
-                );
-              });
-              return DecorationSet.create(state.doc, atoms);
+              return this.getState(state) ?? DecorationSet.empty;
             },
           },
         }),

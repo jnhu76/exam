@@ -103,6 +103,19 @@ export function RichEditorToolbar({
   );
   const orderedCommands = [...inRowCommands, ...overflowCommands];
 
+  // ONE viable tab stop (review U-R5): when the parked control is disabled
+  // (e.g. undo on a fresh document), the single tabIndex=0 moves to the first
+  // enabled control — a disabled button is skipped by Tab entirely, which
+  // would otherwise make the whole toolbar unreachable by keyboard.
+  const firstEnabledIndex = orderedCommands.findIndex(
+    (c) => !disabled && state?.[c.id].enabled,
+  );
+  const parkedCommand = orderedCommands[focusIndex];
+  const tabStopIndex =
+    !state || (parkedCommand && state[parkedCommand.id]?.enabled)
+      ? focusIndex
+      : firstEnabledIndex;
+
   const moveFocus = useCallback(
     (action: string, from: number) => {
       const delta = action === "prev" ? -1 : 1;
@@ -144,7 +157,7 @@ export function RichEditorToolbar({
             type="button"
             variant="ghost"
             size="icon-sm"
-            tabIndex={index === focusIndex ? 0 : -1}
+            tabIndex={index === tabStopIndex ? 0 : -1}
             aria-label={label}
             aria-pressed={command.kind === "toggle" ? active : undefined}
             aria-keyshortcuts={
@@ -223,6 +236,12 @@ export function RichEditorToolbar({
                 <DropdownMenuItem
                   key={command.id}
                   disabled={disabled || !state?.[command.id].enabled}
+                  data-active={state?.[command.id].active || undefined}
+                  aria-pressed={
+                    command.kind === "toggle"
+                      ? state?.[command.id].active
+                      : undefined
+                  }
                   onMouseDown={(e) => e.preventDefault()}
                   onSelect={() => command.execute(editor as Editor)}
                 >

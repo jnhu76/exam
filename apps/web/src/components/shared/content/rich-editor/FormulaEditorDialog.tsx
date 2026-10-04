@@ -94,13 +94,20 @@ export function FormulaEditorDialog({
     }
   }, [open, target]);
 
-  const effectiveDisplay = display && blockAllowed;
+  // What the confirm would persist in this context (raw choice clamped to
+  // the downgrade constraint); the preview shows the PERSISTED form.
+  const persistedDisplay = display && blockAllowed;
   const isEdit = target !== null;
 
   function confirm() {
     // Policy gate: an unedited open closes without any editor transaction.
-    if (shouldApplyFormulaEdit(target, latex, userEdited, effectiveDisplay)) {
-      onConfirm(latex, effectiveDisplay);
+    // The RAW display choice is what defines "no change" — clamping it to the
+    // blockAllowed context here would read a 独立显示 atom opened in a
+    // downgrade context as "mode flipped" and mutate it on a zero-edit
+    // confirm (review U-R1). applyFormula coerces the persisted mode to the
+    // context when a real edit is applied.
+    if (shouldApplyFormulaEdit(target, latex, userEdited, display)) {
+      onConfirm(latex, display && blockAllowed);
     }
     onOpenChange(false);
   }
@@ -138,7 +145,7 @@ export function FormulaEditorDialog({
               <input
                 type="radio"
                 name="formula-display-mode"
-                checked={!effectiveDisplay}
+                checked={!display}
                 onChange={() => setDisplay(false)}
               />
               <span className="type-body">
@@ -160,7 +167,7 @@ export function FormulaEditorDialog({
               <input
                 type="radio"
                 name="formula-display-mode"
-                checked={effectiveDisplay}
+                checked={display}
                 onChange={() => setDisplay(true)}
                 disabled={!blockAllowed}
                 aria-disabled={!blockAllowed}
@@ -215,7 +222,7 @@ export function FormulaEditorDialog({
                     {latex.trim() ? (
                       <MathRenderer
                         latex={latex}
-                        displayMode={effectiveDisplay}
+                        displayMode={persistedDisplay}
                       />
                     ) : (
                       <span className="type-secondary">

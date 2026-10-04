@@ -40,6 +40,7 @@ import {
 } from "./contentAdapter";
 import { buildEditorCommands } from "./rich-editor/commands";
 import {
+  DowngradeCommandGuard,
   ListTabGuard,
   createFormulaActivateExtension,
   type FormulaActivation,
@@ -102,6 +103,7 @@ export function richEditorExtensions(
   options: {
     placeholder?: string;
     onFormulaActivate?: (activation: FormulaActivation) => void;
+    formulaAtomLabel?: (latex: string) => string;
   } = {},
 ) {
   return [
@@ -148,14 +150,24 @@ export function richEditorExtensions(
       ? [Placeholder.configure({ placeholder: options.placeholder })]
       : []),
     ListTabGuard,
+    DowngradeCommandGuard,
     ...(options.onFormulaActivate
-      ? [createFormulaActivateExtension(options.onFormulaActivate)]
+      ? [
+          createFormulaActivateExtension(options.onFormulaActivate, {
+            atomLabel: options.formulaAtomLabel,
+          }),
+        ]
       : []),
     SettleMathSelectionAfterOperation,
   ];
 }
 
-/** Narrows a Mathematics onClick payload into the activation seam's shape. */
+/**
+ * Narrows a Mathematics onClick payload into the activation seam's shape.
+ * The Mathematics extension binds its click handler unconditionally — the
+ * editable gate lives here so a disabled editor (locked attempt, shared
+ * read/edit consumers) never opens the formula surface (review U-R11).
+ */
 function toActivation(
   node: { attrs: { latex?: unknown }; nodeSize: number },
   pos: number,
@@ -464,6 +476,7 @@ export default function RichContentEditor({
     extensions: richEditorExtensions({
       placeholder: t("candidateRuntime.answer.subjective.placeholder"),
       onFormulaActivate: (activation) => formulaRequestRef.current(activation),
+      formulaAtomLabel: (latex) => t("content.formula.atomLabel", { latex }),
     }),
     content: contentDocumentToTiptap(document),
     editable: !disabled,
@@ -548,6 +561,11 @@ export default function RichContentEditor({
   }
 
   formulaRequestRef.current = (activation: FormulaActivation) => {
+    // The Mathematics extension binds its click handler unconditionally; the
+    // editable gate lives at the activation sink so a disabled editor
+    // (locked attempt, shared read/edit consumers) never opens the formula
+    // surface (review U-R11).
+    if (!editor?.isEditable) return;
     setFormulaTarget({
       latex: activation.latex,
       display: activation.display,
@@ -576,12 +594,27 @@ export default function RichContentEditor({
   /** Applies a confirmed formula edit through the existing math commands. */
   function applyFormula(latex: string, display: boolean) {
     if (!editor) return;
+    // A 独立显示 result never persists in a downgrade context (C14) — the
+    // dialog constrains the choice, and this clamp is the write-side defense.
+    const persistableDisplay =
+      display && !editor.isActive("listItem") && !editor.isActive("table");
     const target = formulaTargetRef.current;
     if (target && target.pos !== undefined) {
       const atom = editor.state.doc.nodeAt(target.pos);
       if (!atom || !MATH_NODE_NAMES.has(atom.type.name)) {
         // The targeted atom vanished under the dialog (undo elsewhere,
         // authoritative replacement) — do not write into a stale position.
+        return;
+      }
+      // Identity guard (review U-R6): a DIFFERENT atom may now sit at the
+      // remembered position (undo of an insert, authoritative replacement).
+      // Type-at-position alone would let the edit land in the wrong formula;
+      // require the opened latex to still match before writing.
+      const targetIsBlock = target.display;
+      if (
+        (atom.type.name === "blockMath") !== targetIsBlock ||
+        atom.attrs.latex !== target.latex
+      ) {
         return;
       }
       const atomIsBlock = atom.type.name === "blockMath";

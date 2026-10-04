@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import { useEditorState } from "@tiptap/react";
 import { useTranslation } from "react-i18next";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,15 @@ export function TableContextualBar({
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
-  if (!editor || !editor.isActive("table")) return null;
+  // Reactive subscription (review U-R3): selection-only transactions change
+  // the in-table context without any doc change — without this the bar
+  // failed to appear/disappear until the next keystroke re-rendered.
+  const inTable = useEditorState({
+    editor,
+    selector: ({ editor: current }) =>
+      current ? current.isActive("table") : false,
+  });
+  if (!editor || !inTable) return null;
 
   return (
     <TooltipProvider>

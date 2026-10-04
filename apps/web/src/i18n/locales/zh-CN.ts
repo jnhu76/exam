@@ -165,6 +165,7 @@ const zhCN = {
       formula: "公式",
     },
     formula: {
+      atomLabel: "公式 {{latex}}",
       insertTitle: "插入公式",
       editTitle: "编辑公式",
       description: "直接输入数学符号，或展开下方源码模式编辑 LaTeX。",

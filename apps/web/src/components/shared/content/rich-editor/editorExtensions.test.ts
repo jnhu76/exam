@@ -25,7 +25,10 @@ function createEditor(withFormulaActivation = false): {
   const editor = new Editor({
     extensions: richEditorExtensions(
       withFormulaActivation
-        ? { onFormulaActivate: (a) => activations.push(a) }
+        ? {
+            onFormulaActivate: (a) => activations.push(a),
+            formulaAtomLabel: (latex) => `公式 ${latex}`,
+          }
         : {},
     ),
     content: {
@@ -211,6 +214,86 @@ describe("keyboardShortcut plumbing", () => {
     editor.commands.keyboardShortcut("Enter");
     // ordinary Enter splits the paragraph (stock behavior preserved)
     expect(editor.state.doc.childCount).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe("downgrade keyboard guard (review U-R2)", () => {
+  function createCellEditor(): Editor {
+    const editor = new Editor({
+      extensions: richEditorExtensions(),
+      content: { type: "doc", content: [{ type: "paragraph", content: [] }] },
+    });
+    liveEditors.push(editor);
+    editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: false });
+    // caret into the first cell
+    const cellPos = editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === "tableCell") return false;
+      return undefined;
+    });
+    void cellPos;
+    let firstCell = -1;
+    editor.state.doc.descendants((node, pos) => {
+      if (firstCell < 0 && node.type.name === "tableCell") firstCell = pos;
+    });
+    editor.commands.setTextSelection({
+      from: firstCell + 1,
+      to: firstCell + 1,
+    });
+    return editor;
+  }
+
+  it("Mod-Shift-8 inside a table cell does NOT create a list (plain-text downgrade class)", () => {
+    const editor = createCellEditor();
+    expect(editor.isActive("tableCell")).toBe(true);
+    editor.commands.keyboardShortcut("Mod-Shift-8");
+    expect(editor.isActive("bulletList")).toBe(false);
+    // the same shortcut inside a list ITEM still works (nested lists persist)
+  });
+
+  it("Mod-Alt-C inside a list item does NOT create a code block", () => {
+    const editor = new Editor({
+      extensions: richEditorExtensions(),
+      content: { type: "doc", content: [{ type: "paragraph", content: [] }] },
+    });
+    liveEditors.push(editor);
+    editor.commands.insertContent("项");
+    editor.commands.toggleBulletList();
+    editor.commands.setTextSelection({ from: 2, to: 2 });
+    expect(editor.isActive("listItem")).toBe(true);
+    editor.commands.keyboardShortcut("Mod-Alt-C");
+    expect(editor.isActive("codeBlock")).toBe(false);
+  });
+
+  it("Mod-Shift-8 outside guarded contexts keeps stock behavior", () => {
+    const editor = new Editor({
+      extensions: richEditorExtensions(),
+      content: { type: "doc", content: [{ type: "paragraph", content: [] }] },
+    });
+    liveEditors.push(editor);
+    editor.commands.keyboardShortcut("Mod-Shift-8");
+    expect(editor.isActive("bulletList")).toBe(true);
+  });
+});
+
+describe("activation respects editability (review U-R11)", () => {
+  it("Enter on a selected atom in a DISABLED editor does not activate", () => {
+    const { editor, activations } = createEditor(true);
+    editor.commands.insertContent({
+      type: "inlineMath",
+      attrs: { latex: "y^2" },
+    });
+    let atomPos = -1;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === "inlineMath") atomPos = pos;
+    });
+    editor.view.dispatch(
+      editor.state.tr.setSelection(
+        NodeSelection.create(editor.state.doc, atomPos),
+      ),
+    );
+    editor.setEditable(false);
+    editor.commands.keyboardShortcut("Enter");
+    expect(activations).toHaveLength(0);
   });
 });
 
