@@ -146,6 +146,29 @@ produce a valid canonical value. This document does **not** prescribe whether th
 repair is deterministic split, rejection, or limit adjustment; that choice
 requires adversarial evidence and product justification.
 
+### 4.1 D-F01 — durable representability closure failure (REPAIRED, Phase F)
+
+A second closure failure, found by Phase-E adversarial falsification
+(#669, 2026-10-03): an authority-legal document carrying `U+0000` or a lone
+surrogate passed `ContentDocumentV1Schema`, `CONTENT_LIMITS`, structural
+preflight, and `canonicalizeContentDocument`, then failed at the durable
+write — PostgreSQL jsonb rejects both classes of string — surfacing as an
+untyped HTTP 500 at the SaveAnswer wire. The class:
+
+```text
+authority-legal input (schema + limits + canonicalization)
+  → accepted canonical value
+  → durable platform rejects it at persistence
+```
+
+Transaction containment held (no partial write), but containment does not
+close the set mismatch: `AuthorityLegal(RichStrings) ⊄ DurableRepresentable`.
+
+**D-F01 disposition:** REPAIRED by the Phase-F corrective amendment (§5.1) —
+the Rich string domain is narrowed to the durably representable set at the
+semantic/schema intake, so unrepresentable input fails before canonicalization
+can succeed. AUTHORITY_CHANGED = YES, by explicit narrow amendment.
+
 ## 5. Allowed-input authority (C1)
 
 `CONTENT_LIMITS` defines Rich V1 product / document complexity limits.
@@ -169,6 +192,41 @@ Three limit categories must remain distinguishable:
 
 Current constants are not tuned by this document; they remain implementation
 parameters.
+
+### 5.1 Durable string representability (Phase F corrective amendment, 2026-10-03)
+
+Rich user strings are narrower than "any JS string". The durable platform
+(PostgreSQL jsonb/text over UTF-8) holds exactly the well-formed Unicode
+scalar values minus `U+0000` — a lone surrogate is not a scalar value and
+cannot round-trip UTF-8, and `U+0000` is the platform's rejected control
+character.
+
+Every free string leaf of the V1 grammar — `text.text`, `codeBlock.text`,
+`inlineMath.latex`, `blockMath.latex` — must satisfy this domain at the
+semantic/schema intake (`isDurableRichString`, enforced inside
+`ContentDocumentV1Schema`, the single parse entry). `codeBlock.language` is
+exempt by construction: `CODE_LANGUAGE_PATTERN` is a full-match bounded ASCII
+class that cannot carry `U+0000` or surrogates.
+
+This restores the closure D-F01 broke (§4.1):
+
+```text
+successfulCanonicalize(d) = c  ⇒  c is durably representable
+```
+
+Unrepresentable input now fails at intake, before canonicalization can
+succeed, so JSONB never sees it. Outer protocols keep their own error
+mapping: SaveAnswer rejects with its `INVALID_ANSWER` category; authoring
+writes reject with a validation error; the persisted-read classifier treats a
+hypothetical unrepresentable row as `corrupt` (fail-closed; physically
+unreachable, since the platform cannot have stored either string class — a
+lone surrogate can only ever have been persisted as its UTF-8 replacement,
+which remains a legal scalar value, so no historical row is invalidated).
+
+This is a deliberate narrow authority change (AUTHORITY_CHANGED = YES), not a
+persistence-layer filter: acceptance moved to match the durable platform
+instead of the platform being re-encoded to preserve `U+0000` / lone
+surrogates.
 
 ## 6. Write contract
 
@@ -552,3 +610,6 @@ This contract must continue to satisfy:
   unsupported / corrupt without silently repairing persisted truth. ✓
 - **G:** Successful canonicalization explicitly guarantees its own output is
   accepted by the same semantic system (RC-03). ✓
+- **H:** Successful canonicalization additionally guarantees durable
+  representability of its output — the authority-legal string set equals the
+  platform-storable string set (D-F01 closure, §5.1). ✓

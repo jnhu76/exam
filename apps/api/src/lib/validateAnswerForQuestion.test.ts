@@ -119,6 +119,39 @@ describe("validateAnswerForQuestion (#301 §21/§44)", () => {
     expect(validateAnswerForQuestion(q, { type: "doc" }).ok).toBe(false);
   });
 
+  it("rich text_response: rejects durable-unrepresentable strings before persistence (D-F01)", () => {
+    const q = snapshot({
+      type: "text_response",
+      answerMode: "rich",
+      options: [],
+      standardAnswer: null,
+    });
+    for (const bad of ["\u0000", "\uD800", "\uDC00"]) {
+      const hostile = {
+        ...RICH_DOC,
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: `a${bad}b` }] },
+        ],
+      };
+      expect(
+        validateAnswerForQuestion(q, hostile).ok,
+        JSON.stringify(bad),
+      ).toBe(false);
+    }
+    // The rule is representability, not ASCII-ness: well-formed exotic
+    // scalars stay legal.
+    const exotic = {
+      ...RICH_DOC,
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "答案 🚀 \uFFFD" }],
+        },
+      ],
+    };
+    expect(validateAnswerForQuestion(q, exotic).ok).toBe(true);
+  });
+
   it("canonicalizes rich answers BEFORE equality/idempotency (transient forms converge)", () => {
     const q = snapshot({
       type: "text_response",
