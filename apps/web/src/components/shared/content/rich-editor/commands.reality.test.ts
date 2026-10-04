@@ -230,6 +230,24 @@ describe("contextual availability", () => {
     expect(JSON.stringify(json)).not.toContain("tableHeader");
   });
 
+  it("list toggles are disabled inside a table cell but enabled inside list items (nested lists persist)", () => {
+    const editor = createEditor();
+    const table = commandMap().get("table");
+    const bullet = commandMap().get("bulletList");
+    if (!table || !bullet) throw new Error("missing commands");
+    table.execute(editor);
+    // caret inside a table cell: a list there is projected to plain text
+    expect(editor.isActive("tableCell")).toBe(true);
+    expect(bullet.isEnabled(editor)).toBe(false);
+    // inside a LIST ITEM the toggle stays available — nested lists persist
+    const plain = createEditor();
+    plain.commands.insertContent("列表项");
+    plain.commands.toggleBulletList();
+    plain.commands.setTextSelection({ from: 2, to: 2 });
+    expect(plain.isActive("listItem")).toBe(true);
+    expect(bullet.isEnabled(plain)).toBe(true);
+  });
+
   it("table insertion is not offered inside a table (nested tables are not grammar)", () => {
     const editor = createEditor();
     const table = commandMap().get("table");

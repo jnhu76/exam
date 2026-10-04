@@ -79,17 +79,23 @@ export interface EditorCommandHooks {
 }
 
 /**
- * Structure contexts where the canonical adapter DOWNGRADES content on save
- * (contentAdapter: list items accept paragraph/nested-lists; table cells
- * accept paragraphs only). Offering list/code-block/table operations there
- * would show the candidate something the persisted answer replaces with plain
- * text — the silent-downgrade class the phase contract forbids (§6). Math is
- * the exception: blockMath downgrades to inlineMath preserving the math
- * semantics (#673 C14), so the formula command stays available and the
- * formula SURFACE constrains the mode instead.
+ * Contexts where a CODE BLOCK or TABLE would be downgraded to plain text on
+ * save (contentAdapter: list items accept paragraph/nested-lists only; table
+ * cells accept paragraphs only). Offering the operation would show the
+ * candidate something the persisted answer replaces with plain text — the
+ * silent-downgrade class the phase contract forbids (§6).
  */
 function structureDowngradesHere(editor: Editor): boolean {
   return editor.isActive("tableCell") || editor.isActive("listItem");
+}
+
+/**
+ * Contexts where a LIST would be downgraded: table cells hold paragraphs
+ * only. Nested lists inside a LIST ITEM are persistable and stay available —
+ * that is the #677 F4 nesting capability, not a downgrade.
+ */
+function listDowngradesHere(editor: Editor): boolean {
+  return editor.isActive("tableCell");
 }
 
 export function buildEditorCommands(
@@ -182,7 +188,8 @@ export function buildEditorCommands(
       kind: "toggle",
       shortcut: "Mod+Shift+8",
       isActive: (editor) => editor.isActive("bulletList"),
-      isEnabled: (editor) => editor.can().toggleBulletList(),
+      isEnabled: (editor) =>
+        editor.can().toggleBulletList() && !listDowngradesHere(editor),
       execute: (editor) => {
         editor.chain().focus().toggleBulletList().run();
       },
@@ -195,7 +202,8 @@ export function buildEditorCommands(
       kind: "toggle",
       shortcut: "Mod+Shift+7",
       isActive: (editor) => editor.isActive("orderedList"),
-      isEnabled: (editor) => editor.can().toggleOrderedList(),
+      isEnabled: (editor) =>
+        editor.can().toggleOrderedList() && !listDowngradesHere(editor),
       execute: (editor) => {
         editor.chain().focus().toggleOrderedList().run();
       },
