@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -85,14 +85,26 @@ export function FormulaEditorDialog({
 
   // Each open re-arms the surface from the targeted atom (or an empty insert);
   // closing always disarms so a stale draft can never leak into the next open.
-  useEffect(() => {
+  //
+  // This is a RENDER-TIME state adjustment (React: adjusting state when a
+  // prop changes), not an effect: the MathLive field applies initialLatex
+  // ONCE at mount and ignores later prop changes, so the armed draft must be
+  // correct in the SAME commit that renders the field. Radix's portal currently
+  // defers content mount one commit, which masks an effect-based re-arm; the
+  // arming contract must not depend on that scheduling detail (review U1).
+  const [armed, setArmed] = useState<{
+    open: boolean;
+    target: FormulaDialogTarget | null;
+  }>({ open: false, target: null });
+  if (open !== armed.open || target !== armed.target) {
+    setArmed({ open, target });
     if (open) {
       setLatex(target?.latex ?? "");
       setUserEdited(false);
       setDisplay(target?.display ?? false);
       setExpertOpen(false);
     }
-  }, [open, target]);
+  }
 
   // What the confirm would persist in this context (raw choice clamped to
   // the downgrade constraint); the preview shows the PERSISTED form.
@@ -104,8 +116,8 @@ export function FormulaEditorDialog({
     // The RAW display choice is what defines "no change" — clamping it to the
     // blockAllowed context here would read a 独立显示 atom opened in a
     // downgrade context as "mode flipped" and mutate it on a zero-edit
-    // confirm (review U-R1). applyFormula coerces the persisted mode to the
-    // context when a real edit is applied.
+    // confirm (review U-R1). applyFormulaEdit re-derives the context at
+    // confirm time and coerces the persisted mode when a real edit applies.
     if (shouldApplyFormulaEdit(target, latex, userEdited, display)) {
       onConfirm(latex, display && blockAllowed);
     }
