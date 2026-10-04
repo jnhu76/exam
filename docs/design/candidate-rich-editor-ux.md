@@ -45,6 +45,11 @@ Invariants:
   (= frozen grammar). The catalogue adds no node, mark, or attribute.
 - The catalogue never reads or validates ContentDocument structure — mapping stays in
   `contentAdapter.ts`.
+- Structure operations whose save outcome the canonical adapter would DOWNGRADE are disabled in
+  those contexts rather than offered (reality-test-derived): list/code-block/table controls are
+  unavailable inside table cells or list items (the adapter projects them to plain text there);
+  formula stays available everywhere because the blockMath→inlineMath downgrade (#673 C14)
+  preserves the math semantics — the formula surface constrains the mode instead (§5.1).
 
 ### Command set (complete — nothing else is exposed)
 
