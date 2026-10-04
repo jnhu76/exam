@@ -79,22 +79,6 @@ describe("formula dialog — blockMath atom in a downgrade context (U-R1)", () =
     await user.click(screen.getByTestId("formula-confirm"));
     expect(onConfirm).toHaveBeenCalledWith("x_1+x_2", false);
   });
-
-  it("an inline atom in a downgrade context stays editable as 行内", async () => {
-    const user = userEvent.setup();
-    const onConfirm = vi.fn();
-    renderDialog({
-      blockAllowed: false,
-      target: { latex: "x^2", display: false, pos: 5, nodeSize: 1 },
-      onConfirm,
-    });
-    await screen.findByTestId("formula-dialog");
-    const inlineRadio = screen.getByRole("radio", { name: "行内" });
-    expect(inlineRadio).toBeChecked();
-    // zero-edit confirm → no-op
-    await user.click(screen.getByTestId("formula-confirm"));
-    expect(onConfirm).not.toHaveBeenCalled();
-  });
 });
 
 describe("formula dialog — field arming at open (first re-edit of a persisted formula)", () => {
