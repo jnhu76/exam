@@ -1278,6 +1278,136 @@ describe("C14 fresh-context clamp — confirm-time context decides the persisted
     });
     editor.destroy();
   });
+
+  /**
+   * RE-EDIT clamp (review MATH_CONTEXT_REEDIT_GUARD): for an existing target
+   * the confirm-time context is the TARGET atom's own ancestry, not the
+   * caret's. An authoritative replacement while the dialog is open can
+   * relocate the same-pos/same-latex atom into a list/table while
+   * re-anchoring the selection to a top-level paragraph — deciding from the
+   * caret would then write a blockMath the canonical adapter silently
+   * downgrades. The paired tests below force the caret and the target into
+   * OPPOSITE contexts, in both directions.
+   */
+
+  /** First math atom carrying the given latex, at its doc position. */
+  function findMathAtom(editor: Editor, latex: string) {
+    const hits: Array<{ pos: number; size: number }> = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.attrs.latex === latex) hits.push({ pos, size: node.nodeSize });
+      return true;
+    });
+    const found = hits[0];
+    if (!found) throw new Error(`fixture bug: no atom with latex ${latex}`);
+    return found;
+  }
+
+  it("re-edit follows the TARGET's context: a formula inside a list item stays inline while the caret sits at top level", () => {
+    // Stale-context shape: the dialog opened on the atom (open-time snapshot
+    // allowed 独立显示), then an authoritative replacement relocated the SAME
+    // inlineMath (same pos, same latex) into a list item while re-anchoring
+    // the selection to a top-level paragraph. The caret says "top level",
+    // the target's ancestry says "list" — the target decides.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [
+                    { type: "text", text: "步骤" },
+                    { type: "inlineMath", attrs: { latex: "a+b" } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        { type: "paragraph", content: [{ type: "text", text: "顶层" }] },
+      ],
+    });
+    const target = findMathAtom(editor, "a+b"); // the in-item inlineMath
+    editor.commands.setTextSelection(11); // caret inside 顶层 — NOT the target's context
+    expect(editor.isActive("listItem")).toBe(false); // pin the deliberate divergence
+    applyFormulaEdit(
+      editor,
+      { latex: "a+b", display: false, pos: target.pos, nodeSize: target.size },
+      "z^3",
+      true,
+    );
+    // No blockMath anywhere in the EDITOR (the canonical adapter's downgrade
+    // would hide the defect one layer down), and the edit still applied —
+    // a clamp that silently bails must fail this test.
+    expect(JSON.stringify(editor.getJSON())).not.toContain("blockMath");
+    const doc = tiptapToContentDocument(editor.getJSON());
+    const list = doc.content[0];
+    if (!list || list.type !== "bulletList")
+      throw new Error("expected bulletList");
+    const para = list.content[0]?.content[0];
+    if (!para || para.type !== "paragraph")
+      throw new Error("expected paragraph");
+    expect(para.content).toEqual([
+      { type: "text", text: "步骤" },
+      { type: "inlineMath", latex: "z^3" },
+    ]);
+    editor.destroy();
+  });
+
+  it("re-edit follows the TARGET's context: a top-level formula converts to block math while the caret sits inside a list item", () => {
+    // Inverse decoy: the caret is parked INSIDE the list while the TARGET
+    // sits at top level. A caret-based clamp would wrongly disable 独立显示
+    // document-wide — the target's ancestry is what allows the conversion.
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "步骤" }],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "paragraph",
+          content: [{ type: "inlineMath", attrs: { latex: "a+b" } }],
+        },
+      ],
+    });
+    const target = findMathAtom(editor, "a+b"); // the top-level inlineMath
+    editor.commands.setTextSelection(4); // caret inside 步骤 — NOT the target's context
+    expect(editor.isActive("listItem")).toBe(true); // pin the deliberate divergence
+    applyFormulaEdit(
+      editor,
+      { latex: "a+b", display: false, pos: target.pos, nodeSize: target.size },
+      "z^3",
+      true,
+    );
+    // The conversion HAPPENED — as block math at TOP level (the target's
+    // context), and never inside the list.
+    const topLevel = editor.getJSON().content ?? [];
+    expect(
+      topLevel.some(
+        (block) => block.type === "blockMath" && block.attrs?.latex === "z^3",
+      ),
+    ).toBe(true);
+    const list = topLevel.find((block) => block.type === "bulletList");
+    expect(JSON.stringify(list)).not.toContain("blockMath");
+    // The inline atom was replaced, not duplicated.
+    expect(JSON.stringify(editor.getJSON())).not.toContain("a+b");
+    editor.destroy();
+  });
 });
 
 describe("editor ⇄ canonical whole-grammar round trip", () => {

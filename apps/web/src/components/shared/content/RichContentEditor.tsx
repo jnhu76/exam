@@ -9,7 +9,7 @@ import {
   Selection,
   TextSelection,
 } from "@tiptap/pm/state";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import type { Transform } from "@tiptap/pm/transform";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -445,6 +445,24 @@ const SettleMathSelectionAfterOperation = Extension.create({
 });
 
 /**
+ * Whether a 独立显示 (blockMath) atom can PERSIST at a resolved position:
+ * inside a list item or a table the canonical adapter silently downgrades it
+ * to inline math, so writing one there would diverge candidate-visible
+ * semantics from persisted semantics (C14). tableRow/tableCell/tableHeader
+ * need no separate check — they only exist inside a table. This is the ONE
+ * authority for the downgrade contexts: the dialog's open-time snapshot
+ * (blockMathPersistsHere) and the confirm-time clamp (applyFormulaEdit) both
+ * go through it.
+ */
+function blockMathPersistsAt($pos: ResolvedPos): boolean {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    const name = $pos.node(depth).type.name;
+    if (name === "listItem" || name === "table") return false;
+  }
+  return true;
+}
+
+/**
  * Applies a confirmed formula edit to the editor — the dialog confirm path
  * for both inserts (target null) and re-edits. Exported for the reality
  * suite: the mode decision must be proven against the real schema, not a
@@ -459,14 +477,17 @@ export function applyFormulaEdit(
   // FRESH-context clamp (C14): the dialog's blockAllowed is an OPEN-TIME
   // snapshot and the context can change while the dialog is open
   // (authoritative replacement / restore), so the persisted node type is
-  // re-derived from the live editor AT CONFIRM TIME. A 独立显示 result never
-  // persists inside a list item or table cell — writing a blockMath there
-  // would only save as math because the canonical adapter silently downgrades
-  // it afterwards, diverging candidate-visible semantics from persisted
-  // semantics. Every final node choice below uses this value, not the raw
-  // choice.
-  const persistableDisplay =
-    display && !editor.isActive("listItem") && !editor.isActive("table");
+  // re-derived from the live editor AT CONFIRM TIME — never from the raw
+  // choice. Every final node choice below uses the recomputed value.
+  //
+  // The decision context is the POSITION's ancestry, checked per branch:
+  //   insert (no target) → the caret's own ancestry (selection.$from);
+  //   re-edit (target)   → the TARGET atom's ancestry at target.pos. An
+  //     authoritative replacement can relocate the same-pos/same-latex atom
+  //     into a list while re-anchoring the selection elsewhere (review:
+  //     MATH_CONTEXT_REEDIT_GUARD) — a caret-based check would then misjudge
+  //     the write. target.pos is in range here: nodeAt just resolved a node
+  //     at it, so resolve() cannot throw.
   if (target && target.pos !== undefined) {
     const atom = editor.state.doc.nodeAt(target.pos);
     if (!atom || !MATH_NODE_NAMES.has(atom.type.name)) {
@@ -485,6 +506,8 @@ export function applyFormulaEdit(
     ) {
       return;
     }
+    const persistableDisplay =
+      display && blockMathPersistsAt(editor.state.doc.resolve(target.pos));
     const atomIsBlock = atom.type.name === "blockMath";
     if (persistableDisplay === atomIsBlock) {
       if (persistableDisplay) {
@@ -522,6 +545,9 @@ export function applyFormulaEdit(
     settleImplicitMathSelection(editor);
     return;
   }
+  // INSERT: the caret's own ancestry decides (the atom does not exist yet).
+  const persistableDisplay =
+    display && blockMathPersistsAt(editor.state.selection.$from);
   editor
     .chain()
     .focus()
@@ -664,7 +690,7 @@ export default function RichContentEditor({
   /** 独立显示 persists only outside list items / table cells (C14 downgrade). */
   function blockMathPersistsHere(): boolean {
     if (!editor) return false;
-    return !editor.isActive("listItem") && !editor.isActive("table");
+    return blockMathPersistsAt(editor.state.selection.$from);
   }
 
   formulaRequestRef.current = (activation: FormulaActivation) => {
