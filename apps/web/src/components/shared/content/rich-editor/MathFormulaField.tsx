@@ -56,10 +56,6 @@ export function MathFormulaField({
       const container = containerRef.current;
       if (disposed || !container) return;
       const field = new MathfieldElement();
-      // Menu contents are editing-surface affordances outside the frozen
-      // command contract — remove rather than expose unreviewed actions.
-      field.menuItems = [];
-      field.value = initialLatex;
       field.disabled = disabled;
       field.addEventListener("input", () => {
         onInput(field.value);
@@ -71,9 +67,28 @@ export function MathFormulaField({
       field.addEventListener("keydown", (event: KeyboardEvent) => {
         if (event.key === "Escape" && !event.defaultPrevented) onEscape();
       });
+      // The custom element upgrades on connection — value and focus are only
+      // legal AFTER appendChild ("Mathfield not mounted" otherwise). The
+      // initial value is applied on the connected instance; focus lands on
+      // the next frame so the upgraded field owns its key handling first.
       container.appendChild(field);
+      // Menu contents are editing-surface affordances outside the frozen
+      // command contract — remove rather than expose unreviewed actions.
+      // Set on the CONNECTED element: pre-connect option writes route through
+      // MathLive's deferred-state replay, which can trip pre-mount getters.
+      field.menuItems = [];
+      field.value = initialLatex;
       fieldRef.current = field;
-      field.focus();
+      requestAnimationFrame(() => {
+        if (!disposed) {
+          try {
+            field.focus();
+          } catch {
+            // A lost upgrade race must never crash the surface — the field
+            // remains focusable by click/keyboard.
+          }
+        }
+      });
     });
     return () => {
       disposed = true;

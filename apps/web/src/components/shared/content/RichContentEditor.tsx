@@ -13,6 +13,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import type { Transform } from "@tiptap/pm/transform";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { JSONContent } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
@@ -179,6 +180,21 @@ function toActivation(
     display,
     nodeSize: node.nodeSize,
   };
+}
+
+/**
+ * Editor-side projection of a canonical document for the canvas: ProseMirror
+ * needs at least one textblock for ordinary typing, placeholder, and mark
+ * commands. The canonical empty document ({content:[]}) mounts as ONE empty
+ * paragraph — the update path canonicalizes it straight back to {content:[]},
+ * so the ownership protocol's echo comparison stays stable (no flip-flop).
+ * Never persisted anywhere: storage authority is untouched.
+ */
+function toEditorContent(document: ContentDocumentV1): JSONContent {
+  const json = contentDocumentToTiptap(document);
+  return json.content?.length
+    ? json
+    : { type: "doc", content: [{ type: "paragraph" }] };
 }
 
 /**
@@ -478,7 +494,7 @@ export default function RichContentEditor({
       onFormulaActivate: (activation) => formulaRequestRef.current(activation),
       formulaAtomLabel: (latex) => t("content.formula.atomLabel", { latex }),
     }),
-    content: contentDocumentToTiptap(document),
+    content: toEditorContent(document),
     editable: !disabled,
     onUpdate: ({ editor }) => {
       try {
@@ -537,7 +553,7 @@ export default function RichContentEditor({
     // parent reset. The editor adopts it as its new baseline; emitUpdate:false
     // so the reset does not echo back through onUpdate into a save loop.
     currentEditorDocumentRef.current = document;
-    editor.commands.setContent(contentDocumentToTiptap(document), {
+    editor.commands.setContent(toEditorContent(document), {
       emitUpdate: false,
     });
     // Same restore boundary as creation: the adopted document must not open
@@ -676,7 +692,15 @@ export default function RichContentEditor({
       <EditorContent editor={editor} />
       <FormulaEditorDialog
         open={formulaOpen}
-        onOpenChange={setFormulaOpen}
+        onOpenChange={(open) => {
+          setFormulaOpen(open);
+          // A dismissed surface returns the candidate to the writing
+          // surface: Escape/overlay-close routes through Radix, which
+          // restores focus to the page, not the editor (the confirm path
+          // refocuses through its command chain). Selection-only, so no
+          // update event and no save can ride on it.
+          if (!open) editor.commands.focus();
+        }}
         target={formulaTarget}
         blockAllowed={formulaBlockAllowed}
         onConfirm={applyFormula}
