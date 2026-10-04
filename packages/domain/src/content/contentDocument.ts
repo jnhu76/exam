@@ -171,6 +171,32 @@ export const CONTENT_LIMITS = {
 /** Language identifiers allowed on a code block (presentation metadata only). */
 export const CODE_LANGUAGE_PATTERN = /^[A-Za-z0-9+#._-]{1,32}$/;
 
+// ── Durable string representability (#669 Phase F corrective amendment) ──
+//
+// INVARIANT: authority acceptance must imply durable representability. The
+// durable platform (PostgreSQL jsonb/text over UTF-8) holds exactly the
+// well-formed Unicode scalar values minus U+0000 — a lone surrogate is not
+// a scalar value, and U+0000 is the platform's rejected control character.
+// The Rich string domain is therefore narrower than "any JS string"; this
+// predicate is the single statement of that narrowing and the wire schema
+// applies it to every free string leaf, so no Rich write seam (authoring,
+// SaveAnswer, publish freeze) can accept a document the durable layer would
+// reject. Counterexample D-F01: authority-legal U+0000 / lone surrogate
+// reached the jsonb write and failed as HTTP 500.
+export const RICH_STRING_UNREPRESENTABLE_MESSAGE =
+  "string must contain only well-formed Unicode scalar values with no U+0000 (durable representability)";
+
+const UNREPRESENTABLE_CHAR =
+  /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/**
+ * True when `value` survives the durable platform's jsonb/text encoding
+ * losslessly: well-formed Unicode scalar values, no U+0000.
+ */
+export function isDurableRichString(value: string): boolean {
+  return !UNREPRESENTABLE_CHAR.test(value);
+}
+
 // ── Limits checking ───────────────────────────────────────────────
 
 /** Aggregated structural counters used by the depth/size limit checks. */

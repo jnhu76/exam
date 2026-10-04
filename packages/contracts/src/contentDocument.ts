@@ -3,7 +3,9 @@ import {
   CODE_LANGUAGE_PATTERN,
   CONTENT_DOC_VERSION,
   CONTENT_LIMITS,
+  RICH_STRING_UNREPRESENTABLE_MESSAGE,
   checkContentDocumentLimits,
+  isDurableRichString,
   normalizeContentDocument,
   preflightContentDocumentStructure,
   type ContentBlockMath,
@@ -35,6 +37,20 @@ import {
 
 const MarkTypeEnum = z.enum(["bold", "italic", "underline", "inlineCode"]);
 
+/**
+ * Durable-representability intake shared by every FREE string leaf of the
+ * grammar (#669 Phase F): text runs, code-block bodies, and both LaTeX
+ * slots. `codeBlock.language` is exempt by construction —
+ * CODE_LANGUAGE_PATTERN is a full-match bounded ASCII class that cannot
+ * carry U+0000 or surrogates. This is what makes canonicalization success
+ * imply durable representability (rich-content-semantic-contract §5).
+ */
+function durableRichString(schema: z.ZodString) {
+  return schema.refine(isDurableRichString, {
+    message: RICH_STRING_UNREPRESENTABLE_MESSAGE,
+  });
+}
+
 /** Mark list: canonical order is enforced by normalization, exclusivity here. */
 const MarksSchema = MarkTypeEnum.array().superRefine((marks, ctx) => {
   if (marks.includes("inlineCode") && marks.length > 1) {
@@ -48,7 +64,7 @@ const MarksSchema = MarkTypeEnum.array().superRefine((marks, ctx) => {
 const TextRunSchema = z
   .object({
     type: z.literal("text"),
-    text: z.string().max(CONTENT_LIMITS.textRun),
+    text: durableRichString(z.string().max(CONTENT_LIMITS.textRun)),
     marks: MarksSchema.optional(),
   })
   .strict();
@@ -58,7 +74,7 @@ const HardBreakSchema = z.object({ type: z.literal("hardBreak") }).strict();
 const InlineMathSchema = z
   .object({
     type: z.literal("inlineMath"),
-    latex: z.string().min(1).max(CONTENT_LIMITS.latex),
+    latex: durableRichString(z.string().min(1).max(CONTENT_LIMITS.latex)),
   })
   .strict();
 
@@ -111,20 +127,22 @@ const OrderedListSchema: z.ZodType<ContentOrderedList, z.ZodTypeDef, unknown> =
 const CodeBlockSchema = z
   .object({
     type: z.literal("codeBlock"),
+    // Exempt from durableRichString by construction: the full-match bounded
+    // ASCII language grammar cannot carry U+0000 or surrogates.
     language: z
       .string()
       .refine((value) => CODE_LANGUAGE_PATTERN.test(value), {
         message: "codeBlock language must match the bounded language grammar",
       })
       .nullable(),
-    text: z.string().max(CONTENT_LIMITS.codeBlock),
+    text: durableRichString(z.string().max(CONTENT_LIMITS.codeBlock)),
   })
   .strict();
 
 const BlockMathSchema = z
   .object({
     type: z.literal("blockMath"),
-    latex: z.string().min(1).max(CONTENT_LIMITS.latex),
+    latex: durableRichString(z.string().min(1).max(CONTENT_LIMITS.latex)),
   })
   .strict();
 
