@@ -3,6 +3,7 @@ import {
   CONTENT_DOC_VERSION,
   CONTENT_LIMITS,
   checkContentDocumentLimits,
+  isDurableRichString,
   normalizeContentDocument,
   plainTextProjection,
   plainTextToDocument,
@@ -496,5 +497,54 @@ describe("preflightContentDocumentStructure", () => {
         violation.includes("nodes"),
       ),
     ).toBe(true);
+  });
+});
+
+// ── Durable string representability (#669 Phase F, counterexample D-F01) ──
+//
+// The Rich string domain is narrower than "any JS string": the durable
+// platform (PostgreSQL jsonb/text over UTF-8) holds exactly the well-formed
+// Unicode scalar values minus U+0000. Authority acceptance must imply
+// durable representability.
+
+describe("durable string representability (isDurableRichString)", () => {
+  it("accepts well-formed Unicode scalar values", () => {
+    for (const s of [
+      "plain ascii",
+      "中文试卷",
+      "paired emoji 🚀",
+      "\uFFFD replacement character",
+      "combining e\u0301",
+      "tab\tand\nnewline",
+      "",
+    ]) {
+      expect(isDurableRichString(s), JSON.stringify(s)).toBe(true);
+    }
+  });
+
+  it("rejects U+0000 in every position", () => {
+    for (const s of ["\u0000", "a\u0000b", "trailing\u0000"]) {
+      expect(isDurableRichString(s), JSON.stringify(s)).toBe(false);
+    }
+  });
+
+  it("rejects lone surrogates in every position", () => {
+    for (const s of [
+      "\uD800", // lone high
+      "\uDC00", // lone low
+      "a\uD800b", // high mid-string
+      "a\uDC00b", // low mid-string
+      "end\uD83D", // high at end
+      "\uD800A", // high followed by a non-low
+      "a\uDC00", // low at end
+    ]) {
+      expect(isDurableRichString(s), JSON.stringify(s)).toBe(false);
+    }
+  });
+
+  it("accepts properly paired surrogates adjacent to other text", () => {
+    for (const s of ["a🚀b", "\uD83D\uDE00", "\uD83D\uDE00\uD83D\uDE00"]) {
+      expect(isDurableRichString(s), JSON.stringify(s)).toBe(true);
+    }
   });
 });

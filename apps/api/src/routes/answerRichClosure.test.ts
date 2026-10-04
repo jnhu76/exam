@@ -250,4 +250,86 @@ describe("rich answer canonical closure (save-answer route)", () => {
       ],
     });
   });
+
+  // D-F01 regression (#669 Phase F): the authority used to accept these
+  // strings and fail at the PostgreSQL jsonb write as HTTP 500. The schema
+  // intake now rejects them, so the wire answer is the structured
+  // INVALID_ANSWER rejection with zero durable write.
+  async function durableState() {
+    const [attempt] = await ctx.db
+      .select({ answers: schema.examAttempts.answers })
+      .from(schema.examAttempts)
+      .where(eq(schema.examAttempts.id, attemptId));
+    // exam_answer_save_receipts has a composite PK (org, attempt, question,
+    // clientSeq) — no id column; select a real column.
+    const receipts = await ctx.db
+      .select({ questionId: schema.examAnswerSaveReceipts.questionId })
+      .from(schema.examAnswerSaveReceipts)
+      .where(eq(schema.examAnswerSaveReceipts.attemptId, attemptId));
+    return { answers: attempt?.answers ?? null, receiptCount: receipts.length };
+  }
+
+  it("rejects a U+0000 rich answer with structured INVALID_ANSWER and zero durable write (D-F01)", async () => {
+    const before = await durableState();
+    const res = await saveAnswer(
+      {
+        docVersion: 1,
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "a\u0000b" }] },
+        ],
+      },
+      20,
+    );
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({
+      accepted: false,
+      reason: "INVALID_ANSWER",
+    });
+    expect(await durableState()).toEqual(before);
+  });
+
+  it("rejects lone surrogates the same way (D-F01 family)", async () => {
+    const before = await durableState();
+    for (const [clientSeq, bad] of [
+      [21, "\uD800"],
+      [22, "\uDC00"],
+    ] as const) {
+      const res = await saveAnswer(
+        {
+          docVersion: 1,
+          type: "doc",
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: bad }] },
+          ],
+        },
+        clientSeq,
+      );
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json()).toMatchObject({
+        accepted: false,
+        reason: "INVALID_ANSWER",
+      });
+    }
+    expect(await durableState()).toEqual(before);
+  });
+
+  it("still accepts well-formed exotic scalars — representability, not ASCII-ness", async () => {
+    const res = await saveAnswer(
+      {
+        docVersion: 1,
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "答案 🚀 \uFFFD" }],
+          },
+        ],
+      },
+      23,
+      1,
+    );
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({ accepted: true });
+  });
 });

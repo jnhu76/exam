@@ -11,6 +11,7 @@ import {
 import { QuestionSnapshotSchema } from "../attempt.js";
 import {
   CONTENT_LIMITS,
+  RICH_STRING_UNREPRESENTABLE_MESSAGE,
   normalizeContentDocument,
   type ContentDocumentV1,
 } from "@exam/domain";
@@ -512,5 +513,96 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
       content: [block],
     });
     expect(parsed.success).toBe(true);
+  });
+});
+
+// ── Durable string representability (#669 Phase F / counterexample D-F01) ──
+//
+// The string-leaf intake owns the narrowing: an unrepresentable string must
+// fail the schema (and therefore canonicalization) BEFORE any write seam can
+// accept it, so canonicalization success implies durable representability.
+
+describe("durable string representability (D-F01 closure)", () => {
+  const NUL = "\u0000";
+  const LONE_HIGH = "\uD800";
+  const LONE_LOW = "\uDC00";
+
+  function textDoc(text: string): ContentDocumentV1 {
+    return doc([{ type: "paragraph", content: [{ type: "text", text }] }]);
+  }
+
+  it("rejects U+0000 and lone surrogates in a text run, with the shared reason", () => {
+    for (const bad of [NUL, LONE_HIGH, LONE_LOW, `ok${NUL}ok`]) {
+      const parsed = ContentDocumentV1Schema.safeParse(textDoc(bad));
+      expect(parsed.success, JSON.stringify(bad)).toBe(false);
+      if (!parsed.success) {
+        expect(
+          parsed.error.issues.some(
+            (issue) => issue.message === RICH_STRING_UNREPRESENTABLE_MESSAGE,
+          ),
+          JSON.stringify(bad),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("rejects unrepresentable strings in every free string leaf", () => {
+    const corpus: unknown[] = [
+      doc([{ type: "codeBlock", language: null, text: `x${NUL}` }]),
+      doc([{ type: "blockMath", latex: `x${LONE_HIGH}` }]),
+      doc([
+        {
+          type: "paragraph",
+          content: [{ type: "inlineMath", latex: `${LONE_LOW}x` }],
+        },
+      ]),
+    ];
+    for (const value of corpus) {
+      expect(
+        ContentDocumentV1Schema.safeParse(value).success,
+        JSON.stringify(value),
+      ).toBe(false);
+    }
+  });
+
+  it("codeBlock.language is excluded by the language grammar, not this rule", () => {
+    const parsed = ContentDocumentV1Schema.safeParse(
+      doc([{ type: "codeBlock", language: `a${NUL}b`, text: "x" }]),
+    );
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(
+        parsed.error.issues.some((issue) =>
+          issue.message.includes("language grammar"),
+        ),
+      ).toBe(true);
+      expect(
+        parsed.error.issues.some(
+          (issue) => issue.message === RICH_STRING_UNREPRESENTABLE_MESSAGE,
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("accepts well-formed exotic scalars (CJK, paired emoji, U+FFFD)", () => {
+    expect(
+      ContentDocumentV1Schema.safeParse(textDoc("答案 🚀 \uFFFD")).success,
+    ).toBe(true);
+  });
+
+  it("canonicalization never succeeds for an unrepresentable document", () => {
+    const result = canonicalizeContentDocument(textDoc(NUL));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe(RICH_STRING_UNREPRESENTABLE_MESSAGE);
+    }
+  });
+
+  it("the question create wire schema rejects an unrepresentable rich prompt", () => {
+    const parsed = CreateQuestionRequestSchema.safeParse({
+      ...RICH_TEXT_RESPONSE_CREATE,
+      contentDocument: textDoc(`prove ${NUL}`),
+    });
+    expect(parsed.success).toBe(false);
   });
 });

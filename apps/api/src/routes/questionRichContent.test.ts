@@ -376,4 +376,64 @@ describe("rich content write authority", () => {
       ],
     });
   });
+
+  it("rejects rich writes whose strings are not durably representable (D-F01 cross-writer)", async () => {
+    for (const [label, bad] of [
+      ["U+0000", "\u0000"],
+      ["lone high surrogate", "\uD800"],
+      ["lone low surrogate", "\uDC00"],
+    ] as const) {
+      const res = await createQuestion({
+        type: "text_response",
+        contentDocument: {
+          ...RICH_DOC,
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: `Solve ${bad}:` }],
+            },
+          ],
+        },
+        options: [],
+        standardAnswer: null,
+        rubric: "r",
+      });
+      expect(res.statusCode, `${label}: ${res.body}`).toBe(400);
+      // The rejection is the representability rule, not an unrelated 400.
+      expect(res.body, label).toContain("well-formed Unicode scalar values");
+    }
+  });
+
+  it("rejects a rich option carrying an unrepresentable string (D-F01 cross-writer)", async () => {
+    const res = await createQuestion({
+      type: "single_choice",
+      content: "pick one",
+      options: [
+        {
+          id: "A",
+          contentDocument: {
+            ...RICH_DOC,
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: "A" }] },
+            ],
+          },
+        },
+        {
+          id: "B",
+          contentDocument: {
+            ...RICH_DOC,
+            content: [
+              {
+                type: "paragraph",
+                content: [{ type: "text", text: "\uDC00" }],
+              },
+            ],
+          },
+        },
+      ],
+      standardAnswer: "A",
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    expect(res.body).toContain("well-formed Unicode scalar values");
+  });
 });

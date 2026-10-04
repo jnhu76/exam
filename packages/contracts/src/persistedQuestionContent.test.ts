@@ -166,3 +166,20 @@ describe("resolvePersistedQuestionDocument — static render authority", () => {
     }
   });
 });
+
+describe("durable-unrepresentable persisted values (#669 Phase F)", () => {
+  it("classify as corrupt and refuse resolution — never rich_valid", () => {
+    for (const bad of ["\u0000", "\uD800", "\uDC00"]) {
+      const value = {
+        docVersion: 1,
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: bad }] },
+        ],
+      };
+      const read = classifyPersistedQuestionContent(value);
+      expect(read.kind, JSON.stringify(bad)).toBe("corrupt");
+      expect(resolvePersistedQuestionDocument(value)).toBeNull();
+    }
+  });
+});

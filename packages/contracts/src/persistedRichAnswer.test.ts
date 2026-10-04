@@ -265,3 +265,20 @@ describe("resolveRichAnswerDocument — render authority for persisted answers",
     }
   });
 });
+
+describe("durable-unrepresentable persisted values (#669 Phase F)", () => {
+  it("classify as corrupt and refuse resolution — never rich_valid", () => {
+    for (const bad of ["\u0000", "\uD800", "\uDC00"]) {
+      const value = {
+        docVersion: 1,
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: bad }] },
+        ],
+      };
+      const read = classifyPersistedRichAnswer({ value, answerMode: "rich" });
+      expect(read.kind, JSON.stringify(bad)).toBe("corrupt");
+      expect(resolveRichAnswerDocument(value, "rich")).toBeNull();
+    }
+  });
+});
