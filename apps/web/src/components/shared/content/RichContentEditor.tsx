@@ -450,9 +450,10 @@ const SettleMathSelectionAfterOperation = Extension.create({
  * to inline math, so writing one there would diverge candidate-visible
  * semantics from persisted semantics (C14). tableRow/tableCell/tableHeader
  * need no separate check — they only exist inside a table. This is the ONE
- * authority for the downgrade contexts: the dialog's open-time snapshot
- * (blockMathPersistsHere) and the confirm-time clamp (applyFormulaEdit) both
- * go through it.
+ * authority for the downgrade contexts; every decision routes through it with
+ * the $pos its path owns — INSERT open: caret (blockMathPersistsHere);
+ * RE-EDIT open: activation.pos; CONFIRM: target.pos for re-edits, caret for
+ * inserts (applyFormulaEdit).
  */
 function blockMathPersistsAt($pos: ResolvedPos): boolean {
   for (let depth = $pos.depth; depth > 0; depth -= 1) {
@@ -687,7 +688,11 @@ export default function RichContentEditor({
   const formulaTargetRef = useRef<FormulaDialogTarget | null>(null);
   formulaTargetRef.current = formulaTarget;
 
-  /** 独立显示 persists only outside list items / table cells (C14 downgrade). */
+  /**
+   * INSERT-open anchor: the atom does not exist yet, so the caret's own
+   * ancestry decides (C14 downgrade). Re-edit opens judge activation.pos
+   * instead — see the activation sink below.
+   */
   function blockMathPersistsHere(): boolean {
     if (!editor) return false;
     return blockMathPersistsAt(editor.state.selection.$from);
@@ -705,7 +710,15 @@ export default function RichContentEditor({
       pos: activation.pos,
       nodeSize: activation.nodeSize,
     });
-    setFormulaBlockAllowed(blockMathPersistsHere());
+    // RE-EDIT opens judge the TARGET: the activation payload names the atom,
+    // and the click path delivers it WITHOUT moving the selection onto the
+    // atom, so the caret can sit in a different context (review
+    // MATH_CONTEXT_REEDIT_OPEN). Toolbar INSERT opens keep the caret anchor.
+    // The activation pos is produced synchronously from this same doc, so it
+    // is always resolvable.
+    setFormulaBlockAllowed(
+      blockMathPersistsAt(editor.state.doc.resolve(activation.pos)),
+    );
     setFormulaOpen(true);
   };
 
