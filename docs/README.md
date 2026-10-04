@@ -65,6 +65,7 @@ guidance.
 | [`architecture/exam-system/candidate-recovery.md`](architecture/exam-system/candidate-recovery.md) | Candidate recovery sequences and authority boundaries |
 | [`architecture/exam-system/state-and-authority.md`](architecture/exam-system/state-and-authority.md) | Lifecycle, policy, timestamp, and evidence dimensions |
 | [`architecture/frontend.md`](architecture/frontend.md) | As-built frontend architecture |
+| [`design/candidate-rich-editor-ux.md`](design/candidate-rich-editor-ux.md) | Candidate Rich editor interaction contract (#669 Phase U) — command model, toolbar/keyboard/formula/table behavior, lock-state presentation; consumes, never restates, the Rich semantic authority |
 
 #### Exam semantic authority — where to answer "who owns the fact?"
 
