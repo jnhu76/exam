@@ -1,4 +1,4 @@
-import { plainTextToDocument } from "@exam/domain";
+import { normalizeContentDocument, plainTextToDocument } from "@exam/domain";
 import { classifyPersistedRichAnswer } from "@exam/contracts";
 import { RichContentEditorLazy } from "@/components/shared/content/RichContentEditorLazy";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -64,7 +64,16 @@ export function RichTextAnswerInput({
     case "empty":
       return (
         <RichContentEditorLazy
-          document={plainTextToDocument("")}
+          // CANONICAL mount form: the editor's update path emits
+          // canonicalized documents (normalizeContentDocument), so the mount
+          // value must live in the same canonical space. Mounting the raw
+          // plainTextToDocument shape ({paragraph:[]}) against the canonical
+          // echo ({content:[]}) made the two-way ownership protocol flip-flop
+          // (each side read as an authoritative replacement of the other),
+          // dispatching setContent twice at mount — with the side effect of
+          // no-op undo history entries. See RichContentEditor's ownership
+          // protocol.
+          document={normalizeContentDocument(plainTextToDocument(""))}
           onChange={onChange}
           disabled={disabled}
           ariaLabel={ariaLabel}
@@ -74,7 +83,7 @@ export function RichTextAnswerInput({
     case "legacy_plain":
       return (
         <RichContentEditorLazy
-          document={plainTextToDocument(read.text)}
+          document={normalizeContentDocument(plainTextToDocument(read.text))}
           onChange={onChange}
           disabled={disabled}
           ariaLabel={ariaLabel}

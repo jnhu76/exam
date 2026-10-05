@@ -47,6 +47,29 @@ async function pickSelect(page: Page, label: string, optionName: string) {
   await page.getByRole("option", { name: optionName }).click();
 }
 
+/**
+ * Inserts a formula through the Phase-U formula dialog (#669 phase U):
+ * toolbar 公式 → dialog → expert LaTeX source → mode → confirm. The expert
+ * path is the deterministic automation seam; the visual math-field path is
+ * exercised in rich-editor-phase-u.spec.ts.
+ */
+async function insertFormulaViaDialog(
+  page: Page,
+  latex: string,
+  mode: "行内" | "独立显示",
+): Promise<void> {
+  await page.getByRole("button", { name: "公式" }).click();
+  const dialog = page.getByTestId("formula-dialog");
+  await dialog.waitFor({ state: "visible" });
+  await dialog.getByTestId("formula-expert-toggle").click();
+  await dialog.getByTestId("formula-expert-source").fill(latex);
+  if (mode === "独立显示") {
+    await dialog.getByRole("radio", { name: "独立显示" }).check();
+  }
+  await dialog.getByTestId("formula-confirm").click();
+  await dialog.waitFor({ state: "hidden" });
+}
+
 interface ExamIds {
   examId: string;
 }
@@ -235,8 +258,7 @@ test.describe("issue 301 rich content product loop", () => {
     await page.keyboard.type("重点结论");
     await page.getByRole("button", { name: "加粗" }).click();
     await page.keyboard.type("；并且");
-    await page.getByPlaceholder("输入 LaTeX").fill("a^2+b^2=c^2");
-    await page.getByRole("button", { name: "行内公式" }).click();
+    await insertFormulaViaDialog(page, "a^2+b^2=c^2", "行内");
     await waitForSaveSaved(page);
 
     // Authoritative draft shape: the take snapshot's answerValue is a
@@ -365,13 +387,11 @@ test.describe("issue 301 rich content product loop", () => {
     await editor.click();
     await page.keyboard.type("676独立公式作答：证明 ");
     const BLOCK_LATEX = "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}";
-    await page.getByPlaceholder("输入 LaTeX").fill(BLOCK_LATEX);
-    await page.getByRole("button", { name: "独立公式" }).click();
+    await insertFormulaViaDialog(page, BLOCK_LATEX, "独立显示");
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
     // The destruction trigger: typing + an inline formula right after.
     await page.keyboard.type("证毕，又 ");
-    await page.getByPlaceholder("输入 LaTeX").fill("E=mc^2");
-    await page.getByRole("button", { name: "行内公式" }).click();
+    await insertFormulaViaDialog(page, "E=mc^2", "行内");
     await waitForSaveSaved(page);
 
     // The block formula is STILL VISIBLE after further editing.
@@ -475,11 +495,9 @@ test.describe("issue 301 rich content product loop", () => {
     // Two consecutive toolbar inserts leave the canonical draft as
     // [blockMath, blockMath] — no paragraph, no text cursor (the normalizer
     // strips the paragraphs between them).
-    await page.getByPlaceholder("输入 LaTeX").fill("x^2-1=0");
-    await page.getByRole("button", { name: "独立公式" }).click();
+    await insertFormulaViaDialog(page, "x^2-1=0", "独立显示");
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
-    await page.getByPlaceholder("输入 LaTeX").fill("y^2+z^2");
-    await page.getByRole("button", { name: "独立公式" }).click();
+    await insertFormulaViaDialog(page, "y^2+z^2", "独立显示");
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(2);
     await waitForSaveSaved(page);
 
@@ -560,8 +578,7 @@ test.describe("issue 301 rich content product loop", () => {
     await editor.click();
     const PROMPT_PREFIX = `301数学单选-${STAMP}：`;
     await page.keyboard.type(`${PROMPT_PREFIX}动能公式为 `);
-    await page.getByPlaceholder("输入 LaTeX").fill("E=mc^2");
-    await page.getByRole("button", { name: "行内公式" }).click();
+    await insertFormulaViaDialog(page, "E=mc^2", "行内");
 
     await page.getByPlaceholder("选项 A").fill("正确选项");
     await page.getByPlaceholder("选项 B").fill("错误选项");
@@ -695,8 +712,7 @@ async function setupProsePlusFormula(
   await expect(editor).toHaveCount(1);
   await editor.click();
   await page.keyboard.type("结论：");
-  await page.getByPlaceholder("输入 LaTeX").fill("x^2-1=0");
-  await page.getByRole("button", { name: "独立公式" }).click();
+  await insertFormulaViaDialog(page, "x^2-1=0", "独立显示");
   await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
   return {
     attemptId,
@@ -772,8 +788,15 @@ test.describe("#673 C13 — paste/drag math boundaries in the real editor", () =
     const section = page.getByTestId("take-question-section");
     const editor = section.locator(".ProseMirror");
 
-    // Click the formula (explicit selection — the copy source), copy it.
+    // Copy acquisition under the #679 click contract: clicking the atom
+    // opens the re-edit surface; Escape dismisses it and the atom's
+    // NodeSelection survives the dismissed dialog (probe: ctor=NodeSelection
+    // blockMath, copy→paste count 2). Copy after focus returns to the editor.
     await editor.locator("[data-type='block-math']").click();
+    await page.getByTestId("formula-dialog").waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await page.getByTestId("formula-dialog").waitFor({ state: "hidden" });
+    await expect(editor).toBeFocused();
     await page.keyboard.press("ControlOrMeta+c");
     // Park the caret after the prose, then paste the copy.
     await editor.locator("p").last().click();
@@ -805,9 +828,15 @@ test.describe("#673 C13 — paste/drag math boundaries in the real editor", () =
     const editor = section.locator(".ProseMirror");
 
     // A node drag carries the atom only when the node selection precedes the
-    // drag (dragstart uses the selection's content) — click, then drag.
-    const formula = editor.locator("[data-type='block-math']");
-    await formula.click();
+    // drag (dragstart uses the selection's content). Under the #679 click
+    // contract the click opens the re-edit surface — dismiss it with Escape;
+    // the NodeSelection survives the dismissed dialog, and a real drag fires
+    // dragstart, never the click that re-edits.
+    await editor.locator("[data-type='block-math']").click();
+    await page.getByTestId("formula-dialog").waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await page.getByTestId("formula-dialog").waitFor({ state: "hidden" });
+    await expect(editor).toBeFocused();
     await page.dragAndDrop("[data-type='block-math']", ".ProseMirror p", {
       targetPosition: { x: 10, y: 4 },
     });

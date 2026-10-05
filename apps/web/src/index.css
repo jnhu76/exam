@@ -332,3 +332,77 @@ h3 {
 [data-slot="pagination"] svg:not([data-app-icon]) {
   stroke-width: 1.5;
 }
+
+/*
+ * Rich editor placeholder (contract docs/design/candidate-rich-editor-ux.md
+ * §7). Tiptap Placeholder decorates the first empty textblock with
+ * `is-editor-empty` + `data-placeholder`; this projects the 请输入答案 hint.
+ * Editor-only projection — never persisted content.
+ */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/*
+ * Rich editor content structure (same editor-only scope as the placeholder
+ * rule). Tailwind preflight strips list markers/indentation and table
+ * borders document-wide; without these rules a candidate's lists render as
+ * plain lines and tables as invisible row stacks. Restored ONLY inside the
+ * editor's content surface — persisted content is canonical HTML the
+ * grader renderer projects with its own styles.
+ */
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ul ul {
+  list-style-type: circle;
+}
+
+.ProseMirror ul ul ul {
+  list-style-type: square;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-inline-start: 1.5rem;
+}
+
+.ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid var(--border);
+  padding: 0.375rem 0.5rem;
+  vertical-align: top;
+  position: relative;
+}
+
+.ProseMirror th {
+  background: var(--surface-muted);
+  font-weight: 600;
+  text-align: start;
+}
+
+/* prosemirror-tables marks multi-cell selections; without the overlay the
+   candidate cannot see which cells a contextual-bar command will hit. */
+.ProseMirror .selectedCell:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--surface-muted) 55%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}

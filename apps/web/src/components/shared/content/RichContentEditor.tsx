@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
@@ -9,9 +9,11 @@ import {
   Selection,
   TextSelection,
 } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import type { Transform } from "@tiptap/pm/transform";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { JSONContent } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
@@ -29,14 +31,27 @@ import {
   TableRow,
 } from "@tiptap/extension-table";
 import { Mathematics } from "@tiptap/extension-mathematics";
+import { Placeholder, UndoRedo } from "@tiptap/extensions";
 import "katex/dist/katex.min.css";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
 import { contentDocumentsEqual, type ContentDocumentV1 } from "@exam/domain";
 import {
   contentDocumentToTiptap,
   tiptapToContentDocument,
 } from "./contentAdapter";
+import { buildEditorCommands } from "./rich-editor/commands";
+import {
+  DowngradeCommandGuard,
+  ListTabGuard,
+  createFormulaActivateExtension,
+  type FormulaActivation,
+} from "./rich-editor/editorExtensions";
+import { RichEditorToolbar } from "./rich-editor/RichEditorToolbar";
+import { TableContextualBar } from "./rich-editor/TableContextualBar";
+import {
+  FormulaEditorDialog,
+  type FormulaDialogTarget,
+} from "./rich-editor/FormulaEditorDialog";
 
 /**
  * Two-way ownership protocol: the Tiptap instance owns its state after mount,
@@ -79,8 +94,19 @@ export function isAuthoritativeReplacement(
  * the component and the reality tests, so tests always exercise the exact
  * schema production uses. Fresh instances per call — configure() is not
  * idempotent across documents.
+ *
+ * `options` carries ONLY presentation wiring that does not affect the grammar:
+ * the placeholder text, and the formula re-edit activation callback (contract
+ * §5.2). Both default to inert so schema-level tests exercise the same node
+ * and mark vocabulary without React context.
  */
-export function richEditorExtensions() {
+export function richEditorExtensions(
+  options: {
+    placeholder?: string;
+    onFormulaActivate?: (activation: FormulaActivation) => void;
+    formulaAtomLabel?: (latex: string) => string;
+  } = {},
+) {
   return [
     Document,
     Paragraph,
@@ -107,9 +133,68 @@ export function richEditorExtensions() {
         maxSize: 50,
         maxExpand: 1000,
       },
+      ...(options.onFormulaActivate
+        ? {
+            inlineOptions: {
+              onClick: (node: ProseMirrorNode, pos: number) =>
+                options.onFormulaActivate?.(toActivation(node, pos, false)),
+            },
+            blockOptions: {
+              onClick: (node: ProseMirrorNode, pos: number) =>
+                options.onFormulaActivate?.(toActivation(node, pos, true)),
+            },
+          }
+        : {}),
     }),
+    UndoRedo,
+    ...(options.placeholder
+      ? [Placeholder.configure({ placeholder: options.placeholder })]
+      : []),
+    ListTabGuard,
+    DowngradeCommandGuard,
+    ...(options.onFormulaActivate
+      ? [
+          createFormulaActivateExtension(options.onFormulaActivate, {
+            atomLabel: options.formulaAtomLabel,
+          }),
+        ]
+      : []),
     SettleMathSelectionAfterOperation,
   ];
+}
+
+/**
+ * Narrows a Mathematics onClick payload into the activation seam's shape.
+ * The Mathematics extension binds its click handler unconditionally — the
+ * editable gate lives here so a disabled editor (locked attempt, shared
+ * read/edit consumers) never opens the formula surface (review U-R11).
+ */
+function toActivation(
+  node: { attrs: { latex?: unknown }; nodeSize: number },
+  pos: number,
+  display: boolean,
+): FormulaActivation {
+  return {
+    pos,
+    latex: typeof node.attrs.latex === "string" ? node.attrs.latex : "",
+    display,
+    nodeSize: node.nodeSize,
+  };
+}
+
+/**
+ * Editor-side projection of a canonical document for the canvas: ProseMirror
+ * needs at least one textblock for ordinary typing, placeholder, and mark
+ * commands. The canonical empty document ({content:[]}) mounts as ONE empty
+ * paragraph — the update path canonicalizes it straight back to {content:[]},
+ * so the ownership protocol's echo comparison stays stable (no flip-flop).
+ * Never persisted anywhere: storage authority is untouched.
+ */
+function toEditorContent(document: ContentDocumentV1): JSONContent {
+  const json = contentDocumentToTiptap(document);
+  return json.content?.length
+    ? json
+    : { type: "doc", content: [{ type: "paragraph" }] };
 }
 
 /**
@@ -360,6 +445,124 @@ const SettleMathSelectionAfterOperation = Extension.create({
 });
 
 /**
+ * Whether a 独立显示 (blockMath) atom can PERSIST at a resolved position:
+ * inside a list item or a table the canonical adapter silently downgrades it
+ * to inline math, so writing one there would diverge candidate-visible
+ * semantics from persisted semantics (C14). tableRow/tableCell/tableHeader
+ * need no separate check — they only exist inside a table. This is the ONE
+ * authority for the downgrade contexts; every decision routes through it with
+ * the $pos its path owns — INSERT open: caret (blockMathPersistsHere);
+ * RE-EDIT open: activation.pos; CONFIRM: target.pos for re-edits, caret for
+ * inserts (applyFormulaEdit).
+ */
+function blockMathPersistsAt($pos: ResolvedPos): boolean {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    const name = $pos.node(depth).type.name;
+    if (name === "listItem" || name === "table") return false;
+  }
+  return true;
+}
+
+/**
+ * Applies a confirmed formula edit to the editor — the dialog confirm path
+ * for both inserts (target null) and re-edits. Exported for the reality
+ * suite: the mode decision must be proven against the real schema, not a
+ * component mock.
+ */
+export function applyFormulaEdit(
+  editor: Editor,
+  target: FormulaDialogTarget | null,
+  latex: string,
+  display: boolean,
+): void {
+  // FRESH-context clamp (C14): the dialog's blockAllowed is an OPEN-TIME
+  // snapshot and the context can change while the dialog is open
+  // (authoritative replacement / restore), so the persisted node type is
+  // re-derived from the live editor AT CONFIRM TIME — never from the raw
+  // choice. Every final node choice below uses the recomputed value.
+  //
+  // The decision context is the POSITION's ancestry, checked per branch:
+  //   insert (no target) → the caret's own ancestry (selection.$from);
+  //   re-edit (target)   → the TARGET atom's ancestry at target.pos. An
+  //     authoritative replacement can relocate the same-pos/same-latex atom
+  //     into a list while re-anchoring the selection elsewhere (review:
+  //     MATH_CONTEXT_REEDIT_GUARD) — a caret-based check would then misjudge
+  //     the write. target.pos is in range here: nodeAt just resolved a node
+  //     at it, so resolve() cannot throw.
+  if (target && target.pos !== undefined) {
+    const atom = editor.state.doc.nodeAt(target.pos);
+    if (!atom || !MATH_NODE_NAMES.has(atom.type.name)) {
+      // The targeted atom vanished under the dialog (undo elsewhere,
+      // authoritative replacement) — do not write into a stale position.
+      return;
+    }
+    // Identity guard (review U-R6): a DIFFERENT atom may now sit at the
+    // remembered position (undo of an insert, authoritative replacement).
+    // Type-at-position alone would let the edit land in the wrong formula;
+    // require the opened latex to still match before writing.
+    const targetIsBlock = target.display;
+    if (
+      (atom.type.name === "blockMath") !== targetIsBlock ||
+      atom.attrs.latex !== target.latex
+    ) {
+      return;
+    }
+    const persistableDisplay =
+      display && blockMathPersistsAt(editor.state.doc.resolve(target.pos));
+    const atomIsBlock = atom.type.name === "blockMath";
+    if (persistableDisplay === atomIsBlock) {
+      if (persistableDisplay) {
+        editor
+          .chain()
+          .focus()
+          .updateBlockMath({ latex, pos: target.pos })
+          .run();
+      } else {
+        editor
+          .chain()
+          .focus()
+          .updateInlineMath({ latex, pos: target.pos })
+          .run();
+      }
+      return;
+    }
+    // 行内 ↔ 独立显示 conversion: different node types, so the atom is
+    // replaced in place, then the operation settlement re-runs — the
+    // replacement atom is operation-produced (#676 guard). A clamped
+    // 独立显示 converts the existing blockMath to inline math in place.
+    editor
+      .chain()
+      .insertContentAt(
+        {
+          from: target.pos,
+          to: target.pos + (target.nodeSize ?? atom.nodeSize),
+        },
+        {
+          type: persistableDisplay ? "blockMath" : "inlineMath",
+          attrs: { latex },
+        },
+      )
+      .run();
+    settleImplicitMathSelection(editor);
+    return;
+  }
+  // INSERT: the caret's own ancestry decides (the atom does not exist yet).
+  const persistableDisplay =
+    display && blockMathPersistsAt(editor.state.selection.$from);
+  editor
+    .chain()
+    .focus()
+    .insertContent({
+      type: persistableDisplay ? "blockMath" : "inlineMath",
+      attrs: { latex },
+    })
+    .run();
+  // Not quiet: the insert is a real edit and the settlement's possible
+  // landing paragraph belongs to it.
+  settleImplicitMathSelection(editor);
+}
+
+/**
  * WYSIWYG rich-text editor. The EDIT surface — the ONLY place
  * Tiptap/ProseMirror is imported, always reached through the lazy wrapper
  * (RichContentEditorLazy) so plain-mode bundles never download it.
@@ -370,7 +573,9 @@ const SettleMathSelectionAfterOperation = Extension.create({
  * grammar and surfaced via onChange; the server re-validates on write.
  *
  * Math nodes render through the Mathematics extension with trust disabled —
- * same posture as the read-side KaTeX seam.
+ * same posture as the read-side KaTeX seam. The command bar, formula surface
+ * and table controls are the presentation layer over this editor (contract
+ * docs/design/candidate-rich-editor-ux.md); they add no grammar.
  */
 export default function RichContentEditor({
   document,
@@ -394,9 +599,20 @@ export default function RichContentEditor({
   // applied replacement below re-anchors it.
   const currentEditorDocumentRef = useRef<ContentDocumentV1 | null>(document);
 
+  // The formula surface is React state; the editor extensions are created
+  // once. This ref forwards activation events (atom click / Enter) to the
+  // latest handler without re-creating the editor.
+  const formulaRequestRef = useRef<(activation: FormulaActivation) => void>(
+    () => {},
+  );
+
   const editor = useEditor({
-    extensions: richEditorExtensions(),
-    content: contentDocumentToTiptap(document),
+    extensions: richEditorExtensions({
+      placeholder: t("candidateRuntime.answer.subjective.placeholder"),
+      onFormulaActivate: (activation) => formulaRequestRef.current(activation),
+      formulaAtomLabel: (latex) => t("content.formula.atomLabel", { latex }),
+    }),
+    content: toEditorContent(document),
     editable: !disabled,
     onUpdate: ({ editor }) => {
       try {
@@ -413,6 +629,14 @@ export default function RichContentEditor({
     },
     editorProps: {
       attributes: {
+        // Explicit ARIA role: contenteditable's implicit textbox role is not
+        // reliably exposed to programmatic a11y trees (jsdom 29 reflects no
+        // contentEditable IDL property), and the answer surface must be
+        // queryable by role — never again accidentally satisfied by an
+        // unrelated input (the removed bare LaTeX field was what the first
+        // role=textbox assertion matched).
+        role: "textbox",
+        "aria-multiline": "true",
         "aria-label": ariaLabel ?? t("content.editor.label"),
         class:
           "type-body min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
@@ -447,7 +671,7 @@ export default function RichContentEditor({
     // parent reset. The editor adopts it as its new baseline; emitUpdate:false
     // so the reset does not echo back through onUpdate into a save loop.
     currentEditorDocumentRef.current = document;
-    editor.commands.setContent(contentDocumentToTiptap(document), {
+    editor.commands.setContent(toEditorContent(document), {
       emitUpdate: false,
     });
     // Same restore boundary as creation: the adopted document must not open
@@ -456,89 +680,95 @@ export default function RichContentEditor({
     settleImplicitMathSelection(editor, { quiet: true, landing: "nearest" });
   }, [editor, document]);
 
-  const mathInputRef = useRef<HTMLInputElement>(null);
+  // ---- formula surface state ----
+  const [formulaOpen, setFormulaOpen] = useState(false);
+  const [formulaTarget, setFormulaTarget] =
+    useState<FormulaDialogTarget | null>(null);
+  const [formulaBlockAllowed, setFormulaBlockAllowed] = useState(true);
+  const formulaTargetRef = useRef<FormulaDialogTarget | null>(null);
+  formulaTargetRef.current = formulaTarget;
 
-  function insertMath(displayMode: boolean) {
-    const latex = mathInputRef.current?.value.trim();
-    if (!latex || !editor) return;
-    editor
-      .chain()
-      .focus()
-      .insertContent({
-        type: displayMode ? "blockMath" : "inlineMath",
-        attrs: { latex },
-      })
-      .run();
-    // Not quiet: the insert is a real edit and the settlement's possible
-    // landing paragraph belongs to it.
-    settleImplicitMathSelection(editor);
-    if (mathInputRef.current) mathInputRef.current.value = "";
+  /**
+   * INSERT-open anchor: the atom does not exist yet, so the caret's own
+   * ancestry decides (C14 downgrade). Re-edit opens judge activation.pos
+   * instead — see the activation sink below.
+   */
+  function blockMathPersistsHere(): boolean {
+    if (!editor) return false;
+    return blockMathPersistsAt(editor.state.selection.$from);
+  }
+
+  formulaRequestRef.current = (activation: FormulaActivation) => {
+    // The Mathematics extension binds its click handler unconditionally; the
+    // editable gate lives at the activation sink so a disabled editor
+    // (locked attempt, shared read/edit consumers) never opens the formula
+    // surface (review U-R11).
+    if (!editor?.isEditable) return;
+    setFormulaTarget({
+      latex: activation.latex,
+      display: activation.display,
+      pos: activation.pos,
+      nodeSize: activation.nodeSize,
+    });
+    // RE-EDIT opens judge the TARGET: the activation payload names the atom,
+    // and the click path delivers it WITHOUT moving the selection onto the
+    // atom, so the caret can sit in a different context (review
+    // MATH_CONTEXT_REEDIT_OPEN). Toolbar INSERT opens keep the caret anchor.
+    // The activation pos is produced synchronously from this same doc, so it
+    // is always resolvable.
+    setFormulaBlockAllowed(
+      blockMathPersistsAt(editor.state.doc.resolve(activation.pos)),
+    );
+    setFormulaOpen(true);
+  };
+
+  const commands = useMemo(
+    () =>
+      buildEditorCommands({
+        openFormula: () => {
+          setFormulaTarget(null);
+          setFormulaBlockAllowed(blockMathPersistsHere());
+          setFormulaOpen(true);
+        },
+      }),
+    // blockMathPersistsHere reads the live editor at invocation time; the
+    // catalogue itself is editor-independent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editor],
+  );
+
+  /** Applies a confirmed formula edit through the existing math commands. */
+  function applyFormula(latex: string, display: boolean) {
+    if (!editor) return;
+    applyFormulaEdit(editor, formulaTargetRef.current, latex, display);
   }
 
   if (!editor) return null;
 
-  const btn = (command: () => void, label: string) => (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={command}
-    >
-      {label}
-    </Button>
-  );
-
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1">
-        {btn(
-          () => editor.chain().focus().toggleBold().run(),
-          t("content.editor.bold"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleItalic().run(),
-          t("content.editor.italic"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleUnderline().run(),
-          t("content.editor.underline"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleCode().run(),
-          t("content.editor.inlineCode"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleBulletList().run(),
-          t("content.editor.bulletList"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleOrderedList().run(),
-          t("content.editor.orderedList"),
-        )}
-        {btn(
-          () => editor.chain().focus().toggleCodeBlock().run(),
-          t("content.editor.codeBlock"),
-        )}
-        {btn(
-          () =>
-            editor
-              .chain()
-              .focus()
-              .insertTable({ rows: 2, cols: 2, withHeaderRow: false })
-              .run(),
-          t("content.editor.table"),
-        )}
-        <input
-          ref={mathInputRef}
-          type="text"
-          placeholder={t("content.editor.latexPlaceholder")}
-          className="w-40 rounded-md border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring"
-        />
-        {btn(() => insertMath(false), t("content.editor.inlineMath"))}
-        {btn(() => insertMath(true), t("content.editor.blockMath"))}
-      </div>
+      <RichEditorToolbar
+        editor={editor}
+        commands={commands}
+        disabled={disabled}
+      />
+      <TableContextualBar editor={editor} disabled={disabled} />
       <EditorContent editor={editor} />
+      <FormulaEditorDialog
+        open={formulaOpen}
+        onOpenChange={(open) => {
+          setFormulaOpen(open);
+          // A dismissed surface returns the candidate to the writing
+          // surface: Escape/overlay-close routes through Radix, which
+          // restores focus to the page, not the editor (the confirm path
+          // refocuses through its command chain). Selection-only, so no
+          // update event and no save can ride on it.
+          if (!open) editor.commands.focus();
+        }}
+        target={formulaTarget}
+        blockAllowed={formulaBlockAllowed}
+        onConfirm={applyFormula}
+      />
     </div>
   );
 }
