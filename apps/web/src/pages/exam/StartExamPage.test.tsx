@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -80,6 +86,7 @@ function renderPage() {
 afterEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
+  vi.useRealTimers();
 });
 
 describe("StartExamPage", () => {
@@ -487,6 +494,80 @@ describe("StartExamPage", () => {
       expect(screen.getByText("请等待队列准入")).toBeInTheDocument();
     });
     expect(screen.queryByText("正在排队")).not.toBeInTheDocument();
+  });
+
+  it("polls the admission queue until ready, then starts and navigates (requireQueue)", async () => {
+    vi.useFakeTimers();
+    const controlFlags = {
+      shuffleQuestions: false,
+      shuffleOptions: false,
+      detectTabSwitch: false,
+      disableCopyPaste: false,
+      requireQueue: true,
+      batchSize: 1,
+      batchInterval: 30,
+      restrictIp: false,
+      requireLockdown: false,
+      showResultImmediately: true,
+    };
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Test",
+      durationMinutes: 30,
+      passingScore: 50,
+      totalScore: 100,
+      questionCount: 5,
+      controlFlags,
+      maxAttempts: 3,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
+    });
+    apiPost
+      .mockResolvedValueOnce({
+        examId: "exam-1",
+        status: "waiting",
+        position: 1,
+        waitCount: 1,
+        estimatedWaitSeconds: 30,
+      })
+      .mockResolvedValueOnce({
+        examId: "exam-1",
+        status: "ready",
+        position: 1,
+        waitCount: 0,
+        estimatedWaitSeconds: 0,
+      })
+      .mockResolvedValueOnce({ id: "attempt-9" });
+
+    renderPage();
+    await act(async () => {});
+    expect(screen.getByText("Test")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "开始考试" }));
+    await act(async () => {});
+
+    // While waiting: the queue panel renders and no start POST is sent yet.
+    expect(screen.getByTestId("exam-queue-panel")).toBeInTheDocument();
+    expect(apiPost.mock.calls.map((call) => call[0])).toEqual([
+      "/api/attempts/exam-1/queue",
+    ]);
+
+    // The next poll fires after the poll delay; this one observes admission,
+    // so the page starts the attempt and navigates on its own.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/attempt-9/take",
+    );
+    expect(apiPost.mock.calls.map((call) => call[0])).toEqual([
+      "/api/attempts/exam-1/queue",
+      "/api/attempts/exam-1/queue",
+      "/api/attempts/exam-1/start",
+    ]);
   });
 
   it("shows bestScore when available", async () => {

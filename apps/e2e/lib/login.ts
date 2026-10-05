@@ -52,7 +52,6 @@ const ADMIN_LANDING = /\/admin\/dashboard(?:$|[/?#])/;
  * (ExamView) → /admin/exams. This is the capability-union landing, not a
  * role-string shortcut.
  */
-const TEACHER_LANDING = /\/admin\/exams(?:$|[/?#])/;
 
 export async function loginViaUi(
   page: Page,
@@ -167,7 +166,7 @@ export async function loginViaUi(
 
 /**
  * Log in as the demo-seed admin (admin/admin123 by default) and land on the
- * admin dashboard. Used by admin-flow E2E specs that drive the admin UI.
+ * admin dashboard. Used by E2E specs that drive the admin UI.
  */
 export async function loginAsAdmin(
   page: Page,
@@ -175,19 +174,4 @@ export async function loginAsAdmin(
   password: string = process.env.E2E_ADMIN_PASSWORD ?? "admin123",
 ): Promise<void> {
   await loginViaUi(page, username, password, ADMIN_LANDING);
-}
-
-/**
- * Log in as a Teacher through the REAL /login UI flow and land on the Teacher
- * capability-driven console surface (/admin/exams). The Teacher account is
- * NOT a demo-seed account (there is intentionally no default Teacher seed);
- * callers create it first through the
- * supported Admin product interface (POST /api/users { role: "Teacher" }).
- */
-export async function loginAsTeacher(
-  page: Page,
-  username: string,
-  password: string,
-): Promise<void> {
-  await loginViaUi(page, username, password, TEACHER_LANDING);
 }

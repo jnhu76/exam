@@ -1,8 +1,8 @@
 /**
  * Pending operator-command retry identity on the ProctorDashboard.
  *
- * When an operator command (misconduct mark, force-submit) commits on the
- * server but its response is lost, the dashboard must classify the outcome
+ * When a misconduct mark commits on the server but its response is lost,
+ * the dashboard must classify the outcome
  * as `indeterminate`, freeze the FULL command (operationId + payload),
  * persist it to sessionStorage (fail-closed), and offer a retry that replays
  * the SAME command verbatim — so the server resolves it as an idempotent
@@ -12,17 +12,12 @@
  * the frozen operationId + payload (no new UUID minted). The wire semantics
  * behind the replay — idempotent_replay disposition, exactly-one receipt and
  * audit row, recovery projection — are owned at the API layer by
- * routes/attempts/admin-misconduct.test.ts and
- * routes/attempts/admin-force-submit.test.ts and their concurrency siblings.
+ * routes/attempts/admin-misconduct.test.ts and its concurrency sibling.
  */
 import { test, expect } from "@playwright/test";
-import { seedExam, type SeededExam } from "../lib/seed";
+import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
-import {
-  adminApiToken,
-  candidateLoginApi,
-  candidateStartAttempt,
-} from "../lib/flow";
+import { candidateLoginApi, candidateStartAttempt } from "../lib/flow";
 
 interface CapturedPost {
   body: Record<string, unknown>;
@@ -163,139 +158,6 @@ test.describe("pending operator-command retry identity", () => {
     expect(first.body.notes).toEqual(retry.body.notes);
     expect(first.body.severity).toBe("warning");
     expect(first.body.notes).toBe("A");
-    expect(typeof first.body.operationId).toBe("string");
-  });
-
-  test("force-submit: commit + masked 5xx → banner retry replays the frozen operationId", async ({
-    page,
-    request,
-  }) => {
-    const unique = `fs-retry-${Date.now()}`;
-    const seeded: SeededExam = await seedExam(request, unique);
-    await adminApiToken(request);
-    const candidateToken = await candidateLoginApi(
-      request,
-      seeded.candidate.username,
-      seeded.candidate.password,
-    );
-    const attemptId = await candidateStartAttempt(
-      request,
-      candidateToken,
-      seeded.examId,
-    );
-
-    await loginAsAdmin(page);
-
-    // Capture EVERY force-submit POST body + the parsed response so the
-    // retry-identity + replay-disposition assertions have full evidence.
-    const captured: CapturedPost[] = [];
-    await page.route("**/api/admin/attempts/*/force-submit", async (route) => {
-      const postBody = route.request().postDataJSON() as Record<
-        string,
-        unknown
-      >;
-      // Always let the server really process the request so the commit
-      // semantics are real; then decide how to fulfill based on index.
-      const response = await route.fetch();
-      const text = await response.text();
-      let parsed: CapturedPost["parsed"] = {};
-      try {
-        parsed = JSON.parse(text) as CapturedPost["parsed"];
-      } catch {
-        // keep parsed empty
-      }
-      if (captured.length === 0) {
-        // FIRST POST: the server commits (applied).
-        captured.push({
-          body: postBody,
-          status: response.status(),
-          parsed,
-        });
-        // Mask as 500 so the UI classifies the outcome as indeterminate.
-        await route.fulfill({
-          status: 500,
-          contentType: "application/json",
-          body: JSON.stringify({ error: "masked-for-indeterminate" }),
-        });
-        return;
-      }
-      // RETRY POST: pass through the REAL response (idempotent_replay) so the
-      // UI clears the pending command and we can assert the disposition.
-      captured.push({
-        body: postBody,
-        status: response.status(),
-        parsed,
-      });
-      await route.fulfill({
-        status: response.status(),
-        headers: response.headers(),
-        body: text,
-      });
-    });
-
-    await page.goto(`/admin/exams/${seeded.examId}/proctor`);
-    await page.waitForURL("**/proctor**", { timeout: 15_000 });
-
-    // ── First click: server commits, response masked → indeterminate.
-    const forceSubmitBtn = page.getByRole("button", { name: "强制交卷" });
-    await expect(forceSubmitBtn.first()).toBeVisible({ timeout: 15_000 });
-    await forceSubmitBtn.first().click();
-    await expect(page.getByText("确认强制交卷").first()).toBeVisible({
-      timeout: 15_000,
-    });
-    const confirmBtn = page.getByRole("button", { name: "确认" });
-    await confirmBtn.click();
-
-    // Indeterminate state surfaced (toast).
-    await expect(page.getByText("强制交卷提交状态未确认").first()).toBeVisible({
-      timeout: 15_000,
-    });
-
-    // The frozen command must be persisted in sessionStorage (fail-closed).
-    const storedBefore = await page.evaluate(() => {
-      const keys = Object.keys(sessionStorage).filter((k) =>
-        k.startsWith("exam.pendingForceSubmit:"),
-      );
-      return keys.map((k) => ({
-        key: k,
-        value: JSON.parse(sessionStorage.getItem(k) ?? "null"),
-      }));
-    });
-    expect(storedBefore.length, "pending command persisted").toBe(1);
-    expect(storedBefore[0]!.value.command.attemptId).toBe(attemptId);
-
-    // ── Retry from the PAGE-LEVEL banner. The status poll may already show
-    //    the candidate as graded (the server committed), so the card's
-    //    force-submit button may be gone — the banner is the authoritative
-    //    recovery surface regardless.
-    const banner = page.getByTestId("pending-force-submit-banner");
-    await expect(banner).toBeVisible({ timeout: 15_000 });
-    const bannerRetry = banner.getByRole("button", {
-      name: "重试未确认强制交卷",
-    });
-    await bannerRetry.click();
-
-    // Success toast + cleared pending command.
-    await expect(page.getByText("已强制交卷").first()).toBeVisible({
-      timeout: 15_000,
-    });
-    const storedAfter = await page.evaluate(() => {
-      const keys = Object.keys(sessionStorage).filter((k) =>
-        k.startsWith("exam.pendingForceSubmit:"),
-      );
-      return keys.length;
-    });
-    expect(storedAfter).toBe(0);
-
-    // ── Evidence: exactly two POSTs, identical command identity — the retry
-    //    reused the frozen command verbatim (no new UUID minted).
-    await expect.poll(() => captured.length).toBe(2);
-
-    const first = captured[0]!;
-    const retry = captured[1]!;
-
-    expect(first.body.operationId).toEqual(retry.body.operationId);
-    expect(first.body.reason).toEqual(retry.body.reason);
     expect(typeof first.body.operationId).toBe("string");
   });
 });

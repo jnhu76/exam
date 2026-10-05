@@ -459,17 +459,27 @@ durability boundary.
 
 ### 4.0 E2E retention principle
 
-E2E exists for high-value browser/system boundary failures: crash/reconnect
-recovery, submit-flush scheduling, cross-tab state, retry identity after an
-indeterminate response, session/identity journeys, result-publication
-visibility, and deployment/LAN transport — mechanisms that cannot be
-faithfully proven below the browser/system boundary AND whose failure is
-materially risky. A browser-only assertion is not automatically worth E2E.
-Trivial visual geometry (bounding-box px contracts, exact widths/gaps,
-breakpoint layout) and simple UI state should be tested below E2E
-(component/API/DB) or left unautomated when not materially risky. Every
-surviving E2E must name the material invariant it owns and the
-browser/system mechanism that requires the browser.
+The retention bar is reversed: KEEP requires proof. An E2E earns its
+permanent browser/DB/fixture cost only when BOTH hold:
+
+1. the failure mechanism cannot be faithfully proven at a lower layer
+   (domain/engine/API+PostgreSQL/component) — real browser mechanics
+   (contenteditable selection, shadow DOM, cross-tab Web Locks, real reload
+   and network-failure timing), browser↔server composition (save/submit
+   ordering, lost-response retry identity, cookie/session lifecycle), or
+   true deployment/transport boundaries (production LAN HTTP); and
+2. the failure is materially risky (data loss, wrong submission,
+   authorization, recovery, session, deployment), not cosmetic staleness.
+
+A browser-only assertion is not automatically worth E2E. Per-role route and
+visibility matrices, CRUD driven through buttons, and axe/aria attribute
+scans are kept only when the browser composition itself is the unowned
+mechanism. Trivial visual geometry (bounding-box px contracts, exact
+widths/gaps, breakpoint layout) has zero permanent E2E; narrow-viewport
+coverage is one operability journey (editor usable, navigation and submit
+reachable), never pixel layout. Every surviving E2E must name the material
+invariant it owns and the browser/system mechanism that requires the
+browser.
 
 ### 4.1 Local E2E (`scripts/e2e/run.sh`)
 

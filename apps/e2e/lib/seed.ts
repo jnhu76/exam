@@ -205,7 +205,7 @@ export async function seedExam(
      * Note: `bounded_grace` is intentionally NOT accepted here — seeding a
      * bounded_grace exam requires per-incident / per-attempt grace caps that
      * this helper does not supply. bounded_grace scenarios use their own
-     * dedicated seed path (see candidate-save-submit / disconnect-restore).
+     * dedicated seed path (see the candidate-save-submit API tests).
      */
     interruptionTimePolicy?: "strict" | "operator_incident";
     /**
@@ -251,10 +251,8 @@ export async function seedExam(
   const questionId = question.id as string;
 
   // Objective (true_false) question renders FIRST, manual-graded (text_response)
-  // questions AFTER — this matches spec assumptions (e.g. manual-grading answers
-  // the objective Q1 first, then navigates to the manual question Q2). HEAD had
-  // this order; a later edit (to fix totalScore) accidentally reversed it by
-  // initializing questionIds empty and pushing base last.
+  // questions AFTER — consumers answer the objective Q1 first, then navigate to
+  // the manual question Q2.
   const questionIds: string[] = [questionId];
   // text_response is an independent QuestionType. Per
   // docs/architecture/exam-runtime.md §1.1 the legacy `fill_blank + standardAnswer=null`
