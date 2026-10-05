@@ -87,19 +87,6 @@ export async function answerTrueFalse(
 }
 
 /**
- * Type free-text into the first fill_blank input on the take page.
- * FillBlankInput renders a text input for auto-graded fill_blank questions
- * (string standardAnswer).
- */
-export async function answerFillBlank(page: Page, text: string): Promise<void> {
-  const input = page
-    .getByTestId("take-question-section")
-    .locator("input[type='text']");
-  await input.first().waitFor({ state: "visible" });
-  await input.first().fill(text);
-}
-
-/**
  * Type free-text into the text_response textarea on the take page
  * (P3-MOD-P0-4). text_response is an independent QuestionType rendered as a
  * textarea via TextResponseInput.
@@ -296,21 +283,6 @@ export async function closeExamApi(
   return request.post(`${BASE_URL}/api/exams/${examId}/close`, {
     headers: { Cookie: `auth-token=${adminToken}` },
     data: reason ? { reason } : {},
-  });
-}
-
-/**
- * Export an exam's graded scores as CSV over the admin API. Returns the raw
- * response (caller asserts status + content-type). Mirrors the ScoreListPage
- * 导出CSV button's GET /api/exams/:id/export/scores call.
- */
-export async function exportScoresCsv(
-  request: APIRequestContext,
-  adminToken: string,
-  examId: string,
-): Promise<APIResponse> {
-  return request.get(`${BASE_URL}/api/exams/${examId}/export/scores`, {
-    headers: { Cookie: `auth-token=${adminToken}` },
   });
 }
 

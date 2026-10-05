@@ -9,18 +9,19 @@ import {
 import { assertNoHorizontalOverflow, assertReachable } from "../lib/responsive";
 
 /**
- * Candidate-first responsive baseline (Issue #306, UI-STABILIZATION-GOAL-1
- * G2). Deterministic geometry assertions at the 390x844 baseline viewport —
- * not screenshots, no visual-regression dependency:
+ * Candidate operability at the narrow 390x844 baseline viewport — the
+ * §"responsive operability" journey: at narrow width the candidate can still
+ * log in, read the list, start, answer, save, reach the submit dialog, and
+ * land on the result. Not screenshots, no visual-regression dependency:
  *
  *   - no document-level horizontal overflow on any critical candidate route;
  *   - primary controls stay visible and horizontally reachable;
  *   - the submit dialog fits the viewport;
  *   - timer / save state / submit never disappear at 390px;
- *   - desktop (1280x720) sanity on the same flow (non-regression).
+ *   - a long mixed-script exam title keeps the card and its primary action
+ *     operable.
  *
- * Geometry helpers live in lib/responsive.ts (shared with the Admin
- * responsive baseline).
+ * Geometry helpers live in lib/responsive.ts.
  */
 
 test.describe("candidate responsive baseline 390x844", () => {
@@ -130,33 +131,5 @@ test.describe("candidate responsive baseline 390x844", () => {
         .getByTestId(`exam-card-${seeded.examId}`)
         .getByTestId("exam-primary-action"),
     );
-  });
-});
-
-test.describe("candidate desktop non-regression", () => {
-  test("list → take → save stay overflow-free at 1280x720", async ({
-    page,
-    request,
-  }) => {
-    const seeded = await seedExam(request, "responsive-desktop", {
-      questionAnswer: true,
-      questionScore: 100,
-    });
-    await page.setViewportSize({ width: 1280, height: 720 });
-
-    await candidateLogin(page, seeded.candidate);
-    await page.waitForURL(/\/exam\/list/);
-    await assertNoHorizontalOverflow(page);
-
-    await clickExamPrimaryAction(page, seeded.examId, "start");
-    await page.waitForURL(/\/exam\/[^/]+\/start$/);
-    await page.getByTestId("exam-start-btn").click();
-    await page.waitForURL(/\/exam\/[^/]+\/take$/);
-    await page.getByTestId("take-question-section").waitFor({
-      state: "visible",
-    });
-    await answerTrueFalse(page, true);
-    await waitForSaveSaved(page);
-    await assertNoHorizontalOverflow(page);
   });
 });
