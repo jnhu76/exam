@@ -3,7 +3,11 @@ import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+// Type-only: brings the prosemirror-view declaration into the program so the
+// EditorView augmentation below merges with the class @tiptap/pm re-exports.
+import type {} from "prosemirror-view";
 
 /**
  * Editor-scoped keyboard/selection extensions for the candidate Rich editor
@@ -95,6 +99,54 @@ export const DowngradeCommandGuard = Extension.create({
       "Mod-Shift-7": () => inTableCell(this.editor),
       "Mod-Alt-C": () => structureDowngrades(this.editor),
     };
+  },
+});
+
+/**
+ * prosemirror-view applies native DOM selection changes through its
+ * `selectionchange` listener, which Chrome delivers asynchronously and may
+ * not fire before the next keystroke. Its keydown path only force-flushes an
+ * ALREADY-SCHEDULED observer flush, so after an unhandled native caret move
+ * (Ctrl+End, PageUp, …) the DOM selection can still be ahead of the view
+ * state when the next key is processed. When the document ends with a table,
+ * the pending DOM caret sits after the trailing tableWrapper — a position
+ * with no document representation — and the keystroke is then reconciled
+ * against the stale selection: the input is dropped or lands on the wrong
+ * block while staying visible in the DOM (#701).
+ * INVARIANT: by the time any keydown is handled or inserted, the view state
+ * selection reflects the current DOM selection. flush() reuses
+ * prosemirror-view's own guards (suppression, ignoreSelectionChange, focus);
+ * the composing guard mirrors editHandlers.keydown, which does no input work
+ * during composition. Runs before editHandlers.keydown (custom DOM handlers
+ * run first) and returns false, so keymaps and the browser default proceed.
+ */
+declare module "prosemirror-view" {
+  interface EditorView {
+    /**
+     * Internal DOM observer (untyped upstream). Only flush() is relied on —
+     * the same entry prosemirror-view's keydown path reaches via forceFlush.
+     */
+    domObserver: { flush(): void };
+  }
+}
+
+export const SyncPendingSelectionOnKeydown = Extension.create({
+  name: "syncPendingSelectionOnKeydown",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("syncPendingSelectionOnKeydown"),
+        props: {
+          handleDOMEvents: {
+            keydown: (view: EditorView) => {
+              if (view.composing) return false;
+              view.domObserver.flush();
+              return false;
+            },
+          },
+        },
+      }),
+    ];
   },
 });
 

@@ -191,6 +191,84 @@ async function insertVisualFormula(
 }
 
 test.describe("#669 Phase U candidate editor", () => {
+  test("first keystroke after native caret relocation survives save (#701 CE-1)", async ({
+    page,
+    request,
+  }) => {
+    const fixture = await seedRichExam(request, "ce1");
+    const {
+      page: p,
+      editor,
+      attemptId,
+    } = await openRichEditor(page, request, fixture);
+
+    // Compose a document whose LAST block is a table.
+    await editor.click();
+    await p.keyboard.type("基底。", { delay: 12 });
+    await p.keyboard.press("Enter");
+    await p.getByRole("button", { name: "表格" }).click();
+    await p.waitForTimeout(400);
+    await p.keyboard.type("甲", { delay: 12 });
+    await waitForSaveSaved(p);
+
+    // Native Ctrl+End is not handled by the editor, so the browser moves the
+    // DOM selection itself — after the trailing tableWrapper, a DOM position
+    // with no document representation. Chrome delivers the matching
+    // selectionchange asynchronously, so the next keystroke can arrive while
+    // the view state still points at the clicked paragraph.
+    await editor
+      .locator("p")
+      .first()
+      .click({ position: { x: 5, y: 5 } });
+    await p.keyboard.press("Control+End");
+    // 16 ms/char is inside the previously-failing window (lost at ≤40, won
+    // at 80); the input path must not depend on this pace at all.
+    await p.keyboard.type("R1st", { delay: 16 });
+    await waitForSaveSaved(p);
+
+    const { candidateApiToken } = await import("../lib/flow");
+    const token = await candidateApiToken(request, fixture.candidate);
+    const take = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${token}` } },
+    );
+    const body = (await take.json()) as {
+      questions: Array<{
+        answerValue: {
+          content: Array<{
+            type: string;
+            content?: Array<Record<string, unknown>>;
+          }>;
+        };
+      }>;
+    };
+    const answer = body.questions[0]?.answerValue;
+    const textOf = (content: unknown): string => {
+      const parts: string[] = [];
+      const walk = (node: unknown): void => {
+        if (Array.isArray(node)) return node.forEach(walk);
+        if (node && typeof node === "object") {
+          const n = node as { text?: string; content?: unknown };
+          if (typeof n.text === "string") parts.push(n.text);
+          walk(n.content);
+        }
+      };
+      walk(content);
+      return parts.join("");
+    };
+    // The relocation target is the trailing table; its mapping is PM's own
+    // selectionFromDOM decision, so the test pins the integrity contract, not
+    // a particular cell: nothing dropped, nothing merged into the paragraph
+    // the caret was relocated away from. On the defect the marker landed in
+    // that first paragraph ("基底。R1st") or lost its first character.
+    const first = answer?.content?.[0];
+    expect(first?.type).toBe("paragraph");
+    expect(textOf(first?.content)).toBe("基底。");
+    expect(textOf(answer?.content)).toContain("R1st");
+    const table = answer?.content?.find((b) => b?.type === "table");
+    expect(textOf(table?.content)).toContain("R1st");
+  });
+
   test("list keyboard contract: Tab indents where legal, first-item Tab never escapes (#677 F4)", async ({
     page,
     request,
