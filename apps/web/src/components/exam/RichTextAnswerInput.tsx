@@ -24,7 +24,7 @@ import { useTranslation } from "react-i18next";
  * must not mount even though it is interpretable — the editor's onUpdate
  * path re-serializes through canonicalization, so mounting it would turn
  * read classification into a silent repair write of never-edited content,
- * and for the PC-F01 closure class the canonicalized form itself exceeds
+ * and for the canonical-closure class the canonicalized form itself exceeds
  * CONTENT_LIMITS, producing an editor whose output can never save. Repair
  * of such values is a future explicit policy, never read-time behavior.
  *

@@ -121,7 +121,7 @@ function blockToTiptap(block: ContentBlock): JSONContent {
     default:
       // See inlineToTiptap: an unknown block must fail the conversion
       // explicitly, never disappear into an undefined content entry while
-      // the rest of the document mounts (PC-F07).
+      // the rest of the document mounts.
       throw new Error(
         `unmappable block node: ${(block as { type?: unknown }).type ?? "missing"}`,
       );

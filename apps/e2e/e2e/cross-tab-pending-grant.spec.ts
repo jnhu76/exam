@@ -57,7 +57,7 @@ async function readDeadlineMs(
   return Date.parse(cand!.deadlineAt!);
 }
 
-test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
+test.describe("cross-tab pending grant coordination", () => {
   test.describe.configure({ mode: "serial" });
 
   let seeded: SeededExam;

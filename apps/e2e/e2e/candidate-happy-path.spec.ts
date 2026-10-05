@@ -11,8 +11,8 @@ import {
 /**
  * The candidate application smoke: one real login → list → start → answer →
  * save → submit → graded result journey over the live server. Grading-status
- * variants (text_response pending_manual) are owned by manual-grading.spec.ts
- * and the API route suites.
+ * variants (text_response pending_manual) are owned by the API grading-route
+ * suites (manualGradingClosure, candidate-take-text-response).
  */
 
 test.describe("candidate happy path", () => {

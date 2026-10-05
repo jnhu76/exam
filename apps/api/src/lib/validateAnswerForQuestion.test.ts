@@ -119,7 +119,7 @@ describe("validateAnswerForQuestion (#301 §21/§44)", () => {
     expect(validateAnswerForQuestion(q, { type: "doc" }).ok).toBe(false);
   });
 
-  it("rich text_response: rejects durable-unrepresentable strings before persistence (D-F01)", () => {
+  it("rich text_response: rejects durable-unrepresentable strings before persistence", () => {
     const q = snapshot({
       type: "text_response",
       answerMode: "rich",

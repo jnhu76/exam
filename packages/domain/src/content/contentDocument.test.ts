@@ -402,7 +402,7 @@ describe("preflightContentDocumentStructure", () => {
     expect(preflightContentDocumentStructure(legal)).toEqual([]);
   });
 
-  // ── RC-04 / PC-F02 regressions (#669 Phase D1; evidence #686) ─────
+  // ── node-count limit regressions (#669, #686) ─────────────────────
   //
   // Phase C (#673 C1) proved the preflight raw-walk node budget rejected
   // documents CONTENT_LIMITS accepts: every object, array, and scalar
@@ -477,7 +477,7 @@ describe("preflightContentDocumentStructure", () => {
     expect(preflightContentDocumentStructure(markedTable)).toEqual([]);
   });
 
-  it("leaves node-count rejection to the limits authority, not preflight (RC-04 boundary)", () => {
+  it("leaves node-count rejection to the limits authority, not preflight", () => {
     // 1100 paragraphs × 2 runs = 2200 grammar nodes > totalNodes(2000),
     // ~105k serialized chars < serializedChars: the only authority that
     // rejects this document is CONTENT_LIMITS — preflight must stay clean

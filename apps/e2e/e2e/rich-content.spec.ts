@@ -771,7 +771,7 @@ test.describe("adversarial math render security", () => {
           {
             type: "paragraph",
             content: [
-              { type: "text", text: `D5B安全-${STAMP}：` },
+              { type: "text", text: `安全前缀-${STAMP}：` },
               {
                 type: "inlineMath",
                 latex:

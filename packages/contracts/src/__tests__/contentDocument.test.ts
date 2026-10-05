@@ -441,7 +441,7 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
     expect(parsed.success).toBe(true);
   });
 
-  describe("canonicalizeContentDocument (RC-03 closure seam)", () => {
+  describe("canonicalizeContentDocument", () => {
     function runsDocument(
       runs: Array<{ text: string; marks?: string[] }>,
     ): ContentDocumentV1 {
@@ -461,7 +461,7 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
       };
     }
 
-    it("returns the RC-03 fixed point for legal input", () => {
+    it("is a fixed point for legal input", () => {
       const legal = canonicalizeContentDocument(
         runsDocument([{ text: "x" }, { text: "y" }]),
       );
@@ -511,13 +511,13 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
   });
 });
 
-// ── Durable string representability (#669 Phase F / counterexample D-F01) ──
+// ── Durable string representability (#669) ──
 //
 // The string-leaf intake owns the narrowing: an unrepresentable string must
 // fail the schema (and therefore canonicalization) BEFORE any write seam can
 // accept it, so canonicalization success implies durable representability.
 
-describe("durable string representability (D-F01 closure)", () => {
+describe("durable string representability", () => {
   const NUL = "\u0000";
   const LONE_HIGH = "\uD800";
   const LONE_LOW = "\uDC00";

@@ -1,21 +1,19 @@
 /**
- * #669 Phase D2 — replay-receipt mechanism regressions (engine level).
+ * Replay-receipt mechanism regressions (engine level, #669).
  *
- * PC-F06 / #673 C5 was a RESOURCE debt, not a semantic defect: replay
- * semantics were already correct when receipts were embedded (with full
- * payload copies) in the draft-answer JSONB. D2 replaced the mechanism with
- * compact append-only receipts; these tests prove the frozen semantics
- * survive the mechanism change:
+ * Replay semantics were already correct when receipts were embedded (with
+ * full payload copies) in the draft-answer JSONB; the compact append-only
+ * receipt mechanism must preserve those frozen semantics:
  *
- *   R1  the oldest accepted clientSeq still replays to the prior ACK after
- *       many subsequent saves — no bounded-window eviction can exist;
- *   R2  the oldest replay with a different canonical identity stays
- *       CONFLICTING_PAYLOAD (never "unseen");
- *   R3  unknown clientSeq keeps normal CAS semantics;
- *   R8  canonically-equivalent candidate payloads share one identity (D1
- *       integration — identity is computed on the accepted canonical value);
- *   ID  the identity representation is faithful to structural equality over
- *       the SaveAnswer value domain.
+ *   - the oldest accepted clientSeq still replays to the prior ACK after
+ *     many subsequent saves — no bounded-window eviction can exist;
+ *   - the oldest replay with a different canonical identity stays
+ *     CONFLICTING_PAYLOAD (never "unseen");
+ *   - unknown clientSeq keeps normal CAS semantics;
+ *   - canonically-equivalent candidate payloads share one identity
+ *     (identity is computed on the accepted canonical value);
+ *   - the identity representation is faithful to structural equality over
+ *     the SaveAnswer value domain.
  */
 import { describe, expect, it } from "vitest";
 import type { ExamAttempt } from "@exam/domain";
@@ -63,7 +61,7 @@ async function save(h: PreparedHarness, questionId: string, args: SaveArgs) {
 }
 
 describe("D2 replay receipts — frozen semantics on the repaired mechanism", () => {
-  it("R1: the oldest accepted clientSeq still ACKs after 60 later saves (no bounded window)", async () => {
+  it("the oldest accepted clientSeq still ACKs after 60 later saves (no bounded window)", async () => {
     const N = 60;
     const h = await harness();
     let oldestAck: { serverVersion: number; savedAt: string } | null = null;
@@ -99,7 +97,7 @@ describe("D2 replay receipts — frozen semantics on the repaired mechanism", ()
     expect(h.attemptRepo.receipts.size).toBe(N); // append-only, no eviction
   });
 
-  it("R2: oldest replay with a different canonical identity stays CONFLICTING_PAYLOAD", async () => {
+  it("oldest replay with a different canonical identity stays CONFLICTING_PAYLOAD", async () => {
     const N = 30;
     const h = await harness();
     for (let i = 1; i <= N; i++) {
@@ -121,7 +119,7 @@ describe("D2 replay receipts — frozen semantics on the repaired mechanism", ()
     expect(h.attemptRepo.draftAnswerWriteCount()).toBe(N);
   });
 
-  it("R3: an unknown clientSeq follows normal CAS semantics", async () => {
+  it("an unknown clientSeq follows normal CAS semantics", async () => {
     const h = await harness();
     await save(h, "q1", { answer: "v1", clientSeq: 1, baseVersion: 0 });
 
@@ -145,7 +143,7 @@ describe("D2 replay receipts — frozen semantics on the repaired mechanism", ()
     expect(fresh.serverVersion).toBe(2);
   });
 
-  it("R8: canonically-equivalent candidates replay to the prior ACK (identity of the accepted canonical value)", async () => {
+  it("canonically-equivalent candidates replay to the prior ACK (identity of the accepted canonical value)", async () => {
     // The route's canonicalizer trims case/whitespace; both candidates land on
     // the same canonical value, so identity(receipt) == identity(replay).
     const canonicalizing = (
