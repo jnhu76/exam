@@ -20,7 +20,7 @@ Single-tenant, Admin + Candidate reliable exam loop:
 - Result visible to Admin and Candidate; Result CSV export.
 - Minimal AuditLog, structured pino logs, requestId, health endpoint, stable
   machine-readable error codes.
-- E2E happy path / resume / submit-flush restored as **blocking CI** (both
+- E2E material journeys (happy path, resume) run as **blocking CI** (all
   shards pass on every PR).
 - Docker Compose / health / basic deployment notes.
 
@@ -430,7 +430,7 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
 ## E2E status
 
 E2E is **enabled and runs as blocking CI**. The `e2e` job in
-`.github/workflows/ci.yml` runs the suite in 4 Playwright-native shards and
+`.github/workflows/ci.yml` runs the suite in 2 Playwright-native shards and
 gates every PR; a dedicated LAN HTTP job additionally drives
 `production-lan-http.spec.ts` against a production-mode build. No E2E spec
 FILE is skipped at the suite level; conditional test-level skips (when a

@@ -54,7 +54,7 @@ production deployment itself is the acceptance surface (§1.6).
 | **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
 | **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
 | **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}` for this workflow run only (1-day retention). The name is run-scoped, not attempt-scoped, so partial reruns of downstream jobs still resolve it; `overwrite: true` lets a full rerun replace the same-run artifact. |
-| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and the four E2E shards download this same-workflow artifact and do not rebuild it. |
+| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and the two E2E shards download this same-workflow artifact and do not rebuild it. |
 | **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
 | **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment acceptance does not consume it: the operator's real `docker compose` run uses the pinned release images, not this artifact. |
 
@@ -111,12 +111,12 @@ production deployment itself is the acceptance surface (§1.6).
 
 | Field | Value |
 |-------|-------|
-| **Job** | `e2e` (matrix: `shardIndex: [1, 2, 3, 4]`, `shardTotal: [4]`) |
+| **Job** | `e2e` (matrix: `shardIndex: [1, 2]`, `shardTotal: [2]`) |
 | **Command** | `pnpm --filter @exam/e2e exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}` |
 | **Input build** | Downloads the current workflow's `verify-build` artifact; the shards do not run `pnpm build` independently. |
 | **Browser cache** | `~/.cache/ms-playwright` is cached by OS + E2E package/lockfile state; system dependencies are still installed every shard. |
 | **Services** | PostgreSQL (`exam_e2e` on `localhost:5432`) |
-| **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=${{ matrix.shardTotal }}` (4), fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
+| **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=${{ matrix.shardTotal }}` (2), fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
 | **Allowed resources** | PostgreSQL (`exam_e2e`), CPU, Chromium |
 | **Forbidden** | `exam` or `exam_test` databases, a host port that contradicts `DB_HOST_PORT` (default 5432) |
 | **Failure attribution** | Server startup → check `server.log`; test failure → check `test-results/`; shard-specific → check shard index |
