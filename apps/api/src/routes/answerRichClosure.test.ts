@@ -269,32 +269,17 @@ describe("rich answer canonical closure (save-answer route)", () => {
     return { answers: attempt?.answers ?? null, receiptCount: receipts.length };
   }
 
-  it("rejects a U+0000 rich answer with structured INVALID_ANSWER and zero durable write (D-F01)", async () => {
-    const before = await durableState();
-    const res = await saveAnswer(
-      {
-        docVersion: 1,
-        type: "doc",
-        content: [
-          { type: "paragraph", content: [{ type: "text", text: "a\u0000b" }] },
-        ],
-      },
-      20,
-    );
-    expect(res.statusCode, res.body).toBe(200);
-    expect(res.json()).toMatchObject({
-      accepted: false,
-      reason: "INVALID_ANSWER",
-    });
-    expect(await durableState()).toEqual(before);
-  });
-
-  it("rejects lone surrogates the same way (D-F01 family)", async () => {
-    const before = await durableState();
-    for (const [clientSeq, bad] of [
-      [21, "\uD800"],
-      [22, "\uDC00"],
-    ] as const) {
+  // D-F01 at the wire: both unrepresentable families (U+0000, lone
+  // surrogates) go through the same structured INVALID_ANSWER + zero
+  // durable write mechanism, so the route-level rejection is table-driven.
+  it.each([
+    ["U+0000", "a\u0000b", 20],
+    ["lone high surrogate", "\uD800", 21],
+    ["lone low surrogate", "\uDC00", 22],
+  ] as const)(
+    "rejects a rich answer carrying %s with structured INVALID_ANSWER and zero durable write (D-F01)",
+    async (_family, bad, clientSeq) => {
+      const before = await durableState();
       const res = await saveAnswer(
         {
           docVersion: 1,
@@ -310,9 +295,9 @@ describe("rich answer canonical closure (save-answer route)", () => {
         accepted: false,
         reason: "INVALID_ANSWER",
       });
-    }
-    expect(await durableState()).toEqual(before);
-  });
+      expect(await durableState()).toEqual(before);
+    },
+  );
 
   it("still accepts well-formed exotic scalars — representability, not ASCII-ness", async () => {
     const res = await saveAnswer(

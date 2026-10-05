@@ -326,69 +326,52 @@ describe("examCommands", () => {
         expect(result.status).toBe("published");
       });
 
-      it("rejects a corrupt persisted question document with ValidationError, not TypeError (R2)", async () => {
-        const corrupt = makeQuestion("q-corrupt", {
-          type: "text_response",
-          content: "Solve ",
-          contentDocument: CORRUPT_DOC,
-          answerMode: "rich",
-          options: [],
-          standardAnswer: null,
-        });
-        await expect(
-          publishExam(publishRepo(corrupt), "exam-1", [corrupt]),
-        ).rejects.toThrow(/corrupt/);
-        await expect(
-          publishExam(publishRepo(corrupt), "exam-1", [corrupt]),
-        ).rejects.toThrow(ValidationError);
-      });
+      // R2/R3/R4/R5: two trust states × two rich slots (question document /
+      // option document). Same classifier path and same exception shape at
+      // both slots, so state parity is table-driven; R6/R8 below are the
+      // distinct-behavior counterexamples that stay standalone.
+      it.each([
+        ["corrupt", CORRUPT_DOC, /corrupt/],
+        ["unsupported_version", UNSUPPORTED_DOC, /unsupported docVersion/],
+      ])(
+        "rejects a %s persisted document at the freeze gate with ValidationError in both rich slots (R2/R3 question, R4/R5 option)",
+        async (_state, badDoc, message) => {
+          const badQuestion = makeQuestion("q-doc-bad", {
+            type: "text_response",
+            content: "Solve ",
+            contentDocument: badDoc,
+            answerMode: "rich",
+            options: [],
+            standardAnswer: null,
+          });
+          await expect(
+            publishExam(publishRepo(badQuestion), "exam-1", [badQuestion]),
+          ).rejects.toThrow(ValidationError);
+          await expect(
+            publishExam(publishRepo(badQuestion), "exam-1", [badQuestion]),
+          ).rejects.toThrow(message);
 
-      it("rejects an unsupported persisted question docVersion with ValidationError (R3)", async () => {
-        const future = makeQuestion("q-v2", {
-          type: "text_response",
-          content: "Solve ",
-          contentDocument: UNSUPPORTED_DOC,
-          answerMode: "rich",
-          options: [],
-          standardAnswer: null,
-        });
-        await expect(
-          publishExam(publishRepo(future), "exam-1", [future]),
-        ).rejects.toThrow(/unsupported docVersion/);
-      });
-
-      it("rejects a corrupt persisted OPTION document with ValidationError (R4)", async () => {
-        const corruptOption = makeQuestion("q-opt-corrupt", {
-          type: "single_choice",
-          content: "plain prompt",
-          contentDocument: null,
-          options: [
-            { id: "a", content: "A", contentDocument: null },
-            { id: "b", content: "B", contentDocument: CORRUPT_DOC },
-          ],
-        });
-        await expect(
-          publishExam(publishRepo(corruptOption), "exam-1", [corruptOption]),
-        ).rejects.toThrow(ValidationError);
-        await expect(
-          publishExam(publishRepo(corruptOption), "exam-1", [corruptOption]),
-        ).rejects.toThrow(/corrupt/);
-      });
-
-      it("rejects an unsupported persisted OPTION docVersion with ValidationError (R5)", async () => {
-        const futureOption = makeQuestion("q-opt-v2", {
-          type: "single_choice",
-          content: "plain prompt",
-          contentDocument: null,
-          options: [
-            { id: "a", content: "A", contentDocument: null },
-            { id: "b", content: "B", contentDocument: UNSUPPORTED_DOC },
-          ],
-        });
-        await expect(
-          publishExam(publishRepo(futureOption), "exam-1", [futureOption]),
-        ).rejects.toThrow(/unsupported docVersion/);
-      });
+          const badOptionQuestion = makeQuestion("q-opt-bad", {
+            type: "single_choice",
+            content: "plain prompt",
+            contentDocument: null,
+            options: [
+              { id: "a", content: "A", contentDocument: null },
+              { id: "b", content: "B", contentDocument: badDoc },
+            ],
+          });
+          await expect(
+            publishExam(publishRepo(badOptionQuestion), "exam-1", [
+              badOptionQuestion,
+            ]),
+          ).rejects.toThrow(ValidationError);
+          await expect(
+            publishExam(publishRepo(badOptionQuestion), "exam-1", [
+              badOptionQuestion,
+            ]),
+          ).rejects.toThrow(message);
+        },
+      );
 
       it("never falls back to the stored content string when the document is corrupt (R6)", async () => {
         const fallback = makeQuestion("q-fallback", {

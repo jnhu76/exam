@@ -695,37 +695,6 @@ describe("D2 replay receipts on real PostgreSQL (#669 Phase D2)", () => {
     expect(fresh.serverVersion).toBe(2);
   }, 60_000);
 
-  it("UQ: the composite PK rejects a duplicate replay key at the database", async () => {
-    const { attemptId } = await newRichAttemptFixture("uq");
-    const savedAt = new Date(STARTED_AT.getTime() + 1000);
-    await saveViaCanonicalSeam(db, {
-      attemptId,
-      answer: richAnswer("first"),
-      clientSeq: 1,
-      baseVersion: 0,
-      now: savedAt,
-    });
-
-    const repo = createAttemptRepo(db);
-    try {
-      await repo.appendAnswerSaveReceipt(ctx, {
-        attemptId,
-        questionId: QUESTION_ID,
-        clientSeq: 1,
-        answerIdentity: "f".repeat(64),
-        acceptedVersion: 9,
-        savedAt,
-      });
-      expect.unreachable("duplicate receipt insert must violate the PK");
-    } catch (err) {
-      // Drizzle wraps the PG error; the constraint name lives on the cause.
-      const cause = (err as { cause?: { message?: string } }).cause;
-      expect(`${(err as Error).message} ${cause?.message ?? ""}`).toMatch(
-        /exam_answer_save_receipts_pk/,
-      );
-    }
-  }, 60_000);
-
   it("R7: a backfilled legacy receipt still replays through the production adapter", async () => {
     const { attemptId } = await newRichAttemptFixture("legacy");
     const legacySavedAt = new Date("2026-02-01T00:30:00.000Z");

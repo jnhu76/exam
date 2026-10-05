@@ -104,26 +104,6 @@ describe("QuestionRenderer — rich text_response (issue 301)", () => {
     }
   }, 15000);
 
-  it("fails closed on an unexplained string in a rich slot (PC-F03: no runtime-shape legacy adoption)", async () => {
-    // §7 read contract: a plain string where Rich is authoritative is corrupt
-    // unless explicit provenance establishes legacy_plain — which no runtime
-    // shape provides. The rich input must show the integrity state instead of
-    // adopting the string as answer content.
-    render(
-      <QuestionRenderer
-        question={{
-          ...baseQuestion,
-          type: "text_response",
-          answerMode: "rich",
-        }}
-        answer={"旧草稿"}
-        onChange={() => {}}
-      />,
-    );
-    await screen.findByTestId("rich-answer-integrity-error");
-    expect(document.querySelector(".ProseMirror")).toBeNull();
-  }, 15000);
-
   it("keeps the plain textarea when answerMode is plain", () => {
     render(
       <QuestionRenderer

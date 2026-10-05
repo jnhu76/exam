@@ -209,6 +209,53 @@ describe("MathRenderer — real React seam", () => {
   });
 });
 
+describe("MathRenderer — hostile LaTeX through the live seam (trust: false)", () => {
+  // Full live-DOM audit (the same 16-tag active/remote-content selector set
+  // as assertInertHtml, plus event-handler/javascript: attributes) for the
+  // KaTeX trust-disallowed command families, through the real MathRenderer
+  // seam rather than the katexRenderToHtml policy seam above.
+  function assertInert(container: HTMLElement): void {
+    expect(container.querySelectorAll(ACTIVE_SELECTORS)).toHaveLength(0);
+    for (const el of Array.from(container.querySelectorAll("*"))) {
+      for (const attr of Array.from(el.attributes)) {
+        expect(/^on/i.test(attr.name)).toBe(false);
+        expect(/javascript:/i.test(attr.value)).toBe(false);
+      }
+    }
+  }
+
+  const HOSTILE_LATEX = [
+    "{\\href{javascript:alert(1)}{click}}",
+    "\\includegraphics[width=\\linewidth]{http://evil.example/x.png}",
+    "\\htmlClass{x}{content}\\htmlData{trick=1}{d}",
+    "\\htmlId{payload}{x}",
+    "\\htmlStyle{background:url(javascript:alert(1))}{x}",
+    "\\frac{\\oops",
+  ];
+
+  it("D5B-R6: hostile and trust-disallowed LaTeX renders as inert source in the live DOM", async () => {
+    for (const latex of HOSTILE_LATEX) {
+      const { container, unmount } = render(
+        <MathRenderer latex={latex} displayMode={false} />,
+      );
+      await waitFor(() => {
+        expect(container.textContent).not.toBe("");
+      });
+      assertInert(container);
+      unmount();
+    }
+  });
+
+  it("D5B-R7: oversized latex is escaped verbatim without invoking KaTeX output", () => {
+    const huge = "x".repeat(5001);
+    const { container } = render(
+      <MathRenderer latex={huge} displayMode={false} />,
+    );
+    expect(container.textContent).toBe(huge);
+    assertInert(container);
+  });
+});
+
 describe("ContentRenderer → ContentDocumentRenderer → MathRenderer composition", () => {
   function doc(blocks: ContentBlock[]): ContentDocumentV1 {
     return { docVersion: 1, type: "doc", content: blocks };

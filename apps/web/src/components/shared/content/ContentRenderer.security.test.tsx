@@ -6,7 +6,6 @@ import type { ContentBlock, ContentDocumentV1 } from "@exam/domain";
 import { describe, expect, it } from "vitest";
 import { ContentRenderer } from "./ContentRenderer";
 import { ContentDocumentRenderer } from "./ContentDocumentRenderer";
-import { MathRenderer } from "./MathRenderer";
 
 /**
  * Adversarial security tests for the static content READ path.
@@ -288,37 +287,6 @@ describe("ContentRenderer — boundary fail-closed on oversize/hostile-structure
       ),
     ).not.toBeNull();
     hugeRender.unmount();
-  });
-});
-
-describe("MathRenderer — hostile LaTeX (trust: false)", () => {
-  const HOSTILE_LATEX = [
-    "{\\href{javascript:alert(1)}{click}}",
-    "\\includegraphics[width=\\linewidth]{http://evil.example/x.png}",
-    "\\htmlClass{x}{content}\\htmlData{trick=1}{d}",
-    "\\htmlId{payload}{x}",
-    "\\htmlStyle{background:url(javascript:alert(1))}{x}",
-    "\\frac{\\oops",
-  ];
-
-  it("renders hostile and invalid LaTeX as inert source, never executable markup", () => {
-    for (const latex of HOSTILE_LATEX) {
-      const { container, unmount } = render(
-        <MathRenderer latex={latex} displayMode={false} />,
-      );
-      expect(container.textContent).not.toBe("");
-      assertInert(container);
-      unmount();
-    }
-  });
-
-  it("renders oversized latex as escaped text without invoking KaTeX output", () => {
-    const huge = "x".repeat(5001);
-    const { container } = render(
-      <MathRenderer latex={huge} displayMode={false} />,
-    );
-    expect(container.textContent).toBe(huge);
-    assertInert(container);
   });
 });
 
