@@ -817,6 +817,59 @@ describe("grading queue routes", () => {
     });
   });
 
+  // ── explicit zero as the last manual score is a real grade ──
+  // INVARIANT: 0 is a legal terminal score. Any truthiness shortcut on score
+  // (validation, persistence, or pending-count) would strand the attempt in
+  // pending_manual and withhold an after_grading result indefinitely.
+  it("closes grading when the last manual score is an explicit zero", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-zero")],
+      title: "Zero Score Terminal",
+    });
+    await ctx.db
+      .update(schema.examAttempts)
+      .set({ status: "submitted" })
+      .where(eq(schema.examAttempts.id, attemptId));
+    await seedGradingEntries(
+      ctx,
+      attemptId,
+      [subjectiveQuestion("q-zero")],
+      [],
+    );
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q-zero", score: 0, comment: "" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    // Validation truthiness (`if (!score)` → 400) is caught here.
+    expect(res.statusCode).toBe(200);
+    // Closure-skip mutation (zero treated as not-yet-graded) is caught here.
+    expect(res.json()).toMatchObject({
+      gradingStatus: "fully_graded",
+      fullyGraded: true,
+    });
+
+    // Persistence falsiness (`score || null`) is caught here.
+    const requestContext = {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const entry = await createAttemptGradingEntryRepo(
+      ctx.db,
+    ).findByAttemptAndQuestion(requestContext, attemptId, "q-zero");
+    expect(entry).toMatchObject({
+      status: "completed_manual",
+      earnedScore: 0,
+    });
+  });
+
   // ── a completed_manual entry is terminal — no overwrite ──
   it("does not overwrite a completed_manual entry and keeps exactly one row", async () => {
     const { attemptId } = await seedAttempt(ctx, {
