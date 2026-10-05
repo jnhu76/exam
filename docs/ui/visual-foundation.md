@@ -168,7 +168,8 @@ The table-first #601 criteria are closed by the following authority structure:
   observation facts (`data-overflowing`, integer `scrollWidth − clientWidth`)
   are gated by `apps/web/src/hooks/useOverflowObservation.test.tsx`.
   Candidate-facing operability on real viewports is covered by
-  `apps/e2e/e2e/candidate-responsive.spec.ts`.
+  `apps/e2e/e2e/candidate-happy-path.spec.ts` (the candidate smoke runs at
+  390×844).
 - **behavioral verification** — the structural contract is gated by
   `apps/web/src/table/table-contract-guards.test.ts`, the data-view
   composition grammar and header-capacity channel by

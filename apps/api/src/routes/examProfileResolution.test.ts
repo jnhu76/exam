@@ -323,9 +323,9 @@ describe("exam creation with exam policy profile (profile resolution)", () => {
     );
   });
 
-  // ── §43 canonical M1 validator still owns final Exam validation ──
+  // ── the canonical policy validator still owns final Exam validation ──
 
-  it("canonical M1 conflict validation still rejects an invalid final Exam policy", async () => {
+  it("canonical policy conflict validation still rejects an invalid final Exam policy", async () => {
     const profile = await createProfile();
     const res = await createExam({
       ...examBasePayload,

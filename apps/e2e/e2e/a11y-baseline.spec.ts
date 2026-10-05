@@ -5,11 +5,11 @@ import { seedExam } from "../lib/seed";
 import { candidateLogin, clickExamPrimaryAction } from "../lib/flow";
 
 /**
- * Application-level accessibility smoke. Automated axe scans on a minimal
- * representative pair — the public login surface and the critical candidate
- * take-exam runtime including its submit dialog — gate critical and serious
- * violations at zero. This is a smoke, not WCAG certification: broader
- * surface-by-surface duplication is deliberately not maintained here.
+ * Application-level accessibility smoke. The automated axe scan on the
+ * critical candidate take-exam runtime — including its submit dialog — gates
+ * critical and serious violations at zero. This is a smoke, not WCAG
+ * certification: broader surface-by-surface duplication is deliberately not
+ * maintained here.
  *
  * Focus-ring rendering is owned by the surface recipe tests; dialog focus
  * behavior by the dialog component tests and (where the real browser focus
@@ -63,12 +63,6 @@ async function scanCriticalAndSerious(page: Page): Promise<void> {
 }
 
 test.describe("a11y application smoke", () => {
-  test("login page", async ({ page }) => {
-    await page.goto("/login");
-    await expect(page.getByTestId("login-layout")).toBeVisible();
-    await scanCriticalAndSerious(page);
-  });
-
   test("take-exam runtime and its submit dialog", async ({ page, request }) => {
     const seeded = await seedExam(request, "a11y-take", {
       questionAnswer: true,

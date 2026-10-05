@@ -509,7 +509,7 @@ repository-owned topology.
 
 | Aspect | Rule |
 |--------|------|
-| **Shard count** | 4 (defined in `matrix.shardTotal: [4]`) |
+| **Shard count** | 2 (defined in `matrix.shardTotal: [2]`) |
 | **Shard index** | `${{ matrix.shardIndex }}` (1-based) |
 | **Database per shard** | Single shared `exam_e2e` (CI doesn't create per-shard DBs) |
 | **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
@@ -674,8 +674,8 @@ E2E_WORKERS=4 bash scripts/e2e/run.sh
 
 | Parameter | Value |
 |-----------|-------|
-| `matrix.shardIndex` | `[1, 2, 3, 4]` |
-| `matrix.shardTotal` | `[4]` |
+| `matrix.shardIndex` | `[1, 2]` |
+| `matrix.shardTotal` | `[2]` |
 | `fail-fast` | `true` |
 | `build input` | same-workflow `verify-build` artifact (`packages/*/dist`, `apps/api/dist`, `apps/web/dist`) |
 | `browser cache` | `~/.cache/ms-playwright`, keyed by OS + E2E package/lockfile state |
@@ -702,7 +702,7 @@ After any change to test configuration, CI workflow, or vitest config, verify:
 - [ ] `pnpm --filter @exam/web coverage` passes
 - [ ] `pnpm --filter "@exam/api" coverage` passes (with `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`)
 - [ ] `pnpm verify` passes (full pipeline)
-- [ ] All four CI E2E shards consume the same-workflow build artifact and execute their real Playwright tests
+- [ ] All CI E2E shards consume the same-workflow build artifact and execute their real Playwright tests
 - [ ] No `as any` casts in test files
 - [ ] All time-dependent tests use fake timers
 - [ ] No `TEST_DATABASE_URL` fallback to `DATABASE_URL` in test configs

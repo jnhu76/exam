@@ -141,7 +141,7 @@ describe("exam policy validation — authoring + publish", () => {
 
   // ── PUBLISH revalidation (the freeze/acceptance gate) ─────────────
 
-  it("publishes a policy-valid draft (M1 publish path)", async () => {
+  it("publishes a policy-valid draft (the canonical publish path)", async () => {
     // Route authoring validators (create/update) reject every invalid policy
     // combination before publish, so an inverted-window draft cannot reach
     // publish through the HTTP surface. The publish revalidation gate itself

@@ -806,7 +806,7 @@ describe("result publishing policy", () => {
  * allows publication of any same-org exam. Resource-scoped Teacher authorization
  * (T2, P3-R0 audit note T2) is deferred and deliberately not asserted here.
  */
-describe("M8: Teacher publish-results capability", () => {
+describe("Teacher publish-results capability", () => {
   let ctx: TestContext;
   let courseId: string;
   let questionId: string;

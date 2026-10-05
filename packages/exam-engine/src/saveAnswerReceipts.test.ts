@@ -60,7 +60,7 @@ async function save(h: PreparedHarness, questionId: string, args: SaveArgs) {
   });
 }
 
-describe("D2 replay receipts — frozen semantics on the repaired mechanism", () => {
+describe("replay receipts — frozen semantics on the repaired mechanism", () => {
   it("the oldest accepted clientSeq still ACKs after 60 later saves (no bounded window)", async () => {
     const N = 60;
     const h = await harness();
@@ -198,7 +198,7 @@ describe("D2 replay receipts — frozen semantics on the repaired mechanism", ()
   });
 });
 
-describe("D2 canonical answer identity — faithful representation of structural equality", () => {
+describe("canonical answer identity — faithful representation of structural equality", () => {
   const ID = canonicalAnswerIdentity;
 
   it("equal canonical values share one identity regardless of key order or nesting aliasing", () => {

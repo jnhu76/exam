@@ -75,7 +75,7 @@ describe("classifyPersistedQuestionContent — §7 static read states", () => {
     });
   });
 
-  it("D5A-R3: a non-envelope value is corrupt, and a string in the document slot is never adopted as plain", () => {
+  it("a non-envelope value is corrupt, and a string in the document slot is never adopted as plain", () => {
     for (const value of [
       "遗留字符串",
       42,
@@ -90,14 +90,14 @@ describe("classifyPersistedQuestionContent — §7 static read states", () => {
     }
   });
 
-  it("D5A-R3: an out-of-grammar envelope is corrupt (deep gate, not the shallow shape)", () => {
+  it("an out-of-grammar envelope is corrupt (deep gate, not the shallow shape)", () => {
     expect(classifyPersistedQuestionContent(corruptEnvelope)).toEqual({
       kind: "corrupt",
       raw: corruptEnvelope,
     });
   });
 
-  it("D5A-R4: a hostile deep document is corrupt (bounded preflight before the recursive parse)", () => {
+  it("a hostile deep document is corrupt (bounded preflight before the recursive parse)", () => {
     let content: unknown = [{ type: "text", text: "leaf" }];
     for (let i = 0; i < 500; i++) content = [content];
     const hostile = { docVersion: 1, type: "doc", content };
@@ -107,7 +107,7 @@ describe("classifyPersistedQuestionContent — §7 static read states", () => {
     });
   });
 
-  it("D5A-R6: a schema-valid noncanonical document is rich_noncanonical and returned UNREPAIRED (read != repair)", () => {
+  it("a schema-valid noncanonical document is rich_noncanonical and returned UNREPAIRED (read != repair)", () => {
     const read = classifyPersistedQuestionContent(noncanonicalDoc);
     expect(read.kind).toBe("rich_noncanonical");
     expect(read.kind === "rich_noncanonical" && read.document).toEqual(

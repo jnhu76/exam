@@ -1822,7 +1822,7 @@ describe("admin frozen result view", () => {
    *            → retain frozen standardAnswer
    *   Candidate: ScoreOwnView → own-view path → publication gate applies
    */
-  it("M9: Teacher all-view result bypasses publication gate and keeps frozen standardAnswer", async () => {
+  it("Teacher all-view result bypasses publication gate and keeps frozen standardAnswer", async () => {
     const { attemptId } = await buildTerminalManualAttempt();
 
     // Teacher via assignment-backed authority (capability-driven, not role-name).
