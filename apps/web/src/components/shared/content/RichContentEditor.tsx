@@ -43,6 +43,7 @@ import { buildEditorCommands } from "./rich-editor/commands";
 import {
   DowngradeCommandGuard,
   ListTabGuard,
+  SyncPendingSelectionOnKeydown,
   createFormulaActivateExtension,
   type FormulaActivation,
 } from "./rich-editor/editorExtensions";
@@ -152,6 +153,7 @@ export function richEditorExtensions(
       : []),
     ListTabGuard,
     DowngradeCommandGuard,
+    SyncPendingSelectionOnKeydown,
     ...(options.onFormulaActivate
       ? [
           createFormulaActivateExtension(options.onFormulaActivate, {

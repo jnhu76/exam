@@ -41,6 +41,7 @@
     "lucide-react": "^1.17.0",
     "mathlive": "0.111.0",
     "next-themes": "^0.4.6",
+    "prosemirror-view": "^1.41.9",
     "radix-ui": "^1.4.3",
     "react": "^19.1.0",
     "react-day-picker": "^10.0.1",
