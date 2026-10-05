@@ -404,12 +404,13 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
     return { docVersion: 1, type: "doc", content: [block] };
   }
 
-  it("rejects a 500-level recursive grammar bomb in a controlled way (no RangeError)", () => {
-    expect(() =>
-      ContentDocumentV1Schema.safeParse(grammarBomb(500)),
-    ).not.toThrow();
-    expect(ContentDocumentV1Schema.safeParse(grammarBomb(500)).success).toBe(
-      false,
+  it("rejects a 500-level recursive grammar bomb in a controlled way (no RangeError), naming the structural limit", () => {
+    const parsed = ContentDocumentV1Schema.safeParse(grammarBomb(500));
+    expect(parsed.success).toBe(false);
+    // The controlled rejection is the PREFLIGHT's, not a grammar mismatch —
+    // the issue message names the structural limit.
+    expect(parsed.error?.issues[0]?.message ?? "").toMatch(
+      /nesting exceeds|depth exceeds|structural/,
     );
   });
 
@@ -420,12 +421,6 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
     };
     expect(() => CreateQuestionRequestSchema.safeParse(body)).not.toThrow();
     expect(CreateQuestionRequestSchema.safeParse(body).success).toBe(false);
-  });
-
-  it("proves the preflight fired: the rejection names the structural limit, not a grammar mismatch", () => {
-    const parsed = ContentDocumentV1Schema.safeParse(grammarBomb(500));
-    const message = parsed.error?.issues[0]?.message ?? "";
-    expect(message).toMatch(/nesting exceeds|depth exceeds|structural/);
   });
 
   it("accepts a within-limits document the removed raw-node budget used to reject (#673 C1 / PC-F02)", () => {
