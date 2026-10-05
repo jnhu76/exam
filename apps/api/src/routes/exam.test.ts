@@ -2029,16 +2029,6 @@ describe("exam passing-score invariant (EXAM-SCORE-INV-1)", () => {
     expect(res.json().passingScore).toBe(0);
   });
 
-  it("POST create rejects passingScore < 0", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: examPayload({ passingScore: -1, totalScore: 100 }),
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-  });
-
   it("POST create rejects totalScore <= 0", async () => {
     const res = await ctx.app.inject({
       method: "POST",

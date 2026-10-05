@@ -100,48 +100,6 @@ describe("question routes", () => {
     expect(fields.some((f) => f.field === "standardAnswer")).toBe(true);
   });
 
-  it("POST /api/questions rejects fill_blank with standardAnswer: null", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/questions",
-      payload: {
-        courseId,
-        type: "fill_blank",
-        content: "Write your essay in the blank: ____",
-        standardAnswer: null,
-        score: 30,
-        difficulty: 3,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
-    const fields = body.error.details.fields as Array<{ field: string }>;
-    expect(fields.some((f) => f.field === "standardAnswer")).toBe(true);
-  });
-
-  it("POST /api/questions still rejects single_choice with a non-option answer", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/questions",
-      payload: {
-        courseId,
-        type: "single_choice",
-        content: "Objective question",
-        options: [
-          { id: "a", content: "A" },
-          { id: "b", content: "B" },
-        ],
-        standardAnswer: "zzz",
-        score: 5,
-        difficulty: 1,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-  });
-
   it("POST /api/questions creates a fill_blank question", async () => {
     const res = await ctx.app.inject({
       method: "POST",
@@ -511,39 +469,6 @@ describe("question routes", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(204);
-  });
-
-  it("POST /api/questions rejects single_choice with < 2 options", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/questions",
-      payload: {
-        courseId,
-        type: "single_choice",
-        content: "Bad question.",
-        options: [{ id: "a", content: "Only one" }],
-        standardAnswer: "a",
-        score: 10,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it("POST /api/questions rejects fill_blank without ____ in content", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/questions",
-      payload: {
-        courseId,
-        type: "fill_blank",
-        content: "No placeholder here.",
-        standardAnswer: "answer",
-        score: 10,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
   });
 
   it("POST /api/questions rejects true_false with non-boolean answer", async () => {

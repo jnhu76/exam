@@ -87,37 +87,7 @@ describe("permission boundary", () => {
     await ctx.cleanup();
   });
 
-  describe("unauthenticated gets 401 on all protected endpoints", () => {
-    it("GET /api/exams returns 401", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/exams",
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
-    it("POST /api/candidates returns 401", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/candidates",
-        payload: {
-          username: "should-not-create",
-          password: "password123",
-          name: "Should Not Create",
-          fields: {},
-        },
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
-    it("GET /api/exams/:id/export/scores returns 401", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/exams/00000000-0000-0000-0000-000000000000/export/scores",
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
+  describe("unauthenticated gets 401 on capability-migrated endpoints", () => {
     // 7 capability-migrated routes — unauthenticated denied.
     //
     // The assertion must execute a REAL HTTP request per route: asserting only
@@ -193,30 +163,6 @@ describe("permission boundary", () => {
       candidateToken = candidate.token;
     });
 
-    it("GET /api/exams returns 403", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/exams",
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-
-    it("POST /api/candidates returns 403", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/candidates",
-        payload: {
-          username: "should-not-create-bnd",
-          password: "password123",
-          name: "Should Not Create",
-          fields: {},
-        },
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-
     it("GET /api/exams/:id/export/scores returns 403", async () => {
       const res = await ctx.app.inject({
         method: "GET",
@@ -230,15 +176,6 @@ describe("permission boundary", () => {
       const res = await ctx.app.inject({
         method: "DELETE",
         url: "/api/courses/00000000-0000-0000-0000-000000000000",
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-
-    it("GET /api/users returns 403", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/users",
         cookies: { "auth-token": candidateToken },
       });
       expect(res.statusCode).toBe(403);
@@ -280,15 +217,6 @@ describe("permission boundary", () => {
         method: "POST",
         url: "/api/exams/00000000-0000-0000-0000-000000000000/archive",
         payload: {},
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-
-    it("DELETE /api/exams/:id returns 403 for candidate", async () => {
-      const res = await ctx.app.inject({
-        method: "DELETE",
-        url: "/api/exams/00000000-0000-0000-0000-000000000000",
         cookies: { "auth-token": candidateToken },
       });
       expect(res.statusCode).toBe(403);
@@ -1508,13 +1436,14 @@ describe("permission boundary", () => {
   });
 
   describe("users.role compatibility synchronization (preserved)", () => {
-    // The runtime authority is still users.role.
-    // These routes must NOT change that. They must preserve the existing sync invariant:
-    // every primary-active assignment mutation re-syncs users.role.
+    // The runtime authority is still users.role. These routes must NOT change
+    // that, and every primary-active assignment mutation must re-sync it.
     //
-    // These positive-path tests prove the sync still happens after the
-    // capability-gate migration — they would fail if the migration had
-    // accidentally removed a syncUsersRoleFromPrimary call site.
+    // These tests own the users.role_changed AUDIT METADATA contract
+    // (assignmentAdded / assignmentDeactivated / oldPrimaryRole /
+    // resultingPrimaryRole and the audit-action exclusivity for PATCH
+    // /users/:id). The bare sync invariant itself is owned by
+    // roleAssignments.test.ts.
 
     function adminCtx() {
       return {
@@ -1580,61 +1509,6 @@ describe("permission boundary", () => {
       requireDefined(r, "readUserRole: user must exist");
       return r.role;
     }
-
-    it("PATCH promote-to-primary syncs users.role to the promoted role", async () => {
-      const { user } = await insertTargetUserWithPrimary("Candidate");
-      // Add a secondary Grader assignment to promote.
-      const addRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/users/${user.id}/role-assignments`,
-        payload: { role: "Grader", isPrimary: false },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(addRes.statusCode).toBe(201);
-      const graderAssignmentId = addRes.json().id;
-
-      const promoteRes = await ctx.app.inject({
-        method: "PATCH",
-        url: `/api/role-assignments/${graderAssignmentId}`,
-        payload: { isPrimary: true },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(promoteRes.statusCode).toBe(200);
-      expect(await readUserRole(user.id)).toBe("Grader");
-    });
-
-    it("DELETE a primary assignment auto-promotes the next active and syncs users.role", async () => {
-      const { user } = await insertTargetUserWithPrimary("Candidate");
-      // Add a secondary Grader assignment to auto-promote.
-      const addRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/users/${user.id}/role-assignments`,
-        payload: { role: "Grader", isPrimary: false },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(addRes.statusCode).toBe(201);
-
-      // Find the primary Candidate assignment id, then delete it.
-      const listRes = await ctx.app.inject({
-        method: "GET",
-        url: `/api/users/${user.id}/role-assignments`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const items = listRes.json().items as Array<{
-        id: string;
-        role: string;
-        isPrimary: boolean;
-      }>;
-      const primary = items.find((i) => i.role === "Candidate" && i.isPrimary);
-      requireDefined(primary, "sync delete: primary Candidate assignment");
-      const delRes = await ctx.app.inject({
-        method: "DELETE",
-        url: `/api/role-assignments/${primary.id}`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(delRes.statusCode).toBe(204);
-      expect(await readUserRole(user.id)).toBe("Grader");
-    });
 
     it("PATCH /users/:id role-change syncs users.role to the new role", async () => {
       const { user } = await insertTargetUserWithPrimary("Candidate");

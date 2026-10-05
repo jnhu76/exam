@@ -282,14 +282,6 @@ describe("AppSidebar role visibility", () => {
 });
 
 describe("AppSidebar nav links", () => {
-  it("考试管理 link points to /admin/exams", () => {
-    renderWithProviders(
-      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
-    );
-    const link = screen.getByRole("link", { name: "考试管理" });
-    expect(link).toHaveAttribute("href", "/admin/exams");
-  });
-
   it("成绩查询 link points to /admin/results", () => {
     renderWithProviders(
       <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,

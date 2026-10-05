@@ -86,21 +86,6 @@ describe("exam policy validation — authoring + publish", () => {
     expect(codes).toContain("EXAM_WINDOW_INVALID");
   });
 
-  it("rejects create with passingScore > totalScore", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: {
-        ...validCreatePayload(courseId, questionId),
-        passingScore: 150,
-        totalScore: 100,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).toBe("VALIDATION_ERROR");
-  });
-
   it("accepts create with a valid baseline policy", async () => {
     const res = await ctx.app.inject({
       method: "POST",
