@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3001";
 
 /**
- * UI-MULTIMODAL-PATROL-1 Playwright config.
+ * Patrol Playwright config (manual visual patrol harness).
  *
  * This config is SEPARATE from the normal E2E config. It points at a
  * dedicated testDir (./patrol) so normal `npx playwright test` never

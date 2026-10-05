@@ -1,6 +1,6 @@
-// ── P7-M1: canonical exam policy resolver + conflict validator ─────
+// ── Canonical exam policy resolver + conflict validator ─────
 //
-// Authority: P7-M1 design (`docs/contracts/exam-policy-authority.md`).
+// Authority: (`docs/contracts/exam-policy-authority.md`).
 //
 // This module is the ONE canonical owner of cross-field exam-policy semantic
 // validation (design §9, §10). It is:
@@ -99,7 +99,7 @@ export function resolveExamPolicy(exam: Exam): ResolvedExamPolicy {
  * deterministic; does not throw on policy conflicts — callers decide whether
  * to throw `ValidationError` (authoring/publish) or treat as advisory.
  *
- * Owns the Phase A timing-mode matrix (#291): which (timingMode,
+ * Owns the timing-mode matrix (#291): which (timingMode,
  * durationMinutes, closeAt, interruptionTimePolicy) combinations may be
  * persisted/published. This is the FINAL acceptance authority — Zod may
  * reject shapes early at the API boundary, but every create / draft-update /
@@ -123,7 +123,7 @@ export function validateExamPolicy(
     });
   }
 
-  // ── Phase A timing-mode matrix (#291). ──
+  // ── Timing-mode matrix (#291). ──
   // One authority for mode legality; runtime (start/save/scanner) may rely on
   // these invariants for reachable published exams.
   conflicts.push(

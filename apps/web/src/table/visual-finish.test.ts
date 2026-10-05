@@ -77,7 +77,7 @@ describe("table and color visual-finish authority", () => {
     expect(bright(divider!)).toBe(bright(row!));
   });
 
-  it("keeps primary text ink at or above the AAA floor on white (issue #601 V1)", () => {
+  it("keeps primary text ink at or above the AAA floor on white (issue #601)", () => {
     // The --text token is the single primary-ink authority; every heading,
     // cell, label and metric inherits it. Phase C V1 selected 76% black ink
     // (≈10.9:1 blended on white) for a graduated primary/secondary ladder.
@@ -102,7 +102,7 @@ describe("table and color visual-finish authority", () => {
     expect(contrastOnWhite).toBeGreaterThanOrEqual(7);
   });
 
-  it("pins the 52px body-row breathing geometry (issue #601 V2a)", () => {
+  it("pins the 52px body-row breathing geometry (issue #601)", () => {
     // Body-row minimum is 52px against the frozen 22px cell line-height —
     // ≈15px vertical air per side for a single line. Both table grammars stay
     // in step: the standard TableCell height class and the workbench row
@@ -149,7 +149,7 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
-  it("pins the governed table typography (issue 582 D2 + issue #601 V2b)", () => {
+  it("pins the governed table typography (issue 582 + issue #601)", () => {
     // D2: governed cells converge UP to the 15px body/control tier.
     // V2b (issue #601): the header reads 14px / 20px / weight 500 — removes
     // the header-smaller-than-body inversion while the muted color keeps the

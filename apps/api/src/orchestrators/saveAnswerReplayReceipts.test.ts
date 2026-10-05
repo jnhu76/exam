@@ -1,27 +1,26 @@
 /**
- * #669 Phase D2 — replay-receipt regressions against real PostgreSQL through
- * the canonical production seams (candidate lookup → EA lock → preparation
- * seam → engine saveAnswer), exactly as the save route composes them.
+ * Replay-receipt regressions against real PostgreSQL through the canonical
+ * production seams (candidate lookup → EA lock → preparation seam → engine
+ * saveAnswer), exactly as the save route composes them.
  *
- * PC-F06 / #673 C5 was a RESOURCE debt, not a semantic replay defect. These
- * tests prove the repaired mechanism preserves the frozen semantics AND
- * removes the resource amplification:
+ * Each accepted save writes one compact receipt row; the draft-answer JSONB
+ * stops accumulating payload copies and replay lookup is one indexed key
+ * read. These tests prove the mechanism preserves the frozen save semantics:
  *
- *   RES  resource regression — N accepted rich saves produce N compact
- *        receipt rows; the draft-answer JSONB stops accumulating payload
- *        copies; replay lookup is one indexed key read;
- *   R4   receipt-storage failure rolls back the whole SaveAnswer protocol
- *        commit (no answer-without-receipt state);
- *   C1   concurrent same-clientSeq same-identity saves serialize on the EA
- *        row lock into ONE acceptance + one protocol-consistent replay ACK;
- *   C2   concurrent same-key different-identity resolves to one accepted
- *        identity + one CONFLICTING_PAYLOAD (never last-writer-wins);
- *   C3   unknown clientSeq keeps CAS semantics through the real seams;
- *   UQ   the composite PK backs the one-key-one-identity invariant at the
- *        database (lock-bypass backstop);
- *   R7   a pre-D2 legacy receipt (backfilled by migration 0044 with the
- *        legacy payload) still replays through the production adapter —
- *        identity derived at read time, never written back.
+ *   - storage: N accepted rich saves produce N compact receipt rows and the
+ *     answers JSONB stops growing with save count;
+ *   - atomicity: receipt-storage failure rolls back the whole SaveAnswer
+ *     protocol commit (no answer-without-receipt state);
+ *   - concurrency: same-clientSeq same-identity saves serialize on the EA
+ *     row lock into ONE acceptance + one protocol-consistent replay ACK;
+ *     same-key different-identity resolves to one accepted identity + one
+ *     CONFLICTING_PAYLOAD (never last-writer-wins); an unknown clientSeq
+ *     keeps CAS semantics through the real seams;
+ *   - invariant backstop: the composite PK enforces one-key-one-identity at
+ *     the database (lock-bypass backstop);
+ *   - legacy compatibility: a receipt backfilled by migration 0044 with the
+ *     legacy payload representation still replays through the production
+ *     adapter — identity derived at read time, never written back.
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -113,7 +112,7 @@ function richQuestionSnapshot(): QuestionSnapshot[] {
     {
       originalQuestionId: QUESTION_ID,
       type: "text_response",
-      content: "D2 replay question",
+      content: "replay question",
       contentDocument: null,
       answerMode: "rich",
       attachments: [],
@@ -149,7 +148,7 @@ interface TxRepos {
   eventRepo: ReturnType<typeof createInterruptionEventRepoAdapter>;
 }
 
-describe("D2 replay receipts on real PostgreSQL (#669 Phase D2)", () => {
+describe("replay receipts on real PostgreSQL (#669)", () => {
   let db: Database;
   let db1: Database;
   let db2: Database;
@@ -441,7 +440,7 @@ describe("D2 replay receipts on real PostgreSQL (#669 Phase D2)", () => {
       );
   }
 
-  it("RES: N accepted saves → N compact receipts; answers JSONB stops accumulating payloads", async () => {
+  it("N accepted saves → N compact receipts; answers JSONB stops accumulating payloads", async () => {
     const sizes: Record<number, number> = {};
     let attemptId = "";
     for (const N of [1, 30]) {
@@ -518,12 +517,12 @@ describe("D2 replay receipts on real PostgreSQL (#669 Phase D2)", () => {
 
     // The 30-save attempt's answers JSONB is essentially the size of the
     // 1-save attempt's: adding 29 receipts did NOT duplicate the payload
-    // into the row (before the repair this grew by ~one payload per save —
-    // the PC-F06 measurement showed 1.4KB → 132KB over 100 saves).
+    // into the row (before the repair this grew by ~one payload per save:
+    // 1.4KB → 132KB over 100 saves).
     expect(sizes[30]!).toBeLessThanOrEqual(sizes[1]! + 128);
   }, 120_000);
 
-  it("R4: a receipt-storage failure rolls back the whole protocol commit", async () => {
+  it("a receipt-storage failure rolls back the whole protocol commit", async () => {
     const { attemptId } = await newRichAttemptFixture("rollback");
 
     await expect(
@@ -553,7 +552,7 @@ describe("D2 replay receipts on real PostgreSQL (#669 Phase D2)", () => {
     expect(await receiptRowsFor(attemptId)).toHaveLength(0);
   }, 60_000);
 
-  it("C1: concurrent same-key same-identity saves → one acceptance + one replay ACK", async () => {
+  it("concurrent same-key same-identity saves → one acceptance + one replay ACK", async () => {
     const { attemptId } = await newRichAttemptFixture("c1");
     const t1Now = new Date(STARTED_AT.getTime() + 1000);
     const t2Now = new Date(STARTED_AT.getTime() + 2000);
@@ -614,7 +613,7 @@ describe("D2 replay receipts on real PostgreSQL (#669 Phase D2)", () => {
     expect(answers[0]!.version).toBe(1); // no duplicate answer transition
   }, 60_000);
 
-  it("C2: concurrent same-key different-identity → one accepted identity + one conflict", async () => {
+  it("concurrent same-key different-identity → one accepted identity + one conflict", async () => {
     const { attemptId } = await newRichAttemptFixture("c2");
     const t1Now = new Date(STARTED_AT.getTime() + 1000);
     const t2Now = new Date(STARTED_AT.getTime() + 2000);
@@ -662,7 +661,7 @@ describe("D2 replay receipts on real PostgreSQL (#669 Phase D2)", () => {
     expect(rows[0]!.acceptedVersion).toBe(1);
   }, 60_000);
 
-  it("C3: an unknown clientSeq keeps CAS semantics through the real seams", async () => {
+  it("an unknown clientSeq keeps CAS semantics through the real seams", async () => {
     const { attemptId } = await newRichAttemptFixture("c3");
     await saveViaCanonicalSeam(db, {
       attemptId,
@@ -695,12 +694,12 @@ describe("D2 replay receipts on real PostgreSQL (#669 Phase D2)", () => {
     expect(fresh.serverVersion).toBe(2);
   }, 60_000);
 
-  it("R7: a backfilled legacy receipt still replays through the production adapter", async () => {
+  it("a backfilled legacy receipt still replays through the production adapter", async () => {
     const { attemptId } = await newRichAttemptFixture("legacy");
     const legacySavedAt = new Date("2026-02-01T00:30:00.000Z");
-    const legacyPayload = richAnswer("pre-d2-answer");
+    const legacyPayload = richAnswer("legacy-answer");
 
-    // Seed the PRE-D2 representation: the accepted receipt embedded in the
+    // Seed the legacy representation: the accepted receipt embedded in the
     // draft-answer JSONB with the full payload copy (exactly what migration
     // 0044 backfills from).
     await db

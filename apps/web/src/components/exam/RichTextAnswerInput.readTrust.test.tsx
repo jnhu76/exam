@@ -4,7 +4,7 @@ import type { ContentDocumentV1 } from "@exam/domain";
 import { RichTextAnswerInput } from "./RichTextAnswerInput";
 
 /**
- * Phase-D3 read-trust regressions (#669 PC-F03/F04/F05, F1, R1–R5).
+ * Read-trust regressions (#669).
  *
  * The persisted-read authority (classifyPersistedRichAnswer) decides what may
  * mount the candidate editor. The dangerous edge these tests guard is the
@@ -19,10 +19,10 @@ import { RichTextAnswerInput } from "./RichTextAnswerInput";
  * and on STALE_VERSION serverAnswer adoption alike (they all arrive through
  * the same `value` prop seam).
  *
- * F1 (#669 D3 focused review): `rich_noncanonical` fails closed too. The
+ * Focused review (#669): `rich_noncanonical` fails closed too. The
  * editor's onUpdate re-serializes through canonicalization, so mounting a
  * noncanonical persisted value would turn read classification into a silent
- * repair write; for the PC-F01 closure class the canonicalized form itself
+ * repair write; for the canonical-closure class the canonicalized form itself
  * exceeds CONTENT_LIMITS, yielding an editor whose output can never save.
  */
 
@@ -82,10 +82,10 @@ const NONCANONICAL = {
   ],
 };
 
-/** PC-F01 closure class: two schema-legal same-mark runs whose normalized
+/** Canonical-closure class: two schema-legal same-mark runs whose normalized
  * merge exceeds the textRun limit — an editable mount would emit a value
  * the write seam's canonical boundary always rejects. */
-const PCF01_NONCANONICAL = {
+const MERGED_RUNS_NONCANONICAL = {
   docVersion: 1,
   type: "doc",
   content: [
@@ -111,7 +111,7 @@ async function expectIntegrityState(
   expect(onChange.mock.calls.length).toBe(callsAllowed);
 }
 
-describe("RichTextAnswerInput — typed read adoption (Phase D3)", () => {
+describe("RichTextAnswerInput — typed read adoption", () => {
   it("R1: an unexplained string in a rich slot fails closed as an integrity state", async () => {
     const onChange = vi.fn();
     render(
@@ -164,11 +164,11 @@ describe("RichTextAnswerInput — typed read adoption (Phase D3)", () => {
     await expectIntegrityState(onChange);
   }, 15000);
 
-  it("F1-B: the PC-F01 canonical-closure class never exposes an editable surface", async () => {
+  it("the canonical-closure class never exposes an editable surface", async () => {
     const onChange = vi.fn();
     render(
       <RichTextAnswerInput
-        value={PCF01_NONCANONICAL}
+        value={MERGED_RUNS_NONCANONICAL}
         answerMode="rich"
         onChange={onChange}
       />,

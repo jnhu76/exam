@@ -164,7 +164,8 @@ beforeEach(() => {
   takeHandler.mockReset();
 });
 
-describe("#674 locked-state presentation matrix", () => {
+// Regression for #674: the candidate-facing locked-state overlay matrix.
+describe("locked-state presentation matrix", () => {
   it("disrupted: recovery copy + list navigation; NEVER deadline/auto-submit claims", async () => {
     installTakeRoute(lockedSnapshot("disrupted", { canResume: false }));
     renderPage();

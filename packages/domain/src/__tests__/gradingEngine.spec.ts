@@ -36,7 +36,7 @@ function answer(
   };
 }
 
-// P2D-J1 regression coverage for the multi-question aggregation path in
+// Regression coverage for the multi-question aggregation path in
 // gradeAnswers. The per-question dispatch is covered by exam-engine's
 // gradingEngine.test.ts; here we assert how scores combine into totalScore,
 // how unanswered questions are treated, the passingScore boundary, and that

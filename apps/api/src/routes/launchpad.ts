@@ -46,14 +46,14 @@ function constantTimeEqual(a: string, b: string): boolean {
  * operator CLI territory.
  *
  * The canonical mutation body is `bootstrapAdminOnFreshDb`, shared with the
- * `bootstrap-admin` CLI (P6-008): organization + Admin + primary Admin role
+ * `bootstrap-admin` CLI: organization + Admin + primary Admin role
  * assignment + `admin.bootstrap` audit commit atomically in one
  * transaction. The HTTP adapter is a thin shim that performs the
  * installation-initialized gate and setup-token check before delegating to
  * that canonical body — it does NOT duplicate the irreversible mutation
  * logic.
  *
- * Setup-token contract (P7-C1):
+ * Setup-token contract:
  *   - high entropy (operator-generated, e.g. `openssl rand -hex 32`)
  *   - body only, never URL — validated from the JSON request body
  *   - never audit-logged in plaintext (the audit row written by the

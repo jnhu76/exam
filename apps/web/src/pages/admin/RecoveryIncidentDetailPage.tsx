@@ -35,7 +35,7 @@ const SNAPSHOT_STALE_MS = 2 * 60_000;
 const NAMESPACE = "admin.recoveryIncident";
 
 /**
- * J5-I1C1 — one config-driven incident command dialog (investigate /
+ * One config-driven incident command dialog (investigate /
  * add_note / change_severity / resolve / dismiss).
  *
  * Every command mints ONE operationId per dialog session (reused on retry —
@@ -45,8 +45,8 @@ const NAMESPACE = "admin.recoveryIncident";
  * message; every confirmed outcome reloads the authoritative aggregate.
  */
 /**
- * Recovery Incident Detail (J5-I1B2, contract §6.3) — read-only Admin
- * aggregate. Only wire-confirmed fields render (Task 7 field mapping); the
+ * Recovery Incident Detail (contract §6.3) — read-only Admin
+ * aggregate. Only wire-confirmed fields render (wire-field mapping); the
  * action area is NOT rendered in the read-only phase — `allowedActions` is a
  * computed result, never a disabled-button state (contract §6.4 note).
  */
@@ -143,7 +143,7 @@ export function RecoveryIncidentDetailPage() {
         )}
       </div>
 
-      {/* Operations (J5-I1C1) — server-computed eligibility (allowedActions),
+      {/* Operations — server-computed eligibility (allowedActions),
           never a client-side derivation from status. Empty allowedActions
           keeps the page read-only (§6.2/§6.3 note: a computed result, not a
           disabled-button state). */}
@@ -593,7 +593,7 @@ export function RecoveryIncidentDetailPage() {
         </PageSection>
 
         {/* Interruption evidence links — stubs; full episodes live on the
-            attempt operations page (Task 7 mapping DECISION-1). */}
+            attempt operations page (wire-field mapping decision). */}
         <PageSection title={t("admin.recoveryIncident.sections.interruptions")}>
           {data.interruptionLinks.length === 0 ? (
             <p className="type-secondary">

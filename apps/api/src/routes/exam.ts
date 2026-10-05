@@ -254,7 +254,7 @@ function getDeleteMeta(exam: Exam) {
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
 /**
- * P2D-J5a legacy compatibility: if a client omits `resultPublicationMode` but
+ * Legacy compatibility: if a client omits `resultPublicationMode` but
  * sends the legacy `controlFlags.showResultImmediately` flag, derive the mode
  * from the legacy flag. `true` → 'immediate', `false` → 'manual'. Once the
  * caller explicitly sets `resultPublicationMode`, it wins and the legacy flag
@@ -279,7 +279,7 @@ function resolveResultPublicationMode(
 }
 
 /**
- * P7-M2: the profile-owned policy fields (`ExamProfilePolicyDefaults`).
+ * The profile-owned policy fields (`ExamProfilePolicyDefaults`).
  * Used for presence-based profile-default injection during exam creation
  * (design §20 Option A).
  */
@@ -531,7 +531,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         ),
       ],
       schema: {
-        // Raw defaults-free shape (P7-M2 §20 Option A): the fastify zod
+        // Raw defaults-free shape (design §20 Option A): the fastify zod
         // validator writes its parsed output back into `request.body`, so a
         // defaults-applying schema would inject code defaults into the body
         // and defeat the profile presence detection. The handler re-parses
@@ -618,7 +618,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      // P7-M2: optional exam policy profile (authoring template). When
+      // Optional exam policy profile (authoring template). When
       // selected, the profile's typed defaults are COPY-ON-APPLY'd into the
       // concrete Exam columns below — the created Exam never depends on the
       // profile at runtime (design §3/§4). Resolution precedence (design
@@ -774,7 +774,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           })),
         });
       }
-      // P2D-J5a legacy compatibility: if a client omits `resultPublicationMode`
+      // Legacy compatibility: if a client omits `resultPublicationMode`
       // but sends the legacy `controlFlags.showResultImmediately` flag, derive
       // the mode from the legacy flag. `data.resultPublicationMode` already
       // carries the profile default when the caller omitted the mode;
@@ -952,7 +952,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             if (forbidden.length > 0) {
               throw new ExamUpdateNotAllowedError();
             }
-            // #291 Phase A: clearing closeAt is legal only for untimed exams
+            // #291: clearing closeAt is legal only for untimed exams
             // (published untimed already carry null). A close-bound published
             // exam (timed_window/deadline) must never lose its cutoff — the
             // draft-only canonical validation does not re-check here.
@@ -1122,7 +1122,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               timingMode:
                 (updateData.timingMode as Exam["timingMode"] | undefined) ??
                 exam.timingMode,
-              // Nullable (#291 Phase A): `null` duration/closeAt is business
+              // Nullable (#291): `null` duration/closeAt is business
               // semantics (deadline/untimed), merged with `!== undefined` —
               // never `??`, which would resurrect the old value over null.
               durationMinutes:
@@ -1528,7 +1528,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               reason: exam.status === "closed" ? "ALREADY_CLOSED" : "NOT_OPEN",
             });
           }
-          // extendExam fails closed on untimed exams (#291 Phase A): they
+          // extendExam fails closed on untimed exams (#291): they
           // have no closeAt to extend. The non-null assertion is proven by
           // that guard — extendExam only returns on a successful extension.
           const oldCloseAt = new Date(exam.closeAt!);
@@ -1750,7 +1750,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   /**
-   * Zod schema for the publish-results response payload (P2D-J5a).
+   * Zod schema for the publish-results response payload.
    * `alreadyPublished` lets the caller detect the idempotent no-op case.
    */
   const publishResultsResponseSchema = z.object({
@@ -1761,7 +1761,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * POST /exams/:id/publish-results — Sets `resultsPublishedAt` so manual-mode
-   * result visibility flips from hidden → visible. P2D-J5a.
+   * result visibility flips from hidden → visible.
    *
    * Allowed only from `published | open | closed` (after reconciliation);
    * `draft | canceled | archived` return 409 EXAM_PUBLISH_RESULTS_NOT_ALLOWED.
@@ -1816,10 +1816,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                   published.exam.resultsPublishedAt!.toISOString(),
               },
             });
-            // P5-N1 §17 — atomic fan-out: result mutation + Inbox rows +
+            // Atomic fan-out: result mutation + Inbox rows +
             // required outbox rows commit together inside this transaction.
             // SMTP is NOT called here; the worker drains the outbox
-            // asynchronously (P5-0). A failed required Inbox/outbox write
+            // asynchronously. A failed required Inbox/outbox write
             // rolls back the publication.
             const recipients = await resolveResultPublishedRecipients(
               tx,

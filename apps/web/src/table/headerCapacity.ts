@@ -10,7 +10,7 @@ import {
 
 /**
  * Header-label capacity — the SECOND content channel of a governed column
- * (issue 601 Phase F convergence).
+ * (issue #601).
  *
  * A column's geometry used to be derived from its VALUE vocabulary alone, so a
  * role whose values are short could carry a header that did not fit: measured

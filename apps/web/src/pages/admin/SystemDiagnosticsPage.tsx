@@ -70,7 +70,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 /**
  * System diagnostics page showing health metrics and infrastructure cards.
  *
- * UI-KOI-WEGENT-VISUAL-PIVOT-1: Monitoring cards resemble instruments with
+ * Monitoring cards resemble instruments with
  * white surface, clear 1px border, 8px radius, compact layout, 20px/2px icons,
  * clear numeric hierarchy.
  */

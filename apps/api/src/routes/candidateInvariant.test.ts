@@ -110,7 +110,7 @@ describe("candidate profile invariant", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    // RBAC-M10-E: this user must authenticate (positive test) — seed an active
+    // This user must authenticate (positive test) — seed an active
     // primary Candidate assignment so capability resolution produces Candidate's
     // preset rather than 401 AUTH_REQUIRED.
     const now = new Date();
@@ -156,7 +156,7 @@ describe("candidate profile invariant", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    // RBAC-M10-E: this user must authenticate (positive control for the
+    // This user must authenticate (positive control for the
     // negative 401/403 assertions below) — seed an active primary Candidate
     // assignment so capability resolution produces Candidate's preset rather
     // than 401 AUTH_REQUIRED.

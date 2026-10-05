@@ -3,19 +3,19 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { join } from "node:path";
 
 /**
- * The router-native web surface (EXAM-HTTP-SURFACE-AUTHORITY-CLOSURE-1).
+ * The router-native web surface.
  *
  * Fastify owns every routing decision; no application code inspects a raw
  * URL to decide which surface a request belongs to. Each surface is a
  * Fastify scope with its own prefix, its own unmatched-file policy, and its
  * own cache policy:
  *
- *   /assets/**  fingerprinted build output      immutable, 1y   (I5)
- *   /fonts/**   stable-name public resources    revalidate      (§9C)
- *   /           HTML shell (and SPA navigation) no-cache        (I4)
- *   /index.html HTML shell                      no-cache        (I4)
- *   GET/HEAD unmatched navigation               -> shell        (I4)
- *   any other unmatched method                  -> 404 plain    (§11)
+ *   /assets/**  fingerprinted build output      immutable, 1y
+ *   /fonts/**   stable-name public resources    revalidate
+ *   /           HTML shell (and SPA navigation) no-cache
+ *   /index.html HTML shell                      no-cache
+ *   GET/HEAD unmatched navigation               -> shell
+ *   any other unmatched method                  -> 404 plain
  *
  * A missing file inside a static scope stays in THAT scope's 404 policy —
  * the scoped setNotFoundHandler answers — so a stale hashed asset never
@@ -78,7 +78,7 @@ export async function registerStaticFrontend(
     if (method === "GET" || method === "HEAD") {
       // no-cache, applied before sendFile: @fastify/static is registered
       // with serve:false here, so its computed Cache-Control is never
-      // applied on this path (I4 — the HTML shell never carries immutable).
+      // applied on this path — the HTML shell never carries immutable.
       reply.header("Cache-Control", "no-cache");
       return reply.sendFile("index.html", publicDir, { cacheControl: false });
     }

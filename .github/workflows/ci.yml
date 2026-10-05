@@ -284,8 +284,8 @@ jobs:
       # stop other shards immediately if any shard fails
       fail-fast: true
       matrix:
-        shardIndex: [1, 2, 3, 4]
-        shardTotal: [4]
+        shardIndex: [1, 2]
+        shardTotal: [2]
 
     services:
       postgres:

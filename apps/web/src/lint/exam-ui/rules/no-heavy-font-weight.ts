@@ -3,7 +3,7 @@
  *
  * CJK text reads heavy/clunky at UI sizes; the self-hosted Noto Sans CJK SC
  * loads only 400 / 500 / 700 (no 600). This rule enforces the typographic
- * weight hierarchy established in UI-PRODUCT-FINISH-CLOSURE-1:
+ * weight hierarchy:
  *
  *   - font-semibold (600) is FORBIDDEN everywhere in business/feature source.
  *     No 600 face is loaded, so the browser synthesizes a fuzzy fake bold.

@@ -46,7 +46,7 @@ export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 /**
  * Response schema returned after successful login, including user identity,
  * role, and the actor's effective capability set (the union of all active
- * role assignments' presets — RBAC-M10-E).
+ * role assignments' presets).
  */
 export const LoginResponseSchema = z.object({
   id: z.string().uuid(),

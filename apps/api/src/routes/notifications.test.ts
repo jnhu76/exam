@@ -10,7 +10,7 @@ import { createNotificationRepo } from "@exam/db/src/repository/notificationRepo
 
 const AT = new Date("2026-07-25T12:00:00.000Z");
 
-// P5-N1-I3 — Notification Inbox API integration tests (P5-N1-R0 §25.6).
+// Notification Inbox API integration tests (P5-N1-R0 §25.6).
 //
 // All four endpoints are authenticate-only, scoped to the actor's own
 // notifications. Cross-user access returns a non-leaking 404

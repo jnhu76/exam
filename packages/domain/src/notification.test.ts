@@ -3,7 +3,8 @@ import { NOTIFICATION_TYPES } from "./notification.js";
 
 // Slice 2 — notification domain types.
 //
-// Contract (P5-N1-R0 §7, §22; exam_assigned added under #402/#299):
+// Contract (notification delivery policy §7/§22; exam_assigned added
+// under #402/#299):
 //   - NotificationType values: result_published, exam_assigned.
 //   - Severity / resource_type / resource_id / archived_at / invalidated_at
 //     columns are deferred — they are not domain types here.

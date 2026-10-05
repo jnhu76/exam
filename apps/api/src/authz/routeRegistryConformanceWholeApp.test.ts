@@ -184,7 +184,7 @@ const wholeAppPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(apiSurfacePlugin, { prefix: "/api" });
 };
 
-describe("P4-C1 whole-application authorization route regression lock", () => {
+describe("whole-application authorization route regression lock", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>> | null = null;
 
   beforeAll(async () => {
@@ -447,7 +447,7 @@ describe("P4-C1 whole-application authorization route regression lock", () => {
   });
 
   it("the removed dead AttemptTimeExtend capability (attempt.time.extend) is absent from both the catalog and every route gate", () => {
-    // REC-I4-I3B2 cut the old /extend-time route and moved operator time
+    // The old /extend-time route was removed and operator time
     // grants to the Admin-only AttemptTimeGrant (attempt.time.grant) seam;
     // the leftover AttemptTimeExtend catalog identity had zero runtime
     // consumers and was retired. Like result.publish above, this guards

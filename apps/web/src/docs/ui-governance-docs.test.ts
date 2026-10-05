@@ -263,7 +263,7 @@ export function visualFoundationViolations(
   return violations;
 }
 
-describe("visual-foundation.md authority map (issue #601 Step 1)", () => {
+describe("visual-foundation.md authority map (issue #601)", () => {
   it("answers every governed-question area and names only existing authorities", () => {
     const doc = readFileSync(FOUNDATION_DOC_PATH, "utf8");
     expect(

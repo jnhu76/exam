@@ -1,7 +1,7 @@
 import { statusMeta } from "./statusMeta";
 
 /**
- * J5-I1B Recovery Center — frontend status mapping.
+ * Recovery Center — frontend status mapping.
  *
  * Wire shapes live canonically in `@exam/contracts` (`recovery.ts`) and are
  * imported from there by the Recovery pages and the projection hooks. This

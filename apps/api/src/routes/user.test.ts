@@ -41,7 +41,7 @@ async function createCandidateUser(
     createdAt: now,
     updatedAt: now,
   });
-  // RBAC-M10-E: the candidate-password-reset endpoint targets the
+  // The candidate-password-reset endpoint targets the
   // CandidateProfile identity (not a role projection). A candidate user
   // without a profile is NOT a valid target, so the fixture must create one.
   await db.insert(schema.candidateProfiles).values({
@@ -843,7 +843,7 @@ describe("user routes", () => {
   // to verify HTTP transport mapping without constructing "actor is last Admin"
   // scenarios — the real post-condition behavior is covered by
   // adminInvariant.test.ts (layer 5.1).
-  describe("last-admin invariant — route wiring (RBAC-M10-E)", () => {
+  describe("last-admin invariant — route wiring", () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
@@ -903,7 +903,7 @@ describe("user routes", () => {
     });
   });
 
-  // RBAC-M10-E atomicity proof (P1-2): the combined PATCH /users/:id mutation
+  // Atomicity proof: the combined PATCH /users/:id mutation
   // (users row UPDATE + primary-role replacement + users.role projection sync)
   // MUST execute inside ONE transaction. If the inner assignment mutation fails
   // AFTER the users UPDATE has already executed, the whole transaction must
@@ -915,7 +915,7 @@ describe("user routes", () => {
   // transaction callback by wrapping the assignment repo factory so that
   // replacePrimaryRoleWithinTransaction throws after the users UPDATE ran.
   // We then reload the rows from the DB and assert full rollback.
-  describe("PATCH /users/:id atomicity — inner failure rolls back the whole txn (RBAC-M10-E P1-2)", () => {
+  describe("PATCH /users/:id atomicity — inner failure rolls back the whole txn", () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });

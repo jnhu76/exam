@@ -383,7 +383,7 @@ export class AttemptDeadlineExceedsExamCloseError extends AppError {
 /**
  * Admin publish-results is not allowed for the requested exam state (HTTP 409).
  *
- * P2D-J5a: `POST /exams/:id/publish-results` is allowed only from
+ * `POST /exams/:id/publish-results` is allowed only from
  * `published | open | closed` (after reconciliation). `draft | canceled |
  * archived` are rejected. Stale-state protection mirrors the other admin
  * operations: the route layer reconciles before calling the engine command.

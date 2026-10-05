@@ -128,7 +128,8 @@ describe("deadline scanner — scanDeadlineCandidates (iterator)", () => {
   });
 });
 
-describe("deadline scanner plugin — #547 stall-fact bookkeeping", () => {
+// Issue #547.
+describe("deadline scanner plugin — stall-fact bookkeeping", () => {
   // Module-level singleton: reset the stall facts to fresh-process state.
   function resetStallFacts() {
     deadlineScannerMetrics.startedAt = null;
@@ -173,7 +174,7 @@ describe("deadline scanner plugin — #547 stall-fact bookkeeping", () => {
     }
   });
 
-  it("a hung cycle holds activeSince and skips later ticks — classifier reads STALLED (B2)", async () => {
+  it("a hung cycle holds activeSince and skips later ticks — classifier reads STALLED", async () => {
     vi.useFakeTimers();
     // Deferred hang: teardown rejects it so the in-flight cycle settles
     // and the plugin's awaited onClose can complete (no dangling close).

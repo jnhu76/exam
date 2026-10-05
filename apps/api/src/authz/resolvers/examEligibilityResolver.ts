@@ -1,5 +1,5 @@
 /**
- * Candidate exam-eligibility resource resolver (RBAC-M10-A, archetype B).
+ * Candidate exam-eligibility resource resolver (archetype B).
  *
  * Implements the ADR §Candidate Own-Scope Policy + §Resource Resolver Matrix for
  * the candidate exam-eligibility routes — the registry entries declaring

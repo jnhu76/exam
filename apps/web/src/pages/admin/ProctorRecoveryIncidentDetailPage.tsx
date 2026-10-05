@@ -33,12 +33,12 @@ const SNAPSHOT_STALE_MS = 2 * 60_000;
 const NAMESPACE = "admin.proctorRecoveryIncident";
 
 /**
- * Proctor Operations incident detail (J6, EXAM-303; projection identity issue 606).
+ * Proctor Operations incident detail (projection identity: issue #606).
  *
  * Narrow Proctor projection over `GET /api/admin/incidents/:incidentId/detail`
  * (assignment_scoped): incident row + event history (notes are events) + link
- * metadata + summaries already within Proctor read authority. Per the EXAM-303
- * freeze (F3, human-gate corrective) the wire carries NO time-adjustment
+ * metadata + summaries already within Proctor read authority. Per the Proctor-projection
+ * freeze (the 2026-09-12 human-gate decision) the wire carries NO time-adjustment
  * ledger, NO auditReferences, and NO Admin attempt-command execution details —
  * the page cannot render what the server never sends.
  *

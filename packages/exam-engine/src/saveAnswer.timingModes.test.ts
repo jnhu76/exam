@@ -36,7 +36,7 @@ function saveRequest(now: Date) {
   };
 }
 
-describe("saveAnswer — Phase A timing modes", () => {
+describe("saveAnswer — timing modes", () => {
   it("untimed attempt can save (effectiveDeadline null != expired)", async () => {
     const h = await prepare(
       untimedExam(),

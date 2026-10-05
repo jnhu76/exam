@@ -268,7 +268,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     await cleanup();
   });
 
-  describe("AC1: Submit after deadline succeeds (answers already saved)", () => {
+  describe("Submit after deadline succeeds (answers already saved)", () => {
     it("allows submit when server time is past deadlineAt", async () => {
       const attemptId = await createExamAndStart("Deadline Exam", 1);
 
@@ -289,7 +289,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC2: Cannot start attempt for unpublished exam", () => {
+  describe("Cannot start attempt for unpublished exam", () => {
     it("returns 409 when exam is still in draft", async () => {
       const examRes = await app.inject({
         method: "POST",
@@ -326,7 +326,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC3: Answer save versioned protocol", () => {
+  describe("Answer save versioned protocol", () => {
     it("accepts first save then rejects stale version", async () => {
       const attemptId = await createExamAndStart("Answer Version Exam");
 
@@ -364,7 +364,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC4: Candidate cannot submit another candidate's attempt", () => {
+  describe("Candidate cannot submit another candidate's attempt", () => {
     it("returns 404 for cross-candidate submit", async () => {
       const attemptId = await createExamAndStart("Ownership Exam");
 
@@ -378,8 +378,8 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  // AC5 unenrolled-start denial is owned by m10a.candidateRuntime.test.ts.
-  describe("AC6: Submit after already submitted attempt is idempotent", () => {
+  // Unenrolled-start denial is owned by candidateRuntimeAuthority.test.ts.
+  describe("Submit after already submitted attempt is idempotent", () => {
     it("second submit returns same graded result (idempotent, not an error)", async () => {
       const attemptId = await createExamAndStart("Double Submit Exam");
 
@@ -401,7 +401,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC7: Answer save does not pollute another attempt", () => {
+  describe("Answer save does not pollute another attempt", () => {
     it("saving answer to attempt A does not affect attempt B", async () => {
       const attemptAId = await createExamAndStart("Replay Exam A");
 
@@ -464,7 +464,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC8: Candidate exam payload does not expose standardAnswer", () => {
+  describe("Candidate exam payload does not expose standardAnswer", () => {
     it("start attempt response does not include standardAnswer field", async () => {
       const examRes = await app.inject({
         method: "POST",

@@ -1,5 +1,5 @@
 /**
- * Own-attempt resource resolver (RBAC-M10-A, archetype C/D).
+ * Own-attempt resource resolver (archetype C/D).
  *
  * Implements the ADR §Resource Resolver Matrix row `own_attempt` (the matrix is
  * the authority for the permission set and for "source of truth: attempt

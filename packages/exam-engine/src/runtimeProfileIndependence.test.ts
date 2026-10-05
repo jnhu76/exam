@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 
 const SRC_DIR = dirname(fileURLToPath(import.meta.url));
 
-describe("P7-M2 runtime profile independence (§42)", () => {
+describe("runtime profile independence (§42)", () => {
   it("no runtime execution module imports a profile module", async () => {
     const files = (await readdir(SRC_DIR)).filter(
       (f) => f.endsWith(".ts") && !f.endsWith(".test.ts"),

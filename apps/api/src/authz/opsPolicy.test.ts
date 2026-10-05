@@ -27,7 +27,7 @@ import { ValidationError } from "@exam/domain";
  * (P7-E review P2-2). Skip with an explicit reason instead of running it.
  */
 const raceIt = isTestDbIsolationEnabled() ? it : it.skip;
-describe("P7-E3 operational policy intent", () => {
+describe("operational policy intent", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
   let databaseUrl: string | undefined;
@@ -584,7 +584,7 @@ describe3(
       expect3(parseInt(observed, 10)).toBeGreaterThan(3600);
     });
 
-    it("a FAILED operator-declared drill today never satisfies the drill cadence (P1-3)", async () => {
+    it("a FAILED operator-declared drill today never satisfies the drill cadence", async () => {
       // Policy intent exists at version 1 (previous test): cadence 7d.
       const ctx = {
         organizationId: orgId3,
@@ -651,7 +651,7 @@ describe3(
       ).toBe(true);
     });
 
-    it("a NEWER operator-declared success outranks an OLDER automated success (P7-E review P2)", async () => {
+    it("a NEWER operator-declared success outranks an OLDER automated success", async () => {
       // Same org as the previous test: the automated success is 40d old (one
       // test earlier). A fresh operator-declared success TODAY is the recency
       // truth — cadence (7d) must be SATISFIED, NOT the false negative that

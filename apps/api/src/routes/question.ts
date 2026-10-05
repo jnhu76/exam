@@ -147,7 +147,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           difficulty: q.difficulty,
           tags: q.tags,
           gradingRule: q.gradingRule,
-          // P3-L0-1C: project rubric on the authoritative question read path.
+          // Project rubric on the authoritative question read path.
           // Candidate-facing contracts (CandidateQuestionSnapshot) omit it
           // separately; this admin list is authoritative.
           rubric: q.rubric,
@@ -276,7 +276,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     /** Create a new question. Validates that the referenced courseId exists. Returns 400 on validation error. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
-      // Hostile-depth protection is schema-level (corrective pass round-2):
+      // Hostile-depth protection is schema-level:
       // ContentDocumentV1Schema preflights every rich slot before its
       // recursive grammar, and Fastify validates the body BEFORE this handler,
       // so a deep bomb never reaches handler code.
@@ -384,7 +384,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
-      // Hostile-depth protection is schema-level (corrective pass round-2):
+      // Hostile-depth protection is schema-level:
       // ContentDocumentV1Schema preflights every rich slot before its
       // recursive grammar — this covers both Fastify's body validation and the
       // merged re-validation parse below, which replays the raw document slots.

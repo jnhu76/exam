@@ -1,6 +1,6 @@
 /*
  * Koi Compact Data Workbench — Question-Management-only enhancements
- * (UI-TABLE-KOI-COMPACT-1).
+ *.
  *
  * The shared low-contrast grid, tinted header, and table-head/cell borders are
  * owned by recipes.css and apply to EVERY admin table. This file owns only what
@@ -144,14 +144,14 @@
   line-height: 1.125rem;
   /* Soft fill, NO outline — a type label is a category, not an input or
    * outline button. Removing the border stops it reading like a small input
-   * field (UI-TABLE-KOI-COLOR-REFINE-2 §6). The fill comes from the Badge
+   * field. The fill comes from the Badge
    * variant (single_choice = soft primary; others = neutral surface). */
   border-width: 0;
 }
 
 /* Metadata tag chip geometry for the workbench tag columns lives in
  * badge/recipes.css as the TagBadge "compact-table" variant (single owner,
- * issue 577 m2). The +N overflow chip below is workbench-local and shares the
+ * issue 577). The +N overflow chip below is workbench-local and shares the
  * same density. */
 [data-slot="data-workbench"]
   [data-slot="table-cell"][data-column-role="tag-list"]

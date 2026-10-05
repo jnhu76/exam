@@ -699,7 +699,7 @@ describe("question routes", () => {
     expect(body.logId).toBeUndefined();
   });
 
-  // ── P3-L0-1C: rubric production write/read path closure ─────────
+  // ── rubric production write/read path closure ─────────
   // Proves the historical gap is fixed: rubric flows through POST/PATCH
   // routes (not just repo/contract) and survives a real DB round-trip.
 
@@ -1060,7 +1060,7 @@ describe("question routes", () => {
     expect(list.items).toHaveLength(0);
   });
 
-  // ── P3-MOD-P2-2: MVP question creation proof — type-specific readback ──
+  // ── MVP question creation proof — type-specific readback ──
   // Proves each type's canonical fields are PERSISTED and read back through
   // the production GET path (not just echoed in the create response), and
   // that no type leaks rubric (objective) or options/standardAnswer

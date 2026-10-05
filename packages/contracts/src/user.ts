@@ -5,7 +5,7 @@ import { nullableEmailField, optionalEmailField } from "./emailField.js";
 // ── User ──────────────────────────────────────────────────────────
 
 /**
- * Roles assignable to a human user (RBAC-M8). `System` is excluded (synthetic,
+ * Roles assignable to a human user. `System` is excluded (synthetic,
  * non-assignable); `SuperAdmin` is not defined (no ADR).
  *
  * `RoleSchema` mirrors the assignable set because a user's primary active
@@ -62,7 +62,7 @@ export type CreateUserRequest = z.infer<typeof CreateUserRequestSchema>;
 
 /**
  * Request schema for updating an existing user's name, role, or active status.
- * Role may be set to any assignable role (RBAC-M8).
+ * Role may be set to any assignable role.
  */
 export const UpdateUserRequestSchema = z.object({
   name: z.string().min(1).max(100).optional(),

@@ -15,7 +15,7 @@ import type { Database, TenantContext } from "@exam/db/src/types.js";
  *   4. (pruning is host-owned; the fail-closed surface is the duplicate
  *      conflict + DB-level success-requires-verification CHECK).
  */
-describe("P7-E2B backup evidence ledger", () => {
+describe("backup evidence ledger", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
   let orgId: string;
@@ -230,7 +230,7 @@ describe("P7-E2B backup evidence ledger", () => {
     expect(done.startedAt.toISOString()).toBe(startedAt.toISOString());
   });
 
-  it("completeRun stores the caller-provided completion time — an old backup imported now never renders as freshly verified (P7-E truthful RPO)", async () => {
+  it("completeRun stores the caller-provided completion time — an old backup imported now never renders as freshly verified (truthful RPO)", async () => {
     const operationId = opId();
     // A cold backup that ACTUALLY ran Aug 11 01:00→02:00, imported into the
     // ledger Aug 12 18:00 (the machine was down in between). The ledger must
@@ -472,7 +472,7 @@ describe("P7-E2B backup evidence ledger", () => {
     expect(redone.result).toBe("succeeded");
   });
 
-  it("latestSucceededDrill / latestDrill select by COMPLETION time, not start time (crossed durations, P7-E review P2-2)", async () => {
+  it("latestSucceededDrill / latestDrill select by COMPLETION time, not start time (crossed durations)", async () => {
     // Drill A started EARLIER but COMPLETED LATER (long duration).
     await repo().recordDrill(ctx, {
       operationId: "logical-restore:crossed-A",

@@ -12,7 +12,7 @@ import {
 
 /**
  * FROZEN-SEMANTICS read authority for persisted QUESTION content
- * (rich-content-semantic-contract.md §7; #669 Phase D5-A, F-06). Every static
+ * (rich-content-semantic-contract.md §7; #669). Every static
  * render path that interprets a question prompt / option `contentDocument` —
  * take-exam runtime, grading view, candidate result, authoring preview,
  * choice inputs — must classify through `classifyPersistedQuestionContent`

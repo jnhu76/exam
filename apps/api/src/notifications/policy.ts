@@ -61,7 +61,7 @@ export function requiresInbox(type: NotificationType): boolean {
  * Email is enabled ONLY when a normalized recipient email is present. A
  * recipient without email receives an Inbox row only (no outbox row). This
  * is the composition of the per-type policy and the per-recipient email
- * source (users.email, P5-N1-I1 §13).
+ * source (users.email).
  *
  * Blank/whitespace strings are treated as "no email" as defense in depth —
  * the contract layer already maps blank to undefined, but the policy must

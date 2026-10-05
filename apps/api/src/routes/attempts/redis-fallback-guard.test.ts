@@ -5,7 +5,7 @@ import {
 } from "./__tests__/attempts.testHelpers.js";
 
 /**
- * P3-M7-REDIS-FALLBACK-GUARD
+ * Redis-fallback guard
  *
  * Guardrail proving that the test app's candidate surface runs WITHOUT the
  * Redis plugin (`fastify.redis === undefined`). Per the M7 audit
@@ -17,7 +17,7 @@ import {
  * reads that keep the happy-path suites green under absence would no longer
  * prove anything about Redis-present behavior.
  */
-describe("P3-M7 redis fallback guard — candidate PG state with Redis absent", () => {
+describe("redis fallback guard — candidate PG state with Redis absent", () => {
   let fixture: SharedAttemptFixture;
 
   beforeAll(async () => {

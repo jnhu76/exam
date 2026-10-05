@@ -2596,7 +2596,7 @@ const zhCN = {
       notSet: "未设置",
     },
 
-    /** Recovery Center — queue page (J5-I1B1, contract §5.4). */
+    /** Recovery Center — queue page (contract §5.4). */
     recoveryQueue: {
       title: "恢复审查",
       description:
@@ -2656,7 +2656,7 @@ const zhCN = {
       networkError: "网络异常，请检查连接后重试。",
     },
 
-    /** Recovery Center — incident detail page (J5-I1B2, contract §6.3). */
+    /** Recovery Center — incident detail page (contract §6.3). */
     recoveryIncident: {
       title: "事件详情",
       back: "返回恢复审查",
@@ -2760,7 +2760,7 @@ const zhCN = {
       refreshing: "刷新中…",
     },
 
-    /** Recovery Center — attempt operations page (J5-I1B3, contract §6.4). */
+    /** Recovery Center — attempt operations page (contract §6.4). */
     recoveryAttempt: {
       title: "答题操作详情",
       back: "返回恢复审查",
@@ -2833,7 +2833,7 @@ const zhCN = {
       refreshing: "刷新中…",
     },
 
-    /** Recovery Center — exam recovery detail page (J5-I1B4, contract §6.5). */
+    /** Recovery Center — exam recovery detail page (contract §6.5). */
     recoveryExam: {
       title: "考试恢复详情",
       back: "返回恢复审查",
@@ -2868,7 +2868,7 @@ const zhCN = {
       refreshing: "刷新中…",
     },
 
-    /** Recovery Center — dangerous operations (J5-I1C1). Shared by the attempt /
+    /** Recovery Center — dangerous operations. Shared by the attempt /
         incident / exam recovery pages; per-operation labels are `actions.*`. */
     recoveryOps: {
       operationsTitle: "操作",
@@ -2972,7 +2972,7 @@ const zhCN = {
       linkAttemptDescription: "将一次答题关联到事件 {{id}}。",
     },
 
-    /** Proctor Recovery Center worklist (EXAM-303). */
+    /** Proctor Recovery Center worklist. */
     proctorRecovery: {
       title: "监考处置",
       description:
@@ -3013,7 +3013,7 @@ const zhCN = {
       },
     },
 
-    /** Proctor Operations incident detail (EXAM-303; projection identity issue 606). */
+    /** Proctor Operations incident detail (projection identity: issue #606). */
     proctorRecoveryIncident: {
       title: "监考事件详情",
       refresh: "刷新",

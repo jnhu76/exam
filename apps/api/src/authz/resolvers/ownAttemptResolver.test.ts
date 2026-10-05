@@ -48,7 +48,7 @@ function sameOrgChain(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-describe("RBAC-M10-A own-attempt resolver", () => {
+describe("own-attempt resolver", () => {
   beforeEach(() => {
     ownAttemptChain = null;
     throwNext = false;

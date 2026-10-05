@@ -18,7 +18,7 @@ import {
  * For rich text_response answers this is also the CANONICALIZATION seam: the
  * returned value is the canonical ContentDocumentV1, re-validated after
  * normalization so no accepted answer can persist a canonical form outside
- * schema/limits (RC-03 closure). Every downstream consumer (answersEqual
+ * schema/limits. Every downstream consumer (answersEqual
  * idempotency, draft persistence, submit freeze, grading workset) only ever
  * sees canonical documents (#301 §22).
  *
@@ -127,9 +127,9 @@ export function validateAnswerForQuestion(
         }
         return { ok: true, value: answer };
       }
-      // Hostile-structure preflight BEFORE the recursive schema parse (#301
-      // corrective pass): a deeply nested payload must be rejected by the
-      // bounded iterative walker, never by a stack overflow inside z.lazy.
+      // Hostile-structure preflight BEFORE the recursive schema parse (#301): a
+      // deeply nested payload must be rejected by the bounded iterative walker,
+      // never by a stack overflow inside z.lazy.
       const preflight = preflightContentDocumentStructure(answer);
       if (preflight.length > 0) {
         return {
@@ -144,7 +144,7 @@ export function validateAnswerForQuestion(
           reason: "rich text_response answer must be a valid ContentDocumentV1",
         };
       }
-      // Canonical closure (RC-03, #669 Phase D1): normalization can merge
+      // Canonical closure (#669): normalization can merge
       // adjacent same-mark runs, so legality is re-decided on the canonical
       // value that will actually be persisted. Rejection keeps the existing
       // INVALID_ANSWER-mapped category.

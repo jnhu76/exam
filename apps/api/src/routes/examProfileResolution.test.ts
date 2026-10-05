@@ -16,7 +16,7 @@ import { signJWT } from "@exam/auth/src/session.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 
 /**
- * P7-M2 — exam creation with profile application (§19–§24).
+ * Exam creation with profile application (§19–§24).
  *
  * Proves the COPY-ON-APPLY authority model: profile defaults materialize into
  * ordinary Exam columns at creation; explicit request values and explicit
@@ -24,7 +24,7 @@ import { schema } from "@exam/db/src/schema/pg.js";
  * after application can NEVER change an existing Exam — publish + attempt
  * start succeed without any profile lookup.
  */
-describe("exam creation with exam policy profile (P7-M2 resolution)", () => {
+describe("exam creation with exam policy profile (profile resolution)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let courseId: string;
   let questionId: string;
@@ -323,9 +323,9 @@ describe("exam creation with exam policy profile (P7-M2 resolution)", () => {
     );
   });
 
-  // ── §43 canonical M1 validator still owns final Exam validation ──
+  // ── the canonical policy validator still owns final Exam validation ──
 
-  it("canonical M1 conflict validation still rejects an invalid final Exam policy", async () => {
+  it("canonical policy conflict validation still rejects an invalid final Exam policy", async () => {
     const profile = await createProfile();
     const res = await createExam({
       ...examBasePayload,

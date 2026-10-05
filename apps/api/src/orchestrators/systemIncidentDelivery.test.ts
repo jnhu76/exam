@@ -214,7 +214,7 @@ async function seedFixture(db: Database, suffix: string): Promise<Fixture> {
   };
 }
 
-describe("system incident delivery — durable completion evidence (#304 C1–C4)", () => {
+describe("system incident delivery — durable completion evidence (#304)", () => {
   let iso: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
   let dbShared: Database;
   let db1: Database;

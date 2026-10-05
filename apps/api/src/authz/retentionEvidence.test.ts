@@ -14,7 +14,7 @@ import type { Database, TenantContext } from "@exam/db/src/types.js";
  * (verified + succeeded, ordered by completion time, unbounded — a long run of
  * recent failures/unverified rows must not hide an older verified success).
  */
-describe("P7-CLOSE retention evidence ledger", () => {
+describe("retention evidence ledger", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
   let orgId: string;

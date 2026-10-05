@@ -27,9 +27,9 @@ import type { TableArchetype } from "@/table/tableTiers";
  *
  * The scroll-region contract (measurement, tier negotiation, allocation
  * scope, local scroll, fades/hint) and the viewport representation switch are
- * owned by TableScrollSurface — shared with DataTableShell (issue 601 Phase F);
+ * owned by TableScrollSurface — shared with DataTableShell (issue #601);
  * the workbench adds no separate sizing or search behavior. The viewport
- * decides the representation FIRST (issue 457 R2): mobile cards are never
+ * decides the representation FIRST (issue #457): mobile cards are never
  * descendants of the measurement node.
  */
 export function DataWorkbench({

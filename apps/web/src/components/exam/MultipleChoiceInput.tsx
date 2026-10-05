@@ -5,7 +5,7 @@ import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
  * Checkbox-based input for multiple-choice questions.
  * Allows toggling individual options and returns a sorted array of selected
  * IDs. Option labels render through the static ContentRenderer so rich
- * option content (issue 301) displays exactly as in the read path.
+ * option content displays exactly as in the read path.
  */
 export function MultipleChoiceInput({
   options,

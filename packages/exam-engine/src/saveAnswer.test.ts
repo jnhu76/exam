@@ -42,7 +42,7 @@ async function harness(
   );
 }
 
-describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
+describe("saveAnswer composite action", () => {
   it("1. accepted save persists the new answer with the correct next version", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
     const h = await harness({}, now);

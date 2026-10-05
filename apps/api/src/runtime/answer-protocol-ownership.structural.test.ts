@@ -59,7 +59,7 @@ function stripComments(line: string): string {
   return line;
 }
 
-describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical engine action", () => {
+describe("Save Answer route delegates to the canonical engine action", () => {
   const routeText = readFileSync(ROUTE_FILE, "utf8");
   const routeLines = routeText.split(/\r?\n/);
 
@@ -146,7 +146,7 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
     expect(violations).toEqual([]);
   });
 
-  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the route delegates to the canonical preparation seam", () => {
+  it("the route delegates to the canonical preparation seam", () => {
     // The route must establish the external preconditions (EA lock provenance +
     // canonical deadline reconciliation + canonical effective deadline) via the
     // canonical preparation seam, which mints the opaque mutation evidence
@@ -155,7 +155,7 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
     expect(routeText).toMatch(/prepareReconciledAttemptMutation\s*\(/);
   });
 
-  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the route does NOT own question-membership legality (P1 moved into saveAnswer)", () => {
+  it("the route does NOT own question-membership legality", () => {
     // The membership `.some(...)` protocol guard over questionSnapshot is now
     // owned by the canonical saveAnswer action (§9). The route must no longer
     // contain it. This is the P1 ownership transfer negative lock.
@@ -169,7 +169,7 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
     expect(hits).toEqual([]);
   });
 
-  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the route calls saveAnswer with the mutation context (not the old 4-arg shape)", () => {
+  it("the route calls saveAnswer with the mutation context (not the old 4-arg shape)", () => {
     // Positive lock: the route must call saveAnswer(attempts, mutationContext, …),
     // the corrected 3-arg shape, and must not pass a bare `now` as the 4th arg.
     expect(routeText).toMatch(/saveAnswer\s*\(/);
@@ -185,7 +185,7 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
     expect(window).toMatch(/mutationContext/);
   });
 
-  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the architecture lint forbids casting to ReconciledAttemptMutationContext (forgery guard)", () => {
+  it("the architecture lint forbids casting to ReconciledAttemptMutationContext (forgery guard)", () => {
     // The arch-lint script (scripts/check-architecture.mjs) must contain a rule
     // banning `as ReconciledAttemptMutationContext` in both exam-engine and the
     // API surface, mirroring the LEA capability cast ban. This is the
@@ -213,7 +213,7 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
     ).toBe(true);
   });
 
-  it("EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 — the mutation context mint is private to the preparation owner (deadlineReconciliation.ts)", () => {
+  it("the mutation context mint is private to the preparation owner (deadlineReconciliation.ts)", () => {
     // The context type's provenance brand is module-private to
     // deadlineReconciliation.ts. Only the private mint (called by
     // prepareReconciledAttemptMutation) can attach it. The module exports
@@ -245,7 +245,7 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
   // re-export; the corrected state keeps the mint private to the preparation
   // owner, so the barrel must not re-export attemptMutationContext.ts and the
   // standalone module must not exist.
-  it("EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 RED — mintMutationContext is NOT publicly importable (corrected)", () => {
+  it("mintMutationContext is NOT publicly importable", () => {
     const barrel = readFileSync(
       resolve(REPO_ROOT, "packages/exam-engine/src/index.ts"),
       "utf8",

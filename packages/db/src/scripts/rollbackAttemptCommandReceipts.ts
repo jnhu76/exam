@@ -303,7 +303,7 @@ export async function rollbackAttemptCommandReceipts(
         throw new Error(
           `Guard tripped: ${rowCount} row(s) exist in ` +
             `${ATTEMPT_COMMAND_RECEIPTS_TABLE}. A destructive DROP is ` +
-            "prohibited after activation (J5-I1C0 audit §10). Receipt data is " +
+            "prohibited after activation (dangerous-command identity audit §10). Receipt data is " +
             "durable command evidence; use a data-preserving rollback instead.",
         );
       }

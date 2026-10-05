@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 /*
- * Semantic font roles (UI foundation, UI-TYPO-1).
+ * Semantic font roles (UI foundation).
  *
  * font identity != typography recipe. The roles below are the semantic
  * font-family owners; size/weight/line-height recipes live in the type-*
- * recipe layer (UI-RECIPE-1A). Today --font-ui and --font-reading resolve to
+ * recipe layer. Today --font-ui and --font-reading resolve to
  * the same physical sans stack; they remain separate roles so a future
  * reading recipe can change family, measure, or density without touching UI.
  *
- * Primary UI family (issue 577 M1 truth): self-hosted "HarmonyOS Sans SC"
+ * Primary UI family (issue 577): self-hosted "HarmonyOS Sans SC"
  * (Regular/Medium/Bold = 400/500/700, linked in index.html) is first in the
  * stack so the same typeface renders across Windows/macOS/Linux. Every family
  * after it — "Noto Sans CJK SC" included — is a resilient FALLBACK ONLY: no
@@ -22,11 +22,11 @@
     "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   --font-reading-stack: var(--font-ui);
   /*
-   * Serif authority (UI-TYPO-2). The self-hosted "Noto Serif SC" family is the
+   * Serif authority. The self-hosted "Noto Serif SC" family is the
    * project-owned CJK serif, intended for sustained Chinese reading only. It is
    * NOT a prestige / formal / important signal and must never be applied to
    * UI controls, status, scores, timers, or metadata. Consumers must opt into a
-   * semantic reading recipe (type-reading / type-long-response, UI-RECIPE-1A);
+   * semantic reading recipe (type-reading / type-long-response);
    * serif is not applied by HTML tag alone.
    *
    * WIRING TRUTH (issue 577 m6): --font-reading-stack resolves to --font-ui, so the
@@ -113,7 +113,7 @@
 }
 
 :root {
-  /* Canvas / surfaces — UI-TABLE-KOI-COLOR-REFINE-2.
+  /* Canvas / surfaces.
    * Canvas is a very light NEUTRAL grey (#f5f7fa, no blue cast) so white
    * content surfaces read as a distinct raised layer. Surfaces stay white;
    * subtle/soft tints are neutral grey (#f8fafc) not blue. The previous
@@ -167,7 +167,7 @@
   --table-row-focus: #edf4ff;
   --table-row-selected: #eff6ff;
   --action-hover: #f8fafc;
-  /* UI-TABLE-KOI-COMPACT-1 — Koi compact workbench grid + band roles.
+  /* Koi compact workbench grid + band roles.
    *   - grid border: the per-cell vertical line, the WEAKEST structural line
    *     (#F0F2F5) — barely visible at 100% zoom, present but never noticed
    *     first. (Role value: --border-grid.)
@@ -177,7 +177,7 @@
    *   - footer bg: the integrated pagination band. */
   --table-action-rail-bg: #fbfcfd;
   --table-footer-bg: #fafbfc;
-  /* Sidebar — light neutral chrome (UI-TOKEN-TABLE-FOUNDATION-1). The nav is a
+  /* Sidebar — light neutral chrome. The nav is a
    * quiet light surface, distinct from the canvas by a 1px border + a faint
    * subtle tint, not by a dark fill. Text/active/hover follow the same neutral
    * ladder as the rest of the UI; the active item signals via a primary-soft
@@ -231,8 +231,8 @@
  * Default border authority — MUST stay inside @layer base. As an unlayered
  * author rule this beat every layered border-color utility app-wide
  * (border-primary, aria-invalid:border-destructive, slash-opacity tones, …),
- * so declared state colors silently rendered grey (issue 577 review-fix-1
- * BLOCKER-1, same authority-defeat class as the B1 stroke rule). Cascade
+ * so declared state colors silently rendered grey (issue 577,
+ * same authority-defeat class as the stroke rule). Cascade
  * contract: base default border < component/state utility < intentionally
  * unlayered semantic recipe (surface/feedback/badge/control recipes).
  * INVARIANT: pinning this rule's layer is gated by indexCascade.test.ts.
@@ -250,9 +250,9 @@ body,
 }
 
 /*
- * NO `scrollbar-gutter: stable` here (issue 601 Phase F convergence).
+ * NO `scrollbar-gutter: stable` here (issue #601).
  *
- * Phase F first reserved the document scrollbar's gutter globally to stop a
+ * The document scrollbar's gutter was first reserved globally to stop a
  * pagination transition from toggling the document scrollbar and re-allocating
  * every governed table's scroll region. That treated a SYMPTOM: the region was
  * only re-allocated because the loading placeholder swapped the previous page's
@@ -264,12 +264,11 @@ body,
  *
  * It is also not free: a global gutter reserves the scrollbar width in EVERY
  * viewport, including mobile, where it narrowed the dialog content box
- * (measured: a 375px viewport lost ~14px, dropping dialog content below the
- * 342px floor the dialog-spatial gate asserts). A table-local symptom must not
- * change mobile viewport geometry. The pagination transition is gated instead:
- * ui-data-view-1 samples every animation frame and asserts the document
- * content box and the region's box are invariant, and that no scrollbar is
- * painted, across a real page change.
+ * (measured: a 375px viewport lost ~14px, dropping dialog content below its
+ * minimum content box). A table-local symptom must not change mobile viewport
+ * geometry. The data-view component tests instead pin the pagination
+ * transition behavior: the document content box and the region's box stay
+ * invariant and no scrollbar is painted across a page change.
  */
 
 body {
@@ -278,14 +277,14 @@ body {
 }
 
 /*
- * Weight authority (UI-TYPO-1). The self-hosted HarmonyOS Sans SC family
+ * Weight authority. The self-hosted HarmonyOS Sans SC family
  * loads intentional 400 (Regular), 500 (Medium), and 700 (Bold) faces only;
  * no 600 (semibold) face exists. Driving base h1/h2/h3 at 600 produced an
  * ambiguous nearest-weight snap or synthetic bold. The strongest intentional
  * weight is 700, so base heading elements anchor there. Application-level
  * heading hierarchy is owned by the type-* recipe layer and component
  * classes (PageHeader, CardTitle, etc.), not by this element rule.
- * UI-PRODUCT-FINISH-CLOSURE-1: headings use 500 (medium) — CJK 700 reads
+ * Headings use 500 (medium) — CJK 700 reads
  * heavy/clunky at UI sizes; 500 is the loaded weight that stays crisp.
  */
 h1,
@@ -296,7 +295,7 @@ h3 {
 }
 
 /*
- * UI-PRODUCT-FINISH-CLOSURE-1 — primitive-internal icon optical weight.
+ * Primitive-internal icon optical weight.
  * shadcn primitives (select/checkbox/dropdown/dialog/sheet/pagination)
  * render internal Lucide icons at default stroke 2 with no absoluteStrokeWidth.
  * At 16px (size-4) that reads heavy next to the refined AppIcon inline (1.5).
@@ -305,7 +304,7 @@ h3 {
  * Targets only 16px svgs inside primitive data-slots; larger icons
  * (state/hero) are untouched.
  *
- * OWNERSHIP DISCRIMINATOR (issue 601 Step 1): `:not([data-app-icon])` keeps
+ * OWNERSHIP DISCRIMINATOR (issue #601): `:not([data-app-icon])` keeps
  * these rules from claiming a consumer-supplied AppIcon rendered inside the
  * primitive (DataTablePagination chevrons, RowActions menu items, …) — the
  * AppIcon marker is what makes "primitive-owned internal icon" and
@@ -314,7 +313,7 @@ h3 {
  * rendered at 1.5 instead of 2). Primitive-owned internal icons carry no
  * marker and stay thinned.
  *
- * INVARIANT (issue 577 VAA2-B1): every selector here is scoped to a primitive
+ * INVARIANT (issue 577): every selector here is scoped to a primitive
  * data-slot whose internal icon the primitive itself owns, and excludes
  * AppIcon output. A bare class/element selector (the former `svg.lucide`
  * prefix) also defeated AppIcon's per-role absoluteStrokeWidth contract for

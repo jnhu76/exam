@@ -2,7 +2,7 @@ import { katexRenderToHtml } from "./katexRender";
 import { CONTENT_LIMITS } from "@exam/domain";
 
 /**
- * THE single controlled HTML seam for math rendering (issue 301 §9/§30).
+ * THE single controlled HTML seam for math rendering (#301 §9/§30).
  *
  * Input is ONLY the validated `latex` field of a math node (string). KaTeX
  * runs with `trust: false` and `throwOnError: false`, so \href/\htmlData and

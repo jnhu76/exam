@@ -1,6 +1,6 @@
 /**
  * Guarded, opt-in rollback of the `attempt_command_receipts` table
- * (J5-I1C Slice 1 / J5-I1C0 audit §10).
+ * (dangerous-command identity audit §10).
  *
  * The migration runner is forward-only: there is no automatic down migration.
  * This script is the executable, pre-activation guard wrapper. The core logic

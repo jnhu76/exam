@@ -1,5 +1,5 @@
 /**
- * Assignment-backed runtime authority kernel (RBAC-M10-E).
+ * Assignment-backed runtime authority kernel (union-of-assignments authority).
  *
  * This is the single authoritative source of a human actor's effective runtime
  * authority. It replaces the legacy `presetAllows(users.role, permission)`
@@ -109,7 +109,7 @@ export interface AssignmentAuthority {
 }
 
 /** Reason the authority could not be derived. Each maps to a specific HTTP
- *  status in the caller (see authenticate mapping, task §7 / P1-3). */
+ *  status in the caller (see the authenticate mapping). */
 export type AssignmentAuthorityFailureReason =
   | "no_active_assignments"
   | "zero_primary_with_active"
@@ -117,7 +117,7 @@ export type AssignmentAuthorityFailureReason =
   | "unknown_role"
   | "subject_mismatch"
   | "db_error"
-  // P7-RBAC-REMEDIATION F-05 (ADR-017 D14, defense-in-depth): an active set
+  // (ADR-017 D14, defense-in-depth): an active set
   // containing BOTH Admin and Maintainer for one actor violates the
   // Admin↔Maintainer mutual-exclusion invariant. The write-side seam
   // (`mutateWithAuthorityInvariants`) makes this unreachable through product
@@ -183,7 +183,7 @@ export function deriveAssignmentAuthority(
 
   if (active.length === 0) {
     // Normal runtime outcome (all assignments deactivated/removed). NOT a
-    // thrown error — the caller maps this to 401 (task §3.6, P1-2).
+    // thrown error — the caller maps this to 401 .
     return { ok: false, reason: "no_active_assignments" };
   }
 
@@ -217,7 +217,7 @@ export function deriveAssignmentAuthority(
   }
   const activeRoles = sortRolesCanonical(roleSet);
 
-  // P7-RBAC-REMEDIATION F-05 / ADR-017 D14 (read-side defense-in-depth): the
+  // ADR-017 D14 (read-side defense-in-depth): the
   // Admin↔Maintainer mutual-exclusion invariant is enforced on the write side
   // by the authority-mutation seam, which makes an active set containing BOTH
   // Admin and Maintainer unreachable through product paths. This check fails
@@ -257,12 +257,12 @@ export function deriveAssignmentAuthority(
 
 /**
  * Loads the active assignment set for a user from PostgreSQL and derives the
- * authoritative runtime authority (task §5: `loadAssignmentAuthority`).
+ * authoritative runtime authority (`loadAssignmentAuthority`).
  *
  * Uses {@link listActiveForUser} — the full active set, NOT a `.limit(1)`
  * primary lookup — so multi-primary corruption is observable. DB lookup
  * failure surfaces as `{ ok:false, reason:"db_error" }` (caller maps to 503,
- * never falls back to `users.role`; task §3.4 / §7 / P1-3).
+ * never falls back to `users.role`; .
  *
  * @param db                  Drizzle database handle.
  * @param ctx                 tenant-scoped context carrying the org anchor.

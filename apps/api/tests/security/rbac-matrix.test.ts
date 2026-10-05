@@ -146,7 +146,7 @@ describe("RBAC Permission Matrix (S02)", () => {
     await cleanup();
   });
 
-  describe("AC1: Candidate cannot create exams", () => {
+  describe("Candidate cannot create exams", () => {
     it("Candidate calling POST /api/exams returns 403", async () => {
       const res = await app.inject({
         method: "POST",
@@ -167,7 +167,7 @@ describe("RBAC Permission Matrix (S02)", () => {
     });
   });
 
-  describe("AC4: organizations API removed in Phase 1", () => {
+  describe("organizations API removed in Phase 1", () => {
     it("POST /api/organizations is not registered (404)", async () => {
       const res = await app.inject({
         method: "POST",
@@ -183,7 +183,7 @@ describe("RBAC Permission Matrix (S02)", () => {
     });
   });
 
-  describe("AC5: Candidate cannot list candidates", () => {
+  describe("Candidate cannot list candidates", () => {
     it("Candidate calling GET /api/candidates returns 403", async () => {
       const res = await app.inject({
         method: "GET",
@@ -194,7 +194,7 @@ describe("RBAC Permission Matrix (S02)", () => {
     });
   });
 
-  describe("AC6: Candidate cannot access system health", () => {
+  describe("Candidate cannot access system health", () => {
     it("Candidate calling GET /api/system/health returns 403", async () => {
       const res = await app.inject({
         method: "GET",
@@ -205,7 +205,7 @@ describe("RBAC Permission Matrix (S02)", () => {
     });
   });
 
-  describe("AC7: ctx.capabilities is populated (RBAC-M10-E)", () => {
+  describe("ctx.capabilities is populated", () => {
     it("authenticated user has non-empty capabilities", async () => {
       // RBAC-M10-E: the authoritative runtime authority field is
       // `ctx.capabilities` (the union of every active role assignment's

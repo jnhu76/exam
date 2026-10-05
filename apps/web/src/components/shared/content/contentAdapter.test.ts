@@ -127,7 +127,7 @@ describe("contentDocumentToTiptap", () => {
   });
 });
 
-describe("contentDocumentToTiptap — fail-closed conversion (PC-F07, #669 Phase D3)", () => {
+describe("contentDocumentToTiptap — fail-closed conversion (#669)", () => {
   // Schema-valid canonical documents are closed-grammar, so these inputs can
   // never arise from a classifier-accepted document; the throws are the
   // defense-in-depth boundary that keeps an unknown node from disappearing
@@ -242,7 +242,7 @@ describe("math mapping — candidate-visible math must persist verbatim (#676)",
     expect(out.content[1]).toEqual({ type: "blockMath", latex: "{{{{{" });
   });
 
-  it("downgrades a blockMath in a table cell to inline math — the formula stays math (#673 C14)", () => {
+  it("downgrades a blockMath in a table cell to inline math — the formula stays math (#673)", () => {
     // Canonical cells hold paragraphs only, but the editor schema lets a
     // blockMath land in a cell (authoring/paste). The downgrade must keep
     // the mathematical semantics (inlineMath), never degrade the LaTeX

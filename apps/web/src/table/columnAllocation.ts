@@ -57,7 +57,7 @@ import {
  * term.
  */
 
-/** Actions column value bound (UI-ACTION-CAPACITY-1, issue 453). */
+/** Actions column value bound (issue #453). */
 export const ACTIONS_MIN_FINE = 96;
 export const ACTIONS_MIN_COARSE = 120;
 
@@ -106,7 +106,7 @@ export interface RoleGeometry {
  *     117.2px; content box 119px. Raw machine action keys render through the
  *     truncate-middle presenter channel (ROLE_MACHINE_VALUE_OVERFLOW).
  *
- *   actions 96px fine / 120px coarse (#453 UI-ACTION-CAPACITY-1) — the inline
+ *   actions 96px fine / 120px coarse (#453) — the inline
  *     row-action vocabulary is icon-only and count-bounded (N ≤ 2 inline;
  *     N > 2 → 1 primary + kebab).
  *

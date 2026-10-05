@@ -1,5 +1,6 @@
 /**
- * P7-S2-A — RESULT_PUBLISH_IS_SINGLE_WINNER deterministic concurrency proof.
+ * Deterministic concurrency proof: RESULT_PUBLISH_IS_SINGLE_WINNER has a
+ * single-winner transition.
  *
  * For one Exam, `resultsPublishedAt` transitions NULL → timestamp exactly
  * once. Two concurrent publishers (two physical connections, two
@@ -121,7 +122,7 @@ function createBarrierExamRepoProxy(
   };
 }
 
-describe("P7-S2-A: result publication is single-winner", () => {
+describe("result publication is single-winner", () => {
   let iso: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
   let db1: Database;
   let db2: Database;

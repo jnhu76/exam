@@ -322,9 +322,10 @@ route, page type, table width, or nav item count.
 specific gradient/chevron/edge-cue implementation, the `scrollIntoView` API,
 exact scrollbar styling.
 
-Deterministic enforcement lives in `admin-shell-viewport.spec.ts` (current
-destination matrix, direct-URL reveal, stable ordering, region geometry,
-responsive representation, mobile drawer). Multimodal comparison of
+Deterministic enforcement lives in the web component tests
+(`apps/web/src/components/layout/` — current-destination matching, shell
+structure, drawer, role gating) and in `candidate-happy-path.spec.ts` for
+the narrow-viewport (390×844) operability journey. Multimodal comparison of
 equivalent screenshots (not pixel-diff CI) is the patrol-side discovery
 mechanism for this contract.
 
@@ -687,9 +688,8 @@ until it lands, no control may introduce a THIRD pattern. Gated by
 
 Product baseline, not WCAG certification. Automated gate:
 `apps/e2e/e2e/a11y-baseline.spec.ts` (axe, zero critical/serious on
-representative surfaces: login, candidate exam list, take-exam runtime +
-submit dialog, one admin form, one admin table). Manual checks for changes
-touching the surfaces below:
+representative surfaces: login, take-exam runtime + submit dialog). Manual
+checks for changes touching the surfaces below:
 
 | Area | Check |
 | --- | --- |
@@ -700,7 +700,7 @@ touching the surfaces below:
 | Status | domain status flows through `StatusBadge`/`statusMeta` (text + tone); color never the sole carrier; live regions only for save/error/save-state changes |
 | Timer | exam countdown keeps `role="timer"` + accessible name; per-second ticks are not announced |
 | Contrast | tokens already meet ≥4.5:1 for text roles; never fix contrast with page-local colors — fix the token/recipe owner |
-| Candidate runtime at 390px | timer/save/submit visible; answer input usable; navigator and footer actions reachable; no document-level horizontal overflow (`candidate-responsive.spec.ts`) |
+| Candidate runtime at 390px | the candidate smoke runs at 390×844 (`candidate-happy-path.spec.ts`): login, start, answer input, submit reachable, result completes; rendered layout and overflow stay owned by the component/CSS layer |
 
 ## Forbidden dependencies
 

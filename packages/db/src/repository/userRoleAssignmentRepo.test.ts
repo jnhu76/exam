@@ -46,7 +46,7 @@ async function seedOrgAndUser(
   return { orgId, userId, ctx: createContext(orgId) };
 }
 
-describe("RBAC-M7 userRoleAssignmentRepo", () => {
+describe("userRoleAssignmentRepo", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
 
@@ -170,7 +170,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
     expect(newPrimary?.role).toBe("Grader");
   });
 
-  it("activate is idempotent: re-activating an already-active primary never self-demotes (P7-E review P1)", async () => {
+  it("activate is idempotent: re-activating an already-active primary never self-demotes", async () => {
     const { userId, ctx } = await seedOrgAndUser(db, "idem-active");
     const repo = createUserRoleAssignmentRepo(db);
     const primary = await repo.assign(ctx, {
@@ -220,7 +220,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
     expect(await repo.findPrimaryActiveForUser(ctx, userId)).toBeNull();
   });
 
-  describe("listActiveForUser (RBAC-M10-E)", () => {
+  describe("listActiveForUser", () => {
     it("returns only ACTIVE assignments, excluding inactive rows", async () => {
       const { userId, ctx } = await seedOrgAndUser(db, "kara");
       const repo = createUserRoleAssignmentRepo(db);
@@ -412,7 +412,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
     });
   });
 
-  describe("RBAC-M10-E migration 0015 + invariant primitives", () => {
+  describe("migration 0015 + invariant primitives", () => {
     /**
      * The isolated test DB has ALL migrations applied (0000..0015), so the
      * partial unique index `user_role_assignments_active_primary_unique`

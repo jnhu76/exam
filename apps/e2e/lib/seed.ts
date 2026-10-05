@@ -12,12 +12,12 @@ export interface SeededExam {
   candidate: SeededCandidate;
   /** Extra enrolled candidates (#292 queue scenarios). Empty by default. */
   extraCandidates: SeededCandidate[];
-  /** text_response question ids, when `textResponseQuestions` was set (P3-MOD-P0-4). */
+  /** text_response question ids, when `textResponseQuestions` was set. */
   textResponseQuestionIds: string[];
 }
 
 /**
- * A text_response question to seed (P3-MOD-P0-4). Per the approved protocol
+ * A text_response question to seed. Per docs/architecture/exam-runtime.md §1.1
  * (`docs/architecture/exam-runtime.md` §1.1) text_response is an independent
  * QuestionType — NOT a fill_blank variant. The renderer dispatches it to a
  * textarea via `TextResponseInput`. standardAnswer is optional; rubric is
@@ -101,7 +101,7 @@ async function adminPost(
 
 /**
  * Creates an active Proctor-to-Exam assignment via the production Admin API
- * (M11-I1C, ADR-015 §16). `POST /api/admin/exams/:examId/proctors` runs the
+ * (ADR-015 §16). `POST /api/admin/exams/:examId/proctors` runs the
  * real `assignProctorToExam` domain command (validation, idempotency receipt,
  * audit, operation recovery) — so E2E exercises the genuine write path, not a
  * parallel test channel. Each call gets a fresh idempotency `operationId`.
@@ -183,7 +183,7 @@ export async function seedExam(
     totalScore?: number;
     resultPublicationMode?: "immediate" | "after_grading" | "manual";
     /**
-     * Timing mode of the seeded exam (#291 Phase A). Defaults to
+     * Timing mode of the seeded exam. Defaults to
      * "timed_window". "deadline"/"untimed" seed the mode-legal field shapes
      * (deadline: null duration + explicit closeAt; untimed: null duration +
      * null closeAt); "timed_sync" is rejected by the canonical policy
@@ -205,7 +205,7 @@ export async function seedExam(
      * Note: `bounded_grace` is intentionally NOT accepted here — seeding a
      * bounded_grace exam requires per-incident / per-attempt grace caps that
      * this helper does not supply. bounded_grace scenarios use their own
-     * dedicated seed path (see candidate-save-submit / disconnect-restore).
+     * dedicated seed path (see the candidate-save-submit API tests).
      */
     interruptionTimePolicy?: "strict" | "operator_incident";
     /**
@@ -216,7 +216,7 @@ export async function seedExam(
     /** Seeds N extra candidates enrolled in the same exam. */
     additionalCandidates?: number;
     /**
-     * Optional text_response questions to include (P3-MOD-P0-4). Independent
+     * Optional text_response questions to include. Independent
      * QuestionType rendered as a textarea; the legacy fill_blank-null
      * encoding is deprecated for free-text questions.
      */
@@ -251,12 +251,10 @@ export async function seedExam(
   const questionId = question.id as string;
 
   // Objective (true_false) question renders FIRST, manual-graded (text_response)
-  // questions AFTER — this matches spec assumptions (e.g. manual-grading answers
-  // the objective Q1 first, then navigates to the manual question Q2). HEAD had
-  // this order; a later edit (to fix totalScore) accidentally reversed it by
-  // initializing questionIds empty and pushing base last.
+  // questions AFTER — consumers answer the objective Q1 first, then navigate to
+  // the manual question Q2.
   const questionIds: string[] = [questionId];
-  // P3-MOD-P0-4: text_response is an independent QuestionType. Per
+  // text_response is an independent QuestionType. Per
   // docs/architecture/exam-runtime.md §1.1 the legacy `fill_blank + standardAnswer=null`
   // encoding is deprecated for free-text questions.
   const textResponseQuestionIds: string[] = [];
@@ -266,7 +264,7 @@ export async function seedExam(
       type: "text_response",
       content: tr.content ?? `论述题-${unique}`,
       standardAnswer: tr.standardAnswer ?? null,
-      // rubric is required for text_response at publish time (P3-L0-5).
+      // rubric is required for text_response at publish time.
       rubric: tr.rubric ?? `按逻辑完整性、关键概念、论证质量给分（${unique}）`,
       score: tr.score,
     });
@@ -279,7 +277,7 @@ export async function seedExam(
   const baseQuestionScore = opts.questionScore ?? 100;
   const computedTotalScore = baseQuestionScore + textResponseTotal;
 
-  // #291 Phase A mode-legal timing shape. timed_window keeps the historical
+  // Mode-legal timing shape. timed_window keeps the historical
   // defaults byte-identically (60min duration, +24h closeAt). deadline carries
   // no personal duration (closeAt IS the deadline); untimed carries neither.
   const timingMode = opts.timingMode ?? "timed_window";

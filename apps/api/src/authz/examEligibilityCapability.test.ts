@@ -5,7 +5,7 @@ import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
 
 /**
  * Unit tests for the candidate exam-eligibility capability preHandler
- * (RBAC-M10-A archetype B). Verifies capability + eligibility arbitration,
+ * Verifies capability + eligibility arbitration,
  * ADR §3.9 deny mapping, and route-specific denial policy (ARCH-A closure).
  *
  * Required matrix (task §3.4):
@@ -78,7 +78,7 @@ function capabilitiesFor(role: string): readonly PermissionKey[] {
   return ROLE_CAPS[role] ?? [];
 }
 
-/** Request-scoped predicate that reads ctx.capabilities (RBAC-M10-E). */
+/** Request-scoped predicate that reads ctx.capabilities. */
 function allows(request: FastifyRequest, perm: PermissionKey): boolean {
   return (request.ctx?.capabilities ?? []).includes(perm);
 }
@@ -131,7 +131,7 @@ function makeReply() {
   };
 }
 
-describe("RBAC-M10-A exam-eligibility capability preHandler", () => {
+describe("exam-eligibility capability preHandler", () => {
   beforeEach(() => {
     nextResolution = null;
   });

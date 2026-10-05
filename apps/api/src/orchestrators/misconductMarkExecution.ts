@@ -4,13 +4,13 @@
  * deterministic concurrency tests
  * (`routes/attempts/admin-misconduct.concurrency.test.ts`).
  *
- * This module is the Slice-3 misconduct counterpart to
- * {@link forceSubmitWithOperationRaceRecovery} (Slice 2). Both dangerous
+ * This module is the misconduct-mark counterpart to
+ * {@link forceSubmitWithOperationRaceRecovery}. Both dangerous
  * Attempt commands arbitrate on the SAME
  * `attempt_command_receipts (organization_id, operation_id)` unique constraint
  * via the shared helpers in `attemptCommandReceiptExecution.ts`.
  *
- * J5-I1C0 §8 concurrency experiment (run 2026-08-07 against PostgreSQL 18,
+ * dangerous-command identity audit §8 concurrency experiment (run 2026-08-07 against PostgreSQL 18,
  * REPEATABLE READ, two physical connections, true overlap) — RECORDED OUTCOME:
  *
  *   - Two concurrent misconduct receipts targeting the SAME attempt each
@@ -298,7 +298,7 @@ async function captureBackendIdentity(
 
 /**
  * Builds the MisconductFlag + result_payload for an applied misconduct mark,
- * frozen BEFORE the projection write (J5-I1C0 §5.1 step 7 mirroring). The
+ * frozen BEFORE the projection write (dangerous-command identity audit §5.1 step 7 mirroring). The
  * wire/DB layer validates `flaggedAt` as an ISO string
  * (`MisconductFlagSchema`); the orchestrator builds it from the single
  * server-threaded `now`, NOT from a re-read of the attempt after the write.

@@ -473,7 +473,7 @@ describe("resolveDbPackageTestScope — @exam/db package worker-slot namespace (
   });
 });
 
-describe("resolveDbPackageTestScope — API_TEST_GROUP must not collapse package slots (P1-2, #648)", () => {
+describe("resolveDbPackageTestScope — API_TEST_GROUP must not collapse package slots (#648)", () => {
   // Turbo passes API_TEST_GROUP through DB-backed tasks, so a dedicated API
   // group can be present in a plain @exam/db invocation. The package slot
   // identity is owned ONLY by the worker slot (+ shard in CI); the API

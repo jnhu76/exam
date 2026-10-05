@@ -1,5 +1,5 @@
 /**
- * M10-D permission boundary test: organization/system administrative surfaces.
+ * Permission boundary test: organization/system administrative surfaces.
  *
  * Proves:
  *   - every organization/system route × every non-Admin role: 403 denial
@@ -153,7 +153,7 @@ const dynamicRouteKeys = [
   "PATCH /api/candidates/:id",
 ] as const;
 
-describe("M10-D permission boundary", () => {
+describe("admin-surface permission boundary", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let fieldId: string;
   let identityFieldName: string;
@@ -176,10 +176,10 @@ describe("M10-D permission boundary", () => {
     // which requires exactly one unique identity field when any fields are configured).
     // This is needed before we create any other candidate fields.
     const fieldRepo = createCandidateFieldRepo(ctx.db);
-    identityFieldName = `m10d-identity-${uniquePrefix()}`;
+    identityFieldName = `admin-surface-identity-${uniquePrefix()}`;
     await fieldRepo.create(orgCtx(ctx), {
       name: identityFieldName,
-      label: "M10D Identity Field",
+      label: "Admin Surface Identity Field",
       fieldType: "text",
       required: true,
       unique: true,
@@ -188,8 +188,8 @@ describe("M10-D permission boundary", () => {
 
     // Create a real candidate field fixture for PATCH/DELETE tests (non-unique)
     const f = await fieldRepo.create(orgCtx(ctx), {
-      name: `m10d-field-${uniquePrefix()}`,
-      label: "M10D Test Field",
+      name: `admin-surface-field-${uniquePrefix()}`,
+      label: "Admin Surface Test Field",
       fieldType: "text",
       required: false,
       unique: false,
@@ -203,7 +203,7 @@ describe("M10-D permission boundary", () => {
     const candidate = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
-      `m10d-candidate-${uniquePrefix()}`,
+      `admin-surface-candidate-${uniquePrefix()}`,
       ctx.org.id,
     );
     candidateId = candidate.candidateProfileId;
@@ -265,27 +265,27 @@ describe("M10-D permission boundary", () => {
         ctx.db,
         ctx.org.id,
         "Teacher",
-        "m10d-all-teacher",
+        "admin-surface-all-teacher",
       );
       teacherToken = teacher.token;
       const proctor = await createFutureRoleUserForTest(
         ctx.db,
         ctx.org.id,
         "Proctor",
-        "m10d-all-proctor",
+        "admin-surface-all-proctor",
       );
       proctorToken = proctor.token;
       const grader = await createFutureRoleUserForTest(
         ctx.db,
         ctx.org.id,
         "Grader",
-        "m10d-all-grader",
+        "admin-surface-all-grader",
       );
       graderToken = grader.token;
       const candidate = await createCandidateViaApi(
         ctx.app,
         ctx.adminToken,
-        `m10d-all-cand-${uniquePrefix()}`,
+        `admin-surface-all-cand-${uniquePrefix()}`,
         ctx.org.id,
       );
       candidateToken = candidate.token;
@@ -351,7 +351,7 @@ describe("M10-D permission boundary", () => {
         ctx.db,
         ctx.org.id,
         "Teacher",
-        "m10d-zw-teacher",
+        "admin-surface-zw-teacher",
       );
       teacherToken = teacher.token;
     });
@@ -390,7 +390,7 @@ describe("M10-D permission boundary", () => {
     it("PATCH /api/admin/settings/branding denied — branding unchanged, no audit", async () => {
       const settingsRepo = createSettingsRepo(ctx.db);
       await settingsRepo.upsert(orgCtx(ctx), {
-        productName: "M10-D zero-write baseline",
+        productName: "admin-surface zero-write baseline",
       });
       const before = await settingsRepo.get(orgCtx(ctx));
       requireDefined(before, "settings must exist before denied PATCH");

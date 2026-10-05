@@ -10,13 +10,13 @@ import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 
 /**
- * Rich canonical closure at the SaveAnswer wire (#669 Phase D1, RC-03).
+ * Rich canonical closure at the SaveAnswer wire (#669).
  *
- * Phase C proved the merge class (PC-F01) at the engine seam and inferred
- * route reachability; these tests drive the real route: a legal input whose
- * canonical form violates CONTENT_LIMITS must be rejected before durable
- * acceptance (INVALID_ANSWER), while the exactly-at-limit canonical form is
- * accepted, replayed, and served back as a schema-legal canonical value.
+ * The engine-seam tests prove the merge class and infer route reachability;
+ * these tests drive the real route: a legal input whose canonical form
+ * violates CONTENT_LIMITS must be rejected before durable acceptance
+ * (INVALID_ANSWER), while the exactly-at-limit canonical form is accepted,
+ * replayed, and served back as a schema-legal canonical value.
  */
 describe("rich answer canonical closure (save-answer route)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -189,7 +189,7 @@ describe("rich answer canonical closure (save-answer route)", () => {
     });
   }
 
-  it("rejects the merge-class seed at the wire with INVALID_ANSWER (PC-F01)", async () => {
+  it("rejects the merge-class seed at the wire with INVALID_ANSWER", async () => {
     const res = await saveAnswer(MERGE_SEED, 1);
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
@@ -251,7 +251,7 @@ describe("rich answer canonical closure (save-answer route)", () => {
     });
   });
 
-  // D-F01 regression (#669 Phase F): the authority used to accept these
+  // Regression (#669): the authority used to accept these
   // strings and fail at the PostgreSQL jsonb write as HTTP 500. The schema
   // intake now rejects them, so the wire answer is the structured
   // INVALID_ANSWER rejection with zero durable write.
@@ -269,7 +269,7 @@ describe("rich answer canonical closure (save-answer route)", () => {
     return { answers: attempt?.answers ?? null, receiptCount: receipts.length };
   }
 
-  // D-F01 at the wire: both unrepresentable families (U+0000, lone
+  // At the wire: both unrepresentable families (U+0000, lone
   // surrogates) go through the same structured INVALID_ANSWER + zero
   // durable write mechanism, so the route-level rejection is table-driven.
   it.each([
@@ -277,7 +277,7 @@ describe("rich answer canonical closure (save-answer route)", () => {
     ["lone high surrogate", "\uD800", 21],
     ["lone low surrogate", "\uDC00", 22],
   ] as const)(
-    "rejects a rich answer carrying %s with structured INVALID_ANSWER and zero durable write (D-F01)",
+    "rejects a rich answer carrying %s with structured INVALID_ANSWER and zero durable write",
     async (_family, bad, clientSeq) => {
       const before = await durableState();
       const res = await saveAnswer(

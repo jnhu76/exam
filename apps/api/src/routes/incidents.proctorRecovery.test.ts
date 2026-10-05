@@ -36,7 +36,7 @@ const plugin: FastifyPluginAsync = async (fastify) => {
   await registerAdminIncidentRoutes(fastify);
 };
 
-describe("Proctor Recovery Center — narrow projections (J6, #303)", () => {
+describe("Proctor Recovery Center — narrow projections (#303)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let orgAId: string;
   let orgBId: string;

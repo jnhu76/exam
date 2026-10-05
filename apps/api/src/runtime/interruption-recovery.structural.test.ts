@@ -32,7 +32,7 @@ function stripComments(line: string): string {
 const ENGINE_SRC = "packages/exam-engine/src";
 const API_SRC = "apps/api/src";
 
-describe("REC-I4-I2 interruption recovery structural guards", () => {
+describe("interruption recovery structural guards", () => {
   const engineFiles = listTsFiles(ENGINE_SRC);
   const apiFiles = listTsFiles(API_SRC);
   const allProdFiles = [...engineFiles, ...apiFiles];
@@ -139,10 +139,10 @@ describe("REC-I4-I2 interruption recovery structural guards", () => {
   });
 });
 
-// REC-I4-I3A: public contract + authoring surface structural guards.
+// Public contract + authoring surface structural guards (ADR-013).
 // These lock in the frozen restore response contract, the no-leak boundary,
 // attempt-snapshot immutability, and the Exam authoring surface.
-describe("REC-I4-I3A contract + authoring structural guards", () => {
+describe("interruption contract + authoring structural guards", () => {
   const engineFiles = listTsFiles(ENGINE_SRC);
 
   // Extract the restore-route handler block bounded by the next route

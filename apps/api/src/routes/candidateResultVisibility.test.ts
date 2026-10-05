@@ -16,19 +16,20 @@ import scoreRoutes from "./scores.js";
  * Invariant under test: no candidate-facing response may reveal
  * score-derived result facts until the exam publication policy says the
  * result is visible. The canonical decision is the same one
- * /api/scores/attempts/:attemptId applies (P2D-J5a); every other candidate
+ * /api/scores/attempts/:attemptId applies; every other candidate
  * projection must agree with it.
  *
  * Leak repros (manual mode + fully graded + resultsPublishedAt = null):
  *   L1 submit response, L2 GET /attempts/:id, L3 candidate exam list,
  *   L4 candidate exam detail, L5 pass_then_stop blockingReason.
  *
- * #324 review P1-2 regressions: the pass_then_stop start oracle — while the
+ * Regression (#324): the pass_then_stop start oracle — while the
  * result is hidden, passed and failed candidates must get the IDENTICAL
  * opaque start rejection (no 409-vs-201 differential); after publish-results
  * the durable pass_then_stop policy resumes (passed blocked, failed retakes).
  */
-describe("P1 #324: candidate result visibility projection", () => {
+// Regression for #324 review P1.
+describe("candidate result visibility projection", () => {
   let ctx: TestContext;
   let courseId: string;
   let questionId: string;
@@ -294,7 +295,7 @@ describe("P1 #324: candidate result visibility projection", () => {
     expect(entry!.bestScore).toBeUndefined();
   });
 
-  // ── pass_then_stop start oracle closure (#324 review P1-2) ────────
+  // ── pass_then_stop start oracle (#324) ────────
   //
   // The engine's durable pass_then_stop block distinguishes passed (409)
   // from failed (201) candidates on POST /attempts/:examId/start. While the
@@ -390,8 +391,8 @@ describe("P1 #324: candidate result visibility projection", () => {
     expect(failedStart.statusCode).toBe(201);
   });
 
-  it("start oracle P1-3: terminal grading commits while start waits on the enrollment lock — passed and failed candidates get the IDENTICAL opaque 409, no attempt created", async () => {
-    // Deterministic interleaving at the wire (issue #324 review P1-3). The
+  it("start oracle: terminal grading commits while start waits on the enrollment lock — passed and failed candidates get the IDENTICAL opaque 409, no attempt created", async () => {
+    // Deterministic interleaving at the wire (issue #324). The
     // round-1 pre-check read enrollment OUTSIDE the transaction, so a start
     // that arrived while attempt #1 was still grading could observe
     // finalAttemptId=null and — once grading committed — leak a pass/fail

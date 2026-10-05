@@ -15,7 +15,7 @@
  * synthetic / CLI / resolver / system-actor contexts stay as plain
  * {@link RequestContext} and never participate in capability gating (they do
  * not need `roles` / `capabilities`). This keeps the domain leaf-package
- * invariant intact (P1-1): no `@exam/domain → @exam/authz` dependency.
+ * invariant intact: no `@exam/domain → @exam/authz` dependency.
  *
  * `permissions` (the legacy `Permission[]` slot on RequestContext) is kept as
  * a documented NON-authoritative compatibility field. It is `[]` on every

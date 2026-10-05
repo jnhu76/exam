@@ -21,7 +21,7 @@ import { collectClassNameTokens } from "@/lint/exam-ui/classNameUtils";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RECIPES_CSS = readFileSync(join(HERE, "recipes.css"), "utf8");
 
-describe("typography recipe layer (UI-RECIPE-1A)", () => {
+describe("typography recipe layer", () => {
   it("every recipe resolves its font family through a semantic role variable", () => {
     // Each recipe must use var(--font-ui) | var(--font-reading) | var(--font-mono),
     // never a page-local font-family stack.
@@ -53,7 +53,7 @@ describe("typography recipe layer (UI-RECIPE-1A)", () => {
     expect(RECIPES_CSS).not.toMatch(/text-(success|warning|destructive|info)/);
   });
 
-  it("pins the body/control tier at 15px (issue 582 D2)", () => {
+  it("pins the body/control tier at 15px (issue 582)", () => {
     // The frozen issue 582 visual decision: the governed body tier (and the table
     // cell owner in table/recipes.css) converged UP to the existing 15px
     // text-sm control tier (0.9375rem). Metadata/badges/small captions keep
@@ -128,7 +128,7 @@ function visit(node: TSESTree.Node, cb: (n: TSESTree.Node) => void): void {
   }
 }
 
-describe("migrated consumers use semantic recipes (UI-RECIPE-1A §E)", () => {
+describe("migrated consumers use semantic recipes", () => {
   const consumers: Array<{ file: string; recipe: string; reason: string }> = [
     {
       file: "components/shared/PageHeader.tsx",

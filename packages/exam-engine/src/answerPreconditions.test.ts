@@ -27,8 +27,8 @@ import { computeEffectiveDeadline } from "./deadlineReconciliation.js";
 // code (11 failing: `prepareReconciledAttemptMutation is not a function` +
 // signature mismatch).
 
-describe("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0", () => {
-  it("4.1 P1 — non-member question is rejected inside saveAnswer with zero write (same ValidationError semantics as old route)", async () => {
+describe("saveAnswer preconditions enforced through the preparation seam", () => {
+  it("non-member question is rejected inside saveAnswer with zero write (same ValidationError semantics as old route)", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
     const h = await prepare(makeExam(), makeAttempt(), makeEnrollment(), now);
     const before = h.attemptRepo.get("attempt-1").answers;
@@ -56,7 +56,7 @@ describe("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0", () => {
     expect(h.attemptRepo.get("attempt-1").answers).toBe(before);
   });
 
-  it("4.2 P3 — late-start attempt (deadlineAt > exam.closeAt): preparation seam freezes at the canonical effective deadline and saveAnswer does NOT write", async () => {
+  it("late-start attempt (deadlineAt > exam.closeAt): preparation seam freezes at the canonical effective deadline and saveAnswer does NOT write", async () => {
     // Reachable adversarial shape: candidate started at 09:55 for a 90-min exam
     // closing at 10:00 → deadlineAt = 11:25 > exam.closeAt = 10:00. The
     // canonical effective deadline = min(10:00, 11:25) = 10:00.
@@ -142,7 +142,7 @@ describe("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0", () => {
     expect(h.attemptRepo.draftAnswerWriteCount()).toBe(0);
   });
 
-  it("4.4 P2 — mutation context used with a different AttemptRepository object rejects at runtime", async () => {
+  it("mutation context used with a different AttemptRepository object rejects at runtime", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
     const h = await prepare(makeExam(), makeAttempt(), makeEnrollment(), now);
 
@@ -204,7 +204,7 @@ describe("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0", () => {
 // shape. The runtime assertions are no-op smoke tests that keep the file in
 // the test run; the real assertion is the expect-error at typecheck time.
 
-describe("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — type opacity + direct-call rejection", () => {
+describe("type opacity + direct-call rejection", () => {
   it("rejects object-literal construction of the mutation context (typecheck)", () => {
     // @ts-expect-error — Property '[MUTATION_PROVENANCE_TOKEN]' is missing (brand private).
     const _forged: ReconciledAttemptMutationContext = {

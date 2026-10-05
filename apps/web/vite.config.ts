@@ -47,7 +47,7 @@ export default defineConfig(({ mode }) => {
               return "vendor-react-dom";
             if (id.includes("node_modules/react/")) return "vendor-react";
             if (id.includes("node_modules/")) {
-              // Edit-only heavy deps (issue 301) must keep their dynamic
+              // Edit-only heavy deps must keep their dynamic
               // import boundaries: Tiptap/ProseMirror/KaTeX are reachable
               // ONLY through the lazy editor and math chunks, so the plain
               // READ path never downloads them. Returning undefined lets

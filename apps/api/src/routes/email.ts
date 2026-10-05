@@ -32,7 +32,7 @@ export const emailRoutes: FastifyPluginAsync = async (fastify) => {
    * `to` is validated as an email so the endpoint cannot be used as an open
    * relay and rejects malformed input fast.
    *
-   * P7-E2A (ADR-017 D7): gated by the dedicated SystemEmailTest capability —
+   * ADR-017 D7: gated by the dedicated SystemEmailTest capability —
    * VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT. `system.diagnostics.view`
    * no longer grants this mutation; the Maintainer preset does not receive
    * `system.email.test` by default.
@@ -65,7 +65,7 @@ export const emailRoutes: FastifyPluginAsync = async (fastify) => {
           subject: "Test email",
           text: "This is a test email from the exam platform.",
         });
-        // P7-E2A (P2-3): the side effect is audited under its own action with
+        // The side effect is audited under its own action with
         // a masked recipient (never the verbatim address).
         recordBestEffortAudit(fastify, request, getRequestContext(request), {
           action: "system.email.test",

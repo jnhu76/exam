@@ -120,7 +120,7 @@ describe("attempt routes", () => {
     });
   });
 
-  describe("POST /attempts/:examId/start — latestStartOffsetMinutes guard (ADR-005 Slice 3)", () => {
+  describe("POST /attempts/:examId/start — latestStartOffsetMinutes guard (ADR-005)", () => {
     it("rejects new start after the late-entry cutoff with 409 ATTEMPT_LATE_ENTRY_CLOSED", async () => {
       // openAt = now - 2h; offset = 30min -> latestStartAt = now - 1.5h < now.
       const openAt = new Date(Date.now() - 7200_000).toISOString();
@@ -354,7 +354,7 @@ describe("attempt routes", () => {
 
     it("reports the authored question count for a draft exam (snapshot not frozen yet)", async () => {
       // A draft has no question snapshot; the candidate card must not claim 0
-      // questions when the exam was authored with questions (MVP-P2-02). The
+      // questions when the exam was authored with questions. The
       // draft-only fallback is the whole point: questionIds are the current
       // authoring state only while the exam is still a draft.
       const draftId = crypto.randomUUID();

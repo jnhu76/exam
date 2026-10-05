@@ -97,7 +97,7 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
     await cleanup();
   });
 
-  describe("AC1: Protected endpoints return 401 without auth cookie", () => {
+  describe("Protected endpoints return 401 without auth cookie", () => {
     const protectedEndpoints: Array<{
       method: string;
       url: string;
@@ -120,7 +120,7 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
     }
   });
 
-  describe("AC2: Candidate cannot access admin-only endpoints", () => {
+  describe("Candidate cannot access admin-only endpoints", () => {
     it("Candidate calling GET /api/users returns 403", async () => {
       const res = await app.inject({
         method: "GET",
@@ -158,7 +158,7 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC4: Tampered JWT is rejected", () => {
+  describe("Tampered JWT is rejected", () => {
     it("Invalid JWT signature returns 401", async () => {
       const res = await app.inject({
         method: "GET",

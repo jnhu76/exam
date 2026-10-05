@@ -103,7 +103,7 @@ export function selectorsMatchingAppIcon(
   });
 }
 
-describe("AppIcon stroke authority survives the CSS cascade (issue 577 B1)", () => {
+describe("AppIcon stroke authority survives the CSS cascade (issue 577)", () => {
   it("the gate covers the whole author-CSS surface (superset of the import closure)", () => {
     expect(STYLESHEETS.length).toBeGreaterThanOrEqual(8);
     expect(STYLESHEETS.map((s) => s.file)).toContain("index.css");
@@ -208,7 +208,7 @@ describe("AppIcon stroke authority survives the CSS cascade (issue 577 B1)", () 
   });
 });
 
-describe("AppIcon stroke ownership vs primitive ancestry (issue #601 Step 1)", () => {
+describe("AppIcon stroke ownership vs primitive ancestry (issue #601)", () => {
   /** Every data-slot the primitive-internal optical rule names today. */
   const HOST_SLOTS = [
     "select-trigger",

@@ -53,7 +53,7 @@ export interface QuestionFormData {
     | "text_response";
   content: string;
   /**
-   * Rich prompt document (issue 301). null → Plain mode (`content` is the
+   * Rich prompt document. null → Plain mode (`content` is the
    * authority); non-null → Rich mode (`content` mirrors the plain-text
    * projection for search/display and is re-derived server-side on write).
    */
@@ -126,7 +126,7 @@ function hasFormatting(document: ContentDocumentV1): boolean {
 
 /**
  * Full-featured form for creating or editing questions, supporting all five
- * question types with Plain/Rich content modes (issue 301), options, standard
+ * question types with Plain/Rich content modes, options, standard
  * answers, scoring, and grading rules. Rich mode edits the prompt/options in
  * a lazy WYSIWYG editor; the plain textarea remains the Plain-mode editor.
  */
@@ -293,7 +293,7 @@ export function QuestionForm({
                 // Objective types never carry a rubric.
                 defaults.rubric = null;
               } else if (type === "fill_blank") {
-                // fill_blank is Plain-only (issue 301): an in-flight rich prompt
+                // fill_blank is Plain-only: an in-flight rich prompt
                 // degrades through the confirmation dialog, not silently.
                 if (
                   form.contentDocument &&

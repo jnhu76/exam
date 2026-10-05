@@ -134,7 +134,7 @@ describe("useRecoveryQueueProjection", () => {
     expect(result.current.nextCursor).toBeNull();
   });
 
-  it("loadMore is dropped when a page-1 refresh is in flight (P1-2)", async () => {
+  it("loadMore is dropped when a page-1 refresh is in flight", async () => {
     const { loadPage1, loadMorePage, page1Calls, moreCalls } = makeLoaders();
     const { result } = renderHook(() =>
       useRecoveryQueueProjection<Item>({
@@ -171,7 +171,7 @@ describe("useRecoveryQueueProjection", () => {
     );
   });
 
-  it("loadMore success clears a previous error (P1-2)", async () => {
+  it("loadMore success clears a previous error", async () => {
     const { loadPage1, loadMorePage, page1Calls, moreCalls } = makeLoaders();
     const { result } = renderHook(() =>
       useRecoveryQueueProjection<Item>({
@@ -285,7 +285,7 @@ describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
     vi.useRealTimers();
   });
 
-  it("stale flag is based on the SERVER snapshotAt and self-updates (P1-3)", async () => {
+  it("stale flag is based on the SERVER snapshotAt and self-updates", async () => {
     const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
     // System clock starts at T0; the server snapshot is also T0, so the queue
     // is fresh at resolve time. Wall-clock then advances past the threshold.
@@ -318,7 +318,7 @@ describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
     expect(result.current.isStale).toBe(true);
   });
 
-  it("filter change (deps) resets the projection: the previous filter's rows are never shown (P1-1)", async () => {
+  it("filter change (deps) resets the projection: the previous filter's rows are never shown", async () => {
     const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
     const { result, rerender } = renderHook(
       ({ q }: { q: string }) =>
@@ -360,7 +360,7 @@ describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
     expect(result.current.isInitialLoading).toBe(false);
   });
 
-  it("a manual refresh returning the SAME item count still re-arms polling (P1-4)", async () => {
+  it("a manual refresh returning the SAME item count still re-arms polling", async () => {
     const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
     const { result } = renderHook(() =>
       useRecoveryQueueProjection<Item>({
@@ -402,7 +402,7 @@ describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
     expect(loadPage1).toHaveBeenCalledTimes(3);
   });
 
-  it("a FAILED manual refresh keeps items and still re-arms polling with backoff (P1-4)", async () => {
+  it("a FAILED manual refresh keeps items and still re-arms polling with backoff", async () => {
     const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
     const { result } = renderHook(() =>
       useRecoveryQueueProjection<Item>({
@@ -449,7 +449,7 @@ describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
     expect(loadPage1).toHaveBeenCalledTimes(3);
   });
 
-  it("empty queue + background poll failure keeps EmptyState + inline warning (P1-3)", async () => {
+  it("empty queue + background poll failure keeps EmptyState + inline warning", async () => {
     const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
     const { result } = renderHook(() =>
       useRecoveryQueueProjection<Item>({
@@ -488,7 +488,7 @@ describe("useRecoveryQueueProjection (timer flow — fake timers)", () => {
     expect(result.current.snapshotAt).not.toBeNull();
   });
 
-  it("unmount clears the poll timer: no requests fire after leaving the page (P1-1)", async () => {
+  it("unmount clears the poll timer: no requests fire after leaving the page", async () => {
     const { loadPage1, loadMorePage, page1Calls } = makeLoaders();
     const { unmount } = renderHook(() =>
       useRecoveryQueueProjection<Item>({

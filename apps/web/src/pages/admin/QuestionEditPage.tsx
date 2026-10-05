@@ -166,7 +166,7 @@ export function QuestionEditPage() {
     //   a non-empty plain-text string is forwarded as-is, while a blank /
     //   whitespace-only value is normalized to null so no meaningless "   "
     //   is persisted.
-    // - Rich content (issue 301): the prompt document is sent explicitly (null in
+    // - Rich content: the prompt document is sent explicitly (null in
     //   Plain mode — the explicit null is what upgrades Rich→Plain on the
     //   server). Option documents are OPTIONAL on the wire: plain options
     //   omit the key entirely. answerMode only exists for text_response.

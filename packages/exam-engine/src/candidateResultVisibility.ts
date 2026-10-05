@@ -31,7 +31,7 @@ export type CandidateResultVisibility =
  * candidate-facing projection must apply THIS decision, never a route-local
  * copy of it.
  *
- * Two-stage gate (P2D-J5a semantics):
+ * Two-stage gate:
  *
  *   1. resultReady — is the result computable? Requires status=graded AND all
  *      score fields present AND grading is no longer pending manual scoring.
@@ -126,7 +126,7 @@ export function resolveCandidateEnrollmentResultVisibility(
 
 /**
  * Whether the candidate's retake eligibility is DEFERRED because a final
- * result exists but is not yet visible (#324 review P1-2).
+ * result exists but is not yet visible (#324).
  *
  * The engine enforces pass_then_stop on durable grading truth: a candidate
  * with finalPassed=true is rejected on start while a failed candidate gets a

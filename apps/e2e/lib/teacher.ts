@@ -1,9 +1,9 @@
 /**
- * P4-C3 Teacher E2E fixture helper.
+ * Teacher E2E fixture helper.
  *
  * Creates a Teacher account through the SUPPORTED Admin product interface
  * (POST /api/users { role: "Teacher" }) — NOT by direct DB insertion
- * (P4-G-01 / task §6.2). Admin authenticates via the real /api/auth/login
+ * Admin authenticates via the real /api/auth/login
  * flow; the Teacher is then logged in through the real /login UI via
  * {@link loginAsTeacher}.
  *
@@ -60,7 +60,7 @@ export async function teacherApiToken(
  *
  * The route is the real Admin user-creation surface: it writes the users row
  * + the primary active Teacher assignment + syncs users.role, exactly as a
- * human Admin would via UsersPage. This is the product path P4-G-01 requires
+ * human Admin would via UsersPage. This mirrors the real product path
  * be proven end-to-end.
  */
 export async function createTeacherViaApi(

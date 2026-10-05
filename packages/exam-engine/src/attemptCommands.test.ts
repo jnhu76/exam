@@ -1283,7 +1283,7 @@ describe("attemptCommands", () => {
       expect(attempt.attemptNo).toBe(2);
     });
 
-    it("P1-3 deterministic race: grading commits after start arrival but before the lock — passed AND failed candidates get the same deferred rejection, no attempt created", async () => {
+    it("deterministic race: grading commits after start arrival but before the lock — passed AND failed candidates get the same deferred rejection, no attempt created", async () => {
       // Deterministic interleaving (issue #324 review P1-3):
       //   T1 start request arrives while attempt #1 is still grading
       //     (enrollment.finalAttemptId = null).

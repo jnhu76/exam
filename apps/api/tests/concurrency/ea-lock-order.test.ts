@@ -14,7 +14,7 @@ import {
   createEnrollmentRepoAdapter,
 } from "../../src/adapters/repoAdapters.js";
 
-// P3-FORMAL-P0-D2 — Deterministic concurrency regression (J8).
+// Deterministic EA lock-order concurrency regression.
 //
 // Reproduces the original EA↔AE contention shape with the REPAIRED order and
 // proves both transactions fulfill with NO SQLSTATE 40P01 (deadlock) and NO

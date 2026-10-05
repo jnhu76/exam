@@ -12,7 +12,7 @@ import type {
 import { MathRenderer } from "./MathRenderer";
 
 /**
- * Static rich-content renderer (issue 301 §28).
+ * Static rich-content renderer (#301 §28).
  *
  * READ path only: pure React nodes, NOT Tiptap / ProseMirror /
  * contentEditable. Every element is rendered from the validated
@@ -159,7 +159,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
         </div>
       );
     default:
-      // Controlled fail-safe for invalid persisted data (issue 301 §28): never a
+      // Controlled fail-safe for invalid persisted data (#301 §28): never a
       // raw-HTML fallback.
       return <p className="type-body">{t("content.unsupportedBlock")}</p>;
   }

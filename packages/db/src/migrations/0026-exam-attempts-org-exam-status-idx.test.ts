@@ -69,7 +69,7 @@ async function applyAllMigrations(
   });
 }
 
-describe("0026 exam_attempts org+exam+status index (J5-I1B4 §6.5)", () => {
+describe("0026 exam_attempts org+exam+status index (§6.5)", () => {
   let iso: IsolatedTestDb;
   let conn: Awaited<ReturnType<typeof createDatabase>>;
   let sql: SqlDriver;

@@ -23,7 +23,7 @@ export const QuestionScoreResultSchema = z.object({
   manualGraded: z.boolean(),
 });
 
-// ── Manual Grading (P2D-J2) ──────────────────────────────────────
+// ── Manual Grading ──────────────────────────────────────
 
 /**
  * Grading workflow status for an attempt.
@@ -41,7 +41,7 @@ export const GradingStatusEnum = z.enum([
   "fully_graded",
 ]);
 
-// ── Grading Queue (P2D-J3) ───────────────────────────────────────
+// ── Grading Queue ───────────────────────────────────────
 
 /**
  * A single row in the admin grading queue: one attempt awaiting manual
@@ -109,7 +109,7 @@ export const GradingDetailsQuestionSchema = z.object({
    */
   contentDocument: ContentDocumentV1Schema.nullable(),
   /**
-   * Frozen answer input mode for text_response (#301 corrective pass): the
+   * Frozen answer input mode for text_response (#301): the
    * render authority for `candidateAnswer`. Only `answerMode === "rich"`
    * answers may render through the rich document renderer.
    */
@@ -224,11 +224,11 @@ const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
     "text_response",
   ]),
   content: z.string(),
-  // Rich prompt document (issue 301): null in Plain mode. Candidate result
+  // Rich prompt document: null in Plain mode. Candidate result
   // views render it through the static content renderer.
   contentDocument: ContentDocumentV1Schema.nullable(),
   /**
-   * Frozen answer input mode for text_response (#301 corrective pass): the
+   * Frozen answer input mode for text_response (#301): the
    * render authority for `candidateAnswer`. Only `answerMode === "rich"`
    * answers may render through the rich document renderer.
    */
@@ -268,7 +268,7 @@ export type HiddenReason = z.infer<typeof HiddenReasonEnum>;
 /**
  * Response variant when the exam's showResultImmediately flag is false.
  * Only returns attempt status and exam title without score details.
- * Optional `hiddenReason` (P2D-J5a) lets the frontend show a precise message.
+ * Optional `hiddenReason` lets the frontend show a precise message.
  */
 const HiddenAttemptResultSchema = z.object({
   attemptId: z.string().uuid(),

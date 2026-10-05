@@ -28,7 +28,7 @@ function createDeferred() {
   return { promise, resolve };
 }
 
-describe("db plugin: P0-2 uses runtimeConfig.database.url", () => {
+describe("db plugin: uses runtimeConfig.database.url", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     createDatabaseMock.mockReset();

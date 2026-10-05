@@ -80,7 +80,7 @@ async function teardownAll(
   }
 }
 
-describe("REC-I4-V1: deterministic operationId race recovery", () => {
+describe("deterministic operationId race recovery", () => {
   let iso: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let db1: Database;

@@ -166,7 +166,7 @@ describe("attempt routes", () => {
                   content: "Explain the meaning of life.",
                   options: [],
                   standardAnswer: null,
-                  // P3-L0-5: text_response requires a non-empty rubric at
+                  // text_response requires a non-empty rubric at
                   // publish time (standardAnswer is optional for it).
                   rubric: "Score 0–100 by clarity and depth.",
                   attachments: [],
@@ -550,8 +550,8 @@ describe("attempt routes", () => {
       );
       const operationId = crypto.randomUUID();
       // Pre-insert a misconduct_mark receipt with the same operationId —
-      // WITHOUT calling the misconduct production route (J5-I1C Slice 3 not
-      // activated). The shared UNIQUE(org, operation_id) arbiter must reject
+      // WITHOUT calling the misconduct production route. The shared
+      // UNIQUE(org, operation_id) arbiter must reject
       // the force-submit reuse.
       await createAttemptCommandReceiptRepo(ctx.db).insertReceipt(
         makeAdminCtx(t),
@@ -673,14 +673,14 @@ describe("attempt routes", () => {
     });
 
     it("leaves a submitted-but-not-graded attempt untouched: pure no_change receipt, no grading recovery, no audit", async () => {
-      // Frozen J5-I1C0 §4.2: `no_change` means afterStatus === beforeStatus —
+      // Per the J5-I1C0 receipt-identity audit §4.2: `no_change` means afterStatus === beforeStatus —
       // the receipt's immutable fact must be honest. A `submitted` crash-window
       // row is a terminal no-op for the force-submit command: it must NOT
       // silently complete grading behind a "no_change" receipt (grading
       // recovery of a crashed submit belongs to the candidate submit
       // orchestrator, `submitAndGradeAttempt`, not to a no_change command).
       //
-      // Slice 4: the submit freeze barrier materializes grading workset
+      // The submit freeze barrier materializes grading workset
       // entries atomically with the status flip, so a real crashed-after-submit
       // row ALWAYS carries its workset. Simulate that faithfully: raw-flip the
       // row to `submitted`, then materialize the workset via the same production
@@ -877,7 +877,7 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(404);
     });
 
-    // P2-4: manual-grading integration proof. The planner has two
+    // Manual-grading integration proof. The planner has two
     // pending_manual branches that diverge from the auto path; these two
     // cases prove the receipt-first stored fact matches the engine fact for
     // each, and that replay returns the stored fact verbatim.

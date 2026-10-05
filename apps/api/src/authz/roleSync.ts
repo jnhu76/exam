@@ -1,5 +1,5 @@
 /**
- * Role-assignment sync helper (RBAC-M8).
+ * Role-assignment sync helper.
  *
  * Enforces the migration invariant: `users.role` is a compatibility cache that
  * MUST stay in sync with the user's primary active assignment (ADR migration

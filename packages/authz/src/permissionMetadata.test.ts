@@ -6,7 +6,8 @@ import {
   permissionMetadata,
 } from "./permissionMetadata.js";
 
-describe("#298 permission metadata — exhaustive projection", () => {
+// Issue #298.
+describe("permission metadata — exhaustive projection", () => {
   it("covers every permission key exactly once (no orphan, no gap)", () => {
     const catalogKeys = Object.values(Permission).sort();
     const metadataKeys = Object.keys(PERMISSION_METADATA).sort();

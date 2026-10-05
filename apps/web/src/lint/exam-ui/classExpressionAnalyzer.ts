@@ -1,5 +1,5 @@
 /**
- * Static class-expression analyzer (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §10).
+ * Static class-expression analyzer
  *
  * The flat `collectClassNameTokens()` (in `classNameUtils.ts`) flattens every
  * statically-knowable token into one set. That is correct for the existing

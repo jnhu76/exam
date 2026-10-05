@@ -127,7 +127,7 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // ADR-017 D9: Admin is the SOLE operational-policy intent owner.
   Permission.SystemOpsPolicyView,
   Permission.SystemOpsPolicyManage,
-  // P7-E2A (ADR-017 D7): email test is a side effect, split out of the
+  // ADR-017 D7: email test is a side effect, split out of the
   // diagnostics view capability. Admin keeps it (compatibility preserved);
   // Maintainer does NOT receive it by default.
   Permission.SystemEmailTest,
@@ -240,10 +240,10 @@ const GRADER_PERMISSIONS: readonly PermissionKey[] = [
 const MAINTAINER_PERMISSIONS: readonly PermissionKey[] = [
   Permission.SystemHealthView,
   Permission.SystemDiagnosticsView,
-  // P7-E2B: backup evidence + restore-readiness drill evidence read views.
+  // Backup evidence + restore-readiness drill evidence read views.
   Permission.SystemBackupView,
   Permission.SystemRestoreReadinessView,
-  // P7-E3: Maintainer MAY view the Admin's policy intent — never modify it.
+  // Maintainer MAY view the Admin's policy intent — never modify it.
   Permission.SystemOpsPolicyView,
 ];
 

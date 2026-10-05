@@ -1,6 +1,6 @@
 /**
  * Fastify plugin that registers the resource-aware capability decorator
- * `requireScopedCapability` (RBAC-M10-finish, P4-2A).
+ * `requireScopedCapability` .
  *
  * This wires the pure {@link buildScopedCapabilityPreHandler} to the live
  * dependency set: the `@exam/authz` role-preset matrix (the same source
@@ -46,9 +46,9 @@ import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
 import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
 
 /**
- * The single capability predicate every resource-aware gate uses
- * (RBAC-M10-E). Reads the authoritative `ctx.capabilities` union resolved at
- * authenticate time from `user_role_assignments` — NOT a role preset lookup.
+ * The single capability predicate every resource-aware gate uses. Reads the
+ * authoritative `ctx.capabilities` union resolved at authenticate time from
+ * `user_role_assignments` — NOT a role preset lookup.
  * Centralizing it here means every scoped / candidate / score gate switches
  * authority in lockstep with {@link requireCapability}.
  */
@@ -197,7 +197,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // (`GET /scores/attempts/:attemptId` and `GET /admin/attempts/:attemptId/result`).
   // Own/all is resolved from the actor's capability set (ScoreAllView /
   // ScoreOwnView) plus the resolved attempt ownership — never from a role-name
-  // branch. Emits request.scoreView for the publication handler (P1-4).
+  // branch. Emits request.scoreView for the publication handler.
   // Issue #286: the ScoreAllView path is course-scoped for non-Admin actors
   // through the same Teacher-to-Course gate the scoped routes use.
   const scoreHandler = buildScoreCapabilityPreHandler({
@@ -222,7 +222,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
     return preHandler;
   });
 
-  // Candidate-context capability gate (RBAC-M10-A archetype A).
+  // Candidate-context capability gate (archetype A).
   // Preset-only gate for `GET /candidate/exams`; the handler scopes the list to
   // the candidate profile (defense-in-depth, directive §6.6). No DB resolver.
   const candidateContextHandler = buildCandidateContextCapabilityPreHandler(
@@ -236,7 +236,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
     return preHandler;
   });
 
-  // Candidate exam-eligibility capability gate (RBAC-M10-A archetype B).
+  // Candidate exam-eligibility capability gate (archetype B).
   // Capability + eligibility for exam detail / queue / start. Exam must resolve
   // under the org anchor AND the actor must have a candidate profile with an
   // enrollment for the exam (server-derived, no client candidateId trust).
@@ -270,7 +270,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  // Own-attempt capability gate (RBAC-M10-A archetype C/D).
+  // Own-attempt capability gate (archetype C/D).
   // Capability + ownership for attempt view / take / answer-save / submit /
   // heartbeat / restore. Attempt must resolve under the org anchor AND its
   // owner (candidateProfiles.userId) must equal the actor. Anti-enumeration:

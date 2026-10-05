@@ -224,7 +224,7 @@ export type ScopeType = (typeof Scope)[keyof typeof Scope];
  * persistence is not decided by this catalog — any future custom-role model
  * requires a separate accepted design decision.
  *
- * P7-E2A (ADR-017 D2 amendment of ADR-010): Maintainer is the seventh
+ * ADR-017 D2 amendment of ADR-010: Maintainer is the seventh
  * built-in assignable human role — the Application Maintainer / System
  * Operations Owner preset. It holds ONLY operational observation
  * capabilities and zero business permissions.

@@ -81,7 +81,7 @@ const okResponseSchema = z.object({ ok: z.literal(true) });
  *
  * Fastify plugin that registers user management routes (list, create, update,
  * delete, password-reset). Gates use capability-based authorization
- * (RBAC-M10-C); which presets hold the target permissions is owned by
+ *; which presets hold the target permissions is owned by
  * ROLE_PRESETS in @exam/authz.
  */
 const userRoutes: FastifyPluginAsync = async (fastify) => {
@@ -179,11 +179,11 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const data = CreateUserRequestSchema.parse(request.body);
       const passwordHash = await hashPassword(data.password);
-      // RBAC-M10-E: create the user AND its primary active assignment in ONE
+      // Create the user AND its primary active assignment in ONE
       // transaction. A crash between the two writes previously left a user
-      // with no authority row, which the M10-E flip would lock out. Both
-      // writes succeed atomically or roll back together (P0-2 / E19).
-      // P7-E2A (ADR-017 D14): user creation writes a PRIMARY active
+      // with no authority row, which the union-of-assignments flip would lock out. Both
+      // writes succeed atomically or roll back together (E19).
+      // ADR-017 D14: user creation writes a PRIMARY active
       // assignment — run inside the canonical authority-mutation seam so
       // Admin↔Maintainer exclusion is enforced transactionally (creating a
       // Maintainer for an actor that already holds active Admin, or an Admin
@@ -198,7 +198,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
             name: data.name,
             role: data.role,
             isActive: true,
-            // P5-N1 §13: optional recipient email; contract normalizes + maps
+            // Optional recipient email; contract normalizes + maps
             // blank to undefined, so we store null when absent.
             email: data.email ?? null,
           });
@@ -289,7 +289,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         data.isActive !== undefined && data.isActive !== target.isActive;
       const profileChanged =
         data.name !== undefined && data.name !== target.name;
-      // P5-N1 §13: `email` is optional. The contract normalizes blank to
+      // `email` is optional. The contract normalizes blank to
       // undefined; the route treats "field present in body" as an explicit
       // write (blank -> null clears it), and "field absent" as a no-op.
       const emailProvided =
@@ -423,7 +423,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
      * POST /users/:id/reset-password — reset a candidate user's password.
      *
      * Targets users who have a CandidateProfile (the candidate examinee
-     * identity). RBAC-M10-E (P0-7): the target identity is the candidate
+     * identity). Union-of-assignments authority: the target identity is the candidate
      * profile, NOT a role projection — a user with primary Teacher + secondary
      * Candidate (and a candidate profile) is a valid target; a pure Admin is
      * not. This endpoint is the "candidate password reset" surface.

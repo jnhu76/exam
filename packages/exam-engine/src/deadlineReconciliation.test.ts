@@ -355,7 +355,7 @@ function makeRepos(
   return { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo };
 }
 
-describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
+describe("ensureAttemptDeadlineReconciled", () => {
   it("freezes an expired in_progress attempt to submitted with submitted_answers", async () => {
     const now = new Date("2025-01-01T11:30:00Z"); // after deadline 11:00
     const attempt = makeAttempt({ status: "in_progress" });
@@ -518,7 +518,7 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
 //   submitted + pending_manual (submissionReason='deadline'), NOT auto-
 //   finalize to graded. Only completeManualGrading may advance it.
 
-describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
+describe("ensureAttemptDeadlineReconciled (manual hold)", () => {
   it("holds an expired pure text_response attempt at submitted + pending_manual", async () => {
     const now = new Date("2025-01-01T11:30:00Z"); // after deadline 11:00
     const textAttempt = makeAttempt({
@@ -941,7 +941,7 @@ describe("isAttemptDeadlineExpired (canonical expiry authority)", () => {
   // ACTIVE-DEADLINE-001), NOT a normative Phase-1 timing mode. The helper and
   // scanner discovery agree on this fallback so legacy/corrupt NULL rows
   // converge with reachable rows.
-  it("computeEffectiveDeadline returns exam.closeAt when attempt.deadlineAt is absent (P0-C1 defensive fallback)", () => {
+  it("computeEffectiveDeadline returns exam.closeAt when attempt.deadlineAt is absent (defensive fallback)", () => {
     const exam = makeExam({ closeAt: EXAM_CLOSE });
     const attempt = makeAttempt({ status: "in_progress" });
     delete (attempt as { deadlineAt?: Date }).deadlineAt;

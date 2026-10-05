@@ -26,10 +26,10 @@ import { AssignableRoleSchema } from "@exam/contracts";
  *     datetime formatter (`toLocaleString()` is gone).
  *
  * The per-glyph width is a MEASURED product constant (Chromium, 12px badge
- * text — the same measurement campaign as statusFixture's 12.4px constant):
+ * text — the same measurement basis as statusFixture's 12.4px constant):
  * every character is estimated at the CJK advance, an over-estimate for
  * ASCII, so the estimator is a safe upper bound. The runtime half of the
- * two-level gate renders the real pill in the dense-table-cell-fitting E2E.
+ * two-level gate renders the real pill in the table contract guard tests.
  */
 export const TYPE_BADGE_GLYPH_WIDTH_PX = 12.4;
 export const TYPE_BADGE_PADDING_PX = 16; // px-2 × 2 (covers the narrower workbench-compact badge)

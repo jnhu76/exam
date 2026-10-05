@@ -60,7 +60,7 @@ function extractRule(css: string, tone: string): string {
   return css.slice(bodyStart, i - 1);
 }
 
-describe("feedback tone recipes (issue 577 M4)", () => {
+describe("feedback tone recipes (issue 577)", () => {
   it("defines exactly the five semantic feedback tones", () => {
     for (const tone of TONES) {
       expect(extractRule(RECIPES_CSS, tone), `missing tone: ${tone}`).not.toBe(

@@ -18,7 +18,7 @@ describe("GET /api/admin/proctor/exams", () => {
   let foreignExamId: string;
 
   async function createRoleToken(role: Exclude<Role, "Admin" | "System">) {
-    // RBAC-M10-E: delegate to createFutureRoleUserForTest so the user gets an
+    // Delegate to createFutureRoleUserForTest so the user gets an
     // active primary role assignment — without it, authenticate denies 401 and
     // the future-role capability decisions under test never run.
     const { user, token } = await createFutureRoleUserForTest(

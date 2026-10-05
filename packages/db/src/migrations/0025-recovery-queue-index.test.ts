@@ -66,7 +66,7 @@ async function applyAllMigrations(
   });
 }
 
-describe("0025 recovery-queue keyset index (J5-I1A1 §5.4)", () => {
+describe("0025 recovery-queue keyset index (§5.4)", () => {
   let iso: IsolatedTestDb;
   let conn: Awaited<ReturnType<typeof createDatabase>>;
   let sql: SqlDriver;

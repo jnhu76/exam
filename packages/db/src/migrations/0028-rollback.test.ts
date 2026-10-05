@@ -195,7 +195,7 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
     }
   });
 
-  it("a clean rollback lets 0028 be re-applied with no manual cleanup (P1-1)", async () => {
+  it("a clean rollback lets 0028 be re-applied with no manual cleanup", async () => {
     // The pre-fix rollback left users_org_id_unique behind, so re-applying
     // 0028 failed with "relation already exists". With the index owned by the
     // rollback, a re-deploy must succeed against the same schema.
@@ -305,7 +305,7 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
     }
   });
 
-  it("absent table + an incompatible same-name index fails closed (P1-1)", async () => {
+  it("absent table + an incompatible same-name index fails closed", async () => {
     const incompatibleIso = await setupIsolatedTestDb({
       namespace: "mig0028rb-incompat",
     });
@@ -351,7 +351,7 @@ describe("0028 guarded rollback", { timeout: 90_000 }, () => {
     }
   });
 
-  it("fails closed when a newer composite FK depends on users_org_id_unique (P2-3)", async () => {
+  it("fails closed when a newer composite FK depends on users_org_id_unique", async () => {
     // Mutation proof for the confkey probe: `users` physical column order is
     // id (attnum 1) then organization_id (attnum 2), so the real composite FK
     // `(... org_id, actor_id) → users(organization_id, id)` carries

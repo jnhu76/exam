@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { permissionsForRole, Permission, Role } from "@exam/authz";
 import { ROUTE_PERMISSION_REGISTRY } from "./routeRegistry.js";
 
-describe("RBAC-M6 — Admin superset covers the route registry (migration safety)", () => {
+describe("Admin superset covers the route registry (migration safety)", () => {
   const adminPerms = new Set<string>(permissionsForRole(Role.Admin));
 
   it("every Admin-gated route's permission is granted to Admin", () => {

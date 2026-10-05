@@ -1,34 +1,36 @@
 /**
- * J5-I1C1 review P1 — ProctorDashboard misconduct lost-response retry identity.
+ * Pending operator-command retry identity on the ProctorDashboard.
  *
- * The original P1: after an indeterminate failure the ProctorDashboard
- * misconduct dialog froze ONLY the operationId — severity + notes stayed
- * editable, so a retry could drift the payload under the SAME operationId
- * (silently turning an idempotent replay into a different command).
+ * When a misconduct mark commits on the server but its response is lost,
+ * the dashboard must classify the outcome
+ * as `indeterminate`, freeze the FULL command (operationId + payload),
+ * persist it to sessionStorage (fail-closed), and offer a retry that replays
+ * the SAME command verbatim — so the server resolves it as an idempotent
+ * replay instead of a second, different command.
  *
- * This spec drives the REAL ProctorDashboard misconduct dialog + the real
- * misconduct endpoint and proves the fix end-to-end:
- *
- *   1. Admin marks 违规 (severity warning, notes "A"); the server COMMITS but
- *      the response is masked as a 500 — the UI classifies `indeterminate`
- *      and freezes the FULL command (operationId + severity + notes),
- *      persisted to sessionStorage (fail-closed).
- *   2. Visual/deterministic inspection of the dialog in `indeterminate`: the
- *      severity Select is disabled and the notes Textarea is disabled with
- *      the frozen value still "A" (read-only — no drift).
- *   3. Retry from the dialog; the SAME operationId + severity + notes are
- *      sent (captured POST bodies). The wire semantics behind the replay —
- *      idempotent_replay disposition, exactly-one receipt/audit row, and the
- *      recovery projection — are owned at the API layer by
- *      routes/attempts/admin-misconduct.test.ts and its concurrency sibling.
+ * Browser-owned evidence here: captured POST bodies prove the retry reuses
+ * the frozen operationId + payload (no new UUID minted). The wire semantics
+ * behind the replay — idempotent_replay disposition, exactly-one receipt and
+ * audit row, recovery projection — are owned at the API layer by
+ * routes/attempts/admin-misconduct.test.ts and its concurrency sibling.
  */
 import { test, expect } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
 import { candidateLoginApi, candidateStartAttempt } from "../lib/flow";
 
-test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1 review P1)", () => {
-  test("commit + masked 5xx → dialog freezes severity+notes → retry replays the SAME payload", async ({
+interface CapturedPost {
+  body: Record<string, unknown>;
+  status: number;
+  parsed: {
+    disposition?: string;
+    createdAt?: string;
+    operationId?: string;
+  };
+}
+
+test.describe("pending operator-command retry identity", () => {
+  test("misconduct: commit + masked 5xx → dialog freezes severity+notes → retry replays the SAME payload", async ({
     page,
     request,
   }) => {
@@ -45,18 +47,13 @@ test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1
       s.examId,
     );
 
-    interface CapturedPost {
-      body: { operationId?: unknown; severity?: unknown; notes?: unknown };
-      parsed: { disposition?: string; createdAt?: string };
-    }
     const captured: CapturedPost[] = [];
 
     await page.route("**/api/admin/attempts/*/misconduct", async (route) => {
-      const postBody = route.request().postDataJSON() as {
-        operationId?: unknown;
-        severity?: unknown;
-        notes?: unknown;
-      };
+      const postBody = route.request().postDataJSON() as Record<
+        string,
+        unknown
+      >;
       const response = await route.fetch();
       let parsed: CapturedPost["parsed"] = {};
       try {
@@ -65,7 +62,7 @@ test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1
         // keep parsed empty
       }
       if (captured.length === 0) {
-        captured.push({ body: postBody, parsed });
+        captured.push({ body: postBody, status: response.status(), parsed });
         // The server committed; mask the response as a 500 → indeterminate.
         await route.fulfill({
           status: 500,
@@ -75,7 +72,7 @@ test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1
         return;
       }
       // RETRY POST: pass through the REAL response (idempotent_replay).
-      captured.push({ body: postBody, parsed });
+      captured.push({ body: postBody, status: response.status(), parsed });
       await route.fulfill({
         status: response.status(),
         contentType: "application/json",
@@ -98,7 +95,7 @@ test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1
     await dialog.getByRole("button", { name: "确认标记" }).click();
 
     // ── Indeterminate: the dialog keeps the frozen command and the inputs
-    //    become read-only (review P1: severity + notes must NOT drift).
+    //    become read-only (severity + notes must NOT drift under replay).
     await expect(dialog.getByText(/提交状态未确认/).first()).toBeVisible({
       timeout: 15_000,
     });
@@ -151,7 +148,7 @@ test.describe("ProctorDashboard misconduct lost-response retry identity (J5-I1C1
     expect(storedAfter).toBe(0);
 
     // ── Evidence: identical command identity + payload on both POSTs; the
-    //    retry is a true idempotent_replay referencing the SAME receipt.
+    //    retry is a true idempotent replay referencing the SAME receipt.
     await expect.poll(() => captured.length).toBe(2);
     const first = captured[0]!;
     const retry = captured[1]!;

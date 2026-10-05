@@ -41,7 +41,7 @@ function renderConfirmScene() {
   );
 }
 
-describe("AlertDialog consumes the 6px Button geometry (issue 582 D3)", () => {
+describe("AlertDialog consumes the 6px Button geometry (issue 582)", () => {
   it("renders trigger/cancel/action with the Button radius class", () => {
     renderConfirmScene();
 

@@ -1291,7 +1291,7 @@ describe("incidentCommands — link scope authority (fail-closed lookupAttempt)"
   });
 });
 
-describe("incidentCommands — wrapped PostgreSQL constraint detection (P1-B)", () => {
+describe("incidentCommands — wrapped PostgreSQL constraint detection", () => {
   const ACTION_UNIQUE = "exam_incident_actions_org_action_unique";
   const ATTEMPT_UNIQUE = "exam_incident_attempts_incident_attempt_unique";
   const INTERRUPTION_UNIQUE =

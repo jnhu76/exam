@@ -1,5 +1,5 @@
 /**
- * Resource-aware capability preHandler (RBAC-M10-finish, P4-2A).
+ * Resource-aware capability preHandler .
  *
  * Composes the flat role-preset capability check (auth.ts `requireCapability`)
  * with a registered scope resolver (attemptResolver / examResolver), and maps

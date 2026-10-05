@@ -72,7 +72,7 @@ describe("audit log baseline (S06-lite)", () => {
       authEpoch: 0,
     });
 
-    // RBAC-M10-E: every authenticated request resolves authority from ACTIVE
+    // Every authenticated request resolves authority from ACTIVE
     // user_role_assignments. Seed one active primary assignment per test user
     // so authenticate grants the role's preset (audit endpoints are gated by
     // capability). Without these rows both users collapse to 401 AUTH_REQUIRED.

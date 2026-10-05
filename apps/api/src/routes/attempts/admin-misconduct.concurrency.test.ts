@@ -1,5 +1,5 @@
 /**
- * J5-I1C Slice 3 — Deterministic PostgreSQL Misconduct-Mark Concurrency
+ * Deterministic PostgreSQL Misconduct-Mark Concurrency
  * Verification (the §8 experiment gate, recorded).
  *
  * Proves, against the SAME production entrypoint the HTTP route uses
@@ -293,7 +293,7 @@ function createBarrierBackedMisconductObserver(
   };
 }
 
-describe("J5-I1C Slice 3: deterministic misconduct-mark operationId races", () => {
+describe("deterministic misconduct-mark operationId races", () => {
   let iso: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let db1: Database;

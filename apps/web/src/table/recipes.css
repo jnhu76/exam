@@ -16,7 +16,7 @@
  * authority's consumers (useColumnAllocation) — the colgroup carries explicit
  * per-column px widths and the table its exact computed width, so fixed
  * layout is exact (headers, body cells and colgroup share one allocation).
- * #601 Phase F: this supersedes the #454 assumption that fixed layout +
+ * #601: this supersedes the #454 assumption that fixed layout +
  * col min-width physically enforce per-column minima — Chromium consults
  * col min-width only for the table-level floor and then splits leftover space
  * by its own rule, ignoring per-column floors (measured breaches: long-text
@@ -62,7 +62,7 @@
 }
 
 /*
- * The bounded-expansion remainder (issue 601 Phase F convergence).
+ * The bounded-expansion remainder (issue #601).
  *
  * A table stops growing at EXPANSION_CAP × its preferred width — a sparse
  * table may not stretch a 120px identity column to 400px. The columns stop
@@ -111,11 +111,10 @@
 }
 
 /*
- * The permission matrix is the one specialized table (issue 601 Phase F
- * convergence): its column semantics are roles × capabilities, not record
- * fields, so it owns its widths in table/permissionMatrix.ts rather than in
- * the column allocator. It still gets exact fixed layout from the same
- * mechanism — explicit colgroup px + an explicit table width — and the shared
+ * The permission matrix is the one specialized table (issue #601): its column
+ * semantics are roles × capabilities, not record fields, so it owns its
+ * widths in table/permissionMatrix.ts rather than in the column allocator. It
+ * still gets exact fixed layout from the same mechanism — explicit colgroup px + an explicit table width — and the shared
  * surface (scroll region, cell padding, typography, grid borders) from
  * everything else in this file.
  */
@@ -133,7 +132,7 @@
 }
 
 /*
- * Table visual direction (UI-TABLE-KOI-COMPACT-1) — a light, low-contrast full
+ * Table visual direction — a light, low-contrast full
  * management grid. NOT a gray-block three-line table and NOT a heavy ERP grid.
  * Every admin table renders the same Koi grid: header cells carry a quiet
  * tinted fill (--table-header) plus the stronger --border-header bottom edge;
@@ -200,7 +199,7 @@
 
 /*
  * Column geometry — the sizing authority is table/columnAllocation.ts
- * (ROLE_GEOMETRY + allocateTableColumns; #601 Phase F). Every vocabulary-
+ * (ROLE_GEOMETRY + allocateTableColumns; #601). Every vocabulary-
  * bound token's fixture provenance is documented there and gated by
  * table-contract-guards.test.ts; no width or min-width lives in CSS. This
  * file keeps only the role policies CSS can own: alignment, numeric variants,

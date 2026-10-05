@@ -96,13 +96,15 @@ NAV-HIERARCHY sheets once already — don't.
   HIGH/MEDIUM candidate must then be confirmed by deterministic DOM probes
   (rects, scroll metrics, `aria-current`, overflow state) before it is
   called a defect.
-- **No pixel-diff CI** (`#494` §45): permanent gates are semantic/geometry
-  (see `apps/e2e/e2e/admin-nav-continuity.spec.ts`); the patrol stays a
+- **No pixel-diff CI** (`#494` §45): permanent gates are semantic DOM
+  invariants owned at the component/layer level (e.g. the navigation shell
+  tests under `apps/web/src/components/layout/`); the patrol stays a
   high-recall visual sweep.
 - **Graduation rule** (`#494` §46): when the patrol surfaces a stable failure
-  class, translate it into a deterministic DOM invariant and a permanent
-  Playwright gate. Precedent: "nav looks different" → current destination
-  can leave the nav viewport → `admin-nav-continuity.spec.ts`.
+  class, translate it into a deterministic DOM invariant owned at the
+  strongest layer (component test or browser journey). Precedent: "nav looks
+  different" → the current destination must stay discoverable in the nav
+  viewport → pinned by the navigation shell component tests.
 
 The normative navigation contract enforced here is
 `docs/standards/ui-system.md` §Navigation shell continuity (NAV-1…NAV-6).

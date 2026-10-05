@@ -269,14 +269,14 @@ async function waitFor(
 }
 
 // ── Suites ──────────────────────────────────────────────────────────────
-describe("P7 shared Redis rate limit (integration)", () => {
+describe("shared Redis rate limit (integration)", () => {
   beforeEach(() => {
     for (const key of REDIS_ENV_KEYS) {
       savedEnv[key] = process.env[key];
     }
   });
 
-  describe("two-instance acceptance experiment (P7 §16)", () => {
+  describe("two-instance acceptance experiment (§16)", () => {
     it("two API instances alternating requests share ONE limit of N (not 2N)", async ({
       skip,
     }) => {
@@ -331,7 +331,7 @@ describe("P7 shared Redis rate limit (integration)", () => {
     });
   });
 
-  describe("local-mode control experiment (P7 §17)", () => {
+  describe("local-mode control experiment (§17)", () => {
     it("two instances without shared Redis each allow N (2N total)", async () => {
       const opts: BuildAppOptions = {
         url: REDIS_URL ?? "redis://localhost:6379",
@@ -363,7 +363,7 @@ describe("P7 shared Redis rate limit (integration)", () => {
     });
   });
 
-  describe("test-scope prefix isolation (ADR-007 / P7 §24)", () => {
+  describe("test-scope prefix isolation (ADR-007 / §24)", () => {
     it("two scopes on the same Redis cannot consume each other's counters", async ({
       skip,
     }) => {
@@ -415,7 +415,7 @@ describe("P7 shared Redis rate limit (integration)", () => {
     });
   });
 
-  describe("startup failure modes (P7 §19/§20)", () => {
+  describe("startup failure modes (§19/§20)", () => {
     it("optional: unreachable Redis at startup → app boots, local limiting active, runtime degraded", async () => {
       const app = await buildApp({
         url: "redis://127.0.0.1:1",
@@ -467,7 +467,7 @@ describe("P7 shared Redis rate limit (integration)", () => {
     });
   });
 
-  describe("runtime Redis loss and recovery (P7 §21/§22)", () => {
+  describe("runtime Redis loss and recovery (§21/§22)", () => {
     it("optional: loss degrades to local limiting without crashing; recovery returns to shared", async () => {
       const fake = new FakeRedisServer();
       const port = await fake.start();

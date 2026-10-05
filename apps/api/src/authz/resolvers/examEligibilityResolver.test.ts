@@ -45,7 +45,7 @@ function sameOrgChain(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-describe("RBAC-M10-A exam-eligibility resolver", () => {
+describe("exam-eligibility resolver", () => {
   beforeEach(() => {
     eligibilityChain = null;
     throwNext = false;

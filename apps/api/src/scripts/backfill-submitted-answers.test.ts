@@ -157,7 +157,7 @@ async function freshOrg(db: Database): Promise<string> {
   return rows[0]!.id;
 }
 
-describe("backfill-submitted-answers (P3-L0-4)", () => {
+describe("backfill-submitted-answers", () => {
   let db: Database;
   let conn: Awaited<ReturnType<typeof createDatabase>>;
   let cleanup: () => Promise<void>;

@@ -17,7 +17,7 @@ import {
  * adoption, grading, result rendering, and API export — must classify through
  * `classifyPersistedRichAnswer` (or its binary projection
  * `resolveRichAnswerDocument`) and must not keep a private read oracle
- * (#669 Phase D4: the classifier lives in @exam/contracts so the web read
+ * (#669: the classifier lives in @exam/contracts so the web read
  * paths and the server export boundary consume one implementation).
  *
  * The classification needs CONTEXT, not only the value: the slot's frozen

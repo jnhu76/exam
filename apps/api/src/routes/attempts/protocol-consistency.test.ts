@@ -12,7 +12,7 @@ import {
 } from "./__tests__/attempts.testHelpers.js";
 
 /**
- * P3-PROTO-1 — Backend State Consistency Tests (L0)
+ * Backend State Consistency Tests (L0)
  *
  * Owns the protocol boundary scenarios covered by the describe blocks in this
  * file. The sibling scenarios are owned by these suites — a change here must
@@ -27,7 +27,7 @@ import {
  *   save/submit after deadline                → candidate-save-submit.test.ts
  *   grading queue reads grading entries       → gradingQueue.test.ts
  */
-describe("P3-PROTO-1: protocol boundary consistency", () => {
+describe("protocol boundary consistency", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let examId: string;
   let courseId: string;
@@ -111,7 +111,7 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
 
       const repo = createAttemptRepo(ctx.db);
       const row = await repo.findById(candidateCtx(), attemptId);
-      // P3-L0-2: post-submit, the authoritative frozen snapshot is
+      // Post-submit, the authoritative frozen snapshot is
       // submitted_answers. Capture it and assert a rejected post-submit
       // save does not mutate it.
       answersBefore = row?.submittedAnswers ?? row?.answers;
@@ -218,7 +218,7 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
       // submittedAt should be stable (not updated by second submit)
       expect(row?.submittedAt).toBeDefined();
       expect(row?.status).toBe("graded");
-      // P3-L0-2: submitted_answers must be frozen once and never rebuilt.
+      // Submitted_answers must be frozen once and never rebuilt.
       // The candidate saved answer "b" before submit; the frozen snapshot
       // carries that value, and a second submit must deep-equal the first.
       expect(row?.submittedAnswers).toEqual({
@@ -306,7 +306,7 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
   });
 
   // ─── Scenario #9/#10: deadline reconciliation via candidate entry points ─
-  // P3-L0-3: lazy-triggered reconciliation freezes an expired in_progress
+  // Lazy-triggered reconciliation freezes an expired in_progress
   // attempt on the next candidate entry (take/save/submit/restore). Proves
   // the freeze happens, submittedAt = effectiveDeadline, submissionReason =
   // 'deadline', and the reconciliation is idempotent.
@@ -499,7 +499,7 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
   });
 
   // ─── Scenario #13: text_response grading reads submitted_answers ───
-  // P3-L0-2: proves the submit freeze barrier end-to-end at the engine/DB
+  // Proves the submit freeze barrier end-to-end at the engine/DB
   // level. The candidate saves a draft text answer, submits (freezing
   // submitted_answers), then attempts a further save (rejected). The frozen
   // submitted_answers — NOT the draft — is what grading captures. The route-

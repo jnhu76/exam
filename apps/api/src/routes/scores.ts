@@ -113,7 +113,7 @@ function buildQuestionResults(
       type: question.type,
       content: question.content,
       contentDocument: question.contentDocument ?? null,
-      // #301 corrective pass: frozen answer input mode — the candidate-view
+      // #301: frozen answer input mode — the candidate-view
       // render authority for candidateAnswer (never JOIN live rows).
       answerMode: question.answerMode ?? null,
       order: question.order,
@@ -158,7 +158,7 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
 
 /**
  * Resolves the score preHandler's authoritative own/all capability-path
- * decision (RBAC-M10-E, P1-4). `request.scoreView` is set ONLY by
+ * decision (union-of-assignments authority). `request.scoreView` is set ONLY by
  * `requireScoreCapability` after it arbitrates ScoreAllView vs
  * ScoreOwnView+ownership. A missing signal is a wiring bug (the route's
  * preHandler chain did not include the score capability gate, or the gate
@@ -324,12 +324,12 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
    * whole route is definitionally candidate-safe:
    *
    *   1. Access — `requireScoreCapability` arbitrates capability + ownership
-   *      (RBAC-M10-E): ScoreOwnView principals reach only their own attempts;
+   *      (union-of-assignments authority): ScoreOwnView principals reach only their own attempts;
    *      ScoreAllView actors (admins) may pass the gate but still receive the
    *      candidate projection — the full representation lives on
    *      GET /admin/attempts/:attemptId/result.
    *   2. Visibility — the projection ALWAYS resolves through the candidate
-   *      publication gate (P2D-J5a, EXSEM-018): resultReady first, then the
+   *      publication gate (EXSEM-018): resultReady first, then the
    *      exam's resultPublicationMode. All-view publication bypass never
    *      happens on this surface.
    *   3. Contract — every response is parsed through
@@ -400,7 +400,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       const gradingResult = attempt.gradingResult as QuestionScoreResult[];
       const questionResults = buildQuestionResults(attempt, gradingResult);
 
-      // Minimal projection (RBAC-M10-E): this surface never carries the
+      // Minimal projection (union-of-assignments authority): this surface never carries the
       // frozen reference answer — for ANY caller. The CandidateAttemptResultResponseSchema
       // parse below is the structural boundary: even if this strip drifted,
       // the candidate contract could not emit standardAnswer.

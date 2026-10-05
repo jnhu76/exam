@@ -13,7 +13,7 @@ import {
 import type { ContentDocumentV1 } from "@exam/domain";
 
 /**
- * #669 Phase D4 — the attempt export trust boundary for persisted Rich
+ * The attempt export trust boundary for persisted Rich (#669)
  * answers (F-05): a corrupt or unsupported persisted Rich value must keep its
  * raw evidence in the JSON export but must never be exported as if it were a
  * valid semantic Plain answer (rich-content-semantic-contract §7/§14).

@@ -1,4 +1,4 @@
-// P7-M1 integration: canonical exam-policy validation is enforced across
+// Canonical exam-policy validation is enforced across
 // create, draft-update, and publish (the freeze/acceptance gate).
 // Authority: docs/contracts/exam-policy-authority.md §11, §21.
 
@@ -23,7 +23,7 @@ function validCreatePayload(courseId: string, questionId: string) {
   };
 }
 
-describe("P7-M1 exam policy validation — authoring + publish", () => {
+describe("exam policy validation — authoring + publish", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let courseId: string;
   let questionId: string;
@@ -141,7 +141,7 @@ describe("P7-M1 exam policy validation — authoring + publish", () => {
 
   // ── PUBLISH revalidation (the freeze/acceptance gate) ─────────────
 
-  it("publishes a policy-valid draft (M1 publish path)", async () => {
+  it("publishes a policy-valid draft (the canonical publish path)", async () => {
     // Route authoring validators (create/update) reject every invalid policy
     // combination before publish, so an inverted-window draft cannot reach
     // publish through the HTTP surface. The publish revalidation gate itself
@@ -202,7 +202,7 @@ describe("P7-M1 exam policy validation — authoring + publish", () => {
 });
 // ── Phase A2 (#291): deadline / untimed authoring + timed_sync block ──
 
-describe("Phase A2 timing modes — authoring gate", () => {
+describe("timing modes — authoring gate", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let courseId: string;
   let questionId: string;
@@ -217,7 +217,7 @@ describe("Phase A2 timing modes — authoring gate", () => {
       method: "POST",
       url: "/api/courses",
       payload: {
-        name: "Phase A Course",
+        name: "policy-validation Course",
         code: `PA-${uniquePrefix()}`,
         description: "",
       },
@@ -230,7 +230,7 @@ describe("Phase A2 timing modes — authoring gate", () => {
       payload: {
         courseId,
         type: "true_false",
-        content: "Phase A question.",
+        content: "policy-validation question.",
         standardAnswer: true,
         score: 100,
       },

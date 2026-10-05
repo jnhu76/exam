@@ -75,7 +75,7 @@ function serializeAnswerIdentityValue(value: unknown): string {
  * semantics, rich-content-semantic-contract §12).
  *
  * The SEMANTIC definition of identity remains structural identity of the
- * D1-accepted canonical value (N(d1) == N(d2), contract §3.1). This digest is
+ * accepted canonical value (N(d1) == N(d2), contract §3.1). This digest is
  * its collision-resistant REPRESENTATION: the serialization above is
  * injective over the value domain, so digest equality holds whenever canonical
  * values are equal; the only divergence source is a SHA-256 collision
@@ -100,7 +100,7 @@ export interface AnswerState {
   answers: AnswerRecord[];
   /**
    * The replay receipt for THIS request's (questionId, clientSeq) key if a
-   * prior save accepted it, else null (#669 Phase D2). The caller resolves it
+   * prior save accepted it, else null (#669). The caller resolves it
    * with one indexed repository lookup — replay recognition is bounded by the
    * lookup key, not proportional to the attempt's whole receipt history.
    */
@@ -179,7 +179,7 @@ export function processSaveAnswer(
     };
   }
 
-  // Canonical ordering (#301 corrective pass §5): shape validation and rich
+  // Canonical ordering (#301 §5): shape validation and rich
   // canonicalization run AFTER the lifecycle/deadline guards and BEFORE
   // idempotency/version semantics, so an INVALID payload cannot mask (or be
   // masked by) a protocol rejection, and equality/idempotency/persistence
@@ -295,10 +295,10 @@ export function processSaveAnswer(
 // independently-tested decision core; the API route delegates the whole action.
 
 /**
- * Folds the accepted answer into the persisted draft-answer list (#669 Phase
- * D2): the persisted element is now a pure `AnswerRecord`. The replay
- * receipts that used to ride alongside it (`clientSeq` / `clientSeqHistory`
- * JSONB fields with full payload copies) live in the append-only
+ * Folds the accepted answer into the persisted draft-answer list (#669): the
+ * persisted element is now a pure `AnswerRecord`. The replay receipts that
+ * used to ride alongside it (`clientSeq` / `clientSeqHistory` JSONB fields
+ * with full payload copies) live in the append-only
  * `exam_answer_save_receipts` table instead — adding receipt N+1 no longer
  * rewrites prior receipt state. Pure — returns the next answers array without
  * mutating the input.
@@ -426,7 +426,7 @@ export async function saveAnswer(
   // transactionally consistent with the answers write below (same tx-scoped
   // repository, proven by the P2 affinity assertion). An accepted clientSeq
   // MUST NOT become unknown while the attempt is mutable — receipts are
-  // append-only with no retention bound (#669 Phase D2).
+  // append-only with no retention bound (#669).
   const knownReceipt = await attemptRepo.findAnswerReceipt(
     mutationContext.attemptId,
     request.questionId,
@@ -463,7 +463,7 @@ export async function saveAnswer(
   // accepted:true with no `newAnswer` and must NOT trigger a write — the prior
   // savedAt is returned to the caller verbatim. Rejections never write.
   //
-  // Atomicity (#669 Phase D2 §8): the accepted answer transition and the
+  // Atomicity (#669 §8): the accepted answer transition and the
   // replay receipt creation are ONE protocol commit — both writes go through
   // the same transaction-scoped repository, so a receipt-storage failure
   // rolls the answer write back (and vice versa). There is no committed state

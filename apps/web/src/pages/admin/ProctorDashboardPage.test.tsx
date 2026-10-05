@@ -664,7 +664,7 @@ describe("ProctorDashboardPage", () => {
     });
 
     it("fails closed when cross-tab coordination is unavailable (corrupt authority)", async () => {
-      // REC-I4-C1: if the shared authority cannot be read (corrupted record),
+      // If the shared authority cannot be read (corrupted record),
       // openGrantDialog must NOT fall back to a fresh draft (which would mint a
       // new uncoordinated operationId). It must show coordinationUnavailable
       // and keep the dialog closed. Mirrors coordinator unit-test case 9.
@@ -699,7 +699,7 @@ describe("ProctorDashboardPage", () => {
     });
 
     it("fails closed when cross-tab coordination is unavailable (storage blocked)", async () => {
-      // REC-I4-C1: if the browser blocks the localStorage getter (e.g. disabled
+      // If the browser blocks the localStorage getter (e.g. disabled
       // storage policy), opening the grant dialog must not crash or silently
       // degrade to a fresh draft. The lazy storage adapter surfaces the failure
       // as a CoordinationUnavailable Result, and the page shows the coordination
@@ -737,7 +737,7 @@ describe("ProctorDashboardPage", () => {
       getterSpy.mockRestore();
     });
 
-    // ── Send-claim ownership (REC-I4-C1 follow-up #233) ───────────────────
+    // ── Send-claim ownership (issue #233) ───────────────────
     //
     // The retry path MUST `claimForSend` before POST. If a non-expired lease
     // already exists (another tab is sending), the POST is suppressed, the
@@ -982,7 +982,7 @@ describe("ProctorDashboardPage", () => {
     });
   });
 
-  describe("force-submit retry identity (J5-I1C Slice 2 review P1-1/P1-2 + re-review)", () => {
+  describe("force-submit retry identity", () => {
     async function openForceSubmitDialog() {
       const trigger = await screen.findByRole("button", { name: "强制交卷" });
       fireEvent.click(trigger);
@@ -1979,7 +1979,7 @@ describe("ProctorDashboardPage", () => {
   //    with a NEW operationId. A failed durable-authority clear transitions to
   //    cleanup_failed and keeps the page-level banner instead of closing
   //    silently.
-  describe("misconduct retry identity (review P1)", () => {
+  describe("misconduct retry identity", () => {
     /** Opens the misconduct dialog for the first candidate's flag button. */
     async function openMisconductDialog() {
       const flagBtn = await screen.findByRole("button", { name: "标记违规" });

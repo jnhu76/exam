@@ -329,7 +329,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/system/dashboard", {
     preHandler: [
       fastify.authenticate,
-      // P7-E2C: the dashboard returns BUSINESS aggregates (questions/exams/
+      // The dashboard returns BUSINESS aggregates (questions/exams/
       // candidates/attempts) — gated by the Admin-only business-summary
       // capability, never by the operational health capability.
       fastify.requireCapability(Permission.SystemBusinessSummaryView),
@@ -363,7 +363,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
    * runtime config, and — for actors holding the business-integrity
    * capability (Admin) — the business-integrity anomaly block.
    *
-   * P7-E2A (ADR-017 D8) — authority-domain split by SERVICE PROJECTION: the
+   * ADR-017 D8 — authority-domain split by SERVICE PROJECTION: the
    * route is gated by the operational SystemDiagnosticsView capability
    * (Admin + Maintainer), and the handler includes the `integrity` block
    * (submitted-not-terminalized / workset-mismatch attempt anomalies) ONLY
@@ -400,7 +400,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /system/backups
    *
-   * P7-E2B — READ-ONLY backup evidence projection: latest run, latest
+   * READ-ONLY backup evidence projection: latest run, latest
    * VERIFIED run, last failure, status counts, and bounded history. The
    * artifact is referenced by safe label only (no host paths, no credentials).
    * There is no write sibling: ADR-017 D5 keeps backup trigger / schedule /
@@ -442,7 +442,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /system/ops-policy
    *
-   * P7-E3 (ADR-017 D9) — the Admin's DESIRED operational objectives (intent)
+   * ADR-017 D9 — the Admin's DESIRED operational objectives (intent)
    * plus the DESIRED vs OBSERVED vs STATUS compliance projection. The intent
    * NEVER binds infrastructure; the projection is computed from ledger
    * evidence (last verified backup, restore drills) against the current
@@ -470,7 +470,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * PUT /system/ops-policy
    *
-   * P7-E3 (ADR-017 D9) — Admin is the SOLE intent owner. Records the desired
+   * ADR-017 D9 — Admin is the SOLE intent owner. Records the desired
    * RPO / retention / drill cadence as a typed, versioned (CAS), audited
    * intent record. This writes ONLY the intent — it never schedules,
    * triggers, or rewrites infrastructure (host cron remains the execution
@@ -527,7 +527,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /system/restore-readiness
    *
-   * P7-E2B — READ-ONLY restore-readiness / drill evidence projection: latest
+   * READ-ONLY restore-readiness / drill evidence projection: latest
    * drill, latest successful drill, and drill history. The `source` field
    * distinguishes automated proof from operator declaration. Restore itself
    * remains host-only (ADR-017 D4); this route reads drill EVIDENCE only.
@@ -556,7 +556,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       // an older successful drill from the projection. The latest SUCCEEDED
       // drill (automated or operator-declared — the source is shown on the
       // row) is the recency truth; an older automated success must not
-      // outrank a newer operator-declared success (P7-E review P2).
+      // outrank a newer operator-declared success.
       return {
         latestDrill: latestDrill ? toRestoreDrillWire(latestDrill) : null,
         latestSuccessfulDrill: latestSuccess
@@ -570,7 +570,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /system/retention-readiness
    *
-   * P7-CLOSE P7-3b — READ-ONLY retention evidence projection: latest host-side
+   * READ-ONLY retention evidence projection: latest host-side
    * retention run, latest successful, and history. Retention is host-operator
    * owned (ADR-017 D4); this route reads EVIDENCE only, never execution.
    *
@@ -628,7 +628,7 @@ function toBackupRunWire(r: BackupRunRow) {
 }
 
 /**
- * P7-E3 (ADR-017 D9) — builds the DESIRED vs OBSERVED vs STATUS compliance
+ * ADR-017 D9 — builds the DESIRED vs OBSERVED vs STATUS compliance
  * projection from the policy intent + ledger evidence.
  *
  * Truthfulness rules:
@@ -645,7 +645,7 @@ function toBackupRunWire(r: BackupRunRow) {
  *     the latest drill, not as proof. No successful drill → UNKNOWN; age <=
  *     cadence → SATISFIED; otherwise NOT_SATISFIED. Recency is the truth:
  *     an older automated success does NOT outrank a newer operator-declared
- *     success (P7-E review P2) — picking the older one would be a false
+ *     success — picking the older one would be a false
  *     NOT_SATISFIED despite a successful restore today.
  *   - The projection NEVER changes infrastructure — it only renders truth.
  */
@@ -853,7 +853,7 @@ function toRetentionRunWire(r: RetentionRunRow) {
 }
 
 /**
- * P7-E2A (ADR-017 D8) — builds the OPERATIONAL diagnostics payload (the
+ * ADR-017 D8 — builds the OPERATIONAL diagnostics payload (the
  * diagnostics response minus the business-integrity `integrity` block). It is
  * the shared base of GET /system/diagnostics: every caller (Admin + Maintainer)
  * receives this operational projection; Admin additionally receives the
@@ -967,12 +967,12 @@ async function buildOperationalDiagnostics(
 }
 
 /**
- * P7-E2A (ADR-017 D8) — loads the BUSINESS-integrity anomaly block
+ * ADR-017 D8 — loads the BUSINESS-integrity anomaly block
  * (submitted-not-terminalized / workset-mismatch attempt anomalies). Included
  * only in the full diagnostics response (Admin), never in the operational
  * projection served to Maintainer viewers.
  *
- * P7-S2 Phase 7 — read-only integrity anomalies (detect, never repair).
+ * Read-only integrity anomalies (detect, never repair).
  * Isolated from the main response: if the detector throws (e.g. a corrupt
  * legacy row that defeats even the defensive jsonb guard), diagnostics
  * degrades the `integrity` block to zeroed evidence instead of 500-ing

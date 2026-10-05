@@ -25,7 +25,7 @@ interface QuestionPreviewProps {
  * Read-only preview of a question as it would appear to candidates,
  * rendering options as disabled radio/checkbox inputs or blank fields.
  * Rich prompts/options render through the same static ContentRenderer the
- * candidate sees (issue 301) — the preview never diverges from runtime.
+ * candidate sees — the preview never diverges from runtime.
  */
 export function QuestionPreview({
   type,

@@ -2,7 +2,7 @@
  * exam-ui/no-typography-authority-conflict
  *
  * Deterministic, semantic-free recipe-authority conflict gate
- * (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §12).
+ *
  *
  * Fires when a JSX node selects a `type-*` recipe AND, on the SAME
  * co-occurrence path, another self-target utility (or an inline-style key)

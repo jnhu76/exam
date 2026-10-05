@@ -83,7 +83,7 @@ interface Page<T> {
  * Supports listing, searching, creating, editing, enabling/disabling candidates,
  * and bulk-importing via CSV with a preview wizard.
  *
- * UI-KOI-WEGENT-VISUAL-PIVOT-1: Admin table with distinct header, clear
+ * Admin table with distinct header, clear
  * boundaries, cool-neutral palette.
  */
 export function CandidatesPage() {

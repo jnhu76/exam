@@ -18,7 +18,7 @@ import {
 import { schema } from "@exam/db/src/schema/pg.js";
 
 /**
- * RBAC-M10-A — Candidate runtime capability authorization integration proof.
+ * Candidate runtime capability authorization integration proof.
  *
  * Two responsibilities that candidateOwnership.test.ts does NOT cover:
  *
@@ -43,7 +43,7 @@ const routePlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(scoreRoutes);
 };
 
-describe("RBAC-M10-A candidate runtime — zero-side-effect denial (directive §9.3)", () => {
+describe("candidate runtime — zero-side-effect denial (directive §9.3)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let examId: string;
   let sharedQuestionId: string;
@@ -59,10 +59,10 @@ describe("RBAC-M10-A candidate runtime — zero-side-effect denial (directive §
     ctx = await buildTestApp(routePlugin, { prefix: "/api" });
 
     examId = await createExamViaApi(ctx.app, ctx.adminToken, {
-      examTitle: "M10A Zero-Side-Effect Exam",
-      courseCode: "M10A",
-      courseName: "M10-A Course",
-      questionContent: "M10-A question.",
+      examTitle: "Runtime Authority Zero-Side-Effect Exam",
+      courseCode: "RTA",
+      courseName: "Runtime Authority Course",
+      questionContent: "Runtime Authority question.",
       questionAnswer: true,
       questionScore: 100,
       durationMinutes: 60,
@@ -82,19 +82,19 @@ describe("RBAC-M10-A candidate runtime — zero-side-effect denial (directive §
     candidateA = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
-      `m10a-a-${uniquePrefix()}`,
+      `runtime-authority-a-${uniquePrefix()}`,
       ctx.org.id,
     );
     candidateB = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
-      `m10a-b-${uniquePrefix()}`,
+      `runtime-authority-b-${uniquePrefix()}`,
       ctx.org.id,
     );
     candidateU = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
-      `m10a-u-${uniquePrefix()}`,
+      `runtime-authority-u-${uniquePrefix()}`,
       ctx.org.id,
     );
 
@@ -349,7 +349,7 @@ describe("RBAC-M10-A candidate runtime — zero-side-effect denial (directive §
   });
 });
 
-describe("RBAC-M10-A candidate runtime — non-Candidate role denial (directive §9.2)", () => {
+describe("candidate runtime — non-Candidate role denial (directive §9.2)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let proctor: { user: { id: string }; token: string };
   let examId: string;
@@ -360,13 +360,13 @@ describe("RBAC-M10-A candidate runtime — non-Candidate role denial (directive 
       ctx.db,
       ctx.org.id,
       "Proctor",
-      `m10a-proctor-${uniquePrefix()}`,
+      `runtime-authority-proctor-${uniquePrefix()}`,
     );
     examId = await createExamViaApi(ctx.app, ctx.adminToken, {
-      examTitle: "M10A Proctor Denial Exam",
-      courseCode: "M10AP",
-      courseName: "M10-A Proctor Course",
-      questionContent: "M10-A proctor question.",
+      examTitle: "Runtime Authority Proctor Denial Exam",
+      courseCode: "RTAP",
+      courseName: "Runtime Authority Proctor Course",
+      questionContent: "Runtime Authority proctor question.",
       questionAnswer: true,
       questionScore: 100,
       durationMinutes: 60,

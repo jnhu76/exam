@@ -220,12 +220,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
       }
 
-      // RBAC-M10-E: the actor's authority is resolved from ACTIVE
+      // The actor's authority is resolved from ACTIVE
       // user_role_assignments. users.role / JWT role are NO LONGER
       // authoritative — they are compatibility projections. Login must fail
       // closed for a user with no active assignment (locked out), and must
       // surface operational / integrity failures as 503 (never 401, which
-      // would hide an authz-system outage behind a credentials error; P1-3).
+      // would hide an authz-system outage behind a credentials error).
       const authority = await loadAssignmentAuthority(
         fastify.db,
         {
@@ -272,7 +272,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
         }
         if (authority.reason === "dual_admin_maintainer") {
-          // P7-RBAC-REMEDIATION F-05 / ADR-017 D14: the authority kernel
+          // ADR-017 D14: the authority kernel
           // (`deriveAssignmentAuthority`) now rejects an active set containing
           // BOTH Admin and Maintainer — the write-side seam makes this
           // unreachable through the product, but a hand-edited / bypass-written
@@ -328,7 +328,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       const primaryRole = authority.authority.primaryRole;
       const activeRoles = authority.authority.activeRoles;
-      // P7-RBAC-REMEDIATION F-05: the D14 Admin↔Maintainer exclusion is now
+      // The D14 Admin↔Maintainer exclusion is now
       // enforced in the authority kernel (`deriveAssignmentAuthority`), which
       // both this login path and the per-request `authenticate` decorator
       // traverse. An active {Admin, Maintainer} set therefore returns
@@ -556,7 +556,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         id: user.id,
         username: user.username,
         name: user.name,
-        // RBAC-M10-E: role is the primary-assignment projection resolved at
+        // Role is the primary-assignment projection resolved at
         // authenticate time, NOT a fresh re-read of users.role. The two are
         // kept in sync by syncUsersRoleFromPrimary, but the authenticated ctx
         // is the authoritative projection for this response.
@@ -706,7 +706,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         id: updated.id,
         username: updated.username,
         name: updated.name,
-        // RBAC-M10-E: role + capabilities come from the authenticated ctx
+        // Role + capabilities come from the authenticated ctx
         // (the authoritative assignment-backed projection), NOT from a fresh
         // re-read of the users row. Profile update does not change authority,
         // so the authenticated projection is correct and avoids surface area

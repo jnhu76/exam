@@ -254,7 +254,7 @@ describe("ResultPage", () => {
   // visibility from score-visible or from grading state — it only renders what
   // the DTO gate says.
 
-  it("P3-2: score visible + answers hidden — renders score but not standardAnswer/rubric", async () => {
+  it("score visible + answers hidden — renders score but not standardAnswer/rubric", async () => {
     // Realistic candidate DTO: standardAnswer stripped (undefined) by the API,
     // no rubric field. The page must show score/pass and must NOT open an
     // answer-review section just because the score is visible. manualGraded
@@ -315,7 +315,7 @@ describe("ResultPage", () => {
     expect(screen.queryByText(/评分标准|rubric/i)).not.toBeInTheDocument();
   });
 
-  it("P3-2: does not self-release result from grading state when DTO gate is hidden", async () => {
+  it("does not self-release result from grading state when DTO gate is hidden", async () => {
     // Deliberately cross-wired DTO: terminal grading state (graded) BUT the
     // authoritative result gate says hidden. ResultPage must keep the result
     // hidden — it must not infer release from status=graded.

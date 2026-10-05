@@ -2419,7 +2419,7 @@ export const attemptCommandReceipts = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
-    // The idempotency arbiter (ADR-014 §9 / ADR-015 §4.2 / J5-I1C0 §4.5).
+    // The idempotency arbiter (ADR-014 §9 / ADR-015 §4.2 / dangerous-command identity audit §4.5).
     uniqueIndex("attempt_command_receipts_org_operation_unique").on(
       table.organizationId,
       table.operationId,
@@ -2483,7 +2483,7 @@ export const attemptCommandReceipts = pgTable(
 );
 
 /**
- * SaveAnswer replay receipts (#669 Phase D2) — the idempotency state of the
+ * SaveAnswer replay receipts (#669) — the idempotency state of the
  * answer save protocol, one immutable row per accepted
  * (attempt, question, clientSeq) replay key.
  *

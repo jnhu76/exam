@@ -25,7 +25,7 @@ describe("question routes — Teacher authoring capabilities", () => {
       method: "POST",
       url: "/api/courses",
       payload: {
-        name: "P4-2B Course",
+        name: "question-authoring Course",
         code: `P42B-${uniquePrefix()}`,
         description: "",
       },
@@ -34,7 +34,7 @@ describe("question routes — Teacher authoring capabilities", () => {
     expect(courseRes.statusCode).toBe(201);
     courseId = courseRes.json().id;
 
-    // RBAC-M10-E: delegates to createAssignedUserForTest so the user gets an
+    // Delegates to createAssignedUserForTest so the user gets an
     // active primary role assignment — without it, authenticate denies 401 and
     // the capability decisions under test never run.
     const createUserToken = async (role: "Teacher" | "Candidate") => {

@@ -251,7 +251,7 @@ describe("RecoveryIncidentDetailPage", () => {
     expect(links.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("renders the Operations section with allowedActions-gated command buttons (J5-I1C1)", async () => {
+  it("renders the Operations section with allowedActions-gated command buttons", async () => {
     renderPage();
     await screen.findByText("detail page test incident");
     // Server-computed allowedActions from the mock: investigate + resolve.
@@ -282,7 +282,7 @@ describe("RecoveryIncidentDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("investigates with operationId + expectedVersion and reloads (J5-I1C1)", async () => {
+  it("investigates with operationId + expectedVersion and reloads", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: "开始调查" }));
@@ -333,7 +333,7 @@ describe("RecoveryIncidentDetailPage", () => {
     expect(body.resolutionSummary).toBe("考生已恢复，网络已修复");
   });
 
-  it("surfaces a version conflict with a reload-and-retry message (J5-I1C1)", async () => {
+  it("surfaces a version conflict with a reload-and-retry message", async () => {
     const user = userEvent.setup();
     postMock.mockRejectedValueOnce(
       new ApiError(409, "version conflict", "INCIDENT_VERSION_CONFLICT"),
@@ -391,7 +391,7 @@ describe("RecoveryIncidentDetailPage", () => {
     expect(await screen.findByText(/网络异常/)).toBeInTheDocument();
   });
 
-  it("keeps the loaded page on screen with an inline warning when a background refresh fails (P1-2)", async () => {
+  it("keeps the loaded page on screen with an inline warning when a background refresh fails", async () => {
     renderPage();
     await screen.findByText("detail page test incident");
 

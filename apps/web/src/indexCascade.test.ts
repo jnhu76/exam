@@ -33,7 +33,7 @@ const RULES = FILES.flatMap((f) =>
   parseCssRules(relative(SRC_ROOT, f), readFileSync(f, "utf8")),
 );
 
-describe("default border rule stays in @layer base (issue 577 BLOCKER-1)", () => {
+describe("default border rule stays in @layer base (issue 577)", () => {
   it("a universal default border rule exists exactly once, inside @layer base", () => {
     const universalBorder = RULES.filter(
       (r) =>

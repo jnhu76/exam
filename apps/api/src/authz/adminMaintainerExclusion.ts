@@ -10,7 +10,7 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
 
 /**
- * P7-E2A (ADR-017 D14) — ADMIN / MAINTAINER MUTUAL EXCLUSION.
+ * ADR-017 D14 — ADMIN / MAINTAINER MUTUAL EXCLUSION.
  *
  * `mutateWithAuthorityInvariants` is the canonical mutation seam for every
  * path that can create, activate, promote, or replace a role assignment

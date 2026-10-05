@@ -315,8 +315,8 @@ describe("rich content write authority", () => {
     expect(res.statusCode, res.body).toBe(201);
   });
 
-  it("rejects a rich prompt whose canonical form violates the text-run limit (PC-F01 closure at the authoring seam)", async () => {
-    // The Phase-C merge-class seed: two adjacent unmarked runs, each within
+  it("rejects a rich prompt whose canonical form violates the text-run limit", async () => {
+    // The merge-class seed: two adjacent unmarked runs, each within
     // textRun, whose normalized merge is a 20001-char run. The persisted
     // document is the canonical form, so the write must fail instead of
     // persisting a document the schema rejects on read-back.
@@ -377,7 +377,7 @@ describe("rich content write authority", () => {
     });
   });
 
-  // D-F01 cross-writer parity: the representability rule must fire at BOTH
+  // Cross-writer parity: the representability rule must fire at BOTH
   // rich write seams (prompt document, option document). Family enumeration
   // is owned by the contracts leaf tests over the same schema object, so
   // each seam here proves enforcement with one representative family.
@@ -429,7 +429,7 @@ describe("rich content write authority", () => {
       }),
     },
   ])(
-    "rejects $seam writes carrying an unrepresentable string (D-F01 cross-writer)",
+    "rejects $seam writes carrying an unrepresentable string",
     async ({ makeRequest }) => {
       const res = await createQuestion(makeRequest("\uDC00"));
       expect(res.statusCode, res.body).toBe(400);

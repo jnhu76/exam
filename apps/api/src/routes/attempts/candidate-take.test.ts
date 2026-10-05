@@ -9,12 +9,12 @@ import {
 } from "./__tests__/attempts.testHelpers.js";
 
 /**
- * P3-PROTO-2 — CandidateTakeSnapshot endpoint tests.
+ * CandidateTakeSnapshot endpoint tests.
  *
  * Tests GET /candidate/attempts/:attemptId/take which returns the unified
  * CandidateTakeSnapshot with derived capabilities and answerSource routing.
  */
-describe("P3-PROTO-2: CandidateTakeSnapshot endpoint", () => {
+describe("CandidateTakeSnapshot endpoint", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let examId: string;
   let courseId: string;
@@ -184,7 +184,7 @@ describe("P3-PROTO-2: CandidateTakeSnapshot endpoint", () => {
     });
 
     it("returns answerSource=submitted after submitting", async () => {
-      // P3-L0-2 has landed: the submit freeze barrier writes submitted_answers
+      // The submit freeze barrier writes submitted_answers
       // with one entry per snapshot question, so a fresh submit resolves to
       // "submitted". The "none" arm stays legal for legacy rows whose
       // submitted_answers was never populated (see the fallback branch in

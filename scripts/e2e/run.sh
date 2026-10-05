@@ -480,7 +480,7 @@ run_cleanup() {
   # The stop guard looks at the WHOLE process group, not just the leader:
   # the setsid leader may have exited (and been reaped) while a child still
   # holds the port/connection — a leader-only `kill -0` would skip the stop
-  # and leak the child (round-2 review P2).
+  # and leak the child.
   if [[ "${E2E_WORKERS:-1}" -gt 1 ]]; then
     local sp idx=0
     for sp in "${SHARD_PIDS[@]:-}"; do
@@ -520,7 +520,7 @@ run_cleanup() {
   # covered.
   local -a dbs_to_drop=()
   local keep_dbs=0 preserve_worker_dbs=0
-  # Freeze the retention intent up-front (round-2 review P1): failure +
+  # Freeze the retention intent up-front: failure +
   # E2E_KEEP_WORKER_DB_ON_FAILURE=1 must preserve the WHOLE DB environment —
   # worker DBs AND the compose that hosts them (a script-started compose would
   # otherwise be `down -v`'d, deleting the retained DBs with the container).
@@ -697,10 +697,10 @@ signal_handler() {
 # Returns 2 for combinations with undefined lifecycle semantics:
 #   --keep-server + E2E_WORKERS>1 — preserving N shard servers + N worker
 #                                   DBs + compose has no defined product
-#                                   contract (issue #256-A review P1-2).
+#                                   contract (issue #256-A).
 #   --no-reseed   + E2E_WORKERS>1 — parallel worker DBs are ephemeral and
 #                                   dropped after every run, so there is no
-#                                   existing seed to reuse (P1-3).
+#                                   existing seed to reuse.
 # Returns 0 otherwise. Pure (no side effects).
 validate_run_flags() {
   local reseed="$1" workers="$2" keep_server="$3"
@@ -851,7 +851,7 @@ if [[ "$E2E_WORKERS" -le 1 ]]; then
 
   # Register the DB identity BEFORE any failing operation (ensure/migrate/
   # seed/health): the EXIT-trap cleanup must know exam_e2e on every exit path
-  # (issue #256-A review P1-1). Serial exam_e2e persists across runs by
+  # (issue #256-A). Serial exam_e2e persists across runs by
   # default (--no-reseed depends on it), so cleanup never drops it — the
   # registration drives the failure-retention diagnostics.
   WORKER_DBS_SERIAL=("$E2E_DB_NAME")
@@ -900,12 +900,12 @@ log "并行模式：E2E_WORKERS=${E2E_WORKERS}，每 shard 独立 DB + server。
 # 1. 为每个 shard 建库（幂等）。顺序固定为「先归档 → 后 claim → 再创建」：
 #    - 启动前若同名库已存在（失败保留/崩溃泄漏的取证现场），先归档为
 #      *_prior 再建全新库 —— 保留取证 ≠ 复用执行状态（issue #330）。
-#    - DB identity 只在归档成功之后登记（#330 review P1-2）：归档失败 →
+#    - DB identity 只在归档成功之后登记（#330 ）：归档失败 →
 #      exit 1 时，同名库是上一轮遗留的取证现场、尚未被本轮 claim，EXIT
 #      cleanup 无权 DROP 它。若先登记再归档，归档失败的退出路径会把这个
 #      取证现场当作本轮 ephemeral 库清掉，毁灭取证证据。
 #    - 登记仍在 ensure/migrate/seed/health 等可能失败的操作之前（issue
-#      #256-A review P1-1），任何退出路径 cleanup 都知道要清理哪些库。
+#      #256-A ），任何退出路径 cleanup 都知道要清理哪些库。
 ARCHIVE_CID="$(docker compose -f "$DEV_COMPOSE" ps -q db)"
 for (( i=0; i<E2E_WORKERS; i++ )); do
   if ! archive_retained_worker_db "$ARCHIVE_CID" "${WORKER_DB_PREFIX}${i}"; then

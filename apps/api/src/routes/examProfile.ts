@@ -118,7 +118,7 @@ function mapInterruptionValidationError(err: unknown): never {
 /**
  * Fastify plugin that registers exam policy profile CRUD routes.
  *
- * Profiles are organization-owned authoring templates (P7-M2). RBAC reuses
+ * Profiles are organization-owned authoring templates. RBAC reuses
  * the closest Exam-authoring capabilities — no new permission family:
  *   read profiles   → Permission.ExamView
  *   create profile  → Permission.ExamCreate

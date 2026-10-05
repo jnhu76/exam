@@ -6,13 +6,13 @@ import { Role, Scope } from "./catalog.js";
 // registry in apps/api/src/authz/adminSuperset.test.ts, and the Admin
 // grant/forbid boundaries live in presets-boundaries.test.ts (boundary #1).
 // This file keeps only the preset-metadata pins with no other owner.
-describe("RBAC-M6 — Admin preset metadata", () => {
+describe("Admin preset metadata", () => {
   it("Admin default scope is organization (single-tenant boundary)", () => {
     expect(ROLE_PRESETS[Role.Admin].defaultScope).toBe(Scope.Organization);
   });
 });
 
-describe("RBAC-M6 — last-admin guard contract (ADR §3.2)", () => {
+describe("last-admin guard contract (ADR §3.2)", () => {
   it("Admin is assignable + login-capable (so it can satisfy the guard)", () => {
     expect(ROLE_PRESETS[Role.Admin].assignable).toBe(true);
     expect(ROLE_PRESETS[Role.Admin].loginAllowed).toBe(true);

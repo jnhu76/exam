@@ -57,7 +57,7 @@ function user(
   return userWith(role);
 }
 
-describe("P4-4 capability helper — per-role nav/action visibility", () => {
+describe("capability helper — per-role nav/action visibility", () => {
   // The expected MVP matrix (mirrors the backend @exam/authz presets + the
   // P4-1 route matrix). Teacher = authoring+lifecycle+results, NOT grading/
   // proctor/management. Grader = grading only. Proctor = proctor only.
@@ -135,7 +135,7 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
   });
 });
 
-describe("P4-4 capability helper — exam-page actions (task 10.4)", () => {
+describe("capability helper — exam-page actions", () => {
   it("Teacher may publish / close / publish-results / manage enrollments", () => {
     const u = user("Teacher");
     expect(canPublishExam(u)).toBe(true);
@@ -183,7 +183,7 @@ describe("P4-4 capability helper — exam-page actions (task 10.4)", () => {
   });
 });
 
-describe("P4-4 capability helper — default landing paths", () => {
+describe("capability helper — default landing paths", () => {
   it.each([
     ["Admin", "/admin/dashboard"],
     ["Teacher", "/admin/exams"],
@@ -200,10 +200,10 @@ describe("P4-4 capability helper — default landing paths", () => {
   });
 });
 
-describe("P4-4 capability helper — raw can() parity with backend presets", () => {
+describe("capability helper — raw can() parity with backend presets", () => {
   // A spot-check that the frontend capability verdict matches a known
   // backend decision, so a future preset change surfaces here.
-  it("Teacher can(QuestionCreate) is true (matches P4-2B cutover)", () => {
+  it("Teacher can(QuestionCreate) is true", () => {
     // Permission.QuestionCreate = "question.create"
     expect(can(user("Teacher"), "question.create")).toBe(true);
   });
@@ -218,7 +218,7 @@ describe("P4-4 capability helper — raw can() parity with backend presets", () 
   });
 });
 
-describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — canSeeManagement is capability-derived", () => {
+describe("canSeeManagement is capability-derived", () => {
   // canSeeManagement must NOT short-circuit on a role label (isAdmin). It is an
   // aggregate over the management-surface permission set: the management nav is
   // visible iff the principal's capability set grants ANY of
@@ -274,7 +274,7 @@ describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — canSeeManagement is capabil
   });
 });
 
-describe("RBAC-M10-E closure — multi-role capability union", () => {
+describe("multi-role capability union", () => {
   it("primary Candidate + secondary Teacher grants exam.view from the union", () => {
     // Candidate lacks exam.view; Teacher's preset includes it. The capability
     // union (passed explicitly) must reflect the multi-role truth.
@@ -306,7 +306,7 @@ describe("RBAC-M10-E closure — multi-role capability union", () => {
   });
 });
 
-describe("RBAC-M10-E-FRONTEND-MULTI-ROLE-SHELL-CORRECTIVE-1 — shell reachability matrix", () => {
+describe("shell reachability matrix", () => {
   // Full behavioral matrix:
   // | Primary   | Secondary | Admin console | Exam runtime | Default landing (primary Candidate) | Default landing (non-Candidate-primary) |
   // |-----------|-----------|---------------|--------------|-------------------------------------|-----------------------------------------|

@@ -215,7 +215,7 @@ export interface QuestionSnapshot {
   gradingRule: GradingRule;
   order: number;
   /**
-   * P3-L0-1: frozen grading source (dual-layer). Copied from
+   * Frozen grading source (dual-layer). Copied from
    * Question.rubric at attempt creation; always string | null on newly
    * built snapshots. Historical JSONB rows may omit the key — readers
    * normalize missing to null (see QuestionSnapshotSchema transform).
@@ -297,7 +297,7 @@ export interface Exam {
   courseId: string;
   status: ExamStatus;
   timingMode: TimingMode;
-  // Phase A (#291): null duration = no personal time limit (deadline/untimed);
+  // null duration = no personal time limit (deadline/untimed);
   // null closeAt = open-ended (untimed only). Non-null invariants per mode are
   // owned by the canonical exam-policy validator, not by these columns.
   durationMinutes: number | null;
@@ -315,10 +315,10 @@ export interface Exam {
   // ADR-005 Slice 3: candidate runtime timing policy. null = disabled.
   latestStartOffsetMinutes: number | null;
   minSubmitAfterStartMinutes: number | null;
-  // P2D-J5a: result publishing policy. Authoritative field for candidate
+  // Result publishing policy. Authoritative field for candidate
   // result visibility; supersedes the legacy ControlFlags.showResultImmediately.
   resultPublicationMode: ResultPublicationMode;
-  // P2D-J5a: server time authority instant when an admin published results
+  // Server time authority instant when an admin published results
   // for a manual-mode exam. Null until the first publish-results call; once
   // set, it is never updated (idempotent re-publish is a no-op on this field).
   resultsPublishedAt: Date | null;
@@ -476,7 +476,7 @@ export interface ExamAttempt {
    */
   misconduct?: MisconductFlag | null;
   /**
-   * Grading workflow status (P2D-J2). Orthogonal to `status`: tracks where
+   * Grading workflow status. Orthogonal to `status`: tracks where
    * the attempt sits in the grading pipeline. Undefined for attempts graded
    * before this field existed (migration backfills `auto_graded`); defaults
    * to `auto_graded` at the application boundary.
@@ -589,7 +589,7 @@ export interface QuestionScoreResult {
   standardAnswer: unknown;
 }
 
-// ── Attempt Grading Entry (P3-L0-2E) ─────────────────────────────
+// ── Attempt Grading Entry ─────────────────────────────
 
 /**
  * Grading mode for a single question within an attempt's materialized grading
@@ -625,7 +625,7 @@ export type GradingEntryStatus =
 
 /**
  * A materialized grading workset entry for exactly one question within one
- * attempt (P3-L0-2E).
+ * attempt.
  *
  * Created at submit-freeze time from `submitted_answers` + the frozen
  * `QuestionSnapshot`. This is the single durable grading truth: the manual
@@ -991,20 +991,20 @@ export interface AttemptCommandPayloadByType {
   misconduct_mark: MisconductMarkRequestPayload;
 }
 
-// ───────────────────────── Backup / restore-drill evidence (P7-E2B) ─────────────────────────
+// ───────────────────────── Backup / restore-drill evidence ─────────────────────────
 
 /**
- * Backup mechanism kinds recorded by the evidence ledger (P7-E2B). The
+ * Backup mechanism kinds recorded by the evidence ledger. The
  * repository-managed backup tooling is the logical online dump (`pg_dump -Fc`,
  * `scripts/db-backup.sh`); `physical_base` and `cold_filesystem` are legacy
- * P7-era kinds retained for historical ledger rows. `pitr_wal` archiving is a
+ * kinds retained for historical ledger rows. `pitr_wal` archiving is a
  * continuous process, not a runnable artifact, and is not a run kind.
  */
 export type BackupType = "logical" | "physical_base" | "cold_filesystem";
 
 /**
  * Terminal-or-transient run status of a backup attempt in the evidence
- * ledger. SUCCESS semantics (ADR-017 D10 / P7-E1 §12.4): `succeeded` is the
+ * ledger. SUCCESS semantics (ADR-017 D10): `succeeded` is the
  * ONLY success state and requires artifact produced + readable + verification
  * passed + durable evidence committed.
  */
@@ -1024,7 +1024,7 @@ export type BackupRunStatus = "running" | "succeeded" | "failed" | "abandoned";
 export type BackupVerificationStatus = "verified" | "failed" | "pending";
 
 /**
- * Who initiated the run. `host_script` = P7-C script instrumentation;
+ * Who initiated the run. `host_script` = host-side script instrumentation;
  * `deployment_drill` = the automated deployment drill harness; future
  * decision-gated triggers would add their own executor type.
  */

@@ -240,7 +240,7 @@ describe("AuditLogPage", () => {
     expect(rawFallback).toHaveTextContent("futur…tion");
   });
 
-  it("declares the #598 roles: action-label for actions, short-id for targets", async () => {
+  it("declares the roles: action-label for actions, short-id for targets", async () => {
     renderPage();
     await screen.findByText("评分录入");
 

@@ -34,7 +34,7 @@ export async function clickExamPrimaryAction(
   await action.click();
 }
 
-export async function startAvailableExamFromList(
+export async function startExamFromList(
   page: Page,
   examId: string,
 ): Promise<void> {
@@ -49,70 +49,11 @@ export async function startAvailableExamFromList(
   await page.getByTestId("take-question-section").waitFor({ state: "visible" });
 }
 
-export async function startExamFromList(
-  page: Page,
-  examId: string,
-): Promise<void> {
-  await startAvailableExamFromList(page, examId);
-}
-
-export async function resumeExamFromList(
-  page: Page,
-  examId: string,
-): Promise<void> {
-  const card = page.getByTestId(`exam-card-${examId}`);
-  await card.waitFor({ state: "visible" });
-  await card.getByTestId("exam-primary-action").click();
-  await page.waitForURL(
-    (url) => /\/exam\/[^/]+\/(start|take)$/.test(url.pathname),
-    {
-      timeout: 15_000,
-    },
-  );
-  const currentUrl = new URL(page.url());
-  if (/\/start$/.test(currentUrl.pathname)) {
-    await page.getByTestId("exam-start-btn").click();
-    await page.waitForURL((url) => /\/exam\/[^/]+\/take$/.test(url.pathname), {
-      timeout: 15_000,
-    });
-  }
-  await page.getByTestId("take-question-section").waitFor({ state: "visible" });
-}
-
 export async function answerTrueFalse(
   page: Page,
   value: boolean,
 ): Promise<void> {
   await page.getByTestId(`true-false-${value}`).check();
-}
-
-/**
- * Type free-text into the first fill_blank input on the take page.
- * FillBlankInput renders a text input for auto-graded fill_blank questions
- * (string standardAnswer).
- */
-export async function answerFillBlank(page: Page, text: string): Promise<void> {
-  const input = page
-    .getByTestId("take-question-section")
-    .locator("input[type='text']");
-  await input.first().waitFor({ state: "visible" });
-  await input.first().fill(text);
-}
-
-/**
- * Type free-text into the text_response textarea on the take page
- * (P3-MOD-P0-4). text_response is an independent QuestionType rendered as a
- * textarea via TextResponseInput.
- */
-export async function answerTextResponse(
-  page: Page,
-  text: string,
-): Promise<void> {
-  const textarea = page
-    .getByTestId("take-question-section")
-    .locator("textarea");
-  await textarea.first().waitFor({ state: "visible" });
-  await textarea.first().fill(text);
 }
 
 export async function waitForSaveSaved(page: Page): Promise<void> {
@@ -203,9 +144,8 @@ export async function candidateLoginApi(
 
 /**
  * Start a new attempt for `examId` and immediately submit it (no answers) over
- * the candidate API. Used by admin-flow E2E to reconcile a seeded exam to
- * `open` and resolve the attempt, leaving `open` + zero unresolved attempts.
- * Returns the attempt id.
+ * the candidate API — reconciles a seeded exam to `open` with zero unresolved
+ * attempts. Returns the attempt id.
  */
 export async function startAndSubmitAttempt(
   request: APIRequestContext,
@@ -297,97 +237,4 @@ export async function closeExamApi(
     headers: { Cookie: `auth-token=${adminToken}` },
     data: reason ? { reason } : {},
   });
-}
-
-/**
- * Export an exam's graded scores as CSV over the admin API. Returns the raw
- * response (caller asserts status + content-type). Mirrors the ScoreListPage
- * 导出CSV button's GET /api/exams/:id/export/scores call.
- */
-export async function exportScoresCsv(
-  request: APIRequestContext,
-  adminToken: string,
-  examId: string,
-): Promise<APIResponse> {
-  return request.get(`${BASE_URL}/api/exams/${examId}/export/scores`, {
-    headers: { Cookie: `auth-token=${adminToken}` },
-  });
-}
-
-/**
- * Save one manual grading entry (Admin API). Mirrors the GradingDetailPage
- * 保存 button → POST /api/admin/attempts/:attemptId/grade-question.
- */
-export async function gradeQuestionApi(
-  request: APIRequestContext,
-  adminToken: string,
-  attemptId: string,
-  questionId: string,
-  score: number,
-  comment = "",
-): Promise<APIResponse> {
-  return adminPost(
-    request,
-    adminToken,
-    `/api/admin/attempts/${attemptId}/grade-question`,
-    {
-      questionId,
-      score,
-      comment,
-    },
-  );
-}
-
-/**
- * Publish an exam's results (Admin API) — flips manual-mode result visibility
- * from hidden → visible. Mirrors the (future) ScoreListPage publish action.
- */
-export async function publishResultsApi(
-  request: APIRequestContext,
-  adminToken: string,
-  examId: string,
-): Promise<APIResponse> {
-  return adminPost(
-    request,
-    adminToken,
-    `/api/exams/${examId}/publish-results`,
-    {},
-  );
-}
-
-/**
- * Fetch a candidate's attempt result (the candidate-safe contract: no
- * standardAnswer).
- * Branches on `showResultImmediately`: visible results carry totalScore/passed;
- * hidden results carry a status + hiddenReason.
- */
-export async function getCandidateResult(
-  request: APIRequestContext,
-  candidateToken: string,
-  attemptId: string,
-): Promise<{
-  showResultImmediately: boolean;
-  totalScore?: number;
-  passed?: boolean;
-  status?: string;
-  hiddenReason?: string;
-}> {
-  const res = await request.get(
-    `${BASE_URL}/api/scores/attempts/${attemptId}`,
-    {
-      headers: { Cookie: `auth-token=${candidateToken}` },
-    },
-  );
-  if (!res.ok()) {
-    throw new Error(
-      `get candidate result failed: ${res.status()} ${await res.text()}`,
-    );
-  }
-  return (await res.json()) as {
-    showResultImmediately: boolean;
-    totalScore?: number;
-    passed?: boolean;
-    status?: string;
-    hiddenReason?: string;
-  };
 }

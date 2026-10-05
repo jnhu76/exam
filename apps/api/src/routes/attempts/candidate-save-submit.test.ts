@@ -766,7 +766,7 @@ describe("attempt routes", () => {
     });
   });
 
-  describe("POST /attempts/:attemptId/submit — minSubmitAfterStartMinutes guard (ADR-005 Slice 3)", () => {
+  describe("POST /attempts/:attemptId/submit — minSubmitAfterStartMinutes guard (ADR-005)", () => {
     it("rejects candidate submit too early with 409 ATTEMPT_SUBMIT_TOO_EARLY", async () => {
       const examRes = await ctx.app.inject({
         method: "POST",
@@ -865,7 +865,7 @@ describe("attempt routes", () => {
         })
         .where(eq(schema.examAttempts.id, stuckAttemptId));
 
-      // Slice 4: the submit freeze barrier materializes grading workset
+      // The submit freeze barrier materializes grading workset
       // entries atomically with the status flip, so a real crashed-after-submit
       // row ALWAYS carries its workset. Simulate that faithfully: re-read the
       // frozen attempt and materialize the workset via the same production
@@ -976,7 +976,7 @@ describe("attempt routes", () => {
       });
       expect(saveAfter.statusCode).toBe(200);
       expect(saveAfter.json().accepted).toBe(false);
-      // P3-L0-3: lazy deadline reconciliation now freezes the attempt at the
+      // Lazy deadline reconciliation now freezes the attempt at the
       // save entry point before the save is evaluated, so the rejection reason
       // is ATTEMPT_ALREADY_SUBMITTED (the attempt was deadline-submitted),
       // not the legacy DEADLINE_EXCEEDED. Both communicate the same invariant:
@@ -1075,7 +1075,7 @@ describe("attempt routes", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      // RBAC-M10-E: this user must authenticate to exercise the cross-candidate
+      // This user must authenticate to exercise the cross-candidate
       // submit rejection at the ownership layer — seed an active primary
       // Candidate assignment so the failure is at ownership, not authenticate
       // (401).
@@ -1366,7 +1366,7 @@ describe("attempt routes", () => {
 
       expect(res.statusCode).toBe(200);
       const body = res.json();
-      // REC-I4-I3A frozen restore response contract.
+      // ADR-013 frozen restore response contract.
       expect(body.lifecycle).toBe("restored");
       expect(body.compensation.policy).toBe("strict");
       expect(body.compensation.addedSeconds).toBe(0);
@@ -1649,7 +1649,7 @@ describe("attempt routes", () => {
     });
   });
 
-  // P2D-J1 regression: clean submit → grade → result flows for every objective
+  // Regression: clean submit → grade → result flows for every objective
   // question type, plus score-strategy selection observed through the API.
   // These complement the single_choice/fill_blank cases scattered above by
   // giving each type a named, self-contained path and asserting the graded

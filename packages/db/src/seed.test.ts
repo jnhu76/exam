@@ -152,7 +152,7 @@ describe(
 );
 
 describe(
-  "seed authority preservation (RBAC-M10-E)",
+  "seed authority preservation",
   // Hang-protection budget: getIsolatedTestDb now runs its full migrate under
   // the test-infra lifecycle lock, which serializes all heavy catalog DDL on
   // one coordination DB; the default 5s test timeout is not a sufficient
@@ -261,7 +261,7 @@ describe(
 // apps/api/src/scripts/bootstrap-admin.ts.
 // ──────────────────────────────────────────────────────────────────────
 
-describe("assertNotProductionSeed (P6-008 production guard)", () => {
+describe("assertNotProductionSeed (production guard)", () => {
   it("throws when APP_MODE=production", () => {
     expect(() => assertNotProductionSeed({ APP_MODE: "production" })).toThrow(
       /Refusing to run the baseline seed in production/,

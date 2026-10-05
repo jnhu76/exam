@@ -113,7 +113,7 @@ export const statusMeta = {
     icon: Ban,
     iconPolicy: "show",
   },
-  // Incident statuses (J5-I1B Recovery Center — queue + aggregate wire:
+  // Incident statuses (Recovery Center — queue + aggregate wire:
   // open | investigating | resolved | dismissed). Domain keys are prefixed
   // because `open` collides with the exam lifecycle status.
   incidentOpen: {

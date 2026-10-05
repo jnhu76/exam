@@ -16,7 +16,7 @@ import { getRuntimeConfig } from "../config/runtimeConfig.js";
  * and results untouched and never alters error flow, so measured query
  * behavior is the production path's.
  *
- * MEASUREMENT NEUTRALITY (#550 corrective 1): postgres.js v3 Query objects are
+ * MEASUREMENT NEUTRALITY (#550): postgres.js v3 Query objects are
  * LAZY thenables — calling then/catch/finally (including the implicit `.then`
  * that `Promise.resolve(thenable)` attaches) submits the query for execution.
  * The wrapper therefore MUST NOT touch the returned Query in any way: it only
@@ -151,7 +151,7 @@ export function getCapacityResearchSnapshot(
     },
     sql: {
       total: state.sqlTotal,
-      // Measurement-neutrality law (#550 corrective 1): observing a lazy
+      // Measurement-neutrality law (#550): observing a lazy
       // Query's completion requires attaching handlers, which submits it for
       // execution. These facets are therefore not observed in-process; the
       // server-side pg_stat_activity sampler is the execution-side evidence.

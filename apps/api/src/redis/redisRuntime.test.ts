@@ -81,7 +81,7 @@ function config(overrides: Partial<RedisConfig> = {}): RedisConfig {
   };
 }
 
-describe("RedisRuntime lifecycle (P7)", () => {
+describe("RedisRuntime lifecycle", () => {
   it("buildRetryDelay is bounded (200ms → 2000ms)", () => {
     expect(buildRetryDelay(1)).toBe(200);
     expect(buildRetryDelay(2)).toBe(400);
@@ -210,7 +210,7 @@ describe("RedisRuntime lifecycle (P7)", () => {
     await runtime.close();
   });
 
-  it("required startup error never leaks the Redis URL or its credentials (P7 review P1-2)", async () => {
+  it("required startup error never leaks the Redis URL or its credentials", async () => {
     const client = new FakeClient();
     client.connectImpl = () => new Promise<never>(() => {});
     const runtime = new RedisRuntime({
@@ -232,7 +232,7 @@ describe("RedisRuntime lifecycle (P7)", () => {
     expect(thrown).toBeInstanceOf(RuntimeConfigError);
     expect(message).toMatch(/required/);
     // The operator-usable endpoint (host:port) is fine; credentials and the
-    // raw URL are not — the URL may carry a password (P7 review P1-2).
+    // raw URL are not — the URL may carry a password.
     expect(message).toContain("redis:6379");
     expect(message).not.toContain("supersecret");
     expect(message).not.toContain("redis://");
@@ -308,7 +308,7 @@ describe("RedisRuntime lifecycle (P7)", () => {
 
     // Command timeout with the connection still reporting "ready": ioredis
     // commandTimeout rejects the command WITHOUT closing the connection, so
-    // transport-ready does NOT mean operationally healthy (P7 review P1-3).
+    // transport-ready does NOT mean operationally healthy.
     client.status = "ready";
     runtime.noteRedisCommandError();
     expect(runtime.state).toBe("degraded");

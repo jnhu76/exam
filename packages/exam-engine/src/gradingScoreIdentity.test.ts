@@ -175,7 +175,7 @@ function expectIdentity(
   expect(result.passed).toBe(result.totalScore >= passing);
 }
 
-describe("Slice 5 Step 10 — final score identity (entry sum == gradingResult sum == totalScore)", () => {
+describe("final score identity (entry sum == gradingResult sum == totalScore)", () => {
   it("pure-objective: three objective entries, distinct scores (37 + 23 + 41 = 101)", () => {
     const questions = [obj("q1", 50), obj("q2", 30), obj("q3", 60)];
     const entries = [

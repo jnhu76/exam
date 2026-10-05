@@ -83,7 +83,7 @@ export type WorkerStatus = z.infer<typeof WorkerStatusSchema>;
 /**
  * Schema for the email infrastructure status block in diagnostics. Surfaces
  * whether email is enabled, the derived status, the worker state, and outbox
- * row counts (P5-0 extended with new statuses and heartbeat). Never includes
+ * row counts (extended with new statuses and heartbeat). Never includes
  * SMTP host/user/password, recipient addresses, or email body content.
  */
 export const EmailDiagnosticsStatusSchema = z.object({
@@ -142,7 +142,7 @@ export type RedisDiagnosticsStatus = z.infer<
 >;
 
 /**
- * P7-S2 Phase 7 — read-only attempt-integrity anomaly block.
+ * Read-only attempt-integrity anomaly block.
  *
  * Counts durable attempt shapes the CURRENT runtime cannot produce (submit
  * freeze, workset materialization, and terminal grading commit in one
@@ -175,7 +175,7 @@ export const AttemptIntegrityAnomalySchema = z.object({
  * email infrastructure status, read-only integrity anomalies, and
  * non-sensitive runtime configuration.
  *
- * P7-E2A (ADR-017 D8): `integrity` is OPTIONAL — the business-integrity
+ * ADR-017 D8: `integrity` is OPTIONAL — the business-integrity
  * anomaly block is included only for actors holding
  * `system.business_integrity.view` (Admin preset). Operational-only viewers
  * (Application Maintainer) receive the response WITHOUT the block, so the

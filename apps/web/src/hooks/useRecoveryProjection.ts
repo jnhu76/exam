@@ -5,7 +5,7 @@ import {
 } from "@/lib/recoveryErrors";
 
 /**
- * J5-I1B Recovery Center — shared projection loader.
+ * Recovery Center — shared projection loader.
  *
  * One hook backing the four Recovery surfaces (Queue, Incident detail,
  * Attempt operations, Exam context). It owns the J5-R0 §9 refresh model:

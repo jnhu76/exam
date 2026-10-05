@@ -144,7 +144,7 @@ export interface CorsConfig {
 
 /**
  * Public web origin used to build absolute URLs in server-generated content
- * (P5-N1 §12): `PUBLIC_WEB_ORIGIN` combined with a validated site-relative
+ * `PUBLIC_WEB_ORIGIN` combined with a validated site-relative
  * path. Consumers include the identity one-time links (invitation
  * acceptance, password reset) and the grade_notification Email renderer,
  * which produces a link back to the candidate result page.
@@ -240,7 +240,7 @@ export interface EmailWorkerConfig {
 }
 
 /**
- * Launchpad first-install configuration (P7-C1).
+ * Launchpad first-install configuration.
  *
  * The setup token is a deployment bootstrap secret: high entropy, body-only
  * (never in a URL), never audit-logged in plaintext, and required for the
@@ -548,7 +548,7 @@ function resolveEmailWorkerConfig(
 ): EmailWorkerConfig {
   const lockTimeoutMs = s.emailWorker.EMAIL_WORKER_LOCK_TIMEOUT_MS;
 
-  // P7-S2-D lease sanity guard (fail-fast, SMTP transport only):
+  // Lease sanity guard (fail-fast, SMTP transport only):
   //
   //   EMAIL_WORKER_LOCK_TIMEOUT_MS
   //     > SMTP_CONNECTION_TIMEOUT_MS + SMTP_GREETING_TIMEOUT_MS
@@ -726,7 +726,7 @@ export function loadRuntimeConfig(
     emailWorker: resolveEmailWorkerConfig(s, email),
     publicWebOrigin: resolvePublicWebOrigin(s),
     launchpad: {
-      // P7-C1: unset/empty LAUNCHPAD_SETUP_TOKEN disables launchpad (the
+      // Unset/empty LAUNCHPAD_SETUP_TOKEN disables launchpad (the
       // bootstrap endpoint refuses). NOT fail-fast — a bare `docker compose
       // up` without launchpad configured must start normally.
       setupToken: s.app.LAUNCHPAD_SETUP_TOKEN,

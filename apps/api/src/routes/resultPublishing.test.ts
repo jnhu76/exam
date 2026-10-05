@@ -18,15 +18,15 @@ import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
 
 /**
- * P2D-J5a — Result Publishing Policy integration tests.
+ * Result Publishing Policy integration tests.
  *
  * Each test forces a resultPublicationMode through the create-exam API and
  * then exercises the score-route visibility rule. attempt.gradingStatus is
- * forced directly via repo.update() because P2D-J3's submit-time hook is not
+ * forced directly via repo.update() because the submit-time hook is not
  * merged yet; the gate accepts both 'auto_graded' and 'fully_graded' as
  * "grading done" so the Phase 1 happy path keeps working.
  */
-describe("P2D-J5a: result publishing policy", () => {
+describe("result publishing policy", () => {
   let ctx: TestContext;
   let courseId: string;
   let questionId: string;
@@ -214,8 +214,8 @@ describe("P2D-J5a: result publishing policy", () => {
     });
   }
 
-  // ── Slice 1 ───────────────────────────────────────────────────────
-  it("J5a-1: mode=immediate + auto_graded attempt → candidate sees full result", async () => {
+  // ── immediate mode: full result ──────────────────────────────────
+  it("mode=immediate + auto_graded attempt → candidate sees full result", async () => {
     const { attemptId, examId } = await createGradedAttemptForMode("immediate");
     // Default gradingStatus after auto-grading is 'auto_graded'.
 
@@ -239,8 +239,8 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(response.json().questionResults).toHaveLength(1);
   });
 
-  // ── Slice 2 ───────────────────────────────────────────────────────
-  it("J5a-2: mode=manual + resultsPublishedAt=null → hidden, hiddenReason='pending_publish'", async () => {
+  // ── manual mode before publish: hidden ───────────────────────────
+  it("mode=manual + resultsPublishedAt=null → hidden, hiddenReason='pending_publish'", async () => {
     const { attemptId, examId } = await createGradedAttemptForMode("manual");
 
     // Sanity: manual mode persisted, no publish yet.
@@ -266,8 +266,8 @@ describe("P2D-J5a: result publishing policy", () => {
     });
   });
 
-  // ── Slice 3 ───────────────────────────────────────────────────────
-  it("J5a-3: mode=manual → POST /exams/:id/publish-results → candidate sees full result", async () => {
+  // ── manual mode after publish-results: full result ───────────────
+  it("mode=manual → POST /exams/:id/publish-results → candidate sees full result", async () => {
     const { attemptId, examId } = await createGradedAttemptForMode("manual");
 
     // Before publish: hidden.
@@ -295,8 +295,8 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(after.json().questionResults).toHaveLength(1);
   });
 
-  // ── Slice 4 ───────────────────────────────────────────────────────
-  it("J5a-4: publish-results idempotent — second call returns alreadyPublished=true, timestamp unchanged", async () => {
+  // ── publish-results idempotence ──────────────────────────────────
+  it("publish-results idempotent — second call returns alreadyPublished=true, timestamp unchanged", async () => {
     const { examId } = await createGradedAttemptForMode("manual");
 
     const first = await ctx.app.inject({
@@ -329,8 +329,8 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(transitionAudits).toHaveLength(1);
   });
 
-  // ── Slice 5 ───────────────────────────────────────────────────────
-  it("J5a-5: publish-results rejects draft exam → 409 EXAM_PUBLISH_RESULTS_NOT_ALLOWED", async () => {
+  // ── publish-results rejects draft exam ───────────────────────────
+  it("publish-results rejects draft exam → 409 EXAM_PUBLISH_RESULTS_NOT_ALLOWED", async () => {
     // Create an exam but do NOT publish it — it stays in draft.
     const createResponse = await ctx.app.inject({
       method: "POST",
@@ -377,8 +377,8 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(response.json().error.code).toBe("EXAM_PUBLISH_RESULTS_NOT_ALLOWED");
   });
 
-  // ── Slice 6 ───────────────────────────────────────────────────────
-  it("J5a-6: publish-results rejects canceled/archived exams → 409", async () => {
+  // ── publish-results rejects canceled/archived exams ─────────────
+  it("publish-results rejects canceled/archived exams → 409", async () => {
     const { examId } = await createGradedAttemptForMode("manual");
     // Move the exam to closed, then archive it.
     await createExamRepo(ctx.db).update(adminCtx(), examId, {
@@ -399,8 +399,8 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(response.json().error.code).toBe("EXAM_PUBLISH_RESULTS_NOT_ALLOWED");
   });
 
-  // ── Slice 7 ───────────────────────────────────────────────────────
-  it("J5a-7: non-admin (candidate) publish-results → 403", async () => {
+  // ── publish-results requires Admin ───────────────────────────────
+  it("non-admin (candidate) publish-results → 403", async () => {
     const { examId } = await createGradedAttemptForMode("manual");
     const response = await ctx.app.inject({
       method: "POST",
@@ -469,8 +469,8 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(second.json().error.code).toBe("EXAM_PUBLISH_RESULTS_NOT_ALLOWED");
   });
 
-  // ── Slice 8 ───────────────────────────────────────────────────────
-  it("J5a-8: mode=after_grading + gradingStatus=pending_manual → hidden, hiddenReason='not_graded'", async () => {
+  // ── after_grading mode: hidden while pending_manual ──────────────
+  it("mode=after_grading + gradingStatus=pending_manual → hidden, hiddenReason='not_graded'", async () => {
     const { attemptId } = await createGradedAttemptForMode("after_grading");
     // Force the attempt into pending_manual (J3's submit hook is not merged;
     // the visibility gate must treat pending_manual as not-ready regardless).
@@ -487,8 +487,8 @@ describe("P2D-J5a: result publishing policy", () => {
     });
   });
 
-  // ── Slice 9 ───────────────────────────────────────────────────────
-  it("J5a-9: mode=after_grading + gradingStatus=fully_graded → full result visible", async () => {
+  // ── after_grading mode: visible once fully_graded ────────────────
+  it("mode=after_grading + gradingStatus=fully_graded → full result visible", async () => {
     const { attemptId } = await createGradedAttemptForMode("after_grading");
     // after_grading demands fully_graded; auto_graded (the default after
     // submit) is insufficient, so force fully_graded.
@@ -504,8 +504,8 @@ describe("P2D-J5a: result publishing policy", () => {
     });
   });
 
-  // ── Slice 10 ──────────────────────────────────────────────────────
-  it("J5a-10: mode=manual + resultsPublishedAt != null + gradingStatus=pending_manual → STILL hidden 'not_graded'", async () => {
+  // ── published manual exam still hides pending_manual attempt ─────
+  it("mode=manual + resultsPublishedAt != null + gradingStatus=pending_manual → STILL hidden 'not_graded'", async () => {
     const { attemptId, examId } = await createGradedAttemptForMode("manual");
     await forceGradingStatus(attemptId, "pending_manual");
     // Admin publishes results.
@@ -527,8 +527,8 @@ describe("P2D-J5a: result publishing policy", () => {
     });
   });
 
-  // ── Slice 11 ──────────────────────────────────────────────────────
-  it("J5a-11: mode=immediate + gradingStatus=pending_manual → hidden 'not_graded'", async () => {
+  // ── immediate mode hides pending_manual attempt ──────────────────
+  it("mode=immediate + gradingStatus=pending_manual → hidden 'not_graded'", async () => {
     const { attemptId } = await createGradedAttemptForMode("immediate");
     await forceGradingStatus(attemptId, "pending_manual");
 
@@ -543,8 +543,8 @@ describe("P2D-J5a: result publishing policy", () => {
     });
   });
 
-  // ── Slice 12 ──────────────────────────────────────────────────────
-  it("J5a-12: migration backfill — legacy showResultImmediately=false coerces to manual mode", async () => {
+  // ── legacy flag migration backfill ───────────────────────────────
+  it("migration backfill — legacy showResultImmediately=false coerces to manual mode", async () => {
     // Create an exam via the API sending ONLY the legacy flag (no
     // resultPublicationMode). The API boundary must coerce false → manual.
     const createResponse = await ctx.app.inject({
@@ -588,8 +588,8 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(stored?.resultPublicationMode).toBe("manual");
   });
 
-  // ── Slice 13 ──────────────────────────────────────────────────────
-  it("J5a-13: admin sees full result regardless of mode (even manual + unpublished)", async () => {
+  // ── admin full-result override ───────────────────────────────────
+  it("admin sees full result regardless of mode (even manual + unpublished)", async () => {
     const { attemptId } = await createGradedAttemptForMode("manual");
     // No publish-results call; candidate would see hidden. The full result
     // lives on the authorized all-view surface (EXSEM-017 contract split).
@@ -609,7 +609,8 @@ describe("P2D-J5a: result publishing policy", () => {
   });
 
   // ── #640 notification/result boundary ─────────────────────────────
-  it("#640: publish-results notifies only candidates with visible results and payloads carry no result facts", async () => {
+  // Regression for #640.
+  it("publish-results notifies only candidates with visible results and payloads carry no result facts", async () => {
     // Second candidate: enrolled, attempt started but never submitted — no
     // finalAttemptId, hence not a publication recipient.
     const secondUserId = crypto.randomUUID();
@@ -805,7 +806,7 @@ describe("P2D-J5a: result publishing policy", () => {
  * allows publication of any same-org exam. Resource-scoped Teacher authorization
  * (T2, P3-R0 audit note T2) is deferred and deliberately not asserted here.
  */
-describe("M8: Teacher publish-results capability", () => {
+describe("Teacher publish-results capability", () => {
   let ctx: TestContext;
   let courseId: string;
   let questionId: string;

@@ -95,7 +95,7 @@ describe("XSS / CSRF / CSV Security Baseline (S08-lite)", () => {
     await cleanup();
   });
 
-  describe("AC1: Security headers are present on responses", () => {
+  describe("Security headers are present on responses", () => {
     it("sets X-Content-Type-Options: nosniff", async () => {
       const res = await app.inject({ method: "GET", url: "/api/_test/ping" });
       expect(res.headers["x-content-type-options"]).toBe("nosniff");
@@ -124,7 +124,7 @@ describe("XSS / CSRF / CSV Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC2: XSS payload in candidate name is safe in JSON response", () => {
+  describe("XSS payload in candidate name is safe in JSON response", () => {
     it("returns JSON content-type (not text/html) for responses with script tags in data", async () => {
       const res = await app.inject({
         method: "POST",
@@ -144,7 +144,7 @@ describe("XSS / CSRF / CSV Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC3: CSV export endpoint requires authentication", () => {
+  describe("CSV export endpoint requires authentication", () => {
     it("returns 401 without auth cookie", async () => {
       const res = await app.inject({
         method: "GET",

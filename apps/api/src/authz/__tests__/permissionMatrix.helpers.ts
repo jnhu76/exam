@@ -16,7 +16,7 @@ import { buildTestApp } from "../../routes/testHelpers.js";
 export type MatrixRole = AssignableRole;
 
 /**
- * RBAC-M10-E: post-flip, every authenticated request resolves its authority
+ * Post-flip, every authenticated request resolves its authority
  * from ACTIVE user_role_assignments — a user without one is locked out (no
  * capabilities, login 401). The permission-matrix suites deliberately cover
  * both Phase 1 assignable roles (Admin, Candidate) AND future roles
@@ -93,7 +93,7 @@ export async function buildPermissionMatrixFixture(
   }));
   await testApp.db.insert(schema.users).values(users);
 
-  // RBAC-M10-E: every authenticated request resolves its authority from ACTIVE
+  // Every authenticated request resolves its authority from ACTIVE
   // user_role_assignments. Without an active primary assignment, the matrix
   // users would have no capabilities and every verdict would collapse to 401 /
   // denied — masking the real allow/deny decisions under test. Seed one active

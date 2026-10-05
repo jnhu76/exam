@@ -166,7 +166,7 @@ function findTestOnlyReferencesInProduction(): Hit[] {
   );
 }
 
-describe("J5-I1C Slice 2 re-review P2-1 — test-only export boundary", () => {
+describe("test-only export boundary", () => {
   it("forceSubmitWithOperationRaceRecoveryTestOnly is referenced only from test files / testing harness", () => {
     const hits = findTestOnlyReferencesInProduction();
     expect(hits, formatHits(hits)).toEqual([]);

@@ -1,31 +1,26 @@
 /**
- * REC-I4-C1 — Dual-tab cross-tab pending grant coordination E2E.
+ * Dual-tab pending grant coordination E2E.
  *
  * Drives the REAL production PendingGrantCoordinator (singleton) + the real
  * ProctorDashboard UI + the real server time-grants endpoint. It does NOT
  * hand-write localStorage or mint operationIds in-test — every authority
  * write/read goes through the production coordinator that the page uses.
  *
- * Two traces:
+ * The coordinator unit suite fakes storage and locks; these tests own the
+ * real substrate — Web Locks, shared localStorage, and genuinely separate
+ * pages:
  *
- *   1. Tab A reserves a command and submits; the server commits but the
- *      response is masked as a 5xx so the dialog goes `indeterminate` (the
- *      coordinator KEEPS the frozen authority). Tab A is closed. Tab B opens
- *      the same attempt, the coordinator's getCurrent restores the frozen
- *      command, Tab B retries → server returns idempotent_replay → authority
- *      is cleared → the deadline increased EXACTLY ONCE (600s).
+ *   1. Masked-retry replay: Tab A submits a grant whose server commit
+ *      succeeds but whose response is masked as a 5xx, so the dialog goes
+ *      `indeterminate` and the coordinator KEEPS the frozen authority. Tab A
+ *      is closed. Tab B restores the frozen command and retries → the server
+ *      returns idempotent_replay → the authority is cleared → the deadline
+ *      increased EXACTLY ONCE (600s).
  *
- *   2. Tab A has a pending command for attempt A1. Tab B opens a DIFFERENT
- *      attempt (A2) and clicks 延长时间. The coordinator detects the pending
- *      command for a different attempt → warning toast → dialog does NOT open
- *      → NO time-grants POST is sent.
- *
- * CI fix history: this spec previously never logged the Playwright page into
- * the admin UI (only the API token was obtained), so every page.goto to
- * /admin/.../proctor hit the auth guard and redirected to the candidate list;
- * the 延长时间 button never rendered and the spec failed deterministically.
- * loginAsAdmin(page) now runs before every goto, BEFORE any localStorage write
- * (loginViaUi clears storage on /login).
+ *   2. Lease-conflict serialization: while Tab B's retry POST is gated open,
+ *      Tab C's retry of the same frozen command hits Tab B's active Web-Locks
+ *      lease and sends ZERO POST; after the gate releases, the deadline has
+ *      still increased exactly once.
  */
 
 import { test, expect, type Request } from "@playwright/test";
@@ -62,7 +57,7 @@ async function readDeadlineMs(
   return Date.parse(cand!.deadlineAt!);
 }
 
-test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
+test.describe("cross-tab pending grant coordination", () => {
   test.describe.configure({ mode: "serial" });
 
   let seeded: SeededExam;
@@ -248,103 +243,7 @@ test.describe("Dual-tab cross-tab pending grant (REC-I4-C1)", () => {
   });
 
   /**
-   * Trace 2: Tab A creates a real pending command for attempt A1. Tab B opens a
-   * DIFFERENT attempt (A2), clicks 延长时间 → the coordinator detects the
-   * pending command for a different attempt → warning toast → the grant dialog
-   * does NOT open → NO time-grants POST is sent.
-   */
-  test("Tab B blocked from granting a different attempt when Tab A has pending", async ({
-    page,
-    context,
-  }) => {
-    // Seed a SECOND exam + candidate + attempt for the different-attempt case.
-    const seeded2 = await seedExam(page.request, `c1-block-${Date.now()}`, {
-      interruptionTimePolicy: "operator_incident",
-    });
-    const candToken2 = await candidateLoginApi(
-      page.request,
-      seeded2.candidate.username,
-      seeded2.candidate.password,
-    );
-    const attemptId2 = await candidateStartAttempt(
-      page.request,
-      candToken2,
-      seeded2.examId,
-    );
-
-    // Capture every time-grants POST from Tab B so we can assert NONE was sent.
-    const grantRequests: Request[] = [];
-
-    // ── Tab B: create + log in FIRST. loginViaUi clears localStorage, and
-    //    storage is shared across pages in one context — so Tab B's login must
-    //    run BEFORE Tab A writes the pending authority, otherwise Tab B's login
-    //    would wipe it.
-    const pageB = await context.newPage();
-    await loginAsAdmin(pageB);
-    pageB.on("request", (req) => {
-      if (req.method() === "POST" && req.url().includes("/time-grants")) {
-        grantRequests.push(req);
-      }
-    });
-
-    // ── Tab A: log in, create a REAL pending command for attempt A1 by
-    //    submitting a grant with the response masked as 5xx (indeterminate →
-    //    the coordinator keeps the authority for A1).
-    const pageA = page;
-    await loginAsAdmin(pageA);
-
-    let tabAGrantHappened = false;
-    await pageA.route("**/api/admin/attempts/*/time-grants", async (route) => {
-      if (tabAGrantHappened) {
-        await route.continue();
-        return;
-      }
-      tabAGrantHappened = true;
-      await route.fetch();
-      await route.fulfill({
-        status: 500,
-        contentType: "application/json",
-        body: JSON.stringify({ error: "masked-for-indeterminate" }),
-      });
-    });
-
-    await pageA.goto(`/admin/exams/${seeded.examId}/proctor`);
-    await pageA.waitForURL("**/proctor**", { timeout: 15_000 });
-    await submitTenMinuteGrant(pageA);
-    // Confirm the pending command for A1 is persisted before opening Tab B.
-    await expect(pageA.getByText("未确认加时是否成功").first()).toBeVisible({
-      timeout: 15_000,
-    });
-
-    // ── Tab B: go to the SECOND exam's proctor page, attempt to open the
-    //    grant dialog for attempt A2. The coordinator should detect the
-    //    pending command for A1 (a different attempt) and block.
-    await pageB.goto(`/admin/exams/${seeded2.examId}/proctor`);
-    await pageB.waitForURL("**/proctor**", { timeout: 15_000 });
-
-    const extendBtnB = pageB.getByRole("button", { name: "延长时间" });
-    await expect(extendBtnB.first()).toBeVisible({ timeout: 15_000 });
-    await extendBtnB.first().click();
-
-    // The coordinator detected the pending command for a different attempt and
-    // surfaced the blockedByPending warning (存在未确认的加时命令…).
-    await expect(pageB.getByText("存在未确认的加时命令").first()).toBeVisible({
-      timeout: 15_000,
-    });
-
-    // The grant dialog must NOT have opened.
-    await expect(pageB.getByText("延长考试时间")).toHaveCount(0);
-
-    // Definitive proof: NO time-grants POST was ever sent from Tab B.
-    // Give the async coordinator check a brief window, then assert zero.
-    await pageB.waitForTimeout(500);
-    expect(grantRequests, "no second time-grants request").toHaveLength(0);
-
-    await pageB.close();
-  });
-
-  /**
-   * Trace 3 (REC-I4-C1 #233): deterministic concurrent retry with a gated POST.
+   * Deterministic concurrent retry with a gated POST (#233).
    *
    *   Tab A creates the frozen command → server commits but response masked as
    *   5xx → UI releaseIndeterminate (authority KEPT, no active lease).

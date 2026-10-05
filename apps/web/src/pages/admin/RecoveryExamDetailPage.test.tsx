@@ -160,7 +160,7 @@ describe("RecoveryExamDetailPage", () => {
     expect(postMock).not.toHaveBeenCalled();
   });
 
-  it("assigns a proctor with operationId + userId and reloads (J5-I1C1)", async () => {
+  it("assigns a proctor with operationId + userId and reloads", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: "指派监考" }));
@@ -190,7 +190,7 @@ describe("RecoveryExamDetailPage", () => {
     expect(screen.getByText("请输入监考用户 ID")).toBeInTheDocument();
   });
 
-  it("revokes a proctor with operationId after destructive confirmation (J5-I1C1)", async () => {
+  it("revokes a proctor with operationId after destructive confirmation", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("监考李四");
@@ -248,7 +248,7 @@ describe("RecoveryExamDetailPage", () => {
     expect(await screen.findByText(/网络异常/)).toBeInTheDocument();
   });
 
-  it("keeps the loaded page on screen with an inline warning when a background refresh fails (P1-2)", async () => {
+  it("keeps the loaded page on screen with an inline warning when a background refresh fails", async () => {
     renderPage();
     await screen.findAllByText("网络恢复考试");
 

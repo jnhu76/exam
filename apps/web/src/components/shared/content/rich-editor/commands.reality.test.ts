@@ -163,7 +163,7 @@ describe("toggle commands — active/enabled semantics against the real editor",
   });
 });
 
-describe("undo/redo — real history through the catalogue (#677 F2)", () => {
+describe("undo/redo — real history through the catalogue (#677)", () => {
   it("undo/redo start disabled, enable after a mutation, and revert it", () => {
     const editor = createEditor();
     const undo = commandMap().get("undo");

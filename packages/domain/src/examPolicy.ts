@@ -84,7 +84,7 @@ export interface InterruptionPolicy {
 }
 
 /**
- * Control flags. P7-M1 does NOT refactor these into typed columns. The
+ * Control flags. These stay denormalized flags, not typed columns. The
  * unsupported-for-activation flags (see `@exam/exam-engine` `validateExamPolicy`)
  * are carried through as wire/history vocabulary: the validator rejects their
  * activation, so no new policy can promise a capability the runtime lacks.

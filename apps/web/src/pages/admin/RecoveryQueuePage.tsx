@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { RefreshCw, X, CircleAlert } from "lucide-react";
 
-/** Visible-tab polling interval (J5-I1B1 polling semantics). */
+/** Visible-tab polling interval (queue polling semantics). */
 const POLL_INTERVAL_MS = 30_000;
 /** A server snapshot older than this is flagged stale (Queue refresh contract). */
 const STALE_AFTER_MS = 60_000;
@@ -70,7 +70,7 @@ interface QueueFilters {
 }
 
 /**
- * Recovery Center queue (J5-I1B1, contract §5.4).
+ * Recovery Center queue (contract §5.4).
  *
  * Read-only Admin surface: `GET /api/admin/recovery/incidents` with
  * server-side filters. Filters live in the URL query state (shareable,

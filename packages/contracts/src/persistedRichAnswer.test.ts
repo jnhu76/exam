@@ -42,7 +42,7 @@ const unsupportedVersion = {
 };
 
 /**
- * PC-F01 class (B-F01 closure): two schema-legal same-mark runs whose
+ * Canonical-closure class: two schema-legal same-mark runs whose
  * normalized merge exceeds the textRun limit — schema-valid, but the write
  * seam's canonicalization rejects the merged form. The read classifier must
  * keep it interpretable (rich_noncanonical), never corrupt, never valid.
@@ -191,7 +191,7 @@ describe("classifyPersistedRichAnswer — §7 typed read states", () => {
     );
   });
 
-  it("classifies the PC-F01 canonical-closure class as rich_noncanonical (interpretable, not valid)", () => {
+  it("classifies the canonical-closure class (merged same-mark runs) as rich_noncanonical (interpretable, not valid)", () => {
     const read = classifyPersistedRichAnswer({
       value: pcF01ClosureClass,
       answerMode: "rich",
@@ -266,7 +266,7 @@ describe("resolveRichAnswerDocument — render authority for persisted answers",
   });
 });
 
-describe("durable-unrepresentable persisted values (#669 Phase F)", () => {
+describe("durable-unrepresentable persisted values (#669)", () => {
   it("classify as corrupt and refuse resolution — never rich_valid", () => {
     for (const bad of ["\u0000", "\uD800", "\uDC00"]) {
       const value = {

@@ -44,8 +44,8 @@ function expectIntegrityNotice(container: HTMLElement, plainMarker: string) {
   ).toBe(false);
 }
 
-describe("ContentRenderer — static prompt read trust (D5A-R1..R6)", () => {
-  it("D5A-R1: a canonical prompt renders text, inline math, and block math through the real renderer composition", async () => {
+describe("ContentRenderer — static prompt read trust", () => {
+  it("a canonical prompt renders text, inline math, and block math through the real renderer composition", async () => {
     const canonical = doc([
       para("动能定理："),
       {
@@ -73,7 +73,7 @@ describe("ContentRenderer — static prompt read trust (D5A-R1..R6)", () => {
     });
   });
 
-  it("D5A-R2: docVersion 2 fails closed to the integrity notice — never interpreted as V1, never the plain fallback", () => {
+  it("docVersion 2 fails closed to the integrity notice — never interpreted as V1, never the plain fallback", () => {
     const future = {
       docVersion: 2,
       type: "doc",
@@ -99,7 +99,7 @@ describe("ContentRenderer — static prompt read trust (D5A-R1..R6)", () => {
     }
   });
 
-  it("D5A-R3: corrupt envelopes (missing / non-array / wrong-type content) fail closed without a render-time TypeError", () => {
+  it("corrupt envelopes (missing / non-array / wrong-type content) fail closed without a render-time TypeError", () => {
     const envelopes = [
       { docVersion: 1, type: "doc" },
       { docVersion: 1, type: "doc", content: "not-an-array" },
@@ -120,7 +120,7 @@ describe("ContentRenderer — static prompt read trust (D5A-R1..R6)", () => {
     }
   });
 
-  it("D5A-R4: corrupt nested structure that would crash document/block .map() fails closed without an uncaught render exception", () => {
+  it("corrupt nested structure that would crash document/block .map() fails closed without an uncaught render exception", () => {
     const nested = [
       // paragraph.content must be an inline array:
       { type: "paragraph", content: "scalar" },
@@ -152,7 +152,7 @@ describe("ContentRenderer — static prompt read trust (D5A-R1..R6)", () => {
     }
   });
 
-  it("D5A-R5: off-grammar blocks/inlines are rejected by the trust resolver BEFORE rendering — not partially rendered", () => {
+  it("off-grammar blocks/inlines are rejected by the trust resolver BEFORE rendering — not partially rendered", () => {
     const offGrammar = [
       // Unknown block type:
       { type: "script", content: [{ type: "text", text: "alert(1)" }] },
@@ -186,7 +186,7 @@ describe("ContentRenderer — static prompt read trust (D5A-R1..R6)", () => {
     expect(container.querySelector("strong")).toBeNull();
   });
 
-  it("D5A-R6: historical noncanonical Rich displays read-only with an explicit noncanonical classification and zero mutation", () => {
+  it("historical noncanonical Rich displays read-only with an explicit noncanonical classification and zero mutation", () => {
     // Schema-valid but noncanonical: unsorted marks + split same-mark runs.
     const historical = {
       docVersion: 1,

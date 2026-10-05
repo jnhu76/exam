@@ -71,7 +71,7 @@ const STALE_AFTER_MS = 2 * 60_000;
 const NAMESPACE = "admin.recoveryAttempt";
 
 /**
- * Attempt Operations Context (J5-I1B3, contract §6.4) — read-only Admin
+ * Attempt Operations Context (contract §6.4) — read-only Admin
  * projection of ONE attempt: the FULL per-Attempt time-adjustment ledger
  * (all sources), interruption episodes with nested events, the audit
  * timeline, and related-incident navigation stubs. Read-only phase: the
@@ -100,7 +100,7 @@ export function RecoveryAttemptDetailPage() {
       deps: [attemptId],
     });
 
-  // ── J5-I1C1 Operations — three dangerous commands, one frozen operationId
+  // ── Recovery operations — three dangerous commands, one frozen operationId
   // each (J5-R0 §8.2). Force-submit + misconduct persist a durable pending
   // authority BEFORE the POST (fail-closed: an unpersisted identity must not
   // be sent) and restore it on dialog open; the time grant reuses the shared
@@ -703,7 +703,7 @@ export function RecoveryAttemptDetailPage() {
         </div>
       )}
 
-      {/* Operations (J5-I1C1) — server-computed eligibility (allowedActions),
+      {/* Operations — server-computed eligibility (allowedActions),
           never a client-side derivation from status. Empty allowedActions
           keeps the page read-only (§6.4 note: a computed result, not a
           disabled-button state). */}
@@ -1039,7 +1039,7 @@ export function RecoveryAttemptDetailPage() {
         </PageSection>
       </div>
 
-      {/* ── Operations dialogs (J5-I1C1) ── */}
+      {/* ── Operations dialogs ── */}
       <RecoveryCommandDialog
         open={grantDialogOpen}
         onOpenChange={setGrantDialogOpen}

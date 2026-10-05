@@ -12,7 +12,7 @@ import type { Database } from "../types.js";
  * fields end to end — text_response questions carry rubric, and attempts
  * persist submittedAnswers + submissionReason.
  */
-describe("P3-L0-1 repo round-trip: text_response + submitted_answers", () => {
+describe("repo round-trip: text_response + submitted_answers", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
   let questionRepo: ReturnType<typeof createQuestionRepo>;

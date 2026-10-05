@@ -76,7 +76,7 @@ describe("surface-overlay family owns the floating-layer appearance", () => {
     expect(rule).toContain(SHADOW_LG);
   });
 
-  it("modal variant renders the content-tier surface + 8px + lg (issue 582 D7)", () => {
+  it("modal variant renders the content-tier surface + 8px + lg (issue 582)", () => {
     const rule = extractRule(
       RECIPES_CSS,
       '.surface-overlay[data-overlay-variant="modal"]',
@@ -87,7 +87,7 @@ describe("surface-overlay family owns the floating-layer appearance", () => {
     expect(rule).toContain(SHADOW_LG);
   });
 
-  it("panel variant renders the content-tier surface, zeroed radius/border, one edge per side (issue 582 D7)", () => {
+  it("panel variant renders the content-tier surface, zeroed radius/border, one edge per side (issue 582)", () => {
     const rule = extractRule(
       RECIPES_CSS,
       '.surface-overlay[data-overlay-variant="panel"]',

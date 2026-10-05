@@ -155,7 +155,7 @@ describe("MisconductMarkRequestPayloadSchema (canonical, durable)", () => {
   // canonicalizer both produced "x" — three representations of one
   // operation identity. The trim here makes the canonical receipt agree
   // with the other two layers.
-  it("trims surrounding whitespace from notes (P1-2)", () => {
+  it("trims surrounding whitespace from notes", () => {
     expect(
       MisconductMarkRequestPayloadSchema.parse({
         severity: "warning",
@@ -164,7 +164,7 @@ describe("MisconductMarkRequestPayloadSchema (canonical, durable)", () => {
     ).toEqual({ severity: "warning", notes: "x" });
   });
 
-  it("rejects whitespace-only notes after trim (P1-2)", () => {
+  it("rejects whitespace-only notes after trim", () => {
     expect(() =>
       MisconductMarkRequestPayloadSchema.parse({
         severity: "warning",
@@ -207,7 +207,7 @@ describe("ForceSubmitWithOperationRequestSchema", () => {
     ).toThrow();
   });
 
-  it("rejects a missing reason — the wire request requires it (J5-R0 §8.1)", () => {
+  it("rejects a missing reason — the wire request requires it (§8.1)", () => {
     expect(() =>
       ForceSubmitWithOperationRequestSchema.parse({ operationId: OP }),
     ).toThrow();

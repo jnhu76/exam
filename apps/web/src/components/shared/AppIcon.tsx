@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Governed size/stroke authority for the Lucide Refined icon system
- * (UI-ICON-REFINE-1).
+ *.
  *
  * Why both a numeric `size` prop AND a CSS size class:
  * - The numeric `size` prop drives Lucide's `absoluteStrokeWidth` formula
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
  *   collapsing nav/metric/state icons to 16px. The CSS class is emitted on
  *   the wrapper so it wins over caller classes via tailwind-merge ordering.
  *
- * Why the `data-app-icon` marker (issue 601 Step 1): author CSS beats SVG
+ * Why the `data-app-icon` marker (issue #601): author CSS beats SVG
  * presentation attributes, so primitive-internal optical rules such as
  * `[data-slot="pagination"] svg { stroke-width: 1.5 }` would also claim an
  * AppIcon rendered inside those primitives and silently override its role

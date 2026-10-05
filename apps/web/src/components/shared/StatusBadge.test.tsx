@@ -62,7 +62,7 @@ describe("StatusBadge", () => {
     expect(badge).not.toHaveClass("rounded-full");
   });
 
-  it("keeps the frozen 22px badge height in its recipe owner (issue 582 D5)", () => {
+  it("keeps the frozen 22px badge height in its recipe owner (issue 582)", () => {
     // D5 is a KEEP-AS-BUILT decision: badge/recipes.css owns the governed
     // height (1.375rem = 22px) and the component must not re-declare it.
     const here = dirname(fileURLToPath(import.meta.url));

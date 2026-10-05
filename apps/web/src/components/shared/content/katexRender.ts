@@ -1,13 +1,13 @@
 import katex from "katex";
 // KaTeX's stylesheet is REQUIRED for its HTML output to lay out correctly.
 // Imported here (inside the lazy math chunk), not at app root: the plain
-// content path must not download any KaTeX cost — CSS included (issue 301).
+// content path must not download any KaTeX cost — CSS included.
 import "katex/dist/katex.min.css";
 
 /**
  * Renders LaTeX to KaTeX's HTML string. Kept in its own module so `katex`
  * (and its CSS, imported alongside) only loads when a math node is actually
- * rendered (issue 301 §34: no math on the page → no KaTeX cost).
+ * rendered (#301 §34: no math on the page → no KaTeX cost).
  *
  * `trust: false` is the security boundary: \href, \includegraphics,
  * \htmlClass etc. are disabled, so the output cannot carry links, remote

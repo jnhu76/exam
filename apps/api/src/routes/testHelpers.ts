@@ -265,7 +265,7 @@ async function finishBuildTestApp(args: {
   const seedResult = await seed(db, hashPassword);
 
   // Rate limiting is part of the /api surface (apiSurface registers the
-  // limiter internally, EXAM-HTTP-SURFACE-AUTHORITY-CLOSURE-1). Whole-app
+  // limiter internally). Whole-app
   // builds therefore opt OUT of the limiter unless the caller explicitly
   // opts in with `rateLimit: true` (which registers the limiter at root for
   // route-level probes and must observe it active).
@@ -361,7 +361,7 @@ async function finishBuildTestApp(args: {
 
 /**
  * Creates a user WITH a primary active role assignment for testing
- * role-gated endpoints (RBAC-M10-E). Post-flip, every authenticated request
+ * role-gated endpoints (union-of-assignments authority). Post-flip, every authenticated request
  * resolves authority from ACTIVE user_role_assignments, so a user without an
  * assignment is locked out (E10). This helper is the canonical way to build a
  * login-capable test user. Returns the user row and a signed JWT token.

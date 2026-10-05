@@ -4,7 +4,7 @@ import { Permission, Role, Scope } from "./catalog.js";
 
 const asSet = (perms: readonly string[]) => new Set(perms);
 
-describe("RBAC-M2 role presets — shape", () => {
+describe("role presets — shape", () => {
   it("defines all 7 ADR presets", () => {
     expect(Object.keys(ROLE_PRESETS).sort()).toEqual(
       [
@@ -31,7 +31,7 @@ describe("RBAC-M2 role presets — shape", () => {
   });
 });
 
-describe("RBAC-M2 boundary #7 — Candidate is always own-scope only", () => {
+describe("boundary #7 — Candidate is always own-scope only", () => {
   const perms = asSet(permissionsForRole(Role.Candidate));
 
   it("Candidate holds only own_attempt / own_score runtime perms", () => {

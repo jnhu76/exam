@@ -28,10 +28,10 @@ export type NotificationType = z.infer<typeof NotificationTypeSchema>;
  * `<attemptId>` is restricted to URL-safe identifier characters
  * `[A-Za-z0-9_-]+` (UUIDs and any future id scheme that stays within that
  * class). This is the single source of truth shared by the trusted builders,
- * the write-time validator, and the render-time revalidator (P5-N1-R0 §16.3,
- * extended additively for `exam_assigned` under #402/#299). Anchored with
- * ^...$ so a trailing segment, traversal, or control character cannot slip
- * past; every accepted shape maps to an authorized candidate-facing route.
+ * the write-time validator, and the render-time revalidator (extended
+ * additively for `exam_assigned` under #402/#299). Anchored with ^...$ so a
+ * trailing segment, traversal, or control character cannot slip past; every
+ * accepted shape maps to an authorized candidate-facing route.
  */
 export const NOTIFICATION_ACTION_PATH_PATTERN =
   /^\/exam(?:\/[A-Za-z0-9_-]+\/result|\/list)$/;
@@ -63,7 +63,7 @@ export function isNotificationActionPath(path: string): boolean {
  * result_published, `/exam/list` for exam_assigned). Future types must map
  * to an explicit trusted shape here. `readAt` is null while unread and set
  * when marked read; it does NOT represent business completion
- * (P5-N1-R0 §19.4).
+ *.
  */
 export const NotificationSchema = z.object({
   id: z.string().uuid(),

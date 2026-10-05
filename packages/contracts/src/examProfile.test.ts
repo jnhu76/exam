@@ -8,7 +8,7 @@ import { CreateExamRequestSchema } from "./exam.js";
 import { normalizeInterruptionPolicyConfiguration } from "./interruption.js";
 import { STARTER_PROFILE_RECIPES } from "@exam/domain";
 
-describe("CreateExamRequestSchema — P7-M2 profileId + durationMinutes (design §19/§20)", () => {
+describe("CreateExamRequestSchema — profileId + durationMinutes (design §19/§20)", () => {
   const base = {
     title: "T",
     courseId: "00000000-0000-0000-0000-000000000001",
@@ -177,7 +177,7 @@ describe("UpdateExamProfileRequestSchema (design §22 explicit null)", () => {
   });
 });
 
-describe("ExamProfileSchema Phase A mode shapes (#291)", () => {
+describe("ExamProfileSchema timing-mode shapes (#291)", () => {
   const validCreate = {
     name: "Standard",
     timingMode: "timed_window",
@@ -189,7 +189,7 @@ describe("ExamProfileSchema Phase A mode shapes (#291)", () => {
     interruptionTimePolicy: "strict",
   };
 
-  it("accepts a deadline profile with null duration (#291 Phase A)", () => {
+  it("accepts a deadline profile with null duration (#291)", () => {
     const result = CreateExamProfileRequestSchema.safeParse({
       ...validCreate,
       timingMode: "deadline",
@@ -198,7 +198,7 @@ describe("ExamProfileSchema Phase A mode shapes (#291)", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts an untimed profile with null duration (#291 Phase A)", () => {
+  it("accepts an untimed profile with null duration (#291)", () => {
     const result = CreateExamProfileRequestSchema.safeParse({
       ...validCreate,
       timingMode: "untimed",

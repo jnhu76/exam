@@ -266,7 +266,8 @@ describe("rich answer save protocol", () => {
     }
   });
 
-  it("#676: inline and block math survive save → draft → submit freeze → grading entry", async () => {
+  // Regression for #676.
+  it("inline and block math survive save → draft → submit freeze → grading entry", async () => {
     const INLINE_LATEX = "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}";
     const BLOCK_LATEX = "\\int_0^1 x\\,dx = \\frac{1}{2}";
     // JSON.stringify escapes backslashes — match against the escaped form.

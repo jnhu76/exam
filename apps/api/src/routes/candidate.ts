@@ -295,12 +295,12 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             name: data.name,
             role: "Candidate" as const,
             isActive: true,
-            // P5-N1 §13: optional recipient email; contract normalizes + maps
+            // Optional recipient email; contract normalizes + maps
             // blank to undefined, so we store null when absent.
             email: data.email ?? null,
           });
-          // RBAC-M10-E: a candidate created here MUST get a primary active
-          // Candidate assignment in the SAME transaction, or the M10-E flip
+          // A candidate created here MUST get a primary active
+          // Candidate assignment in the SAME transaction, or the union-of-assignments flip
           // would leave the new candidate with no authority row (locked out).
           await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
             tx,
@@ -414,7 +414,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           throw new CandidateIdentityConflictError();
         }
       }
-      // P5-N1 §13: `email` is optional. Treat "field present in body" as an
+      // `email` is optional. Treat "field present in body" as an
       // explicit write (blank -> null clears it); "field absent" is a no-op.
       const emailProvided =
         request.body != null && "email" in (request.body as object);
@@ -592,7 +592,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           const passwordHash = await hashPassword(password);
-          // RBAC-M10-E: create user + primary Candidate assignment +
+          // Create user + primary Candidate assignment +
           // candidate profile in ONE per-row transaction. A failure in any of
           // the three rolls back all three for THIS row only; other rows are
           // unaffected. The catch below records the row-level import error.

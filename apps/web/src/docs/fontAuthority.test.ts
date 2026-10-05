@@ -201,7 +201,7 @@ export function bundledFontSourceViolations(files: {
   return v;
 }
 
-describe("bundled @font-face source authority (issue #601 Step 1)", () => {
+describe("bundled @font-face source authority (issue #601)", () => {
   const files = Object.fromEntries(
     Object.keys(FACE_WEIGHTS).map((name) => [
       name,

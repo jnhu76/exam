@@ -32,7 +32,7 @@ function expectTimingConflict(
   );
 }
 
-describe("Phase A timing-mode matrix — valid combinations", () => {
+describe("timing-mode matrix — valid combinations", () => {
   it("accepts timed_window (duration, closeAt, strict)", () => {
     expect(validateExamPolicyForExam(makeExam())).toEqual([]);
   });
@@ -75,7 +75,7 @@ describe("Phase A timing-mode matrix — valid combinations", () => {
   });
 });
 
-describe("Phase A timing-mode matrix — timed_window rejections", () => {
+describe("timing-mode matrix — timed_window rejections", () => {
   it("rejects timed_window with null duration", () => {
     expectTimingConflict(makeExam({ durationMinutes: null }));
   });
@@ -85,7 +85,7 @@ describe("Phase A timing-mode matrix — timed_window rejections", () => {
   });
 });
 
-describe("Phase A timing-mode matrix — deadline rejections", () => {
+describe("timing-mode matrix — deadline rejections", () => {
   it("rejects deadline with a positive duration", () => {
     expectTimingConflict(
       makeExam({ timingMode: "deadline", durationMinutes: 60 }),
@@ -123,7 +123,7 @@ describe("Phase A timing-mode matrix — deadline rejections", () => {
   });
 });
 
-describe("Phase A timing-mode matrix — untimed rejections", () => {
+describe("timing-mode matrix — untimed rejections", () => {
   it("rejects untimed with a positive duration", () => {
     expectTimingConflict(
       makeExam({
@@ -152,7 +152,7 @@ describe("Phase A timing-mode matrix — untimed rejections", () => {
   });
 });
 
-describe("Phase A timing-mode matrix — timed_sync blocked", () => {
+describe("timing-mode matrix — timed_sync blocked", () => {
   it("rejects timed_sync regardless of the other timing fields", () => {
     expectTimingConflict(makeExam({ timingMode: "timed_sync" }));
     expectTimingConflict(

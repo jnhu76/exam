@@ -157,7 +157,7 @@ const IncidentListResponseSchema = z.object({
   incidents: z.array(IncidentResponseSchema),
 });
 
-// ── Recovery Incident Queue (J5-I1A1, contract §5.4) ──
+// ── Recovery Incident Queue (contract §5.4) ──
 
 /**
  * Wire format of the keyset cursor: `"<createdAtISO>|<id>"`. This is the ONLY
@@ -1300,7 +1300,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ── Recovery Incident Queue (J5-I1A1, contract §5.4) ──
+  // ── Recovery Incident Queue (contract §5.4) ──
   //
   // Organization-wide Admin-only Recovery Center queue. `IncidentRecoveryView`
   // is granted ONLY to Admin (catalog.ts / presets.ts); the flat
@@ -1381,7 +1381,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ── Proctor Recovery Center (J6, #303) — Proctor Operations projections ──
+  // ── Proctor Recovery Center — Proctor Operations projections ──
   //
   // AUTHORITY FREEZE: these projections expose ONLY incident-domain truth an
   // assigned Proctor already holds read authority over. They deliberately OMIT
@@ -1562,7 +1562,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ── Recovery Incident Aggregate Detail (J5-I1A2, contract §6.3) ──
+  // ── Recovery Incident Aggregate Detail (contract §6.3) ──
   //
   // Admin-only authoritative aggregate projection. `IncidentRecoveryView` is
   // granted ONLY to Admin (catalog.ts / presets.ts), so the flat
@@ -1617,7 +1617,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
 
       // Effective deadline = canonical min(exam.closeAt, attempt.deadlineAt),
       // with null attempt deadlineAt → exam.closeAt, and untimed exams
-      // (closeAt null, #291 Phase A) → null for every attempt. Computed here
+      // (closeAt null, #291) → null for every attempt. Computed here
       // (not in the repo, which is forbidden from importing @exam/exam-engine)
       // via the single canonical authority, which reads only `exam.closeAt`
       // and `attempt.deadlineAt`.
@@ -1702,7 +1702,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ── Recovery Attempt Operations Context (J5-I1A3, contract §6.4) ──
+  // ── Recovery Attempt Operations Context (contract §6.4) ──
   //
   // Admin-only authoritative per-Attempt read model. Same auth shape as the
   // queue and the Incident aggregate: flat `requireCapability` gate on
@@ -1754,7 +1754,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
 
       // Effective deadline = canonical min(exam.closeAt, attempt.deadlineAt),
       // with null attempt deadlineAt → exam.closeAt, and untimed exams
-      // (closeAt null, #291 Phase A) → null. Computed here (not in the repo,
+      // (closeAt null, #291) → null. Computed here (not in the repo,
       // which is forbidden from importing @exam/exam-engine) via the single
       // canonical authority.
       const effectiveDeadlineAt = computeEffectiveDeadline(
@@ -1858,7 +1858,7 @@ export async function registerAdminIncidentRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ── Recovery Exam Context (J5-I1B4, contract §6.5) ──
+  // ── Recovery Exam Context (contract §6.5) ──
   //
   // Admin-only org-wide Exam recovery aggregate: exam summary, incident
   // counts by status/severity, newest incidents, active proctors, attempt

@@ -54,7 +54,7 @@ export function prefixFamily(name: string, prefix: string): UtilityFamily {
 
 /**
  * Build a variant-aware family matcher that detects a Tailwind utility family
- * UNDER any variant prefix AND in arbitrary-value form (UI-MIGRATE-N-W4B §M).
+ * UNDER any variant prefix AND in arbitrary-value form.
  *
  * `prefixFamily` matches only a bare token like `shadow-sm`; it misses
  * `hover:shadow-md`, `data-[state=open]:shadow-lg`, and `shadow-[0_2px_8px_…]`

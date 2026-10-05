@@ -14,7 +14,8 @@ const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(permissionRegistryRoutes);
 };
 
-describe("#298 permission registry + effective authority", () => {
+// Issue #298.
+describe("permission registry + effective authority", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let orgId: string;
   let adminId: string;
@@ -78,7 +79,7 @@ describe("#298 permission registry + effective authority", () => {
     // A user with NO assignment rows at all — the "no active authority" case.
     idleUserId = await seedUser("reg-idle", "Candidate", "reg-pass-5");
 
-    // RBAC-M10-E: one active primary assignment per seeded actor so the
+    // One active primary assignment per seeded actor so the
     // authenticate preHandler resolves the role's preset.
     await ctx.db.insert(schema.userRoleAssignments).values([
       {

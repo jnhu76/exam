@@ -50,7 +50,7 @@ export interface ExamRepository {
    * interruption restore/bounded-grace evaluation to serialize the
    * authoritative `closeAt` read against exam-window changes, and by
    * `publishResults` to serialize the write-once `resultsPublishedAt`
-   * decision (P7-S2-A). Lock order Enrollment → Attempt → Exam must be
+   * decision. Lock order Enrollment → Attempt → Exam must be
    * preserved; no Exam → Attempt path.
    */
   findByIdForUpdate(examId: string): Promise<Exam | null> | Exam | null;
@@ -92,7 +92,7 @@ export function buildQuestionSnapshot(
       score: q.score,
       gradingRule: q.gradingRule,
       order: index,
-      // P3-L0-1: rubric dual-layer — copy authoring source into the frozen
+      // Rubric dual-layer — copy authoring source into the frozen
       // grading source. Always string | null; objective questions carry null.
       rubric: q.rubric ?? null,
     };
@@ -160,11 +160,11 @@ export async function publishExam(
   if (exam.questionIds.length === 0) {
     throw new ValidationError("Exam must have at least one question");
   }
-  // P7-M1: Phase-1 invariants. The timing/selection/retake enum values are
+  // Phase-1 invariants. The timing/selection/retake enum values are
   // narrowed by Zod literals at the contract boundary; these guards are the
   // engine-side re-check (publish is the freeze/acceptance gate) and also
   // defend against historically/stale data that predates a narrower contract.
-  // Phase A2 (#291): timed_window/deadline/untimed are publishable; the
+  // Since #291: timed_window/deadline/untimed are publishable; the
   // canonical revalidation below is the authority that rejects timed_sync.
   if (exam.timingMode === "timed_sync") {
     throw new ValidationError("timed_sync exams are not supported");
@@ -181,15 +181,15 @@ export async function publishExam(
   }
   // `duration_minutes` has no DB CHECK (> 0), so publish is the last line for
   // historical/stale rows that bypass the Zod `.positive()` shape boundary
-  // (P7-M1 design §9: duration is "Zod + publish"). Shape invariant, not
+  // (exam-policy-authority §9: duration is "Zod + publish"). Shape invariant, not
   // cross-field — stays here rather than in the canonical validator. Null is
-  // legal since Phase A (#291): deadline/untimed exams carry no duration
+  // legal since #291: deadline/untimed exams carry no duration
   // (their mode matrix lives in the canonical revalidation below).
   if (exam.durationMinutes !== null && exam.durationMinutes <= 0) {
     throw new ValidationError("Duration must be positive");
   }
 
-  // P7-M1: canonical cross-field policy revalidation (design §11). Publish is
+  // Canonical cross-field policy revalidation (exam-policy-authority §11). Publish is
   // the authority/freeze boundary and revalidates the WHOLE resolved policy —
   // window ordering, passing<=total, max_attempts sanity, and interruption
   // caps (ADR-013). Pure;
@@ -201,7 +201,7 @@ export async function publishExam(
     throw new ValidationError("Exam questions must belong to its course");
   }
 
-  // P3-L0-5 publish validation (CONTEXT.md "Publish validation"):
+  // Publish validation (CONTEXT.md "Publish validation"):
   //   - auto questions (single_choice/multiple_choice/true_false/fill_blank)
   //     require a non-empty, non-placeholder standardAnswer.
   //   - text_response requires a non-empty, non-placeholder rubric;
@@ -254,7 +254,7 @@ export async function publishExam(
         );
       }
     }
-    // #301 corrective pass: the SAME projection invariant holds for rich
+    // #301: the SAME projection invariant holds for rich
     // OPTIONS — a divergent frozen option would show candidates one text
     // (plain projection) while the rich renderer draws another. Publish is
     // the freeze gate: fail closed, never auto-repair. D5.1 applies the same
@@ -523,7 +523,7 @@ export async function archiveExam(
 }
 
 /**
- * Publishes results for an exam (P2D-J5a).
+ * Publishes results for an exam.
  *
  * Sets `resultsPublishedAt` on the exam so manual-mode result visibility
  * flips from hidden → visible. This is NOT a lifecycle status transition
@@ -538,7 +538,7 @@ export async function archiveExam(
  * detect the no-op case via the `alreadyPublished` return flag and suppress
  * duplicate audit/metadata accordingly.
  *
- * P7-S2-A (RESULT_PUBLISH_IS_SINGLE_WINNER): the `resultsPublishedAt`
+ * RESULT_PUBLISH_IS_SINGLE_WINNER: the `resultsPublishedAt`
  * transition NULL → timestamp happens exactly once per exam. The exam row is
  * locked (FOR UPDATE) and the timestamp re-read under the lock, so two
  * concurrent publishers cannot both observe NULL; the loser returns
@@ -555,7 +555,7 @@ export async function publishResults(
   examId: string,
   now: Date,
 ): Promise<{ exam: Exam; alreadyPublished: boolean }> {
-  // P7-S2-A: read the exam under the row lock and re-check
+  // Read the exam under the row lock and re-check
   // `resultsPublishedAt` under the lock. Without this serialization two
   // concurrent publishers can both observe NULL and both claim the first
   // publication (double audit, timestamp overwrite).

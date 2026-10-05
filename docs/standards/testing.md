@@ -54,7 +54,7 @@ production deployment itself is the acceptance surface (§1.6).
 | **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
 | **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
 | **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}` for this workflow run only (1-day retention). The name is run-scoped, not attempt-scoped, so partial reruns of downstream jobs still resolve it; `overwrite: true` lets a full rerun replace the same-run artifact. |
-| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and the four E2E shards download this same-workflow artifact and do not rebuild it. |
+| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and the two E2E shards download this same-workflow artifact and do not rebuild it. |
 | **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
 | **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment acceptance does not consume it: the operator's real `docker compose` run uses the pinned release images, not this artifact. |
 
@@ -111,12 +111,12 @@ production deployment itself is the acceptance surface (§1.6).
 
 | Field | Value |
 |-------|-------|
-| **Job** | `e2e` (matrix: `shardIndex: [1, 2, 3, 4]`, `shardTotal: [4]`) |
+| **Job** | `e2e` (matrix: `shardIndex: [1, 2]`, `shardTotal: [2]`) |
 | **Command** | `pnpm --filter @exam/e2e exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}` |
 | **Input build** | Downloads the current workflow's `verify-build` artifact; the shards do not run `pnpm build` independently. |
 | **Browser cache** | `~/.cache/ms-playwright` is cached by OS + E2E package/lockfile state; system dependencies are still installed every shard. |
 | **Services** | PostgreSQL (`exam_e2e` on `localhost:5432`) |
-| **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=${{ matrix.shardTotal }}` (4), fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
+| **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=${{ matrix.shardTotal }}` (2), fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
 | **Allowed resources** | PostgreSQL (`exam_e2e`), CPU, Chromium |
 | **Forbidden** | `exam` or `exam_test` databases, a host port that contradicts `DB_HOST_PORT` (default 5432) |
 | **Failure attribution** | Server startup → check `server.log`; test failure → check `test-results/`; shard-specific → check shard index |
@@ -457,6 +457,30 @@ durability boundary.
 
 ## 4. E2E Contract
 
+### 4.0 E2E retention principle
+
+The retention bar is reversed: KEEP requires proof. An E2E earns its
+permanent browser/DB/fixture cost only when BOTH hold:
+
+1. the failure mechanism cannot be faithfully proven at a lower layer
+   (domain/engine/API+PostgreSQL/component) — real browser mechanics
+   (contenteditable selection, shadow DOM, cross-tab Web Locks, real reload
+   and network-failure timing), browser↔server composition (save/submit
+   ordering, lost-response retry identity, cookie/session lifecycle), or
+   true deployment/transport boundaries (production LAN HTTP); and
+2. the failure is materially risky (data loss, wrong submission,
+   authorization, recovery, session, deployment), not cosmetic staleness.
+
+A browser-only assertion is not automatically worth E2E. Per-role route and
+visibility matrices, CRUD driven through buttons, and axe/aria attribute
+scans are kept only when the browser composition itself is the unowned
+mechanism. Trivial visual geometry (bounding-box px contracts, exact
+widths/gaps, breakpoint layout) has zero permanent E2E; narrow-viewport
+coverage is one operability journey (editor usable, navigation and submit
+reachable), never pixel layout. Every surviving E2E must name the material
+invariant it owns and the browser/system mechanism that requires the
+browser.
+
 ### 4.1 Local E2E (`scripts/e2e/run.sh`)
 
 One canonical host-native runner backs `pnpm e2e`. The application runs on
@@ -485,7 +509,7 @@ repository-owned topology.
 
 | Aspect | Rule |
 |--------|------|
-| **Shard count** | 4 (defined in `matrix.shardTotal: [4]`) |
+| **Shard count** | 2 (defined in `matrix.shardTotal: [2]`) |
 | **Shard index** | `${{ matrix.shardIndex }}` (1-based) |
 | **Database per shard** | Single shared `exam_e2e` (CI doesn't create per-shard DBs) |
 | **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
@@ -650,8 +674,8 @@ E2E_WORKERS=4 bash scripts/e2e/run.sh
 
 | Parameter | Value |
 |-----------|-------|
-| `matrix.shardIndex` | `[1, 2, 3, 4]` |
-| `matrix.shardTotal` | `[4]` |
+| `matrix.shardIndex` | `[1, 2]` |
+| `matrix.shardTotal` | `[2]` |
 | `fail-fast` | `true` |
 | `build input` | same-workflow `verify-build` artifact (`packages/*/dist`, `apps/api/dist`, `apps/web/dist`) |
 | `browser cache` | `~/.cache/ms-playwright`, keyed by OS + E2E package/lockfile state |
@@ -678,7 +702,7 @@ After any change to test configuration, CI workflow, or vitest config, verify:
 - [ ] `pnpm --filter @exam/web coverage` passes
 - [ ] `pnpm --filter "@exam/api" coverage` passes (with `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`)
 - [ ] `pnpm verify` passes (full pipeline)
-- [ ] All four CI E2E shards consume the same-workflow build artifact and execute their real Playwright tests
+- [ ] All CI E2E shards consume the same-workflow build artifact and execute their real Playwright tests
 - [ ] No `as any` casts in test files
 - [ ] All time-dependent tests use fake timers
 - [ ] No `TEST_DATABASE_URL` fallback to `DATABASE_URL` in test configs

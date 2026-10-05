@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createIpDigest, createRateLimitKey } from "./rateLimitKey.js";
 
-describe("rate limit key digest (P7 §13)", () => {
+describe("rate limit key digest (§13)", () => {
   it("is deterministic for the same IP and secret", () => {
     expect(createIpDigest("10.0.0.7", "secret-a")).toBe(
       createIpDigest("10.0.0.7", "secret-a"),

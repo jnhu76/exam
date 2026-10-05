@@ -6,7 +6,7 @@ import {
 } from "./routeRegistry.js";
 import { Permission, Scope } from "@exam/authz";
 
-describe("RBAC-M4 route permission registry — shape & invariants", () => {
+describe("route permission registry — shape & invariants", () => {
   it("exports a non-empty registry", () => {
     expect(ROUTE_PERMISSION_REGISTRY.length).toBeGreaterThan(0);
   });
@@ -40,7 +40,7 @@ describe("RBAC-M4 route permission registry — shape & invariants", () => {
   });
 });
 
-describe("RBAC-M4 route permission registry — ADR §8 special mappings", () => {
+describe("route permission registry — ADR §8 special mappings", () => {
   const find = (method: string, path: string) =>
     ROUTE_PERMISSION_REGISTRY.find(
       (e) => e.method === method && e.path === path,
@@ -150,7 +150,7 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
  * a runtime decorator without updating the registry (or vice versa), the
  * mismatch surfaces here.
  */
-describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — migrated-route registry declarations", () => {
+describe("migrated-route registry declarations", () => {
   const find = (method: string, path: string) =>
     ROUTE_PERMISSION_REGISTRY.find(
       (e) => e.method === method && e.path === path,

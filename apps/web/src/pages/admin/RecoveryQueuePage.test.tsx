@@ -374,7 +374,7 @@ describe("RecoveryQueuePage", () => {
     expect(getMock).toHaveBeenCalledTimes(2);
   });
 
-  it("rapidly typing examId then candidateId commits BOTH filters to the URL (shared debounce, P2)", async () => {
+  it("rapidly typing examId then candidateId commits BOTH filters to the URL (shared debounce)", async () => {
     vi.useFakeTimers();
     renderPage();
     await act(async () => {});
@@ -402,7 +402,7 @@ describe("RecoveryQueuePage", () => {
     expect(lastCall).toContain("candidateId=cand-9");
   });
 
-  it("empty queue + background poll failure keeps EmptyState + inline warning + refresh button (P1-3)", async () => {
+  it("empty queue + background poll failure keeps EmptyState + inline warning + refresh button", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     getMock.mockResolvedValueOnce({
       items: [],
@@ -433,7 +433,7 @@ describe("RecoveryQueuePage", () => {
     expect(screen.getByText(/数据快照/)).toBeInTheDocument();
   });
 
-  it("changing status while a free-text debounce is pending keeps BOTH in the URL (P2)", async () => {
+  it("changing status while a free-text debounce is pending keeps BOTH in the URL", async () => {
     vi.useFakeTimers();
     // Start with status=investigating already in the URL, simulating a prior
     // Select commit. Then type examId (debounce pending). The debounce commit

@@ -188,7 +188,7 @@ async function insertRecoveryAttempt(
   });
 }
 
-describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents", () => {
+describe("Admin Recovery Center queue — GET /admin/recovery/incidents", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let adminToken: string;
   let candidateToken: string;
@@ -997,9 +997,9 @@ describe("J5-I1A1 Admin Recovery Center queue — GET /admin/recovery/incidents"
   });
 });
 
-// ── J5-I1A2 — Recovery Incident Aggregate Detail (contract §6.3) ──
+// ── Recovery Incident Aggregate Detail (contract §6.3) ──
 
-describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incidents/:incidentId", () => {
+describe("Admin Recovery aggregate detail — GET /admin/recovery/incidents/:incidentId", () => {
   let ctx2: Awaited<ReturnType<typeof buildTestApp>>;
   let adminToken2: string;
   let candidateToken2: string;
@@ -1713,9 +1713,9 @@ describe("J5-I1A2 Admin Recovery aggregate detail — GET /admin/recovery/incide
   });
 });
 
-// ── J5-I1A3 — Recovery Attempt Operations Context (contract §6.4) ──
+// ── Recovery Attempt Operations Context (contract §6.4) ──
 
-describe("J5-I1A3 Admin Recovery attempt operations — GET /admin/recovery/attempts/:attemptId", () => {
+describe("Admin Recovery attempt operations — GET /admin/recovery/attempts/:attemptId", () => {
   let ctx3: Awaited<ReturnType<typeof buildTestApp>>;
   let adminToken3: string;
   let candidateToken3: string;
@@ -2283,9 +2283,9 @@ describe("J5-I1A3 Admin Recovery attempt operations — GET /admin/recovery/atte
   });
 });
 
-// ── J5-I1B4 — Recovery Exam Context (contract §6.5) ──
+// ── Recovery Exam Context (contract §6.5) ──
 
-describe("J5-I1B4 Admin Recovery exam context — GET /admin/recovery/exams/:examId", () => {
+describe("Admin Recovery exam context — GET /admin/recovery/exams/:examId", () => {
   let ctx4: Awaited<ReturnType<typeof buildTestApp>>;
   let adminToken4: string;
   let candidateToken4: string;

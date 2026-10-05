@@ -49,7 +49,9 @@ afterAll(async () => {
 });
 
 describe("registerStaticFrontend — router-native web surface", () => {
-  it("HTML shell (/, /index.html, SPA deep links) is served with no-cache, never immutable (I4 / #500)", async () => {
+  // Regression for #500: the HTML shell must never carry the immutable
+  // asset policy.
+  it("HTML shell (/, /index.html, SPA deep links) is served with no-cache, never immutable", async () => {
     for (const path of ["/", "/index.html", "/some/spa/deep/link"]) {
       const res = await fetch(`${baseUrl}${path}`);
       expect(res.status, path).toBe(200);
@@ -61,7 +63,7 @@ describe("registerStaticFrontend — router-native web surface", () => {
     }
   });
 
-  it("fingerprinted assets keep the immutable long-lived policy (I5)", async () => {
+  it("fingerprinted assets keep the immutable long-lived policy", async () => {
     const res = await fetch(`${baseUrl}/assets/real.js`);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("real asset");

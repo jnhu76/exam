@@ -3,8 +3,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { Permission, type PermissionKey, type RoleKey } from "@exam/authz";
 
 /**
- * Unit tests for the candidate-context capability preHandler (RBAC-M10-A
- * archetype A, capability-only gate). Verifies the gate reads the authoritative
+ * Unit tests for the candidate-context capability preHandler (a
+ * capability-only gate). Verifies the gate reads the authoritative
  * ctx.capabilities union and does NOT branch on role name.
  */
 
@@ -16,7 +16,7 @@ function capabilitiesFor(role: string): readonly PermissionKey[] {
   return ROLE_CAPS[role] ?? [];
 }
 
-/** Request-scoped predicate that reads ctx.capabilities (RBAC-M10-E). */
+/** Request-scoped predicate that reads ctx.capabilities. */
 function allows(request: FastifyRequest, perm: PermissionKey): boolean {
   return (request.ctx?.capabilities ?? []).includes(perm);
 }
@@ -66,7 +66,7 @@ function makeReply() {
 const { buildCandidateContextCapabilityPreHandler } =
   await import("./candidateContextCapability.js");
 
-describe("RBAC-M10-A candidate-context capability preHandler", () => {
+describe("candidate-context capability preHandler", () => {
   const build = () =>
     buildCandidateContextCapabilityPreHandler(allows)(Permission.ExamTake);
 

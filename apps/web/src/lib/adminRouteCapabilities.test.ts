@@ -146,7 +146,7 @@ describe("canAccessAdminRoute — index / unmapped", () => {
   });
 });
 
-describe("canAccessAdminRoute — Teacher ALLOW (frozen P4 matrix)", () => {
+describe("canAccessAdminRoute — Teacher ALLOW (frozen matrix)", () => {
   const allow = [
     "courses",
     "questions",
@@ -169,7 +169,7 @@ describe("canAccessAdminRoute — Teacher ALLOW (frozen P4 matrix)", () => {
   });
 });
 
-describe("canAccessAdminRoute — Teacher DENY (frozen P4 matrix)", () => {
+describe("canAccessAdminRoute — Teacher DENY (frozen matrix)", () => {
   const deny = [
     "dashboard",
     "system",

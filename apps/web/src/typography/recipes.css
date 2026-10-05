@@ -1,6 +1,6 @@
 /*
  * Semantic typography recipes — the first appearance abstraction above
- * primitive Tailwind typography utilities (UI-RECIPE-1A).
+ * primitive Tailwind typography utilities.
  *
  * Public authority: the type-NAME class names. Business consumers use the
  * recipe name; they must not recompose the same role from primitive text,
@@ -26,10 +26,9 @@
  * (statusMeta.ts plus StatusBadge). Field errors are owned by the FieldError
  * component, not a type-NAME recipe.
  *
- * UI-KOI-WEGENT-VISUAL-PIVOT-1: Updated token references from warm Quiet
- * Graphite (--text, --text-muted) to crisp cool-neutral (--ink values via
- * --text, --text-muted). Page title bumped to 24px; metric explicitly sized
- * at 28px per the admin clarity target.
+ * Palette: crisp cool-neutral (--ink values via --text, --text-muted). Page
+ * title is 24px; the metric is explicitly sized at 28px per the admin clarity
+ * target.
  */
 
 /* page-title: 24px / 500 / ink. Strongest non-numeric hierarchy.
@@ -121,8 +120,8 @@
 /* metric-hero: 48px / 700 / tabular-nums. The single largest numeric emphasis
  * on a screen — a final exam score shown to a candidate. Distinct from
  * type-metric (28px) by deliberate scale; both own weight 700 + tabular-nums
- * so numeric alignment is consistent. Introduced in UI-TOKEN-TABLE-FOUNDATION-1
- * to replace an ad-hoc text-5xl font-bold at ResultPage. */
+ * so numeric alignment is consistent. Introduced to replace an ad-hoc
+ * text-5xl font-bold at ResultPage. */
 .type-metric-hero {
   font-family: var(--font-ui);
   font-size: 3rem;

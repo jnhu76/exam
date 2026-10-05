@@ -18,7 +18,7 @@ import scoreRoutes from "./scores.js";
 
 /**
  * Builds a subjective (manual-graded) question snapshot.
- * P3-L0-2D: protocol §1.4 — manual-graded questions are `text_response` by
+ * Per protocol §1.4, manual-graded questions are `text_response` by
  * QuestionType semantics, NOT by `standardAnswer == null`. The default
  * fixture carries a null standardAnswer; a non-null reference answer is
  * exercised in exam-engine's manualGradingCompletion.test.ts.
@@ -69,7 +69,7 @@ function objectiveQuestion(id: string, score = 10): QuestionSnapshot {
  * Subjective questions cannot be created via the question API (which
  * requires a non-null standardAnswer), so attempts are seeded directly.
  *
- * P3-L0-2E Slice 3: the route sources ALL grading state from the durable
+ * The route sources ALL grading state from the durable
  * `attempt_grading_entries` workset, so callers must also materialize grading
  * entries via {@link seedGradingEntries} for the queue / grading-details /
  * grade-question paths to observe the work. An attempt with
@@ -193,9 +193,9 @@ async function seedAttempt(
     enrollmentId: enr.id,
     candidateId: candidateProfileId,
     attemptNo: 1,
-    // Slice 3C: manual grading is only permitted while the attempt is at
+    // Manual grading is only permitted while the attempt is at
     // `submitted + pending_manual`. Test fixtures seed attempts at the correct
-    // lifecycle state; the Slice 7/11/13/14 tests that need a terminal `graded`
+    // lifecycle state; the tests below that need a terminal `graded`
     // attempt reach it by grading the last pending question.
     status: "submitted",
     gradingStatus:
@@ -223,7 +223,7 @@ async function seedAttempt(
 }
 
 /**
- * P3-L0-2E Slice 3 test helper: materializes the durable grading workset for
+ * Test helper: materializes the durable grading workset for
  * an attempt, mirroring what `submitAttempt` would have produced. Each frozen
  * question gets exactly one `attempt_grading_entries` row: objective questions
  * are `completed_auto` with their auto-graded score; text_response questions
@@ -292,7 +292,7 @@ async function seedGradingEntries(
   );
 }
 
-describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
+describe("grading queue routes", () => {
   let ctx: TestContext;
 
   beforeAll(async () => {
@@ -307,7 +307,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     await ctx.cleanup();
   });
 
-  // ── Slice 1: tracer bullet ───────────────────────────────────────
+  // ── tracer bullet: first end-to-end queue read ─────────────────
   it("lists an attempt with a pending_manual grading entry in the queue", async () => {
     const { attemptId, examId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-essay")],
@@ -344,7 +344,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(body.total).toBeGreaterThanOrEqual(1);
   });
 
-  // ── Slice 2: pure-objective attempt NOT in queue ─────────────────
+  // ── pure-objective attempt NOT in queue ─────────────────
   it("does not list an attempt whose grading entries are all completed_auto", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [objectiveQuestion("q-obj")],
@@ -371,7 +371,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(mine).toBeUndefined();
   });
 
-  // ── Slice 3: 403 non-admin ───────────────────────────────────────
+  // ── 403 non-admin ───────────────────────────────────────
   it("rejects a non-admin (candidate) token with 403", async () => {
     const res = await ctx.app.inject({
       method: "GET",
@@ -381,9 +381,9 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  // ── Slice 3E (Slice 3 invariant E): lifecycle state alone cannot create work ──
+  // ── lifecycle state alone cannot create work ──
   it("does not fabricate queue work from gradingStatus=pending_manual when no grading entry exists", async () => {
-    // Attempt is pending_manual but has ZERO grading entries. Slice 3: the
+    // Attempt is pending_manual but has ZERO grading entries. The
     // queue MUST NOT reconstruct work from questionSnapshot / lifecycle state.
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-ghost")],
@@ -404,7 +404,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(mine).toBeUndefined();
   });
 
-  // ── Slice 3N: tenant isolation ───────────────────────────────────
+  // ── tenant isolation ───────────────────────────────────
   it("does not expose another organization's pending grading entries", async () => {
     const now = new Date();
     const foreignOrgId = crypto.randomUUID();
@@ -546,7 +546,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(mine).toBeUndefined();
   });
 
-  // ── P4-2A: resource-aware capability resolver wiring (RBAC-M10-finish) ──
+  // ── resource-aware capability resolver wiring ──
   // The grading-details + grade-question routes use requireScopedCapability,
   // which runs a DB-backed attempt resolver BEFORE the handler. The attempt
   // resolver loads via attemptRepo.findById(ctx), which already filters by the
@@ -689,7 +689,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  // ── Slice 4: GET grading-details returns subjective questions + state ──
+  // ── GET grading-details returns subjective questions + state ──
   it("returns manual-mode questions and their grading state in details", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-essay-1")],
@@ -726,7 +726,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
   });
 
-  // ── Slice 5: grading-details 404 unknown attempt ─────────────────
+  // ── grading-details 404 unknown attempt ─────────────────
   it("returns 404 for an unknown attempt in grading-details", async () => {
     const res = await ctx.app.inject({
       method: "GET",
@@ -736,7 +736,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  // ── Slice 6: POST grade-question saves score + comment ───────────
+  // ── POST grade-question saves score + comment ───────────
   it("saves a manual score and comment for a subjective question", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-a"), subjectiveQuestion("q-b")],
@@ -784,7 +784,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
   });
 
-  // ── Slice 7: last subjective graded -> fully_graded ──────────────
+  // ── last subjective graded -> fully_graded ──────────────
   it("flips gradingStatus to fully_graded when the last question is graded", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-only")],
@@ -817,7 +817,60 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
   });
 
-  // ── Slice 8 (Slice 3C): a completed_manual entry is terminal — no overwrite ──
+  // ── explicit zero as the last manual score is a real grade ──
+  // INVARIANT: 0 is a legal terminal score. Any truthiness shortcut on score
+  // (validation, persistence, or pending-count) would strand the attempt in
+  // pending_manual and withhold an after_grading result indefinitely.
+  it("closes grading when the last manual score is an explicit zero", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-zero")],
+      title: "Zero Score Terminal",
+    });
+    await ctx.db
+      .update(schema.examAttempts)
+      .set({ status: "submitted" })
+      .where(eq(schema.examAttempts.id, attemptId));
+    await seedGradingEntries(
+      ctx,
+      attemptId,
+      [subjectiveQuestion("q-zero")],
+      [],
+    );
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q-zero", score: 0, comment: "" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    // Validation truthiness (`if (!score)` → 400) is caught here.
+    expect(res.statusCode).toBe(200);
+    // Closure-skip mutation (zero treated as not-yet-graded) is caught here.
+    expect(res.json()).toMatchObject({
+      gradingStatus: "fully_graded",
+      fullyGraded: true,
+    });
+
+    // Persistence falsiness (`score || null`) is caught here.
+    const requestContext = {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const entry = await createAttemptGradingEntryRepo(
+      ctx.db,
+    ).findByAttemptAndQuestion(requestContext, attemptId, "q-zero");
+    expect(entry).toMatchObject({
+      status: "completed_manual",
+      earnedScore: 0,
+    });
+  });
+
+  // ── a completed_manual entry is terminal — no overwrite ──
   it("does not overwrite a completed_manual entry and keeps exactly one row", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [
@@ -841,7 +894,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
     expect(first.statusCode).toBe(200);
 
-    // Slice 3C: re-grading q-re is rejected (entry already completed_manual).
+    // Re-grading q-re is rejected (entry already completed_manual).
     const second = await ctx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
@@ -875,7 +928,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(qother).toMatchObject({ status: "pending_manual" });
   });
 
-  // ── Slice 9: error contract ──────────────────────────────────────
+  // ── error contract ──────────────────────────────────────
   it("returns 404 grading an unknown attempt", async () => {
     const res = await ctx.app.inject({
       method: "POST",
@@ -886,7 +939,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  // ── Slice 3K: missing grading entry fails closed ─────────────────
+  // ── missing grading entry fails closed ─────────────────
   it("returns 404 when the grading entry is missing (fail closed, no lazy create)", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-missing-entry")],
@@ -917,7 +970,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(entry).toBeNull();
   });
 
-  // ── Slice 3L: an auto_graded attempt is not in the manual-grading lifecycle ──
+  // ── an auto_graded attempt is not in the manual-grading lifecycle ──
   it("rejects manual grading on an auto_graded attempt (not pending_manual)", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [objectiveQuestion("q-obj")],
@@ -936,7 +989,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
       payload: { questionId: "q-obj", score: 5 },
       cookies: { "auth-token": ctx.adminToken },
     });
-    // Slice 3C: the attempt is submitted + auto_graded, not pending_manual —
+    // The attempt is submitted + auto_graded, not pending_manual —
     // manual grading is rejected at the lifecycle guard.
     expect(res.statusCode).toBe(409);
   });
@@ -976,7 +1029,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  // ── Slice 10: audit row grading.score_entered ────────────────────
+  // ── audit row grading.score_entered ────────────────────
   it("records a grading.score_entered audit row with full metadata", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-aud", 10)],
@@ -1083,7 +1136,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(serialized).not.toContain("answer");
   });
 
-  // ── Slice 11: audit row grading.finalized ────────────────────────
+  // ── audit row grading.finalized ────────────────────────
   it("records a grading.finalized audit when last question is graded", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-fin", 10)],
@@ -1210,7 +1263,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
   });
 
-  // ── Slice 12: grading-details surfaces the candidate's answer ────
+  // ── grading-details surfaces the candidate's answer ────
   it("returns the candidate's answer for a subjective question in details", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-ans")],
@@ -1252,7 +1305,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(questions[0]!.candidateAnswer).toBe("my essay response");
   });
 
-  // ── Slice 13: full grading reconciles objective + manual total ───
+  // ── full grading reconciles objective + manual total ───
   it("reconciles objective + manual into the attempt total on full grading", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [
@@ -1305,7 +1358,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
   });
 
-  // ── Slice 14 (Slice 3C): terminal truth is immutable ───────────
+  // ── terminal truth is immutable ───────────
   it("rejects manual grading after the attempt reaches graded + fully_graded and preserves terminal truth", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-re", 60)],
@@ -1365,7 +1418,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(entry?.earnedScore).toBe(60);
   });
 
-  // ── Slice 3H/I: multi-manual queue behavior ──────────────────────
+  // ── multi-manual queue behavior ──────────────────────
   it("returns two queue items for two pending manual questions, then one after grading the first", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [
@@ -1413,7 +1466,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
   });
 
-  // ── Slice 3C/O: completed_manual immediately leaves the queue ────
+  // ── completed_manual immediately leaves the queue ────
   it("removes the attempt from the queue once all manual entries are completed", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-done")],
@@ -1448,7 +1501,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(mine).toBeUndefined();
   });
 
-  // ── Slice 3F/G: mixed exam exposes only text_response work; non-null std answer ok ──
+  // ── mixed exam exposes only text_response work; non-null std answer ok ──
   it("exposes only text_response work in a mixed exam, including a text_response with non-null standardAnswer", async () => {
     const textWithRef: QuestionSnapshot = {
       ...subjectiveQuestion("q-ref", 20),
@@ -1476,7 +1529,7 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(mine).toMatchObject({ pendingQuestionCount: 1 });
   });
 
-  // ── Slice 3J: gradeQuestion updates the SAME grading entry (id stable) ──
+  // ── gradeQuestion updates the SAME grading entry (id stable) ──
   it("gradeQuestion updates the SAME grading entry — id stable, status completed_manual", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-same", 10)],
@@ -1528,13 +1581,13 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
   });
 });
 
-// ── P3-MOD-P1-1: frozen grading-metadata projection ───────────────
+// ── frozen grading-metadata projection ───────────────
 //
 // The grader needs frozen standardAnswer + rubric (from QuestionSnapshot),
 // not from a live question row. These RED-first tests prove the projection
 // exists and is stable across live-question edits, without joining live
 // questions or reading draft answers.
-describe("grading-details frozen metadata projection (P3-MOD-P1-1)", () => {
+describe("grading-details frozen metadata projection", () => {
   let ctxp1: TestContext;
 
   beforeAll(async () => {
@@ -1698,13 +1751,13 @@ describe("grading-details frozen metadata projection (P3-MOD-P1-1)", () => {
 });
 
 // Note: the tests below were appended; the preceding "});" closed the
-// describe block, so we re-open a sibling describe for the Slice 3C
+// describe block, so we re-open a sibling describe for the strict
 // boundary tests to keep them grouped.
-describe("grading queue Slice 3C — strict manual-work completion boundary", () => {
-  let ctx3c: TestContext;
+describe("grading queue — strict manual-work completion boundary", () => {
+  let strictCtx: TestContext;
 
   beforeAll(async () => {
-    ctx3c = await buildTestApp(async (fastify) => {
+    strictCtx = await buildTestApp(async (fastify) => {
       await fastify.register(examRoutes, { prefix: "" });
       await fastify.register(attemptRoutes, { prefix: "" });
       await fastify.register(scoreRoutes, { prefix: "" });
@@ -1712,19 +1765,19 @@ describe("grading queue Slice 3C — strict manual-work completion boundary", ()
   });
 
   afterAll(async () => {
-    await ctx3c.cleanup();
+    await strictCtx.cleanup();
   });
 
   async function readEntry(attemptId: string, questionId: string) {
     const requestContext = {
-      actorId: ctx3c.admin.id,
-      organizationId: ctx3c.org.id,
-      targetOrganizationId: ctx3c.org.id,
+      actorId: strictCtx.admin.id,
+      organizationId: strictCtx.org.id,
+      targetOrganizationId: strictCtx.org.id,
       role: "Admin" as const,
       permissions: [] as import("@exam/domain").Permission[],
       sessionId: "test",
     };
-    return createAttemptGradingEntryRepo(ctx3c.db).findByAttemptAndQuestion(
+    return createAttemptGradingEntryRepo(strictCtx.db).findByAttemptAndQuestion(
       requestContext,
       attemptId,
       questionId,
@@ -1732,30 +1785,30 @@ describe("grading queue Slice 3C — strict manual-work completion boundary", ()
   }
 
   it("rejects same-value re-grade of a completed_manual entry before terminal completion", async () => {
-    const { attemptId } = await seedAttempt(ctx3c, {
+    const { attemptId } = await seedAttempt(strictCtx, {
       questions: [subjectiveQuestion("q1", 60), subjectiveQuestion("q2", 40)],
       title: "Pre-Terminal Same",
     });
     await seedGradingEntries(
-      ctx3c,
+      strictCtx,
       attemptId,
       [subjectiveQuestion("q1", 60), subjectiveQuestion("q2", 40)],
       [],
     );
 
-    const first = await ctx3c.app.inject({
+    const first = await strictCtx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q1", score: 30 },
-      cookies: { "auth-token": ctx3c.adminToken },
+      cookies: { "auth-token": strictCtx.adminToken },
     });
     expect(first.statusCode).toBe(200);
 
-    const retry = await ctx3c.app.inject({
+    const retry = await strictCtx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q1", score: 30 },
-      cookies: { "auth-token": ctx3c.adminToken },
+      cookies: { "auth-token": strictCtx.adminToken },
     });
     expect(retry.statusCode).toBe(409);
 
@@ -1767,29 +1820,29 @@ describe("grading queue Slice 3C — strict manual-work completion boundary", ()
   });
 
   it("rejects different-value re-grade of a completed_manual entry before terminal completion", async () => {
-    const { attemptId } = await seedAttempt(ctx3c, {
+    const { attemptId } = await seedAttempt(strictCtx, {
       questions: [subjectiveQuestion("q1", 60), subjectiveQuestion("q2", 40)],
       title: "Pre-Terminal Diff",
     });
     await seedGradingEntries(
-      ctx3c,
+      strictCtx,
       attemptId,
       [subjectiveQuestion("q1", 60), subjectiveQuestion("q2", 40)],
       [],
     );
 
-    await ctx3c.app.inject({
+    await strictCtx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q1", score: 30 },
-      cookies: { "auth-token": ctx3c.adminToken },
+      cookies: { "auth-token": strictCtx.adminToken },
     });
 
-    const revise = await ctx3c.app.inject({
+    const revise = await strictCtx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q1", score: 50 },
-      cookies: { "auth-token": ctx3c.adminToken },
+      cookies: { "auth-token": strictCtx.adminToken },
     });
     expect(revise.statusCode).toBe(409);
 
@@ -1802,27 +1855,27 @@ describe("grading queue Slice 3C — strict manual-work completion boundary", ()
   });
 
   it("rejects post-terminal re-grade (same value) and preserves terminal state", async () => {
-    const { attemptId } = await seedAttempt(ctx3c, {
+    const { attemptId } = await seedAttempt(strictCtx, {
       questions: [subjectiveQuestion("q1", 60)],
       passingScore: 50,
       title: "Post-Terminal Same",
     });
-    await ctx3c.db
+    await strictCtx.db
       .update(schema.examAttempts)
       .set({ status: "submitted" })
       .where(eq(schema.examAttempts.id, attemptId));
     await seedGradingEntries(
-      ctx3c,
+      strictCtx,
       attemptId,
       [subjectiveQuestion("q1", 60)],
       [],
     );
 
-    const first = await ctx3c.app.inject({
+    const first = await strictCtx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q1", score: 60 },
-      cookies: { "auth-token": ctx3c.adminToken },
+      cookies: { "auth-token": strictCtx.adminToken },
     });
     expect(first.statusCode).toBe(200);
     expect(first.json()).toMatchObject({
@@ -1833,26 +1886,26 @@ describe("grading queue Slice 3C — strict manual-work completion boundary", ()
     });
 
     const reqCtx = {
-      actorId: ctx3c.admin.id,
-      organizationId: ctx3c.org.id,
-      targetOrganizationId: ctx3c.org.id,
+      actorId: strictCtx.admin.id,
+      organizationId: strictCtx.org.id,
+      targetOrganizationId: strictCtx.org.id,
       role: "Admin" as const,
       permissions: [] as import("@exam/domain").Permission[],
       sessionId: "test",
     };
-    const preAttempt = await createAttemptRepo(ctx3c.db).findById(
+    const preAttempt = await createAttemptRepo(strictCtx.db).findById(
       reqCtx,
       attemptId,
     );
-    const retry = await ctx3c.app.inject({
+    const retry = await strictCtx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q1", score: 60 },
-      cookies: { "auth-token": ctx3c.adminToken },
+      cookies: { "auth-token": strictCtx.adminToken },
     });
     expect(retry.statusCode).toBe(409);
 
-    const postAttempt = await createAttemptRepo(ctx3c.db).findById(
+    const postAttempt = await createAttemptRepo(strictCtx.db).findById(
       reqCtx,
       attemptId,
     );
@@ -1866,48 +1919,48 @@ describe("grading queue Slice 3C — strict manual-work completion boundary", ()
   });
 
   it("rejects post-terminal score revision (different value) and preserves terminal state", async () => {
-    const { attemptId } = await seedAttempt(ctx3c, {
+    const { attemptId } = await seedAttempt(strictCtx, {
       questions: [subjectiveQuestion("q1", 60)],
       passingScore: 50,
       title: "Post-Terminal Diff",
     });
-    await ctx3c.db
+    await strictCtx.db
       .update(schema.examAttempts)
       .set({ status: "submitted" })
       .where(eq(schema.examAttempts.id, attemptId));
     await seedGradingEntries(
-      ctx3c,
+      strictCtx,
       attemptId,
       [subjectiveQuestion("q1", 60)],
       [],
     );
 
-    await ctx3c.app.inject({
+    await strictCtx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q1", score: 60 },
-      cookies: { "auth-token": ctx3c.adminToken },
+      cookies: { "auth-token": strictCtx.adminToken },
     });
 
-    const revise = await ctx3c.app.inject({
+    const revise = await strictCtx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q1", score: 45 },
-      cookies: { "auth-token": ctx3c.adminToken },
+      cookies: { "auth-token": strictCtx.adminToken },
     });
     expect(revise.statusCode).toBe(409);
 
     const entry = await readEntry(attemptId, "q1");
     expect(entry?.earnedScore).toBe(60);
     const reqCtx = {
-      actorId: ctx3c.admin.id,
-      organizationId: ctx3c.org.id,
-      targetOrganizationId: ctx3c.org.id,
+      actorId: strictCtx.admin.id,
+      organizationId: strictCtx.org.id,
+      targetOrganizationId: strictCtx.org.id,
       role: "Admin" as const,
       permissions: [] as import("@exam/domain").Permission[],
       sessionId: "test",
     };
-    const attempt = await createAttemptRepo(ctx3c.db).findById(
+    const attempt = await createAttemptRepo(strictCtx.db).findById(
       reqCtx,
       attemptId,
     );
