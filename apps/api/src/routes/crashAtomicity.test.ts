@@ -1,5 +1,5 @@
 /**
- * P7-S2 Phase 4 — Crash / rollback / lost-response attack evidence.
+ * Crash / rollback / lost-response attack evidence.
  *
  * For each core irreversible flow the durable mutations must live in ONE
  * PostgreSQL transaction, so a crash at any point before commit leaves no
@@ -20,7 +20,7 @@
  * commands (force_submit / misconduct / time grant) already have dedicated
  * replay evidence in their concurrency suites (admin-force-submit.concurrency
  * / admin-misconduct.concurrency / admin-time-grants.concurrency / incident
- * tests), referenced in the P7-S2 closeout.
+ * tests).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
@@ -247,7 +247,7 @@ async function seedExamWithAttempt(
   };
 }
 
-describe("P7-S2 Phase 4: crash/rollback atomicity", () => {
+describe("crash/rollback atomicity", () => {
   let ctx: TestContext;
 
   beforeAll(async () => {
@@ -838,7 +838,7 @@ describe("P7-S2 Phase 4: crash/rollback atomicity", () => {
               actorId: ctx.admin.id,
               now: new Date(),
               reasonCode: "operator_grant",
-              reasonText: "P7-S2 crash atomicity grant",
+              reasonText: "crash atomicity grant",
             },
           );
           throw new Error("SIMULATED_CRASH_AFTER_MUTATION");
@@ -900,7 +900,7 @@ describe("P7-S2 Phase 4: crash/rollback atomicity", () => {
             actorId: ctx.admin.id,
             now: new Date(),
             reasonCode: "operator_grant",
-            reasonText: "P7-S2 crash atomicity grant",
+            reasonText: "crash atomicity grant",
           },
         );
       });

@@ -1,5 +1,6 @@
 /**
- * P4-C3 — Teacher negative-authorization boundary E2E.
+ * Teacher negative-authorization boundary E2E (origin: P4-C3
+ * role-productization).
  *
  * Proves the browser-level boundary composition for the Teacher: direct URLs
  * to frozen-P4-matrix-denied /admin/* routes render the 403 page (P4-C2
@@ -9,8 +10,8 @@
  *
  * Backend capability-gate denials for the same surfaces are owned at the
  * API/PostgreSQL layer and are deliberately not duplicated here:
- * routes/permissionBoundary.test.ts (M10-B/M10-C denial matrices),
- * routes/m10dPermissionBoundary.test.ts, routes/proctorDiscovery.test.ts and
+ * routes/permissionBoundary.test.ts (API denial matrices),
+ * routes/adminSurfacePermissionBoundary.test.ts, routes/proctorDiscovery.test.ts and
  * authz/permissionMatrix.grading.test.ts.
  *
  * Teacher is created via the SUPPORTED product interface (POST /api/users
@@ -27,7 +28,7 @@ import { createTeacherViaApi } from "../lib/teacher";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
-test.describe("P4-C3 Teacher negative-authorization boundary", () => {
+test.describe("Teacher negative-authorization boundary", () => {
   test("Teacher is denied admin/grading/proctor/users/settings/diagnostics at the UI boundary", async ({
     page,
     request,

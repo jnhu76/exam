@@ -11,7 +11,7 @@
  *     {errorMessage}
  *   </div>
  *
- * High-confidence boundary (NARROWED in UI-MIGRATE-N-W2 §10): a `<div>`
+ * High-confidence boundary (NARROWED): a `<div>`
  * carrying ALL of:
  *   - a static `role="alert"` attribute (the authority-owned a11y contract);
  *   - a `rounded-*` utility;
@@ -93,7 +93,7 @@ export default createRule({
       JSXOpeningElement(node) {
         if (!isHtmlDiv(node)) return;
 
-        // NARROW (UI-MIGRATE-N-W2 §10): require the authority-owned a11y
+        // NARROW: require the authority-owned a11y
         // contract. This excludes destructive-color control/state surfaces
         // (timer chips, multi-role status messages) that have no role attr.
         if (!hasStaticAlertRole(node)) return;

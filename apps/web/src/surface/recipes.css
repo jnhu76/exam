@@ -1,6 +1,6 @@
 /*
  * Semantic surface recipes — the region-level appearance authority above
- * primitive Tailwind surface utilities (UI-SURFACE-1).
+ * primitive Tailwind surface utilities.
  *
  * Public authority: the surface-NAME class names. Business consumers select a
  * surface role; they must not recompose the same region-level appearance
@@ -14,7 +14,7 @@
  * layered styles regardless of source order — so these unlayered surface
  * recipes take precedence over any layered Tailwind utility.
  *
- * Cascade policy (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §7, proven against the
+ * Cascade policy (proven against the
  * compiled CSS): a surface recipe's owned properties (background, border,
  * radius, and — for overlay — elevation) CANNOT be overridden by business
  * utilities. That is the intended authority behavior here: a surface recipe is
@@ -78,7 +78,7 @@
 
 /* navigation: the persistent navigation region — a quiet light chrome surface,
  * distinct from the canvas by a 1px border + faint subtle tint, not a dark
- * fill (UI-TOKEN-TABLE-FOUNDATION-1 light-nav pivot). */
+ * fill. */
 .surface-navigation {
   background: var(--sidebar-bg);
   border-color: var(--sidebar-border);
@@ -89,7 +89,7 @@
  * Background + border + radius + shadow, wired by the shadcn overlay
  * primitives (Dialog/AlertDialog/Popover/DropdownMenu/SelectContent/Sheet;
  * ConfirmDialog composes ui/dialog), so no overlay composes its own
- * background/radius/shadow from utilities (issue 577 M5).
+ * background/radius/shadow from utilities (issue 577).
  *
  * The variants materialize the CURRENT overlay population; unifying the
  * family means editing these variants, not the consumers. The modal/panel

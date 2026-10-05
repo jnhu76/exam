@@ -8,12 +8,12 @@ import { canonicalizeContentDocument } from "@exam/contracts";
 import { ValidationError } from "@exam/domain";
 
 /**
- * B′ server-side content write authority.
+ * Server-side content write authority.
  *
  * Every question/option content write — create, update, and the merged
  * update re-validation — resolves through this seam. For a Rich write the
  * document is canonicalized (normalized AND re-validated on the canonical
- * form, so no write can persist a document outside schema/limits — RC-03)
+ * form, so no write can persist a document outside schema/limits)
  * and `content` is DERIVED as its plain-text projection; the client's
  * `content`, if any, is never trusted. For a Plain write `content_document`
  * is persisted as NULL so legacy and plain rows stay indistinguishable.

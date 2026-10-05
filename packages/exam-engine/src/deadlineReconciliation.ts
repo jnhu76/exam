@@ -231,7 +231,7 @@ export async function ensureAttemptDeadlineReconciled(
   // wall-clock reconciliation instant. submissionReason='deadline' marks the
   // freeze as deadline-triggered.
   //
-  // P3-L0-2E: submitAttempt owns the grading workset materialization. The
+  // submitAttempt owns the grading workset materialization. The
   // gradingWorksetRepo is passed through — no caller-level materialize call.
   const submittedAttempt = await submitAttempt(
     attemptRepo,

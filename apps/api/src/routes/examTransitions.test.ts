@@ -96,7 +96,7 @@ async function countAudit(
   return rows.length;
 }
 
-describe("exam reconciliation characterization (P2D-J2.6)", () => {
+describe("exam reconciliation characterization", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let candidateProfileId: string;
   let candidateToken: string;

@@ -161,7 +161,7 @@ export function createAttemptRepoAdapter(
       const row = await repo.refreshLastActivityIfInProgress(ctx, id, now);
       return row ? hydrateAttemptFromDb(row) : null;
     },
-    // Replay receipts (#669 Phase D2). Rows backfilled by migration 0044
+    // Replay receipts (#669). Rows backfilled by migration 0044
     // carry the legacy payload instead of a digest; identity is derived here
     // with the same engine authority and never written back.
     findAnswerReceipt: async (attemptId, questionId, clientSeq) => {

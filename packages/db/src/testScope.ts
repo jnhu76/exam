@@ -381,7 +381,7 @@ export function resolveDbIsolationMode(
  *   local:  exam_test_db_w{worker}
  *   CI:     exam_test_db_s{shard}_w{worker}
  *
- * INVARIANT (#648 P1-2): `API_TEST_GROUP` must NOT alter the package slot
+ * INVARIANT (#648): `API_TEST_GROUP` must NOT alter the package slot
  * identity. Turbo passes API_TEST_GROUP through DB-backed tasks, so a
  * dedicated API group (`background` / `concurrency` / `e2e`) can be present
  * in a plain @exam/db invocation. The API resolver deliberately collapses

@@ -225,7 +225,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("EXAM-519 terminal-signal reconciliation", () => {
+describe("terminal-signal reconciliation", () => {
   it("heartbeat 409 INVALID_STATE_TRANSITION → one authoritative re-read → locked UI, no generic disconnect, no loop", async () => {
     let takeCalls = 0;
     apiGet.mockImplementation(async (path: string) => {

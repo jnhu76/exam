@@ -36,9 +36,9 @@ const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.DeadlineScanner;
  * `autoSubmitAndGrade`. A candidate MUST NOT be auto-submitted without that
  * under-lock canonical recheck.
  *
- * Discovery is complete over the scanner-eligible domain. Since Phase A
- * (#291) NULL per-attempt deadlines are a REACHABLE protocol state:
- * `deadline`-mode attempts carry deadlineAt = null and expire via
+ * Discovery is complete over the scanner-eligible domain. Since #291, NULL
+ * per-attempt deadlines are a REACHABLE protocol state: `deadline`-mode
+ * attempts carry deadlineAt = null and expire via
  * `exam.closeAt <= now`; `untimed` attempts (closeAt also null) can appear in
  * discovery only by accident and the under-lock canonical recheck always
  * rejects them (null effective deadline never expires).
@@ -161,7 +161,8 @@ export async function autoSubmitAndGrade(
   now: Date,
 ): Promise<boolean> {
   const stateChanged = await executeInTransaction(db, async (tx) => {
-    // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA capability
+    // EA lock-order protocol: build the engine repo pair once, mint the
+    // EA capability
     // via the canonical seam BEFORE the Exam FOR UPDATE. The resulting
     // scanner-local lock order is Enrollment → Attempt → Exam (the seam's
     // E→A followed by the Exam lock). Documented here only as the audited

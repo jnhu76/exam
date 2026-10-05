@@ -88,7 +88,7 @@ const NOW = new Date("2026-06-01T12:00:00Z");
 const DEFAULT_PASSING = 50;
 
 /**
- * P3-FORMAL-P0-D2 test helper: mints a genuine capability via the canonical seam.
+ * Test helper: mints a genuine capability via the canonical seam.
  */
 async function mintCap(
   enrollmentRepo: EnrollmentRepository,
@@ -431,7 +431,7 @@ async function runMixedLifecycle(input: {
 
 // ── A. mixed final score includes objective contribution ─────────
 
-describe("P3-L0-2D A: mixed final score reconciliation", () => {
+describe("mixed final score reconciliation", () => {
   it("final total = objective earned + manual awarded (no objective loss)", async () => {
     const questionSnapshot = [
       objectiveSnapshot("q-obj", 40, "a"),
@@ -497,7 +497,7 @@ describe("P3-L0-2D A: mixed final score reconciliation", () => {
 
 // ── B/C. text_response with non-null standardAnswer ──────────────
 
-describe("P3-L0-2D B/C: text_response with non-null standardAnswer", () => {
+describe("text_response with non-null standardAnswer", () => {
   it("is held at pending_manual by the freeze barrier (B-classification)", async () => {
     const questionSnapshot = [
       textResponseSnapshot("q-text", 100, {
@@ -562,7 +562,7 @@ describe("P3-L0-2D B/C: text_response with non-null standardAnswer", () => {
 
 // ── D. partial manual grading must NOT terminally complete ───────
 
-describe("P3-L0-2D D: multi-manual partial completion", () => {
+describe("multi-manual partial completion", () => {
   it("stays submitted + pending_manual after grading only one of two text_response questions", async () => {
     const questionSnapshot = [
       objectiveSnapshot("q-obj", 40, "a"),
@@ -645,7 +645,7 @@ describe("P3-L0-2D D: multi-manual partial completion", () => {
 
 // ── F. pure-objective auto grading regression ────────────────────
 
-describe("P3-L0-2D F: pure-objective auto grading preserved", () => {
+describe("pure-objective auto grading preserved", () => {
   it("a pure-objective attempt still auto-grades inline to graded + auto_graded", async () => {
     const initialAttempt = makeAttempt({
       questionSnapshot: [objectiveSnapshot("q-obj", 100, "a")],
@@ -674,7 +674,7 @@ describe("P3-L0-2D F: pure-objective auto grading preserved", () => {
 
 // ── G. graded + pending_manual remains impossible ────────────────
 
-describe("P3-L0-2D G: graded + pending_manual impossible", () => {
+describe("graded + pending_manual impossible", () => {
   it("a pending_manual attempt that receives its first manual grade never becomes graded until fully_graded", async () => {
     const { attempt } = await runMixedLifecycle({
       questionSnapshot: [
@@ -708,7 +708,7 @@ describe("P3-L0-2D G: graded + pending_manual impossible", () => {
 // with the auto path) projects BOTH Attempt and Enrollment in the same
 // transaction.
 
-describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => {
+describe("manual terminal closure projects Enrollment", () => {
   it("T1: after the last manual grade, enrollment.finalScore/finalPassed/finalAttemptId are written", async () => {
     // Pre-repair regression target: this would have left finalScore NULL.
     const { attempt, result } = await runMixedLifecycle({

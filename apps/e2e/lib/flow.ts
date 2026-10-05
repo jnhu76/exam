@@ -88,7 +88,7 @@ export async function answerTrueFalse(
 
 /**
  * Type free-text into the text_response textarea on the take page
- * (P3-MOD-P0-4). text_response is an independent QuestionType rendered as a
+ * text_response is an independent QuestionType rendered as a
  * textarea via TextResponseInput.
  */
 export async function answerTextResponse(

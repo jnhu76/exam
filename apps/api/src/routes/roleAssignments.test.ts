@@ -64,7 +64,7 @@ async function createPrimaryAssignment(
   return rows[0]!;
 }
 
-describe("RBAC-M8 role-assignment routes", () => {
+describe("role-assignment routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
   beforeAll(async () => {
@@ -286,7 +286,7 @@ describe("RBAC-M8 role-assignment routes", () => {
     expect(graderRow.id).toBe(graderId);
   });
 
-  it("PATCH activate of an already-active primary is IDEMPOTENT: repeated { isActive: true } never self-demotes (P7-E review P1)", async () => {
+  it("PATCH activate of an already-active primary is IDEMPOTENT: repeated { isActive: true } never self-demotes", async () => {
     const target = await createTargetUser(ctx.db, ctx.org.id, "idem-active");
     const prim = await createPrimaryAssignment(
       ctx.db,
@@ -339,7 +339,7 @@ describe("RBAC-M8 role-assignment routes", () => {
     expect(activePrimaries[0]!.id).toBe(prim.id);
   });
 
-  it("PATCH activate audit truthfulness: a genuine reactivation writes role_changed; an already-active re-activation writes NONE (P7-E review P2-1)", async () => {
+  it("PATCH activate audit truthfulness: a genuine reactivation writes role_changed; an already-active re-activation writes NONE", async () => {
     const target = await createTargetUser(
       ctx.db,
       ctx.org.id,
@@ -396,7 +396,7 @@ describe("RBAC-M8 role-assignment routes", () => {
     expect(await countRoleChanged()).toBe(beforeActivate + 1);
 
     // Consecutive idempotent re-activation (already active) → NO new
-    // role_changed audit and NO state change. This is the P2-1 contract: a
+    // role_changed audit and NO state change. Contract: a
     // no-op command must not fabricate a state-change audit.
     const second = await ctx.app.inject({
       method: "PATCH",
@@ -506,7 +506,7 @@ describe("RBAC-M8 role-assignment routes", () => {
 
   // Route-wiring tests (layer 5.2): stub mutateWithEffectiveAdminPostcondition
   // to verify HTTP transport mapping for the deactivate + delete paths.
-  describe("last-admin invariant — route wiring (RBAC-M10-E)", () => {
+  describe("last-admin invariant — route wiring", () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });

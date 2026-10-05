@@ -62,7 +62,7 @@ async function buildAppWithAuth(): Promise<FastifyInstance> {
   return app;
 }
 
-describe("auth plugin: P0-3 API JWT path uses runtimeConfig.authSecret.jwtSecret", () => {
+describe("auth plugin: API JWT path uses runtimeConfig.authSecret.jwtSecret", () => {
   beforeEach(() => {
     vi.stubEnv("APP_MODE", "test");
   });

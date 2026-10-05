@@ -282,7 +282,7 @@ async function createOrgBAdmin(
   db: Awaited<ReturnType<typeof buildTestApp>>["db"],
   orgId: string,
 ): Promise<{ token: string }> {
-  // RBAC-M10-E: delegate to createAssignedUserForTest so the user gets an
+  // Delegate to createAssignedUserForTest so the user gets an
   // active primary Admin assignment scoped to orgId — without it, the
   // cross-org admin token gets 401 AUTH_REQUIRED instead of exercising the
   // cross-org isolation under test.

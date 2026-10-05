@@ -33,7 +33,7 @@ import type {
 const GRADE_CONCURRENCY_PREFIX = "grade-concurrency-test-";
 
 /**
- * P0-1 — finalScore / finalAttemptId last-writer-wins race.
+ * finalScore / finalAttemptId last-writer-wins race.
  *
  * Before the fix, `finalizeGrading` read the enrollment WITHOUT a row lock:
  * two concurrent transactions (one grading a 100-point attempt, one grading a
@@ -87,7 +87,7 @@ async function finalizeInTx(
       },
       ctx,
     );
-    // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam (matches
+    // Mint the EA capability via the canonical seam (matches
     // every production caller); thread it into finalizeGrading. The capability
     // replaces the old (attemptId, enrollmentId) arguments.
     const cap = await lockEnrollmentAndAttempt(
@@ -95,7 +95,7 @@ async function finalizeInTx(
       attempts,
       attemptId,
     );
-    // Slice 4: finalizeGrading aggregates from the grading workset internally —
+    // finalizeGrading aggregates from the grading workset internally —
     // no externally computed result. Build the tx-scoped workset adapter so it
     // reads the entries the submit freeze materialized.
     const gradingWorksetRepo = createGradingWorksetRepoAdapter(
@@ -358,7 +358,7 @@ async function buildFixture(
   const resultHigh = computeGradingResult(highAttempt as never, exam, now);
   const resultLow = computeGradingResult(lowAttempt as never, exam, now);
 
-  // Slice 4: finalizeGrading aggregates from attempt_grading_entries. Seed
+  // finalizeGrading aggregates from attempt_grading_entries. Seed
   // terminal completed_auto entries for each attempt via the repo API (handles
   // the column mapping) so the aggregator sees the same score the old
   // result-based path produced.
@@ -415,7 +415,7 @@ async function readEnrollmentFinal(
   return e;
 }
 
-describe("grading concurrency — enrollment finalScore/finalAttemptId race (P0-1)", () => {
+describe("grading concurrency — enrollment finalScore/finalAttemptId race", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
   beforeAll(async () => {

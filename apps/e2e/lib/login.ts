@@ -179,9 +179,9 @@ export async function loginAsAdmin(
 
 /**
  * Log in as a Teacher through the REAL /login UI flow and land on the Teacher
- * capability-driven console surface (/admin/exams). Used by P4-C3 three-role
- * E2E. The Teacher account is NOT a demo-seed account (there is intentionally
- * no default Teacher seed — P4-G-01); callers create it first through the
+ * capability-driven console surface (/admin/exams). The Teacher account is
+ * NOT a demo-seed account (there is intentionally no default Teacher seed);
+ * callers create it first through the
  * supported Admin product interface (POST /api/users { role: "Teacher" }).
  */
 export async function loginAsTeacher(

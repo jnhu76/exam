@@ -207,7 +207,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /admin/attempts/:attemptId/time-grants — Admin grants operator time to
-   * an in_progress/disrupted attempt (REC-I4-I3B2). The adjustment ledger insert,
+   * an in_progress/disrupted attempt. The adjustment ledger insert,
    * the attempt deadline update, and the compliance audit all commit inside ONE
    * transaction. The client supplies command identity (operationId), magnitude,
    * and reason; server-decided fields (actorId, source, policy, deadlines,

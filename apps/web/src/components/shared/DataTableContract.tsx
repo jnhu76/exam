@@ -71,7 +71,7 @@ export const ROLE_OVERFLOW: Record<DataTableColumnRole, ColumnOverflow> = {
 };
 
 /**
- * Per-role legal overflow domains (issue 454 review corrective C1). An
+ * Per-role legal overflow domains (issue #454). An
  * explicit override is only legal inside its role's domain; the
  * never-silent-truncate roles (status, score, actions, primary-text) accept
  * no truncating mode, so a declaration can never silently truncate them.

@@ -16,7 +16,12 @@ import {
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 /**
- * #669 Phase U — candidate Rich editor browser journeys (OWNER_LAYER_FIRST).
+ * Candidate Rich editor journeys whose invariants live at the real
+ * browser/system boundary.
+ *
+ * Origins: #669 (editor browser-journey closure), #701 (first-keystroke
+ * selection synchronization), #677 (list Tab escape), #679 (persisted-formula
+ * first re-edit).
  *
  * Only invariants that materially depend on the real browser/system boundary
  * are replayed here: real focus traversal (the list Tab contract) and the
@@ -32,7 +37,7 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const STAMP = `${Date.now()}`;
 const RUBRIC = "按要点给分";
 
-interface PhaseUFixture {
+interface RichEditorFixture {
   examId: string;
   questionId: string;
   candidate: SeededCandidate;
@@ -41,18 +46,18 @@ interface PhaseUFixture {
 async function seedRichExam(
   request: APIRequestContext,
   tag: string,
-): Promise<PhaseUFixture> {
+): Promise<RichEditorFixture> {
   const adminToken = await adminApiToken(request);
   const courseRes = await adminPost(request, adminToken, "/api/courses", {
-    name: `Course-phaseu-${tag}`,
-    code: `E2E-phaseu-${tag}-${STAMP}`,
+    name: `Course-rich-editor-${tag}`,
+    code: `E2E-rich-editor-${tag}-${STAMP}`,
     description: "",
   });
   const courseId = ((await courseRes.json()) as { id: string }).id;
   const questionRes = await adminPost(request, adminToken, "/api/questions", {
     courseId,
     type: "text_response",
-    content: `PhaseU 编辑器题-${tag}-${STAMP}`,
+    content: `Rich 编辑器题-${tag}-${STAMP}`,
     standardAnswer: null,
     rubric: RUBRIC,
     score: 40,
@@ -60,7 +65,7 @@ async function seedRichExam(
   });
   const questionId = ((await questionRes.json()) as { id: string }).id;
   const examRes = await adminPost(request, adminToken, "/api/exams", {
-    title: `E2E-phaseu-${tag}-${STAMP}`,
+    title: `E2E-rich-editor-${tag}-${STAMP}`,
     description: "",
     courseId,
     timingMode: "timed_window",
@@ -94,10 +99,10 @@ async function seedRichExam(
   await adminPost(request, adminToken, `/api/exams/${examId}/publish`, {});
   const candidateRes = await request.post(`${BASE_URL}/api/candidates`, {
     data: {
-      username: `e2e-phaseu-${tag}-${STAMP}`,
+      username: `e2e-rich-editor-${tag}-${STAMP}`,
       password: "candidate123",
-      name: `PhaseU考生-${tag}`,
-      fields: { candidateNo: `E2E-PU-${tag}` },
+      name: `Rich编辑器考生-${tag}`,
+      fields: { candidateNo: `E2E-RE-${tag}` },
     },
   });
   expect(candidateRes.ok()).toBeTruthy();
@@ -118,8 +123,8 @@ async function seedRichExam(
     candidate: {
       profileId: candidateBody.id,
       userId: candidateBody.userId ?? candidateBody.id,
-      username: `e2e-phaseu-${tag}-${STAMP}`,
-      name: `PhaseU考生-${tag}`,
+      username: `e2e-rich-editor-${tag}-${STAMP}`,
+      name: `Rich编辑器考生-${tag}`,
       password: "candidate123",
     },
   };
@@ -135,7 +140,7 @@ interface TakeAttempt {
 async function openRichEditor(
   page: Page,
   request: APIRequestContext,
-  fixture: PhaseUFixture,
+  fixture: RichEditorFixture,
 ): Promise<TakeAttempt> {
   await candidateLogin(page, fixture.candidate);
   const startResponse = page.waitForResponse(
@@ -190,12 +195,14 @@ async function insertVisualFormula(
   await dialog.waitFor({ state: "hidden" });
 }
 
-test.describe("#669 Phase U candidate editor", () => {
-  test("first keystroke after native caret relocation survives save (#701 CE-1)", async ({
+test.describe("candidate rich editor browser boundaries", () => {
+  // Regression for #701: native caret relocation + asynchronous
+  // selectionchange + contenteditable first-keystroke synchronization.
+  test("first keystroke after native caret relocation survives save", async ({
     page,
     request,
   }) => {
-    const fixture = await seedRichExam(request, "ce1");
+    const fixture = await seedRichExam(request, "first-keystroke");
     const {
       page: p,
       editor,
@@ -269,7 +276,9 @@ test.describe("#669 Phase U candidate editor", () => {
     expect(textOf(table?.content)).toContain("R1st");
   });
 
-  test("list keyboard contract: Tab indents where legal, first-item Tab never escapes (#677 F4)", async ({
+  // Regression for #677: Tab on the first list item must not escape the
+  // editor through native focus traversal.
+  test("list keyboard contract: Tab indents where legal, first-item Tab never escapes", async ({
     page,
     request,
   }) => {
@@ -302,7 +311,9 @@ test.describe("#669 Phase U candidate editor", () => {
     await expect(editor.locator("ul > li > ul > li")).toHaveCount(0);
   });
 
-  test("persisted formula first re-edit: the visual field arms from the persisted latex and the edit survives save+reload (#679 U1)", async ({
+  // Regression for #679: the persisted formula must arm the MathLive
+  // field on a fresh page and survive save + reload.
+  test("persisted formula first re-edit: the visual field arms from the persisted latex and the edit survives save+reload", async ({
     page,
     request,
   }) => {

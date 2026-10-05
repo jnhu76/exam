@@ -1,5 +1,5 @@
 /**
- * UI-TOKEN-TABLE-FOUNDATION-1 — Playwright capture for the QuestionPage DataView.
+ * Playwright capture for the QuestionPage DataView.
  *
  * Captures the §11/§12 required screenshots (4 widths × interaction states,
  * DPR 1, zoom 100%) against the real QuestionPage route, and writes a manifest

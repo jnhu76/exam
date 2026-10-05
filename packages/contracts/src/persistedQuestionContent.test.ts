@@ -63,7 +63,7 @@ describe("classifyPersistedQuestionContent — §7 static read states", () => {
     expect(read.kind === "rich_valid" && read.document).toEqual(validDoc);
   });
 
-  it("D5A-R2: a non-current docVersion is unsupported_version — never interpreted as V1, never plain", () => {
+  it("a non-current docVersion is unsupported_version — never interpreted as V1, never plain", () => {
     expect(classifyPersistedQuestionContent(unsupportedVersion)).toEqual({
       kind: "unsupported_version",
       raw: unsupportedVersion,
@@ -167,7 +167,7 @@ describe("resolvePersistedQuestionDocument — static render authority", () => {
   });
 });
 
-describe("durable-unrepresentable persisted values (#669 Phase F)", () => {
+describe("durable-unrepresentable persisted values (#669)", () => {
   it("classify as corrupt and refuse resolution — never rich_valid", () => {
     for (const bad of ["\u0000", "\uD800", "\uDC00"]) {
       const value = {

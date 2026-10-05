@@ -813,7 +813,7 @@ describe("attempt routes", () => {
       expect(ledger).toHaveLength(0);
     });
 
-    // P1-2 — cross-Attempt operationId race. The same operationId is fired at
+    // Cross-Attempt operationId race. The same operationId is fired at
     // TWO attempts under DIFFERENT exams in the same org. Different exams mean
     // neither the Enrollment→Attempt lock nor the Exam FOR UPDATE lock overlap;
     // the only mutex is the (organization_id, operation_id) unique index. The

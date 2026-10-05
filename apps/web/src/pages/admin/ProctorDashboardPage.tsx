@@ -635,9 +635,10 @@ export function ProctorDashboardPage() {
   }
 
   /**
-   * Handles operator time grant for a candidate (REC-I4-C1 cross-tab authority).
+   * Handles operator time grant for a candidate (cross-tab pending-command
+   * authority).
    *
-   * Send-claim ownership (REC-I4-C1 follow-up, issue 233):
+   * Send-claim ownership (issue 233):
    *   - draft        → `reserve` atomically grants the FIRST send claim; no
    *                    second claim step is needed before the first POST.
    *   - indeterminate→ every retry MUST `claimForSend` first. On
@@ -681,7 +682,7 @@ export function ProctorDashboardPage() {
         reasonCode: grantState.reasonCode,
         reasonText: grantState.reasonText.trim() || grantState.reasonCode,
       };
-      // REC-I4-C1: reserve the command in the shared authority BEFORE sending
+      // Reserve the command in the shared authority BEFORE sending
       // the HTTP request. If the shared authority is unavailable or another
       // tab already has a pending command, fail closed — never send a request
       // that could create a duplicate operationId. Reserve atomically grants
@@ -976,7 +977,7 @@ export function ProctorDashboardPage() {
 
   /**
    * Opens the grant dialog for a candidate. Honors the cross-tab pending command
-   * invariant (REC-I4-C1): if an unresolved command exists for THIS attempt,
+   * invariant: if an unresolved command exists for THIS attempt,
    * restore it (so the proctor retries the same operationId); if one exists for
    * a DIFFERENT attempt, block opening and direct the proctor to resolve it
    * first (prevents a second in-flight grant that would mint a new identity).
@@ -994,7 +995,7 @@ export function ProctorDashboardPage() {
 
     setExtendTarget(candidate);
 
-    // Read the shared authority FIRST (REC-I4-C1). This is authoritative for
+    // Read the shared authority FIRST. This is authoritative for
     // cross-tab scenarios: another tab may have a pending command for this
     // attempt or a different attempt, OR may have already cleared a command
     // this tab still believes is pending locally.

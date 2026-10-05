@@ -6,7 +6,7 @@ import {
 } from "@/lib/recoveryErrors";
 
 /**
- * J5-I1B Recovery Center — Queue-specific projection coordinator.
+ * Recovery Center — Queue-specific projection coordinator.
  *
  * The generic {@link useRecoveryProjection} is a detail-page primitive. The
  * Queue page additionally paginates (keyset cursor) and must coordinate a

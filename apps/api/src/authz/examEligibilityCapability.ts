@@ -1,5 +1,5 @@
 /**
- * Candidate exam-eligibility capability preHandler (RBAC-M10-A, archetype B).
+ * Candidate exam-eligibility capability preHandler (archetype B).
  *
  * Resource-aware authorization for the candidate exam-eligibility routes — the
  * registry entries declaring `runtimeAuthz.kind: "exam_eligibility"`
@@ -43,7 +43,7 @@ import {
 } from "./resolvers/examEligibilityResolver.js";
 
 /**
- * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
+ * Capability predicate over the request (union-of-assignments authority). Reads the authoritative
  * `ctx.capabilities` union. Signature matches the other gates.
  */
 export type ExamEligibilityAllows = (
@@ -153,7 +153,7 @@ export function buildExamEligibilityCapabilityPreHandler(
     }
 
     // Resolved under the org anchor. The capability check reads the
-    // authoritative ctx.capabilities union (RBAC-M10-E).
+    // authoritative ctx.capabilities union (union-of-assignments authority).
     if (!allows(request, permission)) {
       return reply
         .code(403)

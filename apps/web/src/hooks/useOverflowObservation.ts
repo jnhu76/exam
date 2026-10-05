@@ -43,7 +43,7 @@ const INITIAL_OBSERVATION: OverflowObservation = {
  * region scroll, and window resize. State updates are value-guarded so the
  * render-loop re-observation cannot cascade.
  *
- * Sub-pixel exactness (#601 Phase F): the two consumers of these facts need
+ * Sub-pixel exactness (#601): the two consumers of these facts need
  * DIFFERENT numbers, and conflating them is a measured defect in both
  * directions.
  *

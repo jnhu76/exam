@@ -412,7 +412,7 @@ describe("preflightContentDocumentStructure", () => {
   // failure scales of that campaign, kept fixed and deterministic. The
   // invariant: within authoritative CONTENT_LIMITS ⇒ preflight accepts.
 
-  it("accepts within-limits documents the raw-node budget used to reject (#673 C1 / PC-F02)", () => {
+  it("accepts within-limits documents the raw-node budget used to reject (#673)", () => {
     // Plain runs: 700 paragraphs = 1400 grammar nodes < totalNodes.
     const plainRuns = doc(
       ...Array.from({ length: 700 }, () =>
@@ -500,7 +500,7 @@ describe("preflightContentDocumentStructure", () => {
   });
 });
 
-// ── Durable string representability (#669 Phase F, counterexample D-F01) ──
+// ── Durable string representability ──
 //
 // The Rich string domain is narrower than "any JS string": the durable
 // platform (PostgreSQL jsonb/text over UTF-8) holds exactly the well-formed

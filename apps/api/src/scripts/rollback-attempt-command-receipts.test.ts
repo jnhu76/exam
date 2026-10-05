@@ -179,7 +179,7 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
     "incident_store",
     "decision_db",
   ]) {
-    it(`rejects the look-alike "${dbName}" (review P1-1 counterexample)`, async () => {
+    it(`rejects the look-alike "${dbName}"`, async () => {
       const res = await runCli(["--confirm"], {
         DATABASE_URL: `postgres://exam:exam@localhost:15432/${dbName}?connect_timeout=2`,
       });

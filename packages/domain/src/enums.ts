@@ -95,7 +95,7 @@ export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];
  * `status='grading'` between `submitted` and `graded`; a crash between the two
  * writes could leave a residue row). That writer is gone: terminal grading
  * closes `submitted → graded` in one locked transaction, and the durable
- * grading-pipeline state is `gradingStatus` (P2D-J2), orthogonal to this
+ * grading-pipeline state is `gradingStatus`, orthogonal to this
  * lifecycle. Legacy rows require explicit operator disposition.
  */
 export const AttemptStatus = {
@@ -110,7 +110,7 @@ export const AttemptStatus = {
 export type AttemptStatus = (typeof AttemptStatus)[keyof typeof AttemptStatus];
 
 /**
- * Grading workflow status for an attempt (P2D-J2).
+ * Grading workflow status for an attempt.
  *
  * Tracks where an attempt sits in the grading pipeline. Orthogonal to
  * {@link AttemptStatus}: a subjective attempt holds at `status=submitted`
@@ -130,7 +130,7 @@ export const GradingStatus = {
 export type GradingStatus = (typeof GradingStatus)[keyof typeof GradingStatus];
 
 /**
- * Result publication policy for an exam (P2D-J5a).
+ * Result publication policy for an exam.
  *
  * Governs when candidates may see their graded results. Orthogonal to the
  * exam lifecycle status and to {@link GradingStatus}.

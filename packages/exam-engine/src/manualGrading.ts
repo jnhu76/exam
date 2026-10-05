@@ -63,7 +63,7 @@ export interface GradeQuestionResult {
  * expected question universe), but it does not authorize manual work after
  * the workset is materialized.
  *
- * Slice 3C: gradeQuestion completes pending manual grading work ONLY. Manual
+ * gradeQuestion completes pending manual grading work ONLY. Manual
  * grading completion is one-way; terminal score revision is not part of the
  * current protocol. Once an entry becomes `completed_manual` the ordinary
  * grading command cannot mutate that entry (neither same-value nor
@@ -104,7 +104,7 @@ export async function gradeQuestion(
     throw new NotFoundError("Attempt not found");
   }
 
-  // Slice 3C strict completion boundary — manual-work completion only.
+  // Strict manual-work completion boundary — completion only.
   // gradeQuestion is the command that completes a pending_manual entry while
   // the attempt is submitted + pending_manual; it REJECTS score-revision /
   // re-grade attempts. Lifecycle guards run BEFORE any workset lookup or score
@@ -142,7 +142,7 @@ export async function gradeQuestion(
       "Question is auto-graded and cannot be manually scored",
     );
   }
-  // Slice 3C: only a pending_manual entry may be completed. A completed_manual
+  // Only a pending_manual entry may be completed. A completed_manual
   // entry is terminal for that question — same-value retry and different-value
   // revision are both rejected. The entry's status (NOT score equality) is the
   // authority: the API carries no idempotency key, so payload equality is not

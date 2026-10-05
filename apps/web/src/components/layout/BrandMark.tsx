@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /** Decorative logo mark icon used in the brand header and sidebar.
  * ClipboardCheck is the brand silhouette — no other surface may reuse it
- * for grading or empty states (UI-ICON-REFINE-1 brand authority). */
+ * for grading or empty states (brand authority). */
 export function BrandMark({ className }: { className?: string }) {
   return (
     <span

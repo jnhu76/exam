@@ -274,7 +274,7 @@ describe("score routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    // P2D-J5a: legacy showResultImmediately=false coerces to manual mode, so
+    // Legacy showResultImmediately=false coerces to manual mode, so
     // the hidden variant now carries hiddenReason='pending_publish' (no
     // publish-results call has been made).
     expect(response.json()).toEqual({
@@ -363,7 +363,7 @@ describe("score routes", () => {
       createdAt: now,
       updatedAt: now,
     });
-    // RBAC-M10-E: primary active assignment so the foreign admin's token
+    // Primary active assignment so the foreign admin's token
     // resolves authority (the test then asserts the org-anchor 404, not a
     // 401 from no-assignment).
     await ctx.db.insert(schema.userRoleAssignments).values({
@@ -418,7 +418,7 @@ describe("score routes", () => {
         createdAt: now,
         updatedAt: now,
       });
-      // RBAC-M10-E: primary active assignment so the Grader/Proctor token
+      // Primary active assignment so the Grader/Proctor token
       // resolves authority (then the capability gate denies 403 — not 401).
       await ctx.db.insert(schema.userRoleAssignments).values({
         id: crypto.randomUUID(),
@@ -728,7 +728,7 @@ describe("J8: score list routes", () => {
       createdAt: now,
       updatedAt: now,
     });
-    // RBAC-M10-E: assignment so tempToken can start an attempt.
+    // Assignment so tempToken can start an attempt.
     await ctx.db.insert(schema.userRoleAssignments).values({
       id: crypto.randomUUID(),
       organizationId: ctx.org.id,
@@ -919,7 +919,7 @@ describe("J8: score list routes", () => {
   });
 });
 
-// ── P3-MOD-P3-2: Candidate Result / Answer Visibility Boundaries ──
+// ── Candidate Result / Answer Visibility Boundaries ──
 // Proves result visibility and answer visibility are INDEPENDENT gates, that
 // nothing internal leaks through the Candidate result DTO, that ownership is
 // enforced, and that frozen result metadata is immune to live-question edits.
@@ -933,7 +933,7 @@ describe("J8: score list routes", () => {
 // So the only valid candidate cross-product is {result visible, answers
 // hidden}; the tests below prove score is returned while standardAnswer/rubric
 // never leak, and that result-hidden never leaks score either.
-describe("P3-2 candidate result / answer visibility boundaries", () => {
+describe("candidate result / answer visibility boundaries", () => {
   let ctx: TestContext;
   let courseId: string;
   let singleChoiceId: string;
@@ -1093,7 +1093,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
     await ctx.db.insert(schema.courses).values({
       id: courseId,
       organizationId: ctx.org.id,
-      name: "P3-2 Course",
+      name: "result-visibility Course",
       code: `P32-${uniquePrefix()}`,
       description: "",
       createdAt: new Date(),
@@ -1104,7 +1104,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
       organizationId: ctx.org.id,
       courseId,
       type: "single_choice",
-      content: "P3-2 objective",
+      content: "result-visibility objective",
       options: [
         { id: "a", content: "A" },
         { id: "b", content: "B" },
@@ -1128,7 +1128,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
       organizationId: ctx.org.id,
       courseId,
       type: "text_response",
-      content: "P3-2 essay prompt",
+      content: "result-visibility essay prompt",
       options: [],
       standardAnswer: "参考论述内容",
       attachments: [],
@@ -1149,7 +1149,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
       organizationId: ctx.org.id,
       courseId,
       type: "text_response",
-      content: "P3-2 essay prompt null answer",
+      content: "result-visibility essay prompt null answer",
       options: [],
       standardAnswer: null,
       attachments: [],
@@ -1182,7 +1182,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
       createdAt: now,
       updatedAt: now,
     });
-    // RBAC-M10-E: assignment so candidateBToken can act.
+    // Assignment so candidateBToken can act.
     await ctx.db.insert(schema.userRoleAssignments).values({
       id: crypto.randomUUID(),
       organizationId: ctx.org.id,
@@ -1218,7 +1218,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
 
   it("manual mode: fully_graded + computed score is hidden from the candidate until publish", async () => {
     const { examId, attemptId } = await createManualGradedMixedExam({
-      title: "P3-2 manual hidden",
+      title: "result-visibility manual hidden",
       resultPublicationMode: "manual",
       includeTextResponse: true,
     });
@@ -1261,7 +1261,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
 
   it("result visible: standardAnswer is stripped and rubric never appears for any question type", async () => {
     const { attemptId } = await createManualGradedMixedExam({
-      title: "P3-2 answer gate",
+      title: "result-visibility answer gate",
       resultPublicationMode: "immediate",
       includeTextResponse: true,
     });
@@ -1300,7 +1300,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
     // must carry manualGraded=false and still strip standardAnswer.
     const { attemptId: objectiveAttemptId } = await createManualGradedMixedExam(
       {
-        title: "P3-2 manualGraded objective",
+        title: "result-visibility manualGraded objective",
         resultPublicationMode: "immediate",
         includeTextResponse: false,
       },
@@ -1328,7 +1328,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
       method: "POST",
       url: "/api/exams",
       payload: {
-        title: "P3-2 manualGraded manual",
+        title: "result-visibility manualGraded manual",
         description: "",
         courseId,
         timingMode: "timed_window",
@@ -1421,7 +1421,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
   it("candidate can read own result but not another candidate's attempt", async () => {
     // attemptA belongs to the default candidate; candidate B is a different user.
     const { attemptId: attemptA } = await createManualGradedMixedExam({
-      title: "P3-2 ownership A",
+      title: "result-visibility ownership A",
       resultPublicationMode: "immediate",
       includeTextResponse: false,
     });
@@ -1446,7 +1446,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
 
   it("frozen result metadata is immune to live-question edits", async () => {
     const { attemptId } = await createManualGradedMixedExam({
-      title: "P3-2 frozen metadata",
+      title: "result-visibility frozen metadata",
       resultPublicationMode: "immediate",
       includeTextResponse: false,
     });
@@ -1469,7 +1469,7 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
     await ctx.db
       .update(schema.questions)
       .set({
-        content: "P3-2 LIVE EDITED objective prompt",
+        content: "result-visibility LIVE EDITED objective prompt",
         standardAnswer: "b",
         rubric: "LIVE EDITED rubric",
         updatedAt: new Date(),
@@ -1487,8 +1487,10 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
         (q: { questionId: string }) => q.questionId === singleChoiceId,
       )?.content;
     expect(afterPrompt).toBe(beforePrompt);
-    expect(afterPrompt).toBe("P3-2 objective");
-    expect(afterPrompt).not.toBe("P3-2 LIVE EDITED objective prompt");
+    expect(afterPrompt).toBe("result-visibility objective");
+    expect(afterPrompt).not.toBe(
+      "result-visibility LIVE EDITED objective prompt",
+    );
     // And the live edit still didn't leak standardAnswer/rubric.
     for (const q of after.json().questionResults) {
       expect(q).not.toHaveProperty("standardAnswer");
@@ -1497,14 +1499,14 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
   });
 });
 
-// ── P3-MOD-P3-3: Admin frozen result view ─────────────────────────
+// ── Admin frozen result view ─────────────────────────
 // Proves the Admin result projection is INDEPENDENT of candidate release
 // (INV-A1), reads frozen QuestionSnapshot truth (INV-A2/A5), keeps
 // standardAnswer for Admin (inverse of the candidate strip), and is
 // authorization-gated. The grading-details frozen-rubric/standardAnswer
-// immunity is already PROVEN in gradingQueue.test.ts (P3-MOD-P1-1 block);
+// immunity is already PROVEN in gradingQueue.test.ts;
 // this block covers the scores-endpoint Admin view AttemptDetailPage consumes.
-describe("P3-3 admin frozen result view", () => {
+describe("admin frozen result view", () => {
   let ctx: TestContext;
   let courseId: string;
   let singleChoiceId: string;
@@ -1523,7 +1525,7 @@ describe("P3-3 admin frozen result view", () => {
     await ctx.db.insert(schema.courses).values({
       id: courseId,
       organizationId: ctx.org.id,
-      name: "P3-3 Course",
+      name: "admin-view Course",
       code: `P33-${uniquePrefix()}`,
       description: "",
       createdAt: new Date(),
@@ -1534,7 +1536,7 @@ describe("P3-3 admin frozen result view", () => {
       organizationId: ctx.org.id,
       courseId,
       type: "single_choice",
-      content: "P3-3 objective prompt",
+      content: "admin-view objective prompt",
       options: [
         { id: "a", content: "A" },
         { id: "b", content: "B" },
@@ -1557,9 +1559,9 @@ describe("P3-3 admin frozen result view", () => {
       organizationId: ctx.org.id,
       courseId,
       type: "text_response",
-      content: "P3-3 essay prompt",
+      content: "admin-view essay prompt",
       options: [],
-      standardAnswer: "P3-3 frozen reference answer",
+      standardAnswer: "admin-view frozen reference answer",
       attachments: [],
       score: 20,
       difficulty: 3,
@@ -1568,7 +1570,7 @@ describe("P3-3 admin frozen result view", () => {
         multiSelectScoring: "all_correct_full",
         fillBlankMatchMode: "exact",
       },
-      rubric: "P3-3 key concept: 10\nfull argument: 10",
+      rubric: "admin-view key concept: 10\nfull argument: 10",
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1592,7 +1594,7 @@ describe("P3-3 admin frozen result view", () => {
       method: "POST",
       url: "/api/exams",
       payload: {
-        title: "P3-3 manual cross",
+        title: "admin-view manual cross",
         description: "",
         courseId,
         timingMode: "timed_window",
@@ -1659,7 +1661,7 @@ describe("P3-3 admin frozen result view", () => {
       payload: {
         attemptId,
         questionId: textResponseId,
-        answer: "P3-3 candidate\nmultiline essay",
+        answer: "admin-view candidate\nmultiline essay",
         clientSeq: 2,
         clientSavedAt: new Date().toISOString(),
         baseVersion: 0,
@@ -1709,8 +1711,8 @@ describe("P3-3 admin frozen result view", () => {
         score: 15,
         maxScore: 20,
         correct: true,
-        candidateAnswer: "P3-3 candidate\nmultiline essay",
-        standardAnswer: "P3-3 frozen reference answer",
+        candidateAnswer: "admin-view candidate\nmultiline essay",
+        standardAnswer: "admin-view frozen reference answer",
         ...(existing.get(textResponseId) ?? {}),
       },
     ];
@@ -1791,7 +1793,7 @@ describe("P3-3 admin frozen result view", () => {
       cookies: { "auth-token": ctx.candidateToken },
     });
     expect(candRes.statusCode).toBe(200);
-    expect(candRes.body).not.toContain("P3-3 frozen reference answer");
+    expect(candRes.body).not.toContain("admin-view frozen reference answer");
     expect(candRes.body).not.toContain('"standardAnswer"');
 
     const adminRes = await ctx.app.inject({
@@ -1800,7 +1802,7 @@ describe("P3-3 admin frozen result view", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(adminRes.statusCode).toBe(200);
-    expect(adminRes.body).toContain("P3-3 frozen reference answer");
+    expect(adminRes.body).toContain("admin-view frozen reference answer");
     expect(adminRes.body).toContain('"standardAnswer"');
   });
 
@@ -1902,7 +1904,7 @@ describe("P3-3 admin frozen result view", () => {
       .questionResults.find(
         (q: { questionId: string }) => q.questionId === singleChoiceId,
       );
-    expect(afterObj.content).toBe("P3-3 objective prompt");
+    expect(afterObj.content).toBe("admin-view objective prompt");
     expect(afterObj.standardAnswer).toBe("a");
     expect(afterObj.standardAnswer).not.toBe("b");
 
@@ -1911,7 +1913,7 @@ describe("P3-3 admin frozen result view", () => {
     await ctx.db
       .update(schema.questions)
       .set({
-        content: "P3-3 objective prompt",
+        content: "admin-view objective prompt",
         standardAnswer: "a",
         updatedAt: new Date(),
       })
@@ -1938,7 +1940,7 @@ describe("P3-3 admin frozen result view", () => {
     await ctx.db
       .update(schema.questions)
       .set({
-        content: "P3-3 LIVE MUTATED objective prompt",
+        content: "admin-view LIVE MUTATED objective prompt",
         standardAnswer: "b",
         updatedAt: new Date(),
       })
@@ -1955,7 +1957,7 @@ describe("P3-3 admin frozen result view", () => {
         (q: { questionId: string }) => q.questionId === singleChoiceId,
       );
     expect(afterObj.content).toBe(beforeObj.content);
-    expect(afterObj.content).toBe("P3-3 objective prompt");
+    expect(afterObj.content).toBe("admin-view objective prompt");
     expect(afterObj.standardAnswer).toBe("a");
     expect(afterObj.standardAnswer).not.toBe("b");
   });

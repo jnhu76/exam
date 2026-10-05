@@ -33,7 +33,7 @@ describe("attempt routes", () => {
     await ctx.cleanup();
   });
 
-  describe("POST /api/admin/attempts/:attemptId/misconduct (operation-aware, J5-I1C Slice 3)", () => {
+  describe("POST /api/admin/attempts/:attemptId/misconduct (operation-aware)", () => {
     interface IsolatedTestOrg {
       orgId: string;
       adminToken: string;

@@ -7,7 +7,7 @@
  * governed by the recipe-conflict rule unless a `type-*` recipe is also
  * selected on the same node.
  *
- * (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §15, §16): detects a STATIC inline-style
+ * Detects a STATIC inline-style
  * property whose key maps to a typography category (font-size / line-height /
  * letter-spacing / font-weight / font-family). Only static LITERAL values are
  * reported — a dynamic value (`style={{ fontSize: size }}`) is not statically

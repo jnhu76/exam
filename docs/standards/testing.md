@@ -457,6 +457,20 @@ durability boundary.
 
 ## 4. E2E Contract
 
+### 4.0 E2E retention principle
+
+E2E exists for high-value browser/system boundary failures: crash/reconnect
+recovery, submit-flush scheduling, cross-tab state, retry identity after an
+indeterminate response, session/identity journeys, result-publication
+visibility, and deployment/LAN transport — mechanisms that cannot be
+faithfully proven below the browser/system boundary AND whose failure is
+materially risky. A browser-only assertion is not automatically worth E2E.
+Trivial visual geometry (bounding-box px contracts, exact widths/gaps,
+breakpoint layout) and simple UI state should be tested below E2E
+(component/API/DB) or left unautomated when not materially risky. Every
+surviving E2E must name the material invariant it owns and the
+browser/system mechanism that requires the browser.
+
 ### 4.1 Local E2E (`scripts/e2e/run.sh`)
 
 One canonical host-native runner backs `pnpm e2e`. The application runs on

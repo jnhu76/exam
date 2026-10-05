@@ -39,7 +39,7 @@ export function buildExamPayload(
     maxAttempts: number;
     passingScore: number;
     totalScore: number;
-    // #291 Phase A: deadline/untimed carry null duration; untimed also nulls
+    // #291: deadline/untimed carry null duration; untimed also nulls
     // closeAt (the payload builder below handles that from timingMode).
     timingMode: "timed_window" | "deadline" | "untimed";
     durationMinutes: number | null;
@@ -54,7 +54,7 @@ export function buildExamPayload(
     description: "",
     courseId: overrides.courseId ?? "",
     timingMode: overrides.timingMode ?? ("timed_window" as const),
-    // INVARIANT: explicit null is a real Phase A value (deadline/untimed) —
+    // INVARIANT: explicit null is a real timed-mode value (deadline/untimed) —
     // merge on `undefined`, never `??`, or null collapses to the 60 default.
     durationMinutes:
       overrides.durationMinutes !== undefined

@@ -15,8 +15,7 @@ export type EligibilityDenialMode = "resource_not_found" | "permission_denied";
 /**
  * Metadata attached to preHandler functions returned by the authz decorators.
  * Used by introspection tests to verify the correct kind of gate is wired at
- * runtime (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-2, Finding 2; extended for the
- * 4 candidate-runtime archetypes in RBAC-M10-A).
+ * runtime, extended for the 4 candidate-runtime archetypes below).
  *
  * Per directive §7, an ownership/eligibility/context gate gets an explicit
  * kind distinct from generic `scoped` (org-anchor-only). The candidate-runtime

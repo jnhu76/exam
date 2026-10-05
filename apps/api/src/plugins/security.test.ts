@@ -150,7 +150,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
     await app.close();
   });
 
-  it("missing CORS_ORIGIN in production fails fast at config build (P0-4)", async () => {
+  it("missing CORS_ORIGIN in production fails fast at config build", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("APP_MODE", "production");
     vi.stubEnv("JWT_SECRET", "test-secret");
@@ -188,7 +188,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
     await app.close();
   });
 
-  it("CSRF origin uses CORS_ORIGIN comma-separated list (P1)", async () => {
+  it("CSRF origin uses CORS_ORIGIN comma-separated list", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("APP_MODE", "production");
     vi.stubEnv("JWT_SECRET", "test-secret");

@@ -2,7 +2,7 @@
  * #613 GAP-04 — legacy `ctx.permissions` must remain a non-authoritative
  * shadow field on the canonical authenticated HTTP path.
  *
- * Current invariant (RBAC-M10-E / P4-C1 residue cleanup):
+ * Current invariant:
  *   - authorization decisions read the capability authority (`ctx.capabilities`,
  *     resolved from ACTIVE user_role_assignments at authenticate time);
  *   - `ctx.permissions` (the legacy RequestContext slot) is `[]` on every
@@ -44,7 +44,9 @@ const probeRoutes: FastifyPluginAsync = async (fastify) => {
   );
 };
 
-describe("#613 GAP-04 — ctx.permissions stays a non-authoritative shadow field", () => {
+// Regression for #613 GAP-04: the permissions shadow field must stay
+// non-authoritative.
+describe("ctx.permissions stays a non-authoritative shadow field", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
   beforeAll(async () => {

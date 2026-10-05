@@ -15,7 +15,8 @@ import {
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 /**
- * P2D-J5 — Result publishing policy, candidate-facing visibility (real flow).
+ * Result publishing policy, candidate-facing visibility (real flow).
+ * (Origin: P2D-J5 result-publishing workstream.)
  *
  * Each scenario seeds its own exam + unique candidate and proves what the
  * candidate's browser shows across the publish transition:
@@ -37,7 +38,7 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
  * candidateResultVisibility.test.ts and notifications.test.ts and are
  * deliberately not duplicated here.
  */
-test.describe("result publishing policy (P2D-J5)", () => {
+test.describe("result publishing policy", () => {
   test("Scenario B — manual publish: candidate hidden until admin publishes", async ({
     page,
     request,
@@ -118,7 +119,7 @@ test.describe("result publishing policy (P2D-J5)", () => {
   });
 
   // ── P3 result visibility ────────────────────────────────────────
-  // P3-MOD-P3-1. Proves resultPublicationMode gates candidate score/pass
+  // Proves resultPublicationMode gates candidate score/pass
   // visibility INDEPENDENTLY of grading completion (INV-R1..R3). Scenarios A
   // and B above already cover immediate + manual(objective-auto). The two
   // tests below close the gaps that need a MIXED exam (objective + manual):

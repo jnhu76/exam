@@ -1,10 +1,10 @@
 # Typography Semantic Vocabulary
 
 > Authority for the semantic typography roles of the Exam frontend
-> (UI-VOCAB-1T). Derived from the accepted UI audit and actual application
+>. Derived from the accepted UI audit and actual application
 > consumers — not from desired component names. Each CONFIRMED role is the
 > single public authority for its semantic purpose; the `type-*` recipe
-> primitives (UI-RECIPE-1A) implement these roles.
+> primitives implement these roles.
 
 ## How to read this
 
@@ -51,7 +51,7 @@
 | Candidate | Reason |
 | --- | --- |
 | `section-description` | Weak standalone evidence; the description-under-section-title recipe is the same shape as `page-description`. Reuse `page-description` for now; split only if section-scale descriptions need a distinct size later. |
-| `long-response` serif opt-in | The `long-response` role EXISTS (confirmed) but initially uses `font.reading` (sans). Opting a specific long-response surface into `font.serif` is a future explicitly-approved decision (UI-TYPO-2 conditional roles), not enabled by default. |
+| `long-response` serif opt-in | The `long-response` role EXISTS (confirmed) but initially uses `font.reading` (sans). Opting a specific long-response surface into `font.serif` is a future explicitly-approved decision, not enabled by default. |
 
 ## REJECTED
 
@@ -68,21 +68,20 @@
 | --- | --- | --- |
 | `font.ui` | `--font-ui` (bundled HarmonyOS Sans SC first; host families are fallbacks only) | All UI text |
 | `font.reading` | `--font-reading` (currently = `--font-ui`) | Sustained reading family role; recipe `type-reading` uses this, NOT serif |
-| `font.serif` | `--font-serif` (Noto Serif SC) | Sustained Chinese reading ONLY, by explicit opt-in (UI-TYPO-2 boundary) |
+| `font.serif` | `--font-serif` (Noto Serif SC) | Sustained Chinese reading ONLY, by explicit opt-in |
 | `font.mono` | `--font-mono` | Code/log/mono presentation |
 
 ---
 
 ## Synchronization with ESLint
 
-> **Authority reconstruction (UI-TYPOGRAPHY-AUTHORITY-RECON-1):** the
+> **Authority reconstruction:** the
 > machine-readable ownership of these recipes now lives in
 > `src/typography/recipeRegistry.ts` (the single canonical authority), from
 > which this file's public names/types derive. The registry is drift-tested
 > bidirectionally against `recipes.css` and mirrored as a GENERATED table below.
 
-The structural lint proxy `exam-ui/no-raw-typography` was **retired** in
-UI-MIGRATE-N-W3: it could not deterministically distinguish `section-title`
+The structural lint proxy `exam-ui/no-raw-typography` was **retired**: it could not deterministically distinguish `section-title`
 ownership from topbar/question/overlay title roles (no sound NARROW AST
 boundary existed). It is **not** an active rule and this vocabulary is no
 longer described as the source for it.

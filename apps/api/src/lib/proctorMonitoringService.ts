@@ -102,7 +102,7 @@ const COUNTED_EVENT_NAMES = [
 /**
  * Audit-log actions surfaced in the per-attempt timeline (compliance ops).
  * attempt.extendTime is retained for historical rows (the route was cut in
- * REC-I4-I3B2); new grants emit attempt.timeGrant.
+ * ADR-013); new grants emit attempt.timeGrant.
  */
 const TIMELINE_AUDIT_ACTIONS = new Set([
   "attempt.forceSubmit",
@@ -140,7 +140,7 @@ const SAVE_ERROR_METADATA = [
  * (answer text, question content, tokens, cookies, unknown keys) is dropped.
  * An entry of `undefined` means "no fields allowed" (empty metadata).
  *
- * `grant_time` is the operator time-grant event (REC-I4-I3B2). It is in this
+ * `grant_time` is the operator time-grant event. It is in this
  * allowlist — the keys projected are correlation ids (adjustmentId /
  * operationId) plus the magnitude/reason (addedSeconds / reasonCode) that
  * proctors need to understand a grant in the timeline.

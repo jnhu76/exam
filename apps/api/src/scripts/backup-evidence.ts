@@ -1,5 +1,5 @@
 /**
- * Local script: record durable backup / restore-drill evidence (P7-E2B).
+ * Local script: record durable backup / restore-drill evidence.
  *
  * This is the typed operator evidence command for the backup/restore
  * evidence ledger (PostgreSQL), invoked by operators recording backup or
@@ -133,7 +133,7 @@ export function parseStrictPositiveInt(v: string, flag: string): number {
 }
 
 /**
- * Connected-DB identity check (P7-E review P2-4), as a pure decision.
+ * Connected-DB identity check, as a pure decision.
  *
  * The URL-parsed name is only a hint — APP_MODE=development with
  * DATABASE_URL=…/exam_test would otherwise record "successful" evidence into
@@ -189,7 +189,7 @@ export function decideEvidenceDbAccess(
 }
 
 /**
- * Success ↔ verified invariant for retention evidence (P7-CLOSE review P1-2),
+ * Success ↔ verified invariant for retention evidence,
  * as a pure decision. `result` and `verificationStatus` are parsed as
  * independent CLI flags, so this guards the cross-field rule: a successful
  * retention run REQUIRES verified repository/chain evidence. The DB CHECK
@@ -220,7 +220,7 @@ export function validateRetentionSuccessInvariant(
 }
 
 /**
- * Automated-drill duration invariant (P7-CLOSE review P2-3), as a pure
+ * Automated-drill duration invariant, as a pure
  * decision. An AUTOMATED succeeded drill is the only evidence that can prove
  * RTO, and RTO is measured from its duration — so a duration is REQUIRED on
  * exactly that shape. Operator-declared successes and all failures are exempt
@@ -291,7 +291,7 @@ async function main(): Promise<void> {
   process.stderr.write(`backup-evidence: target database "${databaseName}"\n`);
   const conn = await createDatabase(databaseUrl);
   try {
-    // Connected-DB identity check (P7-E review P2-4): ask the server what
+    // Connected-DB identity check: ask the server what
     // database this connection actually uses and fail closed on test-like
     // names (see decideEvidenceDbAccess). The E2E harness sets
     // ALLOW_UNSAFE_EVIDENCE_TEST_DB=1 to opt in to recording into exam_e2e.
@@ -462,7 +462,7 @@ async function main(): Promise<void> {
         if (Number.isNaN(startedAt.getTime())) {
           fail(`spool: startedAt is not a valid date: ${spool.startedAt}`);
         }
-        // TRUTHFUL RPO (P7-E review P1-2): the ledger must record WHEN the
+        // TRUTHFUL RPO: the ledger must record WHEN the
         // backup actually protected the data, not when the evidence was
         // imported into PostgreSQL. `spool.completedAt` is the true
         // completion/verification time of the cold copy; `now` is only the
@@ -550,7 +550,7 @@ async function main(): Promise<void> {
         break;
       }
       case "retention": {
-        // Host-side retention evidence (P7-CLOSE P7-3b). Records the outcome
+        // Host-side retention evidence. Records the outcome
         // of an automated retention/expire operation executed by the Host
         // Operator outside Exam RBAC. Success means: retention operation
         // succeeded AND repository/chain verification succeeded — not merely

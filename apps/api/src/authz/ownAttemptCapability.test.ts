@@ -3,8 +3,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { Permission, type PermissionKey, type RoleKey } from "@exam/authz";
 
 /**
- * Unit tests for the own-attempt capability preHandler (RBAC-M10-A archetype
- * C/D). Verifies the capability + ownership arbitration is role-name-free and
+ * Unit tests for the own-attempt capability preHandler (capability +
+ * ownership archetype). Verifies the arbitration is role-name-free and
  * the ADR §3.9 deny mapping holds:
  *   - preset deny -> 403 PERMISSION_DENIED
  *   - resolver resource_not_found -> 404 (anti-enumeration)
@@ -64,7 +64,7 @@ function capabilitiesFor(role: string): readonly PermissionKey[] {
   return ROLE_CAPS[role] ?? [];
 }
 
-/** Request-scoped predicate that reads ctx.capabilities (RBAC-M10-E). */
+/** Request-scoped predicate that reads ctx.capabilities. */
 function allows(request: FastifyRequest, perm: PermissionKey): boolean {
   return (request.ctx?.capabilities ?? []).includes(perm);
 }
@@ -117,7 +117,7 @@ function makeReply() {
   };
 }
 
-describe("RBAC-M10-A own-attempt capability preHandler", () => {
+describe("own-attempt capability preHandler", () => {
   beforeEach(() => {
     nextResolution = null;
   });

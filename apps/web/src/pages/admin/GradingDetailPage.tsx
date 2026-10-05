@@ -143,9 +143,9 @@ interface GradingQuestion {
   questionId: string;
   type: string;
   content: string;
-  /** Rich prompt document (issue 301); null in Plain mode. */
+  /** Rich prompt document; null in Plain mode. */
   contentDocument?: ContentDocumentV1 | null;
-  /** Frozen answer input mode (issue 301 corrective pass) — the render authority
+  /** Frozen answer input mode — the render authority
    * for candidateAnswer. */
   answerMode?: string | null;
   maxScore: number;

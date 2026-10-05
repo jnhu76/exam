@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Error placeholder. Appearance is OUTLINE feedback (issue 577 review-fix-1):
+ * Error placeholder. Appearance is OUTLINE feedback (issue #577):
  * the destructive tone owns only the dashed border color; the surface stays
  * transparent and text stays component-owned (secondary message, destructive
- * icon) — matching its pre-corrective unfilled placeholder shape.
+ * icon) — matching its original unfilled placeholder shape.
  */
 export function ErrorState({
   message,

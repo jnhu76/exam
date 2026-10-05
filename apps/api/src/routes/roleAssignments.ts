@@ -38,9 +38,9 @@ const assignableRolesResponseSchema = z.object({
 });
 
 /**
- * Fastify plugin registering role-assignment routes (RBAC-M8).
+ * Fastify plugin registering role-assignment routes.
  *
- * Gates use capability-based authorization (RBAC-M10-C). All four mutating /
+ * Gates use capability-based authorization. All four mutating /
  * management routes use Permission.UserRoleAssign; the per-user list route
  * uses Permission.UserView. Both permissions are Admin-only in the current
  * permission presets, so the migration from legacy requireRole(["Admin"]) is
@@ -143,7 +143,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send({ requestId: request.id, error: "RESOURCE_NOT_FOUND" });
       }
-      // P7-E2A (ADR-017 D14): assignment creation runs inside the canonical
+      // ADR-017 D14: assignment creation runs inside the canonical
       // authority-mutation seam — same org advisory lock + Admin↔Maintainer
       // exclusion post-condition. A secondary Maintainer assignment for an
       // Admin actor (or vice versa) is rejected before commit.
@@ -210,7 +210,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
       const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
 
       if (data.isPrimary === true) {
-        // P7-E2A (ADR-017 D14): promoting a secondary assignment to primary
+        // ADR-017 D14: promoting a secondary assignment to primary
         // changes effective authority — run inside the authority-mutation
         // seam so Admin↔Maintainer exclusion is enforced transactionally.
         const promoted = await mutateWithAuthorityInvariants(
@@ -241,7 +241,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
         };
       }
       if (data.isActive === true) {
-        // P7-E2A (ADR-017 D14): reactivating a deactivated assignment can
+        // ADR-017 D14: reactivating a deactivated assignment can
         // make an Admin/Maintainer authority effective again — run inside
         // the authority-mutation seam (org advisory lock + exclusion
         // post-condition). A reactivated primary restores that role as the
@@ -255,7 +255,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
             ).activateWithinTransaction(tx, ctx, assignmentId);
             if (!result) return null;
             const { row: value, changed } = result;
-            // Audit/sync truthfulness (P7-E review P2-1): a no-op reactivation
+            // Audit/sync truthfulness: a no-op reactivation
             // of an already-active assignment must NOT re-sync users.role (an
             // unconditional UPDATE that bumps updatedAt with no real change)
             // and must NOT emit role_changed (a state change that never
@@ -343,7 +343,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
         };
       }
       // Unreachable in practice: PatchRoleAssignmentRequestSchema (XOR
-      // command contract, P7-E review P2-1) rejects any payload that does not
+      // command contract) rejects any payload that does not
       // carry exactly one of { isPrimary: true } / { isActive: true } /
       // { isActive: false } with 400 before the handler runs. This guard only
       // catches a future contract regression where a payload slips through.

@@ -3,7 +3,7 @@ import { Permission, Scope, Role } from "./catalog.js";
 import { AuditAction } from "./auditActions.js";
 import { Role as DomainRole } from "@exam/domain";
 
-describe("RBAC-M1 catalog — closed-union integrity", () => {
+describe("catalog — closed-union integrity", () => {
   it("every Permission value is a dotted lowercase string (>= 2 segments), unique", () => {
     const values = Object.values(Permission);
     // uniqueness

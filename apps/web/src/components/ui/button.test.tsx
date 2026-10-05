@@ -44,7 +44,7 @@ describe("Button", () => {
     );
   });
 
-  it("renders the 6px primary-control radius across the whole size family (issue 582 D3)", () => {
+  it("renders the 6px primary-control radius across the whole size family (issue 582)", () => {
     // rounded-md resolves to --radius-md (0.375rem = 6px) in the Tailwind
     // build. D3 froze the entire Button family — base plus every size that
     // declares its own radius — at 6px, matching Input/SelectTrigger/Textarea.

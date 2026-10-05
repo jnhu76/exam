@@ -383,7 +383,7 @@ export function TakeExamPage() {
   // loader (initial load, retry, post-submit reload) and any concurrent GET.
   const loadGenerationRef = useRef(0);
   const currentAttemptIdRef = useRef<string | undefined>(attemptId);
-  // EXAM-519: in-flight guard for the terminal-signal reconciliation re-read.
+  // In-flight guard for the terminal-signal reconciliation re-read.
   // Concurrent terminal signals (heartbeat 409 + a settling autosave
   // rejection in the same episode) collapse into at most one active take GET.
   const reconciliationInFlightRef = useRef<Promise<void> | null>(null);
@@ -538,7 +538,7 @@ export function TakeExamPage() {
   }, [attemptId, fetchSnapshot, applySnapshot, t]);
 
   /**
-   * EXAM-519 — one authoritative re-read per terminal-signal episode.
+   * One authoritative re-read per terminal-signal episode.
    *
    * Triggered by terminal heartbeat/save signals: re-reads
    * GET /api/candidate/attempts/:attemptId/take and routes the frozen
@@ -667,7 +667,7 @@ export function TakeExamPage() {
     deadlineHandledRef.current = false;
     heartbeatFailureRef.current = 0;
     heartbeatFailureReportedRef.current = false;
-    // EXAM-519: drop any in-flight reconciliation from the PREVIOUS attempt.
+    // Drop any in-flight reconciliation from the PREVIOUS attempt.
     // The generation guard already makes its late apply a no-op; clearing the
     // ref here ensures the NEW attempt's terminal signals start a fresh
     // re-read instead of joining a promise that may never settle.
@@ -865,7 +865,7 @@ export function TakeExamPage() {
           },
           { attemptId, questionId, level: "warn" },
         );
-        // EXAM-519: a terminal rejection (attempt submitted/closed/deadline)
+        // A terminal rejection (attempt submitted/closed/deadline)
         // is an authority signal — re-read the frozen snapshot once so the
         // page locks instead of staying stale-editable. The accurate
         // rejection alert above remains the terminal feedback. Non-terminal
@@ -1069,7 +1069,7 @@ export function TakeExamPage() {
         void retryFailedSaves();
       }
     } catch (err) {
-      // EXAM-519: a terminal heartbeat (409 INVALID_STATE_TRANSITION) is the
+      // A terminal heartbeat (409 INVALID_STATE_TRANSITION) is the
       // server reporting the attempt left in_progress — an authority signal,
       // NOT a connectivity failure. Re-read the frozen snapshot once (the
       // existing view derivation then locks the page); never show the

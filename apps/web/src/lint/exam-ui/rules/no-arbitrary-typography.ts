@@ -5,7 +5,7 @@
  * VALUES. Arbitrary values bypass the semantic typography layer by pinning
  * exact px/rem/line-height/letter-spacing/font-weight/font-family values inline.
  *
- * (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §5, §6, §15, §16): the rule is built on the
+ * The rule is built on the
  * shared bracket-aware `parseTailwindCandidate` + `classifyArbitraryValue`,
  * which is the single owner of variant-prefix and arbitrary-value semantics.
  * The exact policy categories are explicit:

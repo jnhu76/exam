@@ -73,7 +73,7 @@ describe("ContentRenderer — static prompt read trust (D5A-R1..R6)", () => {
     });
   });
 
-  it("D5A-R2: docVersion 2 fails closed to the integrity notice — never interpreted as V1, never the plain fallback", () => {
+  it("docVersion 2 fails closed to the integrity notice — never interpreted as V1, never the plain fallback", () => {
     const future = {
       docVersion: 2,
       type: "doc",

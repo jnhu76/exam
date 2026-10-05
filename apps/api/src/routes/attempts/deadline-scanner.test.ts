@@ -98,7 +98,7 @@ describe("attempt routes", () => {
           .returning()
       )[0]!;
 
-      // RBAC-M10-E: authenticate resolves authority from ACTIVE
+      // Authenticate resolves authority from ACTIVE
       // user_role_assignments. Seed one active primary assignment per test user
       // so the admin/candidate tokens authenticate with their role's preset.
       await ctx.db.insert(schema.userRoleAssignments).values([
@@ -592,7 +592,7 @@ describe("attempt routes", () => {
       expect(after?.submittedAt).toBeNull();
     });
 
-    // ── P0-C1: REACHABILITY vs NULL-RECOVERY BOUNDARY ──────────────────
+    // ── REACHABILITY vs NULL-RECOVERY BOUNDARY ──────────────────
     //
     // Reachability invariant (ACTIVE-DEADLINE-001): ordinary production
     // CANNOT create an active attempt with deadlineAt = NULL.
@@ -600,7 +600,7 @@ describe("attempt routes", () => {
     // calculateDeadlineAt; the operator time grant engine writes non-null; restoreAttempt
     // only preserves an existing value; scanner/submit never write deadlineAt.
     // A NULL active deadlineAt is therefore schema-admissible but
-    // protocol state for close-bound modes since Phase A (#291): a
+    // protocol state for close-bound modes since #291: a
     // `deadline`-mode attempt carries deadlineAt = NULL and expires via the
     // exam's closeAt (covered below). Only `untimed` (closeAt also NULL)
     // sits outside the scanner's expiry domain — the under-lock canonical
@@ -629,7 +629,7 @@ describe("attempt routes", () => {
     // schema-admissible NULL domain, NOT a protocol liveness claim — the
     // starting state is protocol-unreachable (see T1). The test constructs it
     // via direct DB update to exercise the defensive recovery path.
-    it("auto-submits a NULL-deadline attempt whose exam.closeAt has passed (P0-C1 defensive recovery DL-ROB-001)", async () => {
+    it("auto-submits a NULL-deadline attempt whose exam.closeAt has passed (defensive recovery DL-ROB-001)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId, questionId } = await createStartedAttemptWithQuestion(
         t,
@@ -667,7 +667,7 @@ describe("attempt routes", () => {
     // DEFENSIVE RECOVERY (negative): deadlineAt = NULL AND exam.closeAt > now
     // => NOT canonically expired via the defensive fallback (EffectiveDeadline
     // = closeAt > now) => NOT a candidate, NOT submitted.
-    it("does NOT auto-submit a NULL-deadline attempt while exam.closeAt is future (P0-C1 defensive recovery, negative)", async () => {
+    it("does NOT auto-submit a NULL-deadline attempt while exam.closeAt is future (defensive recovery, negative)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -689,12 +689,12 @@ describe("attempt routes", () => {
       expect(after?.submittedAt).toBeNull();
     });
 
-    // DEFENSIVE RECOVERY (concurrency): the accepted P0-B Attempt->Exam
+    // DEFENSIVE RECOVERY (concurrency): the accepted Attempt->Exam
     // serialization must remain valid for NULL-deadline (defensive) rows. If
     // exam.closeAt is extended into the future before the under-lock recheck,
     // the canonical decision via the defensive fallback is NOT expired => no
     // submit.
-    it("does not auto-submit a NULL-deadline attempt when exam.closeAt is extended before the under-lock recheck (P0-C1 defensive recovery race)", async () => {
+    it("does not auto-submit a NULL-deadline attempt when exam.closeAt is extended before the under-lock recheck (defensive recovery race)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -749,7 +749,7 @@ describe("attempt routes", () => {
     // protocol-unreachable; they are exercised by direct DB update to prove
     // discovery/helper agreement over the defensive domain, not to assert
     // NULL is a valid protocol state.)
-    it("discovery matches canonical expiry over the full domain incl. NULL (P0-C1 defensive discovery conformance)", async () => {
+    it("discovery matches canonical expiry over the full domain incl. NULL (defensive discovery conformance)", async () => {
       const t = await createIsolatedTestOrg();
       const cells: Array<{
         name: string;
@@ -838,14 +838,14 @@ describe("attempt routes", () => {
     // untimed mode: closeAt and deadlineAt are both NULL — the canonical
     // effective deadline is null, expiry is always false, and the scanner must
     // never submit the attempt however late it runs.
-    describe("attempt routes — Phase A timing modes (scanner)", () => {
+    describe("attempt routes — timing modes (scanner)", () => {
       it("deadline-mode attempt (null deadlineAt) is auto-submitted by the scanner at closeAt", async () => {
         const t = await createIsolatedTestOrg();
         const exam = await ctx.app.inject({
           method: "POST",
           url: "/api/exams",
           payload: buildExamPayload({
-            title: "Phase A Deadline Scanner Exam",
+            title: "Deadline Scanner Exam",
             courseId: t.courseId,
             questionIds: [t.questionId],
             timingMode: "deadline",
@@ -917,7 +917,7 @@ describe("attempt routes", () => {
           method: "POST",
           url: "/api/exams",
           payload: buildExamPayload({
-            title: "Phase A Untimed Scanner Exam",
+            title: "Untimed Scanner Exam",
             courseId: t.courseId,
             questionIds: [t.questionId],
             timingMode: "untimed",

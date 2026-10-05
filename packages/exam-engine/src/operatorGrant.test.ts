@@ -787,7 +787,7 @@ describe("grantAttemptTime", () => {
     );
   });
 
-  describe("atomicity sequencing (transaction rollback owned by B2/V1)", () => {
+  describe("atomicity sequencing", () => {
     it("ledger insert throws: attemptRepo.update never called, deadline unchanged", async () => {
       const ctx = setupMocks({
         attempt: makeAttempt({ status: "in_progress" }),
@@ -956,7 +956,7 @@ describe("grantAttemptTime", () => {
       ).rejects.toThrow(NotFoundError);
     });
 
-    it("malformed incidentId fails closed before any Incident lookup or mutation (P2-E)", async () => {
+    it("malformed incidentId fails closed before any Incident lookup or mutation", async () => {
       const ctx = setupMocks({});
       const validator: IncidentGrantValidator = {
         findForGrantValidation: vi.fn(async () => ({

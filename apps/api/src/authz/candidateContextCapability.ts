@@ -1,5 +1,5 @@
 /**
- * Candidate-context capability preHandler (RBAC-M10-A, archetype A).
+ * Candidate-context capability preHandler (archetype A).
  *
  * Authorization for the candidate-context list route whose registry entry
  * declares `runtimeAuthz.kind: "candidate_context"` (authz/routeRegistry.ts owns
@@ -35,7 +35,7 @@ import { buildErrorResponse } from "../lib/errorResponse.js";
 import { type PermissionKey } from "@exam/authz";
 
 /**
- * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
+ * Capability predicate over the request (union-of-assignments authority). Reads the authoritative
  * `ctx.capabilities` union. Signature matches the scoped / score / own-attempt
  * / exam-eligibility gates.
  */

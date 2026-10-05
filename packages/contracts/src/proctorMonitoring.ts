@@ -37,7 +37,7 @@ export const ProctorExamListItemSchema = z
     title: z.string().min(1),
     status: ProctorExamStatusEnum,
     openAt: z.string().datetime(),
-    // Null for untimed exams (#291 Phase A): open-ended, no close time.
+    // Null for untimed exams: open-ended, no close time.
     closeAt: z.string().datetime().nullable(),
   })
   .strict();

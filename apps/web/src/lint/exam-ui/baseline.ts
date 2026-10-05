@@ -9,7 +9,7 @@
  *   already-listed file, is reported.
  *
  * This keeps the repository green today while still rejecting new bypasses —
- * the required invariant of UI-LINT-1. As business pages migrate to the
+ * the required invariant of this lint suite. As business pages migrate to the
  * authoritative components, entries are removed (the migration tasks own this).
  */
 import { readFileSync } from "node:fs";

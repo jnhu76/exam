@@ -5,7 +5,7 @@ import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
  * Radio-button input for single-choice questions.
  * Renders a list of options and reports the selected option ID. Option
  * labels render through the static ContentRenderer so rich option content
- * (issue 301) displays exactly as in the read path.
+ * displays exactly as in the read path.
  */
 export function SingleChoiceInput({
   options,

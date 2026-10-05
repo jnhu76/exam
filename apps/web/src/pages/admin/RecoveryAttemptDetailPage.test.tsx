@@ -241,7 +241,7 @@ describe("RecoveryAttemptDetailPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the Operations section with allowedActions-gated command buttons (J5-I1C1)", async () => {
+  it("renders the Operations section with allowedActions-gated command buttons", async () => {
     renderPage();
     await screen.findByText("第 1 次答题");
     // The Operations section renders the three commands (server-computed
@@ -289,7 +289,7 @@ describe("RecoveryAttemptDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("grants time via POST /time-grants with a frozen operationId and reloads (J5-I1C1)", async () => {
+  it("grants time via POST /time-grants with a frozen operationId and reloads", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(
@@ -334,7 +334,7 @@ describe("RecoveryAttemptDetailPage", () => {
     expect(postMock).not.toHaveBeenCalled();
   });
 
-  it("force-submits with an operationId + canonical reason and reloads (J5-I1C1)", async () => {
+  it("force-submits with an operationId + canonical reason and reloads", async () => {
     const user = userEvent.setup();
     // Keep the POST in flight so the durable pending authority (written BEFORE
     // the request) is observable while the outcome is still unknown.
@@ -367,7 +367,7 @@ describe("RecoveryAttemptDetailPage", () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 
-  it("marks misconduct with operationId + severity + notes and reloads (J5-I1C1)", async () => {
+  it("marks misconduct with operationId + severity + notes and reloads", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: "标记违规" }));
@@ -384,7 +384,7 @@ describe("RecoveryAttemptDetailPage", () => {
     expect(body.notes).toBe("查看手机");
   });
 
-  it("retries an indeterminate force-submit with the SAME operationId (J5-R0 §8.2)", async () => {
+  it("retries an indeterminate force-submit with the SAME operationId (§8.2)", async () => {
     const user = userEvent.setup();
     postMock.mockRejectedValueOnce(new ApiError(0, "Network request failed"));
     renderPage();
@@ -433,7 +433,7 @@ describe("RecoveryAttemptDetailPage", () => {
     expect(await screen.findByText(/网络异常/)).toBeInTheDocument();
   });
 
-  it("keeps the loaded page on screen with an inline warning when a background refresh fails (P1-2)", async () => {
+  it("keeps the loaded page on screen with an inline warning when a background refresh fails", async () => {
     renderPage();
     await screen.findByText("第 1 次答题");
 
@@ -458,7 +458,7 @@ describe("RecoveryAttemptDetailPage", () => {
   //    POST and reused verbatim on an indeterminate retry — a reload can no
   //    longer mint a fresh identity that the server would treat as a REAL
   //    second time adjustment.
-  describe("time-grant reload recovery (review P1)", () => {
+  describe("time-grant reload recovery", () => {
     /** Returns the coordinator's persisted pending-grant authority, if any. */
     function readPendingGrant() {
       const key = Object.keys(window.localStorage).find((k) =>
@@ -559,7 +559,7 @@ describe("RecoveryAttemptDetailPage", () => {
   //    force-submit / misconduct outcome's durable-authority CLEAR fails, the
   //    stale record would silently block every later operation of that type.
   //    The page surfaces a recovery banner with a retry-clear affordance.
-  describe("cleanup-failed recovery banner (review P2)", () => {
+  describe("cleanup-failed recovery banner", () => {
     it("shows the force-submit cleanup-failed banner when the clear fails on a confirmed success", async () => {
       const user = userEvent.setup();
       postMock.mockResolvedValueOnce({ disposition: "applied" });

@@ -120,7 +120,7 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     vi.useRealTimers();
   });
 
-  it("single-flight: a scheduled poll tick while a request is in flight is dropped (P1-3 race)", async () => {
+  it("single-flight: a scheduled poll tick while a request is in flight is dropped (race)", async () => {
     const { loader, calls } = makeControllableLoader();
     renderHook(() =>
       useRecoveryProjection<TestPayload>({
@@ -234,7 +234,7 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(calls.length).toBe(3);
   });
 
-  it("resource switch (deps change) resets the projection: the previous resource is never shown (P1-1)", async () => {
+  it("resource switch (deps change) resets the projection: the previous resource is never shown", async () => {
     const { loader, calls } = makeControllableLoader();
     const { result, rerender } = renderHook(
       ({ id }: { id: string }) =>
@@ -276,7 +276,7 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(result.current.isInitialLoading).toBe(false);
   });
 
-  it("a manual refresh with an unchanged result still re-arms polling (P1-4)", async () => {
+  it("a manual refresh with an unchanged result still re-arms polling", async () => {
     const { loader, calls } = makeControllableLoader();
     const { result } = renderHook(() =>
       useRecoveryProjection<TestPayload>({
@@ -317,7 +317,7 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(loader).toHaveBeenCalledTimes(3);
   });
 
-  it("unmount clears the poll timer: no requests fire after leaving the page (P1-1)", async () => {
+  it("unmount clears the poll timer: no requests fire after leaving the page", async () => {
     const { loader, calls } = makeControllableLoader();
     const { unmount } = renderHook(() =>
       useRecoveryProjection<TestPayload>({
@@ -347,7 +347,7 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
-  it("unmount while a request is in flight aborts it and does not reschedule (P1-1)", async () => {
+  it("unmount while a request is in flight aborts it and does not reschedule", async () => {
     const { loader, calls } = makeControllableLoader();
     const { unmount } = renderHook(() =>
       useRecoveryProjection<TestPayload>({
@@ -379,7 +379,7 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
-  it("a FAILED manual refresh keeps data and still re-arms polling with backoff (P1-4)", async () => {
+  it("a FAILED manual refresh keeps data and still re-arms polling with backoff", async () => {
     const { loader, calls } = makeControllableLoader();
     const { result } = renderHook(() =>
       useRecoveryProjection<TestPayload>({

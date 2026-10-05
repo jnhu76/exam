@@ -1,5 +1,5 @@
 /**
- * UI-MULTIMODAL-PATROL shared fixtures and DOM fact collectors (#494).
+ * Patrol shared fixtures and DOM fact collectors (#494).
  *
  * Both patrol specs import from this module: user fixtures (created via the
  * Admin product API) and the single implementation of the shell/table DOM
@@ -111,7 +111,7 @@ export interface TableShellFacts {
 }
 
 /**
- * Coverage status of a declared table sibling (#494 corrective-2 §8-§12).
+ * Coverage status of a declared table sibling (#494 §8-§12).
  * TABLE_PRESENT — a rendered table matches the declared archetype and the
  * screenshot is eligible for table-geometry visual review.
  * TABLE_COVERAGE_GAP — the page was captured but no rendered table was
@@ -226,7 +226,7 @@ export async function collectShellFacts(page: Page): Promise<{
         scroll != null ? scroll.scrollWidth > scroll.clientWidth + 1 : null;
       return {
         // The scroll region is the single carrier of the geometry vocabulary
-        // (#601 Phase F) — the shell element differs per composition.
+        // (#601) — the shell element differs per composition.
         archetype: scroll?.getAttribute("data-table-archetype") ?? null,
         tier: scroll?.getAttribute("data-table-tier") ?? null,
         containerWidth: shellEl.getBoundingClientRect().width,

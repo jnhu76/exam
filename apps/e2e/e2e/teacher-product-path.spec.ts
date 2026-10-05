@@ -1,8 +1,8 @@
 /**
- * P4-C3 — Teacher positive product-path E2E.
+ * Teacher positive product-path E2E (origin: P4-C3 role-productization).
  *
  * Proves the real Admin → Teacher → authoring → publish → result-surface
- * product path through SUPPORTED product interfaces (P4-G-01). The Teacher
+ * product path through SUPPORTED product interfaces. The Teacher
  * account is created via POST /api/users { role: "Teacher" } authenticated as
  * Admin (NOT direct DB insertion, NOT a demo seed — task §6.2), then logged in
  * via the real /login UI.
@@ -88,7 +88,7 @@ async function teacherCreateObjectiveQuestion(
   return ((await res.json()) as { id: string }).id;
 }
 
-test.describe("P4-C3 Teacher positive product path", () => {
+test.describe("Teacher positive product path", () => {
   test("Admin creates Teacher → Teacher logs in → Teacher authors + publishes via browser UI → Teacher reaches results surface", async ({
     page,
     request,

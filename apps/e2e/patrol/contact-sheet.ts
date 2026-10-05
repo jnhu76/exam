@@ -1,5 +1,5 @@
 /**
- * Single owner of patrol contact-sheet rendering (#494 corrective-2).
+ * Single owner of patrol contact-sheet rendering (#494).
  *
  * Every patrol contact sheet — navigation, responsive, role, table sibling,
  * and hierarchy sets — must go through `renderContactSheet`. It owns the one

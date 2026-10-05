@@ -217,7 +217,8 @@ export async function finalizeTerminalGrading(
   exam: Exam,
   now: Date,
 ): Promise<boolean> {
-  // P3-FORMAL-P0-D2: the FIRST executable protocol action is the transaction-
+  // EA lock-order protocol: the FIRST executable protocol action is the
+  // transaction-
   // affinity assertion. No repository read, lock, write, or workset access
   // may occur before it. The capability proves the caller's transaction
   // already acquired Enrollment before Attempt via the canonical seam, using
@@ -284,7 +285,7 @@ export async function finalizeTerminalGrading(
     throw new ValidationError("Failed to persist graded results");
   }
 
-  // P3-FORMAL-P0-D2 / HR-2: the Enrollment row is NOT re-locked with an
+  // EA lock-order protocol: the Enrollment row is NOT re-locked with an
   // explicit FOR UPDATE here. The capability's affinity assertion already
   // proved the caller's transaction acquired the Enrollment lock before the
   // Attempt lock via the canonical seam. We re-read mutable Enrollment state
@@ -373,7 +374,7 @@ export async function finalizeGrading(
     return false;
   }
 
-  // P3-L0-2C engine invariant: an attempt awaiting manual grading must NOT
+  // Engine invariant: an attempt awaiting manual grading must NOT
   // be advanced to `graded` through the automatic finalization path. Fail
   // closed — only gradeQuestion (manual completion) may close a
   // pending_manual attempt.

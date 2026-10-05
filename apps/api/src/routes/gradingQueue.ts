@@ -334,7 +334,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       const maxScore = preEntry?.maxScore ?? 0;
       const previousScore = preEntry?.earnedScore ?? null;
 
-      // Load the exam for the terminal closure (P3-FORMAL-P0-A): gradeQuestion
+      // Load the exam for the terminal closure: gradeQuestion
       // now delegates terminal projection to finalizeTerminalGrading, which
       // needs the full Exam (passingScore, scoreStrategy, retakePolicy, etc.).
       const gradingQueueRepo = createGradingQueueRepo(fastify.db);

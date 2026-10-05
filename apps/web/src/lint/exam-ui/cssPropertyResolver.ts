@@ -1,6 +1,5 @@
 /**
- * CSS property resolver + arbitrary-value classifier
- * (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §5, §6, §9).
+ * CSS property resolver + arbitrary-value classifier.
  *
  * Two responsibilities, kept distinct:
  *

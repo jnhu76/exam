@@ -169,8 +169,8 @@ export function makeEnrollment(
 
 /**
  * No-op replay-receipt methods for inline AttemptRepository fakes in suites
- * that do not exercise the Save Answer protocol (#669 Phase D2). Receipt
- * behavior coverage lives in makeAttemptRepo and the D2 regression suites.
+ * that do not exercise the Save Answer protocol (#669). Receipt
+ * behavior coverage lives in makeAttemptRepo and the replay-receipt regression suites.
  */
 export function noAnswerReceiptStore(): {
   findAnswerReceipt(): null;
@@ -361,7 +361,7 @@ export interface PreparedHarness extends PreparedAttemptMutation {
  * context plus the post-reconciliation attempt and the repo objects.
  *
  * `seededReceipts` pre-populates the fake's replay-receipt store for the
- * attempt under preparation (#669 Phase D2 suites).
+ * attempt under preparation (#669).
  */
 export async function prepare(
   exam: Exam,

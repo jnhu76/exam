@@ -2206,10 +2206,10 @@ describe("exam passing-score invariant (EXAM-SCORE-INV-1)", () => {
   });
 });
 
-// ADR-013 §3 / REC-I4-I3A: interruption time-compensation policy authoring
+// ADR-013 §3: interruption time-compensation policy authoring
 // surface. Substantive authoring fields exposed through Exam create/update;
 // draft-only mutation; cross-field validation per ADR-013.
-describe("exam interruption policy authoring (ADR-013 / REC-I4-I3A)", () => {
+describe("exam interruption policy authoring (ADR-013)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let courseId: string;
   let questionId: string;

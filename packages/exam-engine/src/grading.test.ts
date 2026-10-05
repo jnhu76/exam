@@ -23,7 +23,7 @@ import { InvalidStateTransitionError } from "@exam/domain";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 
 /**
- * P3-FORMAL-P0-D2 test helper: mints a genuine capability against the
+ * Test helper: mints a genuine capability against the
  * provided repo pair by invoking the canonical seam. Test-only.
  */
 async function mintCap(
@@ -493,7 +493,7 @@ describe("gradeAttemptIdempotent — auto command path", () => {
 
 // ── P3-L0-2: grading reads submitted_answers, not draft answers ──────────
 
-describe("computeGradingResult — submitted_answers read path (P3-L0-2)", () => {
+describe("computeGradingResult — submitted_answers read path", () => {
   const exam = makeExam();
 
   it("scores from submitted_answers when present, ignoring draft answers", () => {
@@ -741,7 +741,7 @@ async function runInTransaction<T>(
   }
 }
 
-describe("grading transactional boundary (P0-2)", () => {
+describe("grading transactional boundary", () => {
   const gradedAt = new Date("2026-06-01T12:00:00Z");
 
   // Case B: under the transactional harness, the happy path commits

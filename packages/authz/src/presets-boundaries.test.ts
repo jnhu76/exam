@@ -10,9 +10,9 @@ const has = (
   return perms.map((p) => set.has(p));
 };
 
-describe("RBAC-M2 boundary #1 — Admin is a compatibility superset", () => {
+describe("boundary #1 — Admin is a compatibility superset", () => {
   it("Admin holds the 4 proctor trap perms (so flipping gates never denies Admin)", () => {
-    // REC-I4-I3B2: the trap perm is AttemptTimeGrant (Admin-only), so Admin
+    // The trap perm is AttemptTimeGrant (Admin-only), so Admin
     // must hold it and the time-grants route stays accessible.
     const [f, g, m, room] = has(
       Role.Admin,
@@ -67,7 +67,7 @@ describe("RBAC-M2 boundary #1 — Admin is a compatibility superset", () => {
   });
 });
 
-describe("RBAC-M2 boundary #2/#3 — Teacher is not Grader or Proctor by default", () => {
+describe("boundary #2/#3 — Teacher is not Grader or Proctor by default", () => {
   it("Teacher does NOT view candidate answers / grade / proctor by default", () => {
     const [ans, grade, force, grant, misconduct, room] = has(
       Role.Teacher,
@@ -99,7 +99,7 @@ describe("RBAC-M2 boundary #2/#3 — Teacher is not Grader or Proctor by default
   });
 });
 
-describe("RBAC-M2 boundary #4/#5 — Proctor cannot view answers / grade / publish by default", () => {
+describe("boundary #4/#5 — Proctor cannot view answers / grade / publish by default", () => {
   it("Proctor does NOT view answers / grade / publish results / view all scores", () => {
     const [ans, grade, pub, scores] = has(
       Role.Proctor,
@@ -131,7 +131,7 @@ describe("RBAC-M2 boundary #4/#5 — Proctor cannot view answers / grade / publi
   });
 });
 
-describe("RBAC-M2 boundary #6 — Grader can grade but cannot publish by default", () => {
+describe("boundary #6 — Grader can grade but cannot publish by default", () => {
   it("Grader CAN view detail/answer/write score", () => {
     const [d, a, s] = has(
       Role.Grader,
@@ -153,7 +153,7 @@ describe("RBAC-M2 boundary #6 — Grader can grade but cannot publish by default
   });
 });
 
-describe("RBAC-M2 boundary #8 — System actor is non-login, non-assignable, SYS-only", () => {
+describe("boundary #8 — System actor is non-login, non-assignable, SYS-only", () => {
   it("System is not login-capable and not assignable", () => {
     expect(ROLE_PRESETS[Role.System].loginAllowed).toBe(false);
     expect(ROLE_PRESETS[Role.System].assignable).toBe(false);
@@ -202,7 +202,7 @@ describe("RBAC-M2 boundary #8 — System actor is non-login, non-assignable, SYS
   });
 });
 
-describe("RBAC-M2 integrity — every granted permission is a known catalog value", () => {
+describe("integrity — every granted permission is a known catalog value", () => {
   const catalog = new Set<string>(Object.values(Permission));
   for (const role of Object.keys(ROLE_PRESETS) as RoleKey[]) {
     it(`${role} grants only known permissions, no duplicates`, () => {

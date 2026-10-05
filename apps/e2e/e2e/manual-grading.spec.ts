@@ -11,7 +11,7 @@ import {
 } from "../lib/flow";
 
 /**
- * P3-MOD-P1-2 — Subjective grading end-to-end (browser loop).
+ * Subjective grading end-to-end browser loop (origin: P3-MOD-P1-2).
  *
  * Proves the real product loop for a text_response question at the browser
  * level:
@@ -38,7 +38,7 @@ import {
  * completes" at the UI level; candidate result visibility is not a P1
  * acceptance gate and is owned by result-publishing.spec.ts.
  */
-test.describe("manual grading (P3-MOD-P1-2)", () => {
+test.describe("manual grading", () => {
   test("candidate submits text_response → admin grades via the queue UI → terminal entry persists", async ({
     page,
     request,

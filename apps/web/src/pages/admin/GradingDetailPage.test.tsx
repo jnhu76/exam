@@ -434,7 +434,7 @@ describe("GradingDetailPage", () => {
   });
 });
 
-describe("GradingDetailPage — one-time submission UX (Slice 2)", () => {
+describe("GradingDetailPage — one-time submission UX", () => {
   beforeEach(() => {
     getMock.mockReset();
     postMock.mockReset();
@@ -719,7 +719,7 @@ describe("GradingDetailPage — one-time submission UX (Slice 2)", () => {
   });
 });
 
-describe("GradingDetailPage — ambiguous-result reconciliation (Slice 3)", () => {
+describe("GradingDetailPage — ambiguous-result reconciliation", () => {
   beforeEach(() => {
     getMock.mockReset();
     postMock.mockReset();
@@ -1092,7 +1092,7 @@ describe("candidateAnswer rendering", () => {
   });
 });
 
-describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
+describe("frozen grading metadata rendering", () => {
   const baseData = {
     attemptId: "att-1",
     examId: "exam-1",
@@ -1254,7 +1254,7 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     expect(refEl).not.toHaveTextContent("[object Object]");
   });
 
-  it("renders a rich answer through the rich renderer when the frozen answerMode is rich (#301 corrective pass)", async () => {
+  it("renders a rich answer through the rich renderer when the frozen answerMode is rich (#301)", async () => {
     getMock.mockResolvedValue({
       ...baseData,
       questions: [
@@ -1297,7 +1297,7 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     expect(answerEl).toHaveTextContent("要点甲");
   });
 
-  it("shows the controlled fallback for an envelope-shaped but corrupt rich answer (#301 corrective pass)", async () => {
+  it("shows the controlled fallback for an envelope-shaped but corrupt rich answer (#301)", async () => {
     getMock.mockResolvedValue({
       ...baseData,
       questions: [
@@ -1324,7 +1324,7 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
     expect(answerEl).toHaveTextContent("此作答内容无法以富文本安全显示");
   });
 
-  it("keeps the legacy formatter for a document-looking payload on a non-rich answer (#301 corrective pass)", async () => {
+  it("keeps the legacy formatter for a document-looking payload on a non-rich answer (#301)", async () => {
     getMock.mockResolvedValue({
       ...baseData,
       questions: [

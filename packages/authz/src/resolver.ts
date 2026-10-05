@@ -120,7 +120,7 @@ export function isScopeDenied(r: unknown): r is DeniedScope {
 
 /**
  * Contract every resource-aware resolver implements. Implementations live in
- * `apps/api/src/authz/resolvers/` (RBAC-M10 / PROCTOR-M1 / GRADING-M1) — they
+ * `apps/api/src/authz/resolvers/` — they
  * read PostgreSQL and MUST honor the integrity rules at the top of this file.
  *
  * The result is either a {@link ResolvedScope} (allow, subject to the

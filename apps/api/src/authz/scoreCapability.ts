@@ -54,7 +54,7 @@ import {
 import type { TeacherCourseAssignmentGate } from "./scopedCapability.js";
 
 /**
- * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
+ * Capability predicate over the request (union-of-assignments authority). Reads the authoritative
  * `ctx.capabilities` union resolved at authenticate time. Signature matches
  * the scoped / candidate-context / own-attempt / exam-eligibility gates so all
  * five switch authority in lockstep.

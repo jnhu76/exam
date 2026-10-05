@@ -171,7 +171,7 @@ export const CONTENT_LIMITS = {
 /** Language identifiers allowed on a code block (presentation metadata only). */
 export const CODE_LANGUAGE_PATTERN = /^[A-Za-z0-9+#._-]{1,32}$/;
 
-// ── Durable string representability (#669 Phase F corrective amendment) ──
+// ── Durable string representability ──
 //
 // INVARIANT: authority acceptance must imply durable representability. The
 // durable platform (PostgreSQL jsonb/text over UTF-8) holds exactly the
@@ -181,8 +181,10 @@ export const CODE_LANGUAGE_PATTERN = /^[A-Za-z0-9+#._-]{1,32}$/;
 // predicate is the single statement of that narrowing and the wire schema
 // applies it to every free string leaf, so no Rich write seam (authoring,
 // SaveAnswer, publish freeze) can accept a document the durable layer would
-// reject. Counterexample D-F01: authority-legal U+0000 / lone surrogate
-// reached the jsonb write and failed as HTTP 500.
+// reject. Historical counterexample (see the Rich semantic contract,
+// docs/architecture/rich-content-semantic-contract.md §4.1): authority-legal
+// U+0000 / a lone surrogate once reached the jsonb write and failed as
+// HTTP 500.
 export const RICH_STRING_UNREPRESENTABLE_MESSAGE =
   "string must contain only well-formed Unicode scalar values with no U+0000 (durable representability)";
 
@@ -812,7 +814,7 @@ export function plainTextToDocument(text: string): ContentDocumentV1 {
  * canonical document. Deep validation stays at the read/write trust
  * boundaries (the persisted-read classifier and the write canonicalizer);
  * no consumer may decide that a value IS trusted Rich because this
- * returned true (#669 Phase D3).
+ * returned true (#669).
  */
 export function isContentDocumentV1(
   value: unknown,

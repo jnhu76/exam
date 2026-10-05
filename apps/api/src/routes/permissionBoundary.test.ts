@@ -118,7 +118,7 @@ describe("permission boundary", () => {
       expect(res.statusCode).toBe(401);
     });
 
-    // M10-B: 7 capability-migrated routes — unauthenticated denied.
+    // 7 capability-migrated routes — unauthenticated denied.
     //
     // The assertion must execute a REAL HTTP request per route: asserting only
     // `matrix.toHaveLength(7)` would be vacuous. This table drives a real
@@ -127,7 +127,7 @@ describe("permission boundary", () => {
     //
     // `method` is typed `HTTPMethods` and `payload` is optional, so each entry
     // flows into `ctx.app.inject()` without an `as never` cast.
-    const m10bUnauthenticatedRoutes: ReadonlyArray<{
+    const capabilityMigratedRoutes: ReadonlyArray<{
       method: HTTPMethods;
       url: string;
       payload?: object;
@@ -166,7 +166,7 @@ describe("permission boundary", () => {
       },
     ];
 
-    it.each(m10bUnauthenticatedRoutes)(
+    it.each(capabilityMigratedRoutes)(
       "$method $url returns 401 without authentication",
       async ({ method, url, payload }) => {
         const res = await ctx.app.inject({
@@ -244,7 +244,7 @@ describe("permission boundary", () => {
       expect(res.statusCode).toBe(403);
     });
 
-    // M10-B: 7 capability-migrated routes — candidate denied
+    // 7 capability-migrated routes — candidate denied
     it("POST /api/exams/:id/unpublish returns 403 for candidate", async () => {
       const res = await ctx.app.inject({
         method: "POST",
@@ -295,7 +295,7 @@ describe("permission boundary", () => {
     });
   });
 
-  describe("Teacher/Proctor/Grader denied on M10-B Admin-only routes", () => {
+  describe("Teacher/Proctor/Grader denied on Admin-only routes", () => {
     let teacherToken: string;
     let proctorToken: string;
     let graderToken: string;
@@ -324,7 +324,7 @@ describe("permission boundary", () => {
       graderToken = grader.token;
     });
 
-    const m10bMigratedRoutes = [
+    const capabilityMigratedRoutes = [
       {
         method: "POST",
         url: "/api/exams/00000000-0000-0000-0000-000000000000/unpublish",
@@ -359,8 +359,8 @@ describe("permission boundary", () => {
       },
     ];
 
-    it("Teacher denied on all 7 M10-B migrated routes", async () => {
-      for (const { method, url, payload } of m10bMigratedRoutes) {
+    it("Teacher denied on all 7 capability-migrated routes", async () => {
+      for (const { method, url, payload } of capabilityMigratedRoutes) {
         const res = await ctx.app.inject({
           method,
           url,
@@ -371,8 +371,8 @@ describe("permission boundary", () => {
       }
     });
 
-    it("Proctor denied on all 7 M10-B migrated routes", async () => {
-      for (const { method, url, payload } of m10bMigratedRoutes) {
+    it("Proctor denied on all 7 capability-migrated routes", async () => {
+      for (const { method, url, payload } of capabilityMigratedRoutes) {
         const res = await ctx.app.inject({
           method,
           url,
@@ -383,8 +383,8 @@ describe("permission boundary", () => {
       }
     });
 
-    it("Grader denied on all 7 M10-B migrated routes", async () => {
-      for (const { method, url, payload } of m10bMigratedRoutes) {
+    it("Grader denied on all 7 capability-migrated routes", async () => {
+      for (const { method, url, payload } of capabilityMigratedRoutes) {
         const res = await ctx.app.inject({
           method,
           url,
@@ -396,7 +396,7 @@ describe("permission boundary", () => {
     });
   });
 
-  describe("M10-B zero-write evidence — denied mutations", () => {
+  describe("zero-write evidence — denied mutations", () => {
     // For the six mutation routes (unpublish, extend, cancel, archive,
     // exam delete, course delete), a denied request must not change
     // persistent state. The capability preHandler should prevent handler
@@ -652,9 +652,9 @@ describe("permission boundary", () => {
     });
   });
 
-  // ─────────────────── M10-C: identity & role-assignment ────────────────────
+  // ─────────────────── identity & role-assignment ────────────────────
   //
-  // M10-C: identity & role-assignment authority over the routes in the tables
+  // Identity & role-assignment authority over the routes in the tables
   // below (flat capability gates: UserView / UserCreate / UserUpdate /
   // UserPasswordReset / UserDelete / UserRoleAssign — all Admin-only in the
   // role presets), so this block proves:
@@ -670,13 +670,13 @@ describe("permission boundary", () => {
   //      (compatibility invariant — users.role is a cache, not the authority)
   //   8. Admin reaches the handler (capability decision = allow) on read routes
   //
-  // Same non-vacuity discipline as M10-B: every fixture is created via direct
+  // Same non-vacuity discipline: every fixture is created via direct
   // schema insert with a deterministic unique prefix; every read-back is
   // fail-fast via requireDefined.
 
-  describe("M10-C unauthenticated matrix — all 10 routes return 401", () => {
+  describe("unauthenticated matrix — all 10 routes return 401", () => {
     const placeholderId = "00000000-0000-0000-0000-000000000000";
-    const m10cUnauthenticatedRoutes: ReadonlyArray<{
+    const identityAuthorityRoutes: ReadonlyArray<{
       method: HTTPMethods;
       url: string;
       payload?: object;
@@ -724,7 +724,7 @@ describe("permission boundary", () => {
       },
     ];
 
-    it.each(m10cUnauthenticatedRoutes)(
+    it.each(identityAuthorityRoutes)(
       "$method $url returns 401 without authentication",
       async ({ method, url, payload }) => {
         const res = await ctx.app.inject({
@@ -737,7 +737,7 @@ describe("permission boundary", () => {
     );
   });
 
-  describe("M10-C non-Admin denial matrix — Candidate/Teacher/Proctor/Grader get 403", () => {
+  describe("non-Admin denial matrix — Candidate/Teacher/Proctor/Grader get 403", () => {
     let candidateToken: string;
     let teacherToken: string;
     let proctorToken: string;
@@ -750,7 +750,7 @@ describe("permission boundary", () => {
 
     async function insertTargetUser(
       role: "Admin" | "Candidate" = "Candidate",
-      usernamePrefix = "m10c-target",
+      usernamePrefix = "perm-boundary-target",
     ) {
       const id = randomUUID();
       const username = `${usernamePrefix}-${uniquePrefix()}`;
@@ -762,7 +762,7 @@ describe("permission boundary", () => {
           organizationId: ctx.org.id,
           username,
           passwordHash: await hashPassword("password123"),
-          name: `M10C ${username}`,
+          name: `Perm Boundary ${username}`,
           role,
           isActive: true,
           createdAt: now,
@@ -799,30 +799,30 @@ describe("permission boundary", () => {
       const candidate = await createCandidateViaApi(
         ctx.app,
         ctx.adminToken,
-        `m10c-cand-${uniquePrefix()}`,
+        `perm-boundary-cand-${uniquePrefix()}`,
         ctx.org.id,
       );
       candidateToken = candidate.token;
-      // Future roles via direct DB insert (consistent with the M10-B pattern).
+      // Future roles via direct DB insert.
       const teacher = await createFutureRoleUserForTest(
         ctx.db,
         ctx.org.id,
         "Teacher",
-        "m10c-tchr",
+        "perm-boundary-tchr",
       );
       teacherToken = teacher.token;
       const proctor = await createFutureRoleUserForTest(
         ctx.db,
         ctx.org.id,
         "Proctor",
-        "m10c-proc",
+        "perm-boundary-proc",
       );
       proctorToken = proctor.token;
       const grader = await createFutureRoleUserForTest(
         ctx.db,
         ctx.org.id,
         "Grader",
-        "m10c-grad",
+        "perm-boundary-grad",
       );
       graderToken = grader.token;
 
@@ -832,7 +832,7 @@ describe("permission boundary", () => {
       assignmentId = assignment.id;
     });
 
-    const m10cRoutes: ReadonlyArray<{
+    const identityAuthorityRoutes: ReadonlyArray<{
       method: HTTPMethods;
       buildUrl: () => string;
       payload?: object;
@@ -843,9 +843,9 @@ describe("permission boundary", () => {
         method: "POST",
         buildUrl: () => "/api/users",
         payload: {
-          username: `m10c-deny-${uniquePrefix()}`,
+          username: `perm-boundary-deny-${uniquePrefix()}`,
           password: "password123",
-          name: "M10C Deny",
+          name: "Perm Boundary Deny",
           role: "Candidate",
         },
         label: "create user",
@@ -896,8 +896,13 @@ describe("permission boundary", () => {
       },
     ];
 
-    it("Candidate denied on all 10 M10-C routes", async () => {
-      for (const { method, buildUrl, payload, label } of m10cRoutes) {
+    it("Candidate denied on all 10 identity-authority routes", async () => {
+      for (const {
+        method,
+        buildUrl,
+        payload,
+        label,
+      } of identityAuthorityRoutes) {
         const res = await ctx.app.inject({
           method,
           url: buildUrl(),
@@ -908,8 +913,13 @@ describe("permission boundary", () => {
       }
     });
 
-    it("Teacher denied on all 10 M10-C routes", async () => {
-      for (const { method, buildUrl, payload, label } of m10cRoutes) {
+    it("Teacher denied on all 10 identity-authority routes", async () => {
+      for (const {
+        method,
+        buildUrl,
+        payload,
+        label,
+      } of identityAuthorityRoutes) {
         const res = await ctx.app.inject({
           method,
           url: buildUrl(),
@@ -920,8 +930,13 @@ describe("permission boundary", () => {
       }
     });
 
-    it("Proctor denied on all 10 M10-C routes", async () => {
-      for (const { method, buildUrl, payload, label } of m10cRoutes) {
+    it("Proctor denied on all 10 identity-authority routes", async () => {
+      for (const {
+        method,
+        buildUrl,
+        payload,
+        label,
+      } of identityAuthorityRoutes) {
         const res = await ctx.app.inject({
           method,
           url: buildUrl(),
@@ -932,8 +947,13 @@ describe("permission boundary", () => {
       }
     });
 
-    it("Grader denied on all 10 M10-C routes", async () => {
-      for (const { method, buildUrl, payload, label } of m10cRoutes) {
+    it("Grader denied on all 10 identity-authority routes", async () => {
+      for (const {
+        method,
+        buildUrl,
+        payload,
+        label,
+      } of identityAuthorityRoutes) {
         const res = await ctx.app.inject({
           method,
           url: buildUrl(),
@@ -945,10 +965,10 @@ describe("permission boundary", () => {
     });
   });
 
-  describe("M10-C System login path is unavailable", () => {
+  describe("System login path is unavailable", () => {
     // The System preset is `loginAllowed: false` and `assignable: false`
     // (packages/authz/src/presets.ts). Two distinct boundaries prevent a
-    // System principal from reaching any M10-C handler, and each requires
+    // System principal from reaching any identity/role-assignment handler, and each requires
     // its own test:
     //
     //   1. AUTHENTICATION BOUNDARY — a forged JWT whose actorId has no
@@ -1008,7 +1028,7 @@ describe("permission boundary", () => {
       // (users.role is plain text — no CHECK constraint — so direct
       // insert of role="System" is allowed; createFutureRoleUserForTest
       // cannot be used because LegacyRole excludes "System").
-      const username = `m10c-system-${uniquePrefix()}`;
+      const username = `perm-boundary-system-${uniquePrefix()}`;
       const password = "password123";
       const userId = randomUUID();
       const now = new Date();
@@ -1019,7 +1039,7 @@ describe("permission boundary", () => {
           organizationId: ctx.org.id,
           username,
           passwordHash: await hashPassword(password),
-          name: "M10C System User",
+          name: "Perm Boundary System User",
           role: "System",
           isActive: true,
           createdAt: now,
@@ -1079,7 +1099,7 @@ describe("permission boundary", () => {
       );
       requireDefined(newAudit, "new login.failure audit row must exist");
       const metadata = newAudit.auditLog.metadata as Record<string, unknown>;
-      // RBAC-M10-E: System cannot hold an assignment (not in the assignable
+      // System cannot hold an assignment (not in the assignable
       // set), so the authority resolver returns no_active_assignments before
       // the ASSIGNABLE_LOGIN_ROLES check is reached. The audit reason reflects
       // that — System is still rejected, just via the authority-first path.
@@ -1088,7 +1108,7 @@ describe("permission boundary", () => {
     });
   });
 
-  describe("M10-C zero-write evidence — denied mutations", () => {
+  describe("identity-authority zero-write evidence — denied mutations", () => {
     function adminCtx() {
       return {
         actorId: ctx.admin.id,
@@ -1107,7 +1127,7 @@ describe("permission boundary", () => {
      */
     async function insertTargetUserWithAssignment(
       role: "Admin" | "Candidate" = "Candidate",
-      usernamePrefix = "m10c-zw",
+      usernamePrefix = "perm-boundary-zw",
     ) {
       const id = randomUUID();
       const username = `${usernamePrefix}-${uniquePrefix()}`;
@@ -1119,7 +1139,7 @@ describe("permission boundary", () => {
           organizationId: ctx.org.id,
           username,
           passwordHash: await hashPassword("password123"),
-          name: `M10C ZW ${username}`,
+          name: `Perm Boundary ZW ${username}`,
           role,
           isActive: true,
           createdAt: now,
@@ -1187,7 +1207,7 @@ describe("permission boundary", () => {
         method: "POST",
         url: "/api/users",
         payload: {
-          username: `m10c-deny-create-${uniquePrefix()}`,
+          username: `perm-boundary-deny-create-${uniquePrefix()}`,
           password: "password123",
           name: "Should Not Exist",
           role: "Candidate",
@@ -1487,9 +1507,9 @@ describe("permission boundary", () => {
     });
   });
 
-  describe("M10-C users.role compatibility synchronization (preserved)", () => {
-    // The runtime authority is still users.role (M10-E has not started).
-    // M10-C must NOT change this. It must preserve the existing sync invariant:
+  describe("users.role compatibility synchronization (preserved)", () => {
+    // The runtime authority is still users.role.
+    // These routes must NOT change that. They must preserve the existing sync invariant:
     // every primary-active assignment mutation re-syncs users.role.
     //
     // These positive-path tests prove the sync still happens after the
@@ -1509,7 +1529,7 @@ describe("permission boundary", () => {
 
     async function insertTargetUserWithPrimary(
       role: "Admin" | "Candidate" = "Candidate",
-      usernamePrefix = "m10c-sync",
+      usernamePrefix = "perm-boundary-sync",
     ) {
       const id = randomUUID();
       const username = `${usernamePrefix}-${uniquePrefix()}`;
@@ -1521,7 +1541,7 @@ describe("permission boundary", () => {
           organizationId: ctx.org.id,
           username,
           passwordHash: await hashPassword("password123"),
-          name: `M10C Sync ${username}`,
+          name: `Perm Boundary Sync ${username}`,
           role,
           isActive: true,
           createdAt: now,

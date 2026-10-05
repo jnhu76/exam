@@ -2,7 +2,7 @@ import { ApiError } from "@/lib/api";
 import type { SaveAnswerRejectReason } from "@exam/contracts";
 
 /**
- * EXAM-519 — terminal-attempt signal classification.
+ * Terminal-attempt signal classification.
  *
  * A terminal error response is a SIGNAL to re-read the authoritative
  * CandidateTakeSnapshot; it is NOT itself terminal state. These predicates

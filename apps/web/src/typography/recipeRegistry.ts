@@ -1,7 +1,6 @@
 /**
  * Typography recipe ownership registry — the SINGLE canonical machine-readable
- * authority for the semantic typography layer (UI-TYPOGRAPHY-AUTHORITY-RECON-1
- * §8, §9).
+ * authority for the semantic typography layer.
  *
  * Authority chain (this file is canonical; everything else derives/validates):
  *

@@ -1,10 +1,10 @@
 /**
  * Shared foundation for the durable Attempt command receipt orchestrators
- * (J5-I1C Slice 2 force-submit, Slice 3 misconduct-mark). The two dangerous
+ * (force-submit, misconduct-mark). The two dangerous
  * Attempt commands arbitrate on the SAME
  * `UNIQUE (organization_id, operation_id)` constraint of
  * `attempt_command_receipts` — the one cross-command idempotency arbiter
- * (J5-I1C0 audit §4.5 / §6.2). This module owns exactly the pieces both
+ * (dangerous-command identity audit §4.5 / §6.2). This module owns exactly the pieces both
  * orchestrators share and nothing else:
  *
  *   - the exact constraint name,

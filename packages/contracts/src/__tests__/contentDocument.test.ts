@@ -423,7 +423,7 @@ describe("ContentDocumentV1Schema — preflight-safe parse entry", () => {
     expect(CreateQuestionRequestSchema.safeParse(body).success).toBe(false);
   });
 
-  it("accepts a within-limits document the removed raw-node budget used to reject (#673 C1 / PC-F02)", () => {
+  it("accepts a within-limits document the removed raw-node budget used to reject (#673)", () => {
     // 677 plain paragraphs = 1354 grammar nodes < totalNodes(2000), ~41k
     // serialized chars < serializedChars: the measured minimal failure of
     // the Phase-C raw-node-budget campaign, now asserted at the PUBLIC

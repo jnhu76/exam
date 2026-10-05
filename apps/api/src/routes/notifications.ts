@@ -12,7 +12,7 @@ import { createNotificationRepo } from "@exam/db/src/repository/notificationRepo
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { getRequestContext } from "./helpers.js";
 
-// P5-N1-I3 — Notification Inbox API routes. The notification TYPE vocabulary
+// Notification Inbox API routes. The notification TYPE vocabulary
 // is the domain tuple `NOTIFICATION_TYPES` (@exam/domain), surfaced through
 // NotificationTypeSchema — never enumerated here.
 //

@@ -6,8 +6,8 @@ import { useTranslation } from "react-i18next";
 
 /**
  * Rich answer input for `text_response` questions authored with
- * `answerMode: "rich"` (issue 301). The `value` prop is interpreted through
- * the shared persisted-read authority (§7 read contract, #669 Phase D3):
+ * `answerMode: "rich"`. The `value` prop is interpreted through
+ * the shared persisted-read authority (§7 read contract, #669):
  * only states whose editability is semantically justified mount the editor —
  *
  *   rich_valid             → the persisted document as-is
@@ -28,7 +28,7 @@ import { useTranslation } from "react-i18next";
  * CONTENT_LIMITS, producing an editor whose output can never save. Repair
  * of such values is a future explicit policy, never read-time behavior.
  *
- * OWNERSHIP (issue 301 corrective pass): the caller MUST key this component
+ * OWNERSHIP: the caller MUST key this component
  * by question identity — a question switch must remount the editor, never
  * reuse the previous question's Tiptap document. The `value` prop is the
  * authoritative answer: it seeds the editor at mount and is re-applied

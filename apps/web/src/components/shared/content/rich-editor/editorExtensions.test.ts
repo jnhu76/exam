@@ -63,7 +63,7 @@ function typeListWithTwoItems(editor: Editor): void {
   editor.commands.insertContent("第二项");
 }
 
-describe("list Tab decision (#677 F4 / U-01)", () => {
+describe("list Tab decision (#677)", () => {
   it("passes through outside a list (no Tab trap)", () => {
     const { editor } = createEditor();
     editor.commands.insertContent("普通段落");

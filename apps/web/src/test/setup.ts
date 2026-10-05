@@ -83,7 +83,7 @@ if (
 }
 
 // jsdom does not implement the Web Locks API, but the cross-tab pending-grant
-// coordinator (REC-I4-C1) hard-requires `navigator.locks` — without it the
+// coordinator hard-requires `navigator.locks` — without it the
 // read-check-write over localStorage is not atomic, so the coordinator fails
 // closed (throws) rather than silently degrading. To exercise the REAL
 // production coordinator singleton in page/component tests (jsdom), install a

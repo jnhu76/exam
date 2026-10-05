@@ -80,7 +80,7 @@ describe("sanitizeClientEvent", () => {
   });
 });
 
-describe("sanitizeMetadata — structure preservation (H3, M9, M10)", () => {
+describe("sanitizeMetadata — structure preservation", () => {
   it("carries arrays through verbatim (no __array wrapper)", () => {
     const out = sanitizeMetadata({
       items: [{ token: "x", name: "a" }, { name: "b" }],

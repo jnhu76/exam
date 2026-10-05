@@ -45,7 +45,7 @@ import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 const NOW = new Date("2026-06-01T12:00:00Z");
 
 /**
- * P3-FORMAL-P0-D2 test helper: mints a genuine capability via the canonical seam.
+ * Test helper: mints a genuine capability via the canonical seam.
  */
 async function mintCap(
   enrollmentRepo: EnrollmentRepository,
@@ -180,7 +180,7 @@ function makeEnrollment(): ExamEnrollment {
   };
 }
 
-describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score truth", () => {
+describe("partial-score branch cannot mutate terminal score truth", () => {
   it("gradeAttemptIdempotent returns a partial response WITHOUT persisting score/gradingResult/passed", async () => {
     const exam = makeExam();
     const initialAttempt = makePendingManualAttempt();

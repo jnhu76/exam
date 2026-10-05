@@ -29,7 +29,7 @@ import {
  * These are API-level leak tests: they assert on the raw JSON body, not on
  * what a page chooses to render. "The page does not show it" is not security.
  */
-describe("P2: candidate take leak protection for text_response", () => {
+describe("candidate take leak protection for text_response", () => {
   let ctx: TestContext;
   let examId: string;
   let textQuestionId: string;

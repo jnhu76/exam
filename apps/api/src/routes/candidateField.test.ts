@@ -52,7 +52,7 @@ describe("candidate field routes", () => {
         updatedAt: now,
       },
     ]);
-    // RBAC-M10-E: primary active assignments for both test users.
+    // Primary active assignments for both test users.
     await ctx.db.insert(schema.userRoleAssignments).values([
       {
         id: crypto.randomUUID(),
@@ -349,7 +349,7 @@ describe("candidate field routes", () => {
         updatedAt: now,
       },
     ]);
-    // RBAC-M10-E: primary active assignments for the local test users.
+    // Primary active assignments for the local test users.
     await ctx.db.insert(schema.userRoleAssignments).values([
       {
         id: crypto.randomUUID(),

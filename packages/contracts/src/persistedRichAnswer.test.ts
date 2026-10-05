@@ -266,7 +266,7 @@ describe("resolveRichAnswerDocument — render authority for persisted answers",
   });
 });
 
-describe("durable-unrepresentable persisted values (#669 Phase F)", () => {
+describe("durable-unrepresentable persisted values (#669)", () => {
   it("classify as corrupt and refuse resolution — never rich_valid", () => {
     for (const bad of ["\u0000", "\uD800", "\uDC00"]) {
       const value = {

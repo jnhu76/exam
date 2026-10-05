@@ -19,7 +19,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 
 /**
- * P4-3 — Candidate ownership boundary proof (task 9.2 cross-candidate matrix).
+ * Candidate ownership boundary proof (cross-candidate matrix).
  *
  * The candidate runtime is requireRole(["Candidate"]) + an own-attempt /
  * own-enrollment / own-score ownership predicate (getOwnedAttempt /
@@ -33,7 +33,7 @@ import { signJWT } from "@exam/auth/src/session.js";
  * The ownership predicate is the security boundary and must not be replaced
  * by a bare capability check (R4).
  */
-describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", () => {
+describe("candidate ownership boundary (cross-candidate attack matrix)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let examId: string;
   let candidateBOnlyExamId: string;
@@ -54,10 +54,10 @@ describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", ()
 
     // Seed a published exam with one true_false question; enroll both candidates.
     examId = await createExamViaApi(ctx.app, ctx.adminToken, {
-      examTitle: "P4-3 Exam",
+      examTitle: "ownership-matrix Exam",
       courseCode: "P43",
-      courseName: "P4-3 Course",
-      questionContent: "P4-3 question.",
+      courseName: "ownership-matrix Course",
+      questionContent: "ownership-matrix question.",
       questionAnswer: true,
       questionScore: 100,
       durationMinutes: 60,
@@ -102,10 +102,10 @@ describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", ()
     }
 
     candidateBOnlyExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
-      examTitle: "P4-3 Candidate B Only Exam",
+      examTitle: "ownership-matrix Candidate B Only Exam",
       courseCode: `P43B-${uniquePrefix()}`,
-      courseName: "P4-3 Candidate B Only Course",
-      questionContent: "P4-3 candidate B only question.",
+      courseName: "ownership-matrix Candidate B Only Course",
+      questionContent: "ownership-matrix candidate B only question.",
       questionAnswer: true,
       questionScore: 100,
       durationMinutes: 60,
@@ -333,7 +333,7 @@ describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", ()
 });
 
 /**
- * RBAC-M10-A-CORRECTIVE-1 — Real cross-organization own-attempt denial (P1-1).
+ * Real cross-organization own-attempt denial.
  *
  * Creates two separate organizations with independent data, proves that a
  * Candidate from Org A cannot access or mutate an Org B attempt, and proves
@@ -342,7 +342,7 @@ describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", ()
  * The test uses real database IDs and real HTTP requests — no fake UUIDs,
  * no mock stubs, no vi.mock.
  */
-describe("RBAC-M10-A-CORRECTIVE-1 cross-organization own-attempt denial", () => {
+describe("cross-organization own-attempt denial", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let orgBId: string;
   let orgBAdminToken: string;
@@ -394,7 +394,7 @@ describe("RBAC-M10-A-CORRECTIVE-1 cross-organization own-attempt denial", () => 
       })
       .returning();
     const orgBAdmin = orgBAdminRows[0]!;
-    // RBAC-M10-E: Org B admin must authenticate (positive control + exam
+    // Org B admin must authenticate (positive control + exam
     // creation/enrollment) — seed an active primary Admin assignment scoped to
     // orgBId so capability resolution produces Admin's preset rather than 401
     // AUTH_REQUIRED.
@@ -433,7 +433,7 @@ describe("RBAC-M10-A-CORRECTIVE-1 cross-organization own-attempt denial", () => 
       .returning();
     const orgBCandUser = orgBCandUserRows[0]!;
 
-    // RBAC-M10-E: Org B candidate must authenticate (positive controls + the
+    // Org B candidate must authenticate (positive controls + the
     // attempt whose ownership the cross-org matrix attacks) — seed an active
     // primary Candidate assignment scoped to orgBId so capability resolution
     // produces Candidate's preset rather than 401 AUTH_REQUIRED.

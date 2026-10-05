@@ -29,9 +29,9 @@ async function createProctor(
   const headers = { Cookie: `auth-token=${adminToken}` };
   // Create the user directly with role "Proctor". The POST /users route
   // creates the user AND its primary active assignment in ONE transaction
-  // (RBAC-M10-E), so the resulting user has exactly ONE active assignment
+  // (union-of-assignments authority), so the resulting user has exactly ONE active assignment
   // (Proctor). Do NOT layer a secondary Teacher assignment on top — under
-  // M10-E the runtime authority is the UNION of every active assignment, so
+  // the runtime authority is the UNION of every active assignment, so
   // a Teacher+Proctor user would inherit Teacher's QuestionView and the
   // forbidden-nav assertion below would correctly fail (题目管理 would
   // appear). A pure Proctor user has only Proctor's preset (ExamRoomView +
@@ -65,7 +65,7 @@ test.describe("Proctor landing workspace", () => {
     proctor = await createProctor(request, adminToken);
     // J4-I1B: /admin/proctor/exams is assignment-filtered — a Proctor sees
     // ONLY exams with an active Proctor-to-Exam assignment (ADR-015 §4.5).
-    // Create the assignment through the production Admin API (M11-I1C) so E2E
+    // Create the assignment through the production Admin API (ADR-015 §16) so E2E
     // exercises the real write path before the Proctor logs in.
     await createProctorAssignmentFixture(
       request,

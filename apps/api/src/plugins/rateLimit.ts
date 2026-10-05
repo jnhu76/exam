@@ -19,7 +19,7 @@ import { RedisRuntime } from "../redis/redisRuntime.js";
  * Fastify plugin that registers IP-based rate limiting when enabled in
  * runtime config.
  *
- * RATE LIMIT IS AN API CONCERN (EXAM-HTTP-SURFACE-AUTHORITY-CLOSURE-1): this
+ * RATE LIMIT IS AN API CONCERN: this
  * plugin is registered INSIDE the apiSurface scope (routes/apiSurface.ts), so
  * only /api requests ever enter the limiter. The docs and web surfaces are
  * outside the limiter by encapsulation — no allow-list, no URL inspection.

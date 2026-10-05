@@ -1,5 +1,5 @@
 /**
- * Shared Tailwind candidate parser (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §6).
+ * Shared Tailwind candidate parser
  *
  * Parses ONE static Tailwind candidate (a single whitespace-delimited token
  * from a className) into its structural regions WITHOUT fully validating it as

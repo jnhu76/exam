@@ -1,6 +1,6 @@
 /*
  * Semantic feedback tone recipes — the repeated soft-feedback appearance
- * authority (issue 577 M4).
+ * authority (issue 577).
  *
  * Public authority: the data-feedback-tone attribute values. A feedback
  * surface is a REPEATED domain feedback meaning — saving / saved / warning /
@@ -18,7 +18,7 @@
  * (--status-{neutral,info,positive,caution,destructive}-{bg,text,border}). No
  * new colors, no second token taxonomy.
  *
- * Cascade placement (issue 577 review-fix-1): these rules are deliberately
+ * Cascade placement (issue #577): these rules are deliberately
  * UNLAYERED — not as a workaround for the (now @layer base) default border
  * rule, but because "feedback tone owns semantic feedback color" is an
  * authority claim: a layered tone could be silently defeated by any layered

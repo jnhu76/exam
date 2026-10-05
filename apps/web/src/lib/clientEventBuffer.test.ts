@@ -129,7 +129,7 @@ describe("ClientEventBuffer", () => {
     expect(buf.size).toBe(2);
   });
 
-  it("grows backoff exponentially across consecutive failures (M12)", async () => {
+  it("grows backoff exponentially across consecutive failures", async () => {
     // Exponential backoff: each consecutive failure roughly doubles the wait.
     // Assert on the COMPUTED backoff (pure function of consecutiveFailures),
     // not currentBackoffForTest() — that returns a remaining-time value

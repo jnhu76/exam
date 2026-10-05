@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Optional recipient email field for user accounts (P5-N1 §13).
+ * Optional recipient email field for user accounts.
  *
  * The email is a NOT-FOR-LOGIN recipient source for operational notifications
  * (the first V1 use case is the `result_published` Inbox + Email outbox). It

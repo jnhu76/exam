@@ -3,7 +3,7 @@
  * vocabulary documented in docs/standards/ui-system.md.
  *
  * This is the source of truth for the confirmed semantic surface recipe names.
- * Future UI-LINT-2 (`exam-ui/no-raw-surface`) synchronizes its allowed-recipe
+ * The future `exam-ui/no-raw-surface` lint rule synchronizes its allowed-recipe
  * list against `CONFIRMED_SURFACES`. Do not add a name here without first
  * documenting its semantic purpose in the surface vocabulary document.
  *

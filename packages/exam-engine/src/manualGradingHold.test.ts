@@ -326,7 +326,7 @@ const NOW = new Date("2026-06-01T12:00:00Z");
 
 // ── A. Mixed manual submit hold ───────────────────────────────────
 
-describe("P3-L0-2C: mixed objective + text_response submit hold", () => {
+describe("mixed objective + text_response submit hold", () => {
   it("submitAttempt establishes gradingStatus=pending_manual at the freeze barrier", async () => {
     // Frozen snapshot: objective true_false + text_response.
     const mixedSnapshot = [
@@ -403,7 +403,7 @@ describe("P3-L0-2C: mixed objective + text_response submit hold", () => {
 
 // ── B. Pure text_response submit hold ─────────────────────────────
 
-describe("P3-L0-2C: pure text_response submit hold", () => {
+describe("pure text_response submit hold", () => {
   it("a pure text_response attempt holds at submitted + pending_manual", async () => {
     const textOnly = makeAttempt({
       questionSnapshot: [textResponseSnapshot("q-text", 10)],
@@ -434,7 +434,7 @@ describe("P3-L0-2C: pure text_response submit hold", () => {
 
 // ── C. Pure-objective regression ──────────────────────────────────
 
-describe("P3-L0-2C: pure-objective inline auto-grade regression", () => {
+describe("pure-objective inline auto-grade regression", () => {
   it("a pure-objective attempt still grades inline to graded + auto_graded", async () => {
     const objectiveOnly = makeAttempt({
       questionSnapshot: [objectiveSnapshot("q1", 10, "a")],
@@ -472,7 +472,7 @@ describe("P3-L0-2C: pure-objective inline auto-grade regression", () => {
 
 // ── E. Terminal finalization guard (engine boundary) ──────────────
 
-describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
+describe("finalizeGrading terminal guard on pending_manual", () => {
   it("refuses to advance a pending_manual attempt to graded via finalizeGrading", async () => {
     // Pre-conditions: the freeze barrier already established the authoritative
     // pending_manual classification, AND the grading workset is fully

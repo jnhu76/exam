@@ -45,7 +45,7 @@ describe("canonical force_submit payload", () => {
   // over `throw new Error()`. The canonicalizers must raise ValidationError
   // (HTTP 400, code VALIDATION_ERROR) so a future caller that skips the wire
   // layer and calls the canonicalizer directly still surfaces a typed error.
-  it("raises a ValidationError (not a generic Error) on a blank reason (P2-2)", () => {
+  it("raises a ValidationError (not a generic Error) on a blank reason", () => {
     try {
       canonicalizeForceSubmitPayload({ reason: "   " });
       throw new Error("expected canonicalizeForceSubmitPayload to throw");
@@ -73,7 +73,7 @@ describe("canonical misconduct_mark payload", () => {
     ).toThrow(/non-empty notes/);
   });
 
-  it("raises a ValidationError (not a generic Error) on blank notes (P2-2)", () => {
+  it("raises a ValidationError (not a generic Error) on blank notes", () => {
     try {
       canonicalizeMisconductPayload({ severity: "warning", notes: "   " });
       throw new Error("expected canonicalizeMisconductPayload to throw");

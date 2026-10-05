@@ -5,14 +5,14 @@ import type { ContentDocumentV1 } from "@exam/domain";
 import { ContentDocumentRenderer } from "./ContentDocumentRenderer";
 
 /**
- * The unified READ entry for question content (issue 301 §28/§33).
+ * The unified READ entry for question content (#301 §28/§33).
  *
  * Plain (document null/undefined) renders the prompt as a single text node —
  * the same thin path the app has always had (TakeExamPage), zero editor or
  * math cost. Rich renders the static ContentDocumentRenderer (pure React
  * nodes, lazy math). READ never mounts an editor.
  *
- * INVARIANT (trust boundary, #669 Phase D5-A / F-06): a TypeScript
+ * INVARIANT (trust boundary, #669): a TypeScript
  * ContentDocumentV1 annotation is not persisted trust. Every non-null
  * document is classified by the shared static read authority
  * (resolvePersistedQuestionDocument) BEFORE rendering; only rich_valid /

@@ -11,8 +11,7 @@ import {
 } from "@exam/authz";
 
 /**
- * Unit tests for the resource-aware capability preHandler (RBAC-M10-finish,
- * P4-2A). The preHandler composes the flat role-preset capability check with a
+ * Unit tests for the resource-aware capability preHandler. It composes the flat role-preset capability check with a
  * registered scope resolver, and maps resolver denials per ADR §3.9:
  *   resource_not_found      -> 404 (preserve anti-enumeration; handler's norm)
  *   organization_mismatch   -> 403 (scope inconsistency, never allow)
@@ -274,7 +273,7 @@ describe("scoped capability preHandler — resolver selection + resource id", ()
 describe("scoped capability preHandler — Proctor assignment gate (J4-I1B)", () => {
   const allow = () => true;
 
-  /** A request whose ctx carries the authoritative runtime roles (RBAC-M10-E). */
+  /** A request whose ctx carries the authoritative runtime roles. */
   function makeRuntimeReq(roles: readonly string[]): FastifyRequest {
     return {
       ctx: {
@@ -398,7 +397,7 @@ describe("scoped capability preHandler — Proctor assignment gate (J4-I1B)", ()
 describe("scoped capability preHandler — Teacher assignment gate (issue #286)", () => {
   const allow = () => true;
 
-  /** A request whose ctx carries the authoritative runtime roles (RBAC-M10-E). */
+  /** A request whose ctx carries the authoritative runtime roles. */
   function makeRuntimeReq(roles: readonly string[]): FastifyRequest {
     return {
       ctx: {

@@ -14,10 +14,10 @@ import {
 } from "../authz/assignmentAuthority.js";
 
 /**
- * Dependency-injection seam for the assignment authority loader (RBAC-M10-E,
- * P1-5). Production wires the real {@link loadAssignmentAuthority}; tests
- * inject a throwing stub to prove `authenticate` fails closed end-to-end
- * (E14) without falling back to `users.role`.
+ * Dependency-injection seam for the assignment authority loader. Production
+ * wires the real {@link loadAssignmentAuthority}; tests inject a throwing
+ * stub to prove `authenticate` fails closed end-to-end (E14) without falling
+ * back to `users.role`.
  */
 export type LoadAssignmentAuthorityFn = typeof loadAssignmentAuthority;
 
@@ -33,7 +33,7 @@ const AUTHORITY_401_REASONS = new Set<AssignmentAuthorityFailureReason>([
  * for route-level authorization guards.
  *
  * `authenticate` resolves the actor's authority from ACTIVE
- * `user_role_assignments` rows (RBAC-M10-E) — NOT from `users.role` or the
+ * `user_role_assignments` rows (union-of-assignments authority) — NOT from `users.role` or the
  * JWT `role` claim. The JWT claim is telemetry only. All integrity / DB
  * failures fail closed; none fall back to `users.role`.
  */
@@ -126,7 +126,7 @@ export function buildAuthPlugin(
           .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
       }
 
-      // RBAC-M10-E: the authoritative runtime authority is resolved from ACTIVE
+      // The authoritative runtime authority is resolved from ACTIVE
       // user_role_assignments. users.role / JWT role are compatibility
       // projections only — never authority.
       const lookupCtx = {
@@ -142,7 +142,7 @@ export function buildAuthPlugin(
       } catch (err) {
         // The loader threw (unexpected failure). Treat identically to an
         // operational / integrity failure: 503, never masquerade as 401,
-        // never fall back to users.role (E14 / P1-3 / ADR §3.9).
+        // never fall back to users.role (E14 / ADR §3.9).
         fastify.log.error(
           { err, actorId: user.id },
           "authenticate: assignment authority loader threw — fail closed",
@@ -154,7 +154,7 @@ export function buildAuthPlugin(
       if (!authority.ok) {
         // 401: the actor is genuinely not authorized (no active assignment).
         // 503: an operational / integrity failure — never masquerade as auth
-        // failure, never fall back to users.role (P1-3 / ADR §3.9).
+        // failure, never fall back to users.role (ADR §3.9).
         if (AUTHORITY_401_REASONS.has(authority.reason)) {
           fastify.log.warn(
             { actorId: user.id, reason: authority.reason },
@@ -217,7 +217,7 @@ export function buildAuthPlugin(
      *
      * Tagged with `_isRequireRole: true` so conformance tests can distinguish a
      * legacy role gate from a capability gate by reference identity / marker
-     * (mirroring the existing `_isAuthenticate` pattern). M10-B routes must NOT
+     * (mirroring the existing `_isAuthenticate` pattern). Capability-gated routes must NOT
      * carry a role gate; the conformance test asserts this is zero.
      */
     fastify.decorate("requireRole", (roles: Role[]) => {
@@ -247,7 +247,7 @@ export function buildAuthPlugin(
 
     /**
      * Returns a pre-handler that checks the authenticated actor's EFFECTIVE
-     * capability set for a Phase 3 {@link PermissionKey} (RBAC-M10-E runtime
+     * capability set for a Phase 3 {@link PermissionKey} (union-of-assignments runtime
      * authority). This is the capability gate replacing `requireRole` on
      * sensitive routes.
      *

@@ -4,7 +4,7 @@ import { CONTENT_LIMITS } from "@exam/domain";
 
 /**
  * Lazy chunk boundary for KaTeX. The heavy renderer (katex + CSS) is only
- * downloaded when a page actually renders a math node (issue 301 §34); documents
+ * downloaded when a page actually renders a math node (#301 §34); documents
  * without math never pay the cost. While the chunk loads, the LaTeX source
  * itself is displayed — content is never missing, only unformatted.
  */

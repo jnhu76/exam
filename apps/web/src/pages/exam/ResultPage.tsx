@@ -51,7 +51,7 @@ function formatQuestionType(type: string, t: (key: string) => string): string {
 }
 
 /**
- * Renders an answer value as text, with optional truncation for long fill-blank answers. Rich documents render through the static content renderer (issue 301).
+ * Renders an answer value as text, with optional truncation for long fill-blank answers. Rich documents render through the static content renderer.
  *
  * The frozen `answerMode` is the render authority: a payload that merely looks
  * like a ContentDocumentV1 envelope on a non-rich (or corrupt) answer keeps the

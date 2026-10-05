@@ -61,9 +61,9 @@ export interface GradingWorksetRepository {
 
   /**
    * Updates the single (attemptId, questionId) entry to completed_manual with
-   * the grader's awarded score. Slice 3 manual-score write authority —
+   * the grader's awarded score. Manual-score write authority —
    * {@link gradeQuestion} reads the entry first then calls this to UPDATE the
-   * SAME row (no second row created). Slice 3C: the command guarantees the
+   * SAME row (no second row created). The command guarantees the
    * entry is `pending_manual` when this is called; a `completed_manual` entry
    * is never re-touched by the ordinary grading command. Returns the updated
    * entry or null if no row matched (which the caller treats as a fail-closed
@@ -118,7 +118,7 @@ function buildFrozenAnswerMap(attempt: ExamAttempt): Map<string, unknown> {
 }
 
 /**
- * Computes the expected grading entries from frozen submitted truth (P3-L0-2E).
+ * Computes the expected grading entries from frozen submitted truth.
  *
  * Pure function — no side effects, no repo calls. Derives exactly one expected
  * entry per frozen question from:
@@ -194,7 +194,7 @@ export async function materializeGradingWorkset(
 
 /**
  * Validates that existing workset entries exactly match the expected truth
- * derived from the frozen attempt (P3-L0-2E idempotent re-entry).
+ * derived from the frozen attempt (idempotent re-entry).
  *
  * Throws on ANY inconsistency. Does not modify entries, does not fill gaps,
  * does not repair partial state, does not overwrite mismatched rows.
@@ -372,7 +372,7 @@ export function validateGradingWorksetConsistency(
   }
 }
 
-// ── P3-L0-2E Slice 4: canonical terminal aggregation ─────────────
+// ── Canonical terminal aggregation ─────────────
 
 /**
  * Result of {@link aggregateGradingEntries}: the single terminal-aggregate

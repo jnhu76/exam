@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RepoContext, TenantContext } from "../types.js";
 import { isPlatformContext, isTenantContext } from "../types.js";
 
-describe("A01: Context type guards", () => {
+describe("context type guards", () => {
   it("isTenantContext identifies TenantContext", () => {
     const ctx: RepoContext = {
       organizationId: "org-1",
@@ -62,7 +62,7 @@ describe("A01: Context type guards", () => {
   });
 });
 
-describe("A01: resolveOrganizationId / resolveOptionalOrganizationId", () => {
+describe("resolveOrganizationId / resolveOptionalOrganizationId", () => {
   it("resolveOrganizationId returns organizationId for Admin", async () => {
     const { resolveOrganizationId } = await import("../repository/baseRepo.js");
     const ctx: TenantContext = {

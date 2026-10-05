@@ -28,7 +28,7 @@ export const TimingModeEnum = z.enum([
  * `EXAM_TIMING_MODE_INVALID` by the canonical exam-policy validator, the ONE
  * timing-matrix authority (`packages/exam-engine`). Zod stays shape-level.
  */
-export const PhaseATimingModeEnum = z.enum([
+export const AuthoringTimingModeEnum = z.enum([
   "timed_window",
   "deadline",
   "untimed",
@@ -42,13 +42,13 @@ const RetakePolicyEnum = z.enum([
   "weekly_limit",
   "pass_then_stop",
 ]);
-const Phase1QuestionSelectionModeEnum = z.literal("manual");
-export const Phase1RetakePolicyEnum = z.enum([
+const AuthoringQuestionSelectionModeEnum = z.literal("manual");
+export const AuthoringRetakePolicyEnum = z.enum([
   "unlimited",
   "max_attempts",
   "pass_then_stop",
 ]);
-// P2D-J5a: result publishing policy. Authoritative visibility field;
+// Result publishing policy. Authoritative visibility field;
 // showResultImmediately remains as a legacy input only.
 export const ResultPublicationModeEnum = z.enum([
   "immediate",
@@ -82,7 +82,7 @@ export const ExamSchema = z.object({
   courseId: z.string().uuid(),
   status: ExamStatusEnum,
   timingMode: TimingModeEnum,
-  // #291 Phase A: null duration = no personal time limit (deadline/untimed);
+  // null duration = no personal time limit (deadline/untimed);
   // null closeAt = open-ended (untimed only).
   durationMinutes: z.number().int().positive().nullable(),
   openAt: z.string().datetime(),
@@ -98,7 +98,7 @@ export const ExamSchema = z.object({
   // ADR-005 Slice 3 timing policy. null = disabled.
   latestStartOffsetMinutes: z.number().int().nullable(),
   minSubmitAfterStartMinutes: z.number().int().nullable(),
-  // P2D-J5a: result publishing policy + manual publish timestamp.
+  // Result publishing policy + manual publish timestamp.
   resultPublicationMode: ResultPublicationModeEnum,
   resultsPublishedAt: z.string().datetime().nullable(),
   // ADR-013 §3: interruption time-compensation policy. The DB column is
@@ -163,7 +163,7 @@ export type EnrollCandidatesRequest = z.infer<
 >;
 
 /**
- * Raw authoring shape for creating an exam (P7-M2 §20 Option A).
+ * Raw authoring shape for creating an exam (design §20 Option A).
  *
  * This is the FASTIFY-BOUNDARY schema: it validates the raw request shape
  * WITHOUT applying any defaults (and without the canonical refine). Because
@@ -197,20 +197,20 @@ export const CreateExamRequestBaseSchema = z.object({
   closeAt: z.string().datetime().nullish(),
   passingScore: z.number().min(0),
   totalScore: z.number().positive(),
-  questionSelectionMode: Phase1QuestionSelectionModeEnum.optional(),
+  questionSelectionMode: AuthoringQuestionSelectionModeEnum.optional(),
   questionIds: z.array(z.string().uuid()).optional(),
   // Raw passthrough at the fastify boundary: ControlFlagsSchema applies nested
   // defaults (showResultImmediately etc.), which would make the route's legacy
   // showResultImmediately presence check see a defaulted flag as explicit
   // input. The full schema parse in the handler validates the real shape.
   controlFlags: z.record(z.unknown()).optional(),
-  retakePolicy: Phase1RetakePolicyEnum.optional(),
+  retakePolicy: AuthoringRetakePolicyEnum.optional(),
   scoreStrategy: ScoreStrategyEnum.optional(),
   maxAttempts: z.number().int().min(1).optional(),
   // ADR-005 Slice 3 timing policy. null/omitted = disabled.
   latestStartOffsetMinutes: z.number().int().min(0).nullish(),
   minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
-  // P2D-J5a: result publishing policy. Optional here so the API boundary can
+  // Result publishing policy. Optional here so the API boundary can
   // detect "caller did not send it" and coerce from the legacy
   // controlFlags.showResultImmediately; the route handler applies the
   // 'immediate' default after coercion.
@@ -238,7 +238,7 @@ export const CreateExamRequestBaseSchema = z.object({
     .positive()
     .max(POSTGRES_INTEGER_MAX)
     .nullish(),
-  // P7-M2: optional authoring input selecting an exam policy profile. The
+  // Optional authoring input selecting an exam policy profile. The
   // profile's defaults are COPY-ON-APPLY into the concrete Exam columns at
   // creation; the created Exam never depends on the profile at runtime.
   profileId: z.string().uuid().optional(),
@@ -246,7 +246,7 @@ export const CreateExamRequestBaseSchema = z.object({
 
 /**
  * Canonical create-exam schema: the raw shape + the existing code defaults +
- * the P7-M2 guard. `durationMinutes` may be omitted ONLY when a profile is
+ * the profile guard. `durationMinutes` may be omitted ONLY when a profile is
  * selected (the profile supplies it). Without a profile, omitting
  * `durationMinutes` fails with the exact same `invalid_type` issue the schema
  * previously produced for the required field — no-profile behavior is
@@ -255,10 +255,10 @@ export const CreateExamRequestBaseSchema = z.object({
 export const CreateExamRequestSchema = CreateExamRequestBaseSchema.extend({
   description: z.string().max(2000).default(""),
   timingMode: TimingModeEnum.default("timed_window"),
-  questionSelectionMode: Phase1QuestionSelectionModeEnum.default("manual"),
+  questionSelectionMode: AuthoringQuestionSelectionModeEnum.default("manual"),
   questionIds: z.array(z.string().uuid()).default([]),
   controlFlags: ControlFlagsSchema.default({}),
-  retakePolicy: Phase1RetakePolicyEnum.default("unlimited"),
+  retakePolicy: AuthoringRetakePolicyEnum.default("unlimited"),
   scoreStrategy: ScoreStrategyEnum.default("highest"),
   maxAttempts: z.number().int().min(1).default(1),
 }).superRefine((data, ctx) => {
@@ -303,12 +303,12 @@ export const UpdateExamRequestBaseSchema = z.object({
   totalScore: z.number().positive().optional(),
   questionIds: z.array(z.string().uuid()).optional(),
   controlFlags: ControlFlagsSchema.partial().optional(),
-  retakePolicy: Phase1RetakePolicyEnum.optional(),
+  retakePolicy: AuthoringRetakePolicyEnum.optional(),
   scoreStrategy: ScoreStrategyEnum.optional(),
   maxAttempts: z.number().int().min(1).optional(),
   latestStartOffsetMinutes: z.number().int().min(0).nullish(),
   minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
-  // P2D-J5a: result publishing policy. Optional on update (only draft exams
+  // Result publishing policy. Optional on update (only draft exams
   // accept full edits; published is schedule-only per ADR-005 Slice 2 §3.7).
   resultPublicationMode: ResultPublicationModeEnum.optional(),
   // ADR-013 §3: interruption time-compensation authoring fields. Optional on

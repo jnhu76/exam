@@ -111,7 +111,7 @@ async function expectIntegrityState(
   expect(onChange.mock.calls.length).toBe(callsAllowed);
 }
 
-describe("RichTextAnswerInput — typed read adoption (Phase D3)", () => {
+describe("RichTextAnswerInput — typed read adoption", () => {
   it("R1: an unexplained string in a rich slot fails closed as an integrity state", async () => {
     const onChange = vi.fn();
     render(

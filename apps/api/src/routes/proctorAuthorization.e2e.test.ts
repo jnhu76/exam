@@ -429,7 +429,7 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
         method: "POST",
         url: `/api/admin/attempts/${examA.attemptId}/force-submit`,
         cookies: { "auth-token": p1Token },
-        // Valid operation-aware payload (J5-I1C Slice 2) so the capability
+        // Valid operation-aware payload so the capability
         // gate — not body validation — is what denies the Proctor.
         payload: {
           operationId: opId(),
@@ -444,7 +444,7 @@ describe("J4-I1D Proctor minimum activation — end-to-end authorization", () =>
         method: "POST",
         url: `/api/admin/attempts/${examA.attemptId}/misconduct`,
         cookies: { "auth-token": p1Token },
-        // J5-I1C Slice 3: misconduct now requires operationId; a valid body
+        // Misconduct now requires operationId; a valid body
         // reaches the capability gate instead of failing schema validation.
         payload: {
           operationId: opId(),

@@ -533,7 +533,7 @@ describe("exam contracts", () => {
 });
 
 // ── ADR-013 restore response contract (REC-I4-I3A) ──
-describe("RestoreAttemptResponseSchema (REC-I4-I3A frozen contract)", () => {
+describe("RestoreAttemptResponseSchema (frozen contract)", () => {
   const baseAttempt = {
     id: "550e8400-e29b-41d4-a716-446655440010",
     organizationId: "550e8400-e29b-41d4-a716-446655440001",
@@ -1102,7 +1102,7 @@ describe("attempt contracts", () => {
   });
 });
 
-describe("CandidateExamDetailResponseSchema timing modes (A2 corrective)", () => {
+describe("CandidateExamDetailResponseSchema timing modes", () => {
   const baseDetail = {
     id: "550e8400-e29b-41d4-a716-446655440000",
     title: "Exam",
@@ -1168,7 +1168,7 @@ describe("CandidateExamDetailResponseSchema timing modes (A2 corrective)", () =>
   });
 });
 
-describe("SaveAnswerAcceptedSchema (A01 strict)", () => {
+describe("SaveAnswerAcceptedSchema (strict)", () => {
   const validAccepted = {
     accepted: true as const,
     serverVersion: 1,
@@ -1202,7 +1202,7 @@ describe("SaveAnswerAcceptedSchema (A01 strict)", () => {
   });
 });
 
-describe("SaveAnswerRejectedSchema (A01 strict)", () => {
+describe("SaveAnswerRejectedSchema (strict)", () => {
   const validRejected = {
     accepted: false as const,
     reason: "STALE_VERSION" as const,
@@ -1268,7 +1268,7 @@ describe("SaveAnswerRejectedSchema (A01 strict)", () => {
   });
 });
 
-describe("SaveAnswerResponseSchema (A01 discriminated union)", () => {
+describe("SaveAnswerResponseSchema (discriminated union)", () => {
   it("accepts accepted branch", () => {
     const result = SaveAnswerResponseSchema.safeParse({
       accepted: true,
@@ -1305,7 +1305,7 @@ describe("SaveAnswerRejectReasonEnum", () => {
   });
 });
 
-describe("SaveAnswer route-shape equivalence (A01 wire contract)", () => {
+describe("SaveAnswer route-shape equivalence (wire contract)", () => {
   const buildRejectedWireShape = (
     reason: import("../attempt.js").SaveAnswerRejectReason,
     options: { latestAnswer?: unknown } = {},
@@ -1446,7 +1446,7 @@ describe("password policy enforcement at boundary", () => {
   });
 });
 
-describe("Phase 3 assignable role model (RBAC-M8)", () => {
+describe("assignable role model", () => {
   it("RoleSchema accepts Admin", () => {
     expect(RoleSchema.safeParse("Admin").success).toBe(true);
   });
@@ -1455,7 +1455,7 @@ describe("Phase 3 assignable role model (RBAC-M8)", () => {
     expect(RoleSchema.safeParse("Candidate").success).toBe(true);
   });
 
-  it("RoleSchema accepts Teacher/Proctor/Grader (widened in RBAC-M8)", () => {
+  it("RoleSchema accepts Teacher/Proctor/Grader (widened assignable roles)", () => {
     expect(RoleSchema.safeParse("Teacher").success).toBe(true);
     expect(RoleSchema.safeParse("Proctor").success).toBe(true);
     expect(RoleSchema.safeParse("Grader").success).toBe(true);
@@ -1479,7 +1479,7 @@ describe("Phase 3 assignable role model (RBAC-M8)", () => {
     expect(result.success).toBe(true);
   });
 
-  it("CreateUserRequestSchema accepts Teacher (widened in RBAC-M8)", () => {
+  it("CreateUserRequestSchema accepts Teacher (widened assignable roles)", () => {
     const result = CreateUserRequestSchema.safeParse({
       username: "newuser",
       password: "password123",

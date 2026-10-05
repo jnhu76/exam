@@ -39,7 +39,7 @@ const MarkTypeEnum = z.enum(["bold", "italic", "underline", "inlineCode"]);
 
 /**
  * Durable-representability intake shared by every FREE string leaf of the
- * grammar (#669 Phase F): text runs, code-block bodies, and both LaTeX
+ * grammar: text runs, code-block bodies, and both LaTeX
  * slots. `codeBlock.language` is exempt by construction —
  * CODE_LANGUAGE_PATTERN is a full-match bounded ASCII class that cannot
  * carry U+0000 or surrogates. This is what makes canonicalization success
@@ -250,7 +250,7 @@ export const ContentDocumentV1Schema = RawPreflightSchema.pipe(
 );
 
 /**
- * Canonicalization closure seam (RC-03, #669 Phase D1): normalizes a
+ * Canonicalization closure seam (RC-03, #669): normalizes a
  * schema-valid document and re-validates the canonical output through the
  * one Rich authority (ContentDocumentV1Schema = grammar + CONTENT_LIMITS).
  *

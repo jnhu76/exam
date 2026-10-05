@@ -30,7 +30,7 @@
   color: var(--status-neutral-text);
 }
 
-/* TagBadge — the single tag-chip geometry/typography owner (issue 577 m2).
+/* TagBadge — the single tag-chip geometry/typography owner (issue 577).
  * default: 22px / 4px radius / 12px / 500 / 16px line-height on the neutral
  * subtle surface. Weight lives HERE (not in a component utility): the Badge
  * base declares font-medium, and this unlayered recipe is what pins the tag

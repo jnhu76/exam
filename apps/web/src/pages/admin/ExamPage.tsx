@@ -59,8 +59,8 @@ interface PaginatedResponse<T> {
 
 /**
  * Admin page for listing, viewing, and deleting exams.
- * UI-KOI-WEGENT-VISUAL-PIVOT-1: Removed empty count strip. Count moved into
- * toolbar summary. Admin table with distinct header, clear boundaries.
+ * No separate count strip — the count lives in the toolbar summary. Admin
+ * table with distinct header, clear boundaries.
  */
 export function ExamPage() {
   const { t } = useTranslation();

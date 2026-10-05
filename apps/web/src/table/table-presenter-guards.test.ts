@@ -487,7 +487,7 @@ function presenterPairingViolations(
   return violations;
 }
 
-describe("table presenter-pairing structural guards (issue #461 C1)", () => {
+describe("table presenter-pairing structural guards (issue #461)", () => {
   it("renders every presenter-overflow column through DataTableOverflowText with the matching mode", () => {
     // Covers explicit overrides (long-text+truncate, description+line-clamp-2)
     // and the presenter-default roles (description, short-id), in both the

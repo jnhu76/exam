@@ -243,7 +243,7 @@ function buildCandidateExamDetail(
     resultVisible &&
     exam.retakePolicy === "pass_then_stop" &&
     enrollment?.finalPassed === true;
-  // #324 review P1-2: while the final result exists but is hidden, retake
+  // #324: while the final result exists but is hidden, retake
   // eligibility is DEFERRED — passed and failed candidates must see the same
   // canStartNewAttempt=false here, matching the identical opaque rejection
   // the start route gives both until publication.
@@ -268,7 +268,7 @@ function buildCandidateExamDetail(
     id: exam.id,
     title: exam.title,
     durationMinutes: exam.durationMinutes,
-    // #291 Phase A: the exam's own timingMode is the canonical source — never
+    // #291: the exam's own timingMode is the canonical source — never
     // infer the mode from the nullable duration/closeAt combination.
     timingMode: exam.timingMode,
     passingScore: exam.passingScore,
@@ -728,7 +728,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         attempt = started.attempt;
         isNew = started.isNew;
       } catch (error) {
-        // #324 review P1-3: the engine decides retake deferral UNDER the
+        // #324: the engine decides retake deferral UNDER the
         // enrollment lock (the same serialization boundary as the grading
         // finalizer), so the pass/fail fact can no longer race past a
         // pre-transaction read. The wire contract stays opaque — a deferral
@@ -838,7 +838,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const ctx = getRequestContext(request);
       const candidateProfile = await getCandidateProfile(fastify, ctx);
 
-      // P3-L0-3: lazy deadline reconciliation. The take endpoint is the
+      // Lazy deadline reconciliation. The take endpoint is the
       // primary entry point; run reconciliation inside a locked tx so an
       // expired attempt is frozen before the snapshot is built. This is a
       // command-style GET with side effects — Cache-Control: no-store below.
@@ -1066,8 +1066,8 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           throw new NotFoundError("尝试不存在");
         }
 
-        // #301 §21 + canonical Save ordering (corrective pass §5, order
-        // clarified in round-2): the route delegates the WHOLE Save Answer
+        // #301 §21 + canonical Save ordering (#301 §5, order
+        // clarified in round 2): the route delegates the WHOLE Save Answer
         // action to the engine, whose actual order is
         //   attempt identity → frozen question membership (P1)
         //     → reconstruct AnswerState → status guards → effective-deadline
@@ -1239,7 +1239,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /attempts/:attemptId/restore — Explicitly restores a disrupted
-   * attempt. ADR-013 §6 / REC-I4-I3A: returns the frozen restore response
+   * attempt. ADR-013 §6: returns the frozen restore response
    * contract (command acknowledgement + candidate-safe compensation summary).
    * The response deliberately does NOT expose internal interruption evidence
    * (episode id, detected event, adjustment ledger) — those remain

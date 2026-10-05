@@ -14,7 +14,7 @@
  */
 
 /**
- * Lifecycle status of an outbox row (P5-0 target state).
+ * Lifecycle status of an outbox row (target state).
  *
  * - `pending`    — first-time or immediately claimable.
  * - `processing` — claimed by one worker; locked_at and locked_by are non-null.
@@ -117,13 +117,13 @@ export interface EmailOutboxRow {
   nextAttemptAt: Date | null;
   sentAt: Date | null;
   /**
-   * Optional Inbox notification that triggered this Email (P5-N1-I2). Null for
+   * Optional Inbox notification that triggered this Email. Null for
    * identity-flow Emails; set on operational Emails
    * (result_published -> grade_notification).
    */
   notificationId: string | null;
   /**
-   * Optional recipient user link, independent of recipientEmail (P5-N1-I2).
+   * Optional recipient user link, independent of recipientEmail.
    */
   recipientUserId: string | null;
   createdAt: Date;

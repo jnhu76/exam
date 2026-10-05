@@ -9,8 +9,7 @@ import { join } from "node:path";
  * in-vitest computed-style check can distinguish "base-layer default" from
  * "unlayered default". These gates pin the source structure that the
  * Tailwind v4 build compiles into the correct cascade order; the runtime
- * behavior is proven by browser computed-style probes (issue 577
- * review-fix-1 evidence).
+ * behavior is proven by browser computed-style probes (issue 577).
  */
 
 export type CssRule = {

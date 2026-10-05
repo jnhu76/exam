@@ -28,7 +28,7 @@
 [data-slot="input"],
 [data-slot="select-trigger"],
 [data-slot="textarea"] {
-  /* border-color is deliberately NOT owned here (issue 577 review-fix-1):
+  /* border-color is deliberately NOT owned here (issue #577):
    * the primitives' `border-input` utility resolves to the SAME value
    * (--border-strong aliases --border-control), and an unlayered
    * border-color on this rule defeats the layered state utilities

@@ -1,5 +1,5 @@
 /**
- * J5-I1C Slice 2 — Deterministic PostgreSQL Force-Submit Concurrency
+ * Deterministic PostgreSQL Force-Submit Concurrency
  * Verification.
  *
  * Proves, against the SAME production entrypoint the HTTP route uses
@@ -344,7 +344,7 @@ function createBarrierBackedForceSubmitObserver(
   };
 }
 
-describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
+describe("deterministic force-submit operationId races", () => {
   let iso: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let db1: Database;
@@ -974,7 +974,7 @@ describe("J5-I1C Slice 2: deterministic force-submit operationId races", () => {
     expect(receipts.find((r) => r.operationId === opB)?.outcome).toBe(
       "no_change",
     );
-    // P2-2: the receipt actor authority is ctx.actorId (single source), not a
+    // The receipt actor authority is ctx.actorId (single source), not a
     // command input — both receipts carry the authenticated admin.
     for (const r of receipts) {
       expect(r.actorId).toBe(adminCtx.actorId);

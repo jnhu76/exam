@@ -1,5 +1,5 @@
 /**
- * P4-C3 — Candidate admin-console boundary E2E.
+ * Candidate admin-console boundary E2E (origin: P4-C3 role-productization).
  *
  * Proves the browser-level boundary composition for the Candidate: the
  * AdminLayout console gate redirects any /admin/* URL to the exam runtime
@@ -20,7 +20,7 @@ import { loginAsCandidate } from "../lib/flow";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
-test.describe("P4-C3 Candidate admin-console boundary", () => {
+test.describe("Candidate admin-console boundary", () => {
   test("Candidate cannot render admin pages; /admin/* redirects to the exam runtime", async ({
     page,
     request,

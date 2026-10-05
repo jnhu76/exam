@@ -69,7 +69,8 @@ function options(path: string, headers?: Record<string, string>) {
   });
 }
 
-describe("#451 OPTIONS/CORS wire contract", () => {
+// Regression for #451.
+describe("OPTIONS/CORS wire contract", () => {
   describe("bare OPTIONS — strictPreflight protocol rejection (intentional)", () => {
     it("answers 400 text/plain 'Invalid Preflight Request' on registered, unknown, and non-/api paths alike", async () => {
       for (const path of [

@@ -35,7 +35,7 @@ function constraintNameOf(err: unknown): string | null {
   return null;
 }
 
-describe("examProfileRepo — organization-scoped CRUD (P7-M2 §10/§27)", () => {
+describe("examProfileRepo — organization-scoped CRUD (§10/§27)", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
   let orgA: string;

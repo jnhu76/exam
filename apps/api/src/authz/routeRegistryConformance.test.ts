@@ -186,7 +186,7 @@ const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(auditRoutes);
 };
 
-describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
+describe("registry/runtime conformance", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>> | null = null;
 
   beforeAll(async () => {
@@ -197,7 +197,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   });
 
   // Select the M10-A candidate runtime routes from the registry.
-  const m10aRegistryEntries = ROUTE_PERMISSION_REGISTRY.filter(
+  const runtimeAuthzRegistryEntries = ROUTE_PERMISSION_REGISTRY.filter(
     (e) => e.runtimeAuthz !== undefined,
   );
 
@@ -207,7 +207,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    * separate expected table is duplicated in the test.
    */
   function expectedMetadata(
-    entry: (typeof m10aRegistryEntries)[number],
+    entry: (typeof runtimeAuthzRegistryEntries)[number],
   ): AuthzPreHandler["authz"] {
     const strategy = entry.runtimeAuthz!;
     switch (strategy.kind) {
@@ -229,7 +229,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     }
   }
 
-  it.each(m10aRegistryEntries)(
+  it.each(runtimeAuthzRegistryEntries)(
     "$method $path — runtime metadata matches registry declaration",
     (entry) => {
       const matches = capturedRoutes.filter(
@@ -246,7 +246,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   );
 
   it("candidate_context routes have no resolver/resourceIdKey in runtime metadata", () => {
-    const contextEntries = m10aRegistryEntries.filter(
+    const contextEntries = runtimeAuthzRegistryEntries.filter(
       (e) => e.runtimeAuthz?.kind === "candidate_context",
     );
     for (const entry of contextEntries) {
@@ -263,7 +263,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   });
 
   it("exam_eligibility routes always have resourceIdKey: examId", () => {
-    const eligibilityEntries = m10aRegistryEntries.filter(
+    const eligibilityEntries = runtimeAuthzRegistryEntries.filter(
       (e) => e.runtimeAuthz?.kind === "exam_eligibility",
     );
     expect(eligibilityEntries).toHaveLength(3);
@@ -284,7 +284,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   });
 
   it("own_attempt routes always have resourceIdKey: id or attemptId", () => {
-    const ownAttemptEntries = m10aRegistryEntries.filter(
+    const ownAttemptEntries = runtimeAuthzRegistryEntries.filter(
       (e) => e.runtimeAuthz?.kind === "own_attempt",
     );
     expect(ownAttemptEntries).toHaveLength(6);
@@ -307,7 +307,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   // ──────────────────────── M10-B conformance ────────────────────────
 
   /**
-   * M10-B: the admin/management routes in `m10bRouteSpecs` below use flat
+   * M10-B: the admin/management routes in `adminFlatCapabilityRouteSpecs` below use flat
    * capability-based gates — each spec is asserted to have exactly one
    * flat-capability handler and zero scoped / role / permission-list handlers.
    *
@@ -322,7 +322,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    * gate declarations for these specs. It does NOT prove resource-level
    * authorization closure.
    */
-  const m10bRouteSpecs: Array<{
+  const adminFlatCapabilityRouteSpecs: Array<{
     method: string;
     path: string;
     permission: string;
@@ -366,7 +366,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   ];
 
   /**
-   * Per-route M10-B conformance. For each spec in `m10bRouteSpecs` we prove:
+   * Per-route M10-B conformance. For each spec in `adminFlatCapabilityRouteSpecs` we prove:
    *
    *   - exactly one matching route registration exists;
    *   - exactly one flat-capability handler is wired;
@@ -382,8 +382,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    * role gate and a capability gate; the tag-based classification closes that
    * hole.
    */
-  it.each(m10bRouteSpecs)(
-    "[M10-B] $method $path — flat capability gate, no role/permission gate",
+  it.each(adminFlatCapabilityRouteSpecs)(
+    "$method $path — flat capability gate, no role/permission gate",
     ({ method, path, permission }) => {
       const matches = capturedRoutes.filter(
         (r) => r.method === method && r.url.endsWith(path),
@@ -773,7 +773,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
 
   /**
    * M10-C: identity & role-assignment authority. The route inventory, methods
-   * and target permissions live in `m10cRouteSpecs` below — the registration
+   * and target permissions live in `identityAuthorityRouteSpecs` below — the registration
    * under test, not a copy. Each entry is a flat capability gate (no resolver).
    * Org-anchor isolation is enforced by `ensureTargetOrg` in the handlers.
    *
@@ -782,7 +782,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    * (POST/PATCH/DELETE in roleAssignments.ts; PATCH role-change in user.ts).
    * `users.role` is a cache; authorization reads the capability authority.
    */
-  const m10cRouteSpecs: Array<{
+  const identityAuthorityRouteSpecs: Array<{
     method: string;
     path: string;
     permission: string;
@@ -825,8 +825,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     },
   ];
 
-  it("has exactly 10 M10-C routes defined", () => {
-    expect(m10cRouteSpecs).toHaveLength(10);
+  it("has exactly 10 identity-authority routes defined", () => {
+    expect(identityAuthorityRouteSpecs).toHaveLength(10);
   });
 
   /**
@@ -844,8 +844,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    * introspection tags attached at the decorators, and the negative-control
    * test below proves the classifier actually detects role gates.
    */
-  it.each(m10cRouteSpecs)(
-    "[M10-C] $method $path — flat capability gate, no role/permission gate",
+  it.each(identityAuthorityRouteSpecs)(
+    "$method $path — flat capability gate, no role/permission gate",
     ({ method, path, permission }) => {
       const matches = capturedRoutes.filter(
         (r) => r.method === method && r.url.endsWith(path),
@@ -975,7 +975,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    * drift is detectable: if the registry's permission changes but the
    * runtime gate stays the same, this test fails.
    */
-  const M10_D_ROUTE_KEYS = new Set([
+  const adminSurfaceRouteKeys = new Set([
     "GET /candidate-fields",
     "POST /candidate-fields",
     "PATCH /candidate-fields/:id",
@@ -999,21 +999,21 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
    * Select the 17 M10-D entries from ROUTE_PERMISSION_REGISTRY.
    * Permission values come from the registry — never hard-coded in the test.
    */
-  const m10dRegistryEntries = ROUTE_PERMISSION_REGISTRY.filter((e) =>
-    M10_D_ROUTE_KEYS.has(`${e.method} ${e.path}`),
+  const adminSurfaceRegistryEntries = ROUTE_PERMISSION_REGISTRY.filter((e) =>
+    adminSurfaceRouteKeys.has(`${e.method} ${e.path}`),
   );
 
-  it("M10-D route key allowlist has exactly 17 entries", () => {
-    expect(M10_D_ROUTE_KEYS.size).toBe(17);
+  it("admin-surface route key allowlist has exactly 17 entries", () => {
+    expect(adminSurfaceRouteKeys.size).toBe(17);
   });
 
-  it("ROUTE_PERMISSION_REGISTRY contains exactly 17 matching M10-D entries", () => {
-    expect(m10dRegistryEntries).toHaveLength(17);
+  it("ROUTE_PERMISSION_REGISTRY contains exactly 17 matching admin-surface entries", () => {
+    expect(adminSurfaceRegistryEntries).toHaveLength(17);
   });
 
-  it("no M10-D key matches more than one registry entry", () => {
+  it("no admin-surface allowlist key matches more than one registry entry", () => {
     const keyCounts = new Map<string, number>();
-    for (const e of m10dRegistryEntries) {
+    for (const e of adminSurfaceRegistryEntries) {
       const key = `${e.method} ${e.path}`;
       keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
     }
@@ -1022,8 +1022,8 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     }
   });
 
-  it.each(m10dRegistryEntries)(
-    "[M10-D] $method $path — flat capability gate, no role/permission gate",
+  it.each(adminSurfaceRegistryEntries)(
+    "$method $path — flat capability gate, no role/permission gate",
     (entry) => {
       const matches = capturedRoutes.filter(
         (r) => r.method === entry.method && r.url.endsWith(entry.path),

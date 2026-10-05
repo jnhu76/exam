@@ -231,7 +231,8 @@ describe("heartbeat plugin", () => {
   });
 });
 
-describe("heartbeat plugin — #547 stall-fact bookkeeping", () => {
+// Issue #547.
+describe("heartbeat plugin — stall-fact bookkeeping", () => {
   // The `now` decoration below is a manually-advanced controlled clock (the
   // operation time authority for the plugin); vi's fake timers advance only
   // the interval. Advancing both together keeps every stamp deterministic.
@@ -284,7 +285,7 @@ describe("heartbeat plugin — #547 stall-fact bookkeeping", () => {
     }
   });
 
-  it("a hung cycle keeps activeSince set and skips later ticks — the input the stall classifier consumes (B2)", async () => {
+  it("a hung cycle keeps activeSince set and skips later ticks — the input the stall classifier consumes", async () => {
     vi.useFakeTimers();
     // Deferred hang: teardown rejects it so the in-flight cycle settles
     // and the plugin's awaited onClose can complete (no dangling close).

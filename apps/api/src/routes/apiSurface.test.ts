@@ -53,8 +53,8 @@ let baseUrl: string;
 let capturedRoutes: Array<{ url: string; routePath: string }> = [];
 
 beforeAll(async () => {
-  // The rate limiter is part of the apiSurface scope (EXAM-HTTP-SURFACE-
-  // AUTHORITY-CLOSURE-1). This suite drives the real composition at scale,
+  // The rate limiter is part of the apiSurface scope. This suite drives the
+  // real composition at scale,
   // so it disables the limiter explicitly; limiter behavior is pinned by
   // the dedicated rate-limit suites.
   process.env.RATE_LIMIT_DISABLED = "true";
@@ -207,7 +207,8 @@ async function expectSpaFallbackRaw(target: string): Promise<void> {
   expect(res.body, target).toContain(INDEX_MARKER);
 }
 
-describe("#429 /api namespace boundary (router-native)", () => {
+// Regression for #429.
+describe("/api namespace boundary (router-native)", () => {
   it("registered API routes beat the scoped 404 — the real route still answers", async () => {
     const res = await fetch(`${baseUrl}/api/health`);
     expect(res.status).toBe(200);
@@ -256,7 +257,7 @@ describe("#429 /api namespace boundary (router-native)", () => {
       await expectCanonicalApiNotFoundRaw("/api/%2e%2e/x");
     });
 
-    it("CORRECTIVE-3 P1: an encoded spelling of /api is classified by the ROUTER as /api", async () => {
+    it("an encoded spelling of /api is classified by the ROUTER as /api", async () => {
       // find-my-way decodes non-reserved percent-escapes before matching
       // (%61 -> a), so /%61pi/__429_unknown__ is a /api request to the
       // router: it must hit the scoped canonical 404 — never the SPA
@@ -338,7 +339,7 @@ describe("#429 /api namespace boundary (router-native)", () => {
     });
   });
 
-  describe("#451 non-regression — OPTIONS dispatch is untouched (fixing #451 is OUT of scope)", () => {
+  describe("non-regression — OPTIONS dispatch is untouched (fixing #451 is OUT of scope)", () => {
     // The authoritative OPTIONS/CORS wire contract (full matrix + envelope
     // exception) lives in optionsCorsWireContract.test.ts and
     // docs/contracts/api-contract.md §"OPTIONS / CORS wire contract".

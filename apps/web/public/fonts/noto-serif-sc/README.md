@@ -1,10 +1,10 @@
 # Noto Serif SC (self-hosted)
 
 Self-hosted Chinese serif family for the **sustained Chinese reading** role only
-(`--font-serif`, UI-TYPO-2). This is the project-owned CJK serif; it is NOT a
+(`--font-serif`). This is the project-owned CJK serif; it is NOT a
 prestige / formal / important signal and must never be applied to UI controls,
 status, scores, timers, tables, or metadata. Consumers must opt into a semantic
-reading recipe (`type-reading` / `type-long-response`, UI-RECIPE-1A); serif is
+reading recipe (`type-reading` / `type-long-response`); serif is
 not applied by HTML tag alone.
 
 ## Provenance

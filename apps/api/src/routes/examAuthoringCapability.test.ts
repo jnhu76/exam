@@ -15,7 +15,7 @@ import {
 } from "./testHelpers.js";
 
 /**
- * P4-2C capability cutover — Teacher exam authoring/lifecycle proof (task 8.4).
+ * Teacher exam authoring/lifecycle capability cutover proof.
  *
  * The exam authoring routes flipped from requireRole(["Admin"]) to
  * requireCapability. Teacher preset grants ExamCreate/ExamUpdate/ExamPublish/
@@ -24,7 +24,7 @@ import {
  * result-publication, and score-list behavior. Candidate has no exam permission
  * and Admin retains compatibility access.
  */
-describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
+describe("exam routes — capability cutover (Teacher authoring)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let courseId: string;
   let questionId: string;
@@ -46,7 +46,7 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
       method: "POST",
       url: "/api/courses",
       payload: {
-        name: "P4-2C Course",
+        name: "teacher-authoring Course",
         code: `P42C-${uniquePrefix()}`,
         description: "",
       },
@@ -60,7 +60,7 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
       payload: {
         courseId,
         type: "true_false",
-        content: "P4-2C question.",
+        content: "teacher-authoring question.",
         standardAnswer: true,
         score: 100,
       },
@@ -68,7 +68,7 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
     });
     questionId = qRes.json().id;
 
-    // RBAC-M10-E: delegates to createAssignedUserForTest so the user gets an
+    // Delegates to createAssignedUserForTest so the user gets an
     // active primary role assignment — without it, authenticate denies 401 and
     // the capability decisions under test never run.
     const mkUser = async (role: "Teacher" | "Candidate") => {
@@ -135,7 +135,7 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
       url: "/api/exams",
       payload: {
         courseId,
-        title: "P4-2C Exam",
+        title: "teacher-authoring Exam",
         description: "",
         durationMinutes: 60,
         openAt: new Date().toISOString(),
@@ -147,7 +147,7 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
       cookies: { "auth-token": teacherToken },
     });
     expect(res.statusCode).toBe(201);
-    expect(res.json().title).toBe("P4-2C Exam");
+    expect(res.json().title).toBe("teacher-authoring Exam");
     expect(res.json().status).toBe("draft");
   });
 
@@ -161,7 +161,9 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
   });
 
   it("Teacher reads and updates a draft exam", async () => {
-    const draftRes = await createTeacherDraft("P4-2C Read Update Exam");
+    const draftRes = await createTeacherDraft(
+      "teacher-authoring Read Update Exam",
+    );
     expect(draftRes.statusCode).toBe(201);
     const examId = draftRes.json().id as string;
 
@@ -176,11 +178,11 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
     const updateRes = await ctx.app.inject({
       method: "PATCH",
       url: `/api/exams/${examId}`,
-      payload: { title: "P4-2C Updated Exam" },
+      payload: { title: "teacher-authoring Updated Exam" },
       cookies: { "auth-token": teacherToken },
     });
     expect(updateRes.statusCode).toBe(200);
-    expect(updateRes.json().title).toBe("P4-2C Updated Exam");
+    expect(updateRes.json().title).toBe("teacher-authoring Updated Exam");
   });
 
   it("Teacher publishes a draft exam (passes the publish gate; draft -> published)", async () => {
@@ -190,7 +192,7 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
       url: "/api/exams",
       payload: {
         courseId,
-        title: "P4-2C Publish Exam",
+        title: "teacher-authoring Publish Exam",
         description: "",
         durationMinutes: 60,
         openAt: new Date().toISOString(),
@@ -214,10 +216,13 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
   });
 
   it("Teacher closes an open exam and publishes manual results", async () => {
-    const closeDraft = await createTeacherDraft("P4-2C Close Exam", {
-      openAt: new Date(Date.now() - 60_000).toISOString(),
-      closeAt: new Date(Date.now() + 86_400_000).toISOString(),
-    });
+    const closeDraft = await createTeacherDraft(
+      "teacher-authoring Close Exam",
+      {
+        openAt: new Date(Date.now() - 60_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    );
     expect(closeDraft.statusCode).toBe(201);
     const closeExamId = closeDraft.json().id as string;
 
@@ -282,9 +287,12 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
     expect(closeRes.statusCode).toBe(200);
     expect(closeRes.json().status).toBe("closed");
 
-    const resultsDraft = await createTeacherDraft("P4-2C Results Exam", {
-      resultPublicationMode: "manual",
-    });
+    const resultsDraft = await createTeacherDraft(
+      "teacher-authoring Results Exam",
+      {
+        resultPublicationMode: "manual",
+      },
+    );
     expect(resultsDraft.statusCode).toBe(201);
     const resultsExamId = resultsDraft.json().id as string;
     const resultsPublish = await ctx.app.inject({
@@ -314,7 +322,9 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
   });
 
   it("Teacher adds, lists, monitors, and removes an enrollment", async () => {
-    const draftRes = await createTeacherDraft("P4-2C Enrollment Exam");
+    const draftRes = await createTeacherDraft(
+      "teacher-authoring Enrollment Exam",
+    );
     expect(draftRes.statusCode).toBe(201);
     const examId = draftRes.json().id as string;
     const candidate = await createCandidateViaApi(

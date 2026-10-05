@@ -643,7 +643,7 @@ describe("attemptRepo custom methods", () => {
     // exam window closes — CanonicalExpired <=> ScannerCandidate over the full
     // scanner-eligible domain (reachable + defensive NULL). This is recovery
     // coverage, not a Phase-1 timing mode.
-    it("returns NULL-deadline attempts once exam.closeAt <= now (P0-C1 defensive recovery coverage)", async () => {
+    it("returns NULL-deadline attempts once exam.closeAt <= now (defensive recovery coverage)", async () => {
       const orgN = randomUUID();
       const idsN = makeIds();
       const ctxN = createContext(orgN);
@@ -685,7 +685,7 @@ describe("attemptRepo custom methods", () => {
     // exam window is still OPEN is NOT canonically expired via the defensive
     // fallback (EffectiveDeadline = closeAt > now) and therefore MUST NOT be a
     // scanner candidate.
-    it("does NOT return NULL-deadline attempts while exam.closeAt > now (P0-C1 defensive recovery, negative)", async () => {
+    it("does NOT return NULL-deadline attempts while exam.closeAt > now (defensive recovery, negative)", async () => {
       const orgF = randomUUID();
       const idsF = makeIds();
       const ctxF = createContext(orgF);

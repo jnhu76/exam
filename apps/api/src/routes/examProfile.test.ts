@@ -21,7 +21,7 @@ const VALID_PROFILE = {
   interruptionGracePerAttemptSeconds: 600,
 };
 
-describe("exam policy profile routes (P7-M2 CRUD)", () => {
+describe("exam policy profile routes (CRUD)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
   beforeAll(async () => {

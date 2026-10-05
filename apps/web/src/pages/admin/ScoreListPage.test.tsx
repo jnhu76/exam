@@ -141,7 +141,7 @@ describe("ScoreListPage", () => {
     expect(filename).toMatch(/\.csv$/);
   });
 
-  it("Teacher preset: page access (ScoreAllView) renders, export affordance (ScoreExport) stays absent (issue 548 F2-04)", async () => {
+  it("Teacher preset: page access (ScoreAllView) renders, export affordance (ScoreExport) stays absent (issue 548)", async () => {
     // Preset-level asymmetry made explicit: Teacher legitimately reaches the
     // score surface but must never be offered an export the server 403s.
     expect([...permissionsForRole("Teacher")]).toContain(

@@ -6,7 +6,7 @@
  *
  * This module is the authority for:
  *   - the `attempt_command_receipts` `(organization_id, operation_id)`
- *     unique-constraint race recovery (J5-I1C0 audit §5.1, §14),
+ *     unique-constraint race recovery (dangerous-command identity audit §5.1, §14),
  *   - planning the force-submit outcome UNDER the EA lock and freezing it
  *     into the receipt's immutable `result_payload` BEFORE the mutation
  *     (receipt-first, audit §5.1 step 7),
@@ -15,7 +15,7 @@
  *   - returning the STORED immutable fact on replay — never a rebuilt
  *     projection of the live attempt.
  *
- * Transaction order (frozen, audit §5.1 / J5-I1C0 §9):
+ * Transaction order (frozen, dangerous-command identity audit §5.1/§9):
  *   pre-read replay/conflict (non-locking, outside any transaction)
  *   → BEGIN (REPEATABLE READ — `executeInTransaction` default)
  *   → EA lock (Enrollment → Attempt, unchanged, ADR-013 §9)
@@ -230,7 +230,7 @@ export interface ForceSubmitExecutionObserver {
  * production entry ({@link forceSubmitWithOperationRaceRecovery}) takes a
  * separate options type that makes `audit` REQUIRED, so an "applied
  * force-submit with no compliance audit" is unrepresentable in production
- * code (review P2-3). Replay / `no_change` / conflict paths never write an
+ * code. Replay / `no_change` / conflict paths never write an
  * audit regardless.
  */
 export interface ForceSubmitExecutionInternalOptions {
@@ -332,7 +332,7 @@ export interface ForceSubmitExecutionPlan {
  *   (gradedAt=now) when auto-gradable; a pending-manual workset stays
  *   `submitted` (gradeAttemptIdempotent returns a partial result without a
  *   transition). outcome=applied, audit written.
- * - `submitted`: terminal no-op (frozen J5-I1C0 §4.2: `no_change` means
+ * - `submitted`: terminal no-op (frozen dangerous-command identity audit §4.2: `no_change` means
  *   afterStatus === beforeStatus). A crash-window row left by ANOTHER
  *   operation is NOT re-graded here — completing grading behind a
  *   "no_change" receipt would make the receipt's immutable fact lie. The
@@ -645,7 +645,7 @@ async function runForceSubmitTransaction(
       // inside the SAME locked transaction — no submitted-but-not-graded
       // crash window is created here (the plan runs BOTH steps only on
       // in_progress/disrupted; a `submitted` row plans a pure no_change with
-      // no mutation, per J5-I1C0 §4.2).
+      // no mutation, per the dangerous-command identity audit §4.2).
       const gradingWorksetRepo = createGradingWorksetRepoAdapter(
         createAttemptGradingEntryRepo(tx),
         ctx,
@@ -815,7 +815,7 @@ async function runReceiptRecovery(
 }
 
 /**
- * Force-submit with operationId race recovery (J5-I1C0 audit §5.1, §14).
+ * Force-submit with operationId race recovery (dangerous-command identity audit §5.1, §14).
  * Single entry point shared by the HTTP route and the deterministic
  * concurrency test.
  *
@@ -882,7 +882,7 @@ async function runForceSubmitWithRaceRecovery(
 ): Promise<AttemptCommandReceiptResponse> {
   // The wire schema already validated/trimmed reason; canonicalizing here
   // guarantees the durable request_payload comes from the ONE domain
-  // canonicalizer (J5-I1C0 §8 "canonicalizeForceSubmitPayload").
+  // canonicalizer (dangerous-command identity audit §8 "canonicalizeForceSubmitPayload").
   const canonicalPayload = canonicalizeForceSubmitPayload({
     reason: input.reason,
   });

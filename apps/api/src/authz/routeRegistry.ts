@@ -41,7 +41,7 @@ export interface SingleResourceSpec {
 export interface ListResourceSpec {
   type: "list";
   listOf: ResourceType;
-  /** Reserved for GRADING-M1 etc.; RBAC-M4 does not implement filters. */
+  /** Reserved for future list filters; no resolver implements them yet. */
   filterSpec?: string;
 }
 
@@ -60,7 +60,7 @@ export type LegacyGate = "Admin" | "Candidate" | "Admin+Candidate" | "public";
 export type EligibilityDenialMode = "resource_not_found" | "permission_denied";
 
 /**
- * Exact runtime authorization strategy for Candidate runtime routes (RBAC-M10-A).
+ * Exact runtime authorization strategy for Candidate runtime routes.
  *
  * Maps 1:1 to the {@link AuthzMetadata} kinds the actual Fastify decorators
  * attach. The registry declares this so a runtime conformance test can compare
@@ -118,7 +118,7 @@ export interface RoutePermissionRegistryEntry {
   /** The resolver key that reduces the resource to the scope. */
   resolver: ResolverKey;
   /**
-   * Exact runtime authorization strategy for Candidate runtime routes (M10-A).
+   * Exact runtime authorization strategy for Candidate runtime routes.
    * Present only on candidate runtime entries; absent on Admin routes.
    * The runtime conformance test compares this field against the actual
    * Fastify onRoute metadata to detect strategy drift.
@@ -156,7 +156,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
   [
     // ── auth (mostly public/self) ──
     {
-      // P7-E2A (ADR-017 D7): the email test is a SIDE-EFFECTING action; it is
+      // ADR-017 D7: the email test is a SIDE-EFFECTING action; it is
       // gated by its own capability (system.email.test), never by a view
       // capability. Audited under `system.email.test` (best-effort, masked
       // recipient).
@@ -867,7 +867,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 6,
     },
     {
-      // P7-E2C: the dashboard is the BUSINESS summary surface (question/exam/
+      // The dashboard is the BUSINESS summary surface (question/exam/
       // candidate/attempt aggregates) — Admin-only business observation. The
       // Maintainer preset does not hold it.
       method: "GET",
@@ -881,7 +881,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 6,
     },
     {
-      // P7-E2A (ADR-017 D8): the diagnostics route gate is the operational
+      // ADR-017 D8: the diagnostics route gate is the operational
       // SystemDiagnosticsView capability; the business-integrity block inside
       // the response is projected server-side by the actor's
       // system.business_integrity.view capability (Admin-only). The registry
@@ -898,7 +898,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 6,
     },
     {
-      // P7-E2B: read-only backup evidence projection (Admin + Maintainer).
+      // Read-only backup evidence projection (Admin + Maintainer).
       // No write sibling exists — backup.trigger/schedule/retention are
       // decision-gated (ADR-017 D5) and NOT implemented.
       method: "GET",
@@ -912,7 +912,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 9,
     },
     {
-      // P7-E2B: read-only restore-readiness / drill evidence projection
+      // Read-only restore-readiness / drill evidence projection
       // (Admin + Maintainer). Restore itself stays host-only (ADR-017 D4).
       method: "GET",
       path: "/system/restore-readiness",
@@ -925,7 +925,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 9,
     },
     {
-      // P7-E3 (ADR-017 D9): read the Admin's operational policy intent +
+      // ADR-017 D9: read the Admin's operational policy intent +
       // compliance projection (Admin + Maintainer).
       method: "GET",
       path: "/system/ops-policy",
@@ -938,7 +938,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 10,
     },
     {
-      // P7-E3 (ADR-017 D9): Admin is the SOLE intent owner. Writes the
+      // ADR-017 D9: Admin is the SOLE intent owner. Writes the
       // typed, audited, non-binding policy intent record. Never granted to
       // Maintainer.
       method: "PUT",
@@ -1222,7 +1222,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       proctorAccess: "admin_only",
       migrationStage: 6,
     },
-    // ── Role assignments (RBAC-M8) — admin capability surface ──
+    // ── Role assignments — admin capability surface ──
     {
       method: "GET",
       path: "/roles/assignable",
@@ -1517,7 +1517,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 7,
     },
 
-    // ── Admin Recovery Center (J5-I1A, contract §5.4 / §6.3) ──
+    // ── Admin Recovery Center (contract §5.4 / §6.3) ──
     // Admin-only organization-wide recovery queue + aggregate incident detail.
     // `IncidentRecoveryView` is granted ONLY to Admin (catalog.ts / presets.ts);
     // a Proctor with `incident.view` + active assignment is STILL denied
@@ -1572,7 +1572,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 8,
     },
 
-    // ── Proctor Recovery Center (J6, #303) — Proctor Operations projections ──
+    // ── Proctor Recovery Center — Proctor Operations projections ──
     // Worklist: the narrow Proctor-OPERATIONS projection, consumed by BOTH
     // caller authorities — an Admin short-circuits to org-wide (compatibility
     // superset), a Proctor's collection filter is server-derived

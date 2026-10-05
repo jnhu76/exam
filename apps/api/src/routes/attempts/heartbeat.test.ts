@@ -205,7 +205,7 @@ describe("attempt routes", () => {
           .returning()
       )[0]!;
 
-      // RBAC-M10-E: authenticate resolves authority from ACTIVE
+      // Authenticate resolves authority from ACTIVE
       // user_role_assignments. Seed one active primary assignment per test user
       // so the admin/candidate tokens authenticate with their role's preset.
       await ctx.db.insert(schema.userRoleAssignments).values([

@@ -26,7 +26,7 @@ import { eq } from "drizzle-orm";
  *   - Admin behavior unchanged (compatibility);
  *   - Admin + Maintainer on the same actor is rejected server-side (D14).
  */
-describe("P7-E2A Operational RBAC Boundary", () => {
+describe("Operational RBAC Boundary", () => {
   let ctx: TestContext;
   let cleanup: () => Promise<void>;
   let maintainerToken: string;
@@ -197,7 +197,7 @@ describe("P7-E2A Operational RBAC Boundary", () => {
       await ctx.db.delete(schema.users).where(eq(schema.users.id, user.id));
     });
 
-    it("Maintainer NEVER receives business-integrity diagnostics (D8)", async () => {
+    it("Maintainer NEVER receives business-integrity diagnostics", async () => {
       const res = await asMaintainer("GET", "/api/system/diagnostics");
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -427,7 +427,7 @@ describe("P7-E2A Operational RBAC Boundary", () => {
     });
   });
 
-  describe("Email test capability split (D7)", () => {
+  describe("Email test capability split", () => {
     it("Maintainer cannot send a test email (no system.email.test)", async () => {
       const res = await asMaintainer("POST", "/api/email/test", {
         to: "someone@example.com",

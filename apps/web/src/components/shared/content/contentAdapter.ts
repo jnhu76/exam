@@ -14,7 +14,7 @@ import {
 
 /**
  * Thin, replaceable mapping between the frozen ContentDocumentV1 grammar and
- * Tiptap's JSON (issue 301). Tiptap is an EDIT-SURFACE detail, never the
+ * Tiptap's JSON. Tiptap is an EDIT-SURFACE detail, never the
  * storage authority: the editor emits Tiptap JSON, this adapter maps it into
  * the canonical grammar (then normalizes), and the server re-validates every
  * write. Anything outside the allow-listed vocabulary throws — the editor
@@ -70,7 +70,7 @@ function inlineToTiptap(inline: ContentInline): JSONContent {
       // The closed grammar types this switch as exhaustive; a hit means the
       // input was never a schema-valid ContentDocumentV1. Fail loudly instead
       // of returning undefined, which would silently shrink the mounted
-      // document (PC-F07): editability must be earned from the whole
+      // document: editability must be earned from the whole
       // semantic document, never from its surviving fragments.
       throw new Error(
         `unmappable inline node: ${(inline as { type?: unknown }).type ?? "missing"}`,

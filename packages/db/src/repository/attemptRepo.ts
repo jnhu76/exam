@@ -23,8 +23,8 @@ type CandidateSelect = typeof candidateProfiles.$inferSelect;
 type UserSelect = typeof users.$inferSelect;
 
 /**
- * One SaveAnswer replay receipt row (`exam_answer_save_receipts`, #669 Phase
- * D2). Post-D2 rows carry `answerIdentity` (sha256 hex of the deterministic
+ * One SaveAnswer replay receipt row (`exam_answer_save_receipts`, #669).
+ * Rows written after the receipt migration carry `answerIdentity` (sha256 hex of the deterministic
  * serialization of the canonical answer); rows backfilled by migration 0044
  * carry the legacy payload in `legacyAnswer` instead — exactly one of the two
  * is present (DB CHECK). The adapter layer derives identity for legacy rows
@@ -88,7 +88,7 @@ export function createAttemptRepo(db: Database) {
     findByIds,
     /**
      * O(1) indexed replay-receipt lookup for ONE (attempt, question,
-     * clientSeq) key (#669 Phase D2). The composite PK serves the lookup
+     * clientSeq) key (#669). The composite PK serves the lookup
      * (org+attempt equality prefix) — replay recognition is bounded by the
      * lookup key, never proportional to the attempt's receipt history. Must
      * be created on the caller's transaction handle so the read participates
@@ -120,7 +120,7 @@ export function createAttemptRepo(db: Database) {
      * D2): the candidate take-snapshot projection restores the client's
      * next-clientSeq bookkeeping from this after a reload. MAX (not
      * "latest accepted") so restored+1 cannot collide with ANY accepted
-     * receipt; identical to the pre-D2 inline value for the supported
+     * receipt; identical to the previous inline-derived value for the supported
      * monotonic client (ADR-012). Served by the composite PK's org+attempt
      * prefix; empty map when the attempt has no receipts.
      */

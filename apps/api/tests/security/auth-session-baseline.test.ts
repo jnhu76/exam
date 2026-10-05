@@ -92,7 +92,7 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
     await cleanup();
   });
 
-  describe("AC1: JWT verification rejects tampered tokens", () => {
+  describe("JWT verification rejects tampered tokens", () => {
     it("rejects a token with a corrupted signature", async () => {
       const parts = adminToken.split(".");
       const corruptedSig = parts[2]!.slice(0, -4) + "AAAA";
@@ -125,7 +125,7 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC2: Login cookie has security attributes", () => {
+  describe("Login cookie has security attributes", () => {
     it("sets httpOnly and sameSite=strict on auth-token cookie", async () => {
       const res = await app.inject({
         method: "POST",
@@ -144,7 +144,7 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC3: verifyJWT throws on invalid input", () => {
+  describe("verifyJWT throws on invalid input", () => {
     it("throws for empty string", () => {
       expect(() => verifyJWT("")).toThrow();
     });

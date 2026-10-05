@@ -18,7 +18,7 @@ const baseProfile: ExamProfilePolicyDefaults = {
   interruptionGracePerAttemptSeconds: 600,
 };
 
-describe("applyExamProfileDefaults — precedence (P7-M2 §18/§21)", () => {
+describe("applyExamProfileDefaults — precedence (§18/§21)", () => {
   it("applies the profile value when the request omits the field", () => {
     const resolved = applyExamProfileDefaults(baseProfile, {});
     expect(resolved).toEqual(baseProfile);
@@ -63,7 +63,7 @@ describe("applyExamProfileDefaults — precedence (P7-M2 §18/§21)", () => {
   });
 });
 
-describe("applyExamProfileDefaults — purity (P7-M2 §18)", () => {
+describe("applyExamProfileDefaults — purity (§18)", () => {
   it("does not mutate the profile or the overrides inputs", () => {
     const profile = { ...baseProfile };
     const overrides: Partial<ExamProfilePolicyDefaults> = {
@@ -87,7 +87,7 @@ describe("applyExamProfileDefaults — purity (P7-M2 §18)", () => {
 });
 
 // ── Phase A2 (#291): timing mode joins the copy-on-apply authority ──
-describe("applyExamProfileDefaults — Phase A timing modes (#291)", () => {
+describe("applyExamProfileDefaults — timing modes (#291)", () => {
   const timedProfile: ExamProfilePolicyDefaults = {
     ...baseProfile,
   };

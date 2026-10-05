@@ -202,7 +202,7 @@ describe("validateAnswerForQuestion (#301 §21/§44)", () => {
   });
 });
 
-describe("rich canonical closure (RC-03, #669 Phase D1)", () => {
+describe("rich canonical closure (#669)", () => {
   const RICH = snapshot({
     type: "text_response",
     answerMode: "rich",
@@ -231,8 +231,8 @@ describe("rich canonical closure (RC-03, #669 Phase D1)", () => {
     };
   }
 
-  it("rejects the PC-F01 merge-class seed before durable acceptance (#669/#686)", () => {
-    // The Phase-C minimized counterexample: two adjacent unmarked runs,
+  it("rejects the merge-class seed before durable acceptance (#669/#686)", () => {
+    // The minimized counterexample: two adjacent unmarked runs,
     // each within textRun, whose canonical merge is a 20001-char run that
     // ContentDocumentV1Schema rejects. Durable acceptance must decide on
     // that canonical form, so the seed must be rejected, not persisted.
@@ -331,7 +331,7 @@ describe("rich canonical closure (RC-03, #669 Phase D1)", () => {
       const parsed = ContentDocumentV1Schema.safeParse(result.value);
       expect(parsed.success).toBe(true);
       if (parsed.success) {
-        // RC-03 fixed point: canonicalizing an accepted canonical value
+        // Fixed point: canonicalizing an accepted canonical value
         // again succeeds and changes nothing.
         expect(normalizeContentDocument(parsed.data)).toEqual(parsed.data);
       }

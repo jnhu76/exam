@@ -15,7 +15,7 @@ import { ValidationError } from "@exam/domain";
  * organization-scoped authority advisory lock and enforces both authority
  * post-conditions:
  *
- *   1. (P7-E2A, ADR-017 D14) ADMIN / MAINTAINER MUTUAL EXCLUSION — no actor
+ *   1. (ADR-017 D14) ADMIN / MAINTAINER MUTUAL EXCLUSION — no actor
  *      may hold active Admin + active Maintainer assignments; and
  *   2. the effective-Admin post-condition — the organization must still have
  *      at least one active user with an active Admin assignment.

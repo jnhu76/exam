@@ -168,7 +168,7 @@ async function start(exam: Exam, now: Date = fixedNow) {
   return { result: await promise, attemptRepo };
 }
 
-describe("startOrRestoreAttempt — Phase A timing modes", () => {
+describe("startOrRestoreAttempt — timing modes", () => {
   it("deadline mode: attempt carries deadlineAt = null", async () => {
     const { attempt } = (await start(deadlineExam())).result;
     expect(attempt.deadlineAt).toBeNull();
@@ -211,7 +211,7 @@ describe("startOrRestoreAttempt — Phase A timing modes", () => {
 // shared deadline comes from the durable T0 (exam.syncStartedAt), never from
 // the candidate's start instant; entry before the trigger or after the
 // global deadline is forbidden.
-describe("startOrRestoreAttempt — timed_sync (Phase B kernel)", () => {
+describe("startOrRestoreAttempt — timed_sync (kernel)", () => {
   const t0 = new Date("2025-01-01T10:00:00Z");
 
   const syncExam = (overrides: Partial<Exam> = {}): Exam =>

@@ -245,7 +245,7 @@ describe("score capability preHandler — own/all arbitration (no role branching
     expect(reply.sentCode).toBe(0);
   });
 
-  it("RBAC-M10-E: multi-role union — ctx.capabilities includes ScoreAllView from a secondary role grant, primary role is Candidate", async () => {
+  it("multi-role union — ctx.capabilities includes ScoreAllView from a secondary role grant, primary role is Candidate", async () => {
     // This test kills spec §16 Mutation G: a score gate that reads
     // permissionsForRole(ctx.role) would see only the Candidate preset
     // (ScoreOwnView, no ScoreAllView) and would limit to "own" scope.

@@ -135,7 +135,8 @@ describe("Tiptap math node reality (#676 — guards extension version drift)", (
   });
 });
 
-describe("#676 regression — a visible blockMath survives the candidate's next edit", () => {
+// Regression for #676.
+describe("a visible blockMath survives the candidate's next edit", () => {
   it("block insert at document end, then an inline formula insert", () => {
     const editor = createEditor();
     insertMath(editor, true, LATEX);
@@ -253,7 +254,7 @@ describe("#676 regression — a visible blockMath survives the candidate's next 
   });
 });
 
-describe("malformed LaTeX — bounded rendering, source preserved (#677 F1)", () => {
+describe("malformed LaTeX — bounded rendering, source preserved (#677)", () => {
   it("malformed inline and block latex convert verbatim; nothing is dropped", () => {
     const editor = createEditor();
     insertMath(editor, false, "\\frac{");
@@ -674,7 +675,8 @@ describe("C13 paste/drop boundary — operation-produced math selections normali
   });
 });
 
-describe("#673 C15 input-rule boundary — typed $$ / $$$ rules never leave a selected atom", () => {
+// Regression for #673 (failure class C15): the input-rule boundary.
+describe("typed $$ / $$$ input rules never leave a selected atom", () => {
   /**
    * The production `Mathematics` extension installs input rules
    * (`$$x$$` → inlineMath, `$$$x$$$` → blockMath) and tiptap runs them

@@ -322,9 +322,10 @@ route, page type, table width, or nav item count.
 specific gradient/chevron/edge-cue implementation, the `scrollIntoView` API,
 exact scrollbar styling.
 
-Deterministic enforcement lives in `admin-shell-viewport.spec.ts` (current
-destination matrix, direct-URL reveal, stable ordering, region geometry,
-responsive representation, mobile drawer). Multimodal comparison of
+Deterministic enforcement lives in the web component tests
+(`apps/web/src/components/layout/` — current-destination matching, shell
+structure, drawer, role gating) and in `candidate-responsive.spec.ts` for
+the narrow-viewport operability journey. Multimodal comparison of
 equivalent screenshots (not pixel-diff CI) is the patrol-side discovery
 mechanism for this contract.
 
@@ -687,9 +688,8 @@ until it lands, no control may introduce a THIRD pattern. Gated by
 
 Product baseline, not WCAG certification. Automated gate:
 `apps/e2e/e2e/a11y-baseline.spec.ts` (axe, zero critical/serious on
-representative surfaces: login, candidate exam list, take-exam runtime +
-submit dialog, one admin form, one admin table). Manual checks for changes
-touching the surfaces below:
+representative surfaces: login, take-exam runtime + submit dialog). Manual
+checks for changes touching the surfaces below:
 
 | Area | Check |
 | --- | --- |

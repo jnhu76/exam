@@ -49,7 +49,7 @@ import { eq, sql } from "drizzle-orm";
 
 /**
  * Stable PostgreSQL advisory-lock key for first-install bootstrap
- * serialization (P7-C corrective pass §6).
+ * serialization.
  *
  * `pg_advisory_xact_lock(bigint)` is transaction-scoped: acquired on BEGIN,
  * auto-released on COMMIT/ROLLBACK. It serializes the "exactly one first
@@ -149,9 +149,9 @@ export async function bootstrapAdmin(
 
   const { user } = await executeInTransaction(db, async (tx) => {
     const txUserRepo = createUserRepo(tx);
-    // RBAC-M10-E: "already has an active admin" is an assignment-backed
+    // "Already has an active admin" is an assignment-backed
     // question (a user whose users.role is Candidate but holds a secondary
-    // active Admin assignment IS an admin authority-wise). P0-7.
+    // active Admin assignment IS an admin authority-wise)..
     const activeAdminCount = await txUserRepo.countEffectiveActiveUsersWithRole(
       systemCtx,
       "Admin",
@@ -169,7 +169,7 @@ export async function bootstrapAdmin(
       role: "Admin",
       isActive: true,
     });
-    // RBAC-M10-E: create the primary Admin assignment in the SAME transaction
+    // Create the primary Admin assignment in the SAME transaction
     // so the bootstrap user is authority-complete before the txn commits.
     await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
       tx,
@@ -300,7 +300,7 @@ async function resolveOrCreateDefaultOrganizationInTx(
  * atomically. If any step fails, none of them land (no orphan org, no
  * orphan user, no orphan assignment, no orphan audit).
  *
- * Concurrency (P7-C corrective pass §6): the transaction opens by taking a
+ * Concurrency: the transaction opens by taking a
  * transaction-scoped PostgreSQL advisory lock
  * ({@link BOOTSTRAP_ADVISORY_XACT_LOCK_KEY}) so HTTP Launchpad and the CLI
  * enter the SAME serialization domain. Under a true first-install race
@@ -347,8 +347,8 @@ export async function bootstrapAdminOnFreshDb(
     };
 
     const txUserRepo = createUserRepo(tx);
-    // RBAC-M10-E: "already has an active admin" is an assignment-backed
-    // question. P0-7.
+    // "Already has an active admin" is an assignment-backed
+    // question..
     const activeAdminCount = await txUserRepo.countEffectiveActiveUsersWithRole(
       systemCtx,
       "Admin",

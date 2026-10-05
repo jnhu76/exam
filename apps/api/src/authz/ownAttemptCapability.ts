@@ -1,5 +1,5 @@
 /**
- * Own-attempt capability preHandler (RBAC-M10-A, archetype C/D).
+ * Own-attempt capability preHandler (archetype C/D).
  *
  * Resource-aware authorization for the candidate own-attempt routes — the
  * registry entries declaring `runtimeAuthz.kind: "own_attempt"`
@@ -39,7 +39,7 @@ import {
 } from "./resolvers/ownAttemptResolver.js";
 
 /**
- * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
+ * Capability predicate over the request (union-of-assignments authority). Reads the authoritative
  * `ctx.capabilities` union. Signature matches the other gates.
  */
 export type OwnAttemptAllows = (

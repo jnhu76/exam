@@ -11,7 +11,7 @@ import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 
-// P0-4 — Submit freeze barrier (ADR-008).
+// Submit freeze barrier (ADR-008).
 //
 // Reproduces the real save-vs-submit race and enforces the invariants the
 // CURRENT contract can actually guarantee. /submit carries no final-answer

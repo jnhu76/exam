@@ -136,7 +136,7 @@ export function toCandidateAttemptResponse(
  * belongs to the route handler, not this pure builder.
  *
  * `clientSeqByQuestion` (highest accepted clientSeq per questionId) is the
- * INVARIANT source for `currentClientSeq`: since #669 Phase D2 the draft
+ * INVARIANT source for `currentClientSeq`: since #669 the draft
  * JSONB no longer carries clientSeq receipts — the accepted-seq bookkeeping
  * lives in `exam_answer_save_receipts` and the route supplies it. Without it
  * a reloaded client would restart its clientSeq counter and replay an
@@ -274,7 +274,7 @@ export function buildCandidateTakeSnapshot(
     resultVisibility,
     answerVisibility,
     // Canonical timing mode — the client must gate the personal countdown on
-    // this field, never on effectiveDeadline being null (#291 Phase A).
+    // this field, never on effectiveDeadline being null (#291).
     timingMode: exam.timingMode,
     submittedAt: attempt.submittedAt?.toISOString() ?? null,
     serverNow: now.toISOString(),

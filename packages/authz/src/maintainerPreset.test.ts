@@ -11,7 +11,7 @@ import { Permission, Role } from "./catalog.js";
  */
 const MAINTAINER = ROLE_PRESETS[Role.Maintainer];
 
-describe("RBAC Maintainer preset — operational-only boundary (P7-E2A)", () => {
+describe("RBAC Maintainer preset — operational-only boundary", () => {
   it("is an assignable, login-capable built-in role", () => {
     expect(MAINTAINER.isSystem).toBe(true);
     expect(MAINTAINER.assignable).toBe(true);
@@ -58,7 +58,7 @@ describe("RBAC Maintainer preset — operational-only boundary (P7-E2A)", () => 
     expect(MAINTAINER.sensitivePermissions).toEqual([]);
   });
 
-  it("does not hold any permanently-forbidden execution capability (D4)", () => {
+  it("does not hold any permanently-forbidden execution capability", () => {
     const perms = new Set(permissionsForRole(Role.Maintainer));
     // Permanently-forbidden keys (ADR-017 D4) are NOT catalog permissions —
     // they are architecturally excluded by surface absence. Assert the

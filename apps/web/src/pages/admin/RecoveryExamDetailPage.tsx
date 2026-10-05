@@ -42,7 +42,7 @@ const STALE_AFTER_MS = 2 * 60_000;
 const NAMESPACE = "admin.recoveryExam";
 
 /**
- * J5-I1C1 — assign-proctor command for the exam recovery detail. The wire has
+ * Assign-proctor command for the exam recovery detail. The wire has
  * no "available proctors" list, so the admin enters a proctor userId; the
  * server resolves the user and fail-closes (404 unknown / 403 not a proctor /
  * 409 duplicate). One operationId per dialog session, retry-safe.
@@ -136,7 +136,7 @@ function AssignProctorCommand({
 }
 
 /**
- * J5-I1C1 — revoke-proctor command for one active proctor. Destructive
+ * Revoke-proctor command for one active proctor. Destructive
  * confirmation naming the proctor + exam; terminal for the assignment.
  */
 function RevokeProctorCommand({
@@ -211,7 +211,7 @@ function RevokeProctorCommand({
 }
 
 /**
- * Exam Recovery Detail (J5-I1B4, contract §6.5) — the org-wide Exam recovery
+ * Exam Recovery Detail (contract §6.5) — the org-wide Exam recovery
  * aggregate: exam summary, incident counts, recent incidents, active proctors
  * and the attempt status distribution, all from ONE server snapshot. Read-only
  * Admin surface; renders only wire fields (no self-derivation).
@@ -436,7 +436,7 @@ export function RecoveryExamDetailPage() {
           )}
         </PageSection>
 
-        {/* Active proctors (J5-I1C1) — read section per the page authority;
+        {/* Active proctors — read section per the page authority;
             the assign/revoke commands are additionally gated on the actor's
             ExamProctorAssignmentManage capability (issue 548). The wire has no
             allowedActions for this surface; server-side capability gating

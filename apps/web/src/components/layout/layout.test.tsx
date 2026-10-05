@@ -126,7 +126,7 @@ describe("AppSidebar role visibility", () => {
     expect(screen.queryByText("管理")).not.toBeInTheDocument();
   });
 
-  it("hides question bank group for candidate role (P4-4: candidate sees no admin nav)", () => {
+  it("hides question bank group for candidate role (candidate sees no admin nav)", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
     );
@@ -144,7 +144,7 @@ describe("AppSidebar role visibility", () => {
     expect(screen.getByText("题目管理")).toBeInTheDocument();
   });
 
-  it("hides exam group for candidate role (P4-4: candidate sees no admin nav)", () => {
+  it("hides exam group for candidate role (candidate sees no admin nav)", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
     );
@@ -224,7 +224,7 @@ describe("AppSidebar role visibility", () => {
   });
 
   // ── P4-4: Teacher/Grader/Proctor nav visibility ──
-  it("Teacher sees question bank and exams but NOT grading/management (P4-4)", () => {
+  it("Teacher sees question bank and exams but NOT grading/management", () => {
     renderWithProviders(
       <AppSidebar user={teacher} collapsed={false} onLogout={() => {}} />,
     );
@@ -240,7 +240,7 @@ describe("AppSidebar role visibility", () => {
     expect(screen.queryByText("仪表盘")).not.toBeInTheDocument();
   });
 
-  it("Grader sees grading queue but NOT question bank/exams/management (P4-4)", () => {
+  it("Grader sees grading queue but NOT question bank/exams/management", () => {
     renderWithProviders(
       <AppSidebar user={grader} collapsed={false} onLogout={() => {}} />,
     );
@@ -314,7 +314,7 @@ describe("ExamLayout header navigation", () => {
   });
 });
 
-describe("Admin shell viewport-scrolling contract (MVP-P2-04)", () => {
+describe("Admin shell viewport-scrolling contract", () => {
   it("keeps the desktop sidebar attached to the viewport (sticky h-screen self-start)", () => {
     renderWithProviders(
       <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
@@ -606,7 +606,7 @@ describe("layout shells", () => {
    * page, NOT the privileged page. The shell still renders (the user is in the
    * console); only the routed page is replaced.
    */
-  it("P4-C2: Teacher direct-URL /admin/users renders the 403 page, not the privileged page", () => {
+  it("Teacher direct-URL /admin/users renders the 403 page, not the privileged page", () => {
     renderWithProviders(
       <AuthProvider initialUser={teacher}>
         <Routes>
@@ -625,7 +625,7 @@ describe("layout shells", () => {
     expect(screen.getByText("您没有权限访问该页面。")).toBeInTheDocument();
   });
 
-  it("P4-C2: Teacher direct-URL /admin/grading-queue renders the 403 page", () => {
+  it("Teacher direct-URL /admin/grading-queue renders the 403 page", () => {
     renderWithProviders(
       <AuthProvider initialUser={teacher}>
         <Routes>
@@ -643,7 +643,7 @@ describe("layout shells", () => {
     expect(screen.getByText("您没有权限访问该页面。")).toBeInTheDocument();
   });
 
-  it("P4-C2: Teacher ALLOW direct-URL /admin/exams renders the page normally", () => {
+  it("Teacher ALLOW direct-URL /admin/exams renders the page normally", () => {
     renderWithProviders(
       <AuthProvider initialUser={teacher}>
         <Routes>
@@ -660,7 +660,7 @@ describe("layout shells", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("P4-C2: Teacher ALLOW direct-URL /admin/questions/import renders the page", () => {
+  it("Teacher ALLOW direct-URL /admin/questions/import renders the page", () => {
     renderWithProviders(
       <AuthProvider initialUser={teacher}>
         <Routes>
@@ -677,7 +677,7 @@ describe("layout shells", () => {
     expect(screen.getByText("import page content")).toBeInTheDocument();
   });
 
-  it("P4-C2: Candidate (no console cap) is redirected away from any /admin/* URL", () => {
+  it("Candidate (no console cap) is redirected away from any /admin/* URL", () => {
     // Candidate has no admin-console capability at all → the shell redirect
     // fires before the per-route guard (console-access check is first).
     renderWithProviders(
@@ -695,7 +695,7 @@ describe("layout shells", () => {
     expect(screen.getByText("exam list")).toBeInTheDocument();
   });
 
-  it("P4-C2: multi-role primary Candidate + secondary Teacher reaches Teacher pages (union, not primary role)", () => {
+  it("multi-role primary Candidate + secondary Teacher reaches Teacher pages (union, not primary role)", () => {
     renderWithProviders(
       <AuthProvider initialUser={candidateTeacher}>
         <Routes>

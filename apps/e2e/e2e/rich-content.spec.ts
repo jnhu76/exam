@@ -20,7 +20,7 @@ import {
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 /**
- * Rich content / WYSIWYG V1 product loop (issue 301).
+ * Rich content / WYSIWYG product loop (originating work: #301).
  *
  * Two representative E2E flows, UI-driven at the rich-specific surfaces:
  *
@@ -51,7 +51,7 @@ async function pickSelect(page: Page, label: string, optionName: string) {
  * Inserts a formula through the Phase-U formula dialog (#669 phase U):
  * toolbar 公式 → dialog → expert LaTeX source → mode → confirm. The expert
  * path is the deterministic automation seam; the visual math-field path is
- * exercised in rich-editor-phase-u.spec.ts.
+ * exercised in rich-editor-input-boundaries.spec.ts.
  */
 async function insertFormulaViaDialog(
   page: Page,
@@ -174,7 +174,7 @@ async function seedCourseId(
   return seedCourse!.id;
 }
 
-test.describe("issue 301 rich content product loop", () => {
+test.describe("rich content product loop", () => {
   test("rich text_response: UI authoring → WYSIWYG answer → canonical draft → submit", async ({
     page,
     request,
@@ -201,7 +201,7 @@ test.describe("issue 301 rich content product loop", () => {
       .fill(RUBRIC);
     // Score 20 must match the assembled exam's totalScore.
     await page.getByRole("spinbutton").fill("20");
-    // Switch the ANSWER mode to the rich editor (issue 301).
+    // Switch the ANSWER mode to the rich editor (#301).
     await pickSelect(page, "作答模式", "富文本");
 
     const createResponse = page.waitForResponse(
@@ -314,7 +314,9 @@ test.describe("issue 301 rich content product loop", () => {
     await submitExam(page);
   });
 
-  test("#676 block formula: insert → keep editing → save → reload → still there → submit", async ({
+  // Regression for #676: a block formula must survive insert → keep
+  // editing → save → reload.
+  test("block formula: insert → keep editing → save → reload → still there → submit", async ({
     page,
     request,
   }) => {
@@ -364,7 +366,7 @@ test.describe("issue 301 rich content product loop", () => {
       20,
     );
 
-    // ── Candidate: the exact #676 sequence ──────────────────────────────
+    // ── Candidate: insert → edit → save → reload sequence ───────────────
     await candidateLogin(page, candidate);
     const startResponse = page.waitForResponse(
       (res) =>
@@ -431,7 +433,9 @@ test.describe("issue 301 rich content product loop", () => {
     await submitExam(page);
   });
 
-  test("#673 C12: reloading an all-formula draft must not let the first keystroke destroy a formula", async ({
+  // Regression for #673: reloading an all-formula draft must not let the
+  // first keystroke destroy a formula (failure class C12 in the #673 audit).
+  test("reloading an all-formula draft must not let the first keystroke destroy a formula", async ({
     page,
     request,
   }) => {
@@ -448,7 +452,7 @@ test.describe("issue 301 rich content product loop", () => {
     await page.getByRole("option", { name: "基础安全培训" }).click();
     await pickSelect(page, "题目类型", "文本作答题");
 
-    const PROMPT = `C12全公式作答题-${STAMP}`;
+    const PROMPT = `全公式作答题-${STAMP}`;
     await page.getByPlaceholder("输入题目内容").fill(PROMPT);
     await page
       .getByPlaceholder("请描述评分时应考虑的关键点、完整性、准确性或论证质量")
@@ -470,7 +474,7 @@ test.describe("issue 301 rich content product loop", () => {
       request,
       adminToken,
       courseId,
-      `C12全公式产品环-${STAMP}`,
+      `全公式产品环-${STAMP}`,
       [questionId],
       candidate.profileId,
       20,
@@ -554,8 +558,10 @@ test.describe("issue 301 rich content product loop", () => {
 });
 
 /**
- * Shared fixture for the #673 C13/C15 math-boundary browser tests (and the
- * same shape C12 builds inline): a rich text_response question, an assembled
+ * Shared fixture for the paste/drag and typed-input-rule math-boundary
+ * browser tests below (and the
+ * same shape the all-formula test builds inline): a rich text_response
+ * question, an assembled
  * exam, a started attempt, and an editor holding prose plus one toolbar
  * blockMath.
  */
@@ -580,7 +586,7 @@ async function setupProsePlusFormula(
   await page.getByPlaceholder("搜索课程名称或代码...").fill("基础安全培训");
   await page.getByRole("option", { name: "基础安全培训" }).click();
   await pickSelect(page, "题目类型", "文本作答题");
-  const PROMPT = `C13${tag}-${STAMP}`;
+  const PROMPT = `${tag}-${STAMP}`;
   await page.getByPlaceholder("输入题目内容").fill(PROMPT);
   await page
     .getByPlaceholder("请描述评分时应考虑的关键点、完整性、准确性或论证质量")
@@ -601,7 +607,7 @@ async function setupProsePlusFormula(
     request,
     adminToken,
     courseId,
-    `C13产品环-${STAMP}-${tag}`,
+    `粘贴拖拽产品环-${STAMP}-${tag}`,
     [questionId],
     candidate.profileId,
     20,
@@ -679,7 +685,9 @@ const editorBlockOrder = (editor: ReturnType<Page["locator"]>) =>
     }),
   );
 
-test.describe("#673 C13 — paste/drag math boundaries in the real editor", () => {
+// Origin: #673 — paste/drag math boundaries confirmed only in the real
+// editor (failure classes C13 in the #673 audit).
+test.describe("paste/drag math boundaries in the real editor", () => {
   /**
    * Reachability was proven deterministicly against the production schema
    * (apps/web richContentEditor.reality.test.ts): the editor's own copy
@@ -767,7 +775,9 @@ test.describe("#673 C13 — paste/drag math boundaries in the real editor", () =
   });
 });
 
-test.describe("#673 C15 — typed math input rules in the real editor", () => {
+// Origin: #673 — the typed input-rule path exists only above the real key
+// event chain (failure class C15 in the #673 audit).
+test.describe("typed math input rules in the real editor", () => {
   /**
    * The production Mathematics extension installs input rules ($$x$$ →
    * inlineMath, $$$x$$$ → blockMath) that tiptap runs inside
@@ -807,7 +817,7 @@ test.describe("#673 C15 — typed math input rules in the real editor", () => {
     await expect(
       editor.locator("[data-type='block-math'][data-latex='x^2-1=0']"),
     ).toHaveCount(1);
-    // INVARIANT (#681 review F4): prose continues after the PRODUCED formula
+    // INVARIANT (#681 finding F4): prose continues after the PRODUCED formula
     // — assert the full block reading order, not just formula survival. The
     // empty paragraph between the formulas is the Enter-split leftover the
     // rule did not occupy; it canonicalizes away on save.
@@ -1039,10 +1049,12 @@ test.describe("editor identity, reconciliation, grading closure", () => {
   });
 });
 
-test.describe("#669 D5 math render security (browser evidence)", () => {
+// Origin: #669 — adversarial math render security with browser network
+// evidence (failure class D5 in the #669 audit).
+test.describe("adversarial math render security", () => {
   /**
    * jsdom cannot prove "no network fetch is initiated by math rendering"
-   * (D5-B M5): this test renders trust-disallowed / remote-referencing /
+   * (#669 audit finding): this test renders trust-disallowed / remote-referencing /
    * HTML-like latex through the real static read path in a real browser and
    * asserts the page initiates zero cross-origin requests and mounts no
    * active/remote element for the adversarial payload. Complements the

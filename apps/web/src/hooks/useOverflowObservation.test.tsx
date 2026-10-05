@@ -132,7 +132,7 @@ describe("useOverflowObservation", () => {
     expect(region).toHaveAttribute("data-at-end", "false");
   });
 
-  it("keeps the exact content box out of the overflow decision (#601 Phase F)", () => {
+  it("keeps the exact content box out of the overflow decision (#601)", () => {
     const { getByTestId } = render(<Probe />);
     const region = getByTestId("region");
     // Measured regression on /admin/questions: a 1394.667px content box whose

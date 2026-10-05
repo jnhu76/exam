@@ -96,7 +96,7 @@ describe("useRecoveryOperation", () => {
     expect(result.current.phase).toBe("idle");
   });
 
-  it("reuses the SAME operationId across retries until a confirmed outcome (J5-R0 §8.2)", async () => {
+  it("reuses the SAME operationId across retries until a confirmed outcome (§8.2)", async () => {
     const { result } = setup();
     act(() => result.current.begin());
     const first = result.current.operationId;

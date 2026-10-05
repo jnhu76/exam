@@ -92,7 +92,7 @@ function buildAttempt(
 }
 
 // ── Step 5: draft answers have zero terminal authority ─────────────
-describe("Slice 5 Step 5 — mutable draft answers cannot affect terminal aggregation", () => {
+describe("mutable draft answers cannot affect terminal aggregation", () => {
   it("objective score stays 40 when draft answer is later mutated to wrong", () => {
     // Materialized truth: completed_auto earnedScore=40 (correct draft at
     // freeze time). The mutable draft is then changed to a wrong value. The
@@ -113,7 +113,7 @@ describe("Slice 5 Step 5 — mutable draft answers cannot affect terminal aggreg
 });
 
 // ── Step 6: submittedAnswers are not regraded at terminal aggregation ─
-describe("Slice 5 Step 6 — submittedAnswers are not re-graded during terminal aggregation", () => {
+describe("submittedAnswers are not re-graded during terminal aggregation", () => {
   it("terminal aggregate uses entry earnedScore, ignoring a conflicting submittedAnswers snapshot", () => {
     // Materialized truth: completed_auto earnedScore=40. The frozen
     // submittedAnswers snapshot is then poisoned to a WRONG answer. Because the

@@ -471,7 +471,7 @@ describe("answerProtocol", () => {
     });
   });
 
-  describe("buildSubmittedAnswersSnapshot (P3-L0-2)", () => {
+  describe("buildSubmittedAnswersSnapshot", () => {
     it("normalizes draft AnswerRecords into a clean SubmittedAnswersSnapshot", async () => {
       const { buildSubmittedAnswersSnapshot } =
         await import("./answerProtocol.js");
@@ -658,7 +658,7 @@ describe("answerProtocol", () => {
   });
 });
 
-describe("processSaveAnswer — canonical rejection precedence matrix (#301 corrective pass)", () => {
+describe("processSaveAnswer — canonical rejection precedence matrix (#301)", () => {
   // A canonicalizer standing in for the frozen-question shape validation: it
   // rejects the "malformed" payload regardless of attempt state. Every matrix
   // row proves the STATE/deadline rejection wins over canonicalization —

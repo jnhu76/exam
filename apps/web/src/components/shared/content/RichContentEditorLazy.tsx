@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ContentDocumentV1 } from "@exam/domain";
 
 /**
- * Chunk boundary for the WYSIWYG editor (issue 301). ALL Tiptap/ProseMirror
+ * Chunk boundary for the WYSIWYG editor. ALL Tiptap/ProseMirror
  * imports live behind this lazy import: pages that never enter EDIT mode
  * (candidate READ, plain answers, grading READ) never download the editor
  * chunk. Loading shows an inert placeholder — no editor semantics are

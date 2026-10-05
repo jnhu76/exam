@@ -6,7 +6,7 @@ import {
 } from "./assignmentAuthority.js";
 
 /**
- * Pure unit tests for {@link deriveAssignmentAuthority} (RBAC-M10-E Commit 1).
+ * Pure unit tests for {@link deriveAssignmentAuthority}.
  *
  * No DB. Each fixture is a hand-built row list; assertions target the
  * discriminated {@link AssignmentAuthorityResult} contract. These are the
@@ -140,7 +140,7 @@ describe("deriveAssignmentAuthority — pure kernel", () => {
 
   describe("fail-closed integrity errors", () => {
     it("returns no_active_assignments (NOT a throw) when the active set is empty", () => {
-      // E10 / task §3.6 / P1-2: empty active set is a normal runtime outcome.
+      // Empty active set is a normal runtime outcome.
       const fromEmpty = deriveAssignmentAuthority([], ORG, USER);
       expect(fromEmpty).toEqual({ ok: false, reason: "no_active_assignments" });
 

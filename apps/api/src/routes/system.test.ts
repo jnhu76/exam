@@ -13,7 +13,7 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import { BOOTSTRAP_PENDING_MESSAGE } from "../workers/emailDeliveryWorker.js";
 
-// P7-S2 integrity-block test fixtures accumulate submitted-attempt rows that
+// Integrity-block test fixtures accumulate submitted-attempt rows that
 // change the tenant-wide anomaly totals. Tracked IDs let an inner afterAll
 // delete them in FK-safe order (entries → attempts → enrollments → profiles →
 // exams → users → courses) so each test sees a clean baseline and the
@@ -245,7 +245,7 @@ describe("system routes", () => {
       expect(typeof body.dbLatency).toBe("number");
       expect(body.dbLatency).toBeGreaterThanOrEqual(0);
 
-      /* P3-M7: explicit assertion that diagnostics degrades cleanly when Redis is absent. The test app does not register the redis plugin (fastify.redis === undefined), so the route's `if (fastify.redis)` branch is false → connected:false, latencyMs:null. Guardrail: diagnostics never breaks when Redis is down. */
+      /* Explicit assertion that diagnostics degrades cleanly when Redis is absent. The test app does not register the redis plugin (fastify.redis === undefined), so the route's `if (fastify.redis)` branch is false → connected:false, latencyMs:null. Guardrail: diagnostics never breaks when Redis is down. */
       expect(body).toHaveProperty("redisStatus");
       expect(body.redisStatus.connected).toBe(false);
       expect(body.redisStatus.latencyMs).toBeNull();
@@ -499,7 +499,7 @@ describe("system routes", () => {
     });
   });
 
-  // P7-S2 Phase 7 — read-only attempt-integrity anomalies.
+  // Read-only attempt-integrity anomalies.
   describe("GET /system/diagnostics integrity block", () => {
     // FK-ordered teardown of every row the two seed helpers created, so the
     // shared test tenant's anomaly totals return to a clean baseline between
@@ -833,7 +833,7 @@ describe("system routes", () => {
       expect(anomalies).toEqual([]);
     });
 
-    // ── P7-S2 merge-review regressions ────────────────────────────────
+    // ── merge-review regressions ────────────────────────────────
     // The detector's anomaly predicates must run over the FULL candidate set
     // (counts are SQL totals, never derived from the bounded sample), and the
     // returned sample must be deterministic and capped at `limit`.

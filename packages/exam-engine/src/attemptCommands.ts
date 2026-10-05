@@ -65,14 +65,14 @@ import {
 } from "./admissionCommands.js";
 
 /**
- * One accepted SaveAnswer replay receipt (#669 Phase D2): the semantic minimum
+ * One accepted SaveAnswer replay receipt (#669): the semantic minimum
  * needed to recognize and replay a prior acceptance for one
  * (attempt, questionId, clientSeq) key.
  *
  * SEMANTIC_RECEIPT_FIELDS:
  *   - answerIdentity — the storage representation of the canonical answer
  *     identity (sha256 over the deterministic serialization of the
- *     D1-accepted canonical value). Identity remains DEFINED by structural
+ *     accepted canonical value). Identity remains DEFINED by structural
  *     equality of canonical values (rich-content-semantic-contract §3.1/§12);
  *     the digest is a collision-resistant representation, not the semantic
  *     authority.
@@ -125,7 +125,7 @@ export interface AttemptRepository {
     now: Date,
   ): Promise<ExamAttempt | null> | ExamAttempt | null;
   /**
-   * O(1) indexed replay lookup for ONE replay key (#669 Phase D2) — the
+   * O(1) indexed replay lookup for ONE replay key (#669) — the
    * receipt for (attemptId, questionId, clientSeq) if a prior save accepted
    * it, else null. Receipt and accepted answer mutation share the caller's
    * transaction: implementations MUST use the same transaction-scoped handle
@@ -324,7 +324,7 @@ export async function startOrRestoreAttempt(
   }
 
   if (exam.retakePolicy === "pass_then_stop") {
-    // #324 review P1-3: the retake-defer decision is made UNDER the enrollment
+    // #324: the retake-defer decision is made UNDER the enrollment
     // lock — the SAME serialization boundary the grading finalizer uses when it
     // commits finalScore/finalPassed/finalAttemptId. A decision made from a
     // pre-transaction read (the round-1 route pre-check) could observe

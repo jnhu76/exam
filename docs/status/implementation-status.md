@@ -430,11 +430,9 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
 ## E2E status
 
 E2E is **enabled and runs as blocking CI**. The `e2e` job in
-`.github/workflows/ci.yml` (sharded) gates every PR. The three named blocking
-specs (candidate-happy-path, resume-attempt, submit-flush) run and pass.
-`fill-blank-e2e.spec.ts` was re-enabled (post-MVP repository hygiene,
-2026-08-09) and runs the auto-graded fill_blank flow. No E2E spec FILE is
-skipped at the suite level; inside `operations.spec.ts` the evidence-state
-tests individually `test.skip` when the evidence CLI is not mounted in the
-current topology (declared in that file's header), which is a conditional
-test-level skip, not a disabled spec.
+`.github/workflows/ci.yml` runs the suite in 4 Playwright-native shards and
+gates every PR; a dedicated LAN HTTP job additionally drives
+`production-lan-http.spec.ts` against a production-mode build. No E2E spec
+FILE is skipped at the suite level; conditional test-level skips (when a
+spec's declared topology precondition is absent) are a test-level condition,
+not a disabled spec.

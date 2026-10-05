@@ -41,7 +41,7 @@ import {
 } from "./auditLogRepo.js";
 
 /**
- * Recovery Incident Queue (J5-I1A, contract §5.4).
+ * Recovery Incident Queue (contract §5.4).
  *
  * Organization-wide list of incidents for the Admin Recovery Center, ordered
  * by `(created_at DESC, id DESC)` with opaque keyset pagination. Every item is
@@ -135,7 +135,7 @@ export interface IncidentQueueItem {
   activeProctors: IncidentQueueProctorSummary[];
 }
 
-// ── Aggregate detail types (J5-I1A2, contract §6.3) ──
+// ── Aggregate detail types (contract §6.3) ──
 
 export interface IncidentAggregateEventSummary {
   id: string;
@@ -281,7 +281,7 @@ export interface IncidentAggregate {
 
 /**
  * Narrow incident detail for the Proctor Recovery Center — a strict subset of
- * {@link IncidentAggregate}. F3 corrective (human-gate 2026-09-12) freezes
+ * {@link IncidentAggregate}. The human-gate decision (2026-09-12) freezes
  * this projection to only incident-domain truth an assigned Proctor already
  * holds read authority over. Fields deliberately omitted:
  *   - timeAdjustmentSummaries (Admin time-adjustment ledger)
@@ -327,7 +327,7 @@ export interface ProctorIncidentDetailResult {
   snapshotAt: Date;
 }
 
-// ── Attempt Operations Context types (J5-I1A3, contract §6.4) ──
+// ── Attempt Operations Context types (contract §6.4) ──
 
 export interface AttemptOperationsInterruptionEpisode {
   interruption: {
@@ -640,7 +640,7 @@ export function createRecoveryRepo(db: Database) {
 
   /**
    * getIncidentAggregate — authoritative aggregate projection for the Admin
-   * Recovery Center detail view (J5-I1A2 §6.3).
+   * Recovery Center detail view (contract §6.3).
    *
    * Reads Incident + events + notes + actions + Attempt memberships +
    * interruption links + Exam/Attempt/Candidate summaries + time adjustments +
@@ -1348,7 +1348,7 @@ export function createRecoveryRepo(db: Database) {
 
   /**
    * getAttemptOperationsContext — the full per-Attempt operations ledger
-   * (J5-I1A3, contract §6.4).
+   * (contract §6.4).
    *
    * Reads Attempt + Exam + Enrollment + Candidate + interruption episodes +
    * time-adjustment ledger + audit timeline + related incidents from ONE
@@ -1992,7 +1992,7 @@ export function createRecoveryRepo(db: Database) {
 
   /**
    * getExamRecoveryContext — the org-wide Exam recovery aggregate (contract
-   * §6.5, J5-I1B4): exam summary, incident counts (by status/severity), the
+   * §6.5): exam summary, incident counts (by status/severity), the
    * newest incidents, active proctors, and the attempt status distribution,
    * read in ONE REPEATABLE READ read-only snapshot.
    *

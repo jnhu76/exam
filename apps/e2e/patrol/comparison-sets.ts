@@ -1,5 +1,5 @@
 /**
- * UI-MULTIMODAL-PATROL comparison-set definitions (#494 §33-§42).
+ * Patrol comparison-set definitions (#494 §33-§42).
  *
  * Pure, dependency-free module: the patrol spec executes these definitions
  * (capture + metadata), and the historical false-negative regression pins
@@ -61,8 +61,7 @@ export const ROLE_SURFACES = [
 
 /** §39 Set D — table siblings grouped by archetype, same viewport. Each
  * sibling owns a stable ordering id — comparison-set definitions own their
- * ordering ids, rendering never derives them from array positions (#494
- * corrective-2). */
+ * ordering ids, rendering never derives them from array positions (#494). */
 export interface TableSiblingStop {
   id: string;
   label: string;

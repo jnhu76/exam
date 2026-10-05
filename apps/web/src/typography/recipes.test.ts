@@ -53,7 +53,7 @@ describe("typography recipe layer (UI-RECIPE-1A)", () => {
     expect(RECIPES_CSS).not.toMatch(/text-(success|warning|destructive|info)/);
   });
 
-  it("pins the body/control tier at 15px (issue 582 D2)", () => {
+  it("pins the body/control tier at 15px (issue 582)", () => {
     // The frozen issue 582 visual decision: the governed body tier (and the table
     // cell owner in table/recipes.css) converged UP to the existing 15px
     // text-sm control tier (0.9375rem). Metadata/badges/small captions keep

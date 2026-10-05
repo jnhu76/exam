@@ -3,7 +3,8 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// P3-FORMAL-P0-D2 — EA lock-order structural regression closure.
+// EA lock-order structural regression closure.
+// (Origin: P3-FORMAL-P0-D2 audit closure.)
 //
 // These are STRUCTURAL architecture tests. They lock the accepted
 // transaction-affine Enrollment→Attempt lock protocol against future
@@ -296,7 +297,7 @@ const AE_ENTRY_POINTS: {
   },
 ];
 
-describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
+describe("EA lock-order structural closure", () => {
   it("lockEnrollmentAndAttempt is defined in exactly one production file (lockSeam.ts)", () => {
     const defs = findInProduction([
       new RegExp(`export\\s+async\\s+function\\s+lockEnrollmentAndAttempt\\b`),
@@ -535,7 +536,7 @@ describe("P3-FORMAL-P0-D2 — EA lock-order structural closure", () => {
     expect(body!).not.toMatch(/examRepo\.findById\(/);
   });
 
-  // REC-I4-I3B2: the single-lock example (extendAttemptTime) was removed with
+  // The single-lock example (extendAttemptTime) was removed with
   // the old /extend-time route. No single-lock Attempt path remains in this
   // module, so this guardrail case is intentionally dropped.
 });

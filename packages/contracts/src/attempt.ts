@@ -332,7 +332,7 @@ export type RestoreAttemptRequest = z.infer<typeof RestoreAttemptRequestSchema>;
 /**
  * Lifecycle outcome of a candidate restore request, as observed by the
  * candidate. Mirrors the engine's `RestoreLifecycleOutcome` (ADR-013 §6,
- * REC-I4-I3A).
+ * ADR-013).
  *
  * The `terminal` outcome is a legitimate result: the attempt was already
  * terminal on entry, or deadline reconciliation submitted it during the
@@ -371,7 +371,7 @@ const RestoreCompensationSchema = z
 
 /**
  * Frozen HTTP response contract for
- * `POST /attempts/:attemptId/restore` (ADR-013 §6, REC-I4-I3A).
+ * `POST /attempts/:attemptId/restore` (ADR-013 §6).
  *
  * This is a **command acknowledgement**, not the canonical take-page state.
  * The candidate client re-reads the authoritative `CandidateTakeSnapshot` via
@@ -395,7 +395,7 @@ const RestoreCompensationSchema = z
  * Those internal details remain absent from the candidate restore response.
  *
  * The separate Admin operator time-grant route and
- * `Permission.AttemptTimeGrant` are implemented under REC-I4-I3B2.
+ * `Permission.AttemptTimeGrant` are implemented under ADR-013.
  * Operator-grant details remain available only through the authorized Admin
  * surface and committed adjustment ledger.
  *
@@ -791,7 +791,7 @@ const POSTGRES_INTEGER_MAX = 2_147_483_647;
 
 /**
  * Request body schema for an admin granting operator time to an attempt
- * (REC-I4-I3B2). The client supplies command identity (`operationId`), the
+ * (ADR-013). The client supplies command identity (`operationId`), the
  * grant magnitude, and a reason. Server-decided fields (actorId, source,
  * policy, beforeDeadline, afterDeadline, incidentId) are intentionally
  * absent — they are derived server-side and can not be set by the caller.
@@ -892,7 +892,7 @@ export const TimeGrantResponseSchema = z.discriminatedUnion("outcome", [
 /** Type for the operator time grant response. */
 export type TimeGrantResponse = z.infer<typeof TimeGrantResponseSchema>;
 
-// ── Attempt Export (P2E-J4) ────────────────────────────────────────
+// ── Attempt Export ────────────────────────────────────────
 
 /**
  * Integrity classification of an exported candidate answer, exactly the

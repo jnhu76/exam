@@ -12,7 +12,7 @@ import type { RuntimeRequestContext } from "../types/requestContext.js";
  * Use this instead of `request.ctx!` to get a runtime guard plus type narrowing.
  *
  * Returns {@link RuntimeRequestContext} — every authenticated request now
- * carries `roles` + `capabilities` (RBAC-M10-E); the legacy `RequestContext`
+ * carries `roles` + `capabilities` (union-of-assignments authority); the legacy `RequestContext`
  * base fields are still present.
  */
 export function getRequestContext(
@@ -61,7 +61,7 @@ export function resolveImportStatus(input: {
  *
  * Generic over the context shape so a {@link RuntimeRequestContext} (which
  * carries `roles` + `capabilities`) is not narrowed back to the base
- * {@link RequestContext} — the extension fields survive the spread (P1-1).
+ * {@link RequestContext} — the extension fields survive the spread.
  *
  * @param ctx - The incoming request context.
  * @returns A new context with `targetOrganizationId` guaranteed to be set.

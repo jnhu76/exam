@@ -57,7 +57,7 @@ export const CandidateExamSummarySchema = z.object({
   examId: z.string().uuid(),
   title: z.string(),
   windowStartAt: z.string().datetime(),
-  // #291 Phase A: untimed exams are open-ended — null window end and no
+  // #291: untimed exams are open-ended — null window end and no
   // personal duration.
   windowEndAt: z.string().datetime().nullable(),
   durationMinutes: z.number().int().positive().nullable(),

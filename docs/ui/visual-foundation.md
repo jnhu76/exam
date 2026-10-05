@@ -117,9 +117,9 @@ casually introduce a new visual rhythm or component geometry outside the
 existing authority; when it must, the exception is declared and adjudicated in
 an Issue, not absorbed silently into page-local classes.
 
-## 4. Phase-F boundary (closed by Phase F)
+## 4. Table-first boundary
 
-Step 1 left the table-first #601 criteria open; Phase F closed them:
+The table-first #601 criteria are closed by the following authority structure:
 
 - **column semantics / allocator enforcement** — one allocation authority
   (`apps/web/src/table/columnAllocation.ts`) with a two-number role geometry
@@ -161,24 +161,20 @@ Step 1 left the table-first #601 criteria open; Phase F closed them:
   exact-text filter, so no page owns a debounce timer of its own. A governed
   table is never nested inside a second bordered surface: the shell IS the data
   surface, and its own title band carries the section heading.
-- **four-regime fixtures** — `apps/e2e/e2e/data-view-1.spec.ts`
-  (UI-DATA-VIEW-1): A overflow (`/admin/recovery` at 1024), B compressed
-  (`/admin/exams` at 1280 and the exam-edit inline panel — the two census pages
-  that used to scroll with region space unused), C preferred (`/admin/exams` at
-  1440), D expanded (`/admin/users` at 1280), plus header capacity across the
-  production routes, the fitted-region sub-pixel gate, Long content (per-role
-  policy gate), Search+toolbar (one band, count in the shared footer),
-  composition (no nested surface), and per-frame pagination/search transition
-  gates (no painted scrollbar while `data-overflowing=false`; the document
-  content box and the region's width stay invariant across the transition
-  without reserving a global `scrollbar-gutter`).
-- **behavioral verification** — the full table regression set
-  (table-contract-2, dense-table-cell-fitting, ui-governance-1,
-  row-action-capacity, table-mobile-1, dialog-spatial, data-view-1) runs green
-  on the Phase F branch.
-
-The #602 optical facts listed in §2 stayed frozen throughout; Phase F did not
-re-open them.
+- **regime verification** — the four allocation regimes are pinned at the
+  authority layer by `apps/web/src/table/columnAllocation.test.ts` (regime A
+  genuine overflow, B compressed fit, C preferred, D bounded expansion, plus
+  role geometry, required/preferred width and `widthMode`); the overflow
+  observation facts (`data-overflowing`, integer `scrollWidth − clientWidth`)
+  are gated by `apps/web/src/hooks/useOverflowObservation.test.tsx`.
+  Candidate-facing operability on real viewports is covered by
+  `apps/e2e/e2e/candidate-responsive.spec.ts`.
+- **behavioral verification** — the structural contract is gated by
+  `apps/web/src/table/table-contract-guards.test.ts`, the data-view
+  composition grammar and header-capacity channel by
+  `apps/web/src/table/data-view-grammar.test.ts`, and the mobile card
+  representation by
+  `apps/web/src/components/shared/MobileTableAdoption.test.tsx`.
 
 ## 5. Rendering / DPI policy
 

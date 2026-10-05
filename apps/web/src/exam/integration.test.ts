@@ -14,7 +14,7 @@ import { transientReducer } from "./transientReducer";
  * locked, non-editable inputs without a stuck "submitting" indicator.
  */
 
-describe("P3-FSM-0 refresh-restore integration", () => {
+describe("refresh-restore integration", () => {
   it("refreshed submitted snapshot → locked view + idle transient (no stuck submitting)", () => {
     const snapshot: CandidateTakeSnapshot = {
       attemptId: "00000000-0000-0000-0000-000000000001",

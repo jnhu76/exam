@@ -109,7 +109,7 @@ async function createCourse(
   return res.json().id;
 }
 
-describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", () => {
+describe("assignment-backed runtime authority (E1–E16 HTTP)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
   beforeAll(async () => {

@@ -85,7 +85,7 @@ describe("Password Policy Baseline (S08-lite)", () => {
     await cleanup();
   });
 
-  describe("AC1: POST /api/users rejects passwords shorter than 8 characters", () => {
+  describe("POST /api/users rejects passwords shorter than 8 characters", () => {
     it("returns 400 VALIDATION_ERROR for a 7-char password", async () => {
       const res = await app.inject({
         method: "POST",
@@ -118,7 +118,7 @@ describe("Password Policy Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC2: POST /api/candidates rejects passwords shorter than 8", () => {
+  describe("POST /api/candidates rejects passwords shorter than 8", () => {
     it("returns 400 VALIDATION_ERROR for a 7-char password", async () => {
       const res = await app.inject({
         method: "POST",

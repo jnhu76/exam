@@ -63,7 +63,7 @@ describe("renderGradeNotificationEmail", () => {
     expect(out.bodyHtml).toMatch(/href="[^"]*\/exam\/[0-9a-f-]+\/result"/);
   });
 
-  describe("content boundary (P5-N1-R0 §15 / P3-R0 §6 leakage class)", () => {
+  describe("content boundary (§15 / §6 leakage class)", () => {
     // The renderer must NEVER emit score / pass status / standard answers /
     // rubric / grader identity. These are inside EXAM (Inbox + result page),
     // never in the Email.

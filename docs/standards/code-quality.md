@@ -198,11 +198,11 @@ pnpm lint:arch
 3. web 不直接依赖 db
 4. 没有循环依赖
 5. packages 之间依赖方向正确
-6. P3-FORMAL-P0-D2: attemptId-rooted dual-lock transactions mint the EA
+6. attemptId-rooted dual-lock transactions mint the EA
    capability via `lockEnrollmentAndAttempt` — no `as LockedEnrollmentAttemptIdentity`
    cast, no exported brand/affinity symbol, no exported capability type guard
 
-### Enrollment ↔ Attempt Lock Order (P3-FORMAL-P0-D2)
+### Enrollment ↔ Attempt Lock Order
 
 AttemptId-rooted dual-lock transactions use `lockEnrollmentAndAttempt`
 (`packages/exam-engine/src/lockSeam.ts`). The returned witness
@@ -610,6 +610,18 @@ CI job 拓扑、命令与 env 接线的唯一权威是 `.github/workflows/ci.yml
 8. 不允许未经说明新增依赖
 9. 不允许把业务逻辑写进 React component
 10. 不允许把考试状态机写进 route handler
+
+### 17.1 Permanent Semantic Naming
+
+永久标识符与文件名必须描述当前领域/技术职责，不得以临时阶段、审计编号或
+活动代号命名（如 `Phase A`、`D2`、`I5`、`P3-FORMAL-P0-D2`、`Wave 1`）。
+命名回答 "这个东西现在做什么"，而不是 "哪次审计发现了它"。
+
+- 函数、参数、常量、类型、fixture、测试标题、文件名一律语义命名。
+- 历史/追溯引用（Issue、PR、audit）可以留在注释中，但不得作为行为的主名称。
+- 豁免：wire/公共字段、持久化枚举值、数据库 migration 顺序号、HTTP 状态码、
+  环境变量、外部协议标识符、语义化版本类型（如 `ContentDocumentV1`）、
+  HTML `h3` 等。
 
 ### 每个 Job 完成后必须输出
 

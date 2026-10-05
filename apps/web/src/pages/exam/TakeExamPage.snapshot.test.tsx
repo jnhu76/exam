@@ -165,7 +165,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("P3-FSM-0 authoritative snapshot read path", () => {
+describe("authoritative snapshot read path", () => {
   it("consumes GET /api/candidate/attempts/:id/take (not /api/attempts/:id)", async () => {
     installTakeRoute(buildSnapshot());
     renderPage();
@@ -387,7 +387,7 @@ describe("P3-FSM-0 authoritative snapshot read path", () => {
   });
 });
 
-describe("P3-FSM-0 TakeExamPage behaviors over the snapshot read path", () => {
+describe("TakeExamPage behaviors over the snapshot read path", () => {
   it("submit dialog shows unanswered count and submits, then reloads snapshot and navigates", async () => {
     installTakeRoute(buildSnapshot());
     apiPost.mockImplementation(async (path: string) => {
@@ -641,7 +641,7 @@ describe("P3-FSM-0 TakeExamPage behaviors over the snapshot read path", () => {
     expect(screen.getByRole("button", { name: "交卷" })).toBeInTheDocument();
   });
 });
-describe("P3-MOD-P0-3 submit-freeze UI proof", () => {
+describe("submit-freeze UI proof", () => {
   it("save execution seam reads derived canSave, keeps the control disabled, and skips the API call when the snapshot is non-editable", async () => {
     // Requirement: "view.canSave === false => save endpoint is not called",
     // and a disabled control alone is not sufficient proof. The page guards the

@@ -350,7 +350,7 @@ describe("AttemptDetailPage", () => {
   // full admin frozen detail (score/pass + objective standardAnswer) purely from
   // that DTO — it never fetches live questions and never hides based on
   // candidate publication state.
-  it("P3-3: renders full admin frozen result (score/pass + standardAnswer) from the admin scores DTO", async () => {
+  it("renders full admin frozen result (score/pass + standardAnswer) from the admin scores DTO", async () => {
     apiGet.mockResolvedValue({
       attemptId: "attempt-1",
       status: "graded",
@@ -448,7 +448,7 @@ describe("AttemptDetailPage", () => {
     return apiPost.mock.calls[call]![1] as Record<string, unknown>;
   }
 
-  it("#524 T1: flag misconduct POST carries operationId (uuid) with severity + notes", async () => {
+  it("T1: flag misconduct POST carries operationId (uuid) with severity + notes", async () => {
     apiPost.mockResolvedValue({});
     await renderLiveView();
     await submitFlag();
@@ -462,7 +462,7 @@ describe("AttemptDetailPage", () => {
     expect(body).toMatchObject({ severity: "warning", notes: "考生查看手机" });
   });
 
-  it("#524 T2: same-dialog retry after unconfirmed failure reuses the same operationId", async () => {
+  it("T2: same-dialog retry after unconfirmed failure reuses the same operationId", async () => {
     apiPost.mockResolvedValue({});
     apiPost.mockRejectedValueOnce(new Error("network drop"));
     await renderLiveView();
@@ -478,7 +478,7 @@ describe("AttemptDetailPage", () => {
     expect(postedBody(1).operationId).toBe(postedBody(0).operationId);
   });
 
-  it("#524 T3: a new dialog after cancel mints a fresh operationId", async () => {
+  it("T3: a new dialog after cancel mints a fresh operationId", async () => {
     apiPost.mockRejectedValue(new Error("network drop"));
     await renderLiveView();
     await submitFlag();
@@ -497,7 +497,7 @@ describe("AttemptDetailPage", () => {
     expect(postedBody(1).operationId).not.toBe(postedBody(0).operationId);
   });
 
-  it("#524 T4: payload semantics unchanged — endpoint, severity, notes", async () => {
+  it("T4: payload semantics unchanged — endpoint, severity, notes", async () => {
     apiPost.mockResolvedValue({});
     await renderLiveView();
     await submitFlag("考试作弊记录");
@@ -533,7 +533,9 @@ describe("AttemptDetailPage", () => {
     });
   }
 
-  it("#612: Proctor-like set renders the timeline shell and never emits the score/export/misconduct requests", async () => {
+  // Regression for #612: capability-set-driven action affordances on the
+  // admin attempt timeline.
+  it("Proctor-like set renders the timeline shell and never emits the score/export/misconduct requests", async () => {
     mockTimelineOnly(mockTimelineEvents);
     renderPage("attempt-1", proctorActor);
 
@@ -566,7 +568,7 @@ describe("AttemptDetailPage", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("#612: divergent capability set (score read without export/misconduct) still composes each sub-feature independently", async () => {
+  it("divergent capability set (score read without export/misconduct) still composes each sub-feature independently", async () => {
     // A Proctor-LABELED actor whose set additionally holds the score-read
     // capability: proves composition follows the capability set, not the role
     // name — timeline + score read held, export + misconduct not.
@@ -600,7 +602,7 @@ describe("AttemptDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("#612: Admin keeps the export affordances on the live view", async () => {
+  it("Admin keeps the export affordances on the live view", async () => {
     mockTimelineResult(mockLiveResult, { events: [] });
     renderPage();
 

@@ -8,7 +8,7 @@
  * no NEW business-page shadow may land.
  *
  * Detection: any Tailwind `shadow-*` utility in a className expression in
- * business / feature scopes — matched variant-aware (UI-MIGRATE-N-W4B §M), so
+ * business / feature scopes — matched variant-aware, so
  * `shadow-sm`, `hover:shadow-md`, `data-[state=open]:shadow-lg`, and
  * `shadow-[0_2px_8px_…]` are all detected. `drop-shadow-*` (a CSS filter, not
  * elevation) is NOT matched. The matched token set (e.g. ["shadow-sm"]) is the
@@ -31,7 +31,7 @@ import {
 } from "../classNameUtils";
 
 /**
- * The shadow utility family, matched variant-aware (UI-MIGRATE-N-W4B §M).
+ * The shadow utility family, matched variant-aware.
  *
  * The stem regex anchors the parser-resolved base utility (after variant
  * prefix / arbitrary-value extraction), so `hover:shadow-md`,

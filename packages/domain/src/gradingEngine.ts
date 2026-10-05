@@ -149,10 +149,10 @@ export function gradeQuestion(
 
 /**
  * Returns true when any question in the snapshot has no standard answer and
- * therefore requires manual scoring (P2D-J3 subjective-question detection).
+ * therefore requires manual scoring (subjective-question detection).
  *
- * P3-L0-2D: this is a LEGACY signal preserved only for backwards-compatibility
- * on attempts whose `gradingStatus` column predates P3-L0-2C (undefined). It
+ * This is a LEGACY signal preserved only for backwards-compatibility
+ * on attempts whose `gradingStatus` column predates the column's introduction (undefined). It
  * MUST NOT be used as a manual-grading classifier for current attempts — use
  * {@link requiresManualGrading} / {@link isManualGradedQuestion}. The freeze
  * barrier's `gradingStatus` is the single authoritative lifecycle fact, and
@@ -171,7 +171,7 @@ export function hasSubjectiveQuestions(questions: QuestionSnapshot[]): boolean {
 /**
  * Returns true when any question in the snapshot requires manual grading.
  *
- * P3-L0-2C authoritative classification seam (docs/architecture/exam-runtime.md §1.1, §1.4):
+ * Authoritative classification seam (docs/architecture/exam-runtime.md §1.1, §1.4):
  * `text_response` is the canonical manual-graded QuestionType —
  * `gradingMode = manual` is derived from `QuestionType`, NOT from
  * `standardAnswer`. The protocol explicitly states

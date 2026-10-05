@@ -65,7 +65,7 @@ const INCIDENT_SEVERITIES = ["info", "minor", "major", "critical"];
 const NAMESPACE = "admin.proctorRecovery";
 
 /**
- * Proctor Operations worklist (J6, EXAM-303; projection identity issue 606).
+ * Proctor Operations worklist (projection identity: issue #606).
  *
  * Read surface over `GET /api/admin/proctor/incidents` — the narrow
  * Proctor-OPERATIONS projection (operational incident handling). The page

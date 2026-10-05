@@ -34,7 +34,7 @@ import {
  * Admin dashboard page showing summary statistics (question count, active exams,
  * candidate count, today's exams), quick-action buttons, and a table of recent exams.
  *
- * UI-KOI-WEGENT-VISUAL-PIVOT-1: Stats cards with icon containers, admin table
+ * Stats cards with icon containers, admin table
  * with distinct header, clear boundaries, cool-neutral palette.
  */
 export function DashboardPage() {

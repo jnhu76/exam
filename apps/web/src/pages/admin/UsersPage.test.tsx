@@ -539,7 +539,7 @@ describe("UsersPage", () => {
     expect(within(table).getByText("cand-teacher")).toBeInTheDocument();
   });
 
-  it("edit dialog never silently falls back to Admin when the current role is not in the assignable catalog (P7 review #6)", async () => {
+  it("edit dialog never silently falls back to Admin when the current role is not in the assignable catalog", async () => {
     // Catalog drift / future-compatible state: the editing user's current
     // role (Maintainer) is missing from GET /roles/assignable.
     apiGet.mockImplementation(async (url: string) =>
@@ -948,7 +948,7 @@ describe("UsersPage", () => {
       expect(getCalls("/api/courses")).toHaveLength(0);
     });
 
-    it("inactive target: action + existing assignments stay, assign picker is absent, revoke remains (issue 548 corrective)", async () => {
+    it("inactive target: action + existing assignments stay, assign picker is absent, revoke remains (issue 548)", async () => {
       mockAssignmentApi({
         users: [mockUsers[0], inactiveTeacherTarget],
         courseAssignments: [
@@ -998,7 +998,7 @@ describe("UsersPage", () => {
       });
     });
 
-    it("option-catalog failure downgrades only the picker — the assignment read survives (issue 548 corrective)", async () => {
+    it("option-catalog failure downgrades only the picker — the assignment read survives (issue 548)", async () => {
       mockAssignmentApi({
         users: [mockUsers[0], teacherTarget],
         courseAssignments: [
@@ -1048,7 +1048,7 @@ describe("UsersPage", () => {
       });
     });
 
-    it("course picker: server-side search reaches a course beyond the first catalog page (issue 548 corrective)", async () => {
+    it("course picker: server-side search reaches a course beyond the first catalog page (issue 548)", async () => {
       // 120 courses (6 pages at pageSize 20); c101 lives on page 6 and is
       // NOT on page 1 — only the server-side search path reaches it without
       // paging through.
@@ -1113,7 +1113,7 @@ describe("UsersPage", () => {
 
     // 15s budget: five pagination round-trips exceed the 5s default under
     // coverage instrumentation; the assertions themselves are deterministic.
-    it("course picker: catalog pagination reaches page 6 without search (issue 548 corrective)", async () => {
+    it("course picker: catalog pagination reaches page 6 without search (issue 548)", async () => {
       const allCourses = Array.from({ length: 120 }, (_, i) => ({
         id: `c${i + 1}`,
         name: `课程${i + 1}`,
@@ -1157,7 +1157,7 @@ describe("UsersPage", () => {
       );
     }, 15_000);
 
-    it("course picker: clearing the search field atomically resets the input, the committed query, and the page (issue 548 corrective)", async () => {
+    it("course picker: clearing the search field atomically resets the input, the committed query, and the page (issue 548)", async () => {
       // 120 courses; searching "课程1" matches 32 of them (2 pages), so the
       // clear can be exercised from page 2 — the state where a clear that
       // only emptied the input would leave a stale filtered server query.
@@ -1236,7 +1236,7 @@ describe("UsersPage", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("assign and revoke failures surface dedicated mutation copy, not the load copy (issue 548 corrective)", async () => {
+    it("assign and revoke failures surface dedicated mutation copy, not the load copy (issue 548)", async () => {
       const { toast } = await import("sonner");
       mockAssignmentApi({
         users: [mockUsers[0], teacherTarget],
@@ -1276,7 +1276,7 @@ describe("UsersPage", () => {
       });
     });
 
-    it("Esc during a busy assign does not close the dialog, and completion refreshes in place (issue 548 corrective)", async () => {
+    it("Esc during a busy assign does not close the dialog, and completion refreshes in place (issue 548)", async () => {
       let resolveAssign: (value: unknown) => void;
       apiPost.mockReturnValue(
         new Promise((resolve) => {
@@ -1466,7 +1466,7 @@ describe("UsersPage", () => {
       expect(getCalls("/api/exams")).toHaveLength(0);
     });
 
-    it("inactive target: action + existing assignments stay, assign picker is absent, revoke remains (issue 548 corrective)", async () => {
+    it("inactive target: action + existing assignments stay, assign picker is absent, revoke remains (issue 548)", async () => {
       mockAssignmentApi({
         users: [mockUsers[0], inactiveGraderTarget],
         examAssignments: [
@@ -1507,7 +1507,7 @@ describe("UsersPage", () => {
       });
     });
 
-    it("option-catalog failure downgrades only the picker — the assignment read survives (issue 548 corrective)", async () => {
+    it("option-catalog failure downgrades only the picker — the assignment read survives (issue 548)", async () => {
       mockAssignmentApi({
         users: [mockUsers[0], graderTarget],
         examAssignments: [
@@ -1551,7 +1551,7 @@ describe("UsersPage", () => {
 
     // 15s budget: five pagination round-trips exceed the 5s default under
     // coverage instrumentation; the assertions themselves are deterministic.
-    it("exam picker: catalog pagination reaches page 6 — an exam beyond the first 100 is assignable (issue 548 corrective)", async () => {
+    it("exam picker: catalog pagination reaches page 6 — an exam beyond the first 100 is assignable (issue 548)", async () => {
       const allExams = Array.from({ length: 120 }, (_, i) => ({
         id: `e${i + 1}`,
         title: `考试${i + 1}`,
@@ -1593,7 +1593,7 @@ describe("UsersPage", () => {
     }, 15_000);
   });
 
-  describe("Staff-list reachability (issue 548 corrective)", () => {
+  describe("Staff-list reachability (issue 548)", () => {
     // 15s budget: five pagination round-trips exceed the 5s default under
     // coverage instrumentation (observed timeout in `pnpm coverage`); the
     // assertions themselves are deterministic.

@@ -226,7 +226,7 @@ async function renderPage(role: "Admin" | "Maintainer" = "Admin") {
   });
 }
 
-describe("OperationsPage (P7-E2C)", () => {
+describe("OperationsPage", () => {
   beforeEach(() => {
     getMock.mockReset();
     putMock.mockReset();
@@ -399,7 +399,7 @@ describe("OperationsPage (P7-E2C)", () => {
   });
 });
 
-describe("OperationsPage policy intent (P7-E3)", () => {
+describe("OperationsPage policy intent", () => {
   beforeEach(() => {
     getMock.mockReset();
     putMock.mockReset();

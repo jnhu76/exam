@@ -1738,7 +1738,7 @@ describe("runtimeConfig", () => {
     });
   });
 
-  describe("redis config (P7 modes)", () => {
+  describe("redis config", () => {
     /** Minimal valid env so loadRuntimeConfig can resolve a database URL. */
     function redisEnv(
       overrides: Record<string, string> = {},
@@ -1755,7 +1755,7 @@ describe("runtimeConfig", () => {
       expect(config.redis.url).toBeNull();
     });
 
-    it("defaults to optional when REDIS_URL is set (post-P7 semantics)", () => {
+    it("defaults to optional when REDIS_URL is set", () => {
       const config = loadRuntimeConfig(
         redisEnv({ REDIS_URL: "redis://localhost:6379" }),
       );

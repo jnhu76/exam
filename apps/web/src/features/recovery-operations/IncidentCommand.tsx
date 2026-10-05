@@ -19,7 +19,7 @@ import { useRecoveryOperation } from "@/features/recovery-operations/useRecovery
 import { Wrench } from "lucide-react";
 
 /**
- * J5-I1C1 — one config-driven incident command dialog (investigate /
+ * One config-driven incident command dialog (investigate /
  * add_note / change_severity / resolve / dismiss / link_attempt).
  *
  * Every command mints ONE operationId per dialog session (reused on retry —
@@ -29,7 +29,7 @@ import { Wrench } from "lucide-react";
  * message; every confirmed outcome reloads the authoritative projection.
  *
  * Shared by the Admin Recovery incident detail and the Proctor Recovery
- * Center (EXAM-303): the component is authority-neutral — callers render it only
+ * Center: the component is authority-neutral — callers render it only
  * for actions the server already listed in `allowedActions`, and the endpoint
  * it posts to is the same canonical exam-scoped incident command route
  * (assignment-enforced for Proctors; Admin carries the organization-wide

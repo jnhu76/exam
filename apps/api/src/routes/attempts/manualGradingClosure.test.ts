@@ -14,7 +14,7 @@ import scoreRoutes from "../scores.js";
 import crypto from "node:crypto";
 
 /**
- * P3-FORMAL-P0-A — Manual Grading Terminal Closure integration tests.
+ * Manual Grading Terminal Closure integration tests.
  *
  * Pre-repair bug: gradeQuestion wrote attempt.{score, passed, gradingResult}
  * on terminal manual completion but NEVER wrote
@@ -293,7 +293,7 @@ async function readEnrollmentFinal(ctx: TestContext, enrollmentId: string) {
 
 // ── tests ────────────────────────────────────────────────────────────
 
-describe("P3-FORMAL-P0-A: manual grading terminal closure", () => {
+describe("manual grading terminal closure", () => {
   let ctx: TestContext;
 
   beforeAll(async () => {

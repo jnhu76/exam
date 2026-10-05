@@ -232,7 +232,7 @@ describe("examCommands", () => {
       );
     });
 
-    it("rejects publish when a rich OPTION diverges from its projection (#301 corrective pass)", async () => {
+    it("rejects publish when a rich OPTION diverges from its projection (#301)", async () => {
       // DB/manual-writer bypass scenario: option.content says one thing while
       // the frozen document renders another. Publish is the freeze gate —
       // fail closed, never auto-repair.
@@ -264,7 +264,7 @@ describe("examCommands", () => {
     // historical/bypassed rows (the supported write seam canonicalizes, so it
     // can never emit them) and require controlled ValidationErrors, never a
     // TypeError escaping plainTextProjection.
-    describe("persisted Rich trust at the publish boundary (#669 D5.1)", () => {
+    describe("persisted Rich trust at the publish boundary (#669)", () => {
       function publishRepo(question: Question) {
         return makeRepo(
           makeExam({

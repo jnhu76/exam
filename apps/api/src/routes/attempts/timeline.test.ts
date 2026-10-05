@@ -93,7 +93,7 @@ describe("attempt routes", () => {
           .returning()
       )[0]!;
 
-      // RBAC-M10-E: authenticate resolves authority from ACTIVE
+      // Authenticate resolves authority from ACTIVE
       // user_role_assignments. Seed one active primary per user so the
       // matrix-of-roles-under-test authenticates and gates run as written.
       await ctx.db.insert(schema.userRoleAssignments).values([

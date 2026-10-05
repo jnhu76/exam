@@ -177,7 +177,7 @@ function invocationCallSites(name: string): RegExp[] {
   ];
 }
 
-describe("Slice 5 — Step 2: submitAttempt exclusively owns workset materialization", () => {
+describe("submitAttempt exclusively owns workset materialization", () => {
   it("materializeGradingWorkset is defined in exactly one production source file", () => {
     // The function must exist (authoritative definition site) and be defined in
     // exactly one production file (gradingWorkset.ts).
@@ -246,7 +246,7 @@ describe("Slice 5 — Step 2: submitAttempt exclusively owns workset materializa
   });
 });
 
-describe("Slice 5 — Step 3: gradingResult cannot become scoring input", () => {
+describe("gradingResult cannot become scoring input", () => {
   it("aggregateGradingEntries is invoked from exactly one production file (the canonical terminal closure)", () => {
     // P3-FORMAL-P0-A convergence: previously aggregateGradingEntries had two
     // direct production call sites (finalizeGrading in grading.ts AND the
@@ -404,7 +404,7 @@ describe("Slice 5 — Step 3: gradingResult cannot become scoring input", () => 
   });
 });
 
-describe("Slice 5 — Steps 5/6/7: aggregator reads neither draft answers, submittedAnswers, gradingResult, nor live questions", () => {
+describe("aggregator reads neither draft answers, submittedAnswers, gradingResult, nor live questions", () => {
   // The canonical terminal aggregator aggregateGradingEntries(attempt, entries,
   // passingScore) receives an ExamAttempt, so by TYPE it could read
   // attempt.answers / attempt.submittedAnswers / attempt.gradingResult. These

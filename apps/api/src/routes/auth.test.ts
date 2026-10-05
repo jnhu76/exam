@@ -83,7 +83,7 @@ describe("auth routes", () => {
 
   it("POST /api/auth/login authenticates a Teacher-role user (RBAC runtime activation)", async () => {
     // Phase 3 widening: a user whose primary role is Teacher can log in and
-    // the JWT/login response carries role=Teacher. RBAC-M10-E: the user must
+    // the JWT/login response carries role=Teacher. The user must
     // have an active primary Teacher assignment, or login fail-closes (the
     // authority resolver returns no_active_assignments -> 401).
     const username = `teacher-${crypto.randomUUID().slice(0, 8)}`;
@@ -271,7 +271,7 @@ describe("auth routes", () => {
       createdAt: now,
       updatedAt: now,
     });
-    // RBAC-M10-E: seed an active primary Admin assignment so the disabled-user
+    // Seed an active primary Admin assignment so the disabled-user
     // path is what's under test. Without an assignment the post-flip resolver
     // would also 401 — but for the "no assignment" reason, masking the
     // disabled-user logic this test exists to verify.
@@ -519,7 +519,7 @@ describe("auth routes", () => {
     expect(body.id).toBe(ctx.admin.id);
     expect(body.username).toBe(ctx.admin.username);
     expect(body.role).toBe(ctx.admin.role);
-    // RBAC-M10-E closure (F-2): /me/profile must return the authoritative
+    // /me/profile must return the authoritative
     // capability union (from the authenticated ctx), NOT lose it. The
     // frontend AuthContext stores this response as the session user; a
     // missing field here would silently drop capabilities on profile update.
@@ -529,7 +529,7 @@ describe("auth routes", () => {
   });
 
   it("GET /api/auth/me returns the authoritative capability union for the authenticated actor", async () => {
-    // RBAC-M10-E closure (F-2): /me must return the same authoritative
+    // /me must return the same authoritative
     // capability union that /login returns, so a session restore (page
     // refresh) does not lose capabilities. The frontend previously had to
     // re-derive visibility from presetFor(user.role) on /me, hiding
@@ -609,7 +609,7 @@ describe("auth routes", () => {
   });
 
   it("POST /api/auth/login: users.role is not authority — a stale SuperAdmin projection does not widen access", async () => {
-    // RBAC-M10-E: runtime authority comes from active assignments, not the
+    // Runtime authority comes from active assignments, not the
     // users.role compatibility cache. A user whose assignment is Candidate but
     // whose users.role is the unsupported SuperAdmin must log in as Candidate.
     const { user } = await corruptUsersRoleProjectionForTest(

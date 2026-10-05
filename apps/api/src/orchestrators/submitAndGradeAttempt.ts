@@ -60,7 +60,7 @@ export async function submitAndGradeAttempt(
   audit?: { request: FastifyRequest },
 ): Promise<SubmitAndGradeResult> {
   const alreadyGraded = await executeInTransaction(db, async (tx) => {
-    // P3-FORMAL-P0-D2: build the engine repo pair ONCE, mint the
+    // EA lock-order protocol: build the engine repo pair ONCE, mint the
     // transaction-affine EA capability via the canonical seam (Enrollment
     // FOR UPDATE before Attempt FOR UPDATE), and thread the SAME repo
     // object instances + capability to every affinity-dependent consumer.
@@ -180,7 +180,7 @@ export async function submitAndGradeAttempt(
         // Submit flips the row to `submitted` under the same lock. After this,
         // any concurrent saveAnswer sees `submitted` and is rejected
         // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.
-        // P3-L0-2E: submitAttempt owns grading workset materialization.
+        // submitAttempt owns grading workset materialization.
         await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
           source: "candidate",
           minSubmitAfterStartMinutes:
@@ -228,12 +228,12 @@ export async function submitAndGradeAttempt(
         throw new NotFoundError("Attempt not found after submit");
       }
 
-      // Slice 4: finalizeGrading is the single terminal authority — it loads
+      // FinalizeGrading is the single terminal authority — it loads
       // the grading workset and aggregates via `aggregateGradingEntries`. No
       // externally computed result is supplied (that would be a second score
       // authority). The gradingWorksetRepo is tx-scoped (created above) and
       // reads the same committed entries the freeze barrier materialized.
-      // P3-FORMAL-P0-D2: the capability is the EA protocol authority threaded
+      // The capability is the EA protocol authority threaded
       // into finalizeGrading → finalizeTerminalGrading.
       await finalizeGrading(
         enrollments,

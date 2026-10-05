@@ -11,7 +11,7 @@
  * This spec is the REGRESSION asset for that contract. It asserts:
  *   E1 — save-triggered early convergence: a post-terminal save rejection
  *        (ATTEMPT_ALREADY_SUBMITTED) triggers the re-read and locks the UI.
- *   E2 — heartbeat-only natural convergence: with NO candidate action, the
+ *   Heartbeat path — natural convergence: with NO candidate action, the
  *        next real heartbeat (409) triggers the re-read; convergence within
  *        one heartbeat period (≤30s + scheduling tolerance).
  * Both paths keep the hard invariant: a stale post-terminal save can
@@ -256,10 +256,12 @@ async function verifyServerTruth(
   };
 }
 
-test.describe("EXAM-519 candidate terminal convergence (regression)", () => {
+// Regression for #519: after a force-submit commits, the candidate UI must
+// converge to the terminal state through both convergence paths.
+test.describe("candidate terminal convergence after force-submit", () => {
   test.setTimeout(150_000);
 
-  test("E1: save-triggered early convergence — terminal save rejection re-reads authority and locks the UI", async ({
+  test("save-triggered early convergence: terminal save rejection re-reads authority and locks the UI", async ({
     page,
     browser,
     request,
@@ -359,10 +361,10 @@ test.describe("EXAM-519 candidate terminal convergence (regression)", () => {
     expect(serverTruth.attemptStatus, "no status resurrection").toBe("graded");
     expect(serverTruth.submittedAt).not.toBeNull();
 
-    await testInfo.attach("exam-519-e1-save-triggered.json", {
+    await testInfo.attach("force-submit-save-triggered-convergence.json", {
       body: JSON.stringify(
         {
-          EXAM_519_E1: {
+          saveTriggeredConvergence: {
             T0,
             attemptId,
             saveRejection: saveBody,
@@ -388,7 +390,7 @@ test.describe("EXAM-519 candidate terminal convergence (regression)", () => {
     await adminContext.close();
   });
 
-  test("E2: heartbeat-only natural convergence — no candidate action, locked within one heartbeat period", async ({
+  test("heartbeat-only natural convergence: no candidate action, locked within one heartbeat period", async ({
     page,
     browser,
     request,
@@ -451,7 +453,7 @@ test.describe("EXAM-519 candidate terminal convergence (regression)", () => {
     await testInfo.attach("exam-519-e2-heartbeat-only.json", {
       body: JSON.stringify(
         {
-          EXAM_519_E2: {
+          heartbeatOnlyConvergence: {
             T0,
             attemptId,
             heartbeatStatus: hb.status,
@@ -476,9 +478,9 @@ test.describe("EXAM-519 candidate terminal convergence (regression)", () => {
     // passed tests in this runner).
     mkdirSync("test-results", { recursive: true });
     appendFileSync(
-      "test-results/exam-519-convergence-evidence.json",
+      "test-results/force-submit-convergence-evidence.json",
       JSON.stringify({
-        EXAM_519_E2: {
+        heartbeatOnlyConvergence: {
           T0,
           attemptId,
           heartbeatStatus: hb.status,

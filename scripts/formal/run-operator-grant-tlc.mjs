@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * REC-I4-F1 — TLC runner for the OperatorGrant formal models.
+ * TLC runner for the OperatorGrant formal models.
  *
  * Executes the pinned TLA+ tools (TLC) against the server safety, client
  * safety, and expected-counterexample configurations under

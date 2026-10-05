@@ -17,7 +17,7 @@ describe("normalizeErrorCode", () => {
  * non-authoritative compatibility message. Machine semantics derive ONLY
  * from structured issue properties — never from issue.message text.
  */
-describe("getValidationErrorDetails — Zod machine semantics (C2)", () => {
+describe("getValidationErrorDetails — Zod machine semantics", () => {
   function detailsFor(issue: ZodIssue) {
     const details = getValidationErrorDetails(new ZodError([issue]));
     expect(details.fields).toHaveLength(1);

@@ -302,7 +302,7 @@ describe("system incident delivery discovery reads (#304)", () => {
     expect(betaProbed.size).toBe(0);
   });
 
-  it("listHeartbeatDetectedEpisodes keeps year-old episodes discoverable — age is never a horizon (#545 T3)", async () => {
+  it("listHeartbeatDetectedEpisodes keeps year-old episodes discoverable — age is never a horizon (#545)", async () => {
     const org = await createOrgFixture(db, "horizon");
     const ctx = context(org.organizationId);
     const OLD = new Date("2024-12-25T00:00:00.000Z");
