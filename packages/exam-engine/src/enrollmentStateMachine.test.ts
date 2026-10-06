@@ -61,6 +61,23 @@ describe("enrollmentStateMachine", () => {
         ENROLLMENT_VALID_TRANSITIONS[EnrollmentStatus.Completed],
       ).toHaveLength(0);
     });
+
+    // INVARIANT: pin the remaining rows exactly — any silently added edge
+    // (e.g. started→assigned rewind, blocked→completed shortcut) turns the
+    // pin red, owning every forbidden pair from those statuses.
+    it("转移表逐行冻结（允许边即全部，其余皆为 forbidden）", () => {
+      expect(ENROLLMENT_VALID_TRANSITIONS[EnrollmentStatus.Assigned]).toEqual([
+        "started",
+        "blocked",
+      ]);
+      expect(ENROLLMENT_VALID_TRANSITIONS[EnrollmentStatus.Started]).toEqual([
+        "completed",
+        "blocked",
+      ]);
+      expect(ENROLLMENT_VALID_TRANSITIONS[EnrollmentStatus.Blocked]).toEqual([
+        "started",
+      ]);
+    });
   });
 
   describe("assertTransition", () => {

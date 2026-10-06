@@ -42,6 +42,7 @@ describe("attemptStateMachine", () => {
       ["in_progress", "grade" as const], // cannot skip submit
       ["in_progress", "restore" as const], // not disrupted
       ["disrupted", "disrupt" as const], // already disrupted
+      ["disrupted", "grade" as const], // grading requires the submitted freeze snapshot
       ["submitted", "submit" as const],
       ["submitted", "disrupt" as const],
       ["submitted", "restore" as const],
