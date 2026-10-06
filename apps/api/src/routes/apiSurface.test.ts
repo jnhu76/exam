@@ -281,18 +281,18 @@ describe("/api namespace boundary (router-native)", () => {
     });
 
     it("raw-socket boundary table — every router-classified /api unmatched target stays canonical JSON", async () => {
+      // /api/../x, /api/%2e%2e/x and /api%2Fx are asserted by the dedicated
+      // raw-socket witnesses above; the table covers the remaining targets.
       for (const target of [
         "/api",
         "/api/",
         "/api/x",
         "/api/x?foo=a.js",
-        "/api/../x",
-        "/api/%2e%2e/x",
         "/%61pi/__429_unknown__",
       ]) {
         await expectCanonicalApiNotFoundRaw(target);
       }
-      for (const target of ["/apix", "/api-docs", "/api%2Fx"]) {
+      for (const target of ["/apix", "/api-docs"]) {
         await expectSpaFallbackRaw(target);
       }
     });
