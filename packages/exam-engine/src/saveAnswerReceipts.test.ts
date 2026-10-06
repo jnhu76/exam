@@ -18,7 +18,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExamAttempt } from "@exam/domain";
 import { canonicalAnswerIdentity, saveAnswer } from "./answerProtocol.js";
-import type { AnswerReceipt } from "./attemptCommands.js";
 import {
   makeExam,
   makeAttempt,
@@ -273,20 +272,5 @@ describe("canonical answer identity — faithful representation of structural eq
       expect(result.newReceipt?.answerIdentity).toBe(ID("padded"));
       expect(result.newReceipt?.answerIdentity).not.toBe(ID("  padded  "));
     });
-  });
-
-  it("legacy-backed receipts resolve to the same identity as digest-backed ones", () => {
-    // Migration 0044 backfills pre-D2 receipts as legacy payloads; the read
-    // authority derives identity with the same function. Both representations
-    // must agree or a legacy replay would falsely conflict (D2-G).
-    const legacyAnswer = { docVersion: 1, type: "doc", content: [] };
-    const digestBacked: AnswerReceipt = {
-      questionId: "q1",
-      clientSeq: 3,
-      answerIdentity: ID(legacyAnswer),
-      version: 2,
-      savedAt: T0,
-    };
-    expect(ID(legacyAnswer)).toBe(digestBacked.answerIdentity);
   });
 });

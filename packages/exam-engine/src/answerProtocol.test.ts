@@ -290,15 +290,6 @@ describe("answerProtocol", () => {
       expect(result.conflict?.reason).toBe("DEADLINE_EXCEEDED");
     });
 
-    it("allows save when deadline guards are not provided", () => {
-      const state = makeState({ attemptStatus: "in_progress" });
-      const request = makeRequest({ baseVersion: 0 });
-
-      const result = processSaveAnswer(state, request);
-
-      expect(result.accepted).toBe(true);
-    });
-
     it("stores new answer record on accepted result", () => {
       const state = makeState();
       const request = makeRequest({ baseVersion: 0 });

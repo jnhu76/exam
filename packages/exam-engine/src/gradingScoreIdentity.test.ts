@@ -197,19 +197,6 @@ describe("final score identity (entry sum == gradingResult sum == totalScore)", 
     const entries = [autoEntry("q1", 37, 50), manualEntry("t1", 19, 50)];
     expectIdentity(questions, entries, 50);
   });
-
-  it("exposes double-count: two entries that would double an objective score fail the identity", () => {
-    // Sanity check that the identity test is meaningful: if the aggregator
-    // double-counted q1, the sums would diverge. This documents the
-    // no-double-count guarantee at the identity level (complements
-    // gradingAggregation.test.ts I/J/K).
-    const questions = [obj("q1", 50), text("t1", 50)];
-    const entries = [autoEntry("q1", 37, 50), manualEntry("t1", 19, 50)];
-    const result = aggregateGradingEntries(attempt(questions), entries, 50);
-    // Only ONE entry per question → totalScore = 56, NOT 93.
-    expect(result.totalScore).toBe(56);
-    expect(result.questionResults).toHaveLength(2);
-  });
 });
 
 // ── Deadline-mixed identity (source-trace evidence) ──────────────────

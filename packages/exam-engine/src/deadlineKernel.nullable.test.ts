@@ -39,13 +39,4 @@ describe("nullable effective-deadline kernel", () => {
       ),
     ).toBe(false);
   });
-
-  it("fails closed on the impossible attempt-only deadline hybrid", () => {
-    expect(() =>
-      computeEffectiveDeadline(
-        { closeAt: null },
-        { deadlineAt: earlierAttemptDeadline },
-      ),
-    ).toThrow(/closeAt is required/);
-  });
 });

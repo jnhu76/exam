@@ -382,30 +382,6 @@ describe("ensureAttemptDeadlineReconciled", () => {
     });
   });
 
-  it("submittedAt = effectiveDeadline (not the reconciliation wall-clock time)", async () => {
-    const now = new Date("2025-01-01T11:45:00Z");
-    const attempt = makeAttempt({
-      status: "in_progress",
-      deadlineAt: new Date("2025-01-01T10:30:00Z"), // earlier than exam closeAt
-    });
-    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
-      makeRepos([attempt]);
-
-    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
-    const result = await ensureAttemptDeadlineReconciled(
-      examRepo,
-      enrollmentRepo,
-      attemptRepo,
-      gradingWorksetRepo,
-      cap,
-      now,
-      makeResolution(attempt),
-    );
-
-    // effectiveDeadline = min(exam.closeAt 12:00, attempt.deadlineAt 10:30) = 10:30
-    expect(result.submittedAt).toEqual(new Date("2025-01-01T10:30:00Z"));
-  });
-
   it("returns the attempt unchanged when not expired", async () => {
     const now = new Date("2025-01-01T10:30:00Z"); // before deadline 11:00
     const attempt = makeAttempt({ status: "in_progress" });

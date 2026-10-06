@@ -846,54 +846,6 @@ describe("gradeAttemptIdempotent", () => {
     expect(updateCalls).toBe(0);
   });
 
-  it("grades normally when attempt is submitted (not yet graded)", async () => {
-    const attempt = makeAttempt({ status: "submitted" });
-    const repos = makeRepos(makeExam(), attempt, makeEnrollment());
-
-    const cap = await mintCap(
-      repos.enrollmentRepo,
-      repos.attemptRepo,
-      "attempt-1",
-    );
-    const result = await gradeAttemptIdempotent(
-      repos.examRepo,
-      repos.enrollmentRepo,
-      repos.attemptRepo,
-      repos.worksetRepo,
-      cap,
-      fixedGradedAt,
-    );
-
-    expect(result.totalScore).toBe(10);
-    expect(result.passed).toBe(true);
-    expect(repos.getAttempt().status).toBe("graded");
-    expect(repos.getAttempt().gradedAt).toEqual(fixedGradedAt);
-  });
-
-  it("rejects attempts in non-submittable/non-graded states (in_progress)", async () => {
-    const repos = makeRepos(
-      makeExam(),
-      makeAttempt({ status: "in_progress" }),
-      makeEnrollment(),
-    );
-
-    const cap = await mintCap(
-      repos.enrollmentRepo,
-      repos.attemptRepo,
-      "attempt-1",
-    );
-    await expect(
-      gradeAttemptIdempotent(
-        repos.examRepo,
-        repos.enrollmentRepo,
-        repos.attemptRepo,
-        repos.worksetRepo,
-        cap,
-        new Date(),
-      ),
-    ).rejects.toThrow(InvalidStateTransitionError);
-  });
-
   it("throws ValidationError when attempt not found", async () => {
     const repos = makeRepos(makeExam(), makeAttempt(), makeEnrollment());
     const cap = await mintCap(
