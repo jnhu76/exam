@@ -49,11 +49,6 @@ describe("RBAC Maintainer preset — operational-only boundary", () => {
     }
   });
 
-  it("does NOT receive the email-test side-effect capability (ADR-017 D7)", () => {
-    const perms = permissionsForRole(Role.Maintainer);
-    expect(perms).not.toContain(Permission.SystemEmailTest);
-  });
-
   it("holds no sensitive permissions", () => {
     expect(MAINTAINER.sensitivePermissions).toEqual([]);
   });

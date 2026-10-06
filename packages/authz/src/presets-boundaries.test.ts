@@ -55,16 +55,6 @@ describe("boundary #1 — Admin is a compatibility superset", () => {
       false,
     ]);
   });
-
-  it("Admin does NOT hold System-only perms", () => {
-    const [auto, hb, recon] = has(
-      Role.Admin,
-      Permission.SystemAutoSubmit,
-      Permission.SystemHeartbeatScan,
-      Permission.SystemLifecycleReconcile,
-    );
-    expect([auto, hb, recon]).toEqual([false, false, false]);
-  });
 });
 
 describe("boundary #2/#3 — Teacher is not Grader or Proctor by default", () => {

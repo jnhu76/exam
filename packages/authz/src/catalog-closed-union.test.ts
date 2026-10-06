@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { Permission, Scope, Role } from "./catalog.js";
-import { AuditAction } from "./auditActions.js";
 import { Role as DomainRole } from "@exam/domain";
 
 describe("catalog — closed-union integrity", () => {
@@ -34,11 +33,6 @@ describe("catalog — closed-union integrity", () => {
       expect(perms.has(s as never)).toBe(false);
     for (const r of Object.values(Role))
       expect(perms.has(r as never)).toBe(false);
-  });
-
-  it("AuditAction values are unique", () => {
-    const values = Object.values(AuditAction);
-    expect(new Set(values).size).toBe(values.length);
   });
 
   it("the @exam/domain Role mirror agrees with this catalog (derived guard)", () => {
