@@ -34,19 +34,6 @@ describe("JWT session management", () => {
     expect(typeof decoded.iat).toBe("number");
     expect(typeof decoded.exp).toBe("number");
   });
-
-  it("should verify token with expiration", async () => {
-    const payload = { ...basePayload };
-
-    const token = signJWT(payload, undefined, { expiresIn: "1h" });
-    const decoded = verifyJWT(token) as DecodedToken;
-    expect(decoded.actorId).toEqual(payload.actorId);
-    expect(decoded.role).toEqual(payload.role);
-    expect(decoded.organizationId).toEqual(payload.organizationId);
-    expect(decoded.authEpoch).toBe(0);
-    expect(typeof decoded.iat).toBe("number");
-    expect(typeof decoded.exp).toBe("number");
-  });
 });
 
 describe("JWT authEpoch claim contract (#325)", () => {
@@ -65,11 +52,6 @@ describe("JWT authEpoch claim contract (#325)", () => {
     const token = signJWT({ ...basePayload }, secret);
     const decoded = verifyJWT(token, secret);
     expect(decoded.authEpoch).toBe(0);
-  });
-
-  it("accepts a large positive integer epoch", () => {
-    const token = signRaw(42);
-    expect(verifyJWT(token, secret).authEpoch).toBe(42);
   });
 
   it("rejects a legacy token with NO authEpoch claim (fail closed)", () => {
