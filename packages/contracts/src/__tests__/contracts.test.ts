@@ -603,6 +603,14 @@ describe("RestoreAttemptResponseSchema (frozen contract)", () => {
     });
     expect(result.success).toBe(false);
   });
+  it("rejects operator_incident policy with positive addedSeconds", () => {
+    const result = RestoreAttemptResponseSchema.safeParse({
+      lifecycle: "restored",
+      compensation: { policy: "operator_incident", addedSeconds: 120 },
+      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("question contracts", () => {

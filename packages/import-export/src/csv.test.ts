@@ -22,10 +22,12 @@ describe("escapeCSVValue", () => {
     expect(escapeCSVValue("line1\rline2")).toBe('"line1\rline2"');
   });
 
-  // `String(value ?? "")` collapses null and undefined, so one witness covers
-  // the class; there is no wire or compatibility distinction between them.
   it("returns empty string for null", () => {
     expect(escapeCSVValue(null)).toBe("");
+  });
+
+  it("returns empty string for undefined", () => {
+    expect(escapeCSVValue(undefined)).toBe("");
   });
 
   // CSV injection mitigation: prefix dangerous leading characters with single quote

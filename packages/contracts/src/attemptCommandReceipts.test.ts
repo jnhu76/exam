@@ -410,6 +410,18 @@ describe("AttemptCommandReceiptResponseSchema (wire)", () => {
     ).toThrow();
   });
 
+  it("rejects disposition=no_change with outcome=applied (inconsistent)", () => {
+    // The union discriminates on `disposition`, so this row fails on a
+    // different `outcome` literal than the applied/no_change row above.
+    expect(() =>
+      AttemptCommandReceiptResponseSchema.parse({
+        ...base,
+        disposition: "no_change",
+        outcome: "applied",
+      }),
+    ).toThrow();
+  });
+
   it("rejects disposition=idempotent_replay with a non-persistent outcome", () => {
     expect(() =>
       AttemptCommandReceiptResponseSchema.parse({
