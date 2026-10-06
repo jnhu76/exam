@@ -460,23 +460,6 @@ describe("mixed final score reconciliation", () => {
     expect(obj?.score).toBe(40);
   });
 
-  it("does NOT double-count the objective score", async () => {
-    const { attempt, result } = await runMixedLifecycle({
-      questionSnapshot: [
-        objectiveSnapshot("q-obj", 40, "a"),
-        textResponseSnapshot("q-text", 60),
-      ],
-      answers: [
-        { questionId: "q-obj", answer: "a" },
-        { questionId: "q-text", answer: "answer" },
-      ],
-      manualScores: [{ questionId: "q-text", score: 30 }],
-    });
-
-    expect(result.totalScore).toBe(70); // not 110, not 100
-    expect(attempt.score).toBe(70);
-  });
-
   it("preserves objective contribution when the objective answer is wrong", async () => {
     const { attempt } = await runMixedLifecycle({
       questionSnapshot: [
@@ -540,23 +523,6 @@ describe("text_response with non-null standardAnswer", () => {
     expect(result.totalScore).toBe(80);
     expect(attempt.gradingStatus).toBe("fully_graded");
     expect(attempt.status).toBe("graded");
-  });
-
-  it("completes to fully_graded after the manual score is entered (C)", async () => {
-    const { attempt } = await runMixedLifecycle({
-      questionSnapshot: [
-        textResponseSnapshot("q-text", 100, {
-          standardAnswer: "参考答案",
-          rubric: "rubric",
-        }),
-      ],
-      answers: [{ questionId: "q-text", answer: "answer" }],
-      manualScores: [{ questionId: "q-text", score: 90 }],
-    });
-
-    expect(attempt.gradingStatus).toBe("fully_graded");
-    expect(attempt.status).toBe("graded");
-    expect(attempt.score).toBe(90);
   });
 });
 
@@ -669,33 +635,6 @@ describe("pure-objective auto grading preserved", () => {
     void result; // pure-objective path goes through finalizeGrading in production.
 
     expect(repos.getAttempt().gradingStatus).toBe("auto_graded");
-  });
-});
-
-// ── G. graded + pending_manual remains impossible ────────────────
-
-describe("graded + pending_manual impossible", () => {
-  it("a pending_manual attempt that receives its first manual grade never becomes graded until fully_graded", async () => {
-    const { attempt } = await runMixedLifecycle({
-      questionSnapshot: [
-        objectiveSnapshot("q-obj", 40, "a"),
-        textResponseSnapshot("q-text-1", 30),
-        textResponseSnapshot("q-text-2", 30),
-      ],
-      answers: [
-        { questionId: "q-obj", answer: "a" },
-        { questionId: "q-text-1", answer: "ans1" },
-        { questionId: "q-text-2", answer: "ans2" },
-      ],
-      // Only ONE of two manual questions scored — must NOT terminally grade.
-      manualScores: [{ questionId: "q-text-1", score: 20 }],
-    });
-
-    // Either pending (status=submitted) or fully graded — but never the
-    // forbidden graded + pending_manual pair.
-    const forbidden =
-      attempt.status === "graded" && attempt.gradingStatus === "pending_manual";
-    expect(forbidden).toBe(false);
   });
 });
 

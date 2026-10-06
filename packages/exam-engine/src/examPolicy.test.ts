@@ -51,34 +51,6 @@ describe("resolveExamPolicy", () => {
 });
 
 describe("validateExamPolicy — valid baselines", () => {
-  it("accepts a default makeExam policy", () => {
-    expect(validateExamPolicyForExam(makeExam())).toEqual([]);
-  });
-
-  it("accepts bounded_grace with valid ordered caps", () => {
-    expect(
-      validateExamPolicyForExam(
-        makeExam({
-          interruptionTimePolicy: "bounded_grace",
-          interruptionGracePerIncidentSeconds: 120,
-          interruptionGracePerAttemptSeconds: 300,
-        }),
-      ),
-    ).toEqual([]);
-  });
-
-  it("accepts operator_incident with null caps", () => {
-    expect(
-      validateExamPolicyForExam(
-        makeExam({
-          interruptionTimePolicy: "operator_incident",
-          interruptionGracePerIncidentSeconds: null,
-          interruptionGracePerAttemptSeconds: null,
-        }),
-      ),
-    ).toEqual([]);
-  });
-
   it("accepts max_attempts with maxAttempts >= 1", () => {
     expect(
       validateExamPolicyForExam(

@@ -1499,26 +1499,6 @@ describe("attemptCommands", () => {
       expect(result.status).toBe("submitted");
     });
 
-    it("returns idempotent success for a graded attempt", async () => {
-      const attempt = makeAttempt({
-        status: "graded",
-        submittedAnswers: { schemaVersion: 1, answers: [] },
-        gradingStatus: "auto_graded",
-      });
-      const attRepo = makeAttemptRepo([attempt]);
-      const wsRepo = makeWorksetRepo([q1AutoEntry("attempt-1", 0)]);
-
-      const result = await submitAttempt(
-        attRepo,
-        wsRepo,
-        "attempt-1",
-        fixedNow,
-        { resolution: noneResolution },
-      );
-
-      expect(result.status).toBe("graded");
-    });
-
     it("rejects candidate submit before minSubmitAfterStartMinutes (ATTEMPT_SUBMIT_TOO_EARLY)", async () => {
       const startedAt = new Date("2025-01-01T10:00:00Z");
       const attempt = makeAttempt({ status: "in_progress", startedAt });

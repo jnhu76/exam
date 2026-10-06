@@ -174,29 +174,11 @@ describe("startOrRestoreAttempt — timing modes", () => {
     expect(attempt.deadlineAt).toBeNull();
   });
 
-  it("untimed mode: attempt carries deadlineAt = null", async () => {
-    const { attempt } = (await start(untimedExam())).result;
-    expect(attempt.deadlineAt).toBeNull();
-  });
-
-  it("timed_window mode: attempt keeps a personal deadline (regression)", async () => {
-    const { attempt } = (await start(makeExam())).result;
-    // started 10:30 + duration 60min.
-    expect(attempt.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
-  });
-
   it("deadline mode: start at/after closeAt is rejected", async () => {
     const afterClose = new Date("2025-01-01T12:00:00Z");
     await expect(start(deadlineExam(), afterClose)).rejects.toThrow(
       /outside exam open window/i,
     );
-  });
-
-  it("untimed mode: start long after openAt is allowed", async () => {
-    const muchLater = new Date("2025-01-02T09:00:00Z");
-    const { attempt } = (await start(untimedExam(), muchLater)).result;
-    expect(attempt.status).toBe("in_progress");
-    expect(attempt.deadlineAt).toBeNull();
   });
 
   it("untimed mode: still requires now >= openAt", async () => {

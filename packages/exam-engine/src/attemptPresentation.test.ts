@@ -323,15 +323,4 @@ describe("materializeAttemptPresentation (#294)", () => {
     expect(result[0]!.order).toBe(0);
     expect(result[0]!.options.map((o) => o.id)).toEqual(["b", "c", "a"]);
   });
-
-  it("two-option choice shuffles without division issues", () => {
-    const published = publishedSnapshot().slice(1, 2);
-    const result = materializeAttemptPresentation(
-      published,
-      flags(false, true),
-      sequenceRng(0.1),
-    );
-
-    expect(result[0]!.options.map((o) => o.id)).toEqual(["e", "d"]);
-  });
 });

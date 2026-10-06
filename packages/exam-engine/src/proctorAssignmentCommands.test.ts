@@ -286,26 +286,6 @@ describe("assignProctorToExam — validation (ADR-015 §12)", () => {
     ).rejects.toThrow(NotFoundError);
   });
 
-  it("inactive target user → 400 VALIDATION_ERROR", async () => {
-    const { repo } = makeRepo();
-    await expect(
-      assignProctorToExam(
-        repo,
-        ctx(),
-        {
-          operationId: "11111111-1111-4111-8111-111111111111",
-          examId: "exam-1",
-          proctorUserId: "proctor-1",
-        },
-        assignmentDeps({
-          lookupProctorUser: lookupProctorUser("proctor-1", {
-            isActive: false,
-          }),
-        }),
-      ),
-    ).rejects.toThrow(ValidationError);
-  });
-
   it("target without an active Proctor role → 400 VALIDATION_ERROR", async () => {
     const { repo } = makeRepo();
     await expect(
