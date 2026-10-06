@@ -63,7 +63,7 @@ describe("exam policy profile routes (CRUD)", () => {
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("GET /api/exam-profiles/:id returns a profile; unknown id → 404", async () => {
+  it("GET /api/exam-profiles/:id returns the created profile", async () => {
     const name = `Get-${uniquePrefix()}`;
     const created = await ctx.app.inject({
       method: "POST",
@@ -112,7 +112,7 @@ describe("exam policy profile routes (CRUD)", () => {
     expect(res.json().minSubmitAfterStartMinutes).toBe(5);
   });
 
-  it("PATCH empty body returns the existing profile unchanged (no audit)", async () => {
+  it("PATCH empty body returns the existing profile unchanged", async () => {
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/exam-profiles",

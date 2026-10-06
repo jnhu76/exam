@@ -703,7 +703,7 @@ describe("Teacher@Course scope matrix (issue #286)", () => {
     );
     const res = await tGet(`/api/scores/attempts/${attemptId}`);
     expect(res.statusCode).toBe(200);
-    expect(res.json().attemptId ?? res.json().id ?? "").toBeTruthy();
+    expect(res.json().attemptId).toBe(attemptId);
   });
 
   it("GET /scores/attempts/:id — out-of-scope attempt (Exam B course) → 404 (anti-enumeration)", async () => {

@@ -138,7 +138,9 @@ describe("candidate profile invariant", () => {
       cookies: { "auth-token": bareToken },
     });
     expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.json())).toBe(true);
+    // A profile-less candidate can have no enrollments, so the exam list
+    // must be empty — not merely array-shaped.
+    expect(res.json()).toEqual([]);
   });
 
   it("candidate without profile cannot start exam attempt", async () => {
@@ -197,10 +199,14 @@ describe("candidate profile invariant", () => {
       url: `/api/attempts/${examId}/start`,
       cookies: { "auth-token": bareToken },
     });
-    expect(res.statusCode).not.toBe(201);
+    // The start route declares eligibilityDenialMode "permission_denied":
+    // a profile-less candidate fails closed at the authz preHandler with
+    // 403 PERMISSION_DENIED, never 201.
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe("PERMISSION_DENIED");
   });
 
-  it("Seed candidate without profile cannot submit answers", async () => {
+  it("answer save against a nonexistent attempt is rejected with the not-found mapping", async () => {
     const fakeAttemptId = "00000000-0000-0000-0000-000000000000";
     const fakeQuestionId = "00000000-0000-0000-0000-000000000001";
     const res = await ctx.app.inject({
@@ -216,6 +222,6 @@ describe("candidate profile invariant", () => {
       },
       cookies: { "auth-token": ctx.candidateToken },
     });
-    expect(res.statusCode).not.toBe(200);
+    expect(res.statusCode).toBe(404);
   });
 });

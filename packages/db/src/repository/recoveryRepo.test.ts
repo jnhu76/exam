@@ -1354,9 +1354,29 @@ describe("recovery incident queue repository", () => {
     });
     // The composite (org, attempt_id) FK normally makes an unresolvable
     // membership impossible; bypass it to simulate tenant-data corruption and
-    // prove the read path still fails closed.
+    // prove the read path still fails closed. Capture the authoritative
+    // constraint definition from pg_get_constraintdef BEFORE dropping, and
+    // restore THAT exact text during cleanup — avoids hard-coding the FK
+    // definition and silently drifting from the migrated schema.
+    const constraintName = "exam_incident_attempts_attempt_fk";
+    const capturedDefRows = await db.execute<{ definition: string }>(
+      sql`SELECT pg_get_constraintdef(c.oid) AS definition
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = c.connamespace
+          WHERE n.nspname = current_schema() AND t.relname = 'exam_incident_attempts'
+            AND c.conname = ${constraintName}`,
+    );
+    // db.execute returns the postgres.js result: a row array accessed by
+    // index (not `.rows`).
+    const fkDef = (capturedDefRows as unknown as { definition: string }[])[0]
+      ?.definition;
+    expect(
+      fkDef,
+      `precondition: constraint ${constraintName} must exist before DROP`,
+    ).toBeTruthy();
     await db.execute(
-      sql`ALTER TABLE exam_incident_attempts DROP CONSTRAINT exam_incident_attempts_attempt_fk`,
+      sql`ALTER TABLE exam_incident_attempts DROP CONSTRAINT ${sql.raw(`"${constraintName}"`)}`,
     );
     try {
       await db.insert(schema.examIncidentAttempts).values({
@@ -1380,8 +1400,10 @@ describe("recovery incident queue repository", () => {
       await db
         .delete(schema.examIncidentAttempts)
         .where(eq(schema.examIncidentAttempts.incidentId, id));
+      // Restore the exact captured definition (round-trips the migrated
+      // constraint instead of re-stating it by hand).
       await db.execute(
-        sql`ALTER TABLE exam_incident_attempts ADD CONSTRAINT exam_incident_attempts_attempt_fk FOREIGN KEY ("organization_id","attempt_id") REFERENCES "exam_attempts"("organization_id","id")`,
+        sql`ALTER TABLE exam_incident_attempts ADD CONSTRAINT ${sql.raw(`"${constraintName}"`)} ${sql.raw(fkDef!)}`,
       );
       await db
         .delete(schema.examIncidents)

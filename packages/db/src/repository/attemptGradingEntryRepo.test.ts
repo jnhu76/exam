@@ -19,6 +19,25 @@ function createContext(orgId: string): RequestContext {
   };
 }
 
+/** Extract the constraint name from a class-23 (integrity violation) error chain. */
+function violationConstraintOf(err: unknown): string | null {
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (typeof current === "object" && current !== null) {
+      const e = current as Record<string, unknown>;
+      if (typeof e.code === "string" && e.code.startsWith("23")) {
+        return String(e.constraint ?? e.constraint_name ?? "");
+      }
+      current = "cause" in e ? e.cause : null;
+    } else {
+      current = null;
+    }
+  }
+  return null;
+}
+
 interface SeedIds {
   courseId: string;
   examId: string;
@@ -232,7 +251,12 @@ describe("attemptGradingEntryRepo", () => {
           correct: false,
         },
       ]),
-    ).rejects.toThrow();
+    ).rejects.toSatisfy((err: unknown) => {
+      expect(violationConstraintOf(err)).toBe(
+        "attempt_grading_entries_attempt_question_unique",
+      );
+      return true;
+    });
   });
 
   it("DB check constraint rejects negative earnedScore", async () => {
@@ -254,7 +278,12 @@ describe("attemptGradingEntryRepo", () => {
         createdAt: now,
         updatedAt: now,
       }),
-    ).rejects.toThrow();
+    ).rejects.toSatisfy((err: unknown) => {
+      expect(violationConstraintOf(err)).toBe(
+        "attempt_grading_entries_earned_score_check",
+      );
+      return true;
+    });
   });
 
   it("DB check constraint rejects earnedScore > maxScore", async () => {
@@ -276,7 +305,12 @@ describe("attemptGradingEntryRepo", () => {
         createdAt: now,
         updatedAt: now,
       }),
-    ).rejects.toThrow();
+    ).rejects.toSatisfy((err: unknown) => {
+      expect(violationConstraintOf(err)).toBe(
+        "attempt_grading_entries_earned_score_limit_check",
+      );
+      return true;
+    });
   });
 
   it("completeManualEntry flips pending_manual to completed_manual with score", async () => {

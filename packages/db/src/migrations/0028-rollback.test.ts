@@ -87,13 +87,9 @@ async function tableExists(sql: SqlDriver, name: string): Promise<boolean> {
 }
 
 async function indexExists(sql: SqlDriver, name: string): Promise<boolean> {
-  // to_regclass resolves indexes too (an index is a relation). Scoped to the
-  // current schema via search_path, so isolated test schemas see their own
-  // copy and a same-name index in another schema cannot false-positive.
-  const rows = (await sql.unsafe(`
-    SELECT to_regclass(${s(name)})::text AS reg
-  `)) as Array<{ reg: string | null }>;
-  return rows[0]?.reg != null;
+  // to_regclass resolves indexes too (an index is a relation) — same lookup
+  // as tableExists; the distinct name keeps call-site intent explicit.
+  return tableExists(sql, name);
 }
 
 /** Re-apply the 0028 migration statements in this connection's schema. */

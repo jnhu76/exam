@@ -51,16 +51,19 @@ describe("auditLogRepo.listByTarget (timeline)", () => {
     const repo = createAuditLogTestRepo(db);
     const attemptId = randomUUID();
 
-    const first = await repo.create(ctx, {
-      actorId: ctx.actorId,
-      action: "attempt.start",
-      targetType: "attempt",
-      targetId: attemptId,
-      metadata: { step: 1 },
-    });
-    // Force a distinct later timestamp so ordering is deterministic even when
-    // both inserts land in the same millisecond.
-    await new Promise((r) => setTimeout(r, 15));
+    // Explicit backdated timestamp keeps the ordering deterministic even
+    // when both inserts land in the same millisecond — no wall-clock gap.
+    const first = await repo.create(
+      ctx,
+      {
+        actorId: ctx.actorId,
+        action: "attempt.start",
+        targetType: "attempt",
+        targetId: attemptId,
+        metadata: { step: 1 },
+      },
+      { createdAt: new Date(Date.now() - 60_000) },
+    );
     const second = await repo.create(ctx, {
       actorId: ctx.actorId,
       action: "attempt.submit",
