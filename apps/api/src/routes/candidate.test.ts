@@ -130,6 +130,15 @@ describe("candidate routes", () => {
     await ctx.cleanup();
   });
 
+  it("GET /api/candidates returns 401 ErrorResponse without auth", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidates",
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error.code).toBe("AUTH_REQUIRED");
+  });
+
   it("GET /api/candidates returns paginated list", async () => {
     const username = `listed-candidate-${Date.now()}`;
     const createRes = await ctx.app.inject({

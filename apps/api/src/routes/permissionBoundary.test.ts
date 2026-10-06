@@ -23,7 +23,6 @@ import {
   createAuditLogRepo,
   type AuditLogListFilter,
 } from "@exam/db/src/repository/auditLogRepo.js";
-import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { DEFAULT_CONTROL_FLAGS } from "./attempts/__tests__/attempts.testHelpers.js";
 import type { Exam } from "@exam/domain";
@@ -661,6 +660,7 @@ describe("permission boundary", () => {
           ...(payload === undefined ? {} : { payload }),
         });
         expect(res.statusCode).toBe(401);
+        expect(res.json().error.code).toBe("AUTH_REQUIRED");
       },
     );
   });
@@ -838,6 +838,9 @@ describe("permission boundary", () => {
           cookies: { "auth-token": candidateToken },
         });
         expect(res.statusCode, `Candidate → ${label}`).toBe(403);
+        expect(res.json().error.code, `Candidate → ${label}`).toBe(
+          "PERMISSION_DENIED",
+        );
       }
     });
 
@@ -855,6 +858,9 @@ describe("permission boundary", () => {
           cookies: { "auth-token": teacherToken },
         });
         expect(res.statusCode, `Teacher → ${label}`).toBe(403);
+        expect(res.json().error.code, `Teacher → ${label}`).toBe(
+          "PERMISSION_DENIED",
+        );
       }
     });
 
@@ -872,6 +878,9 @@ describe("permission boundary", () => {
           cookies: { "auth-token": proctorToken },
         });
         expect(res.statusCode, `Proctor → ${label}`).toBe(403);
+        expect(res.json().error.code, `Proctor → ${label}`).toBe(
+          "PERMISSION_DENIED",
+        );
       }
     });
 
@@ -889,6 +898,9 @@ describe("permission boundary", () => {
           cookies: { "auth-token": graderToken },
         });
         expect(res.statusCode, `Grader → ${label}`).toBe(403);
+        expect(res.json().error.code, `Grader → ${label}`).toBe(
+          "PERMISSION_DENIED",
+        );
       }
     });
   });

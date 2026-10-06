@@ -224,6 +224,7 @@ describe("admin-surface permission boundary", () => {
           ...(payload ? { payload } : {}),
         });
         expect(res.statusCode).toBe(401);
+        expect(res.json().error.code).toBe("AUTH_REQUIRED");
       },
     );
 
@@ -234,6 +235,7 @@ describe("admin-surface permission boundary", () => {
         payload: {},
       });
       expect(res.statusCode).toBe(401);
+      expect(res.json().error.code).toBe("AUTH_REQUIRED");
     });
 
     it("DELETE /api/candidate-fields/:id returns 401", async () => {
@@ -242,6 +244,7 @@ describe("admin-surface permission boundary", () => {
         url: `/api/candidate-fields/${fieldId}`,
       });
       expect(res.statusCode).toBe(401);
+      expect(res.json().error.code).toBe("AUTH_REQUIRED");
     });
 
     it("PATCH /api/candidates/:id returns 401", async () => {
@@ -251,6 +254,7 @@ describe("admin-surface permission boundary", () => {
         payload: { name: "x" },
       });
       expect(res.statusCode).toBe(401);
+      expect(res.json().error.code).toBe("AUTH_REQUIRED");
     });
   });
 
@@ -308,6 +312,7 @@ describe("admin-surface permission boundary", () => {
               cookies: { "auth-token": tokenFn() },
             });
             expect(res.statusCode).toBe(403);
+            expect(res.json().error.code).toBe("PERMISSION_DENIED");
           },
         );
 
@@ -319,6 +324,7 @@ describe("admin-surface permission boundary", () => {
             cookies: { "auth-token": tokenFn() },
           });
           expect(res.statusCode).toBe(403);
+          expect(res.json().error.code).toBe("PERMISSION_DENIED");
         });
 
         it(`DELETE /api/candidate-fields/:id returns 403`, async () => {
@@ -328,6 +334,7 @@ describe("admin-surface permission boundary", () => {
             cookies: { "auth-token": tokenFn() },
           });
           expect(res.statusCode).toBe(403);
+          expect(res.json().error.code).toBe("PERMISSION_DENIED");
         });
 
         it(`PATCH /api/candidates/:id returns 403`, async () => {
@@ -338,6 +345,7 @@ describe("admin-surface permission boundary", () => {
             cookies: { "auth-token": tokenFn() },
           });
           expect(res.statusCode).toBe(403);
+          expect(res.json().error.code).toBe("PERMISSION_DENIED");
         });
       });
     }
