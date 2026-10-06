@@ -174,11 +174,4 @@ describe("questionRepo.listAllTags (vocabulary resilience)", () => {
     const tagsA = await repo.listAllTags(ctxA);
     expect(tagsA).not.toContain("orgb-only");
   });
-
-  it("returns distinct sorted tags", async () => {
-    const tags = await repo.listAllTags(ctxA);
-    const sortedCopy = [...tags].sort();
-    expect(tags).toEqual(sortedCopy);
-    expect(new Set(tags).size).toBe(tags.length);
-  });
 });

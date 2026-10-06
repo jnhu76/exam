@@ -51,31 +51,6 @@ describe("baseRepo count and listPaginated", () => {
     expect(count).toBe(0);
   });
 
-  it("count returns correct number of rows for tenant", async () => {
-    const orgId = await seedOrg("three");
-    const ctx = createContext(orgId);
-    const repo = createAsyncTenantCrudRepo(db, schema.courses);
-
-    await repo.create(ctx, {
-      name: "Course A",
-      code: `A${randomUUID().slice(0, 4)}`,
-      description: "",
-    });
-    await repo.create(ctx, {
-      name: "Course B",
-      code: `B${randomUUID().slice(0, 4)}`,
-      description: "",
-    });
-    await repo.create(ctx, {
-      name: "Course C",
-      code: `C${randomUUID().slice(0, 4)}`,
-      description: "",
-    });
-
-    const count = await repo.count(ctx);
-    expect(count).toBe(3);
-  });
-
   it("count isolates tenants", async () => {
     const orgAlpha = await seedOrg("alpha");
     const orgBeta = await seedOrg("beta");

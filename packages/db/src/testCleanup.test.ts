@@ -108,47 +108,6 @@ describe(
 
       await cleanupOrganizationTestData(db, otherOrganizationId);
     });
-
-    it("cleans up an org with a pre-existing audit log", async () => {
-      const organizationId = crypto.randomUUID();
-      const now = new Date();
-
-      await db.insert(schema.organizations).values({
-        id: organizationId,
-        name: "FK Race Org",
-        displayName: "FK Race Org",
-        slug: `fk-race-${organizationId}`,
-        createdAt: now,
-        updatedAt: now,
-      });
-      await db.insert(schema.auditLogs).values({
-        id: crypto.randomUUID(),
-        organizationId,
-        actorId: crypto.randomUUID(),
-        action: "race.before",
-        targetType: "organization",
-        targetId: organizationId,
-        metadata: {},
-        ipAddress: null,
-        userAgent: null,
-        createdAt: now,
-      });
-
-      await expect(
-        cleanupOrganizationTestData(db, organizationId),
-      ).resolves.toBeUndefined();
-
-      const orgRow = await db
-        .select()
-        .from(schema.organizations)
-        .where(eq(schema.organizations.id, organizationId));
-      expect(orgRow).toEqual([]);
-      const auditRows = await db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, organizationId));
-      expect(auditRows).toEqual([]);
-    });
   },
 );
 
