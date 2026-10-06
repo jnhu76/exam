@@ -433,7 +433,15 @@ describe("system incident delivery — durable completion evidence (#304)", () =
     expect(await orgSystemIncidents(fixture)).toHaveLength(1);
   });
 
-  it("C3: two concurrent reconcilers race on one episode → exactly one System incident/link", async () => {
+  // Overlap here is best-effort: both passes start together on distinct
+  // physical connections, but no barrier forces a specific conflict window,
+  // and the count oracle cannot attribute the loser's convergence to the
+  // 23505 recovery versus the batch pre-read skip (a fully serial schedule
+  // produces the same counts). The deterministic owners for the underlying
+  // mechanisms are backupEvidence.concurrency.test.ts (unique-index
+  // arbitration under true overlap) and incidentOperationRecovery.test.ts +
+  // incidents.admin(.concurrency).test.ts (recovery decision matrix, real PG).
+  it("C3: two reconcilers started together on one episode converge on exactly one System incident/link (best-effort overlap)", async () => {
     const fixture = await seedFixture(dbShared, "c3");
     const episodeId = await commitHeartbeatEpisode(dbShared, fixture);
 

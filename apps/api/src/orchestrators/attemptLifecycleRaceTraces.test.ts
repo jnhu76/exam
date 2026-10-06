@@ -19,9 +19,10 @@
  * composition and is not driven here) — no production code is gated or
  * changed.
  *
- * Each trace runs REPLAYS times with a fresh attempt fixture per repetition;
- * a repetition that lands in any other ordering fails the trace. Fixed
- * timestamps only — ordering is controlled exclusively by the gates.
+ * REPLAYS is 1: the deferred gates force the exact interleaving, so
+ * repeating an identical schedule adds no fault model — a broken gate or a
+ * lost ordering fails every replay equally. Fixed timestamps only — ordering
+ * is controlled exclusively by the gates.
  *
  * Traces:
  *   S1A_SAVE_WINS     — a save that acquires the row lock before submit is
@@ -97,7 +98,7 @@ const DEADLINE_AT = new Date("2026-02-01T01:00:00.000Z"); // personal deadline
 const TRACE_NOW = new Date("2026-02-01T00:30:00.000Z"); // mid-exam instant
 const PAST_DEADLINE_NOW = new Date("2026-02-01T02:00:00.000Z"); // expired
 
-const REPLAYS = 10;
+const REPLAYS = 1;
 
 function context(organizationId: string, actorId: string): RequestContext {
   return {
@@ -642,7 +643,7 @@ describe("attempt lifecycle deterministic race traces (EXAM-341)", () => {
 
   it(
     "TRACE S1A_SAVE_WINS: a save holding the row lock commits first and its " +
-      "answer is what grading freezes (10 deterministic replays)",
+      "answer is what grading freezes",
     async () => {
       for (let i = 0; i < REPLAYS; i++) {
         const traceId = `S1A_SAVE_WINS#${i}`;
@@ -707,7 +708,7 @@ describe("attempt lifecycle deterministic race traces (EXAM-341)", () => {
   it(
     "TRACE S1B_SUBMIT_WINS: a save whose snapshot predates the submit commit " +
       "resumes after terminalization and is rejected without mutating " +
-      "terminal truth (10 deterministic replays)",
+      "terminal truth",
     async () => {
       for (let i = 0; i < REPLAYS; i++) {
         const traceId = `S1B_SUBMIT_WINS#${i}`;
@@ -779,8 +780,7 @@ describe("attempt lifecycle deterministic race traces (EXAM-341)", () => {
 
   it(
     "TRACE S2_DEADLINE_FIRST: deadline finalization commits while an explicit " +
-      "submit is blocked; the submit converges on the one deadline-freeze " +
-      "(10 deterministic replays)",
+      "submit is blocked; the submit converges on the one deadline-freeze",
     async () => {
       for (let i = 0; i < REPLAYS; i++) {
         const traceId = `S2_DEADLINE_FIRST#${i}`;
@@ -832,8 +832,7 @@ describe("attempt lifecycle deterministic race traces (EXAM-341)", () => {
 
   it(
     "TRACE S3_DOUBLE_SUBMIT: two concurrent submit deliveries produce one " +
-      "grading effect and the loser converges idempotently " +
-      "(10 deterministic replays)",
+      "grading effect and the loser converges idempotently",
     async () => {
       for (let i = 0; i < REPLAYS; i++) {
         const traceId = `S3_DOUBLE_SUBMIT#${i}`;

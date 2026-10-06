@@ -133,7 +133,17 @@ describe("Redis baseline", () => {
 
       await app.close();
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Bounded wait for ioredis to process the disconnect — a fixed sleep
+      // here would be a timing assumption under host load.
+      const disconnectedDeadline = Date.now() + 2000;
+      while (client.status === "ready") {
+        if (Date.now() > disconnectedDeadline) {
+          throw new Error(
+            `redis client still "${client.status}" after app.close()`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
       expect(client.status).not.toBe("ready");
       process.env = savedEnv;
       resetRuntimeConfigForTest();
