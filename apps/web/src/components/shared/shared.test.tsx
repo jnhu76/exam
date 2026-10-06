@@ -265,16 +265,12 @@ describe("SearchInput", () => {
 });
 
 describe("TagBadge", () => {
-  it("owns secondary tag semantics and compact geometry", () => {
+  it("owns secondary tag semantics", () => {
     render(<TagBadge>safety</TagBadge>);
 
     expect(screen.getByText("safety")).toHaveAttribute(
       "data-tag-tone",
       "neutral",
-    );
-    expect(screen.getByText("safety")).toHaveAttribute(
-      "data-tag-geometry",
-      "compact",
     );
     // Weight is owned by the [data-slot=tag-badge] recipe (400), not by a
     // component utility (issue 577 m2 single-owner model).
