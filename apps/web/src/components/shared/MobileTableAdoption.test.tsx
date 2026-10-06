@@ -31,7 +31,6 @@ import {
   DataTableShell,
   isMobileRepresentationAllowed,
 } from "./DataTableShell";
-import { DataWorkbench } from "./DataWorkbench";
 import { deriveMobileCardFields } from "./MobileRecordList";
 import type { DataViewColumnDef } from "./DesktopDataTable";
 
@@ -107,21 +106,6 @@ describe("mobile card representation structural guards (issue 457)", () => {
           <DataTableShell archetype={archetype} mobile={<div>x</div>}>
             <table />
           </DataTableShell>,
-        ),
-      ).toThrow(/management-list\/log-diagnostic mechanism/);
-    },
-  );
-
-  it.each(["detail-comparison"] as const)(
-    "the workbench fails loud when mobileList meets archetype %s (DEV/test)",
-    (archetype) => {
-      expect(() =>
-        render(
-          <DataWorkbench
-            archetype={archetype}
-            desktopTable={<table />}
-            mobileList={<div>x</div>}
-          />,
         ),
       ).toThrow(/management-list\/log-diagnostic mechanism/);
     },

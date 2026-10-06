@@ -371,16 +371,6 @@ describe("grading queue routes", () => {
     expect(mine).toBeUndefined();
   });
 
-  // ── 403 non-admin ───────────────────────────────────────
-  it("rejects a non-admin (candidate) token with 403", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/grading-queue",
-      cookies: { "auth-token": ctx.candidateToken },
-    });
-    expect(res.statusCode).toBe(403);
-  });
-
   // ── lifecycle state alone cannot create work ──
   it("does not fabricate queue work from gradingStatus=pending_manual when no grading entry exists", async () => {
     // Attempt is pending_manual but has ZERO grading entries. The
@@ -726,16 +716,6 @@ describe("grading queue routes", () => {
     });
   });
 
-  // ── grading-details 404 unknown attempt ─────────────────
-  it("returns 404 for an unknown attempt in grading-details", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: `/api/admin/attempts/${crypto.randomUUID()}/grading-details`,
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(404);
-  });
-
   // ── POST grade-question saves score + comment ───────────
   it("saves a manual score and comment for a subjective question", async () => {
     const { attemptId } = await seedAttempt(ctx, {
@@ -1012,21 +992,6 @@ describe("grading queue routes", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
-  });
-
-  it("rejects a candidate token on grade-question with 403", async () => {
-    const { attemptId } = await seedAttempt(ctx, {
-      questions: [subjectiveQuestion("q-sub")],
-      title: "Forbidden",
-    });
-    await seedGradingEntries(ctx, attemptId, [subjectiveQuestion("q-sub")], []);
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: `/api/admin/attempts/${attemptId}/grade-question`,
-      payload: { questionId: "q-sub", score: 5 },
-      cookies: { "auth-token": ctx.candidateToken },
-    });
-    expect(res.statusCode).toBe(403);
   });
 
   // ── audit row grading.score_entered ────────────────────

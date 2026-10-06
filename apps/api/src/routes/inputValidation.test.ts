@@ -115,10 +115,10 @@ describe("API input validation (Zod schema boundary)", () => {
     expect(body.error.code).toBe("VALIDATION_ERROR");
   });
 
-  // Inverted-window and passingScore>totalScore create rejections are owned by
-  // examPolicyValidation.test.ts (:69 inverted window with EXAM_WINDOW_INVALID
-  // field code; :89 score invariant) and the exam.test.ts passing-score
-  // boundary matrix.
+  // Inverted-window and passingScore>totalScore create rejections are owned
+  // elsewhere: examPolicyValidation.test.ts for the inverted window
+  // (EXAM_WINDOW_INVALID field code) and the exam.test.ts passing-score
+  // boundary matrix for the score invariant.
 
   it("exam creation rejects durationMinutes <= 0", async () => {
     const res = await ctx.app.inject({

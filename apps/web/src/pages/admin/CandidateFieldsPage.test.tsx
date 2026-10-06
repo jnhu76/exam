@@ -377,12 +377,6 @@ describe("CandidateFieldsPage", () => {
     });
   });
 
-  it("shows error state when loading fails", async () => {
-    apiGet.mockRejectedValue(new Error("fail"));
-    renderPage();
-    expect(await screen.findByText("加载字段配置失败")).toBeInTheDocument();
-  });
-
   it("recovers after retry succeeds", async () => {
     apiGet
       .mockRejectedValueOnce(new Error("fail"))

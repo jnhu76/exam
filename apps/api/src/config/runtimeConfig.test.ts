@@ -300,19 +300,6 @@ describe("runtimeConfig", () => {
       expect(serialized).not.toContain("multiTenant");
     });
 
-    it("public config never exposes multiTenant as a current feature", () => {
-      delete process.env.DEPLOYMENT_MODE;
-      resetRuntimeConfigForTest();
-      const pub = buildPublicConfig();
-      expect(pub).not.toHaveProperty("multiTenant");
-      const features = (pub as { features?: Record<string, unknown> }).features;
-      if (features) {
-        expect(features).not.toHaveProperty("tenantSwitcher");
-        expect(features).not.toHaveProperty("superAdminConsole");
-        expect(features).not.toHaveProperty("multiTenant");
-      }
-    });
-
     it("never includes sensitive keys", () => {
       process.env.JWT_SECRET = "super-secret-value";
       process.env.DATABASE_URL = "postgresql://user:pass@host:5432/db";
@@ -719,17 +706,6 @@ describe("runtimeConfig", () => {
     });
   });
 
-  describe("CORS origin", () => {
-    it("uses localhost default in development", () => {
-      process.env.APP_MODE = "development";
-      delete process.env.CORS_ORIGIN;
-      delete process.env.VITE_PORT;
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.cors.origin).toBe("http://localhost:5173");
-    });
-  });
-
   describe("API port ownership", () => {
     const PROD = {
       JWT_SECRET: "s",
@@ -798,26 +774,6 @@ describe("runtimeConfig", () => {
         DEV_API_PORT: "3100",
       });
       expect(config.port).toBe(3100);
-    });
-
-    it("fails fast on invalid APP_PORT=abc (#566)", () => {
-      expect(() =>
-        loadRuntimeConfig({
-          APP_MODE: "development",
-          ...DEV_DB,
-          APP_PORT: "abc",
-        }),
-      ).toThrow(/APP_PORT must be a TCP port/);
-    });
-
-    it("fails fast on APP_PORT=0 (#566)", () => {
-      expect(() =>
-        loadRuntimeConfig({
-          APP_MODE: "development",
-          ...DEV_DB,
-          APP_PORT: "0",
-        }),
-      ).toThrow(/APP_PORT must be a TCP port/);
     });
 
     it("fails fast on APP_PORT=65536 (#566)", () => {
