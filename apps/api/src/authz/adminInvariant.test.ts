@@ -169,7 +169,11 @@ describe("mutateWithEffectiveAdminPostcondition", () => {
     expect(await effectiveAdminCount()).toBe(1);
   });
 
-  it("serializes concurrent attempts to remove the last two Admins", async () => {
+  // Sequential (the shared max:1 test pool queues these in dispatch order):
+  // the first removal commits, the second hits the post-condition and is
+  // rejected. True-overlap write-skew prevention is owned by
+  // authorityInvariants.concurrency.test.ts.
+  it("sequential last-two-Admin removal: first commits, second is rejected", async () => {
     const { user: a } = await createUser("concurrent-a", "Admin");
     const { user: b } = await createUser("concurrent-b", "Admin");
 

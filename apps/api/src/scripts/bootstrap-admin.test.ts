@@ -485,12 +485,12 @@ describe("bootstrapAdminOnFreshDb (production bootstrap path)", () => {
     }
   });
 
-  it("serializes concurrent first-install attempts: exactly one winner, one Admin, one audit", async () => {
-    // Two non-force bootstrap attempts race on a migrated-but-empty schema.
-    // The transaction-scoped advisory lock makes the serialization domain
-    // explicit: exactly one attempt commits; the loser re-reads the Admin
-    // authority inside its own (now-serialized) transaction and refuses
-    // with the typed AdminAlreadyExistsError — never a silent second Admin.
+  // Both attempts share the same max:1 schema-pinned connection, so they run
+  // in dispatch order: the winner commits; the loser re-reads the committed
+  // Admin authority and refuses with the typed AdminAlreadyExistsError —
+  // never a silent second Admin. (True-overlap advisory-lock serialization
+  // of the same seam class is proven in authorityInvariants.concurrency.test.ts.)
+  it("duplicate first-install attempts: exactly one winner, one Admin, one audit", async () => {
     const iso = await setupIsolatedTestDb({
       namespace: "script-bootstrap-race",
       databaseUrl: resolveTestDbUrl(),

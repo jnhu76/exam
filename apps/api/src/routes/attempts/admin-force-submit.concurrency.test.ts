@@ -66,6 +66,12 @@ import { IdempotencyConflictError } from "@exam/domain";
 import type { Database } from "@exam/db/src/types.js";
 import { createDeferred } from "../../testing/barrier.js";
 import type { Deferred } from "../../testing/barrier.js";
+import {
+  snapshotBackendState,
+  waitForBackendBlocked,
+  waitForTransactionStarted,
+  type ObserverSql,
+} from "../../testing/pgConcurrencyProbes.js";
 import { collectConnectionEvidence } from "../../testing/operatorGrantConcurrencyHarness.js";
 import {
   forceSubmitWithOperationRaceRecoveryTestOnly as forceSubmitWithOperationRaceRecovery,
@@ -713,124 +719,6 @@ describe("deterministic force-submit operationId races", () => {
         ),
       );
     return rows;
-  }
-
-  /**
-   * The subset of the postgres-js driver surface the overlap probes need.
-   * The test declares its connections with this narrow type instead of the
-   * full `postgres.Sql` so the probe helpers stay typed without importing
-   * the driver's types into the test.
-   */
-  interface ObserverSql {
-    unsafe(query: string, params?: unknown[]): Promise<unknown[]>;
-    end(): Promise<void>;
-  }
-
-  /**
-   * PROOF that `waiterPid` is genuinely blocked inside a DB transaction.
-   * Returns the waiter's `wait_event_type`/`wait_event` from
-   * `pg_stat_activity` and the count of the granted/blocked locks it holds
-   * that prove it has an open transaction (≥1 transactionid lock) plus, when
-   * `blockedOnBlockerPid` is set, that it is waiting on something held by
-   * that backend. Deterministic — no sleep. Throws if the waiter is not
-   * actually in an active transaction (the real-overlap invariant).
-   */
-  async function snapshotBackendState(
-    sql: ObserverSql,
-    pid: number,
-  ): Promise<{
-    active: boolean;
-    waitEventType: string | null;
-    waitEvent: string | null;
-    inTransaction: boolean;
-  }> {
-    const rows = (await sql.unsafe(
-      `SELECT
-         pid,
-         state,
-         wait_event_type,
-         wait_event,
-         xact_start IS NOT NULL AS in_transaction
-       FROM pg_stat_activity
-       WHERE pid = $1`,
-      [pid],
-    )) as Array<{
-      pid: number;
-      state: string;
-      wait_event_type: string | null;
-      wait_event: string | null;
-      in_transaction: boolean;
-    }>;
-    const row = rows[0];
-    if (!row) {
-      return {
-        active: false,
-        waitEventType: null,
-        waitEvent: null,
-        inTransaction: false,
-      };
-    }
-    return {
-      active: row.state === "active" || row.state === "idle in transaction",
-      waitEventType: row.wait_event_type,
-      waitEvent: row.wait_event,
-      inTransaction: Boolean(row.in_transaction),
-    };
-  }
-
-  /**
-   * Polls (bounded, deterministic) until `waiterPid` reports an open
-   * transaction (`xact_start IS NOT NULL`) — proof the waiter's BEGIN has
-   * executed. Resolves with the snapshot; rejects on timeout so a broken
-   * race surfaces instead of silently passing.
-   */
-  async function waitForTransactionStarted(
-    sql: ObserverSql,
-    pid: number,
-    timeoutMs = 2_000,
-  ): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      const snap = await snapshotBackendState(sql, pid);
-      if (snap.inTransaction) return;
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    throw new Error(
-      `Backend ${pid} did not start a transaction within ${timeoutMs}ms`,
-    );
-  }
-
-  /**
-   * Polls (bounded, deterministic) until `waiterPid` reports a non-granted
-   * lock request in `pg_locks` — proof it is blocked waiting for a lock held
-   * by another transaction (T1's EA row lock or the uncommitted unique index
-   * entry). The primary real-overlap signal. Uses `pg_locks` (rather than
-   * `pg_stat_activity.wait_event_type`) because the ungranted-lock row
-   * persists for the whole wait, so sampling cannot miss a transient window.
-   */
-  async function waitForBackendBlocked(
-    sql: ObserverSql,
-    pid: number,
-    timeoutMs = 8_000,
-  ): Promise<{ blockedOnLocktype: string; mode: string }> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      const rows = (await sql.unsafe(
-        `SELECT locktype, mode
-         FROM pg_locks
-         WHERE pid = $1 AND granted = false
-         LIMIT 1`,
-        [pid],
-      )) as Array<{ locktype: string; mode: string }>;
-      if (rows.length > 0) {
-        return { blockedOnLocktype: rows[0]!.locktype, mode: rows[0]!.mode };
-      }
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    throw new Error(
-      `Backend ${pid} did not report an ungranted lock within ${timeoutMs}ms ` +
-        "(the race did not produce real overlap)",
-    );
   }
 
   it("Matrix A: same attempt, different operationIds → one applied, one no_change, 2 receipts, 1 audit (true overlap, 40001 retry)", async () => {

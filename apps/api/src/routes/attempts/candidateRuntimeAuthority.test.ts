@@ -123,24 +123,6 @@ describe("candidate runtime — zero-side-effect denial (directive §9.3)", () =
     await ctx.cleanup();
   });
 
-  /** Count rows for a table+org predicate. */
-  async function countRows(
-    table: "examAttempts" | "auditLogs" | "attemptGradingEntries",
-    attemptId: string,
-  ): Promise<number> {
-    const colMap = {
-      examAttempts: schema.examAttempts,
-      auditLogs: schema.auditLogs,
-      attemptGradingEntries: schema.attemptGradingEntries,
-    } as const;
-    const t = colMap[table];
-    const rows = await ctx.db
-      .select({ id: t.id })
-      .from(t)
-      .where(and(eq(t.organizationId, ctx.org.id), eq(t.id, attemptId)));
-    return rows.length;
-  }
-
   /** Count audit rows for an action targeting an attempt (org-scoped). */
   async function countAuditForAction(
     attemptId: string,

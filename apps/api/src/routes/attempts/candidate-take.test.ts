@@ -184,11 +184,13 @@ describe("CandidateTakeSnapshot endpoint", () => {
     });
 
     it("returns answerSource=submitted after submitting", async () => {
-      // The submit freeze barrier writes submitted_answers
-      // with one entry per snapshot question, so a fresh submit resolves to
-      // "submitted". The "none" arm stays legal for legacy rows whose
-      // submitted_answers was never populated (see the fallback branch in
-      // attempts.shared.ts and the backfill-submitted-answers script).
+      // The submit freeze barrier (buildSubmittedAnswersSnapshot) writes one
+      // submitted_answers entry per snapshot question — unanswered questions
+      // get a null value, not a missing entry — so a fresh submit through
+      // the current path deterministically resolves to "submitted". The
+      // "none" fallback branch in attempts.shared.ts only serves legacy rows
+      // whose submitted_answers was never populated (backfill script); this
+      // test creates no legacy rows.
       const startRes = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${examId}/start`,
@@ -214,7 +216,7 @@ describe("CandidateTakeSnapshot endpoint", () => {
       expect(body.isEditable).toBe(false);
 
       const q = body.questions[0];
-      expect(["submitted", "none"]).toContain(q.answerSource);
+      expect(q.answerSource).toBe("submitted");
       expect(q).not.toHaveProperty("standardAnswer");
     });
 

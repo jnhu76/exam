@@ -692,8 +692,8 @@ describe("attempt routes", () => {
         notes: "escalated second mark",
       });
 
-      // The projection reflects the LATEST applied receipt (commit-order last
-      // writer wins, serialized by the FOR UPDATE lock).
+      // The projection reflects the LATEST applied receipt (the second,
+      // sequential call reads the first's committed state).
       const attempt = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
         attemptId,

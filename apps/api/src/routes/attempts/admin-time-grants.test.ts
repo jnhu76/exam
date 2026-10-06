@@ -813,13 +813,17 @@ describe("attempt routes", () => {
       expect(ledger).toHaveLength(0);
     });
 
-    // Cross-Attempt operationId race. The same operationId is fired at
+    // Cross-Attempt operationId conflict. The same operationId is fired at
     // TWO attempts under DIFFERENT exams in the same org. Different exams mean
     // neither the Enrollment→Attempt lock nor the Exam FOR UPDATE lock overlap;
-    // the only mutex is the (organization_id, operation_id) unique index. The
-    // loser must surface as 409 IDEMPOTENCY_CONFLICT (via the route's 23505
-    // recovery rerun), NOT a generic RESOURCE_CONFLICT. (Same-Exam attempts
-    // would serialize on the exam lock and never exercise this path.)
+    // the arbiter is the (organization_id, operation_id) unique index. On the
+    // app's default single-connection test pool these requests run in dispatch
+    // order (sequential), so this asserts the OUTCOME mapping — the loser
+    // surfaces as 409 IDEMPOTENCY_CONFLICT (via the route's 23505 recovery
+    // rerun), NOT a generic RESOURCE_CONFLICT, and writes no second ledger
+    // row. TRUE overlap (both transactions live concurrently, loser recovers
+    // through the 23505 path) is owned deterministically by
+    // admin-time-grants.concurrency.test.ts.
     describe("cross-Attempt operationId race (different exams)", () => {
       it("the loser returns 409 IDEMPOTENCY_CONFLICT and writes exactly one ledger row", async () => {
         const t = await createIsolatedTestOrg();

@@ -147,7 +147,10 @@ describe("staff invitation flow (#297)", () => {
     expect(users).toHaveLength(0);
   });
 
-  it("concurrent duplicate acceptance yields exactly one account", async () => {
+  // Pool-queued (the app's default single-connection test pool dispatches
+  // these in order): the outcome invariant — exactly one account survives —
+  // is owned; no specific interleaving is claimed.
+  it("duplicate acceptance bursts yield exactly one account", async () => {
     const inviteRes = await ctx.app.inject({
       method: "POST",
       url: "/api/invitations",
@@ -565,7 +568,7 @@ describe("email password reset flow (#297)", () => {
     expect(staleMe.statusCode).toBe(401);
   });
 
-  it("consume is single-use and concurrent-safe", async () => {
+  it("consume is single-use (one winner per reset token)", async () => {
     const staffUser = await createStaffWithEmail("reset-single");
     await ctx.app.inject({
       method: "POST",

@@ -401,16 +401,6 @@ describe("Operational RBAC Boundary", () => {
       expect(res.statusCode).toBe(403);
     });
 
-    it("Maintainer cannot manage users (create rejected)", async () => {
-      const res = await asMaintainer("POST", "/api/users", {
-        username: "hacker",
-        password: "password123",
-        name: "Hacker",
-        role: "Admin",
-      });
-      expect(res.statusCode).toBe(403);
-    });
-
     it("Maintainer cannot modify organization settings", async () => {
       const res = await asMaintainer("PATCH", "/api/admin/settings/branding", {
         name: "Hacked",

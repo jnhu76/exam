@@ -1,38 +1,49 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { createDatabase, migratePostgres, schema } from "@exam/db";
+import {
+  createPostgresDatabase,
+  migratePostgres,
+} from "@exam/db/src/postgres.js";
+import { schema } from "@exam/db/src/schema/pg.js";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import type { Database } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { seed } from "@exam/db/src/seed.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import { createDeferred } from "../../src/testing/barrier.js";
+import { collectConnectionEvidence } from "../../src/testing/operatorGrantConcurrencyHarness.js";
+import {
+  probeRowLockHeldNowait,
+  waitForBackendBlocked,
+  type ObserverSql,
+} from "../../src/testing/pgConcurrencyProbes.js";
 
-interface Deferred<T = void> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-}
-
-function deferred<T = void>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-}
-
-async function expectStillPending(p: Promise<unknown>, ms: number) {
-  const result = await Promise.race([
-    p.then(
-      () => "resolved" as const,
-      () => "rejected" as const,
-    ),
-    new Promise<"pending">((r) => setTimeout(() => r("pending"), ms)),
-  ]);
-  expect(result).toBe("pending");
-}
+/**
+ * Attempt-row serialization against real PostgreSQL — deterministic
+ * two-session proofs.
+ *
+ * The previous version of the second test ran both transactions on ONE
+ * max:1 pool: the observed "blocking" was pool queuing, not row locking
+ * (proven by a targeted mutation that removed FOR UPDATE — the test stayed
+ * green). The parked schedule below uses two INDEPENDENT physical sessions
+ * (distinct max:1 pools, distinct backend pids) and an observer connection,
+ * so the blocking is attributable to the row lock itself:
+ *
+ *   Session A: BEGIN → Attempt FOR UPDATE (row lock held) → read answers →
+ *              signal locked-and-read → PARK → write version+1 → COMMIT
+ *   Observer:  SELECT ... FOR UPDATE NOWAIT on the attempt row is rejected
+ *              with SQLSTATE 55P03 — session A provably holds the row lock.
+ *   Session B: BEGIN → Attempt FOR UPDATE → blocks (pg_locks ungranted-lock
+ *              probe on B's pid) → wakes only after A commits → must read
+ *              the post-commit answer version → writes version+1 → COMMIT
+ *
+ * Oracle: the two committed versions are exactly {1, 2} (a permutation) and
+ * the durable final answer version is 2. Removing the row lock fails this
+ * deterministically: session B would complete its read-modify-write during
+ * A's park and both would write the same version.
+ */
 
 interface Fixture {
-  sql: { end: () => Promise<void> };
   db: Database;
   orgId: string;
   candidateUserId: string;
@@ -42,15 +53,7 @@ interface Fixture {
   questionId: string;
 }
 
-async function buildFixture(schemaName?: string): Promise<Fixture> {
-  const conn = await createDatabase(resolveTestDbUrl(), schemaName);
-  const db = conn.db;
-  const sql = conn.sql as Fixture["sql"];
-
-  if (schemaName) {
-    await migratePostgres(db, { migrationsSchema: schemaName });
-  }
-
+async function buildFixture(db: Database): Promise<Fixture> {
   const seedResult = await seed(db, hashPassword);
   const orgId = seedResult.orgId;
 
@@ -159,7 +162,6 @@ async function buildFixture(schemaName?: string): Promise<Fixture> {
   });
 
   return {
-    sql,
     db,
     orgId,
     candidateUserId,
@@ -216,27 +218,86 @@ async function insertAttempt(
   return rows[0]!.id;
 }
 
+/** One locked read-modify-write of the single answer, like a parallel save. */
+async function lockedReadModifyWrite(
+  db: Database,
+  fx: Fixture,
+  ctx: ReturnType<typeof makeCtx>,
+  rowId: string,
+  park?: {
+    lockedAndRead: ReturnType<typeof createDeferred<void>>;
+    release: ReturnType<typeof createDeferred<void>>;
+  },
+): Promise<number> {
+  return db.transaction(async (tx) => {
+    const txRepo = createAttemptRepo(tx as unknown as Database);
+    const locked = await txRepo.findByIdForUpdate(ctx, rowId);
+    if (!locked) throw new Error("not found");
+    if (park) {
+      park.lockedAndRead.resolve();
+      await park.release.promise;
+    }
+    const current = (locked.answers ?? []) as Array<{
+      questionId: string;
+      version: number;
+    }>;
+    const existing = current.find((a) => a.questionId === fx.questionId);
+    const nextVersion = (existing?.version ?? 0) + 1;
+    const updated = current.filter((a) => a.questionId !== fx.questionId);
+    updated.push({
+      questionId: fx.questionId,
+      answer: true,
+      version: nextVersion,
+      savedAt: new Date(),
+    });
+    await txRepo.update(ctx, rowId, {
+      answers: updated,
+      lastActivityAt: new Date(),
+    });
+    return nextVersion;
+  });
+}
+
 describe("PG concurrency — attempt row-level serialization", () => {
+  let iso: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
   let fx: Fixture;
   let ctx: ReturnType<typeof makeCtx>;
   let attemptId: string;
-  let cleanup: () => Promise<void>;
+  let dbB: Database;
+  let sqlObserver: ObserverSql;
+  let teardown: () => Promise<void>;
 
   beforeAll(async () => {
-    const iso = await setupIsolatedTestDb({
+    iso = await setupIsolatedTestDb({
       namespace: "concurrency",
       databaseUrl: resolveTestDbUrl(),
     });
-    cleanup = iso.cleanup;
-    fx = await buildFixture(iso.schemaName);
+    const connMain = await createPostgresDatabase(
+      iso.databaseUrl,
+      iso.schemaName,
+    );
+    const connB = await createPostgresDatabase(iso.databaseUrl, iso.schemaName);
+    const connObserver = await createPostgresDatabase(
+      iso.databaseUrl,
+      iso.schemaName,
+    );
+    await migratePostgres(connMain.db, { migrationsSchema: iso.schemaName });
+    fx = await buildFixture(connMain.db);
     ctx = makeCtx(fx);
     attemptId = await insertAttempt(fx, 1, "in_progress");
-  });
+    dbB = connB.db;
+    sqlObserver = connObserver.sql;
+    teardown = async () => {
+      await connObserver.sql.end();
+      await connB.sql.end();
+      await connMain.sql.end();
+      await iso.cleanup();
+    };
+  }, 60_000);
 
   afterAll(async () => {
-    await fx.sql.end();
-    await cleanup();
-  });
+    await teardown();
+  }, 30_000);
 
   it("rollback: save error does not modify attempt row", async () => {
     const repo = createAttemptRepo(fx.db);
@@ -266,137 +327,51 @@ describe("PG concurrency — attempt row-level serialization", () => {
     expect(after?.status).toBe(before?.status);
   });
 
-  it("FOR UPDATE can lock and mutate a submitted-status row (DB layer)", async () => {
-    const submittedId = await insertAttempt(fx, 2, "submitted", {
-      submittedAt: new Date(),
-    });
-    const repo = createAttemptRepo(fx.db);
+  it("two-session read-modify-write: the second FOR UPDATE blocks until the first commits, versions form a permutation", async () => {
+    const rowId = await insertAttempt(fx, 2, "in_progress");
 
-    await fx.db.transaction(async (tx) => {
-      const txRepo = createAttemptRepo(tx as unknown as Database);
-      const locked = await txRepo.findByIdForUpdate(ctx, submittedId);
-      expect(locked).not.toBeNull();
-      expect(locked!.status).toBe("submitted");
+    const pidA = (await collectConnectionEvidence(fx.db)).pid;
+    const pidB = (await collectConnectionEvidence(dbB)).pid;
+    expect(pidA).not.toBe(pidB);
 
-      await txRepo.update(ctx, submittedId, {
-        answers: [
-          {
-            questionId: fx.questionId,
-            answer: false,
-            version: 1,
-            savedAt: new Date(),
-          },
-        ],
-        lastActivityAt: new Date(),
-      });
-    });
+    const park = {
+      lockedAndRead: createDeferred<void>("rmw-locked-and-read"),
+      release: createDeferred<void>("rmw-release"),
+    };
 
-    const after = await repo.findById(ctx, submittedId);
-    const answers = after!.answers as Array<{ questionId: string }>;
-    expect(answers).toHaveLength(1);
-    expect(answers[0]!.questionId).toBe(fx.questionId);
-  });
+    // Session A locks and reads, then parks BEFORE its write.
+    const saveA = lockedReadModifyWrite(fx.db, fx, ctx, rowId, park);
+    await park.lockedAndRead.promise;
 
-  it("save-then-submit: second FOR UPDATE blocks until first commits", async () => {
-    const rowId = await insertAttempt(fx, 3, "in_progress");
-    let saveCommitted = false;
-    let submitSawPreCommit = false;
-
-    // Test-only barrier: keep the save transaction open after it has
-    // acquired the attempt row lock via FOR UPDATE. This forces submit
-    // to wait on the same attempt row through FOR UPDATE.
-    // Production serialization is provided by the row lock, not by
-    // this Promise latch.
-    const saveHoldingRowLock = deferred();
-    const saveCanCommit = deferred();
-
-    const saveTx = fx.db.transaction(async (tx) => {
-      const txRepo = createAttemptRepo(tx as unknown as Database);
-      await txRepo.findByIdForUpdate(ctx, rowId);
-      await txRepo.update(ctx, rowId, {
-        answers: [
-          {
-            questionId: fx.questionId,
-            answer: true,
-            version: 1,
-            savedAt: new Date(),
-          },
-        ],
-        lastActivityAt: new Date(),
-      });
-      saveHoldingRowLock.resolve();
-      await saveCanCommit.promise;
-      saveCommitted = true;
-    });
-
-    await saveHoldingRowLock.promise;
-
-    const submitOp = fx.db.transaction(async (tx) => {
-      await createAttemptRepo(tx as unknown as Database).findByIdForUpdate(
-        ctx,
-        rowId,
-      );
-      if (!saveCommitted) submitSawPreCommit = true;
-    });
-
-    await expectStillPending(submitOp, 50);
-
-    try {
-      saveCanCommit.resolve();
-      await Promise.all([saveTx, submitOp]);
-    } finally {
-      saveCanCommit.resolve();
+    // Observer: session A really holds the attempt row lock right now.
+    const nowait = await probeRowLockHeldNowait(
+      sqlObserver,
+      "exam_attempts",
+      rowId,
+    );
+    expect(nowait.acquired).toBe(false);
+    if (!nowait.acquired) {
+      expect(nowait.sqlstate).toBe("55P03");
     }
 
-    expect(submitSawPreCommit).toBe(false);
+    // Session B, independent backend: its FOR UPDATE must block on A's lock.
+    const saveB = lockedReadModifyWrite(dbB, fx, ctx, rowId);
+    const blocked = await waitForBackendBlocked(sqlObserver, pidB);
+    expect(["relation", "transactionid", "tuple"]).toContain(
+      blocked.blockedOnLocktype,
+    );
+
+    park.release.resolve();
+    const versions = await Promise.all([saveA, saveB]);
+
+    // Both writes landed, each on top of the other's committed state.
+    versions.sort((a, b) => a - b);
+    expect(versions).toEqual([1, 2]);
 
     const repo = createAttemptRepo(fx.db);
     const final = await repo.findById(ctx, rowId);
     const answers = final!.answers as Array<{ version: number }>;
     expect(answers).toHaveLength(1);
-    expect(answers[0]!.version).toBe(1);
-  });
-
-  it("N-parallel save: monotonic versions with no lost updates (N=5)", async () => {
-    const N = 5;
-    const parallelId = await insertAttempt(fx, 4, "in_progress");
-
-    const saves = Array.from({ length: N }, (_, i) =>
-      fx.db.transaction(async (tx) => {
-        const txRepo = createAttemptRepo(tx as unknown as Database);
-        const locked = await txRepo.findByIdForUpdate(ctx, parallelId);
-        if (!locked) throw new Error("not found");
-        const current = (locked.answers ?? []) as Array<{
-          questionId: string;
-          version: number;
-        }>;
-        const existing = current.find((a) => a.questionId === fx.questionId);
-        const nextVersion = (existing?.version ?? 0) + 1;
-        const updated = current.filter((a) => a.questionId !== fx.questionId);
-        updated.push({
-          questionId: fx.questionId,
-          answer: i % 2 === 0,
-          version: nextVersion,
-          savedAt: new Date(),
-        });
-        await txRepo.update(ctx, parallelId, {
-          answers: updated,
-          lastActivityAt: new Date(),
-        });
-        return nextVersion;
-      }),
-    );
-
-    const results = await Promise.all(saves);
-    results.sort((a, b) => a - b);
-    for (let i = 0; i < results.length; i++) {
-      expect(results[i]).toBe(i + 1);
-    }
-
-    const repo = createAttemptRepo(fx.db);
-    const final = await repo.findById(ctx, parallelId);
-    const answers = final!.answers as Array<{ version: number }>;
-    expect(answers).toHaveLength(1);
-    expect(answers[0]!.version).toBe(N);
-  });
+    expect(answers[0]!.version).toBe(2);
+  }, 30_000);
 });

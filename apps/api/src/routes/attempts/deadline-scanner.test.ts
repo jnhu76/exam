@@ -373,7 +373,7 @@ describe("attempt routes", () => {
       expect(autoSubmitRows).toHaveLength(0);
     });
 
-    it("does NOT write a phantom attempt.autoSubmit audit when the row is already submitted at lock time (race no-op)", async () => {
+    it("does NOT write a phantom attempt.autoSubmit audit when the row is already submitted when the scanner operates", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -521,21 +521,25 @@ describe("attempt routes", () => {
       expect(attempt?.status).toBe("in_progress");
     });
 
-    // T7 — extendExam(closeAt) || Scanner linearization regression.
+    // T7 — extendExam(closeAt) vs scanner: post-extension authoritative
+    // recheck regression.
     //
     // Scenario: an attempt is a discovery candidate (deadlineAt in the past,
-    // so the DB query selects it). Between discovery and the scanner's
-    // under-lock authoritative recheck, the exam window is EXTENDED so that
-    // the canonical effective deadline is now in the future. The scanner MUST
-    // NOT submit: the canonical isAttemptDeadlineExpired recheck, evaluated
-    // under Attempt FOR UPDATE + Exam FOR UPDATE, sees the new closeAt.
+    // so the DB query selects it). The exam window is EXTENDED — fully
+    // committed — BEFORE the scanner operation runs. The scanner MUST NOT
+    // submit: the canonical isAttemptDeadlineExpired recheck, evaluated
+    // under Attempt FOR UPDATE + Exam FOR UPDATE at operation time, sees
+    // the committed extension and no-ops.
     //
-    // This proves the accepted linearization for the
-    // extendExam || Scanner race: the Exam FOR UPDATE (lock order
-    // Attempt -> Exam) is the serialization point, and a concurrent
-    // closeAt extension that lands before the scanner's exam read makes the
-    // recheck return false (no-op). (Decision B.)
-    it("does not auto-submit when exam.closeAt is extended before the under-lock recheck (T7 linearization)", async () => {
+    // PROOF BOUNDARY: the writer commits before the scanner starts, so this
+    // is a sequential post-extension recheck proof — it kills "remove the
+    // under-lock recheck / act on the stale discovery predicate". It does
+    // NOT construct a concurrent writer-vs-scanner schedule; the
+    // deterministic writer-race ownership lives in
+    // candidate-deadline-authority.concurrency.test.ts and
+    // candidate-save-deadline-race.concurrency.test.ts (parked production
+    // transaction vs the real extend route).
+    it("does not auto-submit when exam.closeAt is extended (committed) before the scanner's under-lock recheck (T7)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -689,12 +693,13 @@ describe("attempt routes", () => {
       expect(after?.submittedAt).toBeNull();
     });
 
-    // DEFENSIVE RECOVERY (concurrency): the accepted Attempt->Exam
-    // serialization must remain valid for NULL-deadline (defensive) rows. If
-    // exam.closeAt is extended into the future before the under-lock recheck,
-    // the canonical decision via the defensive fallback is NOT expired => no
-    // submit.
-    it("does not auto-submit a NULL-deadline attempt when exam.closeAt is extended before the under-lock recheck (defensive recovery race)", async () => {
+    // DEFENSIVE RECOVERY (sequential recheck): the canonical decision must
+    // remain correct for NULL-deadline (defensive) rows after a committed
+    // exam.closeAt extension. Under the defensive fallback
+    // EffectiveDeadline = closeAt (future), so the canonical recheck returns
+    // NOT expired => no-op. Same proof boundary as T7: the extension commits
+    // before the scanner runs; this is not a concurrent race schedule.
+    it("does not auto-submit a NULL-deadline attempt when exam.closeAt is extended (committed) before the scanner's under-lock recheck (defensive recovery)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,

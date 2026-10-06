@@ -14,6 +14,7 @@ export function createAuditLogTestRepo(db: Database) {
     async create(
       ctx: TenantContext | RequestContext,
       event: AuditLogInsert<string>,
+      options?: { createdAt?: Date },
     ) {
       const row = {
         id: randomUUID(),
@@ -25,7 +26,7 @@ export function createAuditLogTestRepo(db: Database) {
         metadata: event.metadata,
         ipAddress: event.ipAddress ?? null,
         userAgent: event.userAgent ?? null,
-        createdAt: new Date(),
+        createdAt: options?.createdAt ?? new Date(),
       };
       await db.insert(auditLogs).values(row);
       return row;

@@ -1,6 +1,10 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import crypto from "node:crypto";
-import { createDatabase, migratePostgres, schema } from "@exam/db";
+import {
+  createPostgresDatabase,
+  migratePostgres,
+} from "@exam/db/src/postgres.js";
+import { schema } from "@exam/db/src/schema/pg.js";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import type { Database } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -9,62 +13,57 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { seed } from "@exam/db/src/seed.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { lockEnrollmentAndAttempt } from "@exam/exam-engine";
+import { createDeferred } from "../../src/testing/barrier.js";
+import { collectConnectionEvidence } from "../../src/testing/operatorGrantConcurrencyHarness.js";
+import {
+  probeRowLockHeldNowait,
+  waitForBackendBlocked,
+  type ObserverSql,
+} from "../../src/testing/pgConcurrencyProbes.js";
 import {
   createAttemptRepoAdapter,
   createEnrollmentRepoAdapter,
 } from "../../src/adapters/repoAdapters.js";
 
-// Deterministic EA lock-order concurrency regression.
-//
-// Reproduces the original EA↔AE contention shape with the REPAIRED order and
-// proves both transactions fulfill with NO SQLSTATE 40P01 (deadlock) and NO
-// reversed A→E edge. Same Enrollment E + same active Attempt A, two
-// independent transactions/connections, explicit barriers.
-//
-// Schedule:
-//   Natural EA transaction (startOrRestoreAttempt-shaped):
-//     lock E (enrollment FOR UPDATE)
-//     signal E-held
-//     wait for canonical-locator-read signal
-//     lock A (attempt FOR UPDATE)
-//     commit
-//   Canonical attemptId-rooted transaction:
-//     plain-read A locator
-//     signal locator-read
-//     lockEnrollmentAndAttempt (E then A)  → waits on E held by natural EA
-//     acquires E after natural EA commits, then A
-//     commit
-//
-// Pre-repair, the canonical transaction acquired A before E (A→E), forming a
-// cycle with the natural E→A; PostgreSQL 40P01 resulted. Post-repair both
-// sides are E→A, so no cycle exists and both fulfill.
-
-interface Deferred<T = void> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-}
-function deferred<T = void>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-}
-
-async function expectStillPending(p: Promise<unknown>, ms: number) {
-  const result = await Promise.race([
-    p.then(
-      () => "resolved" as const,
-      () => "rejected" as const,
-    ),
-    new Promise<"pending">((r) => setTimeout(() => r("pending"), ms)),
-  ]);
-  expect(result).toBe("pending");
-}
+/**
+ * EA↔AE lock-order cycle prevention + tx-bound repository lifecycle
+ * semantics — deterministic, real-overlap proofs.
+ *
+ * Test 1 — lock-order cycle prevention (the historical 40P01 regression
+ * class). Two INDEPENDENT physical sessions (distinct max:1 pools, distinct
+ * backend pids) with a pinned schedule:
+ *
+ *   Session A — natural EA order (the startOrRestoreAttempt shape):
+ *     Enrollment FOR UPDATE → signal eHeld → PARK → Attempt FOR UPDATE → commit
+ *   Observer — independent connection:
+ *     `SELECT ... FOR UPDATE NOWAIT` on the enrollment row is rejected with
+ *     SQLSTATE 55P03: session A provably holds the Enrollment row lock while
+ *     the Attempt lock is NOT yet held.
+ *   Session B — the REAL canonical seam (lockEnrollmentAndAttempt):
+ *     locator read → Enrollment FOR UPDATE → blocks on session A's row lock
+ *     (pg_locks ungranted-lock probe on B's pid; B's only lock acquisition up
+ *     to that point is the Enrollment FOR UPDATE, so the wait is attributable
+ *     to A's held lock).
+ *   Release A: A acquires the Attempt lock and commits; B wakes, acquires
+ *   E then A, commits. Both fulfill with NO 40P01 — under the canonical
+ *   E-before-A order no cycle is constructible even with true overlap.
+ *
+ *   (A reversed seam — Attempt FOR UPDATE before Enrollment FOR UPDATE —
+ *   under this same schedule acquires the free Attempt lock, then blocks on
+ *   A's Enrollment lock; releasing A makes A block on B's Attempt lock: a
+ *   real cycle and a 40P01. That reversal is exercised by targeted mutation
+ *   validation, not by a committed mutant.)
+ *
+ * Test 2 — tx-bound repository lifecycle characterization. A repository
+ * captured inside a transaction KEEPS EXECUTING after the transaction ends
+ * (reads return rows; a write after ROLLBACK lands durably in autocommit on
+ * the pooled connection). This pins the REAL driver behavior
+ * (Drizzle 0.45 / postgres.js 3.4): there is NO post-end rejection. Safety
+ * arguments must not rely on one — see the follow-up issue tracking the
+ * capability-boundary hardening.
+ */
 
 interface Fixture {
-  sql: { end: () => Promise<void> };
-  db: Database;
   orgId: string;
   candidateUserId: string;
   candidateProfileId: string;
@@ -74,12 +73,7 @@ interface Fixture {
   attemptId: string;
 }
 
-async function buildFixture(schemaName: string): Promise<Fixture> {
-  const conn = await createDatabase(resolveTestDbUrl(), schemaName);
-  const db = conn.db;
-  const sql = conn.sql as Fixture["sql"];
-  await migratePostgres(db, { migrationsSchema: schemaName });
-
+async function buildFixture(db: Database): Promise<Fixture> {
   const seedResult = await seed(db, hashPassword);
   const orgId = seedResult.orgId;
 
@@ -187,7 +181,6 @@ async function buildFixture(schemaName: string): Promise<Fixture> {
     updatedAt: new Date(),
   });
 
-  // Insert one in_progress attempt sharing E/A.
   const attemptRows = await db
     .insert(schema.examAttempts)
     .values({
@@ -214,18 +207,15 @@ async function buildFixture(schemaName: string): Promise<Fixture> {
       updatedAt: new Date(),
     })
     .returning({ id: schema.examAttempts.id });
-  const attemptId = attemptRows[0]!.id;
 
   return {
-    sql,
-    db,
     orgId,
     candidateUserId,
     candidateProfileId,
     examId,
     enrollmentId,
     questionId,
-    attemptId,
+    attemptId: attemptRows[0]!.id,
   };
 }
 
@@ -239,78 +229,144 @@ function makeCtx(fx: Fixture) {
   };
 }
 
-let fx: Fixture;
-let ctx: ReturnType<typeof makeCtx>;
-let cleanup: () => Promise<void>;
+describe("EA lock-order and tx-bound repo lifecycle (real sessions)", () => {
+  let iso: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
+  let dbA: Database;
+  let dbB: Database;
+  let dbSeed: Database;
+  let sqlObserver: ObserverSql;
+  let fx: Fixture;
+  let ctx: ReturnType<typeof makeCtx>;
+  let teardown: () => Promise<void>;
 
-beforeAll(async () => {
-  const iso = await setupIsolatedTestDb({
-    namespace: "ea_lock_order",
-    databaseUrl: resolveTestDbUrl(),
-  });
-  cleanup = iso.cleanup;
-  fx = await buildFixture(iso.schemaName);
-  ctx = makeCtx(fx);
-});
-
-afterAll(async () => {
-  await fx.sql.end();
-  await cleanup();
-});
-
-async function runOneContentionSchedule(
-  fx: Fixture,
-  ctx: ReturnType<typeof makeCtx>,
-) {
-  // Natural EA path: lock E, then A, commit.
-  await fx.db.transaction(async (tx) => {
-    const enrollmentRepo = createEnrollmentRepo(tx as unknown as Database);
-    await enrollmentRepo.findByExamAndCandidateForUpdate(
-      ctx,
-      fx.examId,
-      fx.candidateProfileId,
-    );
-    const attemptRepo = createAttemptRepo(tx as unknown as Database);
-    await attemptRepo.findByIdForUpdate(ctx, fx.attemptId);
-  });
-
-  // Canonical attemptId-rooted path: mint via lockEnrollmentAndAttempt.
-  await fx.db.transaction(async (tx) => {
-    const attemptRepo = createAttemptRepo(tx as unknown as Database);
-    const enrollmentRepo = createEnrollmentRepo(tx as unknown as Database);
-    const enrollments = createEnrollmentRepoAdapter(enrollmentRepo, ctx);
-    const attempts = createAttemptRepoAdapter(attemptRepo, ctx);
-    await lockEnrollmentAndAttempt(enrollments, attempts, fx.attemptId);
-  });
-}
-
-describe("EA lock-order concurrency regression (J8)", () => {
-  it("natural EA and canonical attemptId-rooted transactions both fulfill, no 40P01", async () => {
-    await runOneContentionSchedule(fx, ctx);
-  });
-
-  it("repaired contention schedule is stable across 100 consecutive runs", async () => {
-    for (let i = 0; i < 100; i++) {
-      await runOneContentionSchedule(fx, ctx);
-    }
-    // Reaching here means all 100 runs fulfilled with no 40P01.
-    expect(true).toBe(true);
-  });
-
-  // J4 — real-DB half of the ended-transaction composite safety proof.
-  // A tx-bound repo captured inside a committed/rolled-back transaction rejects
-  // further DB use. Combined with the consumer-level unit proof in
-  // packages/exam-engine/src/lockSeam.test.ts (J4 consumer-level), this
-  // establishes that a leaked capability + ended original repos cannot reach
-  // the protected Enrollment UPDATE.
-  it("captured tx-bound repo operations fail after the transaction ends (ended-session liveness)", async () => {
-    let capturedAttemptRepo: ReturnType<typeof createAttemptRepo> | null = null;
-    await fx.db.transaction(async (tx) => {
-      capturedAttemptRepo = createAttemptRepo(tx as unknown as Database);
-      // Use it inside the tx to prove it works while live.
-      await capturedAttemptRepo!.findById(ctx, fx.attemptId);
+  beforeAll(async () => {
+    iso = await setupIsolatedTestDb({
+      namespace: "ea_lock_order",
+      databaseUrl: resolveTestDbUrl(),
     });
-    // tx has committed. Any further use of the captured repo must fail.
-    expect(capturedAttemptRepo).not.toBeNull();
+    // Three INDEPENDENT max:1 connections: racer A, racer B, and a
+    // probe-only observer that never queues behind a parked racer.
+    const connA = await createPostgresDatabase(iso.databaseUrl, iso.schemaName);
+    const connB = await createPostgresDatabase(iso.databaseUrl, iso.schemaName);
+    const connSeed = await createPostgresDatabase(
+      iso.databaseUrl,
+      iso.schemaName,
+    );
+    const connObserver = await createPostgresDatabase(
+      iso.databaseUrl,
+      iso.schemaName,
+    );
+    dbA = connA.db;
+    dbB = connB.db;
+    dbSeed = connSeed.db;
+    sqlObserver = connObserver.sql;
+    await migratePostgres(dbSeed, { migrationsSchema: iso.schemaName });
+    fx = await buildFixture(dbSeed);
+    ctx = makeCtx(fx);
+    teardown = async () => {
+      await connObserver.sql.end();
+      await connSeed.sql.end();
+      await connB.sql.end();
+      await connA.sql.end();
+      await iso.cleanup();
+    };
+  }, 60_000);
+
+  afterAll(async () => {
+    await teardown();
+  }, 30_000);
+
+  it("true overlap, canonical E→A order: a parked natural-EA holder does not deadlock the canonical seam — no 40P01", async () => {
+    const pidA = (await collectConnectionEvidence(dbA)).pid;
+    const pidB = (await collectConnectionEvidence(dbB)).pid;
+    expect(pidA).not.toBe(pidB);
+
+    const eHeld = createDeferred<void>("natural-ea-enrollment-held");
+    const releaseA = createDeferred<void>("natural-ea-release");
+
+    // Session A — natural EA order, parked BETWEEN the two lock acquisitions
+    // (the only window in which an EA↔AE cycle is constructible at all).
+    const naturalEa = dbA.transaction(async (tx) => {
+      const enrollmentRepo = createEnrollmentRepo(tx as unknown as Database);
+      await enrollmentRepo.findByExamAndCandidateForUpdate(
+        ctx,
+        fx.examId,
+        fx.candidateProfileId,
+      );
+      eHeld.resolve();
+      await releaseA.promise;
+      const attemptRepo = createAttemptRepo(tx as unknown as Database);
+      await attemptRepo.findByIdForUpdate(ctx, fx.attemptId);
+    });
+
+    await eHeld.promise;
+
+    // Observer: session A really holds the Enrollment row lock right now.
+    const nowait = await probeRowLockHeldNowait(
+      sqlObserver,
+      "exam_enrollments",
+      fx.enrollmentId,
+    );
+    expect(nowait.acquired).toBe(false);
+    if (!nowait.acquired) {
+      expect(nowait.sqlstate).toBe("55P03");
+    }
+
+    // Session B — the REAL canonical seam on an independent session. Its
+    // Enrollment FOR UPDATE must block on A's row lock.
+    const canonical = dbB.transaction(async (tx) => {
+      const attemptRepo = createAttemptRepo(tx as unknown as Database);
+      const enrollmentRepo = createEnrollmentRepo(tx as unknown as Database);
+      const enrollments = createEnrollmentRepoAdapter(enrollmentRepo, ctx);
+      const attempts = createAttemptRepoAdapter(attemptRepo, ctx);
+      await lockEnrollmentAndAttempt(enrollments, attempts, fx.attemptId);
+    });
+
+    const blocked = await waitForBackendBlocked(sqlObserver, pidB);
+    expect(["relation", "transactionid", "tuple"]).toContain(
+      blocked.blockedOnLocktype,
+    );
+
+    // Release A: A completes (Attempt lock, commit); B wakes, acquires E
+    // then A, commits. Under the canonical order both fulfill — no cycle.
+    releaseA.resolve();
+    await Promise.all([naturalEa, canonical]);
+
+    // Durable post-commit sanity: both rows still present, attempt still
+    // in_progress (neither path mutates status).
+    const attempt = await createAttemptRepo(dbSeed).findById(ctx, fx.attemptId);
+    expect(attempt?.status).toBe("in_progress");
+  }, 30_000);
+
+  // Characterization of the REAL tx-bound repository lifecycle semantics
+  // (Drizzle 0.45 / postgres.js 3.4): a captured repository does NOT reject
+  // use after its transaction ends. A post-ROLLBACK write executes in
+  // autocommit on the pooled connection and LANDS DURABLY. Any safety
+  // argument that leans on driver-level post-end rejection is false; this
+  // test pins the actual behavior so such an assumption cannot silently
+  // return (and a driver upgrade that changes it turns this red).
+  it("tx-bound repository captured in a rolled-back transaction keeps executing — its post-rollback write lands durably (characterization)", async () => {
+    let captured: ReturnType<typeof createAttemptRepo> | null = null;
+    const marker = new Date(Date.now() + 123_456);
+    await expect(
+      dbSeed.transaction(async (tx) => {
+        captured = createAttemptRepo(tx as unknown as Database);
+        const live = await captured.findById(ctx, fx.attemptId);
+        expect(live).not.toBeNull();
+        throw new Error("forced rollback before any write");
+      }),
+    ).rejects.toThrow("forced rollback before any write");
+    expect(captured).not.toBeNull();
+
+    // Post-rollback read: still executes (no rejection).
+    const afterRead = await captured!.findById(ctx, fx.attemptId);
+    expect(afterRead).not.toBeNull();
+
+    // Post-rollback WRITE: executes and lands durably — proving the repo is
+    // no longer transactional after the transaction ended.
+    await captured!.update(ctx, fx.attemptId, { lastActivityAt: marker });
+
+    const fresh = await createAttemptRepo(dbSeed).findById(ctx, fx.attemptId);
+    expect(fresh?.lastActivityAt?.toISOString()).toBe(marker.toISOString());
   });
 });

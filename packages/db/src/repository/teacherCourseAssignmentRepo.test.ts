@@ -197,20 +197,21 @@ describe("teacher course assignment persistence foundation", () => {
       updatedAt: now(),
     });
     // The constraint name is the deterministic arbiter (not message text).
-    await repo
-      .insertAssignment(alpha.ctx, {
+    await expect(
+      repo.insertAssignment(alpha.ctx, {
         teacherUserId: teacherId,
         courseId: alpha.courseAId,
         assignedBy: alpha.adminId,
         assignedAt: now(),
         createdAt: now(),
         updatedAt: now(),
-      })
-      .catch((err: unknown) => {
-        expect(constraintNameOf(err)).toBe(
-          "teacher_course_assignments_active_unique",
-        );
-      });
+      }),
+    ).rejects.toSatisfy((err: unknown) => {
+      expect(constraintNameOf(err)).toBe(
+        "teacher_course_assignments_active_unique",
+      );
+      return true;
+    });
     // A DIFFERENT course for the same teacher is still allowed.
     const other = await repo.insertAssignment(alpha.ctx, {
       teacherUserId: teacherId,

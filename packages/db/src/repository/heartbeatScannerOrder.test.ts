@@ -9,7 +9,6 @@ import { schema } from "../schema/pg.js";
 describe("heartbeat/scanner commit-order serialization — real PostgreSQL", () => {
   let iso: IsolatedTestDb;
   let conn: Awaited<ReturnType<typeof createDatabase>>;
-  let adminSql: postgres.Sql;
 
   const orgId = randomUUID();
   const courseId = randomUUID();
@@ -28,9 +27,6 @@ describe("heartbeat/scanner commit-order serialization — real PostgreSQL", () 
     iso = await setupIsolatedTestDb({ namespace: "heartbeatorder" });
     conn = await createDatabase(iso.databaseUrl, iso.schemaName);
     await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
-
-    adminSql = postgres(iso.databaseUrl, { max: 5 });
-    await adminSql.unsafe(`SET search_path TO "${iso.schemaName}"`);
 
     const now = new Date("2025-12-31T00:00:00.000Z");
     await conn.db.insert(schema.organizations).values({
@@ -116,7 +112,6 @@ describe("heartbeat/scanner commit-order serialization — real PostgreSQL", () 
   }, 30_000);
 
   afterAll(async () => {
-    if (adminSql) await adminSql.end();
     if (conn) await conn.sql.end();
     if (iso) await iso.cleanup();
   }, 30_000);

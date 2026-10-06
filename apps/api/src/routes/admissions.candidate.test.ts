@@ -7,7 +7,8 @@
  *   C1 duplicate join → one durable membership
  *   C2 duplicate admission → one admitted fact
  *   C3 duplicate start → one attempt, one consumption
- *   C4 admit-vs-start race → deterministic legal convergence
+ *   C4 admit-vs-start ordering → sequential progression across the batch
+ *       boundary (clock-controlled via setNow; no Promise.all racing)
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
@@ -357,28 +358,37 @@ describe("durable admission candidate API (#292)", () => {
     const started = await startAt(head.token);
     expect(started.statusCode).toBe(201);
 
-    // The tail is NOT admitted immediately: it must wait for its batch boundary.
-    const tooEarly = await queueAt(tail.token);
-    expect(tooEarly.json()).toMatchObject({ status: "waiting" });
+    // Control the admission clock instead of sleeping: freeze at the head's
+    // start moment so the still-waiting check cannot race the 2s batch
+    // boundary (a CI pause between the two calls would otherwise flip it),
+    // then advance past the boundary deterministically.
+    const t0 = new Date();
+    ctx.setNow(t0);
+    try {
+      const tooEarly = await queueAt(tail.token);
+      expect(tooEarly.json()).toMatchObject({ status: "waiting" });
 
-    await new Promise((r) => setTimeout(r, 2_500));
-    const status = await queueAt(tail.token);
-    expect(status.json()).toMatchObject({ status: "ready", position: 1 });
+      ctx.setNow(new Date(t0.getTime() + 2_000 + 1));
+      const status = await queueAt(tail.token);
+      expect(status.json()).toMatchObject({ status: "ready", position: 1 });
 
-    const rows = await ctx.db
-      .select()
-      .from(schema.examAdmissions)
-      .where(
-        and(
-          eq(schema.examAdmissions.examId, progressExamId),
-          eq(schema.examAdmissions.candidateId, tail.profileId),
-        ),
-      );
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.admittedAt).not.toBeNull();
+      const rows = await ctx.db
+        .select()
+        .from(schema.examAdmissions)
+        .where(
+          and(
+            eq(schema.examAdmissions.examId, progressExamId),
+            eq(schema.examAdmissions.candidateId, tail.profileId),
+          ),
+        );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.admittedAt).not.toBeNull();
 
-    const tailStarted = await startAt(tail.token);
-    expect(tailStarted.statusCode).toBe(201);
+      const tailStarted = await startAt(tail.token);
+      expect(tailStarted.statusCode).toBe(201);
+    } finally {
+      ctx.setNow(null);
+    }
 
     const attempts = await ctx.db
       .select()

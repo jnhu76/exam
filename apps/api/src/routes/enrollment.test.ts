@@ -387,7 +387,7 @@ describe("exam_assigned notifications on enrollment (#299)", () => {
     return profile!.userId;
   }
 
-  it("a new enrollment with email atomically creates 1 Inbox + 1 Email outbox row", async () => {
+  it("a new enrollment with email creates exactly 1 Inbox + 1 Email outbox row", async () => {
     const profileId = await createCandidateViaApi(
       "withmail",
       "with@example.com",

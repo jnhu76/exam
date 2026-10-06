@@ -293,7 +293,12 @@ describe("admin incident routes — integration", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("concurrent create with the same operationId yields one incident (23505 race recovery)", async () => {
+  // Pool-queued (the app's default single-connection test pool dispatches
+  // these in order): the second caller goes through the committed-receipt
+  // replay path. TRUE-overlap operationId racing is owned by the barrier
+  // schedules in incidents.admin.concurrency.test.ts and
+  // admin-time-grants.concurrency.test.ts.
+  it("retried create with the same operationId yields one incident (route idempotency)", async () => {
     const opId = randomUUID();
     const payload = {
       operationId: opId,
@@ -325,7 +330,7 @@ describe("admin incident routes — integration", () => {
     ]);
   });
 
-  it("concurrent note with the same operationId yields one event", async () => {
+  it("retried note with the same operationId yields one event (route idempotency)", async () => {
     const createRes = await ctx.app.inject({
       method: "POST",
       url: `/api/admin/exams/${examId}/incidents`,

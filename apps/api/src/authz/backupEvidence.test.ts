@@ -357,7 +357,12 @@ describe("backup evidence ledger", () => {
     ).rejects.toThrow();
   });
 
-  it("concurrent duplicate completion produces at most one success", async () => {
+  // Sequential (the shared max:1 test pool queues these in dispatch order):
+  // the duplicate is caught by the code-level check, never by the unique
+  // index. The TRUE concurrent duplicate — 23505 on the partial unique index
+  // and its fail-closed classification — is owned by
+  // backupEvidence.concurrency.test.ts.
+  it("sequential duplicate completion produces at most one success", async () => {
     const operationId = opId();
     const results = await Promise.allSettled([
       repo().completeRun(ctx, {

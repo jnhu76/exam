@@ -377,11 +377,15 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
     expect(await violationsFor(ctx)).toEqual([]);
   });
 
-  it("serializes concurrent Admin + Maintainer assignment races (write-skew)", async () => {
-    // A brand-new actor with no active assignments. Two concurrent authority
-    // mutations race: one adds Admin (primary), the other adds Maintainer
-    // (primary). The shared org advisory lock serializes them; the second
-    // transaction's post-condition must observe the first commit and reject.
+  // Sequential (the shared max:1 test pool queues these in dispatch order):
+  // whichever assignment commits first, the other hits the exclusion
+  // post-condition and is rejected. True-overlap write-skew prevention is
+  // owned by authorityInvariants.concurrency.test.ts.
+  it("sequential Admin + Maintainer assignment: the second is rejected by the exclusion post-condition", async () => {
+    // A brand-new actor with no active assignments. Two authority mutations
+    // run in pool-dispatch order: one adds Admin (primary), the other adds
+    // Maintainer (primary). The first commits; the second transaction's
+    // post-condition must observe that commit and reject.
     const userRepo = createUserRepo(db);
     const actor = await userRepo.create(ctx, {
       username: `race-actor-${randomUUID().slice(0, 8)}`,
@@ -425,8 +429,8 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
     expect(rejected).toBe(1);
     expect(await violationsFor(ctx)).toEqual([]);
 
-    // Either winner is legal — the race is settled by lock acquisition order.
-    // Exactly one authority role must survive.
+    // Dispatch order decides which half wins — exactly one authority role
+    // must survive.
     const rows = await createUserRoleAssignmentRepo(db).listForUser(
       ctx,
       actor.id,
@@ -439,7 +443,11 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
     expect(["Admin", "Maintainer"]).toContain(activeRoles[0]);
   });
 
-  it("shares the fence with the effective-Admin seam (mixed races)", async () => {
+  // Sequential (the shared max:1 test pool queues these in dispatch order):
+  // the Admin promotion commits, the Maintainer addition is rejected by the
+  // exclusion post-condition. True-overlap write-skew prevention is owned by
+  // authorityInvariants.concurrency.test.ts.
+  it("shares the fence with the effective-Admin seam (mixed sequential mutations)", async () => {
     // One transaction promotes a Candidate to Admin; the other adds a
     // Maintainer primary for the same actor. Different seams, same lock.
     const userRepo = createUserRepo(db);
@@ -497,7 +505,7 @@ describe("Admin ↔ Maintainer mutual exclusion", () => {
     const activeRoles = rows.filter((r) => r.isActive).map((r) => r.role);
     const hasAdmin = activeRoles.includes("Admin");
     const hasMaintainer = activeRoles.includes("Maintainer");
-    // Admin ∩ Maintainer = ∅ — never both, no matter which race won.
+    // Admin ∩ Maintainer = ∅ — never both, no matter which half committed.
     expect(hasAdmin && hasMaintainer).toBe(false);
     expect(activeRoles.length).toBeGreaterThan(0);
   });

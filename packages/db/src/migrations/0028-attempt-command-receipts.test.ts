@@ -371,6 +371,10 @@ describe(
       ).rejects.toThrow(/attempt_command_receipts_request_payload_check/);
     });
 
+    // ── NOT NULL column constraints ───────────────────────────────────
+    // (not a JSONB object-shape CHECK: NULL violates the column's NOT NULL,
+    //  which reports the column name, not a constraint name)
+
     it("rejects a null request_payload", async () => {
       await expect(
         sql.unsafe(`
@@ -382,7 +386,7 @@ describe(
           'force_submit', NULL, '{}'::jsonb, 'applied', ${s(alpha.adminId)}
         )
       `),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/request_payload.*not-null|not-null.*request_payload/);
     });
 
     it("rejects a non-object result_payload (scalar)", async () => {

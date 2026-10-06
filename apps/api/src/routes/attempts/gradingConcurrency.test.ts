@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, like } from "drizzle-orm";
-import { buildTestApp, uniquePrefix } from "../testHelpers.js";
+import { eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
+import {
+  createPostgresDatabase,
+  migratePostgres,
+} from "@exam/db/src/postgres.js";
+import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
@@ -17,12 +22,19 @@ import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
 } from "../../adapters/repoAdapters.js";
+import type { EnrollmentRepository } from "@exam/exam-engine";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import { createDeferred } from "../../testing/barrier.js";
+import type { Deferred } from "../../testing/barrier.js";
+import { collectConnectionEvidence } from "../../testing/operatorGrantConcurrencyHarness.js";
+import {
+  probeRowLockHeldNowait,
+  waitForBackendBlocked,
+  type ObserverSql,
+} from "../../testing/pgConcurrencyProbes.js";
 import type {
   ControlFlags,
   Exam,
-  ExamEnrollment,
   Permission,
   QuestionSnapshot,
   RequestContext,
@@ -30,98 +42,46 @@ import type {
   ScoreResult,
 } from "@exam/domain";
 
-const GRADE_CONCURRENCY_PREFIX = "grade-concurrency-test-";
-
 /**
- * finalScore / finalAttemptId last-writer-wins race.
+ * Deterministic enrollment finalScore/finalAttemptId serialization proof.
  *
- * Before the fix, `finalizeGrading` read the enrollment WITHOUT a row lock:
- * two concurrent transactions (one grading a 100-point attempt, one grading a
- * 0-point attempt on the same enrollment) both read the same stale
- * finalScore/finalAttemptId, each computed `shouldSelectAttempt`, and the one
- * that committed LAST overwrote the other — so under `highest` strategy the
- * enrollment could end up recording the 0-point attempt.
+ * Fault model: two concurrent terminal graders race the enrollment
+ * finalScore/finalAttemptId projection. Without the canonical seam's
+ * Enrollment `FOR UPDATE` (acquired BEFORE the Attempt lock), both
+ * transactions read the same pre-final state and the last committer can
+ * overwrite a higher already-committed score (`highest` strategy loses).
  *
- * The fix reads the enrollment with `FOR UPDATE` inside the caller's
- * transaction, so the second transaction's read blocks until the first commits.
- * Selection is then recomputed against the post-commit state. These tests prove
- * that serialization holds in real Postgres: whichever attempt finalizes first,
- * the `highest` policy always keeps the higher score.
+ * Each schedule below pins the interleaving deterministically with real
+ * physical sessions and observer evidence — no `Promise.all` racing, no
+ * repetition loops:
  *
- * Real-Postgres integration test (no fake repos, no DB mocking). Seeds via
- * direct inserts with explicit ids (matches the admin-force-submit test
- * pattern) so FKs link up; only the grading path under test goes through the
- * engine + tx-scoped repos.
+ *   T1 (racer connection 1, max:1 pool):
+ *     executeInTransaction (REPEATABLE READ, production composition)
+ *       → lockEnrollmentAndAttempt seam step 2 acquires Enrollment FOR UPDATE
+ *       → test hook signals enrollmentLockAcquired and PARKS the transaction
+ *         mid-seam (before the Attempt lock) on a release gate
+ *   Observer connection (independent):
+ *     → SELECT ... FOR UPDATE NOWAIT on the enrollment row is rejected with
+ *       SQLSTATE 55P03: T1 provably holds the Enrollment row lock
+ *   T2 (racer connection 2, independent max:1 pool):
+ *     the SAME production composition for the second attempt
+ *       → its seam's Enrollment FOR UPDATE blocks on T1's row lock
+ *       → proven via pg_locks ungranted-lock probe on T2's backend pid
+ *   Release:
+ *     T1 completes the seam, finalizes, commits; T2 wakes (directly or via
+ *     the REPEATABLE READ 40001 whole-transaction retry), re-reads the
+ *     committed enrollment state, and recomputes selection against it.
+ *
+ * Schedules H, L, E below cover both commit orders plus the equal-score
+ * decline oracle. The durable final enrollment row is the oracle.
  */
-
-function makeCtx(orgId: string, actorId: string): RequestContext {
-  return {
-    actorId,
-    organizationId: orgId,
-    role: "Admin" as Role,
-    permissions: [] as Permission[],
-    sessionId: "grade-concurrency-test",
-    targetOrganizationId: orgId,
-  };
-}
-
-/**
- * Mirrors the production callers (submitAndGradeAttempt / autoSubmitAndGrade /
- * admin force-submit / gradingQueue): wrap finalizeGrading in ONE transaction
- * with tx-scoped repos and a locked attempt row, then a locked enrollment row.
- */
-async function finalizeInTx(
-  db: Database,
-  ctx: RequestContext,
-  attemptId: string,
-  enrollmentId: string,
-  exam: Exam,
-): Promise<boolean> {
-  return executeInTransaction(db, async (tx) => {
-    const txAttemptRepo = createAttemptRepo(tx);
-    const { exams, enrollments, attempts } = createExamEngineRepos(
-      {
-        examRepo: createExamRepo(tx),
-        attemptRepo: txAttemptRepo,
-        enrollmentRepo: createEnrollmentRepo(tx),
-      },
-      ctx,
-    );
-    // Mint the EA capability via the canonical seam (matches
-    // every production caller); thread it into finalizeGrading. The capability
-    // replaces the old (attemptId, enrollmentId) arguments.
-    const cap = await lockEnrollmentAndAttempt(
-      enrollments,
-      attempts,
-      attemptId,
-    );
-    // finalizeGrading aggregates from the grading workset internally —
-    // no externally computed result. Build the tx-scoped workset adapter so it
-    // reads the entries the submit freeze materialized.
-    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-      createAttemptGradingEntryRepo(tx),
-      ctx,
-    );
-    return finalizeGrading(
-      enrollments,
-      attempts,
-      gradingWorksetRepo,
-      cap,
-      exam,
-      new Date(),
-    );
-  });
-}
 
 interface ConcurrencyFixture {
-  orgId: string;
   adminCtx: RequestContext;
   exam: Exam;
   enrollmentId: string;
   attemptHighId: string;
   attemptLowId: string;
-  resultHigh: ScoreResult;
-  resultLow: ScoreResult;
 }
 
 async function buildFixture(
@@ -129,7 +89,7 @@ async function buildFixture(
   highCorrect: boolean,
   lowCorrect: boolean,
 ): Promise<ConcurrencyFixture> {
-  const slug = `${GRADE_CONCURRENCY_PREFIX}${uniquePrefix()}`;
+  const slug = `grade-serialization-${crypto.randomUUID().slice(0, 8)}`;
   const now = new Date();
   const orgId = crypto.randomUUID();
   const courseId = crypto.randomUUID();
@@ -140,7 +100,7 @@ async function buildFixture(
   const enrollmentId = crypto.randomUUID();
   const attemptHighId = crypto.randomUUID();
   const attemptLowId = crypto.randomUUID();
-  const adminCtx = makeCtx(orgId, "admin-concurrency-test");
+  const adminCtx = makeCtx(orgId, "admin-serialization-test");
 
   await db.insert(schema.organizations).values({
     id: orgId,
@@ -288,7 +248,7 @@ async function buildFixture(
     maxAttempts: exam.maxAttempts,
     latestStartOffsetMinutes: null,
     minSubmitAfterStartMinutes: null,
-    resultPublicationMode: "immediate",
+    resultPublicationMode: exam.resultPublicationMode,
     resultsPublishedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -382,150 +342,289 @@ async function buildFixture(
   await seedEntries(attemptHighId, resultHigh);
   await seedEntries(attemptLowId, resultLow);
 
+  return { adminCtx, exam, enrollmentId, attemptHighId, attemptLowId };
+}
+
+function makeCtx(orgId: string, actorId: string): RequestContext {
   return {
-    orgId,
-    adminCtx,
-    exam,
-    enrollmentId,
-    attemptHighId,
-    attemptLowId,
-    resultHigh,
-    resultLow,
+    actorId,
+    organizationId: orgId,
+    role: "Admin" as Role,
+    permissions: [] as Permission[],
+    sessionId: "grade-serialization-test",
+    targetOrganizationId: orgId,
   };
 }
 
-async function readEnrollmentFinal(
+/**
+ * Mirrors the production callers (submitAndGradeAttempt / autoSubmitAndGrade /
+ * admin force-submit / gradingQueue): wrap finalizeGrading in ONE
+ * executeInTransaction (REPEATABLE READ + 40001/40P01 retry) with tx-scoped
+ * repos, minting the EA capability via the canonical seam.
+ */
+async function finalizeInTx(
   db: Database,
-  enrollmentId: string,
-): Promise<{
-  finalScore: number | null;
-  finalPassed: boolean | null;
-  finalAttemptId: string | null;
-}> {
-  const rows = await db
-    .select({
-      finalScore: schema.examEnrollments.finalScore,
-      finalPassed: schema.examEnrollments.finalPassed,
-      finalAttemptId: schema.examEnrollments.finalAttemptId,
-    })
-    .from(schema.examEnrollments)
-    .where(eq(schema.examEnrollments.id, enrollmentId));
-  const e = rows[0];
-  if (!e) throw new Error("enrollment disappeared");
-  return e;
+  ctx: RequestContext,
+  attemptId: string,
+  exam: Exam,
+): Promise<boolean> {
+  return executeInTransaction(db, async (tx) => {
+    const txAttemptRepo = createAttemptRepo(tx);
+    const { enrollments, attempts } = createExamEngineRepos(
+      {
+        examRepo: createExamRepo(tx),
+        attemptRepo: txAttemptRepo,
+        enrollmentRepo: createEnrollmentRepo(tx),
+      },
+      ctx,
+    );
+    const cap = await lockEnrollmentAndAttempt(
+      enrollments,
+      attempts,
+      attemptId,
+    );
+    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+      createAttemptGradingEntryRepo(tx),
+      ctx,
+    );
+    return finalizeGrading(
+      enrollments,
+      attempts,
+      gradingWorksetRepo,
+      cap,
+      exam,
+      new Date(),
+    );
+  });
 }
 
-describe("grading concurrency — enrollment finalScore/finalAttemptId race", () => {
-  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+interface FinalizerParkGate {
+  /** Resolved with the enrollment id once T1's seam holds the row lock. */
+  enrollmentLockAcquired: Deferred<string>;
+  /** T1's transaction parks on this until the controller releases it. */
+  release: Deferred<void>;
+}
+
+/**
+ * Test-only wrapper around the engine-facing enrollment adapter: after the
+ * seam's `FOR UPDATE` read returns (the Enrollment row lock is held, the
+ * Attempt lock not yet requested), signal the controller and hold the
+ * transaction open. One-shot: a REPEATABLE READ 40001 retry re-runs the seam
+ * but does not re-park (the gate is already settled).
+ */
+function parkAfterEnrollmentLock(
+  enrollments: EnrollmentRepository,
+  gate: FinalizerParkGate,
+): EnrollmentRepository {
+  let parkedOnce = false;
+  return {
+    ...enrollments,
+    findByExamAndCandidateForUpdate: async (
+      examId: string,
+      candidateId: string,
+    ) => {
+      const row = await enrollments.findByExamAndCandidateForUpdate(
+        examId,
+        candidateId,
+      );
+      if (row && !parkedOnce) {
+        parkedOnce = true;
+        gate.enrollmentLockAcquired.resolve(row.id);
+        await gate.release.promise;
+      }
+      return row;
+    },
+  };
+}
+
+/**
+ * The deterministic serialization schedule: T1 (parked mid-seem holding the
+ * Enrollment row lock) vs T2 (independent physical session, full production
+ * composition). Proves, in order:
+ *   1. distinct backend sessions (pids differ);
+ *   2. T1 really holds the Enrollment row lock (observer NOWAIT probe → 55P03);
+ *   3. T2 really blocks (pg_locks ungranted request on T2's pid — its only
+ *      lock acquisition before the park point is the seam's Enrollment
+ *      FOR UPDATE, so the wait is attributable to T1's row lock);
+ *   4. after release, both finalizers settle and the durable enrollment row
+ *      satisfies the caller-supplied oracle.
+ */
+async function runSerializedFinalizerSchedule(
+  connections: { db1: Database; db2: Database; sqlObserver: ObserverSql },
+  f: ConcurrencyFixture,
+  parkedAttemptId: string,
+  secondAttemptId: string,
+): Promise<void> {
+  const t1Pid = (await collectConnectionEvidence(connections.db1)).pid;
+  const t2Pid = (await collectConnectionEvidence(connections.db2)).pid;
+  expect(t1Pid).not.toBe(t2Pid);
+
+  const gate: FinalizerParkGate = {
+    enrollmentLockAcquired: createDeferred<string>("t1-enrollment-lock"),
+    release: createDeferred<void>("t1-release"),
+  };
+
+  const t1 = executeInTransaction(connections.db1, async (tx) => {
+    const txAttemptRepo = createAttemptRepo(tx);
+    const { enrollments, attempts } = createExamEngineRepos(
+      {
+        examRepo: createExamRepo(tx),
+        attemptRepo: txAttemptRepo,
+        enrollmentRepo: createEnrollmentRepo(tx),
+      },
+      f.adminCtx,
+    );
+    const parked = parkAfterEnrollmentLock(enrollments, gate);
+    // The SAME parked adapter must be threaded into finalizeGrading: the
+    // capability's consume-time affinity assertion compares repo identity.
+    const cap = await lockEnrollmentAndAttempt(
+      parked,
+      attempts,
+      parkedAttemptId,
+    );
+    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+      createAttemptGradingEntryRepo(tx),
+      f.adminCtx,
+    );
+    return finalizeGrading(
+      parked,
+      attempts,
+      gradingWorksetRepo,
+      cap,
+      f.exam,
+      new Date(),
+    );
+  });
+
+  const enrollmentId = await gate.enrollmentLockAcquired.promise;
+  expect(enrollmentId).toBe(f.enrollmentId);
+
+  // (2) Direct row-lock attribution: the observer's NOWAIT read is rejected
+  // with lock_not_available because T1's seam holds the enrollment row lock.
+  const nowait = await probeRowLockHeldNowait(
+    connections.sqlObserver,
+    "exam_enrollments",
+    enrollmentId,
+  );
+  expect(nowait.acquired).toBe(false);
+  if (!nowait.acquired) {
+    expect(nowait.sqlstate).toBe("55P03");
+  }
+
+  // (3) T2 — independent session, unmodified production composition.
+  const t2 = finalizeInTx(connections.db2, f.adminCtx, secondAttemptId, f.exam);
+  const blocked = await waitForBackendBlocked(connections.sqlObserver, t2Pid);
+  expect(["relation", "transactionid", "tuple"]).toContain(
+    blocked.blockedOnLocktype,
+  );
+
+  // (4) Release T1; both settle (T2 directly or via a 40001 retry with a
+  // fresh snapshot that includes T1's committed projection).
+  gate.release.resolve();
+  await Promise.all([t1, t2]);
+}
+
+describe("grading finalizer serialization — enrollment finalScore/finalAttemptId", () => {
+  let iso: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
+  let db1: Database;
+  let db2: Database;
+  let sqlObserver: ObserverSql;
+  let teardown: () => Promise<void>;
 
   beforeAll(async () => {
-    ctx = await buildTestApp(async () => {
-      /* no routes needed — we call the engine directly */
+    iso = await setupIsolatedTestDb({
+      namespace: "grading_serialization",
+      databaseUrl: resolveTestDbUrl(),
     });
-  });
+    const conn1 = await createPostgresDatabase(iso.databaseUrl, iso.schemaName);
+    const conn2 = await createPostgresDatabase(iso.databaseUrl, iso.schemaName);
+    const connObserver = await createPostgresDatabase(
+      iso.databaseUrl,
+      iso.schemaName,
+    );
+    db1 = conn1.db;
+    db2 = conn2.db;
+    sqlObserver = connObserver.sql;
+    await migratePostgres(db1, { migrationsSchema: iso.schemaName });
+    teardown = async () => {
+      await connObserver.sql.end();
+      await conn2.sql.end();
+      await conn1.sql.end();
+      await iso.cleanup();
+    };
+  }, 60_000);
 
   afterAll(async () => {
-    const stale = await ctx.db
-      .select({ id: schema.organizations.id })
-      .from(schema.organizations)
-      .where(like(schema.organizations.slug, `${GRADE_CONCURRENCY_PREFIX}%`));
-    for (const org of stale) {
-      await cleanupOrganizationTestData(ctx.db, org.id);
-    }
-    await ctx.cleanup();
-  });
-
-  // Case 1: high-score (100) + low-score (0) graded concurrently. Under
-  // `highest` the enrollment MUST end with finalScore 100 and finalAttemptId
-  // pointing at the high attempt, regardless of commit order.
-  it("concurrent grading of a 100 and a 0 attempt keeps the high score (no last-writer-wins)", async () => {
-    const f = await buildFixture(ctx.db as Database, true, false);
-
-    // Race the two finalizations. `Promise.all` starts them ~together; the
-    // FOR UPDATE on the enrollment serializes them. Whichever commits first,
-    // the second recomputes selection against the now-committed finalScore.
-    await Promise.all([
-      finalizeInTx(
-        ctx.db as Database,
-        f.adminCtx,
-        f.attemptHighId,
-        f.enrollmentId,
-        f.exam,
-      ),
-      finalizeInTx(
-        ctx.db as Database,
-        f.adminCtx,
-        f.attemptLowId,
-        f.enrollmentId,
-        f.exam,
-      ),
-    ]);
-
-    const final = await readEnrollmentFinal(ctx.db as Database, f.enrollmentId);
-    expect(final.finalScore).toBe(100);
-    expect(final.finalAttemptId).toBe(f.attemptHighId);
-    expect(final.finalPassed).toBe(true);
+    await teardown();
   }, 30_000);
 
-  // Case 2: repeat the race several times to exercise different interleavings.
-  // Over many runs the high score must ALWAYS win under `highest`.
-  it("repeated concurrent races always retain the high score (order-invariant)", async () => {
-    for (let i = 0; i < 4; i++) {
-      const f = await buildFixture(ctx.db as Database, true, false);
-      await Promise.all([
-        finalizeInTx(
-          ctx.db as Database,
-          f.adminCtx,
-          f.attemptHighId,
-          f.enrollmentId,
-          f.exam,
-        ),
-        finalizeInTx(
-          ctx.db as Database,
-          f.adminCtx,
-          f.attemptLowId,
-          f.enrollmentId,
-          f.exam,
-        ),
-      ]);
-      const final = await readEnrollmentFinal(
-        ctx.db as Database,
-        f.enrollmentId,
-      );
-      expect(final.finalScore).toBe(100);
-      expect(final.finalAttemptId).toBe(f.attemptHighId);
-    }
-  }, 120_000);
+  async function readEnrollmentFinal(enrollmentId: string): Promise<{
+    finalScore: number | null;
+    finalPassed: boolean | null;
+    finalAttemptId: string | null;
+  }> {
+    const rows = await db1
+      .select({
+        finalScore: schema.examEnrollments.finalScore,
+        finalPassed: schema.examEnrollments.finalPassed,
+        finalAttemptId: schema.examEnrollments.finalAttemptId,
+      })
+      .from(schema.examEnrollments)
+      .where(eq(schema.examEnrollments.id, enrollmentId));
+    const e = rows[0];
+    if (!e) throw new Error("enrollment disappeared");
+    return e;
+  }
 
-  // Case 3: two attempts both worth 100 (equal). `highest` uses `>` not `>=`,
-  // so the first attempt committed stays the recorded final; the second must
-  // NOT overwrite it. This proves the locked re-read + recompute path: the
-  // second transaction sees finalScore=100 already set and declines.
-  it("two equal-score attempts keep the first committed final under `highest` (no clobber on equal)", async () => {
-    const f = await buildFixture(ctx.db as Database, true, true);
+  it("Schedule H: high-score finalizer holds the Enrollment lock; the low-score finalizer blocks, then declines against the committed 100", async () => {
+    const f = await buildFixture(db1, true, false);
 
-    await Promise.all([
-      finalizeInTx(
-        ctx.db as Database,
-        f.adminCtx,
-        f.attemptHighId,
-        f.enrollmentId,
-        f.exam,
-      ),
-      finalizeInTx(
-        ctx.db as Database,
-        f.adminCtx,
-        f.attemptLowId,
-        f.enrollmentId,
-        f.exam,
-      ),
-    ]);
+    await runSerializedFinalizerSchedule(
+      { db1, db2, sqlObserver },
+      f,
+      f.attemptHighId,
+      f.attemptLowId,
+    );
 
-    const final = await readEnrollmentFinal(ctx.db as Database, f.enrollmentId);
+    const final = await readEnrollmentFinal(f.enrollmentId);
     expect(final.finalScore).toBe(100);
-    // finalAttemptId must point at exactly one of the two attempts (the
-    // first to commit), never null, never a partial state.
-    expect([f.attemptHighId, f.attemptLowId]).toContain(final.finalAttemptId);
     expect(final.finalPassed).toBe(true);
+    expect(final.finalAttemptId).toBe(f.attemptHighId);
+  }, 30_000);
+
+  it("Schedule L: low-score finalizer holds the Enrollment lock; the high-score finalizer blocks, then overwrites the committed 0", async () => {
+    const f = await buildFixture(db1, true, false);
+
+    await runSerializedFinalizerSchedule(
+      { db1, db2, sqlObserver },
+      f,
+      f.attemptLowId,
+      f.attemptHighId,
+    );
+
+    const final = await readEnrollmentFinal(f.enrollmentId);
+    expect(final.finalScore).toBe(100);
+    expect(final.finalPassed).toBe(true);
+    expect(final.finalAttemptId).toBe(f.attemptHighId);
+  }, 30_000);
+
+  // Equal scores: `highest` selects with `>`, NOT `>=`, so the FIRST
+  // committer keeps finalAttemptId and the second finalizer declines. The
+  // parked-first attempt id is a frozen identity, so the oracle is exact —
+  // an overwrite (>= mutant) or a lost update flips it red.
+  it("Schedule E: equal scores — the first committer keeps finalAttemptId, the second declines (no clobber)", async () => {
+    const f = await buildFixture(db1, true, true);
+
+    await runSerializedFinalizerSchedule(
+      { db1, db2, sqlObserver },
+      f,
+      f.attemptHighId,
+      f.attemptLowId,
+    );
+
+    const final = await readEnrollmentFinal(f.enrollmentId);
+    expect(final.finalScore).toBe(100);
+    expect(final.finalPassed).toBe(true);
+    expect(final.finalAttemptId).toBe(f.attemptHighId);
   }, 30_000);
 });

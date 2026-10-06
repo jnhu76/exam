@@ -46,6 +46,25 @@ function readMigrationStatements(tag: string): string[] {
     .filter((stmt) => stmt.length > 0);
 }
 
+/** Extract the constraint name from a class-23 (integrity violation) error chain. */
+function violationConstraintOf(err: unknown): string | null {
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (typeof current === "object" && current !== null) {
+      const e = current as Record<string, unknown>;
+      if (typeof e.code === "string" && e.code.startsWith("23")) {
+        return String(e.constraint ?? e.constraint_name ?? "");
+      }
+      current = "cause" in e ? e.cause : null;
+    } else {
+      current = null;
+    }
+  }
+  return null;
+}
+
 type SqlDriver = Awaited<ReturnType<typeof createDatabase>>["sql"];
 
 /**
@@ -724,7 +743,14 @@ describe("0021 — post-migration disrupted rows are a distinct population", () 
         createdAt: now,
         updatedAt: now,
       }),
-    ).rejects.toThrow();
+    ).rejects.toSatisfy((err: unknown) => {
+      // The named CHECK (added by 0022, converged by 0027) is the arbiter —
+      // not any incidental error.
+      expect(violationConstraintOf(err)).toBe(
+        "exam_attempts_status_pointer_check",
+      );
+      return true;
+    });
   });
 
   it("scanner-pattern: in_progress → episode + event + pointer → disrupted succeeds", async () => {

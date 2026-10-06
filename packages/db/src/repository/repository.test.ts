@@ -288,7 +288,10 @@ describe("organizationRepo.resolveOptionalBrandingTenant", () => {
   });
 });
 
-describe("enrollmentRepo.findByExamAndCandidateForUpdate", () => {
+// Miss-path contract only. The hit path (row resolution under FOR UPDATE and
+// its blocking semantics) is owned by apps/api ea-lock-order.test.ts, which
+// drives the real lockEnrollmentAndAttempt seam against a held lock.
+describe("enrollmentRepo.findByExamAndCandidateForUpdate — miss path", () => {
   let db: Database;
   let cleanup: () => Promise<void>;
   const rootContext = createContext("system", "Admin", "system");

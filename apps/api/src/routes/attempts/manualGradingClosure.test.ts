@@ -32,12 +32,13 @@ import crypto from "node:crypto";
  *       projection written AND consistent with attempt.score AND visible on
  *       the candidate exam list.
  *   T7: concurrent gradeQuestion for the SAME pending entry (UNCONTROLLED
- *       schedule — Promise.all only; no controlled-barrier harness exists in
- *       this repo). Exactly one wins; the other is rejected; no duplicate
- *       projection write.
- *   T8: two manual-graded attempts on the same enrollment reach terminal via
- *       the manual path concurrently (UNCONTROLLED). Enrollment projection
- *       converges to the scoreStrategy-selected winner under FOR UPDATE.
+ *       schedule — Promise.all only; on the app's default single-connection
+ *       test pool the requests run in dispatch order). Exactly one wins; the
+ *       other is rejected; no duplicate projection write. The DETERMINISTIC
+ *       same-enrollment finalizer serialization owner (parked first committer
+ *       under a real held lock) is gradingConcurrency.test.ts.
+ *   T8b: legacy-data guard — a pre-existing graded attempt with NULL
+ *       enrollment.finalScore is not silently repaired by a later call.
  */
 
 // ── fixture builders (mirror gradingQueue.test.ts) ────────────────────
@@ -378,10 +379,12 @@ describe("manual grading terminal closure", () => {
 
   it("T7: concurrent gradeQuestion for the SAME pending entry — exactly one wins (UNCONTROLLED schedule)", async () => {
     // NOTE: this test uses Promise.all, which does NOT deterministically
-    // order the FOR UPDATE acquisitions. The repo has no controlled-barrier
-    // harness today. This test asserts the OUTCOME invariant (exactly one
-    // logical completion; no duplicate projection) but cannot prove a
-    // specific interleaving. Marked UNCONTROLLED SCHEDULE per the design.
+    // order the FOR UPDATE acquisitions (on the app's default max:1 test
+    // pool the two requests are dispatch-ordered; under worker-database mode
+    // they are a genuinely uncontrolled race). It asserts the OUTCOME
+    // invariant (exactly one logical completion; no duplicate projection).
+    // Specific interleavings are proven deterministically by the
+    // barrier-parked schedules in gradingConcurrency.test.ts.
     const questions = [subjectiveQuestion("q-text", 100)];
     const { attemptId, enrollmentId } = await seedAttempt(ctx, {
       questions,

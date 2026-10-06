@@ -580,7 +580,7 @@ describe("incident persistence foundation", () => {
     expect(none).toHaveLength(0);
   });
 
-  it("updates incident state and version atomically", async () => {
+  it("updates incident state and version in one call", async () => {
     const repo = createIncidentRepo(db);
     const now = new Date();
     const incident = await repo.insert(alpha.ctx, {
@@ -605,7 +605,10 @@ describe("incident persistence foundation", () => {
     expect(updated?.version).toBe(2);
   });
 
-  it("locks incident row FOR UPDATE (findByIdForUpdate)", async () => {
+  // Blocking semantics of the row lock are owned by
+  // incidents.admin.concurrency.test.ts (two-session barrier schedule). At
+  // this layer the method contract is row resolution under the org scope.
+  it("findByIdForUpdate resolves the org-scoped incident row", async () => {
     const repo = createIncidentRepo(db);
     const now = new Date();
     const incident = await repo.insert(alpha.ctx, {
