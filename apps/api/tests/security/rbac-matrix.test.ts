@@ -156,6 +156,7 @@ describe("RBAC permission baseline", () => {
         cookies: { "auth-token": candidateToken },
       });
       expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe("PERMISSION_DENIED");
     });
   });
 });
