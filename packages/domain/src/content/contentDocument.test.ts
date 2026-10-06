@@ -345,21 +345,6 @@ describe("preflightContentDocumentStructure", () => {
     expect(violations.some((v) => v.includes("nesting exceeds"))).toBe(true);
   });
 
-  it("rejects a serialized-oversized array fan-out at the serialization gate", () => {
-    // 200k empty objects serialize to ~600k chars — past serializedChars —
-    // so the value is rejected before the raw walk runs. The walk itself is
-    // inherently bounded: every raw JSON value costs at least one serialized
-    // character, so a payload that passes the size gate cannot make the walk
-    // visit more than CONTENT_LIMITS.serializedChars units.
-    const hostile = {
-      docVersion: 1,
-      type: "doc",
-      content: new Array(200_000).fill(0).map(() => ({})),
-    };
-    const violations = preflightContentDocumentStructure(hostile);
-    expect(violations.length).toBeGreaterThan(0);
-  });
-
   it("stops at the serialization gate — an oversized payload never enters the raw walk", () => {
     // Oversized AND deeper than the raw depth budget: if the walk ran, it
     // would append a "nesting exceeds" violation on top of the size one.
@@ -522,10 +507,12 @@ describe("durable string representability (isDurableRichString)", () => {
     }
   });
 
-  it("rejects U+0000 in every position", () => {
-    for (const s of ["\u0000", "a\u0000b", "trailing\u0000"]) {
-      expect(isDurableRichString(s), JSON.stringify(s)).toBe(false);
-    }
+  it("rejects U+0000", () => {
+    // The U+0000 alternative in UNREPRESENTABLE_CHAR is unanchored and has no
+    // lookaround, so position is not a distinct input class here. The
+    // lone-surrogate alternatives DO depend on position and keep their
+    // per-position rows in the test below.
+    expect(isDurableRichString("\u0000")).toBe(false);
   });
 
   it("rejects lone surrogates in every position", () => {

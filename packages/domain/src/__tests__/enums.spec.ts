@@ -35,22 +35,12 @@ describe("domain enums expose stable string values", () => {
     expect(ExamStatus.Archived).toBe("archived");
   });
 
-  it("AttemptStatus 定义当前可达状态（in_progress/disrupted/submitted/graded）", () => {
-    expect(AttemptStatus.InProgress).toBe("in_progress");
-    expect(AttemptStatus.Disrupted).toBe("disrupted");
-    expect(AttemptStatus.Submitted).toBe("submitted");
-    expect(AttemptStatus.Graded).toBe("graded");
-  });
-
-  it("AttemptStatus 保留 not_started / queued / voided 为当前状态机不可达的预留值", () => {
-    expect(AttemptStatus.NotStarted).toBe("not_started");
-    expect(AttemptStatus.Queued).toBe("queued");
-    expect(AttemptStatus.Voided).toBe("voided");
-  });
-
   it("AttemptStatus 恰为 7 个值且不含 grading（#542：旧版生产中间态已从当前词汇移除，提交→批改 在同一事务内落 graded）", () => {
     // Exact-set oracle: the value set matches the DB CHECK
-    // (exam_attempts_status_check) and the status-contract drift test.
+    // (exam_attempts_status_check) and the status-contract drift test. It
+    // entails every individual literal, including the currently unreachable
+    // reserved values (not_started / queued / voided) and the reachable
+    // in_progress / disrupted / submitted / graded set.
     expect(Object.values(AttemptStatus)).toEqual([
       "not_started",
       "queued",
