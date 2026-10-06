@@ -4,7 +4,7 @@ import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import candidateRoutes from "./candidate.js";
 import examRoutes from "./exam.js";
-import { buildTestApp, createExamViaApi, uniquePrefix } from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 
 describe("API input validation (Zod schema boundary)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;

@@ -176,31 +176,14 @@ describe("runtimeConfig", () => {
     };
 
     // ── Production invariant: docs CANNOT be enabled by env ──
-    it("production + API_DOCS_ENABLED unset → disabled", () => {
-      const config = loadRuntimeConfig(PROD);
-      expect(config.apiReference.enabled).toBe(false);
-    });
-
-    it("production + API_DOCS_ENABLED=false → disabled", () => {
-      const config = loadRuntimeConfig({
-        ...PROD,
-        API_DOCS_ENABLED: "false",
-      });
-      expect(config.apiReference.enabled).toBe(false);
-    });
-
+    // prod×true is the only production row with decision power: it kills
+    // removal of the !isProduction mask and && → || widening (mutation-
+    // calibrated; unset/false/1 rows pass those mutations because the
+    // decision short-circuits on the mask, so they are omitted).
     it("production + API_DOCS_ENABLED=true → disabled (critical regression)", () => {
       const config = loadRuntimeConfig({
         ...PROD,
         API_DOCS_ENABLED: "true",
-      });
-      expect(config.apiReference.enabled).toBe(false);
-    });
-
-    it("production + API_DOCS_ENABLED=1 → disabled (critical regression)", () => {
-      const config = loadRuntimeConfig({
-        ...PROD,
-        API_DOCS_ENABLED: "1",
       });
       expect(config.apiReference.enabled).toBe(false);
     });
@@ -241,41 +224,9 @@ describe("runtimeConfig", () => {
       expect(config.apiReference.enabled).toBe(true);
     });
 
-    // ── Test: the knob keeps its real consumer ──
-    it("test + unset → disabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-      });
-      expect(config.apiReference.enabled).toBe(false);
-    });
-
-    it("test + false → disabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-        API_DOCS_ENABLED: "false",
-      });
-      expect(config.apiReference.enabled).toBe(false);
-    });
-
-    it("test + true → enabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-        API_DOCS_ENABLED: "true",
-      });
-      expect(config.apiReference.enabled).toBe(true);
-    });
-
-    it("test + 1 → enabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-        API_DOCS_ENABLED: "1",
-      });
-      expect(config.apiReference.enabled).toBe(true);
-    });
+    // Test mode resolves apiReferenceEnabled through the same non-production
+    // branch as development (decision and truthyLeaf parser identical), so
+    // the four development rows are its decision owners.
   });
 
   describe("buildPublicConfig", () => {
@@ -1184,31 +1135,15 @@ describe("runtimeConfig", () => {
     };
 
     // ── Production invariant: rate limiting CANNOT be disabled by env ──
-    it("production + RATE_LIMIT_DISABLED unset → enabled", () => {
-      const config = loadRuntimeConfig(PROD);
-      expect(config.rateLimit.enabled).toBe(true);
-    });
-
-    it("production + RATE_LIMIT_DISABLED=false → enabled", () => {
-      const config = loadRuntimeConfig({
-        ...PROD,
-        RATE_LIMIT_DISABLED: "false",
-      });
-      expect(config.rateLimit.enabled).toBe(true);
-    });
-
+    // prod×true is the #567 regression owner and the only production row
+    // with decision power: the `mode === "production"` disjunct
+    // short-circuits before the leaf is read, and prod×true is what kills
+    // removal of that disjunct (mutation-calibrated; unset/false rows pass
+    // that mutation).
     it("production + RATE_LIMIT_DISABLED=true → enabled (critical regression)", () => {
       const config = loadRuntimeConfig({
         ...PROD,
         RATE_LIMIT_DISABLED: "true",
-      });
-      expect(config.rateLimit.enabled).toBe(true);
-    });
-
-    it("production + RATE_LIMIT_DISABLED=1 → enabled (critical regression)", () => {
-      const config = loadRuntimeConfig({
-        ...PROD,
-        RATE_LIMIT_DISABLED: "1",
       });
       expect(config.rateLimit.enabled).toBe(true);
     });
@@ -1249,65 +1184,21 @@ describe("runtimeConfig", () => {
       expect(config.rateLimit.enabled).toBe(false);
     });
 
-    // ── Test: RATE_LIMIT_DISABLED still controls the limiter ──
-    it("test + unset → enabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-      });
-      expect(config.rateLimit.enabled).toBe(true);
-    });
-
-    it("test + false → enabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-        RATE_LIMIT_DISABLED: "false",
-      });
-      expect(config.rateLimit.enabled).toBe(true);
-    });
-
-    it("test + true → disabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-        RATE_LIMIT_DISABLED: "true",
-      });
-      expect(config.rateLimit.enabled).toBe(false);
-    });
-
-    it("test + 1 → disabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "test",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
-        RATE_LIMIT_DISABLED: "1",
-      });
-      expect(config.rateLimit.enabled).toBe(false);
-    });
+    // Test mode resolves the same non-e2e branch with the same truthyLeaf
+    // parser as development, so the four development rows are its decision
+    // owners (and the vitest helpers themselves pin RATE_LIMIT_DISABLED=true
+    // in test mode on every integration run).
 
     // ── E2E: always disabled, regardless of RATE_LIMIT_DISABLED ──
-    it("e2e + unset → disabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "e2e",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
-      });
-      expect(config.rateLimit.enabled).toBe(false);
-    });
-
+    // e2e×false is the retained e2e row: it kills removal of the
+    // `mode !== "e2e"` guard (mutation-calibrated; e2e×true passes that
+    // mutation), pinning the E2E runner's limiter-off contract even when the
+    // operator explicitly sets RATE_LIMIT_DISABLED=false.
     it("e2e + false → disabled", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "e2e",
         TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
         RATE_LIMIT_DISABLED: "false",
-      });
-      expect(config.rateLimit.enabled).toBe(false);
-    });
-
-    it("e2e + true → disabled", () => {
-      const config = loadRuntimeConfig({
-        APP_MODE: "e2e",
-        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
-        RATE_LIMIT_DISABLED: "true",
       });
       expect(config.rateLimit.enabled).toBe(false);
     });

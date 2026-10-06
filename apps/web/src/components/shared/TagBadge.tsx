@@ -20,7 +20,6 @@ export function TagBadge({
       variant="outline"
       data-slot="tag-badge"
       data-tag-tone="neutral"
-      data-tag-geometry="compact"
       data-tag-variant={variant}
       className={cn(className)}
       {...props}

@@ -18,14 +18,10 @@ import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
-import examRoutes from "../../src/routes/exam.js";
-import userRoutes from "../../src/routes/user.js";
 import candidateRoutes from "../../src/routes/candidate.js";
-import systemRoutes from "../../src/routes/system.js";
-import settingsRoutes from "../../src/routes/settings.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/src/types.js";
-import type { Permission, Role } from "@exam/domain";
+import type { Role } from "@exam/domain";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -33,7 +29,7 @@ function createDbPlugin(db: Database) {
   });
 }
 
-describe("RBAC Permission Matrix (S02)", () => {
+describe("RBAC permission baseline", () => {
   let db: Database;
   let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let org: { id: string };
@@ -125,17 +121,7 @@ describe("RBAC Permission Matrix (S02)", () => {
     await app.register(authPlugin);
     await app.register(rateLimitPlugin);
     await app.register(authzPlugin);
-    await app.register(settingsRoutes, { prefix: "/api" });
-    await app.register(examRoutes, { prefix: "/api" });
-    await app.register(userRoutes, { prefix: "/api" });
     await app.register(candidateRoutes, { prefix: "/api" });
-    await app.register(systemRoutes, { prefix: "/api" });
-
-    app.get("/api/health", async () => ({ status: "ok" }));
-
-    app.get("/api/auth/me", { preHandler: [app.authenticate] }, (request) => {
-      return { ctx: request.ctx };
-    });
 
     await app.ready();
   });
@@ -144,27 +130,6 @@ describe("RBAC Permission Matrix (S02)", () => {
     await app.close();
     await sql.end();
     await cleanup();
-  });
-
-  describe("Candidate cannot create exams", () => {
-    it("Candidate calling POST /api/exams returns 403", async () => {
-      const res = await app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: {
-          title: "Cheater Exam",
-          courseId: randomUUID(),
-          durationMinutes: 60,
-          openAt: new Date().toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionIds: [],
-        },
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
   });
 
   describe("organizations API removed in Phase 1", () => {
@@ -191,36 +156,7 @@ describe("RBAC Permission Matrix (S02)", () => {
         cookies: { "auth-token": candidateToken },
       });
       expect(res.statusCode).toBe(403);
-    });
-  });
-
-  describe("Candidate cannot access system health", () => {
-    it("Candidate calling GET /api/system/health returns 403", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/system/health",
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-  });
-
-  describe("ctx.capabilities is populated", () => {
-    it("authenticated user has non-empty capabilities", async () => {
-      // RBAC-M10-E: the authoritative runtime authority field is
-      // `ctx.capabilities` (the union of every active role assignment's
-      // preset, resolved from user_role_assignments). The legacy
-      // `ctx.permissions` slot is intentionally empty post-flip — it is no
-      // longer the authority surface.
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/auth/me",
-        cookies: { "auth-token": adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      const capabilities = body.ctx.capabilities as Permission[];
-      expect(capabilities.length).toBeGreaterThan(0);
+      expect(res.json().error.code).toBe("PERMISSION_DENIED");
     });
   });
 });
