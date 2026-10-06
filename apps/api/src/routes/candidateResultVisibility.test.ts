@@ -583,16 +583,9 @@ describe("candidate result visibility projection", () => {
     expect(snapshot).not.toHaveProperty("passed");
   });
 
-  it("standardAnswer isolation: candidate attempt response never carries standardAnswer", async () => {
-    const { attemptId } = await createGradedAttemptForMode("manual");
-    const body = await getCandidateAttempt(attemptId);
-    const snapshot = body.questionSnapshot as Array<Record<string, unknown>>;
-    expect(snapshot.length).toBeGreaterThan(0);
-    for (const question of snapshot) {
-      expect(question).not.toHaveProperty("standardAnswer");
-      expect(question).not.toHaveProperty("rubric");
-    }
-  });
+  // standardAnswer/rubric isolation on GET /attempts/:id is owned by
+  // attempts/candidate-secret-surfaces.test.ts (same endpoint, adds
+  // gradingRule + misconduct envelope + raw-wire marker guards).
 
   // ── Manual mode, post-publish restoration ────────────────────────
 

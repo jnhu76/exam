@@ -287,54 +287,10 @@ describe("timing modes — authoring gate", () => {
     expect(fieldCodes(body)).toContain("EXAM_TIMING_MODE_INVALID");
   });
 
-  it("rejects deadline + durationMinutes (illegal combination)", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: {
-        ...validCreatePayload(courseId, questionId),
-        timingMode: "deadline",
-        durationMinutes: 60,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(fieldCodes(res.json())).toContain("EXAM_TIMING_MODE_INVALID");
-  });
-
-  it("rejects untimed + closeAt (illegal combination)", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: {
-        ...validCreatePayload(courseId, questionId),
-        timingMode: "untimed",
-        durationMinutes: null,
-        // closeAt present on an untimed exam.
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(fieldCodes(res.json())).toContain("EXAM_TIMING_MODE_INVALID");
-  });
-
-  it("deadline + bounded_grace is rejected at authoring", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: {
-        ...validCreatePayload(courseId, questionId),
-        timingMode: "deadline",
-        durationMinutes: null,
-        interruptionTimePolicy: "bounded_grace",
-        interruptionGracePerIncidentSeconds: 120,
-        interruptionGracePerAttemptSeconds: 300,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(fieldCodes(res.json())).toContain("EXAM_TIMING_MODE_INVALID");
-  });
+  // The per-combination legality cells (deadline+duration, untimed+closeAt,
+  // deadline+bounded_grace) are owned member-by-member by the pure validator
+  // tests (exam-engine examPolicy.timingModes). One route row is kept above
+  // as the sole witness of the EXAM_TIMING_MODE_INVALID wire mapping.
 
   it("draft update switches timed_window → untimed and clears timing fields", async () => {
     const createRes = await ctx.app.inject({

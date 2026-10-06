@@ -127,7 +127,7 @@ export function WizardPolicyFields({
                 );
               }}
             >
-              <SelectTrigger data-testid="wiz-timing-mode-select">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

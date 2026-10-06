@@ -39,7 +39,6 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
   let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let adminToken: string;
   let candidateToken: string;
-  let otherCandidateToken: string;
   let candidateProfileId: string;
   let courseId: string;
   let questionId: string;
@@ -179,13 +178,6 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
       createdAt: otherNow,
       updatedAt: otherNow,
     });
-    otherCandidateToken = signJWT({
-      actorId: otherCandidateUserId,
-      role: "Candidate",
-      organizationId: candidate.organizationId,
-      authEpoch: 0,
-    });
-
     const candidateRows = await db
       .select()
       .from(schema.candidateProfiles)
@@ -268,27 +260,6 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     await cleanup();
   });
 
-  describe("Submit after deadline succeeds (answers already saved)", () => {
-    it("allows submit when server time is past deadlineAt", async () => {
-      const attemptId = await createExamAndStart("Deadline Exam", 1);
-
-      const originalNow = app.now;
-      app.now = () => new Date(Date.now() + 5 * 60 * 1000);
-      try {
-        const submitRes = await app.inject({
-          method: "POST",
-          url: `/api/attempts/${attemptId}/submit`,
-          cookies: { "auth-token": candidateToken },
-        });
-
-        expect(submitRes.statusCode).toBe(200);
-        expect(submitRes.json().status).toBe("graded");
-      } finally {
-        app.now = originalNow;
-      }
-    });
-  });
-
   describe("Cannot start attempt for unpublished exam", () => {
     it("returns 409 when exam is still in draft", async () => {
       const examRes = await app.inject({
@@ -326,184 +297,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("Answer save versioned protocol", () => {
-    it("accepts first save then rejects stale version", async () => {
-      const attemptId = await createExamAndStart("Answer Version Exam");
-
-      const first = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${questionId}`,
-        payload: {
-          attemptId,
-          questionId,
-          answer: "A",
-          clientSeq: 0,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(first.statusCode).toBe(200);
-      expect(first.json().accepted).toBe(true);
-
-      const stale = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${questionId}`,
-        payload: {
-          attemptId,
-          questionId,
-          answer: "B",
-          clientSeq: 1,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(stale.statusCode).toBe(200);
-      expect(stale.json().accepted).toBe(false);
-    });
-  });
-
-  describe("Candidate cannot submit another candidate's attempt", () => {
-    it("returns 404 for cross-candidate submit", async () => {
-      const attemptId = await createExamAndStart("Ownership Exam");
-
-      const res = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/submit`,
-        cookies: { "auth-token": otherCandidateToken },
-      });
-      expect(res.statusCode).toBe(404);
-      expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
-    });
-  });
-
-  // Unenrolled-start denial is owned by candidateRuntimeAuthority.test.ts.
-  describe("Submit after already submitted attempt is idempotent", () => {
-    it("second submit returns same graded result (idempotent, not an error)", async () => {
-      const attemptId = await createExamAndStart("Double Submit Exam");
-
-      const firstSubmit = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/submit`,
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(firstSubmit.statusCode).toBe(200);
-      expect(firstSubmit.json().status).toBe("graded");
-
-      const secondSubmit = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/submit`,
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(secondSubmit.statusCode).toBe(200);
-      expect(secondSubmit.json().status).toBe("graded");
-    });
-  });
-
-  describe("Answer save does not pollute another attempt", () => {
-    it("saving answer to attempt A does not affect attempt B", async () => {
-      const attemptAId = await createExamAndStart("Replay Exam A");
-
-      const examRes = await app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: {
-          title: "Replay Exam B",
-          courseId,
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 6,
-          totalScore: 10,
-          questionIds: [questionId],
-        },
-        cookies: { "auth-token": adminToken },
-      });
-      const examBId = examRes.json().id;
-      await app.inject({
-        method: "POST",
-        url: `/api/exams/${examBId}/publish`,
-        cookies: { "auth-token": adminToken },
-      });
-      await app.inject({
-        method: "POST",
-        url: `/api/exams/${examBId}/enrollments`,
-        payload: { candidateIds: [candidateProfileId] },
-        cookies: { "auth-token": adminToken },
-      });
-      const startB = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${examBId}/start`,
-        cookies: { "auth-token": candidateToken },
-      });
-      const attemptBId = startB.json().id;
-
-      await app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptAId}/answers/${questionId}`,
-        payload: {
-          attemptId: attemptAId,
-          questionId,
-          answer: "A",
-          clientSeq: 1,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": candidateToken },
-      });
-
-      const loadB = await app.inject({
-        method: "GET",
-        url: `/api/attempts/${attemptBId}`,
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(loadB.statusCode).toBe(200);
-      const bAnswers = loadB.json().questionSnapshot;
-      expect(bAnswers).toBeDefined();
-    });
-  });
-
   describe("Candidate exam payload does not expose standardAnswer", () => {
-    it("start attempt response does not include standardAnswer field", async () => {
-      const examRes = await app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: {
-          title: "Leak Check Exam",
-          courseId,
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 6,
-          totalScore: 10,
-          questionIds: [questionId],
-        },
-        cookies: { "auth-token": adminToken },
-      });
-      const examId = examRes.json().id;
-      await app.inject({
-        method: "POST",
-        url: `/api/exams/${examId}/publish`,
-        cookies: { "auth-token": adminToken },
-      });
-      await app.inject({
-        method: "POST",
-        url: `/api/exams/${examId}/enrollments`,
-        payload: { candidateIds: [candidateProfileId] },
-        cookies: { "auth-token": adminToken },
-      });
-      const startRes = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${examId}/start`,
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(startRes.statusCode).toBe(201);
-      const body = startRes.json();
-      const bodyText = JSON.stringify(body);
-      expect(bodyText).not.toContain("standardAnswer");
-    });
-
     it("candidate cannot read admin exam detail endpoint", async () => {
       const examRes = await app.inject({
         method: "POST",

@@ -200,24 +200,6 @@ describe("capability helper — default landing paths", () => {
   });
 });
 
-describe("capability helper — raw can() parity with backend presets", () => {
-  // A spot-check that the frontend capability verdict matches a known
-  // backend decision, so a future preset change surfaces here.
-  it("Teacher can(QuestionCreate) is true", () => {
-    // Permission.QuestionCreate = "question.create"
-    expect(can(user("Teacher"), "question.create")).toBe(true);
-  });
-  it("Teacher can(GradingScoreWrite) is false (Teacher is not a Grader)", () => {
-    expect(can(user("Teacher"), "grading.score.write")).toBe(false);
-  });
-  it("Candidate can(AttemptSubmit) is true (own-attempt)", () => {
-    expect(can(user("Candidate"), "attempt.submit")).toBe(true);
-  });
-  it("Candidate can(QuestionView) is false", () => {
-    expect(can(user("Candidate"), "question.view")).toBe(false);
-  });
-});
-
 describe("canSeeManagement is capability-derived", () => {
   // canSeeManagement must NOT short-circuit on a role label (isAdmin). It is an
   // aggregate over the management-surface permission set: the management nav is

@@ -348,7 +348,7 @@ export function ExamProfileEditPage() {
                 });
               }}
             >
-              <SelectTrigger data-testid="profile-timing-mode-select">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

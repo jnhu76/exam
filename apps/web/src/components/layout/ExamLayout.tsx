@@ -103,7 +103,6 @@ export function ExamLayout() {
               <DropdownMenuLabel>{user.name}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                data-testid="exam-settings-link"
                 onSelect={() => void navigate(routes.exam.settings)}
               >
                 {t("examLayout.accountSettings")}

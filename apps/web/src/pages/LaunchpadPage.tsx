@@ -118,10 +118,7 @@ export function LaunchpadPage() {
   // page does not flash empty before the redirect resolves.
   if (statusState === "loading") {
     return (
-      <main
-        data-testid="launchpad-layout"
-        className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6"
-      >
+      <main className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6">
         <PageContainer role="auth">
           <Card className="w-full">
             <CardHeader>
@@ -135,10 +132,7 @@ export function LaunchpadPage() {
   }
 
   return (
-    <main
-      data-testid="launchpad-layout"
-      className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6"
-    >
+    <main className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6">
       <PageContainer role="auth">
         <Card className="w-full">
           <CardHeader>
@@ -153,7 +147,7 @@ export function LaunchpadPage() {
               </InlineErrorBanner>
             )}
             <form onSubmit={handleSubmit}>
-              <FieldGroup data-testid="launchpad-field-group" className="gap-4">
+              <FieldGroup className="gap-4">
                 <Field>
                   <Label htmlFor="organizationName">
                     {t("launchpad.organizationNameLabel")}

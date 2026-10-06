@@ -54,7 +54,10 @@ describe("malformed JSON boundary (#450)", () => {
     });
   }
 
-  it.each(["/api/auth/login", "/api/courses", "/api/exams"])(
+  // Public (login) and authenticated (courses) routes exercise the two
+  // real dimensions — parser chain is registered once app-global; the exams
+  // route is the same middleware chain with no handler branching.
+  it.each(["/api/auth/login", "/api/courses"])(
     "returns canonical 400 for malformed JSON on %s",
     async (url) => {
       const res = await injectRawJsonBody(url, "{not-valid-json");
@@ -89,12 +92,8 @@ describe("malformed JSON boundary (#450)", () => {
     expect(body.error.requestId).not.toBe("");
   });
 
-  it("keeps valid requests on normal business semantics (GET /api/health)", async () => {
-    const res = await ctx.app.inject({ method: "GET", url: "/api/health" });
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: "ok" });
-  });
-
+  // GET /api/health carries no body, so it never reaches the JSON parser;
+  // the health contract itself is owned by readiness.test.ts.
   it("keeps genuine internal exceptions at 500 INTERNAL_ERROR", async () => {
     const res = await injectRawJsonBody(
       "/api/__probe/internal-error",

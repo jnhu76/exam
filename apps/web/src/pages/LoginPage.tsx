@@ -55,7 +55,7 @@ export function LoginPage() {
               <p className="type-secondary mb-6">{branding.productSubtitle}</p>
             )}
             <form onSubmit={handleSubmit}>
-              <FieldGroup data-testid="login-field-group" className="gap-4">
+              <FieldGroup className="gap-4">
                 <Field>
                   <Label htmlFor="username">
                     {t("auth.login.usernameLabel")}

@@ -85,6 +85,10 @@ describe("Password Policy Baseline (S08-lite)", () => {
     await cleanup();
   });
 
+  // The /users boundary rows stay: user.test.ts's validation-details row
+  // uses a 5-char password, so the 7/8 boundary on the /users schema
+  // (contracts user.ts minLength overrides) has no other witness. The
+  // candidates route has no equivalent owner either, so its row stays too.
   describe("POST /api/users rejects passwords shorter than 8 characters", () => {
     it("returns 400 VALIDATION_ERROR for a 7-char password", async () => {
       const res = await app.inject({

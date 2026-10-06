@@ -227,10 +227,7 @@ export function FormulaEditorDialog({
                   <span className="type-metadata">
                     {t("content.formula.previewLabel")}
                   </span>
-                  <div
-                    className="rounded-md border border-border bg-card px-3 py-2"
-                    data-testid="formula-expert-preview"
-                  >
+                  <div className="rounded-md border border-border bg-card px-3 py-2">
                     {latex.trim() ? (
                       <MathRenderer
                         latex={latex}

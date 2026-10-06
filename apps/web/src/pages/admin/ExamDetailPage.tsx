@@ -858,7 +858,6 @@ export function ExamDetailPage() {
               {t("admin.examDetail.extendDialog.cancel")}
             </Button>
             <Button
-              data-testid="extend-confirm-btn"
               disabled={extending || extendMinutes <= 0}
               onClick={() => void handleExtend()}
             >

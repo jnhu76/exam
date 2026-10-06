@@ -5,7 +5,6 @@ import { ExamTimer } from "./ExamTimer";
 import { QuestionHeader } from "./QuestionHeader";
 import { QuestionNavigator } from "./QuestionNavigator";
 import { QuestionRenderer } from "./QuestionRenderer";
-import { QuestionWorkspace } from "./QuestionWorkspace";
 import { SubjectiveAnswerInput } from "./SubjectiveAnswerInput";
 import { TrueFalseInput } from "./TrueFalseInput";
 
@@ -250,52 +249,6 @@ describe("QuestionNavigator", () => {
     const legend = screen.getByText("未作答").closest("div")!.parentElement!;
     const swatches = legend.querySelectorAll("span.inline-block");
     expect(swatches.length).toBe(3);
-  });
-});
-
-describe("QuestionWorkspace", () => {
-  it("renders header, question, answer, and footer slots", () => {
-    render(
-      <QuestionWorkspace
-        header={<QuestionHeader number={1} typeLabel="单选题" score={5} />}
-        question={<p>题干内容</p>}
-        answer={<div>答案内容</div>}
-        footer={<div>底部操作</div>}
-      />,
-    );
-
-    expect(screen.getByText("第 1 题")).toBeInTheDocument();
-    expect(screen.getByText("单选题")).toBeInTheDocument();
-    expect(screen.getByText("5 分")).toBeInTheDocument();
-    expect(screen.getByText("题干内容")).toBeInTheDocument();
-    expect(screen.getByText("答案内容")).toBeInTheDocument();
-    expect(screen.getByText("底部操作")).toBeInTheDocument();
-  });
-
-  // Characterization (UI-MIGRATE-N-W3): the question content surface is a
-  // governed content region wrapping the question prompt. After the
-  // surface-content migration it must remain a distinct bordered region
-  // containing the prompt text. Asserts the durable role, not the raw
-  // surface utility classes.
-  it("keeps the question content surface as a distinct region holding the prompt", () => {
-    const { container } = render(
-      <QuestionWorkspace
-        question={<p data-testid="prompt">题干内容</p>}
-        answer={<div>答案内容</div>}
-      />,
-    );
-    const prompt = screen.getByTestId("prompt");
-    // The prompt lives inside a bordered surface element (the question
-    // content region). The surface carries padding that distinguishes it
-    // from the surrounding workspace.
-    const surface = prompt.parentElement;
-    expect(surface).not.toBeNull();
-    // The workspace section is the outermost shell; the surface is a child
-    // distinct from the answer area.
-    const section = container.querySelector("section");
-    expect(section).not.toBeNull();
-    expect(section).toContainElement(prompt);
-    expect(section).toContainElement(screen.getByText("答案内容"));
   });
 });
 

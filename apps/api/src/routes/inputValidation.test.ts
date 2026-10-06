@@ -6,6 +6,13 @@ import candidateRoutes from "./candidate.js";
 import examRoutes from "./exam.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 
+// The per-route files and plugins/errors.test.ts own the ZodError→HTTP
+// mapping; contracts tests own the members they enumerate. The rows below are
+// the sole wire-boundary witnesses for schema members that NO other lane
+// covers (verified member-by-member in the #716 adversarial pass): title
+// min/max, openAt datetime, durationMinutes positivity, question content
+// non-empty, question score positivity, and the duplicate-username → 409
+// mapping. Adversarial review D restored them after the first deletion pass.
 describe("API input validation (Zod schema boundary)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let courseId: string;
@@ -84,41 +91,19 @@ describe("API input validation (Zod schema boundary)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
-  });
-
-  it("exam creation rejects negative passingScore", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: { ...baseExamPayload(), passingScore: -1 },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
   });
 
   it("exam creation rejects invalid datetime format for openAt", async () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
-      payload: {
-        ...baseExamPayload(),
-        openAt: "not-a-date",
-      },
+      payload: { ...baseExamPayload(), openAt: "not-a-date" },
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
   });
-
-  // Inverted-window and passingScore>totalScore create rejections are owned
-  // elsewhere: examPolicyValidation.test.ts for the inverted window
-  // (EXAM_WINDOW_INVALID field code) and the exam.test.ts passing-score
-  // boundary matrix for the score invariant.
 
   it("exam creation rejects durationMinutes <= 0", async () => {
     const res = await ctx.app.inject({
@@ -128,6 +113,7 @@ describe("API input validation (Zod schema boundary)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
   });
 
   it("question creation rejects empty content", async () => {
@@ -139,13 +125,12 @@ describe("API input validation (Zod schema boundary)", () => {
         type: "true_false",
         content: "",
         standardAnswer: true,
-        score: 10,
+        score: 5,
       },
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
   });
 
   it("question creation rejects negative score", async () => {
@@ -155,15 +140,14 @@ describe("API input validation (Zod schema boundary)", () => {
       payload: {
         courseId,
         type: "true_false",
-        content: "A question.",
+        content: "Valid content.",
         standardAnswer: true,
         score: -1,
       },
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
   });
 
   it("candidate creation rejects duplicate username", async () => {

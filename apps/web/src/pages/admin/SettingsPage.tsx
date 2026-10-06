@@ -143,11 +143,7 @@ export function SettingsPage() {
               />
               <FieldError>{profileError}</FieldError>
             </Field>
-            <Button
-              type="submit"
-              disabled={savingProfile}
-              data-testid="profile-save-btn"
-            >
+            <Button type="submit" disabled={savingProfile}>
               {savingProfile
                 ? t("admin.settings.actions.saving")
                 : t("admin.settings.actions.save")}

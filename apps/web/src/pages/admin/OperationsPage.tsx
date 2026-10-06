@@ -158,7 +158,7 @@ export function OperationsPage() {
 
   if (isLoading && !health) {
     return (
-      <div data-testid="operations-page" className="space-y-4">
+      <div className="space-y-4">
         <PageHeader title={t("ops.title")} />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
@@ -169,7 +169,7 @@ export function OperationsPage() {
 
   if (error && !health && !backup) {
     return (
-      <div data-testid="operations-page">
+      <div>
         <PageHeader title={t("ops.title")} />
         <ErrorState
           message={error}
@@ -221,11 +221,7 @@ export function OperationsPage() {
   else drillTone = "warning";
 
   return (
-    <PageContainer
-      role="admin-standard"
-      data-testid="operations-page"
-      className="space-y-6"
-    >
+    <PageContainer role="admin-standard" className="space-y-6">
       <PageHeader title={t("ops.title")} description={t("ops.subtitle")} />
 
       {stale && <InlineErrorBanner>{t("ops.staleWarning")}</InlineErrorBanner>}

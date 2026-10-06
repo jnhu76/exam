@@ -268,17 +268,12 @@ describe("TagBadge", () => {
   it("owns secondary tag semantics", () => {
     render(<TagBadge>safety</TagBadge>);
 
+    // Tone ownership lives here; the default-variant and weight attributes
+    // are owned by src/badge/tagBadgeOwnership.test.tsx.
     expect(screen.getByText("safety")).toHaveAttribute(
       "data-tag-tone",
       "neutral",
     );
-    // Weight is owned by the [data-slot=tag-badge] recipe (400), not by a
-    // component utility (issue 577 m2 single-owner model).
-    expect(screen.getByText("safety")).toHaveAttribute(
-      "data-tag-variant",
-      "default",
-    );
-    expect(screen.getByText("safety")).not.toHaveClass("font-normal");
   });
 });
 

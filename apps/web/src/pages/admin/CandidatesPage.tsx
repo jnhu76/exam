@@ -755,7 +755,6 @@ export function CandidatesPage() {
               {t("admin.common.cancel")}
             </Button>
             <Button
-              data-testid="reset-password-confirm-btn"
               onClick={() => void confirmResetPassword()}
               disabled={resetting}
             >
