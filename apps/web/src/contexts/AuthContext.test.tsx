@@ -16,15 +16,6 @@ const adminUser: MeResponse = {
   capabilities: [...permissionsForRole("Admin")],
 };
 
-const candidateUser: MeResponse = {
-  id: "c1",
-  username: "candidate",
-  name: "考生",
-  role: Role.Candidate,
-  organizationId: "org",
-  capabilities: [...permissionsForRole("Candidate")],
-};
-
 const teacherUser: MeResponse = {
   ...adminUser,
   id: "teacher",
@@ -162,70 +153,11 @@ describe("AuthContext", () => {
       expect(screen.getByTestId("is-loading")).toHaveTextContent("false");
     });
 
-    it("redirects admin to /admin/dashboard after login", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue(
-          new Response(JSON.stringify(adminUser), {
-            headers: { "Content-Type": "application/json" },
-          }),
-        ),
-      );
-
-      render(
-        <MemoryRouter initialEntries={["/login"]}>
-          <AuthProvider>
-            <AuthProbe />
-            <Routes>
-              <Route path="/login" element={null} />
-              <Route path="/admin/dashboard" element={<LocationProbe />} />
-              <Route path="*" element={<LocationProbe />} />
-            </Routes>
-          </AuthProvider>
-        </MemoryRouter>,
-      );
-
-      await act(async () => {
-        await userEvent.click(screen.getByText("login"));
-      });
-
-      expect(screen.getByTestId("current-path")).toHaveTextContent(
-        "/admin/dashboard",
-      );
-    });
-
-    it("redirects candidate to /exam/list after login", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue(
-          new Response(JSON.stringify(candidateUser), {
-            headers: { "Content-Type": "application/json" },
-          }),
-        ),
-      );
-
-      render(
-        <MemoryRouter initialEntries={["/login"]}>
-          <AuthProvider>
-            <AuthProbe />
-            <Routes>
-              <Route path="/login" element={null} />
-              <Route path="/exam/list" element={<LocationProbe />} />
-              <Route path="*" element={<LocationProbe />} />
-            </Routes>
-          </AuthProvider>
-        </MemoryRouter>,
-      );
-
-      await act(async () => {
-        await userEvent.click(screen.getByText("login-candidate"));
-      });
-
-      expect(screen.getByTestId("current-path")).toHaveTextContent(
-        "/exam/list",
-      );
-    });
-
+    // The admin/candidate redirect paths are owned end-to-end by
+    // LoginPage.test.tsx (real provider + real form + real route elements).
+    // The role rows below stay: no page-level test pins the
+    // Teacher/Grader/Proctor landing surfaces, so each row is the sole
+    // killer of its role-specific redirect mutant.
     it.each([
       ["Teacher", teacherUser, "login-teacher", "/admin/exams"],
       ["Grader", graderUser, "login-grader", "/admin/grading-queue"],
