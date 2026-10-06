@@ -7,7 +7,10 @@ import type { Database } from "@exam/db/src/types.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
-import { setupApiTestDatabaseFromEnv } from "../routes/testDatabase.js";
+import {
+  isWorkerDatabaseMode,
+  setupApiTestDatabaseFromEnv,
+} from "../routes/testDatabase.js";
 import {
   grabFreePort,
   healthState,
@@ -47,7 +50,21 @@ import {
  * Isolation: fixtures use per-scenario UUID identities; each test stops every
  * server it booted so no scanner cross-talk leaks into the next test's DB
  * observations (all instances would otherwise share the worker database).
+ *
+ * LANE CONTRACT (docs/standards/testing.md §5.2): requires worker-database
+ * isolation (TEST_DB_ISOLATION=worker-database). WHAT THIS PROVES: durability
+ * across REAL OS-process replacement — SIGKILL, new pid, fresh boot of the
+ * production entry, and new physical PostgreSQL connections that must find the
+ * previous process's durable facts. WHY WORKER-DATABASE: those fresh child
+ * connections resolve their database from TEST_DATABASE_URL alone and cannot
+ * inherit the parent process's per-file schema binding (search_path is
+ * connection-local), so the physical per-worker database must be the isolation
+ * authority. IN THE FILE-SCHEMA LANE the whole suite is skipped at collection
+ * time, before any setup; the canonical evidence lane that RUNS this suite is
+ * worker-database (pnpm verify / CI api-coverage).
  */
+
+const workerDbDescribe = isWorkerDatabaseMode() ? describe : describe.skip;
 
 const SCAN_INTERVAL_MS = 1000;
 /** Documented operability ceiling for ready→terminal convergence after restart. */
@@ -399,7 +416,7 @@ function takeAnswerValue(
   return hit === undefined ? null : hit.answerValue;
 }
 
-describe("process-restart deadline recovery (#326)", () => {
+workerDbDescribe("process-restart deadline recovery (#326)", () => {
   let connInfo: Awaited<ReturnType<typeof createDatabase>>;
   let db: Database;
   let orgId = "";
