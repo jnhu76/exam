@@ -233,11 +233,14 @@ TypeScript lifetime proof. They do NOT claim that:
 - AST proves arbitrary capability escape impossible
 - `assertCapabilityFor` alone proves the transaction session is live
 
-Cross-transaction / expired-witness safety is correct even if a future static
-escape rule misses a leak, because the consume-time `assertCapabilityFor`
-reference-identity check rejects any capability minted against a different
-repo pair, and the underlying tx-bound repo session rejects further use
-after commit/rollback.
+Cross-transaction / expired-witness safety relies on the consume-time
+`assertCapabilityFor` reference-identity check, which rejects any capability
+minted against a different repo pair. NOTE (empirically characterized by
+`apps/api/tests/concurrency/ea-lock-order.test.ts`): the tx-bound repository
+does NOT reject use after its transaction ends — a post-end write executes in
+autocommit on the pooled connection and lands durably. Safety must not be
+argued from driver-level post-end rejection; hardening the capability
+boundary is tracked in #720.
 
 ---
 
