@@ -184,6 +184,10 @@ describe("exam policy validation — authoring + publish", () => {
     expect(body.interruptionGracePerIncidentSeconds).toBeNull();
     expect(body.interruptionGracePerAttemptSeconds).toBeNull();
   });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
 });
 // ── Phase A2 (#291): deadline / untimed authoring + timed_sync block ──
 

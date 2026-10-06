@@ -275,11 +275,13 @@ describe("launchpad routes", () => {
     expect(second.statusCode).toBe(409);
   });
 
-  it("concurrent HTTP bootstrap attempts: exactly one 200, one 409, never 500", async () => {
-    // Two simultaneous first-install requests race through the freshness
-    // gate (both may pass it), then serialize on the transaction-scoped
-    // advisory lock inside the canonical mutation. The loser must map to
-    // the same 409 as the freshness gate — never an internal 500.
+  it("duplicate HTTP bootstrap attempts: exactly one 200, one 409, never 500", async () => {
+    // Two first-install requests dispatched together (the app's default
+    // single-connection test pool runs them in dispatch order). Both may
+    // pass the freshness gate; the loser must map to the same 409 as the
+    // freshness gate — never an internal 500. TRUE-overlap advisory-lock
+    // serialization follows the same seam proven in
+    // authorityInvariants.concurrency.test.ts.
     vi.stubEnv("LAUNCHPAD_SETUP_TOKEN", VALID_TOKEN);
     resetRuntimeConfigForTest();
     await resetToUninitialized(ctx);

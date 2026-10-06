@@ -429,7 +429,7 @@ describe("attempt routes", () => {
       expect(attempt?.status).toBe("disrupted");
     });
 
-    it("does NOT write a phantom attempt.disrupted audit when the row is already disrupted at lock time (race no-op)", async () => {
+    it("does NOT write a phantom attempt.disrupted audit when the row is already disrupted at lock time (already-disrupted no-op)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
