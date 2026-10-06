@@ -15,7 +15,7 @@ import zhCN from "./locales/zh-CN.js";
  * `resources` below + `SUPPORTED_LOCALES`, and wire a language switcher.
  */
 export const SUPPORTED_LOCALES = ["zh-CN"] as const;
-export const DEFAULT_LOCALE = "zh-CN" as const;
+const DEFAULT_LOCALE = "zh-CN" as const;
 
 void i18n.use(initReactI18next).init({
   resources: {

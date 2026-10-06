@@ -19,7 +19,6 @@ export function BrandHeader({
 
   return (
     <div
-      data-testid="brand-header"
       className={cn(
         "flex min-w-0 items-center gap-2",
         compact && "justify-center",

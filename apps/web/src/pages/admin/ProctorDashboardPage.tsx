@@ -1305,7 +1305,6 @@ export function ProctorDashboardPage() {
               {t("admin.proctorDashboard.actions.refresh")}
             </Button>
             <Button
-              data-testid="proctor-monitor-link"
               variant="outline"
               size="sm"
               onClick={() =>

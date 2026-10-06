@@ -4,4 +4,4 @@
  * route share one definition and cannot drift. See
  * {@link sanitizeClientEvent} there for behavior.
  */
-export { sanitizeClientEvent, sanitizeMetadata } from "@exam/contracts";
+export { sanitizeClientEvent } from "@exam/contracts";

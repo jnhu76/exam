@@ -224,16 +224,13 @@ function LockedOverlay({
         )}
         {hintKey && <div className="type-secondary">{t(hintKey as never)}</div>}
         {lockReason === "deadline" && autoSubmitFailed && (
-          <Button onClick={onRetrySubmit} data-testid="retry-submit-btn">
+          <Button onClick={onRetrySubmit}>
             {t("candidateRuntime.actions.retrySubmit")}
           </Button>
         )}
         {lockReason === "disrupted" &&
           (canResume ? (
-            <Button
-              onClick={onRetryRestore}
-              data-testid="lock-retry-restore-btn"
-            >
+            <Button onClick={onRetryRestore}>
               {t("candidateRuntime.restore.retryRestore")}
             </Button>
           ) : (
@@ -251,11 +248,7 @@ function LockedOverlay({
           !autoSubmitFailed && (
             <div className="flex flex-wrap justify-center gap-2">
               {showResult && lockReason !== "voided" && (
-                <Button
-                  variant="outline"
-                  onClick={onViewResult}
-                  data-testid="lock-view-result-btn"
-                >
+                <Button variant="outline" onClick={onViewResult}>
                   {t("candidateRuntime.lock.viewResult")}
                 </Button>
               )}
@@ -308,18 +301,10 @@ function RestoreFailedSurface({
         </AlertDescription>
       </Alert>
       <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          variant="outline"
-          onClick={onBackToList}
-          data-testid="restore-back-to-list"
-        >
+        <Button variant="outline" onClick={onBackToList}>
           {t("candidateRuntime.restore.backToList")}
         </Button>
-        <Button
-          ref={retryBtnRef}
-          onClick={onRetry}
-          data-testid="restore-retry-btn"
-        >
+        <Button ref={retryBtnRef} onClick={onRetry}>
           <AppIcon icon={RotateCcw} size="inline" />
           {t("candidateRuntime.restore.retryRestore")}
         </Button>
@@ -1341,10 +1326,7 @@ export function TakeExamPage() {
               />
             )}
             {!view.isLocked && view.timingMode === "deadline" && (
-              <div
-                data-testid="deadline-static"
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3"
-              >
+              <div className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3">
                 <span className="type-metadata">
                   {t("candidateRuntime.timer.cutoff")}
                 </span>
@@ -1356,10 +1338,7 @@ export function TakeExamPage() {
               </div>
             )}
             {!view.isLocked && view.timingMode === "untimed" && (
-              <div
-                data-testid="untimed-badge"
-                className="inline-flex h-9 items-center rounded-md border border-border bg-card px-3"
-              >
+              <div className="inline-flex h-9 items-center rounded-md border border-border bg-card px-3">
                 <span className="type-metadata">
                   {t("candidateRuntime.timer.untimed")}
                 </span>
@@ -1459,7 +1438,6 @@ export function TakeExamPage() {
               <Alert
                 variant="destructive"
                 className="border-destructive/30 bg-destructive/10"
-                data-testid="save-retry-banner"
               >
                 <AppIcon icon={TriangleAlert} size="inline" />
                 <AlertTitle>
@@ -1475,7 +1453,6 @@ export function TakeExamPage() {
                     size="xs"
                     className="mt-1"
                     onClick={() => void retryFailedSaves()}
-                    data-testid="save-retry-btn"
                   >
                     {t("candidateRuntime.saveRetry.retry")}
                   </Button>

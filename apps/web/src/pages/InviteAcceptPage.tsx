@@ -70,10 +70,7 @@ export function InviteAcceptPage() {
   };
 
   return (
-    <main
-      data-testid="invite-accept-layout"
-      className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6"
-    >
+    <main className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6">
       <PageContainer role="auth">
         <Card className="w-full">
           <CardHeader>
@@ -95,10 +92,7 @@ export function InviteAcceptPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit}>
-                <FieldGroup
-                  data-testid="invite-accept-field-group"
-                  className="gap-4"
-                >
+                <FieldGroup className="gap-4">
                   <p className="type-secondary">
                     {t("auth.invite.description")}
                   </p>

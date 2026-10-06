@@ -169,11 +169,7 @@ export function NotificationBell() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-80 p-0"
-        data-testid="notification-panel"
-      >
+      <PopoverContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-medium">
             {t("notifications.panelTitle")}
@@ -209,7 +205,7 @@ export function NotificationBell() {
               {t("notifications.empty")}
             </div>
           ) : (
-            <ul className="divide-y" data-testid="notification-list">
+            <ul className="divide-y">
               {list.map((n) => (
                 <li key={n.id}>
                   <button

@@ -211,7 +211,6 @@ export function RichEditorToolbar({
         role="toolbar"
         aria-orientation="horizontal"
         aria-label={t("content.editor.toolbarLabel")}
-        data-testid="rich-editor-toolbar"
         className="flex flex-nowrap items-center gap-0.5"
       >
         {rowButtons}
@@ -225,7 +224,6 @@ export function RichEditorToolbar({
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t("content.editor.moreCommands")}
-                data-testid="toolbar-overflow-trigger"
                 onMouseDown={(e) => e.preventDefault()}
               >
                 <AppIcon icon={MoreHorizontal} size="inline" />

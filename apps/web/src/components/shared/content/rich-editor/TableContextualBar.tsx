@@ -122,7 +122,6 @@ export function TableContextualBar({
       <div
         role="group"
         aria-label={t("content.table.controlsLabel")}
-        data-testid="table-contextual-bar"
         className="flex flex-nowrap items-center gap-0.5 rounded-md border border-border bg-card px-1 py-0.5"
       >
         {TABLE_COMMANDS.map((command) => (

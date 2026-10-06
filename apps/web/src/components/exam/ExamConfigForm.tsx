@@ -182,7 +182,7 @@ export function ExamConfigForm({
               value={data.timingMode}
               onValueChange={(v) => updateTimingMode(v as AuthoringTimingMode)}
             >
-              <SelectTrigger data-testid="timing-mode-select">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

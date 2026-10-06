@@ -62,10 +62,7 @@ export function ResetPasswordPage() {
   };
 
   return (
-    <main
-      data-testid="reset-password-layout"
-      className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6"
-    >
+    <main className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6">
       <PageContainer role="auth">
         <Card className="w-full">
           <CardHeader>
@@ -87,10 +84,7 @@ export function ResetPasswordPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit}>
-                <FieldGroup
-                  data-testid="reset-password-field-group"
-                  className="gap-4"
-                >
+                <FieldGroup className="gap-4">
                   <p className="type-secondary">
                     {t("auth.reset.description")}
                   </p>

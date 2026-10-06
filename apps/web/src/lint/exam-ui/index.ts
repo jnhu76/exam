@@ -50,14 +50,3 @@ const plugin: ESLint.Plugin = {
 };
 
 export default plugin;
-export {
-  preferInlineErrorBanner,
-  noBusinessShadow,
-  noArbitraryTypography,
-  noTypographyAuthorityConflict,
-  noArbitraryInlineTypography,
-  noHeavyFontWeight,
-  noRecipeRecomposition,
-  noDialogSpatialOverride,
-  noArbitraryFilterWidth,
-};
