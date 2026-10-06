@@ -323,9 +323,4 @@ describe("enrollmentRepo.findByExamAndCandidateForUpdate", () => {
     );
     expect(result).toBeNull();
   });
-
-  it("exists as a method on the repo", async () => {
-    const repo = createEnrollmentRepo(db);
-    expect(typeof repo.findByExamAndCandidateForUpdate).toBe("function");
-  });
 });

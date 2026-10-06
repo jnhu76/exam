@@ -6,7 +6,8 @@
  *
  * 1. fresh-path: applying the full journal (through 0028) creates the table
  *    with the exact named CHECKs, the unique arbiter, the composite FK, the
- *    actor/org FKs, and the per-attempt history index;
+ *    actor/org FKs, the per-attempt history indexes, and the composite-FK
+ *    target `users_org_id_unique` bound to the `users` table;
  * 2. the idempotency arbiter `attempt_command_receipts_org_operation_unique`
  *    is the ONE cross-command conflict point (audit §11.3);
  * 3. command_type / outcome / jsonb-object CHECKs reject disallowed values
@@ -147,11 +148,6 @@ async function insertOrgAttemptChain(
   return { orgId, adminId, examId, attemptId };
 }
 
-async function constraintNames(table: string): Promise<string[]> {
-  // Method scoped to the isolated test schema via the shared connection.
-  return [];
-}
-
 describe(
   "0028 attempt_command_receipts schema contract",
   { timeout: 60_000 },
@@ -177,15 +173,6 @@ describe(
       await conn?.sql.end();
       await iso?.cleanup();
     }, 30_000);
-
-    async function constraintsOn(table: string): Promise<string[]> {
-      const rows = await sql.unsafe<{ conname: string }[]>(`
-      SELECT conname FROM pg_constraint
-      WHERE conrelid = ${s(table)}::regclass
-      ORDER BY conname
-    `);
-      return rows.map((r) => r.conname);
-    }
 
     async function indexesOn(table: string): Promise<string[]> {
       const rows = await sql.unsafe<{ indexname: string }[]>(`
@@ -227,29 +214,9 @@ describe(
       ]);
     });
 
-    it("creates the frozen named CHECK constraints", async () => {
-      const names = await constraintsOn("attempt_command_receipts");
-      expect(names).toContain("attempt_command_receipts_command_type_check");
-      expect(names).toContain("attempt_command_receipts_outcome_check");
-      expect(names).toContain("attempt_command_receipts_request_payload_check");
-      expect(names).toContain("attempt_command_receipts_result_payload_check");
-      // FKs land as constraints too.
-      expect(names).toContain("attempt_command_receipts_org_attempt_fk");
-      expect(names).toContain("attempt_command_receipts_org_fk");
-      expect(names).toContain("attempt_command_receipts_actor_fk");
-      void constraintNames; // unused local placeholder retained for symmetry
-    });
-
-    it("creates the unique arbiter and the per-attempt history indexes", async () => {
-      const names = await indexesOn("attempt_command_receipts");
-      expect(names).toContain("attempt_command_receipts_org_operation_unique");
-      expect(names).toContain(
-        "attempt_command_receipts_org_attempt_created_idx",
-      );
-      expect(names).toContain(
-        "attempt_command_receipts_org_attempt_command_created_idx",
-      );
-      // Composite-FK target index on users (actor identity graph).
+    it("binds users_org_id_unique to the users table", async () => {
+      // Composite-FK target index on users. Sole host-table witness: everything
+      // else proves the name, which a relocated index also satisfies.
       const userNames = await indexesOn("users");
       expect(userNames).toContain("users_org_id_unique");
     });
