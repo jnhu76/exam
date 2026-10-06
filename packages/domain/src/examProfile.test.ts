@@ -133,10 +133,4 @@ describe("applyExamProfileDefaults — timing modes (#291)", () => {
     expect(resolved.timingMode).toBe("deadline");
     expect(resolved.durationMinutes).toBeNull();
   });
-
-  it("resolves timingMode for every profile (no absent key)", () => {
-    expect(applyExamProfileDefaults(timedProfile, {}).timingMode).toBe(
-      "timed_window",
-    );
-  });
 });

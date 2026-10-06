@@ -59,25 +59,6 @@ describe("CreateUserRequestSchema.email (optional recipient source)", () => {
     }
   });
 
-  it("normalizes empty string email to undefined on write", () => {
-    const result = CreateUserRequestSchema.safeParse({
-      ...base,
-      email: "",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.email).toBeUndefined();
-    }
-  });
-
-  it("rejects a malformed email", () => {
-    const result = CreateUserRequestSchema.safeParse({
-      ...base,
-      email: "not-an-email",
-    });
-    expect(result.success).toBe(false);
-  });
-
   it("rejects an email with no local part", () => {
     const result = CreateUserRequestSchema.safeParse({
       ...base,

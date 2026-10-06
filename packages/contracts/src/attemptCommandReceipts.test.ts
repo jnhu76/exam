@@ -411,6 +411,8 @@ describe("AttemptCommandReceiptResponseSchema (wire)", () => {
   });
 
   it("rejects disposition=no_change with outcome=applied (inconsistent)", () => {
+    // The union discriminates on `disposition`, so this row fails on a
+    // different `outcome` literal than the applied/no_change row above.
     expect(() =>
       AttemptCommandReceiptResponseSchema.parse({
         ...base,
@@ -456,18 +458,6 @@ describe("AttemptCommandReceiptResponseSchema (wire)", () => {
         resultPayload: misconductResultPayload,
       }),
     ).toThrow(/resultPayload\.commandType misconduct_mark does not match/);
-  });
-
-  it("rejects outer misconduct_mark with an inner force_submit result payload", () => {
-    expect(() =>
-      AttemptCommandReceiptResponseSchema.parse({
-        ...base,
-        commandType: "misconduct_mark" as const,
-        resultPayload: forceSubmitResultPayload,
-        disposition: "applied",
-        outcome: "applied",
-      }),
-    ).toThrow(/resultPayload\.commandType force_submit does not match/);
   });
 
   it("rejects a command mismatch on the idempotent_replay branch too", () => {

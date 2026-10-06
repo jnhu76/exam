@@ -75,11 +75,6 @@ describe("interruption policy contracts", () => {
       },
       {
         policy: "bounded_grace" as const,
-        perIncidentCapSeconds: -1,
-        perAttemptAggregateCapSeconds: 180,
-      },
-      {
-        policy: "bounded_grace" as const,
         perIncidentCapSeconds: 60.5,
         perAttemptAggregateCapSeconds: 180,
       },

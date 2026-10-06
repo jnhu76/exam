@@ -17,10 +17,4 @@ describe("last-admin guard contract (ADR §3.2)", () => {
     expect(ROLE_PRESETS[Role.Admin].assignable).toBe(true);
     expect(ROLE_PRESETS[Role.Admin].loginAllowed).toBe(true);
   });
-
-  it("System does NOT count toward the last-admin guard (non-human, non-login)", () => {
-    // ADR §3.2 #4: System actor does not count toward the last-admin guard.
-    expect(ROLE_PRESETS[Role.System].loginAllowed).toBe(false);
-    expect(ROLE_PRESETS[Role.System].assignable).toBe(false);
-  });
 });

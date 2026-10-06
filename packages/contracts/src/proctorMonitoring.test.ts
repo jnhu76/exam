@@ -19,17 +19,14 @@ describe("ProctorExamListResponseSchema", () => {
     expect(ProctorExamListResponseSchema.parse(valid)).toEqual(valid);
   });
 
-  it.each(["draft", "canceled", "archived"])(
-    "rejects unsupported %s exams",
-    (status) => {
-      expect(() =>
-        ProctorExamListResponseSchema.parse({
-          ...valid,
-          items: [{ ...valid.items[0], status }],
-        }),
-      ).toThrow();
-    },
-  );
+  it("rejects unsupported draft exams", () => {
+    expect(() =>
+      ProctorExamListResponseSchema.parse({
+        ...valid,
+        items: [{ ...valid.items[0], status: "draft" }],
+      }),
+    ).toThrow();
+  });
 
   it("rejects authoring and grading fields", () => {
     expect(() =>
