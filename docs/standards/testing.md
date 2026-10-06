@@ -601,15 +601,32 @@ pnpm --filter @exam/domain test
 ### 5.2 API Integration Tests
 
 ```bash
-# Serial (default)
+# Local serial lane (default; per-file schema isolation)
 pnpm --filter @exam/api test
 
-# Parallel (requires worker-database isolation)
+# Full verification lane (worker-database isolation; canonical API evidence)
 TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
 ```
 
 - **DB required**: Yes (`exam_test` on `DB_HOST_PORT`, default 5432).
 - **Env**: `TEST_DATABASE_URL` must point to `exam_test`.
+
+**Lane contract — process-isolated suites.** The two real-child-process suites
+`src/runtime/processRestartDeadline.process.test.ts` and
+`src/routes/admissions.durability.process.test.ts` spawn the production server
+entry as OS child processes that open fresh physical PostgreSQL connections
+from `TEST_DATABASE_URL`. Such connections cannot inherit the parent process's
+per-file schema binding (`search_path` is connection-local), so these suites
+require worker-database isolation, where the physical per-worker database is
+the isolation authority (§2.8):
+
+- **Local serial lane (file-schema)**: the suites **skip before any setup**
+  (`isWorkerDatabaseMode() ? describe : describe.skip` — collection-time
+  skip); all other API integration tests run normally.
+- **Worker-database lane**: the suites **run and must pass**. This lane owns
+  their evidence and is exercised by `pnpm verify` and CI `api-coverage`
+  (§1.4). It is the only supported way to execute them locally, e.g.
+  `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=1 pnpm --filter @exam/api exec vitest run <files>`.
 
 ### 5.3 Web Tests
 
