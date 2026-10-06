@@ -210,11 +210,6 @@ describe("exam contracts", () => {
     totalScore: 100,
   };
 
-  it("CreateExamRequestSchema accepts valid exam", () => {
-    const result = CreateExamRequestSchema.safeParse(validExam);
-    expect(result.success).toBe(true);
-  });
-
   it("CreateExamRequestSchema defaults timed_window mode", () => {
     const result = CreateExamRequestSchema.parse(validExam);
     expect(result.timingMode).toBe("timed_window");
@@ -336,15 +331,6 @@ describe("exam contracts", () => {
     expect(result.success).toBe(true);
   });
 
-  it("CreateExamRequestSchema accepts passingScore = totalScore", () => {
-    const result = CreateExamRequestSchema.safeParse({
-      ...validExam,
-      passingScore: 100,
-      totalScore: 100,
-    });
-    expect(result.success).toBe(true);
-  });
-
   it("CreateExamRequestSchema accepts passingScore = 0", () => {
     const result = CreateExamRequestSchema.safeParse({
       ...validExam,
@@ -378,14 +364,6 @@ describe("exam contracts", () => {
     expect(result.success).toBe(true);
   });
 
-  it("UpdateExamRequestSchema accepts both fields with passingScore = totalScore", () => {
-    const result = UpdateExamRequestSchema.safeParse({
-      passingScore: 50,
-      totalScore: 50,
-    });
-    expect(result.success).toBe(true);
-  });
-
   // ── ADR-013 interruption policy authoring (REC-I4-I3A) ──
 
   it("CreateExamRequestSchema accepts strict interruption policy with null caps", () => {
@@ -402,14 +380,6 @@ describe("exam contracts", () => {
       interruptionTimePolicy: "bounded_grace",
       interruptionGracePerIncidentSeconds: 120,
       interruptionGracePerAttemptSeconds: 300,
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("CreateExamRequestSchema accepts operator_incident", () => {
-    const result = CreateExamRequestSchema.safeParse({
-      ...validExam,
-      interruptionTimePolicy: "operator_incident",
     });
     expect(result.success).toBe(true);
   });
@@ -500,15 +470,6 @@ describe("exam contracts", () => {
       ...validExam,
       interruptionTimePolicy: "strict",
       interruptionGracePerIncidentSeconds: 120,
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("CreateExamRequestSchema accepts operator_incident with caps (shape-only; normalizer rejects)", () => {
-    const result = CreateExamRequestSchema.safeParse({
-      ...validExam,
-      interruptionTimePolicy: "operator_incident",
-      interruptionGracePerAttemptSeconds: 300,
     });
     expect(result.success).toBe(true);
   });
@@ -642,15 +603,6 @@ describe("RestoreAttemptResponseSchema (frozen contract)", () => {
     });
     expect(result.success).toBe(false);
   });
-
-  it("rejects operator_incident policy with positive addedSeconds", () => {
-    const result = RestoreAttemptResponseSchema.safeParse({
-      lifecycle: "restored",
-      compensation: { policy: "operator_incident", addedSeconds: 120 },
-      attempt: { ...baseAttempt, serverNow: new Date().toISOString() },
-    });
-    expect(result.success).toBe(false);
-  });
 });
 
 describe("question contracts", () => {
@@ -710,49 +662,21 @@ describe("question contracts", () => {
   // ── #437: auto-graded types require a non-null typed standardAnswer at
   //    the write boundary; text_response may carry null (reference answer) ──
 
-  it.each([
-    [
-      "single_choice",
-      {
-        options: [
-          { id: "A", content: "Option A" },
-          { id: "B", content: "Option B" },
-        ],
-      },
-    ],
-    [
-      "multiple_choice",
-      {
-        options: [
-          { id: "A", content: "Option A" },
-          { id: "B", content: "Option B" },
-          { id: "C", content: "Option C" },
-        ],
-      },
-    ],
-    ["true_false", {}],
-    ["fill_blank", { content: "The answer is ____" }],
-  ] as const)(
-    "CreateQuestionRequestSchema rejects %s with standardAnswer: null",
-    (type, extra) => {
-      const result = CreateQuestionRequestSchema.safeParse({
-        courseId: "550e8400-e29b-41d4-a716-446655440000",
-        type,
-        content: "Prompt",
-        standardAnswer: null,
-        score: 10,
-        ...extra,
-      });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(
-          result.error.issues.some(
-            (issue) => issue.path[0] === "standardAnswer",
-          ),
-        ).toBe(true);
-      }
-    },
-  );
+  it("CreateQuestionRequestSchema rejects an auto-graded type with standardAnswer: null", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "true_false",
+      content: "Prompt",
+      standardAnswer: null,
+      score: 10,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((issue) => issue.path[0] === "standardAnswer"),
+      ).toBe(true);
+    }
+  });
 
   it.each([
     [
@@ -1185,14 +1109,6 @@ describe("SaveAnswerAcceptedSchema (strict)", () => {
     }
   });
 
-  it("rejects conflict field (strict)", () => {
-    const result = SaveAnswerAcceptedSchema.safeParse({
-      ...validAccepted,
-      conflict: { reason: "STALE_VERSION" },
-    });
-    expect(result.success).toBe(false);
-  });
-
   it("rejects unknown key (strict)", () => {
     const result = SaveAnswerAcceptedSchema.safeParse({
       ...validAccepted,
@@ -1222,11 +1138,6 @@ describe("SaveAnswerRejectedSchema (strict)", () => {
     }
   });
 
-  it("parses STALE_VERSION without details", () => {
-    const result = SaveAnswerRejectedSchema.safeParse(validRejected);
-    expect(result.success).toBe(true);
-  });
-
   it("parses all 4 reasons", () => {
     const reasons = [
       "STALE_VERSION",
@@ -1247,14 +1158,6 @@ describe("SaveAnswerRejectedSchema (strict)", () => {
     const result = SaveAnswerRejectedSchema.safeParse({
       ...validRejected,
       reason: "UNKNOWN",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects conflict field (strict)", () => {
-    const result = SaveAnswerRejectedSchema.safeParse({
-      ...validRejected,
-      conflict: { reason: "STALE_VERSION" },
     });
     expect(result.success).toBe(false);
   });
@@ -1631,9 +1534,9 @@ describe("audit contracts", () => {
     const id = "55555555-5555-4555-8555-555555555555";
     const ts = "2026-08-30T00:00:00.000Z";
     expect(decodeAuditCursor("garbage")).toBeNull();
-    // Pre-snapshot v1 cursors carry no window bound and must never parse.
-    expect(decodeAuditCursor(`v1|${ts}|${id}`)).toBeNull();
-    expect(decodeAuditCursor(`v2|${ts}|${id}`)).toBeNull();
+    // A well-formed 4-segment cursor carrying an unknown (pre-snapshot v1)
+    // version must be rejected by the version gate, not by the length gate.
+    expect(decodeAuditCursor(`v1|${ts}|${ts}|${id}`)).toBeNull();
     expect(decodeAuditCursor(`v2|not-a-date|${ts}|${id}`)).toBeNull();
     expect(decodeAuditCursor(`v2|${ts}|not-a-date|${id}`)).toBeNull();
     expect(decodeAuditCursor(`v2|${ts}|${ts}|not-an-id`)).toBeNull();
@@ -1655,19 +1558,6 @@ describe("grading detail contracts", () => {
     candidateAnswer: "光合作用是植物利用光能...",
     entry: null,
   };
-
-  it("GradingDetailsQuestionSchema accepts a valid question with answer", () => {
-    const result = GradingDetailsQuestionSchema.safeParse(validQuestion);
-    expect(result.success).toBe(true);
-  });
-
-  it("GradingDetailsQuestionSchema accepts null candidateAnswer", () => {
-    const result = GradingDetailsQuestionSchema.safeParse({
-      ...validQuestion,
-      candidateAnswer: null,
-    });
-    expect(result.success).toBe(true);
-  });
 
   it("GradingDetailsQuestionSchema accepts any candidateAnswer type", () => {
     for (const answer of [

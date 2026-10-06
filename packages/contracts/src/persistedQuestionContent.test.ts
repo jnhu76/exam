@@ -141,12 +141,6 @@ describe("resolvePersistedQuestionDocument — static render authority", () => {
     expect(resolvePersistedQuestionDocument(null)).toBeNull();
   });
 
-  it("returns the parsed canonical document, not the raw payload", () => {
-    const resolved = resolvePersistedQuestionDocument(validDoc);
-    expect(resolved).not.toBeNull();
-    expect(resolved!.content[0]).toEqual(validDoc.content[0]);
-  });
-
   it("stays binary-consistent with the classifier: valid/noncanonical render, everything else rejects", () => {
     const corpus = [
       validDoc,

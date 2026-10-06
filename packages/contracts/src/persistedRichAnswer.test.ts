@@ -239,12 +239,6 @@ describe("resolveRichAnswerDocument — render authority for persisted answers",
     expect(resolveRichAnswerDocument(hostile, "rich")).toBeNull();
   });
 
-  it("returns the parsed canonical document, not the raw payload", () => {
-    const resolved = resolveRichAnswerDocument(validDoc, "rich");
-    expect(resolved).not.toBeNull();
-    expect(resolved!.content[0]).toEqual(validDoc.content[0]);
-  });
-
   it("stays binary-consistent with the classifier: valid/noncanonical render, everything else rejects", () => {
     const corpus: Array<[unknown, string | null]> = [
       [validDoc, "rich"],

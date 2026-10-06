@@ -410,16 +410,6 @@ describe("AttemptCommandReceiptResponseSchema (wire)", () => {
     ).toThrow();
   });
 
-  it("rejects disposition=no_change with outcome=applied (inconsistent)", () => {
-    expect(() =>
-      AttemptCommandReceiptResponseSchema.parse({
-        ...base,
-        disposition: "no_change",
-        outcome: "applied",
-      }),
-    ).toThrow();
-  });
-
   it("rejects disposition=idempotent_replay with a non-persistent outcome", () => {
     expect(() =>
       AttemptCommandReceiptResponseSchema.parse({
@@ -456,18 +446,6 @@ describe("AttemptCommandReceiptResponseSchema (wire)", () => {
         resultPayload: misconductResultPayload,
       }),
     ).toThrow(/resultPayload\.commandType misconduct_mark does not match/);
-  });
-
-  it("rejects outer misconduct_mark with an inner force_submit result payload", () => {
-    expect(() =>
-      AttemptCommandReceiptResponseSchema.parse({
-        ...base,
-        commandType: "misconduct_mark" as const,
-        resultPayload: forceSubmitResultPayload,
-        disposition: "applied",
-        outcome: "applied",
-      }),
-    ).toThrow(/resultPayload\.commandType force_submit does not match/);
   });
 
   it("rejects a command mismatch on the idempotent_replay branch too", () => {

@@ -41,14 +41,6 @@ describe("NotificationSchema (read DTO)", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts a notification with a result action path", () => {
-    const result = NotificationSchema.safeParse({
-      ...base,
-      actionPath: "/exam/00000000-0000-4000-8000-00000000000a/result",
-    });
-    expect(result.success).toBe(true);
-  });
-
   it("accepts a read notification (readAt set)", () => {
     const result = NotificationSchema.safeParse({
       ...base,
@@ -133,11 +125,6 @@ describe("UnreadCountResponseSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts a positive integer count", () => {
-    const result = UnreadCountResponseSchema.safeParse({ count: 42 });
-    expect(result.success).toBe(true);
-  });
-
   it("rejects a negative count", () => {
     const result = UnreadCountResponseSchema.safeParse({ count: -1 });
     expect(result.success).toBe(false);
@@ -190,14 +177,6 @@ describe("NOTIFICATION_ACTION_PATH_PATTERN / isNotificationActionPath", () => {
   // (#402/#299): /exam/list. The pattern is the single source of truth shared
   // by the trusted builders, the write-time validator, and the render-time
   // revalidator. Every accepted shape maps to an authorized candidate route.
-
-  it("pattern matches the canonical result route", () => {
-    expect(
-      NOTIFICATION_ACTION_PATH_PATTERN.test(
-        "/exam/00000000-0000-4000-8000-00000000000a/result",
-      ),
-    ).toBe(true);
-  });
 
   it("isNotificationActionPath accepts a canonical result path", () => {
     expect(

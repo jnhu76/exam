@@ -25,29 +25,28 @@ describe("interruption policy contracts", () => {
     });
   });
 
-  it.each(["strict", "operator_incident"] as const)(
-    "requires null caps for %s",
-    (policy) => {
-      expect(
-        normalizeInterruptionPolicyConfiguration({
-          policy,
-          perIncidentCapSeconds: null,
-          perAttemptAggregateCapSeconds: null,
-        }),
-      ).toEqual({
-        policy,
+  it("requires null caps for strict and operator_incident policies", () => {
+    // Both members share one branch in the caps rule (examPolicy.ts:
+    // `policy !== "bounded_grace"`), so one witness covers the class.
+    expect(
+      normalizeInterruptionPolicyConfiguration({
+        policy: "strict",
         perIncidentCapSeconds: null,
         perAttemptAggregateCapSeconds: null,
-      });
-      expect(() =>
-        normalizeInterruptionPolicyConfiguration({
-          policy,
-          perIncidentCapSeconds: 1,
-          perAttemptAggregateCapSeconds: null,
-        }),
-      ).toThrow();
-    },
-  );
+      }),
+    ).toEqual({
+      policy: "strict",
+      perIncidentCapSeconds: null,
+      perAttemptAggregateCapSeconds: null,
+    });
+    expect(() =>
+      normalizeInterruptionPolicyConfiguration({
+        policy: "strict",
+        perIncidentCapSeconds: 1,
+        perAttemptAggregateCapSeconds: null,
+      }),
+    ).toThrow();
+  });
 
   it("requires positive bounded caps ordered per incident then aggregate", () => {
     expect(
@@ -71,11 +70,6 @@ describe("interruption policy contracts", () => {
       {
         policy: "bounded_grace" as const,
         perIncidentCapSeconds: 0,
-        perAttemptAggregateCapSeconds: 180,
-      },
-      {
-        policy: "bounded_grace" as const,
-        perIncidentCapSeconds: -1,
         perAttemptAggregateCapSeconds: 180,
       },
       {

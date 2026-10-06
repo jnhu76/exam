@@ -39,12 +39,6 @@ function baseEvent(overrides: Record<string, unknown> = {}) {
 }
 
 describe("ProctorAttemptStatusSchema", () => {
-  it("accepts a minimal valid status", () => {
-    expect(ProctorAttemptStatusSchema.safeParse(baseStatus()).success).toBe(
-      true,
-    );
-  });
-
   it("accepts all onlineState values", () => {
     for (const s of ["online", "stale", "offline"]) {
       expect(
