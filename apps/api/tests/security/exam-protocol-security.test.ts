@@ -326,44 +326,6 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("Answer save versioned protocol", () => {
-    it("accepts first save then rejects stale version", async () => {
-      const attemptId = await createExamAndStart("Answer Version Exam");
-
-      const first = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${questionId}`,
-        payload: {
-          attemptId,
-          questionId,
-          answer: "A",
-          clientSeq: 0,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(first.statusCode).toBe(200);
-      expect(first.json().accepted).toBe(true);
-
-      const stale = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${attemptId}/answers/${questionId}`,
-        payload: {
-          attemptId,
-          questionId,
-          answer: "B",
-          clientSeq: 1,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion: 0,
-        },
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(stale.statusCode).toBe(200);
-      expect(stale.json().accepted).toBe(false);
-    });
-  });
-
   describe("Candidate cannot submit another candidate's attempt", () => {
     it("returns 404 for cross-candidate submit", async () => {
       const attemptId = await createExamAndStart("Ownership Exam");

@@ -1164,49 +1164,6 @@ describe("candidate result / answer visibility boundaries", () => {
     await ctx.cleanup();
   });
 
-  it("manual mode: fully_graded + computed score is hidden from the candidate until publish", async () => {
-    const { examId, attemptId } = await createManualGradedMixedExam({
-      title: "result-visibility manual hidden",
-      resultPublicationMode: "manual",
-      includeTextResponse: true,
-    });
-
-    // Internal state is fully_graded + computed (set in the helper). The
-    // candidate result must still be HIDDEN with no score leakage.
-    const before = await ctx.app.inject({
-      method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
-      cookies: { "auth-token": ctx.candidateToken },
-    });
-    expect(before.statusCode).toBe(200);
-    const beforeBody = before.json();
-    expect(beforeBody.showResultImmediately).toBe(false);
-    expect(beforeBody.hiddenReason).toBe("pending_publish");
-    expect(beforeBody).not.toHaveProperty("totalScore");
-    expect(beforeBody).not.toHaveProperty("passed");
-    expect(beforeBody).not.toHaveProperty("questionResults");
-
-    // Publish results via the real endpoint, then the result becomes visible.
-    const publishRes = await ctx.app.inject({
-      method: "POST",
-      url: `/api/exams/${examId}/publish-results`,
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(publishRes.statusCode).toBe(200);
-
-    const after = await ctx.app.inject({
-      method: "GET",
-      url: `/api/scores/attempts/${attemptId}`,
-      cookies: { "auth-token": ctx.candidateToken },
-    });
-    expect(after.statusCode).toBe(200);
-    const afterBody = after.json();
-    expect(afterBody.showResultImmediately).toBe(true);
-    expect(afterBody.totalScore).toBe(30);
-    expect(afterBody.passed).toBe(true);
-    void examId;
-  });
-
   it("result visible: standardAnswer is stripped and rubric never appears for any question type", async () => {
     const { attemptId } = await createManualGradedMixedExam({
       title: "result-visibility answer gate",

@@ -85,39 +85,10 @@ describe("Password Policy Baseline (S08-lite)", () => {
     await cleanup();
   });
 
-  describe("POST /api/users rejects passwords shorter than 8 characters", () => {
-    it("returns 400 VALIDATION_ERROR for a 7-char password", async () => {
-      const res = await app.inject({
-        method: "POST",
-        url: "/api/users",
-        payload: {
-          username: `pwtest-${randomUUID().slice(0, 8)}`,
-          password: "1234567",
-          name: "PW Test",
-          role: "Admin",
-        },
-        cookies: { "auth-token": adminToken },
-      });
-      expect(res.statusCode).toBe(400);
-      expect(res.json().error.code).toBe("VALIDATION_ERROR");
-    });
-
-    it("accepts an 8-char password", async () => {
-      const res = await app.inject({
-        method: "POST",
-        url: "/api/users",
-        payload: {
-          username: `pwtest-${randomUUID().slice(0, 8)}`,
-          password: "12345678",
-          name: "PW Test OK",
-          role: "Admin",
-        },
-        cookies: { "auth-token": adminToken },
-      });
-      expect(res.statusCode).toBe(201);
-    });
-  });
-
+  // The /users minLength cell is owned by src/routes/user.test.ts
+  // "POST /api/users returns validation details" (password TOO_SMALL field
+  // detail — strictly stronger than a bare 400 code assert). The candidates
+  // route has no equivalent owner, so its minLength cell lives here.
   describe("POST /api/candidates rejects passwords shorter than 8", () => {
     it("returns 400 VALIDATION_ERROR for a 7-char password", async () => {
       const res = await app.inject({
