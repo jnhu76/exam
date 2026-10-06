@@ -18,6 +18,15 @@
 
 ## 已修复事故
 
+### 2026-10-06 — `pnpm verify` 全量 4-worker coverage 下 `bootstrap-admin.test.ts` 单点 5s 超时（PR #717 / #716 验证期间）
+
+- **现象**：本地 `pnpm verify`（head `219eafc5`，PR #717；`.env.test.local` 钉定 `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`，v8 coverage）的 `@exam/api#coverage` 失败：1 个测试 5000ms 超时 — `src/scripts/bootstrap-admin.test.ts:449` `"records the adapter source in the admin.bootstrap audit metadata…"`（无断言失败）。文件级结果 `1 failed | 211 passed | 4 skipped (216)`，测试级 `1 failed | 2736 passed | 11 skipped (2748)`。turbo 侧其余 15 个任务全部缓存命中，仅 `@exam/api#coverage` 实跑（244s）。
+- **错误片段**：`Error: Test timed out in 5000ms.`（vitest 默认 testTimeout），失败点为该 it 体，无 assertion 错误、无 hook 级联。
+- **证据（同代码再跑就过，登记规则 #1）**：① 同一 commit 的裸 `pnpm test`（同 lane env）在此前数分钟 16/16 全绿（api 2737 passed | 11 skipped）；② 立即在完全相同的 coverage lane 单文件复跑：`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm vitest run --coverage src/scripts/bootstrap-admin.test.ts` → 20/20 PASS，受害用例实测 697ms（预算 5000ms 的 14%）；③ 全量 `pnpm verify` 原样重跑 → exit 0（16/16 + 9/9）。④ 非因果排除：`git diff b7d76ec5..HEAD -- apps/api/src/scripts/` 为空——该 PR（#716 test 收敛）未触碰 scripts/ 及其被测生产代码。
+- **根因**：BUG-FLAKE-001 宿主负载 / I/O 争用家族的又一次漂移性单点超时（受害者位置不固定的既观察模式，见 2026-08-31、2026-09-01 条目）：全量 216 文件 × coverage 插桩 × 4 worker 同机并发时，瞬时调度无法在 5s 默认 testTimeout 内收敛；本次漂移到 bootstrap-admin 的 audit-metadata 用例（真实 PG 写入 + argon2 + audit）。与本 PR 改动无因果（④ + ①②③）。
+- **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry）——按登记规则以"单文件定向复跑 + 全量重跑"取证后放行；门禁结论按最终全量 PASS 记录，超时发生的那次 run 在 PR 描述中如实记录为 flake occurrence。
+- **后续动作**：`bootstrap-admin.test.ts` 同签名复发 ≥3 次或串行/单文件下再出现，按登记规则升级为正式跟踪条目。
+
 ### 2026-09-27 — 多个 package coverage 并发跑触发 worker-database 运行租约互斥（操作模式限制，非回归；PR #643 验证期间）
 
 - **现象**：本地（WSL2，PR #643 closure 修复验证期间，head `4250aea7`）把三个 coverage 套件作为独立 pnpm/vitest 进程**同时**在后台运行（`pnpm --filter @exam/api run coverage` + `pnpm --filter @exam/web run coverage` + `pnpm --filter @exam/db run coverage`，共用 docker-compose.dev 的同一 PG 实例）。db coverage 失败而 api/web 全绿。首次发生：`packages/db/src/testInfraLock.test.ts` 3 个失败 + `packages/db/src/repository/recoveryRepo.test.ts` 3 个失败（两文件耗时分别被拉长到 ~44.6s / ~63s，其余 53 文件全过）。
