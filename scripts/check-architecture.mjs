@@ -66,10 +66,14 @@ await forbid("packages/auth/src", [
 // other input selected the mode — the drift F-05 and F-08 shipped. Consumers
 // classify the RESOLVED mode; the resolver reads its `env` parameter, so no
 // module needs the direct process form. Scope is the modules that own
-// runtime-mode consumers (the API application and the db package); a laundered
-// alias is out of reach of a textual guard and stays a review responsibility.
+// runtime-mode consumers (the API application and the db package).
+//
+// This pins the direct property form only. A destructured, aliased or
+// dynamically keyed read (`const { APP_MODE } = process.env`, `const e =
+// process.env; e.APP_MODE`, `process.env[key]`) is out of reach of a textual
+// guard and stays a review responsibility.
 const runtimeModeRawRead =
-  /process\.env(?:\.(?:APP_MODE|NODE_ENV)\b|\[["'](?:APP_MODE|NODE_ENV)["']\])/;
+  /process\.env\??(?:\.(?:APP_MODE|NODE_ENV)\b|\[["'](?:APP_MODE|NODE_ENV)["']\])/;
 for (const moduleDir of ["apps/api/src", "packages/db/src"]) {
   await forbid(moduleDir, [
     [
