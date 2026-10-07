@@ -410,6 +410,11 @@ describe("isTestDbIsolationEnabled", () => {
     expect(isTestDbIsolationEnabled()).toBe(true);
   });
 
+  it("returns true when env is empty string", () => {
+    process.env.TEST_DB_ISOLATION = "";
+    expect(isTestDbIsolationEnabled()).toBe(true);
+  });
+
   it("returns true when env is 1", () => {
     process.env.TEST_DB_ISOLATION = "1";
     expect(isTestDbIsolationEnabled()).toBe(true);
@@ -420,9 +425,30 @@ describe("isTestDbIsolationEnabled", () => {
     expect(isTestDbIsolationEnabled()).toBe(true);
   });
 
+  it("returns true for unrecognized tokens (yes)", () => {
+    process.env.TEST_DB_ISOLATION = "yes";
+    expect(isTestDbIsolationEnabled()).toBe(true);
+  });
+
   it("returns false when env is 0", () => {
     process.env.TEST_DB_ISOLATION = "0";
     expect(isTestDbIsolationEnabled()).toBe(false);
+  });
+
+  it("returns false when env is false", () => {
+    process.env.TEST_DB_ISOLATION = "false";
+    expect(isTestDbIsolationEnabled()).toBe(false);
+  });
+
+  it("resolves an injected env instead of process.env", () => {
+    // The injection seam (used by the API test database adapter) must apply
+    // the same grammar to the passed-in env and never consult process.env.
+    expect(isTestDbIsolationEnabled({ TEST_DB_ISOLATION: "yes" })).toBe(true);
+    expect(isTestDbIsolationEnabled({ TEST_DB_ISOLATION: "0" })).toBe(false);
+    expect(isTestDbIsolationEnabled({ TEST_DB_ISOLATION: "false" })).toBe(
+      false,
+    );
+    expect(isTestDbIsolationEnabled({})).toBe(true);
   });
 });
 

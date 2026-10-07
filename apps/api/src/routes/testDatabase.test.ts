@@ -8,10 +8,15 @@ import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 /**
  * ADR-007 Phase 3B — API test database adapter tests.
  *
- * This file is PURE mode-selection coverage: it mocks the Phase 3A
- * `setupWorkerTestDatabase` and asserts the adapter picks the right path for
- * each TEST_DB_ISOLATION value — the "file-schema" ENABLED isolation
- * regression and its trim/worker-database variants. No PG service is needed.
+ * Two coverage layers:
+ *   - Mode selection: the Phase 3A `setupWorkerTestDatabase` is mocked and the
+ *     adapter must pick the right path for each TEST_DB_ISOLATION strategy
+ *     value (worker-database opt-in vs legacy file-schema).
+ *   - TEST_DB_ISOLATION_ENABLED authority (F-04): the per-file schema path is
+ *     NOT mocked — the enabled/disabled counterfactual cells run the real
+ *     `setupIsolatedTestDb` (real CREATE/DROP SCHEMA against the test DB) and
+ *     observe the returned handle's `schemaName`, so the adapter cannot drift
+ *     from the canonical resolver without a real behavioral difference.
  *
  * The end-to-end worker-DB lifecycle (real CREATE DATABASE / migrate /
  * truncate / close / production guard) is covered in
@@ -70,10 +75,10 @@ describe("setupApiTestDatabaseFromEnv — mode selection", () => {
   });
 
   it("TEST_DB_ISOLATION=file-schema → legacy path with per-file schema (NOT silently disabled)", async () => {
-    // Regression guard: "file-schema" is the documented legacy mode name and
-    // MUST be treated as ENABLED. Without the explicit handling it falls
-    // through to the disabled branch, returning schemaName undefined and
-    // silently running tests on the shared `public` schema with no isolation.
+    // "file-schema" is the documented legacy mode name; under the canonical
+    // TEST_DB_ISOLATION_ENABLED grammar only exact "0"/"false" disable, so it
+    // resolves ENABLED and must get a per-file schema (never the shared
+    // `public` schema with no isolation).
     const h = await setupApiTestDatabaseFromEnv({
       env: { TEST_DB_ISOLATION: "file-schema", TEST_DATABASE_URL: BASE_URL },
       namespace: "unit-fs",
@@ -85,8 +90,10 @@ describe("setupApiTestDatabaseFromEnv — mode selection", () => {
     await h.close();
   });
 
-  it("trims whitespace around TEST_DB_ISOLATION before matching", async () => {
-    // "  file-schema  " must behave identically to "file-schema" (enabled).
+  it("whitespace-padded TEST_DB_ISOLATION value still resolves enabled", async () => {
+    // The enabled fact does not trim: canonical grammar disables only on the
+    // exact tokens "0"/"false", so "  file-schema  " is an unknown (enabled)
+    // token. (Trimming stays owned by the worker-database opt-in check.)
     const h = await setupApiTestDatabaseFromEnv({
       env: {
         TEST_DB_ISOLATION: "  file-schema  ",
@@ -137,6 +144,76 @@ describe("setupApiTestDatabaseFromEnv — mode selection", () => {
       },
     });
     expect(h.schemaName).toBeUndefined();
+    await h.close();
+  });
+});
+
+// --- isolation-enabled fact: single canonical resolver (F-04) ---------------
+
+describe("setupApiTestDatabaseFromEnv — TEST_DB_ISOLATION_ENABLED authority", () => {
+  // Observation target is the HANDLE, not a local boolean: a schemaName
+  // matching /^test_/ means the adapter entered the per-file schema path
+  // (real CREATE SCHEMA against the test DB); `undefined` means the
+  // shared-DB disabled path — the silent no-isolation outcome #730 E6
+  // observed under `TEST_DB_ISOLATION=yes` before the adapter delegated to
+  // the canonical resolver. The enabled/disabled grammar itself is owned by
+  // `packages/db` `isTestDbIsolationEnabled` (see testIsolation.test.ts);
+  // these cells pin the adapter to whatever that resolver reports.
+
+  it.each([
+    ["yes", "hostile token (#730 E6)"],
+    ["1", "canonical shorthand"],
+    ["true", "canonical word"],
+    ["on", "canonical word"],
+    ["definitely", "unknown token"],
+  ])(
+    "TEST_DB_ISOLATION=%s (%s) → enabled: per-file schema created",
+    async (value) => {
+      const h = await setupApiTestDatabaseFromEnv({
+        env: { TEST_DB_ISOLATION: value, TEST_DATABASE_URL: BASE_URL },
+        namespace: "unit-iso-enabled",
+      });
+      expect(h.mode).toBe("file-schema");
+      expect(typeof h.schemaName).toBe("string");
+      expect(h.schemaName).toMatch(/^test_/);
+      expect(setupWorkerMock).not.toHaveBeenCalled();
+      await h.close();
+    },
+  );
+
+  it.each(["0", "false"])(
+    "TEST_DB_ISOLATION=%s → disabled: shared DB, schemaName undefined",
+    async (value) => {
+      const h = await setupApiTestDatabaseFromEnv({
+        env: { TEST_DB_ISOLATION: value, TEST_DATABASE_URL: BASE_URL },
+        namespace: "unit-iso-disabled",
+      });
+      expect(h.mode).toBe("file-schema");
+      expect(h.schemaName).toBeUndefined();
+      expect(setupWorkerMock).not.toHaveBeenCalled();
+      await h.close();
+    },
+  );
+
+  it("TEST_DB_ISOLATION unset → enabled by default", async () => {
+    const h = await setupApiTestDatabaseFromEnv({
+      env: { TEST_DATABASE_URL: BASE_URL },
+      namespace: "unit-iso-unset",
+    });
+    expect(h.mode).toBe("file-schema");
+    expect(typeof h.schemaName).toBe("string");
+    expect(h.schemaName).toMatch(/^test_/);
+    await h.close();
+  });
+
+  it("TEST_DB_ISOLATION='' (set but empty) → enabled by default", async () => {
+    const h = await setupApiTestDatabaseFromEnv({
+      env: { TEST_DB_ISOLATION: "", TEST_DATABASE_URL: BASE_URL },
+      namespace: "unit-iso-empty",
+    });
+    expect(h.mode).toBe("file-schema");
+    expect(typeof h.schemaName).toBe("string");
+    expect(h.schemaName).toMatch(/^test_/);
     await h.close();
   });
 });

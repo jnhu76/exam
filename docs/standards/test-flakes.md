@@ -18,6 +18,15 @@
 
 ## 已修复事故
 
+### 2026-10-07 — `pnpm verify` 全量 4-worker coverage 下 `bootstrap-admin.test.ts` 三用例 5s 超时（PR #735 / #733 R2 验证期间；2026-10-06 同签名第 2 次复发）
+
+- **现象**：本地 `pnpm verify`（R2 final head `e0d94dda`，PR #735；`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`，v8 coverage）的 `@exam/api#coverage` 失败：3 个测试 5000ms 超时（无断言失败）— `src/scripts/bootstrap-admin.test.ts:375`（audit 插入失败的原子回滚）、`:449`（audit metadata 记录——与 2026-10-06 条目同一受害用例）、`:493`（首装竞态唯一胜者）。文件级 `1 failed | 215 passed | 4 skipped (220)`，测试级 `3 failed | 2749 passed | 11 skipped (2763)`。turbo 侧其余任务全部成功/缓存命中，仅 `@exam/api#coverage` 实跑失败（cache miss，hash `3b07b736d614d797`）。
+- **错误片段**：`Error: Test timed out in 5000ms.`（vitest 默认 testTimeout）×3，失败点均为 it 体，无 assertion 错误、无 hook 级联。
+- **证据（同代码再跑就过，登记规则 #1）**：① 同一 head 原样全量重跑 `pnpm verify` → exit 0（9/9）；`@exam/api#coverage` 同 turbo hash `3b07b736d614d797` cache miss 真实重跑 → 216 文件全过 / `2752 passed | 11 skipped`，0 失败。② 单文件定向复跑（同 lane env + coverage）：`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api exec vitest run --coverage src/scripts/bootstrap-admin.test.ts` → 20/20 PASS，三个受害用例实测 651/631/653ms（各约为 5000ms 预算的 13%）。③ 非因果排除：`git diff 209e36a2..e0d94dda` 仅为 `apps/api/src/routes/testDatabase.test.ts` 模块 doclet 注释；生产代码与数分钟前同一 lane 实跑通过的 verify（head `209e36a2`）完全一致；同一 head 的非 coverage `pnpm test` 亦 EXIT=0（api `2742 passed | 21 skipped`）。
+- **根因**：BUG-FLAKE-001 宿主负载 / I/O 争用家族的又一次漂移性单点超时（见 2026-08-31、2026-09-01、2026-10-06 条目），且为 2026-10-06 条目同签名的**第 2 次复发**（同文件、同 lane；本次受害面从 1 用例扩大为同文件 3 用例，其一与上次相同）：全量 220 文件 × coverage 插桩 × 4 worker 同机并发时，瞬时调度无法在 5s 默认 testTimeout 内收敛。与 R2 改动无因果（①②③）。
+- **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry）——按登记规则以同 hash 全量复跑 + 单文件定向复跑取证后放行；门禁结论按最终全量 PASS 记录，超时发生的那次 run 已在 #733 R2 review record 评论中如实记录。
+- **后续动作**：本签名累计 2 次（2026-10-06、2026-10-07）；按登记规则 #3，再复发 1 次即升级为正式跟踪条目。
+
 ### 2026-10-06 — `pnpm verify` 全量 4-worker coverage 下 `bootstrap-admin.test.ts` 单点 5s 超时（PR #717 / #716 验证期间）
 
 - **现象**：本地 `pnpm verify`（head `219eafc5`，PR #717；`.env.test.local` 钉定 `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`，v8 coverage）的 `@exam/api#coverage` 失败：1 个测试 5000ms 超时 — `src/scripts/bootstrap-admin.test.ts:449` `"records the adapter source in the admin.bootstrap audit metadata…"`（无断言失败）。文件级结果 `1 failed | 211 passed | 4 skipped (216)`，测试级 `1 failed | 2736 passed | 11 skipped (2748)`。turbo 侧其余 15 个任务全部缓存命中，仅 `@exam/api#coverage` 实跑（244s）。
@@ -25,7 +34,7 @@
 - **证据（同代码再跑就过，登记规则 #1）**：① 同一 commit 的裸 `pnpm test`（同 lane env）在此前数分钟 16/16 全绿（api 2737 passed | 11 skipped）；② 立即在完全相同的 coverage lane 单文件复跑：`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm vitest run --coverage src/scripts/bootstrap-admin.test.ts` → 20/20 PASS，受害用例实测 697ms（预算 5000ms 的 14%）；③ 全量 `pnpm verify` 原样重跑 → exit 0（16/16 + 9/9）。④ 非因果排除：`git diff b7d76ec5..HEAD -- apps/api/src/scripts/` 为空——该 PR（#716 test 收敛）未触碰 scripts/ 及其被测生产代码。
 - **根因**：BUG-FLAKE-001 宿主负载 / I/O 争用家族的又一次漂移性单点超时（受害者位置不固定的既观察模式，见 2026-08-31、2026-09-01 条目）：全量 216 文件 × coverage 插桩 × 4 worker 同机并发时，瞬时调度无法在 5s 默认 testTimeout 内收敛；本次漂移到 bootstrap-admin 的 audit-metadata 用例（真实 PG 写入 + argon2 + audit）。与本 PR 改动无因果（④ + ①②③）。
 - **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry）——按登记规则以"单文件定向复跑 + 全量重跑"取证后放行；门禁结论按最终全量 PASS 记录，超时发生的那次 run 在 PR 描述中如实记录为 flake occurrence。
-- **后续动作**：`bootstrap-admin.test.ts` 同签名复发 ≥3 次或串行/单文件下再出现，按登记规则升级为正式跟踪条目。
+- **后续动作**：`bootstrap-admin.test.ts` 同签名复发 ≥3 次或串行/单文件下再出现，按登记规则升级为正式跟踪条目。（**复发记录**：2026-10-07 第 2 次——PR #735 验证期间，受害面扩大为同文件 3 用例，见同日条目；累计 2 次，未达升级门槛。）
 
 ### 2026-09-27 — 多个 package coverage 并发跑触发 worker-database 运行租约互斥（操作模式限制，非回归；PR #643 验证期间）
 
