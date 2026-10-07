@@ -1,20 +1,24 @@
 import path from "node:path";
 import { availableParallelism } from "node:os";
 import { fileURLToPath } from "node:url";
-import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
-import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
+import {
+  TEST_RUNTIME_ENV,
+  loadSupportedTestEnvFiles,
+  seedProcessEnvFromFiles,
+} from "../../vitest.shared.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
 
-// Seed process.env from .env files so worker threads inherit them.
-// vitest's config.env makes vars available on import.meta.env but worker
-// threads may not see them on process.env; pushing here ensures inheritance.
-const envVars = loadEnv("test", workspaceRoot, "");
-for (const [key, value] of Object.entries(envVars)) {
-  if (process.env[key] === undefined) process.env[key] = value;
-}
+// Seed process.env from the SUPPORTED test env files (repo-root .env +
+// optional .env.test.local — exact-path reads, #741) so worker threads
+// inherit them; shell exports keep winning via the only-if-undefined
+// seeding. vitest's config.env makes vars available on import.meta.env but
+// worker threads may not see them on process.env; pushing here ensures
+// inheritance.
+const fileEnv = loadSupportedTestEnvFiles(workspaceRoot);
+seedProcessEnvFromFiles(fileEnv);
 
 // Worker cap — resource admission control, not package serialization:
 // @exam/db keeps file parallelism but caps concurrent workers because
@@ -28,7 +32,11 @@ const maxWorkers = Math.min(
   DB_TEST_WORKER_CAP,
   Math.max(1, availableParallelism() - 1),
 );
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
+  // #741: per-package implicit envDir admission is OFF — package-local
+  // .env* files can never reach import.meta.env. Pinned by
+  // scripts/check-env-surface.mjs.
+  envDir: false,
   test: {
     maxWorkers,
     exclude: ["dist/**", "node_modules/**"],
@@ -39,8 +47,10 @@ export default defineConfig(({ mode }) => ({
     globalSetup: ["./vitest.globalSetup.ts"],
     // Force test runtime mode via the monorepo-shared constant so every
     // package's vitest config agrees (see ../../vitest.shared.ts for why).
+    // TEST_RUNTIME_ENV spreads LAST: it owns APP_MODE/NODE_ENV over any
+    // file-provided value.
     env: {
-      ...loadEnv(mode, workspaceRoot, ""),
+      ...fileEnv,
       ...TEST_RUNTIME_ENV,
     },
     // Deliberately NO package-wide hookTimeout raise. Vitest's per-describe

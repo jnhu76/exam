@@ -2,6 +2,10 @@ import { defineConfig } from "vitest/config";
 import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
+  // #741: per-package implicit envDir admission is OFF — apps/web/.env*
+  // files can never reach import.meta.env in tests; VITE_* values come from
+  // the process environment only. Pinned by scripts/check-env-surface.mjs.
+  envDir: false,
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

@@ -1,16 +1,18 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
-import { defineConfig, loadEnv } from "vite";
+import { parse as parseEnvFile } from "dotenv";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { SUPPORTED_DEV_ENV_FILE } from "../../envFilePolicy.js";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 /**
  * Resolve a port variable with shell-env priority: process.env (shell export)
- * wins over the root `.env` file (loaded via Vite loadEnv), which wins over
- * the fallback. Vite config runs in Node before dev-server env loading, so
- * without loadEnv a root-`.env` VITE_PORT / DEV_API_PORT would be invisible
- * here.
+ * wins over the development env file (repo-root `.env`, admitted below in
+ * development mode only), which wins over the fallback.
  */
 function resolvePort(
   name: string,
@@ -26,13 +28,35 @@ function resolvePort(
   return port;
 }
 
+/**
+ * Development-only admission of the supported development source: the
+ * repository-root `.env`, read as ONE exact path (#741). Every other mode —
+ * production builds included — reads no env file here: `VITE_PORT` /
+ * `DEV_API_PORT` are development configuration, so `.env.production` stays
+ * deployment-owned (docker compose --env-file only) and can never become a
+ * web dev-port source. Unsupported Vite mode files (`.env.local`,
+ * `.env.development*`, `.env.production.local`) have no code path into this
+ * config; the env-surface guard rejects them at verify if created.
+ */
+function loadDevRootEnv(mode: string): Record<string, string> {
+  if (mode !== "development") return {};
+  const path = join(repoRoot, SUPPORTED_DEV_ENV_FILE);
+  if (!existsSync(path)) return {};
+  return parseEnvFile(readFileSync(path, "utf8"));
+}
+
 export default defineConfig(({ mode }) => {
-  const rootEnv = loadEnv(mode, repoRoot, "");
+  const rootEnv = loadDevRootEnv(mode);
 
   const vitePort = resolvePort("VITE_PORT", 5173, rootEnv);
   const devApiPort = resolvePort("DEV_API_PORT", 3000, rootEnv);
 
   return {
+    // #741: Vite's implicit env-file discovery is OFF. `import.meta.env.VITE_*`
+    // resolves from the process environment only — a package-local
+    // apps/web/.env* file can never enter the client bundle. Pinned by
+    // scripts/check-env-surface.mjs.
+    envDir: false,
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
@@ -54,7 +78,7 @@ export default defineConfig(({ mode }) => {
               // them follow the async chunk graph instead of the eager
               // vendor bundle.
               if (
-                id.includes("@tiptap/") ||
+                id.includes("@tiptop/") ||
                 id.includes("/prosemirror-") ||
                 id.includes("node_modules/katex/") ||
                 // MathLive is the visual formula surface (#669 phase U). Like

@@ -2,6 +2,9 @@ import { defineConfig } from "vitest/config";
 import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
 
 export default defineConfig({
+  // #741: per-package implicit envDir admission is OFF (pinned by
+  // scripts/check-env-surface.mjs).
+  envDir: false,
   test: {
     globals: true,
     environment: "node",

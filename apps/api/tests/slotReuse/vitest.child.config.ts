@@ -1,8 +1,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
-import { TEST_RUNTIME_ENV } from "../../../../vitest.shared.js";
+import {
+  TEST_RUNTIME_ENV,
+  loadSupportedTestEnvFiles,
+  seedProcessEnvFromFiles,
+} from "../../../../vitest.shared.js";
 import { resolveParallelism } from "../../vitest.parallelism.js";
 
 /**
@@ -55,23 +58,25 @@ if ((stage !== "A" && stage !== "B") || handoff.trim() === "") {
   );
 }
 
-// Seed process.env from .env files so the child runner inherits them the
-// same way the parent config does (only keys still undefined).
-const envVars = loadEnv("test", workspaceRoot, "");
-for (const [key, value] of Object.entries(envVars)) {
-  if (process.env[key] === undefined) process.env[key] = value;
-}
+// Seed process.env from the SUPPORTED test env files so the child runner
+// inherits them the same way the parent config does (only keys still
+// undefined — shell exports win; #741 exact-path reads).
+const fileEnv = loadSupportedTestEnvFiles(workspaceRoot);
+seedProcessEnvFromFiles(fileEnv);
 
 const parallelism = resolveParallelism(process.env);
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
+  // #741: per-package implicit envDir admission is OFF (pinned by
+  // scripts/check-env-surface.mjs).
+  envDir: false,
   test: {
     root: apiRoot,
     include: [`tests/slotReuse/stage${stage}.fixture.test.ts`],
     exclude: ["dist/**", "node_modules/**"],
     // Force the same test runtime mode as every other vitest config.
     env: {
-      ...loadEnv(mode, workspaceRoot, ""),
+      ...fileEnv,
       ...TEST_RUNTIME_ENV,
     },
     fileParallelism: parallelism.fileParallelism,
