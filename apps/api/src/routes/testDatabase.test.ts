@@ -8,10 +8,15 @@ import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 /**
  * ADR-007 Phase 3B — API test database adapter tests.
  *
- * This file is PURE mode-selection coverage: it mocks the Phase 3A
- * `setupWorkerTestDatabase` and asserts the adapter picks the right path for
- * each TEST_DB_ISOLATION value — the "file-schema" ENABLED isolation
- * regression and its trim/worker-database variants. No PG service is needed.
+ * Two coverage layers:
+ *   - Mode selection: the Phase 3A `setupWorkerTestDatabase` is mocked and the
+ *     adapter must pick the right path for each TEST_DB_ISOLATION strategy
+ *     value (worker-database opt-in vs legacy file-schema).
+ *   - TEST_DB_ISOLATION_ENABLED authority (F-04): the per-file schema path is
+ *     NOT mocked — the enabled/disabled counterfactual cells run the real
+ *     `setupIsolatedTestDb` (real CREATE/DROP SCHEMA against the test DB) and
+ *     observe the returned handle's `schemaName`, so the adapter cannot drift
+ *     from the canonical resolver without a real behavioral difference.
  *
  * The end-to-end worker-DB lifecycle (real CREATE DATABASE / migrate /
  * truncate / close / production guard) is covered in
