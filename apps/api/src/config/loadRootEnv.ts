@@ -1,20 +1,18 @@
-import { config as loadEnv } from "dotenv";
+import { config as dotenvConfig } from "dotenv";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseAppMode } from "@exam/db";
 
 /**
- * Resolve candidate paths for the `.env` file relative to this module's
- * location. Checks both the immediate parent (monorepo root) and the
- * grandparent directory, deduplicating identical resolved paths.
- *
- * @returns Array of candidate `.env` file system paths.
+ * The one supported application env-file source (#741): the repository-root
+ * `.env`, resolved module-relative so the source (`apps/api/src/config/`) and
+ * dist (`apps/api/dist/config/`) layouts find the same file without depending
+ * on the caller's cwd. Package-local `.env*` files are not admission
+ * candidates — they are an unsupported surface rejected by
+ * scripts/check-env-surface.mjs.
  */
-export function resolveRootEnvPaths(): string[] {
-  return [
-    fileURLToPath(new URL("../../.env", import.meta.url)),
-    fileURLToPath(new URL("../../../../.env", import.meta.url)),
-  ].filter((path, index, paths) => paths.indexOf(path) === index);
+export function resolveRootEnvPath(): string {
+  return fileURLToPath(new URL("../../../../.env", import.meta.url));
 }
 
 /**
@@ -50,10 +48,22 @@ export function isManagedProfileEnv(env: NodeJS.ProcessEnv): boolean {
 }
 
 /**
- * Load environment variables from the first existing `.env` file found by
- * {@link resolveRootEnvPaths}. No-op when none of the candidate paths exist,
- * or when `env` selects a managed profile (see {@link isManagedProfileEnv} —
- * only a bare development process imports the developer `.env`).
+ * MECHANISM (#741): parse exactly one env file into `process.env`, never
+ * overriding pre-set values (dotenv's default). Accepting a path here does
+ * NOT make that path a supported source — the AUTHORITY for which path is
+ * admissible is {@link loadRootEnv} (the repository-root `.env` only). This
+ * seam exists so tests can prove the physical admission half against
+ * throwaway temp fixtures instead of writing a repository env-file authority.
+ */
+export function admitEnvFile(path: string): void {
+  dotenvConfig({ path, quiet: true });
+}
+
+/**
+ * Load the supported repository-root `.env` ({@link resolveRootEnvPath}).
+ * No-op when the file does not exist, or when `env` selects a managed
+ * profile (see {@link isManagedProfileEnv} — only a bare development process
+ * imports the developer `.env`).
  *
  * Existing `process.env` values are NOT overwritten by `dotenv` (the
  * library's default behavior).
@@ -61,12 +71,9 @@ export function isManagedProfileEnv(env: NodeJS.ProcessEnv): boolean {
 export function loadRootEnv(env: NodeJS.ProcessEnv = process.env): void {
   if (isManagedProfileEnv(env)) return;
 
-  const paths = resolveRootEnvPaths().filter((path) => existsSync(path));
+  const path = resolveRootEnvPath();
 
-  if (paths.length === 0) return;
+  if (!existsSync(path)) return;
 
-  loadEnv({
-    path: paths,
-    quiet: true,
-  });
+  admitEnvFile(path);
 }

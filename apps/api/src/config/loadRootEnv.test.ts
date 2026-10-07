@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { config as loadEnv } from "dotenv";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  admitEnvFile,
   isManagedProfileEnv,
   loadRootEnv,
-  resolveRootEnvPaths,
+  resolveRootEnvPath,
 } from "./loadRootEnv.js";
 
 vi.mock("dotenv", () => ({
@@ -37,24 +38,41 @@ describe("loadRootEnv", () => {
     vi.restoreAllMocks();
   });
 
-  it("checks deployed and repository root .env paths", () => {
-    expect(resolveRootEnvPaths()).toEqual([
-      fileURLToPath(new URL("../../.env", import.meta.url)),
+  // #741 H1: the application runtime has exactly ONE env-file source — the
+  // repository-root `.env`. This test lives next to the module (same depth,
+  // four hops up = repo root, anchored by the workspace manifest via the
+  // un-mocked statSync), so the pre-#741 two-candidate implementation
+  // (apps/api/.env first, repository root second) fails to even import.
+  it("resolves exactly one application env source: the repository-root .env", () => {
+    expect(resolveRootEnvPath()).toBe(
       fileURLToPath(new URL("../../../../.env", import.meta.url)),
-    ]);
+    );
+    // The anchor: four hops up from this module holds the workspace
+    // manifest — proving the resolved directory IS the repository root.
+    expect(
+      statSync(
+        fileURLToPath(new URL("../../../../package.json", import.meta.url)),
+      ).isFile(),
+    ).toBe(true);
   });
 
-  it("loads existing root .env paths quietly without enabling override", () => {
-    const paths = resolveRootEnvPaths();
-    mockedExistsSync.mockImplementation((path) => path === paths[1]);
+  it("loads an existing root .env quietly without enabling override", () => {
+    const path = resolveRootEnvPath();
+    mockedExistsSync.mockImplementation((checked) => checked === path);
 
     loadRootEnv({ DATABASE_URL: "postgresql://explicit@localhost:5432/exp" });
 
+    expect(mockedLoadEnv).toHaveBeenCalledWith({ path, quiet: true });
+    expect(mockedLoadEnv.mock.calls[0]?.[0]).not.toHaveProperty("override");
+  });
+
+  it("admitEnvFile forwards the mechanism path without adding options", () => {
+    admitEnvFile("/throwaway/fixture/.env");
+
     expect(mockedLoadEnv).toHaveBeenCalledWith({
-      path: [paths[1]],
+      path: "/throwaway/fixture/.env",
       quiet: true,
     });
-    expect(mockedLoadEnv.mock.calls[0]?.[0]).not.toHaveProperty("override");
   });
 
   it("does not call dotenv when no root .env file exists", () => {
@@ -91,23 +109,25 @@ describe("loadRootEnv", () => {
   });
 
   it("loads the developer .env for an explicit development mode", () => {
-    const paths = resolveRootEnvPaths();
     mockedExistsSync.mockReturnValue(true);
 
     loadRootEnv({ APP_MODE: "development" });
 
-    expect(mockedLoadEnv).toHaveBeenCalled();
-    expect(mockedLoadEnv.mock.calls[0]?.[0]?.path).toEqual(paths);
+    expect(mockedLoadEnv).toHaveBeenCalledWith({
+      path: resolveRootEnvPath(),
+      quiet: true,
+    });
   });
 
   it("treats an unparseable APP_MODE as unmanaged — the config error stays with getRuntimeConfig", () => {
-    const paths = resolveRootEnvPaths();
     mockedExistsSync.mockReturnValue(true);
 
     loadRootEnv({ APP_MODE: "bogus" });
 
-    expect(mockedLoadEnv).toHaveBeenCalled();
-    expect(mockedLoadEnv.mock.calls[0]?.[0]?.path).toEqual(paths);
+    expect(mockedLoadEnv).toHaveBeenCalledWith({
+      path: resolveRootEnvPath(),
+      quiet: true,
+    });
   });
 
   it("isManagedProfileEnv mirrors the APP_MODE-authoritative resolver", () => {
