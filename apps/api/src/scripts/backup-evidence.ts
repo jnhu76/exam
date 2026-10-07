@@ -35,7 +35,7 @@
  * credentials, or host paths (only the safe artifact label).
  */
 
-import { createDatabase } from "@exam/db";
+import { createDatabase, parseAppMode, type AppMode } from "@exam/db";
 import { createBackupEvidenceRepo } from "@exam/db/src/repository/backupEvidenceRepo.js";
 import { createRetentionEvidenceRepo } from "@exam/db/src/repository/retentionEvidenceRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
@@ -135,11 +135,16 @@ export function parseStrictPositiveInt(v: string, flag: string): number {
 /**
  * Connected-DB identity check, as a pure decision.
  *
- * The URL-parsed name is only a hint — APP_MODE=development with
- * DATABASE_URL=…/exam_test would otherwise record "successful" evidence into
- * a test database while the production ledger stayed empty. The caller passes
- * the server's `current_database()` result in; this fails closed on test-like
- * names (test/e2e/ci substring, the same convention as the test-name guard).
+ * The URL-parsed name is only a hint — a development `DATABASE_URL` pointing at
+ * `…/exam_test` would otherwise record "successful" evidence into a test
+ * database while the production ledger stayed empty. The caller passes the
+ * server's `current_database()` result in; this fails closed on test-like names
+ * (test/e2e/ci substring, the same convention as the test-name guard).
+ *
+ * This answers a DIFFERENT question from the runtime-mode guard: mode says
+ * which profile the process selected, this says which database the connection
+ * actually reached. Both layers are kept — mode selection can be wrong, and a
+ * stale/redirected DATABASE_URL can contradict a correct mode.
  *
  * The E2E harness legitimately records ledger evidence into the exam_e2e DB
  * (by the three-DB contract that name must contain "e2e") to verify the
@@ -151,8 +156,8 @@ export function parseStrictPositiveInt(v: string, flag: string): number {
  */
 export interface EvidenceDbAccessInput {
   connectedDb: string | undefined;
-  /** Raw APP_MODE env value (string | undefined) — displayed in reasons only. */
-  appMode: string | undefined;
+  /** Resolved runtime mode (packages/db::parseAppMode) — displayed in reasons only. */
+  runtimeMode: AppMode;
   urlDatabaseName: string;
   allowUnsafeTestDb: boolean;
 }
@@ -163,13 +168,13 @@ export type EvidenceDbAccessDecision =
 export function decideEvidenceDbAccess(
   input: EvidenceDbAccessInput,
 ): EvidenceDbAccessDecision {
-  const mode = input.appMode ?? "(unset)";
+  const mode = input.runtimeMode;
   if (!input.connectedDb) {
     return {
       allowed: false,
       reason:
         `refusing to record evidence: could not determine the connected database ` +
-        `(APP_MODE=${mode}, DATABASE_URL database "${input.urlDatabaseName}")`,
+        `(runtime mode "${mode}", DATABASE_URL database "${input.urlDatabaseName}")`,
     };
   }
   if (!/(test|e2e|ci)/.test(input.connectedDb)) {
@@ -182,7 +187,7 @@ export function decideEvidenceDbAccess(
     allowed: false,
     reason:
       `refusing to record evidence: connected database "${input.connectedDb}" is test-like ` +
-      `(APP_MODE=${mode}, DATABASE_URL database "${input.urlDatabaseName}"). ` +
+      `(runtime mode "${mode}", DATABASE_URL database "${input.urlDatabaseName}"). ` +
       "Point DATABASE_URL at the deployment database, or set " +
       "ALLOW_UNSAFE_EVIDENCE_TEST_DB=1 only for the E2E harness.",
   };
@@ -270,14 +275,19 @@ async function resolveDefaultOrgId(
 
 async function main(): Promise<void> {
   loadRootEnv();
-  // Test-mode guard: APP_MODE test/ci/e2e routes the resolver to
-  // TEST_DATABASE_URL (fail-fast) — an operator recording evidence against a
-  // test database would make the product ledger silently miss the run while
-  // the shell hard gate passes. Refuse instead of writing to the wrong DB.
-  const appMode = process.env.APP_MODE;
-  if (appMode === "test" || appMode === "ci" || appMode === "e2e") {
+  // Test-mode guard: test-like runtime modes route the canonical resolver to
+  // TEST_DATABASE_URL, so an operator recording evidence against a test
+  // database would make the product ledger silently miss the run while the
+  // shell hard gate passes. Refuse instead of writing to the wrong DB.
+  //
+  // Mode resolution is owned by parseAppMode (APP_MODE authoritative, NODE_ENV
+  // the fallback, an invalid APP_MODE throws). This guard only classifies the
+  // RESOLVED mode — it must never re-read the raw inputs, or a mode selected by
+  // the NODE_ENV fallback would slip past as "APP_MODE unset".
+  const mode = parseAppMode(process.env);
+  if (mode === "test" || mode === "ci" || mode === "e2e") {
     fail(
-      `refusing to record evidence with APP_MODE=${appMode} (test database). ` +
+      `refusing to record evidence with runtime mode "${mode}" (test database). ` +
         "Set APP_MODE=development and DATABASE_URL to the deployment database.",
     );
   }
@@ -301,7 +311,7 @@ async function main(): Promise<void> {
     const connectedDb = identity[0]?.db;
     const access = decideEvidenceDbAccess({
       connectedDb,
-      appMode,
+      runtimeMode: mode,
       urlDatabaseName: databaseName,
       allowUnsafeTestDb: process.env.ALLOW_UNSAFE_EVIDENCE_TEST_DB === "1",
     });

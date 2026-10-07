@@ -16,13 +16,14 @@ import {
   parseStrictPositiveInt,
   validateRetentionSuccessInvariant,
   validateAutomatedDrillDurationInvariant,
+  type EvidenceDbAccessInput,
 } from "./backup-evidence.js";
 
 const base = {
-  appMode: "development",
+  runtimeMode: "development",
   urlDatabaseName: "exam",
   allowUnsafeTestDb: false,
-};
+} satisfies Partial<EvidenceDbAccessInput>;
 
 describe("decideEvidenceDbAccess (connected-DB identity guard)", () => {
   it("allows a production-named database without flagging a bypass", () => {
@@ -219,30 +220,46 @@ interface CliRunResult {
   stderr: string;
 }
 
+/**
+ * Base child environment for the CLI subprocess.
+ *
+ * INTENTIONAL DEVELOPMENT profile: backup-evidence is the operator
+ * evidence-recording CLI, and its own guard refuses test-like runtime modes
+ * ("Set APP_MODE=development ..."), so development is the profile under test,
+ * not an ambient default. Under the documented loader law (#565) this profile
+ * ADMITS the developer root `.env`, so no "explicit values are the only
+ * inputs" claim is made here; instead every semantic fact under test is pinned
+ * by an explicit projection that the file cannot override (dotenv never
+ * overwrites already-set vars): the mode identity, the DATABASE_URL target,
+ * and the guard opt-in. The isolated schema lives inside the exam_test
+ * database, so the connected-DB identity guard needs its documented opt-in.
+ */
+function buildCliEnv(
+  overrides: Record<string, string | undefined> = {},
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    APP_MODE: "development",
+    NODE_ENV: "development",
+    ALLOW_UNSAFE_EVIDENCE_TEST_DB: "1",
+    DATABASE_URL: cliDbUrl,
+  };
+  // `undefined` means UNSET (not empty): the child must not inherit a value
+  // for a variable the case deliberately removes.
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete env[key];
+    else env[key] = value;
+  }
+  return env;
+}
+
 function runEvidenceCli(
   args: string[],
+  overrides: Record<string, string | undefined> = {},
   timeoutMs = 60_000,
 ): Promise<CliRunResult> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [TSX_CLI, SCRIPT_PATH, ...args], {
-      env: {
-        // INTENTIONAL DEVELOPMENT profile: backup-evidence is the operator
-        // evidence-recording CLI, and its own guard refuses raw
-        // APP_MODE=test/ci/e2e ("Set APP_MODE=development ..."), so
-        // development is the profile under test, not an ambient default.
-        // Under the documented loader law (#565) this profile ADMITS the
-        // developer root `.env`, so no "explicit values are the only inputs"
-        // claim is made here; instead every semantic fact under test is
-        // pinned by an explicit projection that the file cannot override
-        // (dotenv never overwrites already-set vars): the mode identity
-        // above, the DATABASE_URL target below, and the guard opt-in.
-        APP_MODE: "development",
-        NODE_ENV: "development",
-        // The isolated schema lives inside the exam_test database, so the
-        // connected-DB identity guard needs its documented opt-in.
-        ALLOW_UNSAFE_EVIDENCE_TEST_DB: "1",
-        DATABASE_URL: cliDbUrl,
-      },
+      env: buildCliEnv(overrides),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -274,39 +291,137 @@ let cliDbUrl = "";
 let cliDb: Awaited<ReturnType<typeof getIsolatedTestDb>>["db"] | null = null;
 let cliCleanup: (() => Promise<void>) | null = null;
 
-CLI_DESCRIBE(
-  "backup-evidence CLI complete --size-bytes (#351 fail-closed)",
-  () => {
-    beforeAll(async () => {
-      const iso = await getIsolatedTestDb("api-backup-evidence-cli");
-      cliDb = iso.db;
-      cliCleanup = iso.cleanup;
-      const baseUrl = iso.databaseUrl ?? resolveTestDbUrl();
-      cliDbUrl = iso.schemaName
-        ? addSearchPathToUrl(baseUrl, iso.schemaName)
-        : baseUrl;
-      // resolveDefaultOrgId requires one organization row.
-      const organizationRepo = createOrganizationRepo(iso.db);
-      await organizationRepo.create(
-        {
-          actorId: "system",
-          organizationId: "system",
-          role: "Admin",
-          permissions: [],
-          sessionId: "s",
-        },
-        {
-          name: "org",
-          displayName: "Org",
-          slug: `slug-${randomUUID().slice(0, 8)}`,
-        },
-      );
-    }, 30_000);
+CLI_DESCRIBE("backup-evidence CLI (real subprocess, isolated schema)", () => {
+  beforeAll(async () => {
+    const iso = await getIsolatedTestDb("api-backup-evidence-cli");
+    cliDb = iso.db;
+    cliCleanup = iso.cleanup;
+    const baseUrl = iso.databaseUrl ?? resolveTestDbUrl();
+    cliDbUrl = iso.schemaName
+      ? addSearchPathToUrl(baseUrl, iso.schemaName)
+      : baseUrl;
+    // resolveDefaultOrgId requires one organization row.
+    const organizationRepo = createOrganizationRepo(iso.db);
+    await organizationRepo.create(
+      {
+        actorId: "system",
+        organizationId: "system",
+        role: "Admin",
+        permissions: [],
+        sessionId: "s",
+      },
+      {
+        name: "org",
+        displayName: "Org",
+        slug: `slug-${randomUUID().slice(0, 8)}`,
+      },
+    );
+  }, 30_000);
 
-    afterAll(async () => {
-      await cliCleanup?.();
+  afterAll(async () => {
+    await cliCleanup?.();
+  });
+
+  /**
+   * The CLI's test-like mode guard must classify the CANONICAL runtime mode
+   * (packages/db::parseAppMode: APP_MODE authoritative, NODE_ENV the fallback,
+   * invalid APP_MODE throws) — never a local APP_MODE grammar. These cases run
+   * the real subprocess so the hostile environments reach the real consumer.
+   */
+  describe("runtime-mode guard (parseAppMode convergence)", () => {
+    it("refuses a test-like mode that only NODE_ENV selects (APP_MODE unset)", async () => {
+      // The canonical fallback reads NODE_ENV when APP_MODE is unset: the
+      // resolved mode here IS test, so the test-DB safety refusal must
+      // activate. A raw-APP_MODE grammar sees "unset" and stays silent.
+      const result = await runEvidenceCli(
+        [
+          "complete",
+          "--operation-id",
+          `physical_base:mode-${randomUUID().slice(0, 8)}`,
+          "--type",
+          "physical_base",
+          "--artifact-label",
+          "mode.tar",
+          "--size-bytes",
+          "1024",
+          "--verification-method",
+          "pg_verifybackup",
+          "--executor",
+          "host_script",
+        ],
+        { APP_MODE: undefined, NODE_ENV: "test" },
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("refusing to record evidence");
+      expect(result.stderr).toContain("test");
     });
 
+    it("honours APP_MODE over NODE_ENV (development wins over NODE_ENV=test)", async () => {
+      // Precedence direction proof: NODE_ENV=test does NOT select test mode
+      // while APP_MODE says development. Without this, "refuse whenever any
+      // raw input looks test-like" would pass the case above while inverting
+      // the documented precedence.
+      const operationId = `physical_base:precedence-${randomUUID().slice(0, 8)}`;
+      const result = await runEvidenceCli(
+        [
+          "complete",
+          "--operation-id",
+          operationId,
+          "--type",
+          "physical_base",
+          "--artifact-label",
+          "precedence.tar",
+          "--size-bytes",
+          "2048",
+          "--verification-method",
+          "pg_verifybackup",
+          "--executor",
+          "host_script",
+        ],
+        { APP_MODE: "development", NODE_ENV: "test" },
+      );
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("verified success");
+      const rows = await cliDb!
+        .select()
+        .from(backupRuns)
+        .where(eq(backupRuns.operationId, operationId));
+      expect(rows.find((r) => r.status === "succeeded")).toBeDefined();
+    });
+
+    it("propagates the canonical invalid-APP_MODE error instead of a local fallback", async () => {
+      // Canonical semantics: an unparseable APP_MODE throws. The CLI must fail
+      // closed on that config error — never re-classify the bad value as
+      // "not test-like, therefore proceed as development".
+      const result = await runEvidenceCli(
+        [
+          "complete",
+          "--operation-id",
+          `physical_base:invalid-${randomUUID().slice(0, 8)}`,
+          "--type",
+          "physical_base",
+          "--artifact-label",
+          "invalid.tar",
+          "--size-bytes",
+          "1024",
+          "--verification-method",
+          "pg_verifybackup",
+          "--executor",
+          "host_script",
+        ],
+        { APP_MODE: "prooduction", NODE_ENV: "development" },
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('Invalid APP_MODE "prooduction"');
+      // The failure precedes any database work: no target was even resolved.
+      expect(result.stderr).not.toContain("target database");
+    });
+  });
+
+  describe("complete --size-bytes (#351 fail-closed)", () => {
     it("rejects --size-bytes 0 and records NO succeeded ledger row", async () => {
       const operationId = `physical_base:reject-${randomUUID().slice(0, 8)}`;
       const result = await runEvidenceCli([
@@ -367,5 +482,5 @@ CLI_DESCRIBE(
       expect(succeeded).toBeDefined();
       expect(succeeded!.artifactSizeBytes).toBe(123456);
     });
-  },
-);
+  });
+});
