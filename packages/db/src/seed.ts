@@ -10,9 +10,14 @@ import { schema, ASSIGNABLE_ROLES } from "./schema/pg.js";
 import type { AssignableRole } from "./schema/pg.js";
 import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
 import { parseAppMode } from "./databaseUrl.js";
-import dotenv from "dotenv";
 
-dotenv.config({ quiet: true });
+// INVARIANT (#733): NO source admission in shared seed modules. Physical
+// dotenv admission belongs to application entrypoints (apps/api's
+// loadRootEnv, which admits the developer .env for bare development and
+// blocks it for managed profiles). This file is imported by tests, API test
+// helpers, and the E2E seed orchestrator, so an import must never mutate
+// process.env from a developer .env file. SEED_* values below are consumed
+// from the already-admitted process environment.
 
 /** Function signature for a password hashing function used during seeding. */
 export type HashFunction = (password: string) => string | Promise<string>;

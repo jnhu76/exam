@@ -274,6 +274,17 @@ describe("assertNotProductionSeed (production guard)", () => {
     );
   });
 
+  // APP_MODE is authoritative; a development NODE_ENV must not soften a
+  // production APP_MODE (R4 canonical runtime-mode discipline).
+  it("throws when APP_MODE=production even while NODE_ENV=development", () => {
+    expect(() =>
+      assertNotProductionSeed({
+        APP_MODE: "production",
+        NODE_ENV: "development",
+      }),
+    ).toThrow(/Refusing to run the baseline seed in production/);
+  });
+
   it("points operators to the production bootstrap path", () => {
     try {
       assertNotProductionSeed({ APP_MODE: "production" });
