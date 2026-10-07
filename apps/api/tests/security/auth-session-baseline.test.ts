@@ -20,6 +20,7 @@ import { seed, SEED_CREDENTIALS } from "@exam/db/src/seed.js";
 import authRoutes from "../../src/routes/auth.js";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
+import { getRuntimeConfig } from "../../src/config/runtimeConfig.js";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -57,12 +58,15 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
         .where(eq(schema.users.id, seedResult.users.adminId))
     )[0]!;
 
-    adminToken = signJWT({
-      actorId: admin.id,
-      role: admin.role as Role,
-      organizationId: admin.organizationId,
-      authEpoch: 0,
-    });
+    adminToken = signJWT(
+      {
+        actorId: admin.id,
+        role: admin.role as Role,
+        organizationId: admin.organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
     adminUsername = admin.username;
 
     app = Fastify();
@@ -146,14 +150,21 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
 
   describe("verifyJWT throws on invalid input", () => {
     it("throws for empty string", () => {
-      expect(() => verifyJWT("")).toThrow();
+      expect(() =>
+        verifyJWT("", getRuntimeConfig().authSecret.jwtSecret),
+      ).toThrow();
     });
 
     it("throws for unsigned payload", () => {
       const unsigned = Buffer.from(
         JSON.stringify({ actorId: "x", role: "Admin", organizationId: "y" }),
       ).toString("base64url");
-      expect(() => verifyJWT(`${unsigned}.${unsigned}.`)).toThrow();
+      expect(() =>
+        verifyJWT(
+          `${unsigned}.${unsigned}.`,
+          getRuntimeConfig().authSecret.jwtSecret,
+        ),
+      ).toThrow();
     });
   });
 });

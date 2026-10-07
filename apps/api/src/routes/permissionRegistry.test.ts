@@ -8,6 +8,7 @@ import authRoutes from "./auth.js";
 import { permissionRegistryRoutes } from "./permissionRegistry.js";
 import { buildTestApp } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
@@ -55,26 +56,35 @@ describe("permission registry + effective authority", () => {
     }
 
     adminId = await seedUser("reg-admin", "Admin", "reg-pass-1");
-    adminToken = signJWT({
-      actorId: adminId,
-      role: "Admin",
-      organizationId: orgId,
-      authEpoch: 0,
-    });
+    adminToken = signJWT(
+      {
+        actorId: adminId,
+        role: "Admin",
+        organizationId: orgId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
     maintainerId = await seedUser("reg-maint", "Maintainer", "reg-pass-2");
-    maintainerToken = signJWT({
-      actorId: maintainerId,
-      role: "Maintainer",
-      organizationId: orgId,
-      authEpoch: 0,
-    });
+    maintainerToken = signJWT(
+      {
+        actorId: maintainerId,
+        role: "Maintainer",
+        organizationId: orgId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
     candidateId = await seedUser("reg-cand", "Candidate", "reg-pass-3");
-    candidateToken = signJWT({
-      actorId: candidateId,
-      role: "Candidate",
-      organizationId: orgId,
-      authEpoch: 0,
-    });
+    candidateToken = signJWT(
+      {
+        actorId: candidateId,
+        role: "Candidate",
+        organizationId: orgId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
     teacherId = await seedUser("reg-teacher", "Teacher", "reg-pass-4");
     // A user with NO assignment rows at all — the "no active authority" case.
     idleUserId = await seedUser("reg-idle", "Candidate", "reg-pass-5");

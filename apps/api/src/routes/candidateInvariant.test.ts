@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import {
   buildTestApp,
   createCandidateViaApi,
@@ -125,12 +126,15 @@ describe("candidate profile invariant", () => {
       updatedAt: now,
     });
     const { signJWT } = await import("@exam/auth/src/session.js");
-    const bareToken = signJWT({
-      actorId: bareUserId,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-      authEpoch: 0,
-    });
+    const bareToken = signJWT(
+      {
+        actorId: bareUserId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const res = await ctx.app.inject({
       method: "GET",
@@ -174,12 +178,15 @@ describe("candidate profile invariant", () => {
       updatedAt: now,
     });
     const { signJWT } = await import("@exam/auth/src/session.js");
-    const bareToken = signJWT({
-      actorId: bareUserId,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-      authEpoch: 0,
-    });
+    const bareToken = signJWT(
+      {
+        actorId: bareUserId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "Profile Invariant Start Exam",

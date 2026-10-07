@@ -316,12 +316,15 @@ describe("auth routes", () => {
       },
     });
 
-    const disableToken = signJWT({
-      actorId: disableUserId,
-      role: "Admin",
-      organizationId: ctx.org.id,
-      authEpoch: 0,
-    });
+    const disableToken = signJWT(
+      {
+        actorId: disableUserId,
+        role: "Admin",
+        organizationId: ctx.org.id,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
     const meRes = await ctx.app.inject({
       method: "GET",
       url: "/api/auth/me",
@@ -638,7 +641,7 @@ describe("auth routes", () => {
     expect(cookieStr).toBeDefined();
     const token = extractCookieValue(cookieStr!, "auth-token");
     expect(token).toBeDefined();
-    const decoded = verifyJWT(token!);
+    const decoded = verifyJWT(token!, getRuntimeConfig().authSecret.jwtSecret);
     expect(decoded.actorId).toBe(user.id);
     expect(decoded.organizationId).toBe(ctx.org.id);
     expect(decoded.role).toBe("Candidate");
@@ -932,12 +935,15 @@ describe("auth epoch revocation (#325)", () => {
         .select()
         .from(schema.users)
         .where(eq(schema.users.id, userId));
-      const tabBToken = signJWT({
-        actorId: userId,
-        role: "Candidate",
-        organizationId: r4Ctx.org.id,
-        authEpoch: userRows[0]!.authEpoch,
-      });
+      const tabBToken = signJWT(
+        {
+          actorId: userId,
+          role: "Candidate",
+          organizationId: r4Ctx.org.id,
+          authEpoch: userRows[0]!.authEpoch,
+        },
+        getRuntimeConfig().authSecret.jwtSecret,
+      );
 
       // Tab A logs out → epoch advances → tab B dies too (documented
       // all-tab/all-device semantics for v0.x).

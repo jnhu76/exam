@@ -27,6 +27,7 @@ import candidateRoutes from "../../src/routes/candidate.js";
 import attemptRoutes from "../../src/routes/attempts.js";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
+import { getRuntimeConfig } from "../../src/config/runtimeConfig.js";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -130,18 +131,24 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
         .where(eq(schema.users.id, seedResult.users.candidateId))
     )[0]!;
 
-    adminToken = signJWT({
-      actorId: admin.id,
-      role: admin.role as Role,
-      organizationId: admin.organizationId,
-      authEpoch: 0,
-    });
-    candidateToken = signJWT({
-      actorId: candidate.id,
-      role: candidate.role as Role,
-      organizationId: candidate.organizationId,
-      authEpoch: 0,
-    });
+    adminToken = signJWT(
+      {
+        actorId: admin.id,
+        role: admin.role as Role,
+        organizationId: admin.organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
+    candidateToken = signJWT(
+      {
+        actorId: candidate.id,
+        role: candidate.role as Role,
+        organizationId: candidate.organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const otherCandidateUserId = randomUUID();
     const otherNow = new Date();

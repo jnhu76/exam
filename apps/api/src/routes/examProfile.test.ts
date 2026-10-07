@@ -5,6 +5,7 @@ import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const VALID_PROFILE = {
   name: "Standard",
@@ -322,12 +323,15 @@ describe("exam policy profile routes (CRUD)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const orgBToken = signJWT({
-      actorId: orgBAdminId,
-      organizationId: orgBId,
-      role: "Admin",
-      authEpoch: 0,
-    });
+    const orgBToken = signJWT(
+      {
+        actorId: orgBAdminId,
+        organizationId: orgBId,
+        role: "Admin",
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     // Org A profile id.
     const created = await ctx.app.inject({

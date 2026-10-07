@@ -22,6 +22,7 @@ import candidateRoutes from "../../src/routes/candidate.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
+import { getRuntimeConfig } from "../../src/config/runtimeConfig.js";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -58,12 +59,15 @@ describe("Password Policy Baseline (S08-lite)", () => {
         .where(eq(schema.users.id, seedResult.users.adminId))
     )[0]!;
 
-    adminToken = signJWT({
-      actorId: admin.id,
-      role: admin.role as Role,
-      organizationId: admin.organizationId,
-      authEpoch: 0,
-    });
+    adminToken = signJWT(
+      {
+        actorId: admin.id,
+        role: admin.role as Role,
+        organizationId: admin.organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     app = Fastify();
     setupSecurity(app);

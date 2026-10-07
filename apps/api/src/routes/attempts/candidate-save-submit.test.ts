@@ -11,6 +11,7 @@ import { materializeGradingWorkset } from "@exam/exam-engine";
 import { createGradingWorksetRepoAdapter } from "../../adapters/repoAdapters.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getSaveAnswerMessage } from "@exam/contracts";
+import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import {
   buildExamPayload,
   enrollCandidateForExam,
@@ -386,12 +387,15 @@ describe("attempt routes", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      const token = signJWT({
-        actorId: userId,
-        role: "Candidate",
-        organizationId: ctx.org.id,
-        authEpoch: 0,
-      });
+      const token = signJWT(
+        {
+          actorId: userId,
+          role: "Candidate",
+          organizationId: ctx.org.id,
+          authEpoch: 0,
+        },
+        getRuntimeConfig().authSecret.jwtSecret,
+      );
 
       const res = await ctx.app.inject({
         method: "GET",
@@ -1089,12 +1093,15 @@ describe("attempt routes", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      otherCandidateToken = signJWT({
-        actorId: otherUserId,
-        role: "Candidate",
-        organizationId: ctx.org.id,
-        authEpoch: 0,
-      });
+      otherCandidateToken = signJWT(
+        {
+          actorId: otherUserId,
+          role: "Candidate",
+          organizationId: ctx.org.id,
+          authEpoch: 0,
+        },
+        getRuntimeConfig().authSecret.jwtSecret,
+      );
 
       const examRes = await ctx.app.inject({
         method: "POST",

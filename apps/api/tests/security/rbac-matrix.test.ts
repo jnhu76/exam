@@ -22,6 +22,7 @@ import candidateRoutes from "../../src/routes/candidate.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
+import { getRuntimeConfig } from "../../src/config/runtimeConfig.js";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -98,18 +99,24 @@ describe("RBAC permission baseline", () => {
       updatedAt: now,
     });
 
-    adminToken = signJWT({
-      actorId: adminId,
-      role: "Admin" as Role,
-      organizationId: org.id,
-      authEpoch: 0,
-    });
-    candidateToken = signJWT({
-      actorId: candidate.id,
-      role: candidate.role as Role,
-      organizationId: candidate.organizationId,
-      authEpoch: 0,
-    });
+    adminToken = signJWT(
+      {
+        actorId: adminId,
+        role: "Admin" as Role,
+        organizationId: org.id,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
+    candidateToken = signJWT(
+      {
+        actorId: candidate.id,
+        role: candidate.role as Role,
+        organizationId: candidate.organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     app = Fastify();
     setupSecurity(app);

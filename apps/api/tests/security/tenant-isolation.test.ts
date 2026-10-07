@@ -24,6 +24,7 @@ import systemRoutes from "../../src/routes/system.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
+import { getRuntimeConfig } from "../../src/config/runtimeConfig.js";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -225,24 +226,33 @@ describe("Tenant Isolation (S01)", () => {
       updatedAt: now,
     });
 
-    adminAToken = signJWT({
-      actorId: adminA.id,
-      role: adminA.role as Role,
-      organizationId: adminA.organizationId,
-      authEpoch: 0,
-    });
-    adminBToken = signJWT({
-      actorId: adminB.id,
-      role: adminB.role as Role,
-      organizationId: adminB.organizationId,
-      authEpoch: 0,
-    });
-    candidateAToken = signJWT({
-      actorId: candidateA.id,
-      role: candidateA.role as Role,
-      organizationId: candidateA.organizationId,
-      authEpoch: 0,
-    });
+    adminAToken = signJWT(
+      {
+        actorId: adminA.id,
+        role: adminA.role as Role,
+        organizationId: adminA.organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
+    adminBToken = signJWT(
+      {
+        actorId: adminB.id,
+        role: adminB.role as Role,
+        organizationId: adminB.organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
+    candidateAToken = signJWT(
+      {
+        actorId: candidateA.id,
+        role: candidateA.role as Role,
+        organizationId: candidateA.organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     app = Fastify();
     setupSecurity(app);

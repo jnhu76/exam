@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, and } from "drizzle-orm";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import {
   buildTestApp,
   createCandidateViaApi,
@@ -408,12 +409,15 @@ describe("cross-organization own-attempt denial", () => {
       createdAt: now,
       updatedAt: now,
     });
-    orgBAdminToken = signJWT({
-      actorId: orgBAdmin.id,
-      organizationId: orgBId,
-      role: "Admin",
-      authEpoch: 0,
-    });
+    orgBAdminToken = signJWT(
+      {
+        actorId: orgBAdmin.id,
+        organizationId: orgBId,
+        role: "Admin",
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     // ── Create Org B candidate user ──
     const candPasswordHash = await hashPassword("password123");
@@ -463,12 +467,15 @@ describe("cross-organization own-attempt denial", () => {
     const orgBCandProfileId = orgBCandProfileRows[0]!.id;
 
     // Sign candidate B's JWT
-    const orgBCandToken = signJWT({
-      actorId: orgBCandUser.id,
-      organizationId: orgBId,
-      role: "Candidate",
-      authEpoch: 0,
-    });
+    const orgBCandToken = signJWT(
+      {
+        actorId: orgBCandUser.id,
+        organizationId: orgBId,
+        role: "Candidate",
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     candidateB = {
       candidateProfileId: orgBCandProfileId,
