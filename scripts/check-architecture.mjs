@@ -82,6 +82,21 @@ for (const moduleDir of ["apps/api/src", "packages/db/src"]) {
     ],
   ]);
 }
+// Physical dotenv admission belongs to application entrypoints (#733): the
+// canonical seam is apps/api's loadRootEnv, mode-gated via parseAppMode.
+// packages/db/src is shared mechanism — seed.ts, the E2E seed orchestrator,
+// test-isolation helpers — imported by tests, API helpers, and research
+// harnesses, so module evaluation must never read a developer .env into
+// process.env (the F-06 defect: a module-level dotenv.config() made every
+// importer admit the file a second time, even after the managed entrypoint
+// had refused it). The one legitimate dotenv consumer in the package is the
+// drizzle-kit CLI config, which lives outside src/.
+await forbid("packages/db/src", [
+  [
+    /from ["']dotenv["']|require\(["']dotenv["']\)|dotenv\s*\.\s*config/,
+    "shared db mechanism must not admit dotenv sources — entrypoints own source admission",
+  ],
+]);
 await forbid("packages/exam-engine/src", [
   [/from ["']fastify/, "exam-engine cannot depend on fastify"],
   // No explicit cast to the transaction-affine EA capability: the brand symbols
