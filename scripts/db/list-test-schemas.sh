@@ -2,14 +2,23 @@
 # List all test_* schemas in the test database.
 # Usage:
 #   bash scripts/db/list-test-schemas.sh
-#   DATABASE_URL="postgresql://..." bash scripts/db/list-test-schemas.sh
+#   TEST_DATABASE_URL="postgresql://..." bash scripts/db/list-test-schemas.sh
 #
-# DB guard: mirrors drop-test-schemas.sh — only a test database
-# (exam_test / exam_test_w*) makes sense for listing test_* schemas.
+# Target authority: mirrors drop-test-schemas.sh — the test database target
+# comes from the canonical resolver (packages/db/src/databaseUrl.ts::
+# resolveTestBranchUrl) through its executable projection
+# (src/testDatabaseUrlCli.ts). DATABASE_URL is never consulted (#733 R6).
+#
+# DB guard: only a test database (exam_test / exam_test_w*) makes sense for
+# listing test_* schemas; the connected database is re-checked via
+# current_database() before any query runs.
 
 set -euo pipefail
 
-DB_URL="${DATABASE_URL:-postgresql://exam:exam@localhost:${DB_HOST_PORT:-5432}/exam_test}"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Canonical TEST_DATABASE_TARGET projection — no shell-local URL grammar.
+# A non-zero seam exit stops here under set -e, before any psql call.
+DB_URL="$(cd "$repo_root" && pnpm --filter @exam/db exec tsx src/testDatabaseUrlCli.ts)"
 
 CURRENT_DB="$(psql "$DB_URL" -t -A -c 'SELECT current_database();' | tr -d '[:space:]')"
 case "${CURRENT_DB}" in

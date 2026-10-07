@@ -3,15 +3,26 @@
 # Safety: NEVER drops public, drizzle, pg_catalog, or information_schema.
 # Usage:
 #   bash scripts/db/drop-test-schemas.sh
-#   DATABASE_URL="postgresql://..." bash scripts/db/drop-test-schemas.sh
+#   TEST_DATABASE_URL="postgresql://..." bash scripts/db/drop-test-schemas.sh
 #
-# DB guard: this script is DESTRUCTIVE (schema drops). It refuses to run
-# against anything but a test database (exam_test / exam_test_w* worker
-# databases) — pointing it at `exam` (dev) or `exam_e2e` (E2E) is an error.
+# Target authority: the test database target is resolved by the canonical
+# resolver (packages/db/src/databaseUrl.ts::resolveTestBranchUrl) through its
+# executable projection (src/testDatabaseUrlCli.ts). Precedence:
+#   TEST_DATABASE_URL > TEST_DB_URL (legacy) > constructed exam_test from
+#   DB_HOST_PORT. DATABASE_URL is never consulted for the test target (#733 R6).
+#
+# DB guard: this script is DESTRUCTIVE (schema drops). Target authority and
+# safety are independent layers: after connecting, it re-checks the ACTUAL
+# database via current_database() and refuses to run against anything but a
+# test database (exam_test / exam_test_w* worker databases) — pointing it at
+# `exam` (dev) or `exam_e2e` (E2E) is an error.
 
 set -euo pipefail
 
-DB_URL="${DATABASE_URL:-postgresql://exam:exam@localhost:${DB_HOST_PORT:-5432}/exam_test}"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Canonical TEST_DATABASE_TARGET projection — no shell-local URL grammar.
+# A non-zero seam exit stops here under set -e, before any psql call.
+DB_URL="$(cd "$repo_root" && pnpm --filter @exam/db exec tsx src/testDatabaseUrlCli.ts)"
 
 CURRENT_DB="$(psql "$DB_URL" -t -A -c 'SELECT current_database();' | tr -d '[:space:]')"
 case "${CURRENT_DB}" in

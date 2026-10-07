@@ -444,6 +444,47 @@ for (const f of vitestConfigs) {
     }
   }
 }
+// --- Guard 6: shell test-schema tooling resolves TEST_DATABASE_TARGET only
+// through the canonical projection (#733 R6 / F-07) --------------------------
+// The audited shell family once resolved the test target itself:
+//   DB_URL="${DATABASE_URL:-postgresql://exam:exam@localhost:${DB_HOST_PORT:-5432}/exam_test}"
+// That shape is a second TEST_DATABASE_TARGET authority twice over: it lets
+// DATABASE_URL control the test target (masked for test branches since
+// #730 EXP-01), and it re-implements resolveTestBranchUrl's constructed
+// fallback. The family must obtain the target from the canonical executable
+// projection (packages/db/src/testDatabaseUrlCli.ts → resolveTestBranchUrl).
+// The connected current_database() identity guard inside those scripts is a
+// DIFFERENT layer (bounds destructive consequence) and must stay.
+// Bounded to the audited semantic consumer family on purpose: other scripts
+// legitimately handle distinct DB facts — production backup resolves the
+// running container's identity (db-backup.sh), and the managed e2e runner is
+// the TEST_DATABASE_URL input owner for its children (e2e/run.sh).
+{
+  const CANONICAL_PROJECTION = "testDatabaseUrlCli";
+  const auditedShellTestTargetConsumers = [
+    "scripts/db/drop-test-schemas.sh",
+    "scripts/db/list-test-schemas.sh",
+    "scripts/test/db-isolation-stress.sh",
+  ];
+  for (const f of auditedShellTestTargetConsumers) {
+    const text = await readFile(f, "utf8");
+    if (!text.includes(CANONICAL_PROJECTION)) {
+      violations.push(
+        `${f}: does not obtain TEST_DATABASE_TARGET through the canonical projection (testDatabaseUrlCli.ts) — shell must not resolve the test target itself (#733 R6)`,
+      );
+    }
+    if (/\$\{DATABASE_URL:-/.test(text)) {
+      violations.push(
+        `${f}: falls back to DATABASE_URL for the test target — DATABASE_URL is masked for TEST_DATABASE_TARGET; resolve through ${CANONICAL_PROJECTION}.ts`,
+      );
+    }
+    if (/postgresql:\/\/exam:exam@localhost:/.test(text)) {
+      violations.push(
+        `${f}: constructs a canonical test DB URL locally — construction belongs to resolveTestBranchUrl; resolve through ${CANONICAL_PROJECTION}.ts`,
+      );
+    }
+  }
+}
 // --- Report -----------------------------------------------------------------
 if (violations.length > 0) {
   process.stderr.write(
