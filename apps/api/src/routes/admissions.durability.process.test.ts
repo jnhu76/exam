@@ -10,6 +10,17 @@
  * (`node --import tsx src/server.ts`) as an OS child process; divergence is
  * impossible through shared JS state because the processes share nothing but
  * PostgreSQL.
+ *
+ * LANE CONTRACT (docs/standards/testing.md §5.2): requires worker-database
+ * isolation (TEST_DB_ISOLATION=worker-database). WHAT THIS PROVES: durable
+ * admission/membership facts surviving REAL OS-process replacement (SIGKILL,
+ * new pid, fresh physical connections). WHY WORKER-DATABASE: the spawned
+ * servers resolve their database from TEST_DATABASE_URL alone and cannot
+ * inherit the parent process's per-file schema binding (search_path is
+ * connection-local), so the physical per-worker database must be the isolation
+ * authority. IN THE FILE-SCHEMA LANE the whole suite is skipped at collection
+ * time, before any setup; the canonical evidence lane that RUNS this suite is
+ * worker-database (pnpm verify / CI api-coverage).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -20,7 +31,10 @@ import type { Database } from "@exam/db/src/types.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
-import { setupApiTestDatabaseFromEnv } from "./testDatabase.js";
+import {
+  isWorkerDatabaseMode,
+  setupApiTestDatabaseFromEnv,
+} from "./testDatabase.js";
 import {
   grabFreePort,
   killHard,
@@ -199,7 +213,10 @@ async function createQueueExam(
   return examId;
 }
 
-describe("durable admission across real process boundaries (#292 Q7/Q8)", () => {
+const workerDbDescribe = isWorkerDatabaseMode() ? describe : describe.skip;
+const TITLE = "durable admission across real process boundaries (#292 Q7/Q8)";
+
+workerDbDescribe(TITLE, () => {
   let cleanup: Awaited<ReturnType<typeof setupApiTestDatabaseFromEnv>> | null =
     null;
   let db: Database;
