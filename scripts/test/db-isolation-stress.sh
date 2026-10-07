@@ -20,11 +20,23 @@
 #   KEEP_TEST_SCHEMAS=1   Keep test schemas after run (for debugging)
 #   TEST_DB_ISOLATION=0   Disable isolation (run against public schema — expect failures)
 #   TURBO_FORCE=true      Bypass turbo cache
+#
+# Target authority: the stress run's own database target (schema leak count)
+# is resolved once per invocation by the canonical resolver
+# (packages/db/src/databaseUrl.ts::resolveTestBranchUrl) through its
+# executable projection (src/testDatabaseUrlCli.ts); the drop/list child
+# scripts resolve through the same projection independently. DATABASE_URL is
+# never consulted for the test target (#733 R6).
 
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$repo_root"
+
+# Canonical TEST_DATABASE_TARGET projection — no shell-local URL grammar.
+# Resolved before any stage so a config error fails fast, before pnpm work.
+# A non-zero seam exit stops here under set -e, before any psql call.
+DB_URL="$(pnpm --filter @exam/db exec tsx src/testDatabaseUrlCli.ts)"
 
 ITERATIONS="${1:-10}"
 FAST_MODE=false
@@ -237,7 +249,7 @@ fi
 # ---- schema leak check ----
 echo ""
 echo "=== Schema leak check ==="
-SCHEMA_COUNT=$(psql "${DATABASE_URL:-postgresql://exam:exam@localhost:${DB_HOST_PORT:-5432}/exam_test}" -t -A \
+SCHEMA_COUNT=$(psql "$DB_URL" -t -A \
   -c "SELECT count(*) FROM information_schema.schemata WHERE schema_name LIKE 'test_%';" 2>/dev/null || echo "UNKNOWN")
 echo "  Remaining test_* schemas: $SCHEMA_COUNT"
 
