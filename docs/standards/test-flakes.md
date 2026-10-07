@@ -18,6 +18,15 @@
 
 ## 已修复事故
 
+### 2026-10-07 — 裸 `pnpm test` 全量下 `slot-reuse-isolation.test.ts` 的 `afterAll` 吃穿 30s 钩子预算（#733 R4 施工前的基线表征；本签名第 1 次）
+
+- **现象**：在**未改动的** `master` head `94dc798c` 上跑一次裸 `pnpm test`（非 coverage lane）作为 R4 的改动前基线表征：`EXIT=1`，唯一失败是 `apps/api` 的 `tests/slotReuse/slot-reuse-isolation.test.ts > slot-reuse data isolation (sequential files, same pool slot)`。文件级 `1 failed | 212 passed | 7 skipped (220)`，测试级 `2741 passed | 21 skipped (2762)`——**没有任何断言失败**，只有 `afterAll` 钩子超时。全量耗时 513.32s（transform 5.91s、import 109.81s、tests 379.29s）。turbo 侧 `15 successful, 16 total`（13 cached），仅 `@exam/api#test` 实跑失败。
+- **错误片段**：`Error: Hook timed out in 30000ms.`（`If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".`），位置 `tests/slotReuse/slot-reuse-isolation.test.ts:152:3`，指向 `afterAll(` —— 失败点是该用例专用 slot 库的清理钩子（文件内注释：「Dedicated slot DB is disposable evidence: drop it」），**不是**测试体，也无 hook 级联或 assertion 错误。
+- **证据（同代码再跑就过，登记规则 #1）**：在同 head `94dc798c`、未改动任何文件的前提下，立即把该文件单独复跑：`pnpm --filter @exam/api exec vitest run tests/slotReuse/slot-reuse-isolation.test.ts` → `EXIT=0`，`1 passed (1)`，用例本体 6183ms、整体 `Duration 7.38s`（远在 30s 预算之内）。非因果排除：本观测发生在**任何候选改动之前**的基线 run 上，当时工作树干净，不存在可归因的改动。
+- **根因假设**：既有 BUG-FLAKE-001 宿主编排 / I/O 争用家族在 **`afterAll` 维度**上的形态，而非常见的 5s `testTimeout` 维度。本登记册 2026-09-24 条目的根因分析已指出：slot-reuse 隔离证明的 `DROP DATABASE` 是 lane 上的慢持有者（实测 4.3–5.7s、历史 23.4s），队列深度会把它放大。该钩子已经持有显式的 `30_000` 预算（该文件刻意不设包级 `hookTimeout` 放宽），本次是在 212 个文件 × 真实 PG 的满负载下把这个 30s 预算也吃穿了。
+- **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry）——按登记规则以"单文件定向复跑通过"取证后放行；门禁结论仍以最终 run 的真实退出码为准，本 flake 只作为门禁诊断的对照基线。
+- **后续动作**：本签名第 1 次观测。若在**未改动被测代码**的前提下再次出现（尤其串行 / 单文件下也出现），或同签名累计 ≥3 次，按登记规则 #3 升级为正式跟踪条目；届时需要评估 slot-reuse 的库清理路径是否应从"钩子内同步 DROP DATABASE"改为可被负载隔离的实现（注意：这是**测试基础设施**的设计问题，不构成放宽任何断言的理由）。
+
 ### 2026-10-07 — `pnpm verify` 全量 4-worker coverage 下 `bootstrap-admin.test.ts` 三用例 5s 超时（PR #735 / #733 R2 验证期间；2026-10-06 同签名第 2 次复发）
 
 - **现象**：本地 `pnpm verify`（R2 final head `e0d94dda`，PR #735；`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`，v8 coverage）的 `@exam/api#coverage` 失败：3 个测试 5000ms 超时（无断言失败）— `src/scripts/bootstrap-admin.test.ts:375`（audit 插入失败的原子回滚）、`:449`（audit metadata 记录——与 2026-10-06 条目同一受害用例）、`:493`（首装竞态唯一胜者）。文件级 `1 failed | 215 passed | 4 skipped (220)`，测试级 `3 failed | 2749 passed | 11 skipped (2763)`。turbo 侧其余任务全部成功/缓存命中，仅 `@exam/api#coverage` 实跑失败（cache miss，hash `3b07b736d614d797`）。
