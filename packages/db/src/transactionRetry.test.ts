@@ -11,18 +11,30 @@
  *
  * Deadlock schedule (two physical connections on one isolated schema):
  *   T1 (victim, wrapped) parks pre-commit holding row_a. T2 (raw sql.begin,
- *   NOT wrapped) locks row_b, then parks BEFORE its row_a request. T1 is
- *   released first and OBSERVED waiting on T2's row_b transactionid via
- *   pg_locks (bounded predicate poll — no fixed sleep); only then is T2
- *   released to queue on row_a. Deadlock blame goes to whichever waiter
- *   queued FIRST (its deadlock_timeout elapses first while the cycle is
- *   complete), so T1 — the wrapped transaction — is deterministically the
- *   one aborted with 40P01. The wrapper retries the whole callback; the
- *   one-shot park never re-fires and T2 commits as soon as the abort
- *   releases its wait, so attempt 2 applies both writes. If PostgreSQL ever
- *   blamed T2 instead, T2 (unwrapped) would surface 40P01 and this test
- *   fails loudly — the blame rule is stable PG behavior, not a timing
- *   assumption.
+ *   NOT wrapped) holds a row lock on row_b, then parks BEFORE its row_a
+ *   request. T1 is released first and OBSERVED waiting on T2's row_b
+ *   transactionid via pg_locks (bounded predicate poll — no fixed sleep);
+ *   only then is T2 released to complete the cycle on row_a. Deadlock blame
+ *   goes to whichever waiter queued FIRST (its deadlock_timeout elapses
+ *   first while the cycle is complete), so T1 — the wrapped transaction — is
+ *   deterministically the one aborted with 40P01. The callback records each
+ *   attempt's SQLSTATE, so a wrong retry classification (or a second,
+ *   unintended retryable error) fails the oracle explicitly instead of only
+ *   perturbing the attempt count. If PostgreSQL ever blamed T2 instead, T2
+ *   (unwrapped) would surface 40P01 and this test fails loudly — the blame
+ *   rule is stable PG behavior, not a timing assumption.
+ *
+ * INVARIANT (ordering edge): the contender takes row locks only and
+ * WRITES NOTHING (`SELECT ... FOR UPDATE` on row_b and row_a). The victim's
+ * `UPDATE row_b` still really blocks behind the contender's row_b lock and
+ * the cycle still really ends in a 40P01 — but because the contender never
+ * creates a new row version, the retry attempt's REPEATABLE READ snapshot
+ * cannot version-conflict with it under ANY interleaving, no matter how
+ * late the contender's commit lands relative to the wrapper's 20ms backoff.
+ * A contender that writes any row the retry callback also writes breaks
+ * this: a retry whose snapshot was taken while the contender was still
+ * uncommitted then fails with 40001 on the contender-written row and flips
+ * the oracle to attempts == 3 under package-level concurrency.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
@@ -31,6 +43,21 @@ import { getIsolatedTestDb } from "./testDb.js";
 import { createDatabase, type DatabaseConnection } from "./database.js";
 import { executeInTransaction, type Database } from "./types.js";
 import { schema } from "./schema/pg.js";
+
+/** Walks an error's `cause` chain for the first PostgreSQL SQLSTATE code. */
+function extractSqlState(err: unknown): string | undefined {
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+  while (current && typeof current === "object" && !visited.has(current)) {
+    visited.add(current);
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string" && /^[0-9][0-9A-Z]{4}$/.test(code)) {
+      return code;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
 
 describe("executeInTransaction retry contract (real PostgreSQL)", () => {
   let iso: Awaited<ReturnType<typeof getIsolatedTestDb>>;
@@ -69,6 +96,10 @@ describe("executeInTransaction retry contract (real PostgreSQL)", () => {
 
   it("retries a real 40P01 deadlock to completion (bounded, whole-callback)", async () => {
     let attempts = 0;
+    const attemptErrors: Array<{
+      attempt: number;
+      sqlstate?: string | undefined;
+    }> = [];
     let rowAParkUsed = false;
     let signalT1Parked = () => {};
     const t1Parked = new Promise<void>((r) => {
@@ -81,22 +112,31 @@ describe("executeInTransaction retry contract (real PostgreSQL)", () => {
 
     const victim = executeInTransaction(db, async (tx) => {
       attempts += 1;
-      // Attempt-tagged write: if the aborted attempt left residue, the final
-      // value would betray it (rollback is part of the retry contract).
-      await tx.execute(
-        sql`UPDATE organizations SET display_name = ${`t1-attempt-${attempts}`}, updated_at = now()
-            WHERE id = ${orgA}`,
-      );
-      if (!rowAParkUsed) {
-        rowAParkUsed = true;
-        signalT1Parked();
-        await t1Release;
+      const attempt = attempts;
+      try {
+        // Attempt-tagged write: if the aborted attempt left residue, the final
+        // value would betray it (rollback is part of the retry contract).
+        await tx.execute(
+          sql`UPDATE organizations SET display_name = ${`t1-attempt-${attempts}`}, updated_at = now()
+              WHERE id = ${orgA}`,
+        );
+        if (!rowAParkUsed) {
+          rowAParkUsed = true;
+          signalT1Parked();
+          await t1Release;
+        }
+        await tx.execute(
+          sql`UPDATE organizations SET display_name = 't1', updated_at = now()
+              WHERE id = ${orgB}`,
+        );
+        return "t1-done" as const;
+      } catch (err) {
+        // Observability: the retry contract is keyed on SQLSTATE, so the
+        // oracle asserts WHICH transient error each retry followed, not just
+        // how many attempts ran.
+        attemptErrors.push({ attempt, sqlstate: extractSqlState(err) });
+        throw err;
       }
-      await tx.execute(
-        sql`UPDATE organizations SET display_name = 't1', updated_at = now()
-            WHERE id = ${orgB}`,
-      );
-      return "t1-done" as const;
     });
 
     let contenderXid = "";
@@ -110,8 +150,10 @@ describe("executeInTransaction retry contract (real PostgreSQL)", () => {
     });
 
     const contender = conn2.sql.begin(async (tx2) => {
-      await tx2`UPDATE organizations SET display_name = 't2-b', updated_at = now()
-                WHERE id = ${orgB}`;
+      // Lock-only participation (INVARIANT above): a real row lock that the
+      // victim's row_b update must queue behind, without a contender row
+      // version the retry's snapshot could conflict with.
+      await tx2`SELECT id FROM organizations WHERE id = ${orgB} FOR UPDATE`;
       const xidRows = (await tx2`SELECT txid_current()::text AS xid`) as Array<{
         xid: string;
       }>;
@@ -122,9 +164,10 @@ describe("executeInTransaction retry contract (real PostgreSQL)", () => {
       // deadlock_timeout elapses first), so the victim must be the earlier
       // waiter for the wrapped retry to be the exercised path.
       await t2Gate;
-      // Queues on T1's uncommitted row_a; completes when the 40P01 abort of
-      // T1's first attempt releases it — T2 commits right after.
-      await tx2`UPDATE organizations SET updated_at = now() WHERE id = ${orgA}`;
+      // Completes the deadlock cycle by QUEUEING on T1's uncommitted row_a.
+      // The wait ends when the 40P01 abort of T1's first attempt releases
+      // it; T2 commits right after.
+      await tx2`SELECT id FROM organizations WHERE id = ${orgA} FOR UPDATE`;
     });
 
     // T1 holds row_a pre-commit; T2 holds row_b, gated before its row_a
@@ -157,6 +200,8 @@ describe("executeInTransaction retry contract (real PostgreSQL)", () => {
 
     expect(result).toBe("t1-done");
     expect(attempts).toBe(2);
+    // Exactly one transient failure — the owned 40P01 — drove the retry.
+    expect(attemptErrors).toEqual([{ attempt: 1, sqlstate: "40P01" }]);
 
     // Both durable effects survived; the aborted attempt left no residue.
     const after = await db
