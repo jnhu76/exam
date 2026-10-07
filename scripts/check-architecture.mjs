@@ -49,6 +49,16 @@ await forbid("packages/authz/src", [
 await forbid("packages/contracts/src", [
   [/from ["']fastify/, "contracts cannot depend on fastify"],
 ]);
+// @exam/auth owns the JWT/password mechanism only (#733 R3): application mode
+// and secret policy are resolved by the canonical settings/runtimeConfig
+// authority and passed in as explicit arguments, so the package must not read
+// the environment itself.
+await forbid("packages/auth/src", [
+  [
+    /process\.env/,
+    "auth package must not read process.env — configuration enters as explicit arguments",
+  ],
+]);
 await forbid("packages/exam-engine/src", [
   [/from ["']fastify/, "exam-engine cannot depend on fastify"],
   // No explicit cast to the transaction-affine EA capability: the brand symbols

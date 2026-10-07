@@ -6,6 +6,7 @@ import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import candidateRoutes from "./candidate.js";
 import attemptRoutes from "./attempts.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import {
   buildTestApp,
   uniquePrefix,
@@ -291,12 +292,15 @@ describe("exam creation with exam policy profile (profile resolution)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const orgBToken = signJWT({
-      actorId: orgBAdminId,
-      organizationId: orgBId,
-      role: "Admin",
-      authEpoch: 0,
-    });
+    const orgBToken = signJWT(
+      {
+        actorId: orgBAdminId,
+        organizationId: orgBId,
+        role: "Admin",
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const orgBProfile = await ctx.app.inject({
       method: "POST",

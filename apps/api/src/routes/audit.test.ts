@@ -13,6 +13,7 @@ import type { RequestContext } from "@exam/domain";
 import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 import type { ActiveAuditActionForDurability } from "../audit/auditPolicy.js";
 import { AUDIT_EXPORT_MAX_ROWS } from "@exam/contracts";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
@@ -46,12 +47,15 @@ describe("audit log baseline (S06-lite)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    adminToken = signJWT({
-      actorId: adminId,
-      role: "Admin",
-      organizationId: orgId,
-      authEpoch: 0,
-    });
+    adminToken = signJWT(
+      {
+        actorId: adminId,
+        role: "Admin",
+        organizationId: orgId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     candidateId = crypto.randomUUID();
     await ctx.db.insert(schema.users).values({
@@ -65,12 +69,15 @@ describe("audit log baseline (S06-lite)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    candidateToken = signJWT({
-      actorId: candidateId,
-      role: "Candidate",
-      organizationId: orgId,
-      authEpoch: 0,
-    });
+    candidateToken = signJWT(
+      {
+        actorId: candidateId,
+        role: "Candidate",
+        organizationId: orgId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     // Every authenticated request resolves authority from ACTIVE
     // user_role_assignments. Seed one active primary assignment per test user

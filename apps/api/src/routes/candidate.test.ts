@@ -9,6 +9,7 @@ import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { eq, sql } from "drizzle-orm";
 import candidateRoutes from "./candidate.js";
 import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 async function installCandidateCreateAuditFailure(
   db: Awaited<ReturnType<typeof buildTestApp>>["db"],
@@ -86,12 +87,15 @@ describe("candidate routes", () => {
       createdAt: now,
       updatedAt: now,
     });
-    adminToken = signJWT({
-      actorId: adminId,
-      role: "Admin",
-      organizationId,
-      authEpoch: 0,
-    });
+    adminToken = signJWT(
+      {
+        actorId: adminId,
+        role: "Admin",
+        organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
     ({ token: teacherToken } = await createFutureRoleUserForTest(
       ctx.db,
       organizationId,

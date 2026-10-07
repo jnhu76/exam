@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { RuntimeConfigError, type RequestContext } from "@exam/domain";
+import { type RequestContext } from "@exam/domain";
 import jwt from "jsonwebtoken";
 
 /**
@@ -18,27 +18,6 @@ export interface JwtPayload extends Omit<
   authEpoch: number;
 }
 
-/** Returns true when the application is running in production mode. */
-function isProductionMode(): boolean {
-  // APP_MODE is the authoritative run-mode; NODE_ENV is a fallback.
-  const appMode = process.env.APP_MODE;
-  if (appMode === "production") return true;
-  if (appMode && appMode !== "production") return false;
-  return process.env.NODE_ENV === "production";
-}
-
-/** Returns the JWT signing secret from environment, or throws in production if unset. */
-function getDefaultJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (secret) {
-    return secret;
-  }
-  if (isProductionMode()) {
-    throw new RuntimeConfigError("JWT_SECRET is required in production");
-  }
-  return "development-only-change-me";
-}
-
 /**
  * Validates the revocation-critical `authEpoch` claim. Returns true only for
  * a finite non-negative integer (0 included). Every other shape fails closed:
@@ -49,16 +28,22 @@ function isValidAuthEpoch(value: unknown): value is number {
 }
 
 /**
- * Signs a JWT with the given payload and optional secret, defaulting to 24h HS256.
- * The payload must carry an explicit valid `authEpoch`; production signing never
+ * Signs a JWT with the given payload and secret, defaulting to 24h HS256.
+ * The payload must carry an explicit valid `authEpoch`; signing never
  * defaults it.
+ *
+ * INVARIANT (#733 R3): the secret is a required explicit dependency.
+ * @exam/auth owns the JWT mechanism only — application mode and secret
+ * policy belong to the application config authority (settings →
+ * runtimeConfig), which resolves and passes the secret in. The package
+ * reads no environment; enforced by scripts/check-architecture.mjs.
  */
 export function signJWT(
   payload: JwtPayload,
-  secret?: string,
+  secret: string,
   options?: jwt.SignOptions,
 ): string {
-  return jwt.sign(payload, secret ?? getDefaultJwtSecret(), {
+  return jwt.sign(payload, secret, {
     expiresIn: "24h",
     algorithm: "HS256",
     ...options,
@@ -70,8 +55,8 @@ export function signJWT(
  * or when the `authEpoch` claim is missing/non-number/non-integer/negative —
  * those tokens fail closed instead of being trusted as epoch 0.
  */
-export function verifyJWT(token: string, secret?: string): JwtPayload {
-  const decoded = jwt.verify(token, secret ?? getDefaultJwtSecret(), {
+export function verifyJWT(token: string, secret: string): JwtPayload {
+  const decoded = jwt.verify(token, secret, {
     algorithms: ["HS256"],
   });
   if (!isValidAuthEpoch((decoded as JwtPayload).authEpoch)) {

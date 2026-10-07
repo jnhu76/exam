@@ -6,6 +6,7 @@ import candidateFieldRoutes from "./candidateField.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 describe("candidate field routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -83,12 +84,15 @@ describe("candidate field routes", () => {
       createdAt: now,
       updatedAt: now,
     });
-    adminToken = signJWT({
-      actorId: adminId,
-      role: "Admin",
-      organizationId,
-      authEpoch: 0,
-    });
+    adminToken = signJWT(
+      {
+        actorId: adminId,
+        role: "Admin",
+        organizationId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
   });
 
   afterAll(async () => {
@@ -380,12 +384,15 @@ describe("candidate field routes", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const localAdminToken = signJWT({
-      actorId: localAdminId,
-      role: "Admin",
-      organizationId: localOrgId,
-      authEpoch: 0,
-    });
+    const localAdminToken = signJWT(
+      {
+        actorId: localAdminId,
+        role: "Admin",
+        organizationId: localOrgId,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     try {
       const createRes = await ctx.app.inject({

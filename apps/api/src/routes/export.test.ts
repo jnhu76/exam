@@ -10,6 +10,7 @@ import {
   exportResultsCsvAsAdmin,
   uniquePrefix,
 } from "./testHelpers.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import authRoutes from "./auth.js";
 import examRoutes from "./exam.js";
@@ -264,12 +265,15 @@ describe("CSV export integration", () => {
     });
     expect(candidateRes.statusCode).toBe(201);
     const candidateBody = candidateRes.json();
-    const candidateToken = signJWT({
-      actorId: candidateBody.userId,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-      authEpoch: 0,
-    });
+    const candidateToken = signJWT(
+      {
+        actorId: candidateBody.userId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const escapeExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "CSV Escape Exam",
@@ -349,12 +353,15 @@ describe("CSV export integration", () => {
     });
     expect(candidateRes.statusCode).toBe(201);
     const candidateBody = candidateRes.json();
-    const candidateToken = signJWT({
-      actorId: candidateBody.userId,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-      authEpoch: 0,
-    });
+    const candidateToken = signJWT(
+      {
+        actorId: candidateBody.userId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const injExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "CSV Injection Exam",
@@ -460,12 +467,15 @@ describe("CSV export integration", () => {
     });
     expect(candRes.statusCode).toBe(201);
     const candidateBody = candRes.json();
-    const candidateToken = signJWT({
-      actorId: candidateBody.userId,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-      authEpoch: 0,
-    });
+    const candidateToken = signJWT(
+      {
+        actorId: candidateBody.userId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const labelExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "Label Export Exam",
@@ -565,12 +575,15 @@ describe("CSV export integration", () => {
     });
     expect(candRes.statusCode).toBe(201);
     const candidateBody = candRes.json();
-    const candidateToken = signJWT({
-      actorId: candidateBody.userId,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-      authEpoch: 0,
-    });
+    const candidateToken = signJWT(
+      {
+        actorId: candidateBody.userId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+        authEpoch: 0,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const fallbackExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "Fallback Export Exam",

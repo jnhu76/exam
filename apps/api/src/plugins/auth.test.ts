@@ -123,28 +123,6 @@ describe("auth plugin: API JWT path uses runtimeConfig.authSecret.jwtSecret", ()
     });
     await app.close();
   });
-
-  it("token signed using session.ts default fallback is rejected when runtimeConfig has a different secret", async () => {
-    vi.stubEnv("JWT_SECRET", "runtime-secret-A");
-    const app = await buildAppWithAuth();
-
-    vi.stubEnv("JWT_SECRET", "fallback-secret-from-env");
-    const token = signJWT({
-      actorId: "user-1",
-      role: "Admin",
-      organizationId: "org-1",
-      authEpoch: 0,
-    });
-
-    const res = await app.inject({
-      method: "GET",
-      url: "/protected",
-      cookies: { "auth-token": token },
-    });
-
-    expect(res.statusCode).toBe(401);
-    await app.close();
-  });
 });
 
 describe("auth plugin: requireCapability (RBAC runtime activation, PR #3)", () => {
