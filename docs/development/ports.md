@@ -22,15 +22,24 @@ Notes:
   `EXAM_PORT` → the `web` nginx on container 80 (#585), which routes `/api/**`
   to the API (`app:3000`) and serves everything else from the local SPA files
   (deep-link fallback).
-- Env files own one mode each: `.env` (from `.env.example`) is local
-  development ONLY; `.env.production` (from `.env.production.example`, filled by
-  `node scripts/init-production-env.mjs`) is deployment ONLY and is read via
-  `docker compose --env-file .env.production` (the flag replaces the default `.env`
-  as Compose's interpolation file, so the dev `.env` is never read for
-  deployment — host shell exports still override individual values). Dev
-  tooling never reads `.env.production`. Tests read an optional git-ignored
-  `.env.test.local` (vitest `loadEnv`, mode `test`); unset values resolve
-  automatically — see `docs/standards/testing.md` for the variable set.
+- Env files live ONLY at the repository root (#741): `.env` (from
+  `.env.example`) is local development ONLY; `.env.test.local` is the
+  optional git-ignored test override (vitest reads exactly `.env` +
+  `.env.test.local` as its file sources — no other file participates);
+  `.env.production` (from `.env.production.example`, filled by
+  `node scripts/init-production-env.mjs`) is deployment ONLY and is read
+  solely via `docker compose --env-file .env.production` (the flag replaces
+  the default `.env` as Compose's interpolation file, so the dev `.env` is
+  never read for deployment — host shell exports still override individual
+  values). No dev tooling reads `.env.production`: the web production build
+  reads no env file at all (`VITE_PORT`/`DEV_API_PORT` come from process.env
+  or defaults), Drizzle reads the root `.env` only, and Vite's implicit
+  env-file discovery is disabled everywhere (`envDir: false`) so no
+  package-local `.env*` can reach `import.meta.env` or the client bundle.
+  Any other env-like file at the root (`.env.local`, `.env.development*`,
+  `.env.test`, …) or in any subdirectory fails
+  `pnpm verify:static` (scripts/check-env-surface.mjs) — even though git
+  ignores them.
 - **Managed WSL E2E topology** (issue #571): The runner
   (`scripts/e2e/run.sh`) sets `COMPOSE_DISABLE_ENV_FILE=1` before any
   Compose invocation, so the developer root `.env` is intentionally ignored by

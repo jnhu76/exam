@@ -125,6 +125,37 @@ production deployment itself is the acceptance surface (§1.6).
 
 ## 2. Environment Variable Contract
 
+### 2.0 Env-file source surface (#741)
+
+Physical env files live ONLY at the repository root. The complete supported
+set is owned by `envFilePolicy.ts` (repo root) and enforced fail-loud by
+`pnpm lint:env-surface` (scripts/check-env-surface.mjs, part of
+`verify:static`):
+
+| Root file | Owner | Read by |
+|---|---|---|
+| `.env` | local development | API dev profile (`loadRootEnv`, repo-root `.env` only), web dev (`vite.config.ts`, development mode only), vitest seeding, Drizzle, dev Compose |
+| `.env.test.local` | developer test override | vitest only |
+| `.env.production` | deployment | `docker compose --env-file` only |
+| `.env.example` / `.env.production.example` | tracked templates | never a runtime source |
+
+There is no other env-file source: no `.env.local` / `.env.development*` /
+`.env.test` / `.env.production.local`, and no nested `apps/*/.env` or
+`packages/*/.env` — Vite/Vitest implicit env-file discovery is disabled
+(`envDir: false` in every vite/vitest config), unsupported files that exist
+anyway fail the guard, and the loaders read their supported files by exact
+path so unsupported files are provably ignored. Vitest file-level precedence
+is `.env.test.local` over `.env`; shell exports win over both (the configs
+seed `process.env` only-if-undefined), and `TEST_RUNTIME_ENV` owns
+`APP_MODE`/`NODE_ENV` in the worker projection.
+
+**Fixture discipline:** permanent tests MUST NOT write any repository
+env-file authority — env fixtures live under `mkdtemp`/`/tmp` (a hard kill
+can never leave a runtime authority behind). Physical-admission tests use
+the mechanism seam (`admitEnvFile` in `loadRootEnv.ts` accepts a path; only
+`loadRootEnv` decides which path is a supported source). The guard's G4
+section rejects repository-anchored env writers in test files.
+
 ### 2.1 `DATABASE_URL`
 
 | Context | Value | Purpose |
