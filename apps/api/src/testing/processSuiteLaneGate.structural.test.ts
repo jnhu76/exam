@@ -63,8 +63,9 @@ describe("process-suite lane gate (worker-database only)", () => {
     const spawnSuites = testFiles.filter((file) =>
       HARNESS_IMPORT.test(readFileSync(file, "utf8")),
     );
-    // The two suites that own the process-restart / durability evidence.
-    expect(spawnSuites.length).toBe(2);
+    // The two suites that own the process-restart / durability evidence, plus
+    // the harness's own spawned-server ownership regression suite (#724).
+    expect(spawnSuites.length).toBe(3);
     for (const file of spawnSuites) {
       const source = readFileSync(file, "utf8");
       expect(

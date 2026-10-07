@@ -611,9 +611,11 @@ TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api
 - **DB required**: Yes (`exam_test` on `DB_HOST_PORT`, default 5432).
 - **Env**: `TEST_DATABASE_URL` must point to `exam_test`.
 
-**Lane contract — process-isolated suites.** The two real-child-process suites
-`src/runtime/processRestartDeadline.process.test.ts` and
-`src/routes/admissions.durability.process.test.ts` spawn the production server
+**Lane contract — process-isolated suites.** The real-child-process suites —
+`src/runtime/processRestartDeadline.process.test.ts`,
+`src/routes/admissions.durability.process.test.ts`, and
+`src/testing/restartProcessHarness.ownership.process.test.ts` (the spawn
+harness's own ownership regression) — spawn the production server
 entry as OS child processes that open fresh physical PostgreSQL connections
 from `TEST_DATABASE_URL`. Such connections cannot inherit the parent process's
 per-file schema binding (`search_path` is connection-local), so these suites
