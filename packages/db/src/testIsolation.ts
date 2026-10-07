@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { resolveTestBranchUrl } from "./databaseUrl.js";
 import { quoteIdent } from "./sqlIdent.js";
 import { withTestInfraLifecycleLock } from "./testInfraLock.js";
+import type { ResolverEnv } from "./testScope.js";
 
 /**
  * Sanitize a string to be a valid PostgreSQL schema identifier.
@@ -284,12 +285,26 @@ export async function withIsolatedTestSchema<T>(
 }
 
 /**
- * Check whether test DB isolation is enabled.
- * Defaults to true when TEST_DB_ISOLATION is not set or set to "1".
- * Set TEST_DB_ISOLATION=0 to disable.
+ * Check whether test DB isolation is enabled — the single resolver of the
+ * TEST_DB_ISOLATION_ENABLED fact (every consumer of that fact must delegate
+ * here, never re-derive it). ENABLED unless the value is exactly `"0"` or
+ * `"false"`; unset and `""` are ENABLED (default on), and any other token
+ * (e.g. `"1"`, `"yes"`, `"file-schema"`, `"worker-database"`) is ENABLED.
+ *
+ * Note this is a DIFFERENT semantic fact from the isolation *strategy*
+ * (`"file-schema"` vs `"worker-database"`, resolved by
+ * `testScope.resolveDbIsolationMode` / the worker opt-in check): the two
+ * share the `TEST_DB_ISOLATION` variable but own disjoint value sets.
+ *
+ * @param env environment to resolve against; defaults to `process.env`.
+ *   Callers that resolve a non-process environment (e.g. the API test
+ *   database adapter, which takes an injected env) pass it here — the
+ *   grammar is identical either way.
  */
-export function isTestDbIsolationEnabled(): boolean {
-  const val = process.env.TEST_DB_ISOLATION;
+export function isTestDbIsolationEnabled(
+  env: ResolverEnv = process.env,
+): boolean {
+  const val = env.TEST_DB_ISOLATION;
   if (val === undefined || val === "") return true;
   return val !== "0" && val !== "false";
 }

@@ -12,7 +12,10 @@
  * production (the worker path delegates to the production guard).
  */
 
-import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import {
+  isTestDbIsolationEnabled,
+  setupIsolatedTestDb,
+} from "@exam/db/src/testIsolation.js";
 import {
   setupWorkerTestDatabase,
   type WorkerDatabaseHandle,
@@ -76,11 +79,11 @@ export function isWorkerDatabaseMode(env: ResolverEnv = process.env): boolean {
  *   PostgreSQL database via the worker helper. `schemaName` is `undefined`.
  * - Otherwise → per-file schema isolation.
  *
- * In per-file mode the adapter still respects the isolation-enabled rules of
- * `isTestDbIsolationEnabled()` (evaluated against the passed-in `env`, so the
- * adapter is fully testable): when isolation is disabled
- * (`TEST_DB_ISOLATION=0`), no per-file schema is created and the returned
- * `schemaName` is `undefined`.
+ * In per-file mode the adapter delegates the enabled/disabled decision to
+ * the canonical resolver `isTestDbIsolationEnabled()` (evaluated against the
+ * passed-in `env`, so the adapter is fully testable): when isolation is
+ * disabled (`TEST_DB_ISOLATION=0`), no per-file schema is created and the
+ * returned `schemaName` is `undefined`.
  *
  * @param namespace stable logical name for the caller (e.g. `"api"`,
  *   `"security-rbac"`). Passed to the per-file path for schema naming; ignored
@@ -103,22 +106,13 @@ export async function setupApiTestDatabaseFromEnv(options?: {
     return wrapWorkerHandle(worker);
   }
 
-  // Per-file schema path. Whether a per-file schema is created follows the
-  // SAME rules as `isTestDbIsolationEnabled()`, evaluated against the `env`
-  // the caller passed in (defaults to `process.env`) so the adapter is fully
-  // testable. The value is trimmed for consistency with
-  // `isWorkerDatabaseMode()`; an unrecognized value is treated as disabled.
-  // Note: "file-schema" is treated as ENABLED. It is the documented legacy
-  // mode name (see docs/archive/dev/test-suite-taxonomy.md); without this it would
-  // fall through to the disabled branch and silently run tests on the shared
-  // `public` schema with NO isolation.
-  const isoEnabled = (() => {
-    const val = env.TEST_DB_ISOLATION?.trim();
-    if (val === undefined || val === "" || val === "file-schema") return true;
-    return val === "1" || val === "true";
-  })();
-
-  if (isoEnabled) {
+  // Per-file schema path. Whether a per-file schema is created at all is
+  // owned by the canonical TEST_DB_ISOLATION_ENABLED resolver
+  // (`isTestDbIsolationEnabled`, evaluated against the caller-supplied `env`
+  // so the adapter is fully testable); the adapter adds no local
+  // interpretation of the value. When it reports disabled, no schema is
+  // created and `schemaName` is `undefined` (shared-DB path).
+  if (isTestDbIsolationEnabled(env)) {
     const iso = await setupIsolatedTestDb({ namespace, databaseUrl: baseUrl });
     return wrapLegacyIso(iso, baseUrl);
   }
