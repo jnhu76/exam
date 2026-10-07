@@ -78,7 +78,7 @@ export default defineConfig(({ mode }) => {
               // them follow the async chunk graph instead of the eager
               // vendor bundle.
               if (
-                id.includes("@tiptop/") ||
+                id.includes("@tiptap/") ||
                 id.includes("/prosemirror-") ||
                 id.includes("node_modules/katex/") ||
                 // MathLive is the visual formula surface (#669 phase U). Like
