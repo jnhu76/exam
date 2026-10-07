@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  afterEach,
+  vi,
+} from "vitest";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { getWorkerScopedTestDb } from "./testDb.js";
@@ -206,5 +214,72 @@ describe("demo seed", { timeout: 30_000 }, () => {
 
     const admin = users.find((u) => u.username === "admin")!;
     expect(await verifyPassword("admin123", admin.passwordHash)).toBe(true);
+  });
+
+  /**
+   * The production guard must decide from the CANONICAL runtime mode
+   * (`parseAppMode`: APP_MODE authoritative, NODE_ENV the fallback, an invalid
+   * APP_MODE throws) — never from a local NODE_ENV grammar. Each case drives
+   * the real `seedDemo` consumer under a stubbed hostile environment; the
+   * refusal is expected BEFORE any database work, so the fixture database is
+   * only touched by the case that asserts the seed is allowed.
+   */
+  describe("production guard (parseAppMode convergence)", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("refuses when APP_MODE selects production even though NODE_ENV says development", async () => {
+      // Canonical resolution: APP_MODE=production wins over NODE_ENV. A
+      // NODE_ENV-only guard reads "development" here and seeds demo data into
+      // a production deployment.
+      vi.stubEnv("APP_MODE", "production");
+      vi.stubEnv("NODE_ENV", "development");
+      const { grader } = makeRecordingGrader();
+
+      await expect(seedDemo(db, precomputedHash, grader)).rejects.toThrow(
+        /not allowed in production mode/,
+      );
+    });
+
+    it("seeds when APP_MODE=development even though NODE_ENV says production", async () => {
+      // Precedence direction proof: APP_MODE is authoritative, so this
+      // environment is development and the seed must keep working. Without
+      // this case, "refuse when either input says production" would pass the
+      // refusal case above while inverting the documented precedence.
+      vi.stubEnv("APP_MODE", "development");
+      vi.stubEnv("NODE_ENV", "production");
+      const { grader, calls } = makeRecordingGrader();
+
+      const ids = await seedDemo(db, precomputedHash, grader);
+
+      expect(calls).toHaveLength(6);
+      expect(ids.exams["open"]).toBeDefined();
+    });
+
+    it("refuses when an unset APP_MODE falls back to NODE_ENV=production", async () => {
+      // The canonical fallback: with APP_MODE unset the resolved mode IS
+      // production, so the guard must engage.
+      vi.stubEnv("APP_MODE", undefined);
+      vi.stubEnv("NODE_ENV", "production");
+      const { grader } = makeRecordingGrader();
+
+      await expect(seedDemo(db, precomputedHash, grader)).rejects.toThrow(
+        /not allowed in production mode/,
+      );
+    });
+
+    it("propagates the canonical invalid-APP_MODE error instead of seeding", async () => {
+      // Canonical semantics: an unparseable APP_MODE throws. The guard must
+      // fail closed on that config error — never treat the bad value as
+      // "not production, therefore proceed".
+      vi.stubEnv("APP_MODE", "prooduction");
+      vi.stubEnv("NODE_ENV", "development");
+      const { grader } = makeRecordingGrader();
+
+      await expect(seedDemo(db, precomputedHash, grader)).rejects.toThrow(
+        /Invalid APP_MODE "prooduction"/,
+      );
+    });
   });
 });

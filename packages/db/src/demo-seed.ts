@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, and } from "drizzle-orm";
+import { parseAppMode } from "./databaseUrl.js";
 import {
   executeInTransaction,
   type Database,
@@ -140,7 +141,9 @@ function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
  *
  * This is a demo reset routine: it writes demo questions, exams, enrollments,
  * and attempts to a known sample state. User authority is preserved if the
- * user already has any assignment rows. It is NOT allowed in production.
+ * user already has any assignment rows. It is NOT allowed in production — the
+ * resolved runtime mode ({@link parseAppMode}: APP_MODE authoritative,
+ * NODE_ENV the fallback).
  *
  * @param db - Database instance.
  * @param hashFn - Password hashing function.
@@ -155,7 +158,10 @@ export async function seedDemo(
   hashFn: HashFunction,
   grader: DemoSeedGrader,
 ): Promise<DemoIds> {
-  if (process.env.NODE_ENV === "production") {
+  // Production fail-closed guard. Mode resolution is owned by parseAppMode —
+  // a NODE_ENV-only test lets a deployment whose APP_MODE says production
+  // (with any other NODE_ENV) seed demo data over its real data.
+  if (parseAppMode(process.env) === "production") {
     throw new Error("demo-seed is not allowed in production mode");
   }
 
