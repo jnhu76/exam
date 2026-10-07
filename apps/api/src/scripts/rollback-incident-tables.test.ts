@@ -75,13 +75,17 @@ function runCli(
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [TSX_CLI, SCRIPT_PATH, ...args], {
       env: {
-        // The CLI is env-driven; neutralize inherited test-mode vars so
-        // APP_MODE/DATABASE_URL below are the only inputs.
-        APP_MODE: "",
-        NODE_ENV: "development",
-        TEST_DATABASE_URL: undefined,
-        TEST_DB_URL: undefined,
-        ALLOW_UNSAFE_TEST_DATABASE_URL: undefined,
+        // MANAGED production profile: the production admission law makes
+        // loadRootEnv() a no-op, so the developer root `.env` is blocked and
+        // the per-case `env` projection really is the only input. Production
+        // is the managed profile whose resolver consumes the CLI's operator
+        // DATABASE_URL contract — test-like modes would route the resolver
+        // to TEST_DATABASE_URL/construction and never read DATABASE_URL.
+        // The env is a closed whitelist (no `...process.env`); per-case keys
+        // that pin a different resolution branch (the missing-env case
+        // below) override these explicitly.
+        APP_MODE: "production",
+        NODE_ENV: "",
         ...env,
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -136,12 +140,13 @@ describe("rollback CLI — controlled error path (no DB needed)", () => {
 
   it("fails fast when the required DB env is missing (exit 2, stderr)", async () => {
     const res = await runCli(["--confirm"], {
-      // production mode never gets the development convenience fallback. An
-      // EMPTY (set) DATABASE_URL prevents the CLI's loadRootEnv() from filling
-      // the value from the repo `.env`, simulating a truly missing env.
+      // Pinned production profile (same branch as the runCli base, stated
+      // explicitly because profile is part of this case's input): no
+      // constructed or file-sourced fallback exists there — the admission
+      // law already blocked the repo `.env`, so a truly missing DATABASE_URL
+      // must fail fast with a clear stderr.
       APP_MODE: "production",
       NODE_ENV: "",
-      DATABASE_URL: "",
     });
     expect(res.code).toBe(2);
     expect(res.stderr).toMatch(/DATABASE_URL is required/);

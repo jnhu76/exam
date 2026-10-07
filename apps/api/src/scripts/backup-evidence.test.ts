@@ -226,11 +226,18 @@ function runEvidenceCli(
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [TSX_CLI, SCRIPT_PATH, ...args], {
       env: {
-        APP_MODE: "",
+        // INTENTIONAL DEVELOPMENT profile: backup-evidence is the operator
+        // evidence-recording CLI, and its own guard refuses raw
+        // APP_MODE=test/ci/e2e ("Set APP_MODE=development ..."), so
+        // development is the profile under test, not an ambient default.
+        // Under the documented loader law (#565) this profile ADMITS the
+        // developer root `.env`, so no "explicit values are the only inputs"
+        // claim is made here; instead every semantic fact under test is
+        // pinned by an explicit projection that the file cannot override
+        // (dotenv never overwrites already-set vars): the mode identity
+        // above, the DATABASE_URL target below, and the guard opt-in.
+        APP_MODE: "development",
         NODE_ENV: "development",
-        TEST_DATABASE_URL: undefined,
-        TEST_DB_URL: undefined,
-        ALLOW_UNSAFE_TEST_DATABASE_URL: undefined,
         // The isolated schema lives inside the exam_test database, so the
         // connected-DB identity guard needs its documented opt-in.
         ALLOW_UNSAFE_EVIDENCE_TEST_DB: "1",
