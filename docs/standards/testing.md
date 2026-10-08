@@ -282,15 +282,24 @@ section rejects repository-anchored env writers in test files.
 
 ### 2.7 `DEPLOYMENT_MODE`
 
-| Context | Value |
-|---------|-------|
-| CI (all) | `singleTenant` |
-| Production | `singleTenant` |
-| Phase 4 | `multiTenant` (not yet allowed) |
+| Context | Value | Mechanism |
+|---------|-------|-----------|
+| CI jobs that inject it (`api-coverage`, `package-coverage`, `e2e`) | `singleTenant` | explicit job-level `env:` in `.github/workflows/ci.yml` — the only CI injection sites; no workflow-level default |
+| CI jobs with no settings resolution (`static`, `verify-build`, `web-coverage`) | variable absent | nothing injects or consumes it there |
+| Production / rehearsal containers (incl. the `production-transport-regression` stack) | `singleTenant` unless the operator env sets otherwise | Compose service `environment` projection `DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}` (`docker-compose.yml`), interpolated from the shell / `--env-file .env.production`; the image itself sets no `DEPLOYMENT_MODE` |
+| Any process resolving app settings without an injected value | `singleTenant` | application resolved default — `settings.ts::deploymentModeLeaf` (`defaultRaw: "singleTenant"`; unset or empty → `singleTenant`) — a resolved fact, not an injection |
 
 **Rules:**
-- Phase 1.x is single-tenant only.
-- `DEPLOYMENT_MODE=multiTenant` must fail fast at startup.
+- Phase 1.x is single-tenant only. The effective value is `singleTenant`
+  everywhere today, but through three different mechanisms — explicit CI
+  job injection, Compose interpolation projection, and the application's
+  resolved default; the table states which applies where. (The earlier
+  "CI (all)" phrasing was imprecise: only three CI jobs inject it, and the
+  Compose/application defaults cover every other context.)
+- `DEPLOYMENT_MODE=multiTenant` must fail fast at startup — the settings
+  leaf throws (`SettingsError`) on `multiTenant` and on any other
+  non-empty invalid value. `multiTenant` remains a Phase 4
+  platformization capability, not a runnable mode today.
 
 ### 2.8 Test Database Lifecycle Ownership
 
