@@ -18,6 +18,15 @@
 
 ## 已修复事故
 
+### 2026-10-08 — `pnpm test` turbo 并行（api+db+web 同时）下 `RichTextAnswerInput.readTrust.test.tsx` 单点 "editor not mounted"（#741 验证期间；本签名第 1 次）
+
+- **现象**：turbo `pnpm test` 全量（api/db/web 并行）中 web 套件 1 个用例失败：
+  `apps/web/src/components/exam/RichTextAnswerInput.readTrust.test.tsx` — `R1 positive control: a string on a plain-mode slot upgrades into the editor`，错误 `Error: editor not mounted`（Tiptap 挂载等待窗口内未收敛），同一套件其余 2327 测试全过。
+- **证据（同代码再跑就过，登记规则 #1）**：单文件隔离重跑 9/9 过；随后完整 web 套件串行重跑 165 文件 / 2328 测试全过（EXIT=0），同一工作树。
+- **根因假设**：与 2026-08-31 宿主负载型家族同机制（turbo 并行多套件瞬时饱和，jsdom+Tiptap 挂载的时序敏感用例最先受害）。#741 新增的 `vite-env-file-admission.test.ts`（子进程 vite build，~2s CPU 突发）是套件内新增负载之一，但失败签名与该测试无执行交集。
+- **当前缓解**：无代码改动（不调 timeout、不 skip）。重套件串行执行（既有约定）。
+- **后续动作**：若串行执行下同签名复发 ≥3 次，按登记规则升级；届时再评估 build 探针测试的调度隔离。
+
 ### 2026-10-08 — `pnpm verify` 全量 4-worker coverage 下 `bootstrap-admin.test.ts` 单点 5s 超时（#733 R5 验证期间；2026-10-06 同签名第 3 次复发 → 已升级 BUG-FLAKE-005）
 
 - **现象**：本地 `pnpm verify`（R5 候选分支 `fix/733-r5-seed-dotenv-admission`；`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`，v8 coverage）的 `@exam/api#coverage` 失败：1 个测试 5000ms 超时（无断言失败）— `src/scripts/bootstrap-admin.test.ts` `resolveOrCreateDefaultOrganization > uses organizationDisplayName when supplied`（受害用例继续在同文件内漂移，与前两次不重合）。文件级 `1 failed | 217 passed | 4 skipped (222)`，测试级 `1 failed | 2756 passed | 11 skipped (2768)`。turbo 其余任务全部成功，仅 `@exam/api#coverage` 实跑失败。

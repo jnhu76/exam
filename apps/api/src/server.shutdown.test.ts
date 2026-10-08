@@ -13,7 +13,7 @@
  * regression. It cannot be satisfied by a production process.exit() because
  * that call is gone — a green run means the event loop drained by itself.
  *
- * Configuration authority (#688, #733 R1): the child is a test-owned
+ * Configuration authority (#688, #733 R1, #741): the child is a test-owned
  * subprocess, so it runs under the MANAGED test profile. The previous
  * development-profile shape admitted the developer root `.env`
  * (loadRootEnv law) and projected `APP_PORT` into the leaf development
@@ -21,14 +21,19 @@
  * developer's port instead of the test-owned one while every assertion
  * stayed green. The readiness oracle therefore additionally requires the
  * child's OWN listen record to name exactly the owned port, and a hostile
- * regression below kills the old shape under an admitted hostile `.env`
- * plus an occupied default port.
+ * regression below kills the old shape under an occupied default port plus
+ * a hostile `.env` physically present in the child's cwd (a temp fixture —
+ * #741 W3 decomposed the old `apps/api/.env` real-candidate writer: the
+ * developer-file ADMISSION dimension is owned by the loadRootEnv admission
+ * tests and the env-surface guard; this test owns the bind oracle and the
+ * foreign-:3000 fallback kill).
  */
 import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createServer } from "node:net";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPostgresDatabase } from "@exam/db/src/postgres.js";
 import { getIsolatedTestDb, resolveTestDbUrl } from "@exam/db/src/testDb.js";
@@ -70,6 +75,7 @@ interface ChildRun {
 
 async function runServerLifecycle(
   namespace = "api-server-shutdown",
+  options: { cwd?: string } = {},
 ): Promise<ChildRun> {
   const iso = await getIsolatedTestDb(namespace);
   // Shared-DB fallback (isolation disabled) has no schemaName; the base
@@ -117,6 +123,7 @@ async function runServerLifecycle(
         EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: String(CHILD_SHUTDOWN_TIMEOUT_MS),
       },
       stdio: ["ignore", "pipe", "pipe"],
+      ...(options.cwd ? { cwd: options.cwd } : {}),
     },
   );
 
@@ -243,49 +250,34 @@ function assertShutdownOracle(run: ChildRun): void {
   expect(run.stderr, diag).not.toContain("Graceful shutdown failed");
 }
 
-// ── #688 hostile regression owner ───────────────────────────────────────
+// ── #688 hostile regression owner (#741 W3 shape) ────────────────────────
 // The old development-profile shape must fail under exactly the conditions
-// that made #688 silent: a developer `.env` carrying its own port keys and
-// the default 3000 occupied. C=46001/D=46002 sit outside the child's
-// [20000, 40000) selection range and away from 3000, so the scenario
-// contract "P != C, P != D, P != 3000" holds by construction (asserted in
-// the test for explicitness).
+// that made #688 silent: hostile port keys physically present in the boot
+// environment and the default 3000 occupied. The hostile `.env` now lives in
+// a throwaway temp cwd (#741 removed `apps/api/.env` from the loader's
+// source set, and permanent tests must never write a repository env-file
+// authority): it proves no cwd-relative env read can re-enter the boot
+// chain, while the loadRootEnv admission tests + env-surface guard own the
+// developer-file admission dimension.
+// C=46001/D=46002 sit outside the child's [20000, 40000) selection range
+// and away from 3000, so the scenario contract "P != C, P != D, P != 3000"
+// holds by construction (asserted in the test for explicitness).
 
 const HOSTILE_DOTENV_PORT = 46_001; // hostile APP_PORT (C)
 const HOSTILE_DOTENV_DEV_PORT = 46_002; // hostile DEV_API_PORT (D)
 
 /**
- * The loader's FIRST candidate path (`resolveRootEnvPaths`): an
- * `apps/api/.env` shadows the same keys in a developer's root `.env`, so
- * the fixture never needs to touch the developer's real root file. The
- * fixture exists only for the duration of `run`; if a file was already
- * present it is restored byte-for-byte and the restore is proven.
+ * Temp cwd holding a hostile `.env` with its own port keys. Removed
+ * recursively in `finally` — a hard kill can only leave an unread temp-dir
+ * file, never a repository runtime authority.
  */
-async function withHostileRootEnv<T>(run: () => Promise<T>): Promise<T> {
-  const fixturePath = resolve(__dirname, "../.env");
-  const body = `APP_PORT=${HOSTILE_DOTENV_PORT}\nDEV_API_PORT=${HOSTILE_DOTENV_DEV_PORT}\n`;
-  const preExisting = existsSync(fixturePath);
-  const backup = preExisting ? readFileSync(fixturePath) : null;
-  writeFileSync(fixturePath, body);
-  try {
-    return await run();
-  } finally {
-    if (backup === null) {
-      rmSync(fixturePath);
-      if (existsSync(fixturePath)) {
-        throw new Error(
-          "hostile .env fixture cleanup failed — file still present",
-        );
-      }
-    } else {
-      writeFileSync(fixturePath, backup);
-      if (!readFileSync(fixturePath).equals(backup)) {
-        throw new Error(
-          "hostile .env fixture restore failed — restored file differs from backup",
-        );
-      }
-    }
-  }
+function makeHostileCwdFixture(): string {
+  const dir = mkdtempSync(join(tmpdir(), "exam-shutdown-hostile-env-"));
+  writeFileSync(
+    join(dir, ".env"),
+    `APP_PORT=${HOSTILE_DOTENV_PORT}\nDEV_API_PORT=${HOSTILE_DOTENV_DEV_PORT}\n`,
+  );
+  return dir;
 }
 
 /**
@@ -317,11 +309,14 @@ PG_DESCRIBE("server SIGTERM lifecycle (child process)", () => {
     assertShutdownOracle(run);
   }, 120_000);
 
-  it("binds exactly the owned port under a hostile developer .env with :3000 occupied, then passes the full shutdown oracle", async () => {
-    await withHostileRootEnv(async () => {
+  it("binds exactly the owned port with a hostile .env in cwd and :3000 occupied, then passes the full shutdown oracle", async () => {
+    const hostileCwd = makeHostileCwdFixture();
+    try {
       const releasePort3000 = await occupyForeignListener(3000);
       try {
-        const run = await runServerLifecycle("api-server-shutdown-hostile");
+        const run = await runServerLifecycle("api-server-shutdown-hostile", {
+          cwd: hostileCwd,
+        });
         // Scenario-contract guard: the selected port is distinct from every
         // hostile input, so the oracle below genuinely separates
         // "test-owned APP_PORT won" from "any hostile authority won".
@@ -337,6 +332,8 @@ PG_DESCRIBE("server SIGTERM lifecycle (child process)", () => {
       } finally {
         releasePort3000();
       }
-    });
+    } finally {
+      rmSync(hostileCwd, { recursive: true, force: true });
+    }
   }, 120_000);
 });

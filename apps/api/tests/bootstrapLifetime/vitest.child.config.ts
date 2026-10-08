@@ -1,8 +1,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
-import { TEST_RUNTIME_ENV } from "../../../../vitest.shared.js";
+import {
+  TEST_RUNTIME_ENV,
+  loadSupportedTestEnvFiles,
+  seedProcessEnvFromFiles,
+} from "../../../../vitest.shared.js";
 
 /**
  * Dedicated config for the bootstrap-lifetime CHILD vitest run (spawned by
@@ -39,14 +42,16 @@ if (handoff.trim() === "" || workerId.trim() === "") {
   );
 }
 
-// Seed process.env from .env files so the child runner inherits them the
-// same way the parent config does (only keys still undefined).
-const envVars = loadEnv("test", workspaceRoot, "");
-for (const [key, value] of Object.entries(envVars)) {
-  if (process.env[key] === undefined) process.env[key] = value;
-}
+// Seed process.env from the SUPPORTED test env files so the child runner
+// inherits them the same way the parent config does (only keys still
+// undefined — shell exports win; #741 exact-path reads).
+const fileEnv = loadSupportedTestEnvFiles(workspaceRoot);
+seedProcessEnvFromFiles(fileEnv);
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
+  // #741: per-package implicit envDir admission is OFF (pinned by
+  // scripts/check-env-surface.mjs).
+  envDir: false,
   test: {
     root: apiRoot,
     include: [
@@ -55,7 +60,7 @@ export default defineConfig(({ mode }) => ({
     ],
     exclude: ["dist/**", "node_modules/**"],
     env: {
-      ...loadEnv(mode, workspaceRoot, ""),
+      ...fileEnv,
       ...TEST_RUNTIME_ENV,
     },
     // The lifetime proof: both fixture files execute sequentially in ONE pool

@@ -77,8 +77,10 @@ Deployment and development settings are SEPARATE files:
   deployment (host shell environment variables can still override individual
   values). Every `docker compose` command in this runbook includes it.
 - `.env` (from `.env.example`) — local development only. No dev tooling
-  (`pnpm dev` / Vite / Drizzle / vitest) ever reads `.env.production`, and no
-  deployment secret ever lands in `.env`.
+  (`pnpm dev` / Vite / Drizzle / vitest) ever reads `.env.production` — the
+  web production build reads no env file at all, and this separation is
+  pinned by `pnpm lint:env-surface` (#741). No deployment secret ever lands
+  in `.env`.
 
 Set the production-required values in `.env.production`. The
 bundled `docker-compose.yml` uses Compose `${VAR:?...}` required-expansion

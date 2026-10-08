@@ -1,18 +1,23 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
-import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
+import {
+  TEST_RUNTIME_ENV,
+  loadSupportedTestEnvFiles,
+  seedProcessEnvFromFiles,
+} from "../../vitest.shared.js";
 import { resolveParallelism } from "./vitest.parallelism.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
 
-// Seed process.env from .env files so worker threads inherit them.
-const envVars = loadEnv("test", workspaceRoot, "");
-for (const [key, value] of Object.entries(envVars)) {
-  if (process.env[key] === undefined) process.env[key] = value;
-}
+// Seed process.env from the SUPPORTED test env files (repo-root .env +
+// optional .env.test.local — exact-path reads, #741) so worker threads
+// inherit them; shell exports keep winning via the only-if-undefined
+// seeding. Unsupported root mode files (.env.local / .env.test / …) have no
+// code path into this run.
+const fileEnv = loadSupportedTestEnvFiles(workspaceRoot);
+seedProcessEnvFromFiles(fileEnv);
 
 // DB dependency + parallelism contract (implementation: ./vitest.parallelism.ts).
 //
@@ -41,7 +46,11 @@ for (const [key, value] of Object.entries(envVars)) {
 // hand, and CI shards never set it at all (same reason as local parallel).
 const parallelism = resolveParallelism(process.env);
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
+  // #741: per-package implicit envDir admission is OFF — package-local
+  // .env* files can never reach import.meta.env. Pinned by
+  // scripts/check-env-surface.mjs.
+  envDir: false,
   test: {
     // Fail-fast DB availability pre-check. Runs once before any test file;
     // aborts the run with a clear "run pnpm db:up" message if the test DB is
@@ -52,8 +61,10 @@ export default defineConfig(({ mode }) => ({
     exclude: ["dist/**", "node_modules/**"],
     // Force test runtime mode via the monorepo-shared constant so every
     // package's vitest config agrees (see ../../vitest.shared.ts for why).
+    // TEST_RUNTIME_ENV spreads LAST: it owns APP_MODE/NODE_ENV over any
+    // file-provided value.
     env: {
-      ...loadEnv(mode, workspaceRoot, ""),
+      ...fileEnv,
       ...TEST_RUNTIME_ENV,
     },
     fileParallelism: parallelism.fileParallelism,
