@@ -21,7 +21,7 @@ vi.mock("@exam/domain", async (importOriginal) => {
 });
 
 describe("direct Vitest transitive domain source resolution (api)", () => {
-  it("routes @exam/contracts' runtime @exam/domain dependency through Vitest", async () => {
+  it("transitively applies the domain source alias through contracts", async () => {
     const { NotificationTypeSchema } = await import("@exam/contracts");
 
     expect(NotificationTypeSchema.options).toContain(
