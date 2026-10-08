@@ -62,12 +62,6 @@ export interface EditorCommandDescriptor {
   execute(editor: Editor): void;
 }
 
-/** Presentation hint: these commands move into the narrow-viewport overflow menu. */
-export const OVERFLOW_COMMAND_IDS: ReadonlySet<EditorCommandId> = new Set([
-  "codeBlock",
-  "table",
-]);
-
 export interface EditorCommandHooks {
   /**
    * Opens the formula surface. Injected so the catalogue stays decoupled from
