@@ -66,7 +66,7 @@ production deployment itself is the acceptance surface (§1.6).
 | **Command** | `pnpm --filter @exam/web coverage` |
 | **Input build** | Downloads the current workflow's `verify-build` artifact before running coverage. |
 | **Services** | None (pure jsdom) |
-| **Env vars** | `APP_MODE=test`, `NODE_ENV=test` (from vitest config) |
+| **Env vars** | None set by the job or the config — Vitest defaults `NODE_ENV` to `test` when unset; `APP_MODE` is not set (the web suite reads no `APP_MODE`-dependent config) |
 | **Allowed resources** | CPU (jsdom + V8 coverage instrumentation) |
 | **Forbidden** | Database access, Redis, network calls |
 | **Timeout** | 10s per test (CI guardrail in `vitest.config.ts`) |
@@ -128,7 +128,7 @@ production deployment itself is the acceptance surface (§1.6).
 ### 2.0 Env-file source surface (#741)
 
 Physical env files live ONLY at the repository root. The complete supported
-set is owned by `envFilePolicy.ts` (repo root) and enforced fail-loud by
+set is owned by `config/envFilePolicy.ts` and enforced fail-loud by
 `pnpm lint:env-surface` (scripts/check-env-surface.mjs, part of
 `verify:static`):
 
@@ -144,10 +144,12 @@ There is no other env-file source: no `.env.local` / `.env.development*` /
 `packages/*/.env` — Vite/Vitest implicit env-file discovery is disabled
 (`envDir: false` in every vite/vitest config), unsupported files that exist
 anyway fail the guard, and the loaders read their supported files by exact
-path so unsupported files are provably ignored. Vitest file-level precedence
-is `.env.test.local` over `.env`; shell exports win over both (the configs
-seed `process.env` only-if-undefined), and `TEST_RUNTIME_ENV` owns
-`APP_MODE`/`NODE_ENV` in the worker projection.
+path so unsupported files are provably ignored. In the vitest configs that
+admit file sources (`@exam/api` incl. its two fixture child configs, and
+`@exam/db`), file-level precedence is `.env.test.local` over `.env`; shell
+exports win over both (those configs seed `process.env` only-if-undefined),
+and `TEST_RUNTIME_ENV` owns `APP_MODE`/`NODE_ENV` in their worker projection
+(§2.4 has the exact per-project matrix).
 
 **Fixture discipline:** permanent tests MUST NOT write any repository
 env-file authority — env fixtures live under `mkdtemp`/`/tmp` (a hard kill
@@ -212,12 +214,28 @@ section rejects repository-anchored env writers in test files.
 
 | Context | Value |
 |---------|-------|
-| CI (all jobs) | `test` |
+| CI jobs that export it (`api-coverage`, `package-coverage`, `e2e`) | `test` — explicit job-level `env:` injection |
+| CI vitest job without an `env:` block (`web-coverage`) | `test` via Vitest's own default (unset → `test`), NOT CI-injected |
+| CI jobs that run no vitest/playwright runtime (`static`, `verify-build`, `production-transport-regression`) | unset |
 | Local dev | `development` |
 | Production | `production` |
 
 **Rules:**
-- Vitest configs force `NODE_ENV=test` via `TEST_RUNTIME_ENV` from `vitest.shared.ts`.
+- `TEST_RUNTIME_ENV` (`config/vitest.shared.ts`) forces both `NODE_ENV=test`
+  and `APP_MODE=test`, but only in the vitest projects that import it:
+  `@exam/api` (incl. its two fixture child configs), `@exam/db`, and
+  `@exam/auth` — the projects whose suites resolve mode-dependent config or
+  pin a deterministic mode. The remaining vitest projects (`@exam/web`,
+  contracts, authz, domain, exam-engine, import-export) set no `test.env`:
+  they rely on Vitest's own default `NODE_ENV=test` (applied only when the
+  variable is unset — an exported host value would win) and read no
+  `APP_MODE`. `pnpm lint:db-config` Guard 3 pins the constant's presence for
+  the API and DB configs only; the other projects' reliance on the Vitest
+  default has no automated guard.
+- CI's explicit `NODE_ENV=test` and its `APP_MODE=ci`/`e2e` are separate
+  job-level injections; the workflow-level `env:` sets neither (only
+  Turbo/team and `TEST_INFRA_SCOPE`). Mode selection follows `APP_MODE`
+  first, with `NODE_ENV` as its fallback (§2.5).
 - Production behavior tests MUST use `vi.stubEnv("NODE_ENV", "production")`.
 
 ### 2.5 `APP_MODE`
@@ -228,7 +246,7 @@ section rejects repository-anchored env writers in test files.
 | CI E2E | `e2e` | Routes to `TEST_DATABASE_URL`; E2E mode |
 | Local dev | `development` | Routes to `DATABASE_URL` |
 | Production | `production` | Routes to `DATABASE_URL`; production guards active |
-| Vitest (all) | `test` (forced by `TEST_RUNTIME_ENV`) | Routes to `TEST_DATABASE_URL` when set, else a LOCAL URL constructed from `DB_HOST_PORT` |
+| Vitest (API/DB/auth + fixture children) | `test` (forced by `TEST_RUNTIME_ENV` in those configs; other vitest projects set no `APP_MODE`) | Routes to `TEST_DATABASE_URL` when set, else a LOCAL URL constructed from `DB_HOST_PORT` |
 
 **Rules:**
 - `APP_MODE` is the authoritative runtime mode selector.
@@ -264,15 +282,24 @@ section rejects repository-anchored env writers in test files.
 
 ### 2.7 `DEPLOYMENT_MODE`
 
-| Context | Value |
-|---------|-------|
-| CI (all) | `singleTenant` |
-| Production | `singleTenant` |
-| Phase 4 | `multiTenant` (not yet allowed) |
+| Context | Value | Mechanism |
+|---------|-------|-----------|
+| CI jobs that inject it (`api-coverage`, `package-coverage`, `e2e`) | `singleTenant` | explicit job-level `env:` in `.github/workflows/ci.yml` — the only CI injection sites; no workflow-level default |
+| CI jobs with no settings resolution (`static`, `verify-build`, `web-coverage`) | variable absent | nothing injects or consumes it there |
+| Production / rehearsal containers (incl. the `production-transport-regression` stack) | `singleTenant` unless the operator env sets otherwise | Compose service `environment` projection `DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}` (`docker-compose.yml`), interpolated from the shell / `--env-file .env.production`; the image itself sets no `DEPLOYMENT_MODE` |
+| Any process resolving app settings without an injected value | `singleTenant` | application resolved default — `settings.ts::deploymentModeLeaf` (`defaultRaw: "singleTenant"`; unset or empty → `singleTenant`) — a resolved fact, not an injection |
 
 **Rules:**
-- Phase 1.x is single-tenant only.
-- `DEPLOYMENT_MODE=multiTenant` must fail fast at startup.
+- Phase 1.x is single-tenant only. The effective value is `singleTenant`
+  everywhere today, but through three different mechanisms — explicit CI
+  job injection, Compose interpolation projection, and the application's
+  resolved default; the table states which applies where. (The earlier
+  "CI (all)" phrasing was imprecise: only three CI jobs inject it, and the
+  Compose/application defaults cover every other context.)
+- `DEPLOYMENT_MODE=multiTenant` must fail fast at startup — the settings
+  leaf throws (`SettingsError`) on `multiTenant` and on any other
+  non-empty invalid value. `multiTenant` remains a Phase 4
+  platformization capability, not a runnable mode today.
 
 ### 2.8 Test Database Lifecycle Ownership
 
@@ -623,11 +650,26 @@ pnpm --filter @exam/domain test
 ```
 
 - **DB required**: No (except `@exam/db`).
-- **Env**: `APP_MODE=test`, `NODE_ENV=test` (forced by vitest config).
-- **Stale-dist trap**: apps and tests resolve `@exam/*` via built `dist/`, not
-  `src/`. Filtered commands like `pnpm --filter <pkg> test` bypass Turbo's
-  `^build` chain, so after editing package source run `pnpm build` (root,
-  Turbo-ordered) first — otherwise the filtered run silently tests stale code.
+- **Env**: `@exam/auth` and `@exam/db` force `APP_MODE=test` / `NODE_ENV=test`
+  via `TEST_RUNTIME_ENV`; the pure packages set no `test.env` (Vitest's
+  default `NODE_ENV=test` applies when the variable is unset, and they read
+  no `APP_MODE`).
+- **Stale-dist trap**: workspace packages advertise built `dist/` as their
+  production entry, so every resolution through Node/package exports reads
+  the last build, not `src/`. Two exact-match exceptions exist (#746/#689):
+  the `@exam/api` and `@exam/contracts` vitest projects alias the exact
+  `@exam/domain` root import to `packages/domain/src/index.ts` (and direct
+  `tsc` typecheck in both projects maps the same entry), so a direct
+  `vitest run` there is source-fresh for that one exact import. Everything
+  else still resolves via `dist/`: deep or non-root `@exam/domain` imports
+  (the alias regex is exact-match by design), all other `@exam/*` packages,
+  and all production resolution. Filtered commands like
+  `pnpm --filter <pkg> test` also bypass Turbo's `^build` chain — the
+  build-first graph `pnpm test` / `pnpm verify` run — so after editing
+  package source, either run the root `pnpm build` first or stay within the
+  two documented aliases; otherwise the filtered run silently tests stale
+  code. #746 did NOT eliminate the stale-dist risk for other workspace
+  packages.
 
 ### 5.2 API Integration Tests
 
@@ -668,7 +710,8 @@ pnpm --filter @exam/web test
 ```
 
 - **DB required**: No (pure jsdom).
-- **Env**: `APP_MODE=test`, `NODE_ENV=test` (forced by vitest config).
+- **Env**: none forced by the config — Vitest defaults `NODE_ENV` to `test`
+  when unset; the suite reads no `APP_MODE`.
 
 ### 5.4 E2E Tests
 

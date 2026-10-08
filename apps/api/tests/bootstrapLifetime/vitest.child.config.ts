@@ -5,7 +5,7 @@ import {
   TEST_RUNTIME_ENV,
   loadSupportedTestEnvFiles,
   seedProcessEnvFromFiles,
-} from "../../../../vitest.shared.js";
+} from "../../../../config/vitest.shared.js";
 
 /**
  * Dedicated config for the bootstrap-lifetime CHILD vitest run (spawned by

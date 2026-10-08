@@ -86,12 +86,12 @@ for (const f of vitestConfigs) {
     if (line.trim().startsWith("//") || line.trim().startsWith("*")) continue;
     if (/APP_MODE\s*:\s*["']test["']/.test(line)) {
       violations.push(
-        `${f}:${i + 1} inline APP_MODE: "test" — import TEST_RUNTIME_ENV from ../../vitest.shared.ts instead`,
+        `${f}:${i + 1} inline APP_MODE: "test" — import TEST_RUNTIME_ENV from ../../config/vitest.shared.ts instead`,
       );
     }
     if (/NODE_ENV\s*:\s*["']test["']/.test(line)) {
       violations.push(
-        `${f}:${i + 1} inline NODE_ENV: "test" — import TEST_RUNTIME_ENV from ../../vitest.shared.ts instead`,
+        `${f}:${i + 1} inline NODE_ENV: "test" — import TEST_RUNTIME_ENV from ../../config/vitest.shared.ts instead`,
       );
     }
   }

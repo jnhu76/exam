@@ -24,8 +24,8 @@
 
 | 问题 | 例子 | 答案所在 |
 | --- | --- | --- |
-| **Source**：值可以从哪里来？ | 继承的进程环境、仓库根 `.env`、测试 runner、Compose 插值 | `envFilePolicy.ts` + 相应 admission entrypoint |
-| **Admission / overlay**：允许谁进入、谁覆盖谁？ | dev 允许根 `.env`，managed profile 不允许；shell 优先于 dotenv | `loadRootEnv.ts`、`vitest.shared.ts`、Vite/Compose 调用者 |
+| **Source**：值可以从哪里来？ | 继承的进程环境、仓库根 `.env`、测试 runner、Compose 插值 | `config/envFilePolicy.ts` + 相应 admission entrypoint |
+| **Admission / overlay**：允许谁进入、谁覆盖谁？ | dev 允许根 `.env`，managed profile 不允许；shell 优先于 dotenv | `loadRootEnv.ts`、`config/vitest.shared.ts`、Vite/Compose 调用者 |
 | **Semantic authority**：键如何解析成事实？ | `APP_MODE` 模式、`TEST_DATABASE_URL` 优先级、`JWT_SECRET` 默认/必填 | `settings.ts`、`runtimeConfig.ts`、`@exam/db` 等下文所列 owner |
 | **Projection / consumer**：谁最终实际使用？ | `app.listen`、`createDatabase`、JWT 签发、Redis、Email worker | `AppRuntimeConfig`、独立 CLI 或 test harness |
 
@@ -52,9 +52,9 @@ flowchart TD
     ROOT["repo/.env（开发源）"]
     TESTROOT["repo/.env.test.local（仅 Vitest）"]
     PROD["repo/.env.production（部署）"]
-    POLICY["envFilePolicy.ts：支持的文件名 / root-only policy"]
+    POLICY["config/envFilePolicy.ts：支持的文件名 / root-only policy"]
     APIADM["loadRootEnv：仅 dev 许可，不覆盖已设值"]
-    TESTADM["vitest.shared：精确 .env + .env.test.local；runner 约束"]
+    TESTADM["config/vitest.shared：精确 .env + .env.test.local admission（仅 API/DB/child configs 调用）"]
     COMPOSE["Compose --env-file：插值与显式 environment 投影"]
     ENV["API 进程的有效 process.env"]
     SETTINGS["settings.ts：resolveSettings；primitive/default/requiredness"]
@@ -113,7 +113,7 @@ flowchart LR
 - [`apps/api/src/config/runtimeConfig.ts`](../../apps/api/src/config/runtimeConfig.ts)：**API runtime policy facade**。决定跨字段约束、依赖默认值、profile mask、组合为 `AppRuntimeConfig`；`getRuntimeConfig` 缓存实际运行时配置。
 - [`packages/db/src/databaseUrl.ts`](../../packages/db/src/databaseUrl.ts)：被显式委托的 `RUNTIME_MODE` / `DATABASE_TARGET` / `TEST_DATABASE_TARGET` 的 canonical owner。这样 `packages/db` 不必反向依赖 `apps/api`。
 - [`packages/db/src/testIsolation.ts`](../../packages/db/src/testIsolation.ts)：`TEST_DB_ISOLATION_ENABLED` 的唯一 predicate。
-- [`envFilePolicy.ts`](../../envFilePolicy.ts)：**文件名 policy data**，不是各个 env 值的解释器。
+- [`config/envFilePolicy.ts`](../../config/envFilePolicy.ts)：**文件名 policy data**，不是各个 env 值的解释器。
 
 **不得据此要求 `apps/api/src` 的每个 `process.env` 字面出现都为零**：研究开关、脚本自有事实、测试拓扑和 npm build metadata 是不同目的地/事实；重点是不能绕过已建模的 API setting。
 
@@ -143,7 +143,7 @@ flowchart TD
 | 仓库根文件 | 归属 / 被谁读取 | 不得被谁隐式读取 |
 | --- | --- | --- |
 | `.env` | bare dev API `loadRootEnv`；Web development Node/Vite config；Vitest 共享 loader；Drizzle CLI；development Compose | managed API（test/e2e/ci/production）；Web production build |
-| `.env.test.local` | `vitest.shared.ts`，可选本地测试覆盖 | API runtime、Web Vite dev/prod、Drizzle、生产 Compose |
+| `.env.test.local` | `config/vitest.shared.ts`（仅 API/DB/fixture child configs 经共享 loader 读取），可选本地测试覆盖 | API runtime、Web Vite dev/prod、Drizzle、生产 Compose |
 | `.env.production` | production `docker compose --env-file .env.production` 的**插值输入** | API dotenv loader、Vitest、Web production build 的 dotenv parser、Drizzle |
 | `.env.example` | tracked 开发模板，不是运行时值来源 | 所有 runtime readers |
 | `.env.production.example` | tracked 部署模板，不是运行时值来源 | 所有 runtime readers |
@@ -157,8 +157,8 @@ flowchart TD
 | 目的地 / 语义事实 | 优先级（左胜右） | 被 mask、禁止或特殊情况 | Owner |
 | --- | --- | --- | --- |
 | bare dev API 的同名 env key | 已继承的进程值 > 根 `.env` | dotenv 默认不 override；仅 dev admission | `loadRootEnv` |
-| Vitest 进程 env 播种 | 已设进程值 > `.env.test.local` > `.env` | 只填充 undefined；worker `test.env` 是不同投影 | `vitest.shared` |
-| Vitest `test.env` 投影 | `TEST_RUNTIME_ENV` 对 `APP_MODE/NODE_ENV` 优先 > fileEnv | 不应把这条与进程播种链强行合成一条顺序 | `vitest.shared` |
+| Vitest 进程 env 播种 | 已设进程值 > `.env.test.local` > `.env` | 只填充 undefined；worker `test.env` 是不同投影；仅显式调用共享 loader 的 API/DB/child configs 执行播种 | `config/vitest.shared` |
+| Vitest `test.env` 投影 | `TEST_RUNTIME_ENV` 对 `APP_MODE/NODE_ENV` 优先 > fileEnv | 不应把这条与进程播种链强行合成一条顺序；消费方为 API/DB/child configs + Auth，其中 Auth 只消费 mode 投影、不经共享 loader 读 `.env` | `config/vitest.shared` |
 | `RUNTIME_MODE` | `APP_MODE` > `NODE_ENV`（仅 production/test）> development | **显式无效 APP_MODE 必须报错** | `parseAppMode` |
 | dev `API_BIND_PORT` | `DEV_API_PORT` > 3000 | `APP_PORT` 被 mask，**不是 fallback** | `resolveApiBindPort` |
 | production `API_BIND_PORT` | `APP_PORT` > 3000 | `DEV_API_PORT` masked | `resolveApiBindPort` |
@@ -191,8 +191,8 @@ flowchart TD
 | 7. Worker-DB opt-in（不同事实） | `routes/testDatabase::isWorkerDatabaseMode` | testDatabase adapter |
 | 8. Isolation strategy（不同事实） | `packages/db::testScope.resolveDbIsolationMode` | testDb / testDbBootstrap |
 | 9. DEVELOPER_DOTENV_ADMISSION | `loadRootEnv`（`envFilePolicy` 限制文件名） | server、seed、e2e-seed entrypoints |
-| 10. ROOT_ENV_FILE_POLICY | `envFilePolicy.ts`（`check-env-surface` 验证） | API/Vitest/Vite/Drizzle readers、deployment contract |
-| 11. VITEST_TEST_ENV_ADMISSION | `vitest.shared.ts` | 各包 Vitest config → test worker |
+| 10. ROOT_ENV_FILE_POLICY | `config/envFilePolicy.ts`（`check-env-surface` 验证） | API/Vitest/Vite/Drizzle readers、deployment contract |
+| 11. VITEST_TEST_ENV_ADMISSION | `config/vitest.shared.ts` | 文件 admission + 播种 consumer：API（含两个 fixture child config）、DB；`TEST_RUNTIME_ENV` mode 投影 consumer：上述 + Auth（Auth 不经共享 loader 读 `.env`）；其余 Vitest project 两者均不消费 |
 | 12. WEB_DEV_ENV_ADMISSION | `apps/web/vite.config.ts` | Vite dev port / API proxy |
 | 13. DEPLOYMENT_ENV_FILE | Compose 显式 `--env-file` | production containers 的 `environment` |
 | 14. REDIS settings | `settings.redis` + `runtimeConfig.resolveRedisConfig` | Redis plugin、redisRuntime |
@@ -343,7 +343,7 @@ sequenceDiagram
 
 ### 6.2 managed test/e2e/ci 与 production
 
-- **Managed test/E2E/CI**：runner/`TEST_RUNTIME_ENV` 提前导出 profile、端口和 test DB target；API `loadRootEnv` 不加载开发者 `.env`。Vitest 自身可以按**测试 harness contract**读取根 `.env` + `.env.test.local`，但这不是 `loadRootEnv` 在 managed API 子进程读取文件。
+- **Managed test/E2E/CI**：runner 自有 env（CI job `env:`）或 Vitest 的 `TEST_RUNTIME_ENV` worker 投影提前固定 mode，runner env 提供端口和 test DB target；API `loadRootEnv` 不加载开发者 `.env`。Vitest 自身可以按**测试 harness contract**读取根 `.env` + `.env.test.local`，但这不是 `loadRootEnv` 在 managed API 子进程读取文件。
 - **Production**：部署命令通过 `--env-file .env.production` 供 Compose 插值，Compose 显式生成 container environment；容器 `APP_MODE=production` 阻断 API 的开发 dotenv admission；production DB 和 JWT/起源类必需项 fail-fast。
 - **Web**：Vite 在 development 模式精确读取根 `.env` 来决定 `VITE_PORT` 和 `DEV_API_PORT` 代理目标；`envDir: false`，所以不存在 package-local `.env*` 的前端打包权限。客户端 `VITE_API_BASE_URL` / `VITE_APP_TIMEZONE` 通过**构建进程环境**进入 `import.meta.env`，而非前端绕过 `settings.ts` 读取服务器秘密。
 - **Independent DB tools**：migrate、rollback、backup 等调用 `resolveDatabaseUrlFromEnv`；test-schema shell tools 调用 `testDatabaseUrlCli.ts`。CLI 的 env 输入是 process env，不自行运行 dotenv 或复制 TEST_DB_URL fallback。
@@ -386,7 +386,7 @@ sequenceDiagram
 ## 9. 新增或修改配置的维护流程
 
 1. **先命名 semantic fact 与目的地**：是 API runtime、test harness、Web build、seed mechanism，还是 deployment tooling？与现有事实相同，还是明确不同？
-2. **指定唯一 owner**：普通 application primitive leaf 加入 `settings.ts`；cross-field/profile policy 放 `runtimeConfig.ts`；mode/DB 等 delegated fact 修改真正的 `@exam/db` owner；physical-source policy 修改 `envFilePolicy.ts`（必须有审议），而不是让 consumer 自己读一个新 `.env`。
+2. **指定唯一 owner**：普通 application primitive leaf 加入 `settings.ts`；cross-field/profile policy 放 `runtimeConfig.ts`；mode/DB 等 delegated fact 修改真正的 `@exam/db` owner；physical-source policy 修改 `config/envFilePolicy.ts`（必须有审议），而不是让 consumer 自己读一个新 `.env`。
 3. **明确完整顺序**：写清 source admission、process vs file precedence、profile mask、unset/empty/invalid 区分、required/secret、fallback 和 fail-fast 顺序。不要只写“优先读取 X”。
 4. **给出真实 consumer 路径**：新增键必须对应一个已有或同时实现的消费者；`settings` 不能长出未使用的 speculative leaves；下游优先使用 `AppRuntimeConfig`，机制库接收 explicit dependency。
 5. **从两个方向检查 DAG**：source 正向到 consumer、consumer 反向到 canonical resolver 必须汇合；审查所有 `process.env`、`import.meta.env`、shell/CI/Compose 读写。

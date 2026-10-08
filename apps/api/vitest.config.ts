@@ -1,12 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { DOMAIN_TEST_SOURCE_ALIAS } from "../../vitest.sourceAliases.js";
+import { DOMAIN_TEST_SOURCE_ALIAS } from "../../config/vitest.sourceAliases.js";
 import {
   TEST_RUNTIME_ENV,
   loadSupportedTestEnvFiles,
   seedProcessEnvFromFiles,
-} from "../../vitest.shared.js";
+} from "../../config/vitest.shared.js";
 import { resolveParallelism } from "./vitest.parallelism.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,8 +68,10 @@ export default defineConfig(() => ({
     // full rationale (flake safety, e2e isolation, cache-hit zero-cost).
     globalSetup: ["./vitest.globalSetup.ts"],
     exclude: ["dist/**", "node_modules/**"],
-    // Force test runtime mode via the monorepo-shared constant so every
-    // package's vitest config agrees (see ../../vitest.shared.ts for why).
+    // Force test runtime mode via the monorepo-shared constant (see
+    // ../../config/vitest.shared.ts for why). This config is one of the
+    // importers — the mode-routing projects (API incl. fixture children,
+    // DB) plus auth spread it; pure projects set no test.env.
     // TEST_RUNTIME_ENV spreads LAST: it owns APP_MODE/NODE_ENV over any
     // file-provided value.
     env: {

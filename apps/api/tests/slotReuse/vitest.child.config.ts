@@ -5,7 +5,7 @@ import {
   TEST_RUNTIME_ENV,
   loadSupportedTestEnvFiles,
   seedProcessEnvFromFiles,
-} from "../../../../vitest.shared.js";
+} from "../../../../config/vitest.shared.js";
 import { resolveParallelism } from "../../vitest.parallelism.js";
 
 /**

@@ -16,6 +16,6 @@ import { fileURLToPath } from "node:url";
 export const DOMAIN_TEST_SOURCE_ALIAS = {
   find: /^@exam\/domain$/,
   replacement: fileURLToPath(
-    new URL("./packages/domain/src/index.ts", import.meta.url),
+    new URL("../packages/domain/src/index.ts", import.meta.url),
   ),
 };
