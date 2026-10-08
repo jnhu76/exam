@@ -8,6 +8,76 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-10-08
+
+### Added
+
+- Candidate rich-text answer editor UX (#669 Phase U, #700): a governed
+  toolbar (canonical command registry, roving tabindex keyboard traversal,
+  narrow-viewport overflow menu), a MathLive formula surface with expert
+  LaTeX source and live KaTeX preview, explicit keyboard contracts, and
+  write-side list/table clamps. Absorbs the take-page lock-presentation
+  fix (#674): disrupted connectivity is no longer mislabeled as deadline
+  auto-submit, and failed answer saves retry.
+- `exam_answer_save_receipts` — an append-only answer replay-receipt table
+  (migration `0044_answer_save_receipts.sql`) with a full in-transaction
+  legacy backfill and sha256 answer-identity digests, replacing the O(N)
+  full-answers-JSONB rewrite per accepted save (#691).
+- Root-only env-file policy, enforced by a new `lint:env-surface` gate in
+  `pnpm verify:static`: exactly one admitted application source (the
+  repository-root `.env`); package-local `.env` files are no longer
+  configuration sources (#741, #743).
+- Direct cross-package Vitest/typecheck domain-source resolution
+  (`vitest.sourceAliases.ts`, `tsconfig.typecheck.json`): editing
+  `packages/domain/src` no longer requires a domain rebuild before direct
+  runs measure the change (#689, #746), with the workflow documented in
+  CONTRIBUTING.md.
+
+### Changed
+
+- Configuration guards converge on single authorities (#733): unified
+  `TEST_DB_ISOLATION` authority (#735), no implicit JWT configuration
+  authority (#736), runtime-mode guards routed through `parseAppMode`
+  (#738), the seed dotenv admission fork removed (#740), and shell
+  test-schema tooling resolved through the canonical test target (#742).
+  The configuration authority DAG, precedence, and consumers are
+  documented (#745).
+- The test suite is materially smaller while owning more: repository-wide
+  owner-layer reduction of semantically dominated tests (#706–#717),
+  deterministic real-PostgreSQL concurrency proofs with discriminating
+  oracles (#718, #721, #722, #727), E2E slimmed to material browser
+  boundaries with semantic names (#705), CI E2E shards 4 → 2.
+- Process tests run explicit hermetic profiles in the worker-database
+  isolation lane; readiness is bound to the spawned child identity
+  (#723, #725, #734).
+
+### Fixed
+
+- Production image build: the Docker builder now copies the root
+  `envFilePolicy.ts` required by the web vite config (#747, via #746 and
+  the content-identical re-landing #748).
+- Block math silently lost on save (#676); remaining math selection and
+  table fidelity gaps (#673); first keystroke after caret relocation into
+  a trailing-table region silently lost (#701).
+- Rich content trust chain (#669): canonical closure at the durable
+  acceptance boundary (#687), fail-closed persisted-read adoption (#690),
+  take-snapshot `clientSeq` restored from replay receipts (#691),
+  export trust boundaries (#692), fail-closed render trust for untrusted
+  static prompts with KaTeX safety evidence (#693), publish-boundary
+  validation (#694), durable Rich string closure (#696), and consolidated
+  permanent regression ownership (#703).
+- Take-page navigator current-question ring clipped on narrow viewports
+  (#683); topbar controls aligned on shared h-9 geometry (#675).
+
+### Removed
+
+- Package-local implicit env-file families (12 vite/vitest configs set
+  `envDir: false`; `apps/api/.env` leaves the application source set) —
+  superseded by the root-only policy (#743).
+- Semantically dominated/duplicate test suites, proven-dead internal web
+  surface, and the dev seed dotenv admission fork (#708–#717, #705, #722,
+  #740).
+
 ## [0.0.7] - 2026-09-30
 
 ### Added
@@ -481,7 +551,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/jnhu76/exam/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/jnhu76/exam/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/jnhu76/exam/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/jnhu76/exam/compare/v0.0.4...v0.0.5
