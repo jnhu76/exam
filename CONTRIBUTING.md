@@ -50,7 +50,7 @@ pnpm dev              # start API + Web dev servers
 6. Keep the Issue and PR in sync — update the Issue if scope or
    decisions change.
 
-## Direct Vitest development loop (#689)
+## Direct development loop (#689)
 
 After editing `packages/domain/src`, you can run **direct** Vitest in the
 `@exam/contracts` or `@exam/api` project without first building domain:
@@ -62,11 +62,17 @@ pnpm --filter @exam/api exec vitest run src/domainSourceResolution.test.ts
 
 Those two Vitest projects resolve the exact `@exam/domain` package-root import
 to `packages/domain/src/index.ts` via the test-only
-`vitest.sourceAliases.ts`. Production Node and TypeScript package entries
-**still resolve to dist**, as intended. This exception does not mean a direct
-Vitest run automatically rebuilds **other** workspace dependencies; use the
-root `pnpm test` / `pnpm verify` Turbo commands for the complete build-first,
-CI-equivalent graph.
+`vitest.sourceAliases.ts`. Direct typecheck is source-fresh the same way: the
+`typecheck` script of both projects uses `tsconfig.typecheck.json`, whose
+`paths` maps the exact `@exam/domain` entry to domain source, so `tsc` gate
+evidence never comes from a stale `dist/index.d.ts`. Production Node and
+TypeScript package entries **still resolve to dist**, as intended: builds
+(`tsc`) keep using `tsconfig.json`, and the editor TS server reads
+`tsconfig.json` too, so editor diagnostics for domain symbols can trail one
+domain build behind until `pnpm --filter @exam/domain build` runs. These
+exceptions do not mean a direct run automatically rebuilds **other** workspace
+dependencies; use the root `pnpm test` / `pnpm verify` Turbo commands for the
+complete build-first, CI-equivalent graph.
 
 ## Verification Requirements
 

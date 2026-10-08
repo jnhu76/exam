@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // #689: direct typecheck mirrors the Vitest source alias — resolve the
+    // exact @exam/domain entry to source so type evidence is never a stale
+    // dist/index.d.ts. Production build keeps tsconfig.json (dist types).
+    // rootDir widens to the repo root because the aliased domain sources
+    // live outside this package; harmless under noEmit.
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "../..",
+    "paths": {
+      "@exam/domain": ["../../packages/domain/src/index.ts"]
+    }
+  }
+}
