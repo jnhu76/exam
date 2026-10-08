@@ -647,7 +647,10 @@ export default function RichContentEditor({
   });
 
   useEffect(() => {
-    editor?.setEditable(!disabled);
+    // Editability sync is not a document change: emitUpdate=false keeps the
+    // lock/mount transition from emitting a doc-unchanged "update", which
+    // would surface onChange and fabricate an answer save (#697).
+    editor?.setEditable(!disabled, false);
   }, [editor, disabled]);
 
   useEffect(() => {
