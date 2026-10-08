@@ -114,6 +114,20 @@ function hiddenResultPresentation(
           tone: "text-muted-foreground",
           message: t("candidateResult.status.queued"),
         };
+      default: {
+        // INVARIANT (compile-time drift guard): with every non-graded wire
+        // status mapped above, `result.status` is `never` here; a future
+        // AttemptStatus extension without a mapped message fails typecheck
+        // instead of silently sliding into the neutral fallback below. The
+        // return keeps a runtime fallback for untyped/unknown payloads.
+        const unhandled: never = result.status;
+        void unhandled;
+        return {
+          icon: Hourglass,
+          tone: "text-muted-foreground",
+          message: t("candidateResult.status.default"),
+        };
+      }
     }
   }
   // Graded but withheld: hiddenReason names the still-closed gate.
