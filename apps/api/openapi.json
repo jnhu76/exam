@@ -35985,9 +35985,6 @@
                           "enum": [
                             "not_graded",
                             "pending_publish",
-                            "submitted",
-                            "disrupted",
-                            "in_progress",
                             "not_started"
                           ]
                         }
@@ -36852,9 +36849,6 @@
                           "enum": [
                             "not_graded",
                             "pending_publish",
-                            "submitted",
-                            "disrupted",
-                            "in_progress",
                             "not_started"
                           ]
                         }
