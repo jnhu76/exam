@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { DOMAIN_TEST_SOURCE_ALIAS } from "../../vitest.sourceAliases.js";
 import {
   TEST_RUNTIME_ENV,
   loadSupportedTestEnvFiles,
@@ -51,6 +52,9 @@ export default defineConfig(() => ({
   // .env* files can never reach import.meta.env. Pinned by
   // scripts/check-env-surface.mjs.
   envDir: false,
+  // #689: bypass stale @exam/domain/dist when running Vitest outside Turbo.
+  // Production package exports / TS build resolution remain unchanged.
+  resolve: { alias: [DOMAIN_TEST_SOURCE_ALIAS] },
   test: {
     // Fail-fast DB availability pre-check. Runs once before any test file;
     // aborts the run with a clear "run pnpm db:up" message if the test DB is
