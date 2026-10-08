@@ -214,7 +214,9 @@ section rejects repository-anchored env writers in test files.
 
 | Context | Value |
 |---------|-------|
-| CI (all jobs) | `test` |
+| CI jobs that export it (`api-coverage`, `package-coverage`, `e2e`) | `test` — explicit job-level `env:` injection |
+| CI vitest job without an `env:` block (`web-coverage`) | `test` via Vitest's own default (unset → `test`), NOT CI-injected |
+| CI jobs that run no vitest/playwright runtime (`static`, `verify-build`, `production-transport-regression`) | unset |
 | Local dev | `development` |
 | Production | `production` |
 
@@ -230,6 +232,10 @@ section rejects repository-anchored env writers in test files.
   `APP_MODE`. `pnpm lint:db-config` Guard 3 pins the constant's presence for
   the API and DB configs only; the other projects' reliance on the Vitest
   default has no automated guard.
+- CI's explicit `NODE_ENV=test` and its `APP_MODE=ci`/`e2e` are separate
+  job-level injections; the workflow-level `env:` sets neither (only
+  Turbo/team and `TEST_INFRA_SCOPE`). Mode selection follows `APP_MODE`
+  first, with `NODE_ENV` as its fallback (§2.5).
 - Production behavior tests MUST use `vi.stubEnv("NODE_ENV", "production")`.
 
 ### 2.5 `APP_MODE`
@@ -639,10 +645,22 @@ pnpm --filter @exam/domain test
   via `TEST_RUNTIME_ENV`; the pure packages set no `test.env` (Vitest's
   default `NODE_ENV=test` applies when the variable is unset, and they read
   no `APP_MODE`).
-- **Stale-dist trap**: apps and tests resolve `@exam/*` via built `dist/`, not
-  `src/`. Filtered commands like `pnpm --filter <pkg> test` bypass Turbo's
-  `^build` chain, so after editing package source run `pnpm build` (root,
-  Turbo-ordered) first — otherwise the filtered run silently tests stale code.
+- **Stale-dist trap**: workspace packages advertise built `dist/` as their
+  production entry, so every resolution through Node/package exports reads
+  the last build, not `src/`. Two exact-match exceptions exist (#746/#689):
+  the `@exam/api` and `@exam/contracts` vitest projects alias the exact
+  `@exam/domain` root import to `packages/domain/src/index.ts` (and direct
+  `tsc` typecheck in both projects maps the same entry), so a direct
+  `vitest run` there is source-fresh for that one exact import. Everything
+  else still resolves via `dist/`: deep or non-root `@exam/domain` imports
+  (the alias regex is exact-match by design), all other `@exam/*` packages,
+  and all production resolution. Filtered commands like
+  `pnpm --filter <pkg> test` also bypass Turbo's `^build` chain — the
+  build-first graph `pnpm test` / `pnpm verify` run — so after editing
+  package source, either run the root `pnpm build` first or stay within the
+  two documented aliases; otherwise the filtered run silently tests stale
+  code. #746 did NOT eliminate the stale-dist risk for other workspace
+  packages.
 
 ### 5.2 API Integration Tests
 

@@ -45,10 +45,12 @@ export default defineConfig(() => ({
     // the mixed pure/PG suite keeps its self-skip semantics. See
     // ./vitest.globalSetup.ts.
     globalSetup: ["./vitest.globalSetup.ts"],
-    // Force test runtime mode via the monorepo-shared constant so every
-    // package's vitest config agrees (see ../../config/vitest.shared.ts for
-    // why). TEST_RUNTIME_ENV spreads LAST: it owns APP_MODE/NODE_ENV over
-    // any file-provided value.
+    // Force test runtime mode via the monorepo-shared constant (see
+    // ../../config/vitest.shared.ts for why). This config is one of the
+    // importers — the mode-routing projects (API incl. fixture children,
+    // DB) plus auth spread it; pure projects set no test.env.
+    // TEST_RUNTIME_ENV spreads LAST: it owns APP_MODE/NODE_ENV over any
+    // file-provided value.
     env: {
       ...fileEnv,
       ...TEST_RUNTIME_ENV,

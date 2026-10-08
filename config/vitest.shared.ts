@@ -29,7 +29,11 @@ import { join } from "node:path";
 import { parse as parseEnvFile } from "dotenv";
 import { SUPPORTED_TEST_ENV_FILES } from "./envFilePolicy.js";
 
-/** Environment that forces the test runtime mode in every vitest process. */
+/**
+ * Environment forcing the test runtime mode in the vitest projects that
+ * spread it (API incl. its fixture child configs, DB, auth — see the
+ * header note; pure projects set no `test.env`).
+ */
 export const TEST_RUNTIME_ENV = {
   APP_MODE: "test",
   NODE_ENV: "test",
