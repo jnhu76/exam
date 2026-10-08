@@ -5,7 +5,7 @@ import { parse as parseEnvFile } from "dotenv";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { SUPPORTED_DEV_ENV_FILE } from "../../envFilePolicy.js";
+import { SUPPORTED_DEV_ENV_FILE } from "../../config/envFilePolicy.js";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 

@@ -38,9 +38,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# envFilePolicy.ts is imported at repo root by apps/web/vite.config.ts
-# (env-file admission policy, #741); it is dependency-free policy data.
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json envFilePolicy.ts ./
+# config/envFilePolicy.ts is imported by apps/web/vite.config.ts (env-file
+# admission policy, #741); it is dependency-free policy data.
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
+COPY config/envFilePolicy.ts config/
 COPY packages/domain/package.json packages/domain/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/

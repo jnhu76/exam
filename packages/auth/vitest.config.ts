@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
+import { TEST_RUNTIME_ENV } from "../../config/vitest.shared.js";
 
 export default defineConfig({
   // #741: per-package implicit envDir admission is OFF (pinned by

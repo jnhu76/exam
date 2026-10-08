@@ -2,7 +2,7 @@
 /**
  * Env-file source-surface guard (#741, ROOT_ONLY_ENV_FILE_POLICY).
  *
- * POLICY DATA lives in ../../envFilePolicy.ts (imported here via Node type
+ * POLICY DATA lives in ../config/envFilePolicy.ts (imported here via Node type
  * stripping, the same pattern config-contract.mjs uses for settings.ts);
  * this script owns the ENFORCEMENT relations only:
  *
@@ -32,7 +32,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SUPPORTED_ROOT_ENV_FILES } from "../envFilePolicy.ts";
+import { SUPPORTED_ROOT_ENV_FILES } from "../config/envFilePolicy.ts";
 
 const args = process.argv.slice(2);
 let ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -151,8 +151,9 @@ console.log("G3. Checking env reader allowlist…");
     "apps/api/src/config/loadRootEnv.ts",
     // web build-tool Node-side admission (development mode only)
     "apps/web/vite.config.ts",
-    // shared vitest test-env loader (imported by every vitest config)
-    "vitest.shared.ts",
+    // shared vitest test-env loader (imported by the configs that force
+    // test mode — API, DB, auth, fixture children)
+    "config/vitest.shared.ts",
     // DB tooling bootstrap
     "packages/db/drizzle.config.ts",
   ]);

@@ -6,7 +6,7 @@ import {
   TEST_RUNTIME_ENV,
   loadSupportedTestEnvFiles,
   seedProcessEnvFromFiles,
-} from "../../vitest.shared.js";
+} from "../../config/vitest.shared.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
@@ -46,9 +46,9 @@ export default defineConfig(() => ({
     // ./vitest.globalSetup.ts.
     globalSetup: ["./vitest.globalSetup.ts"],
     // Force test runtime mode via the monorepo-shared constant so every
-    // package's vitest config agrees (see ../../vitest.shared.ts for why).
-    // TEST_RUNTIME_ENV spreads LAST: it owns APP_MODE/NODE_ENV over any
-    // file-provided value.
+    // package's vitest config agrees (see ../../config/vitest.shared.ts for
+    // why). TEST_RUNTIME_ENV spreads LAST: it owns APP_MODE/NODE_ENV over
+    // any file-provided value.
     env: {
       ...fileEnv,
       ...TEST_RUNTIME_ENV,

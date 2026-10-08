@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { DOMAIN_TEST_SOURCE_ALIAS } from "../../vitest.sourceAliases.js";
+import { DOMAIN_TEST_SOURCE_ALIAS } from "../../config/vitest.sourceAliases.js";
 
 export default defineConfig({
   // #741: per-package implicit envDir admission is OFF (pinned by

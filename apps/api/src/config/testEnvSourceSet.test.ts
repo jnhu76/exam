@@ -22,20 +22,22 @@ import { fileURLToPath } from "node:url";
  * guard additionally fails loud at verify when they exist on disk (see
  * envSurfaceGuard.test.ts).
  *
- * Probe shape: the policy/loader modules live at the repository root
- * (imported by every vitest config), outside this package's vite root, so
- * the assertions run in one tsx child (the repo's standard process-level
- * probe) against throwaway mkdtemp fixtures. This suite never writes a
- * repository env-file authority (#741 W3), and the seeding semantics are
- * exercised in the child's isolated process.env instead of the worker's.
+ * Probe shape: the policy/loader modules live in the repository `config/`
+ * directory (imported by the vitest configs that force test mode), outside
+ * this package's vite root, so the assertions run in one tsx child (the
+ * repo's standard process-level probe) against throwaway mkdtemp fixtures.
+ * This suite never writes a repository env-file authority (#741 W3), and
+ * the seeding semantics are exercised in the child's isolated process.env
+ * instead of the worker's.
  */
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const envFilePolicyUrl = new URL(
-  `file://${join(REPO_ROOT, "envFilePolicy.ts")}`,
+  `file://${join(REPO_ROOT, "config", "envFilePolicy.ts")}`,
 ).href;
-const vitestSharedUrl = new URL(`file://${join(REPO_ROOT, "vitest.shared.ts")}`)
-  .href;
+const vitestSharedUrl = new URL(
+  `file://${join(REPO_ROOT, "config", "vitest.shared.ts")}`,
+).href;
 const tsxLoaderUrl = String(import.meta.resolve("tsx"));
 
 const createdDirs: string[] = [];
@@ -61,7 +63,7 @@ interface ProbeReport {
 }
 
 /**
- * Child probe importing the REAL root modules and running every scenario
+ * Child probe importing the REAL config/ modules and running every scenario
  * against fixture dirs the parent plants. Reports one JSON object on stdout.
  */
 function probeScript(dirsJson: string): string {
@@ -223,8 +225,10 @@ describe("root env-file policy data (#741)", () => {
     expect(report.supportedTestFiles).toEqual([".env", ".env.test.local"]);
   });
 
-  it("lives at the repository root, next to the workspace manifest", () => {
-    expect(existsSync(join(REPO_ROOT, "envFilePolicy.ts"))).toBe(true);
+  it("lives in config/, while physical env sources stay at the repository root", () => {
+    expect(existsSync(join(REPO_ROOT, "config", "envFilePolicy.ts"))).toBe(
+      true,
+    );
     expect(existsSync(join(REPO_ROOT, "package.json"))).toBe(true);
   });
 });
