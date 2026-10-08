@@ -113,7 +113,7 @@ flowchart LR
 - [`apps/api/src/config/runtimeConfig.ts`](../../apps/api/src/config/runtimeConfig.ts)：**API runtime policy facade**。决定跨字段约束、依赖默认值、profile mask、组合为 `AppRuntimeConfig`；`getRuntimeConfig` 缓存实际运行时配置。
 - [`packages/db/src/databaseUrl.ts`](../../packages/db/src/databaseUrl.ts)：被显式委托的 `RUNTIME_MODE` / `DATABASE_TARGET` / `TEST_DATABASE_TARGET` 的 canonical owner。这样 `packages/db` 不必反向依赖 `apps/api`。
 - [`packages/db/src/testIsolation.ts`](../../packages/db/src/testIsolation.ts)：`TEST_DB_ISOLATION_ENABLED` 的唯一 predicate。
-- [`envFilePolicy.ts`](../../envFilePolicy.ts)：**文件名 policy data**，不是各个 env 值的解释器。
+- [`config/envFilePolicy.ts`](../../config/envFilePolicy.ts)：**文件名 policy data**，不是各个 env 值的解释器。
 
 **不得据此要求 `apps/api/src` 的每个 `process.env` 字面出现都为零**：研究开关、脚本自有事实、测试拓扑和 npm build metadata 是不同目的地/事实；重点是不能绕过已建模的 API setting。
 
@@ -192,7 +192,7 @@ flowchart TD
 | 8. Isolation strategy（不同事实） | `packages/db::testScope.resolveDbIsolationMode` | testDb / testDbBootstrap |
 | 9. DEVELOPER_DOTENV_ADMISSION | `loadRootEnv`（`envFilePolicy` 限制文件名） | server、seed、e2e-seed entrypoints |
 | 10. ROOT_ENV_FILE_POLICY | `envFilePolicy.ts`（`check-env-surface` 验证） | API/Vitest/Vite/Drizzle readers、deployment contract |
-| 11. VITEST_TEST_ENV_ADMISSION | `vitest.shared.ts` | 各包 Vitest config → test worker |
+| 11. VITEST_TEST_ENV_ADMISSION | `config/vitest.shared.ts` | 显式强制 test mode 的 Vitest config（API 含两个 fixture child config、DB、Auth）→ test worker；其余 Vitest project 不消费它 |
 | 12. WEB_DEV_ENV_ADMISSION | `apps/web/vite.config.ts` | Vite dev port / API proxy |
 | 13. DEPLOYMENT_ENV_FILE | Compose 显式 `--env-file` | production containers 的 `environment` |
 | 14. REDIS settings | `settings.redis` + `runtimeConfig.resolveRedisConfig` | Redis plugin、redisRuntime |
@@ -343,7 +343,7 @@ sequenceDiagram
 
 ### 6.2 managed test/e2e/ci 与 production
 
-- **Managed test/E2E/CI**：runner/`TEST_RUNTIME_ENV` 提前导出 profile、端口和 test DB target；API `loadRootEnv` 不加载开发者 `.env`。Vitest 自身可以按**测试 harness contract**读取根 `.env` + `.env.test.local`，但这不是 `loadRootEnv` 在 managed API 子进程读取文件。
+- **Managed test/E2E/CI**：runner 自有 env（CI job `env:`）或 Vitest 的 `TEST_RUNTIME_ENV` worker 投影提前固定 mode，runner env 提供端口和 test DB target；API `loadRootEnv` 不加载开发者 `.env`。Vitest 自身可以按**测试 harness contract**读取根 `.env` + `.env.test.local`，但这不是 `loadRootEnv` 在 managed API 子进程读取文件。
 - **Production**：部署命令通过 `--env-file .env.production` 供 Compose 插值，Compose 显式生成 container environment；容器 `APP_MODE=production` 阻断 API 的开发 dotenv admission；production DB 和 JWT/起源类必需项 fail-fast。
 - **Web**：Vite 在 development 模式精确读取根 `.env` 来决定 `VITE_PORT` 和 `DEV_API_PORT` 代理目标；`envDir: false`，所以不存在 package-local `.env*` 的前端打包权限。客户端 `VITE_API_BASE_URL` / `VITE_APP_TIMEZONE` 通过**构建进程环境**进入 `import.meta.env`，而非前端绕过 `settings.ts` 读取服务器秘密。
 - **Independent DB tools**：migrate、rollback、backup 等调用 `resolveDatabaseUrlFromEnv`；test-schema shell tools 调用 `testDatabaseUrlCli.ts`。CLI 的 env 输入是 process env，不自行运行 dotenv 或复制 TEST_DB_URL fallback。

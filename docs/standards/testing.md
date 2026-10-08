@@ -66,7 +66,7 @@ production deployment itself is the acceptance surface (§1.6).
 | **Command** | `pnpm --filter @exam/web coverage` |
 | **Input build** | Downloads the current workflow's `verify-build` artifact before running coverage. |
 | **Services** | None (pure jsdom) |
-| **Env vars** | `APP_MODE=test`, `NODE_ENV=test` (from vitest config) |
+| **Env vars** | None set by the job or the config — Vitest defaults `NODE_ENV` to `test` when unset; `APP_MODE` is not set (the web suite reads no `APP_MODE`-dependent config) |
 | **Allowed resources** | CPU (jsdom + V8 coverage instrumentation) |
 | **Forbidden** | Database access, Redis, network calls |
 | **Timeout** | 10s per test (CI guardrail in `vitest.config.ts`) |
@@ -128,7 +128,7 @@ production deployment itself is the acceptance surface (§1.6).
 ### 2.0 Env-file source surface (#741)
 
 Physical env files live ONLY at the repository root. The complete supported
-set is owned by `envFilePolicy.ts` (repo root) and enforced fail-loud by
+set is owned by `config/envFilePolicy.ts` and enforced fail-loud by
 `pnpm lint:env-surface` (scripts/check-env-surface.mjs, part of
 `verify:static`):
 
@@ -144,10 +144,12 @@ There is no other env-file source: no `.env.local` / `.env.development*` /
 `packages/*/.env` — Vite/Vitest implicit env-file discovery is disabled
 (`envDir: false` in every vite/vitest config), unsupported files that exist
 anyway fail the guard, and the loaders read their supported files by exact
-path so unsupported files are provably ignored. Vitest file-level precedence
-is `.env.test.local` over `.env`; shell exports win over both (the configs
-seed `process.env` only-if-undefined), and `TEST_RUNTIME_ENV` owns
-`APP_MODE`/`NODE_ENV` in the worker projection.
+path so unsupported files are provably ignored. In the vitest configs that
+admit file sources (`@exam/api` incl. its two fixture child configs, and
+`@exam/db`), file-level precedence is `.env.test.local` over `.env`; shell
+exports win over both (those configs seed `process.env` only-if-undefined),
+and `TEST_RUNTIME_ENV` owns `APP_MODE`/`NODE_ENV` in their worker projection
+(§2.4 has the exact per-project matrix).
 
 **Fixture discipline:** permanent tests MUST NOT write any repository
 env-file authority — env fixtures live under `mkdtemp`/`/tmp` (a hard kill
@@ -217,7 +219,17 @@ section rejects repository-anchored env writers in test files.
 | Production | `production` |
 
 **Rules:**
-- Vitest configs force `NODE_ENV=test` via `TEST_RUNTIME_ENV` from `vitest.shared.ts`.
+- `TEST_RUNTIME_ENV` (`config/vitest.shared.ts`) forces both `NODE_ENV=test`
+  and `APP_MODE=test`, but only in the vitest projects that import it:
+  `@exam/api` (incl. its two fixture child configs), `@exam/db`, and
+  `@exam/auth` — the projects whose suites resolve mode-dependent config or
+  pin a deterministic mode. The remaining vitest projects (`@exam/web`,
+  contracts, authz, domain, exam-engine, import-export) set no `test.env`:
+  they rely on Vitest's own default `NODE_ENV=test` (applied only when the
+  variable is unset — an exported host value would win) and read no
+  `APP_MODE`. `pnpm lint:db-config` Guard 3 pins the constant's presence for
+  the API and DB configs only; the other projects' reliance on the Vitest
+  default has no automated guard.
 - Production behavior tests MUST use `vi.stubEnv("NODE_ENV", "production")`.
 
 ### 2.5 `APP_MODE`
@@ -228,7 +240,7 @@ section rejects repository-anchored env writers in test files.
 | CI E2E | `e2e` | Routes to `TEST_DATABASE_URL`; E2E mode |
 | Local dev | `development` | Routes to `DATABASE_URL` |
 | Production | `production` | Routes to `DATABASE_URL`; production guards active |
-| Vitest (all) | `test` (forced by `TEST_RUNTIME_ENV`) | Routes to `TEST_DATABASE_URL` when set, else a LOCAL URL constructed from `DB_HOST_PORT` |
+| Vitest (API/DB/auth + fixture children) | `test` (forced by `TEST_RUNTIME_ENV` in those configs; other vitest projects set no `APP_MODE`) | Routes to `TEST_DATABASE_URL` when set, else a LOCAL URL constructed from `DB_HOST_PORT` |
 
 **Rules:**
 - `APP_MODE` is the authoritative runtime mode selector.
@@ -623,7 +635,10 @@ pnpm --filter @exam/domain test
 ```
 
 - **DB required**: No (except `@exam/db`).
-- **Env**: `APP_MODE=test`, `NODE_ENV=test` (forced by vitest config).
+- **Env**: `@exam/auth` and `@exam/db` force `APP_MODE=test` / `NODE_ENV=test`
+  via `TEST_RUNTIME_ENV`; the pure packages set no `test.env` (Vitest's
+  default `NODE_ENV=test` applies when the variable is unset, and they read
+  no `APP_MODE`).
 - **Stale-dist trap**: apps and tests resolve `@exam/*` via built `dist/`, not
   `src/`. Filtered commands like `pnpm --filter <pkg> test` bypass Turbo's
   `^build` chain, so after editing package source run `pnpm build` (root,
@@ -668,7 +683,8 @@ pnpm --filter @exam/web test
 ```
 
 - **DB required**: No (pure jsdom).
-- **Env**: `APP_MODE=test`, `NODE_ENV=test` (forced by vitest config).
+- **Env**: none forced by the config — Vitest defaults `NODE_ENV` to `test`
+  when unset; the suite reads no `APP_MODE`.
 
 ### 5.4 E2E Tests
 
