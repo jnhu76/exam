@@ -10,7 +10,9 @@ import { computeStaffInvitationStatus } from "@exam/domain";
 describe("direct Vitest @exam/domain source resolution (api)", () => {
   it("loads the domain source module instead of stale dist", async () => {
     const source = await vi.importActual<typeof import("@exam/domain")>(
-      fileURLToPath(new URL("../../../packages/domain/src/identity.ts", import.meta.url)),
+      fileURLToPath(
+        new URL("../../../packages/domain/src/identity.ts", import.meta.url),
+      ),
     );
 
     expect(computeStaffInvitationStatus).toBe(
