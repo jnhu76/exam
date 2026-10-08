@@ -2,7 +2,7 @@
 
 > **性质：架构导航与实现映射（descriptive architecture reference）**  
 > **审计基线：** `dc0fcce62f48dcf98e7c71f2834b70e9caee19b5`（2026-10-08，#733 最终 closeout）  
-> **审计结果：** `PASS_WITH_DEFERRED_DEBT`；最终审计摘要报告为 24 个语义事实，但 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 的 registry 表逐行数实际为 **25 行**（§SEED_*§ 与 evidence CLI escape hatch 分列）；本文件保留全部 25 行，不擅自合并为一个 fact。已审计事实未发现第二权威或生产 API 配置绕过。  
+> **审计结果：** `PASS_WITH_DEFERRED_DEBT`；最终审计摘要报告为 24 个语义事实，但 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 的 registry 表逐行数实际为 **25 行**（`SEED_*` 与 evidence CLI escape hatch 分列）；本文件保留全部 25 行，不擅自合并为一个 fact。已审计事实未发现第二权威或生产 API 配置绕过。  
 > **重要：** 本文**不是另一套 settings 默认值、解析算法或部署拓扑的规范根**。运行中的配置语义以表中指明的代码 authority 为准；测试/部署契约以现有权威文档及脚本为准。本文的表格是它们的**索引与 DAG 投影**。当代码发生变化，必须同步本文，而不是让本文成为第二 resolver。
 
 ## 目录
