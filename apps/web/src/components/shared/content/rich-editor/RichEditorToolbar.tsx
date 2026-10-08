@@ -207,11 +207,20 @@ export function RichEditorToolbar({
 
   return (
     <TooltipProvider>
+      {/* INVARIANT (#699): the row never wraps (contract §2), and one 36px
+          control per command plus the group separators and the
+          narrow-viewport overflow trigger add up to more than a narrow card's
+          content box. The row is therefore the horizontal scroll boundary:
+          commands that do not fit scroll INSIDE it instead of widening the
+          page. A scroll container's automatic minimum size is zero, so no
+          ancestor can be stretched by the row. -mx-1/p-1 keeps the buttons'
+          focus rings inside the clip boundary at the same visual position
+          (#683); the pair is one rule. */}
       <div
         role="toolbar"
         aria-orientation="horizontal"
         aria-label={t("content.editor.toolbarLabel")}
-        className="flex flex-nowrap items-center gap-0.5"
+        className="-mx-1 flex flex-nowrap items-center gap-0.5 overflow-x-auto p-1"
       >
         {rowButtons}
         {/* Narrow viewports: low-frequency insert commands collapse into the
