@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CircleCheck, CircleX } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  CircleCheck,
+  CircleX,
+  Clock,
+  Hourglass,
+  TriangleAlert,
+} from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { useNavigate, useParams } from "react-router";
 import {
@@ -48,6 +55,90 @@ function formatQuestionType(type: string, t: (key: string) => string): string {
   const key = `candidateResult.questionTypes.${type}`;
   const label = t(key);
   return label === key ? type : label;
+}
+
+/** The hidden response variant of the candidate attempt-result contract. */
+type HiddenAttemptResult = Extract<
+  CandidateAttemptResultResponse,
+  { showResultImmediately: false }
+>;
+
+/**
+ * Status projection (icon + copy) for a hidden candidate result (#698).
+ *
+ * INVARIANT: for a non-graded attempt the wire `status` is the lifecycle-copy
+ * authority — `hiddenReason` stays the engine's historical catch-all
+ * ("not_started") there and must not be rendered literally; only a graded
+ * attempt's `hiddenReason` names the gate still withholding the computable
+ * result (resolveCandidateResultVisibility two-stage gate).
+ */
+function hiddenResultPresentation(
+  result: HiddenAttemptResult,
+  t: (key: string) => string,
+): { icon: LucideIcon; tone: string; message: string } {
+  if (result.status !== "graded") {
+    switch (result.status) {
+      case "in_progress":
+        return {
+          icon: Clock,
+          tone: "text-muted-foreground",
+          message: t("candidateResult.status.in_progress"),
+        };
+      case "submitted":
+        return {
+          icon: Hourglass,
+          tone: "text-muted-foreground",
+          message: t("candidateResult.status.submitted"),
+        };
+      case "disrupted":
+        return {
+          icon: TriangleAlert,
+          tone: "text-warning",
+          message: t("candidateResult.status.disrupted"),
+        };
+      case "voided":
+        return {
+          icon: CircleX,
+          tone: "text-destructive",
+          message: t("candidateResult.status.voided"),
+        };
+      case "not_started":
+        return {
+          icon: Clock,
+          tone: "text-muted-foreground",
+          message: t("candidateResult.status.not_started"),
+        };
+      case "queued":
+        return {
+          icon: Clock,
+          tone: "text-muted-foreground",
+          message: t("candidateResult.status.queued"),
+        };
+    }
+  }
+  // Graded but withheld: hiddenReason names the still-closed gate.
+  switch (result.hiddenReason) {
+    case "not_graded":
+      return {
+        icon: Hourglass,
+        tone: "text-muted-foreground",
+        message: t("candidateResult.status.not_graded"),
+      };
+    case "pending_publish":
+      return {
+        icon: Hourglass,
+        tone: "text-muted-foreground",
+        message: t("candidateResult.status.pending_publish"),
+      };
+    default:
+      // hiddenReason is optional on the wire — the fallback must not assert
+      // any particular lifecycle state.
+      return {
+        icon: Hourglass,
+        tone: "text-muted-foreground",
+        message: t("candidateResult.status.default"),
+      };
+  }
 }
 
 /**
@@ -125,6 +216,12 @@ export function ResultPage() {
 
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
   if (!result) return <LoadingState />;
+
+  // Hidden-result projection; null on the visible variant (see
+  // hiddenResultPresentation for the status-vs-hiddenReason authority split).
+  const hiddenView = result.showResultImmediately
+    ? null
+    : hiddenResultPresentation(result, t as (key: string) => string);
 
   return (
     <PageContainer role="candidate" className="flex flex-col gap-6">
@@ -275,40 +372,23 @@ export function ResultPage() {
           </DataTableShell>
         </>
       ) : (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <AppIcon
-              icon={CircleCheck}
-              size="state"
-              className="mx-auto mb-3 text-success"
-            />
-            <p
-              className="text-lg font-medium"
-              data-testid="result-status-message"
-            >
-              {(() => {
-                // hiddenReason mirrors the attempt lifecycle state for
-                // non-graded attempts and names the withholding gate for
-                // graded ones (resolveCandidateResultVisibility) — one
-                // message per value, no status-based shadow branches (#698).
-                const reason = result.hiddenReason;
-                if (reason === "pending_publish")
-                  return t("candidateResult.status.pending_publish");
-                if (reason === "not_graded")
-                  return t("candidateResult.status.not_graded");
-                if (reason === "submitted")
-                  return t("candidateResult.status.submitted");
-                if (reason === "disrupted")
-                  return t("candidateResult.status.disrupted");
-                if (reason === "in_progress")
-                  return t("candidateResult.status.in_progress");
-                if (reason === "not_started")
-                  return t("candidateResult.status.not_started");
-                return t("candidateResult.status.default");
-              })()}
-            </p>
-          </CardContent>
-        </Card>
+        hiddenView && (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <AppIcon
+                icon={hiddenView.icon}
+                size="state"
+                className={`mx-auto mb-3 ${hiddenView.tone}`}
+              />
+              <p
+                className="text-lg font-medium"
+                data-testid="result-status-message"
+              >
+                {hiddenView.message}
+              </p>
+            </CardContent>
+          </Card>
+        )
       )}
 
       <div className="flex justify-end">

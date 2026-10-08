@@ -97,7 +97,7 @@ describe("ResultPage", () => {
     expect(screen.getByLabelText("回答错误")).toBeInTheDocument();
   });
 
-  it("shows only waiting state when results are hidden", async () => {
+  it("shows only the neutral fallback when results are hidden", async () => {
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "graded",
@@ -109,7 +109,7 @@ describe("ResultPage", () => {
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("已交卷，等待成绩公布");
+    ).toHaveTextContent("暂无法查看成绩，请稍后重试");
     expect(screen.queryByText("及格线")).not.toBeInTheDocument();
   });
 
@@ -126,7 +126,7 @@ describe("ResultPage", () => {
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("成绩正在审核中，将在公布后可见");
+    ).toHaveTextContent("评分已完成，成绩尚未公布");
   });
 
   it("shows not_graded message when hiddenReason is not_graded", async () => {
@@ -142,23 +142,24 @@ describe("ResultPage", () => {
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("考试尚未完成评分，请等待");
+    ).toHaveTextContent("成绩暂未满足查看条件，请稍后查看");
   });
 
-  it("falls back to generic message when hiddenReason is unknown/missing", async () => {
+  it("falls back to the neutral message when hiddenReason is unknown/missing", async () => {
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "graded",
       showResultImmediately: false,
       examTitle: "能力测验",
-      // no hiddenReason → fallback
+      // hiddenReason is optional on the wire — the fallback must not assert
+      // any particular lifecycle state (e.g. submitted).
     });
 
     renderPage();
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("已交卷，等待成绩公布");
+    ).toHaveTextContent("暂无法查看成绩，请稍后重试");
   });
 
   it("published (visible) result still displays score details", async () => {
@@ -180,55 +181,100 @@ describe("ResultPage", () => {
     expect(screen.getByText("8")).toBeInTheDocument();
   });
 
-  it("shows '已提交，等待评分' when hiddenReason is submitted (#698)", async () => {
+  it("shows submitted lifecycle copy from the wire status, not the hiddenReason catch-all (#698)", async () => {
     // Deadline auto-submit holding state: answers frozen, grading pending.
-    // Must never fall through to the catch-all "考试尚未开始".
+    // The REAL wire carries the engine's historical catch-all hiddenReason
+    // ("not_started") for non-graded attempts — the page must key lifecycle
+    // copy on status, never render the catch-all "考试尚未开始" literally.
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "submitted",
       showResultImmediately: false,
       examTitle: "能力测验",
-      hiddenReason: "submitted",
+      hiddenReason: "not_started",
     });
 
     renderPage();
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("已提交，等待评分");
+    ).toHaveTextContent("已交卷，等待评分完成");
     expect(screen.queryByText("考试尚未开始")).not.toBeInTheDocument();
   });
 
-  it("shows disrupted message when hiddenReason is disrupted", async () => {
+  it("shows disrupted copy with a warning icon from the wire status", async () => {
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "disrupted",
       showResultImmediately: false,
       examTitle: "能力测验",
-      hiddenReason: "disrupted",
+      hiddenReason: "not_started",
     });
 
-    renderPage();
+    const { container } = renderPage();
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("答题中断，请联系管理员或重新进入");
+    ).toHaveTextContent("答题已中断，请返回考试列表尝试恢复");
+    // Hidden states are not successes — the icon must not render the green
+    // success treatment the visible/graded result uses.
+    expect(container.querySelector("svg[data-app-icon]")).toHaveClass(
+      "text-warning",
+    );
+    expect(container.querySelector("svg[data-app-icon]")).not.toHaveClass(
+      "text-success",
+    );
   });
 
-  it("shows in-progress message when hiddenReason is in_progress", async () => {
+  it("shows in-progress copy from the wire status", async () => {
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "in_progress",
       showResultImmediately: false,
       examTitle: "能力测验",
-      hiddenReason: "in_progress",
+      hiddenReason: "not_started",
     });
 
     renderPage();
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("考试仍在进行中，交卷后可查看成绩");
+    ).toHaveTextContent("考试正在进行中，尚未交卷");
+  });
+
+  it("shows queued copy from the wire status", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "queued",
+      showResultImmediately: false,
+      examTitle: "能力测验",
+      hiddenReason: "not_started",
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByTestId("result-status-message"),
+    ).toHaveTextContent("尚未开始答题，暂无成绩");
+  });
+
+  it("shows voided copy with a destructive icon from the wire status", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "voided",
+      showResultImmediately: false,
+      examTitle: "能力测验",
+      hiddenReason: "not_started",
+    });
+
+    const { container } = renderPage();
+
+    expect(
+      await screen.findByTestId("result-status-message"),
+    ).toHaveTextContent("本次考试记录已作废，无法查看成绩");
+    expect(container.querySelector("svg[data-app-icon]")).toHaveClass(
+      "text-destructive",
+    );
   });
 
   it("truncates long fill blank answers with the full value in title", async () => {
