@@ -310,7 +310,39 @@ describe("score routes", () => {
       attemptId,
       status: "in_progress",
       showResultImmediately: false,
-      hiddenReason: "not_started",
+      hiddenReason: "in_progress",
+      examTitle: "Visible Score",
+    });
+  });
+
+  it("returns a hidden response with reason 'submitted' for a submitted attempt (#698)", async () => {
+    // Deadline auto-submit / pending-manual holding state: the attempt froze
+    // its answers but grading has not finished. The candidate must see
+    // "已提交，等待评分", never the catch-all "考试尚未开始".
+    const { attemptId } = await createGradedAttempt(true);
+    const requestContext = {
+      actorId: ctx.candidate.id,
+      organizationId: ctx.org.id,
+      role: "Candidate" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    await createAttemptRepo(ctx.db).update(requestContext, attemptId, {
+      status: "submitted",
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      attemptId,
+      status: "submitted",
+      showResultImmediately: false,
+      hiddenReason: "submitted",
       examTitle: "Visible Score",
     });
   });

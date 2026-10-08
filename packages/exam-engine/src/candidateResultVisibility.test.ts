@@ -204,16 +204,25 @@ describe("resolveCandidateResultVisibility", () => {
     });
   });
 
-  it("non-graded lifecycle states → hidden not_started", () => {
+  it("non-graded lifecycle states map to their own hiddenReason (no catch-all)", () => {
+    // #698: hiddenReason must mirror the attempt lifecycle state so the
+    // candidate result page can show a truthful message ("已提交，等待评分")
+    // instead of the misleading catch-all "考试尚未开始".
     const exam = makeExam({ resultPublicationMode: "immediate" });
-    for (const status of [
-      "not_started",
-      "queued",
-      "in_progress",
-      "disrupted",
-      "submitted",
-      "voided",
-    ] as const) {
+    const cases: Array<
+      [
+        ExamAttempt["status"],
+        "not_started" | "in_progress" | "submitted" | "disrupted",
+      ]
+    > = [
+      ["not_started", "not_started"],
+      ["queued", "not_started"],
+      ["in_progress", "in_progress"],
+      ["submitted", "submitted"],
+      ["disrupted", "disrupted"],
+      ["voided", "not_started"],
+    ];
+    for (const [status, hiddenReason] of cases) {
       const {
         score: _noScore,
         passed: _noPassed,
@@ -222,7 +231,7 @@ describe("resolveCandidateResultVisibility", () => {
       const attempt = { ...lifecycleBase, status };
       expect(resolveCandidateResultVisibility(exam, attempt)).toEqual({
         visible: false,
-        hiddenReason: "not_started",
+        hiddenReason,
       });
     }
   });

@@ -109,7 +109,7 @@ describe("ResultPage", () => {
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("成绩尚未公布");
+    ).toHaveTextContent("已交卷，等待成绩公布");
     expect(screen.queryByText("及格线")).not.toBeInTheDocument();
   });
 
@@ -158,7 +158,7 @@ describe("ResultPage", () => {
 
     expect(
       await screen.findByTestId("result-status-message"),
-    ).toHaveTextContent("成绩尚未公布");
+    ).toHaveTextContent("已交卷，等待成绩公布");
   });
 
   it("published (visible) result still displays score details", async () => {
@@ -180,12 +180,15 @@ describe("ResultPage", () => {
     expect(screen.getByText("8")).toBeInTheDocument();
   });
 
-  it("shows '已提交，等待评分' when status is submitted and no score", async () => {
+  it("shows '已提交，等待评分' when hiddenReason is submitted (#698)", async () => {
+    // Deadline auto-submit holding state: answers frozen, grading pending.
+    // Must never fall through to the catch-all "考试尚未开始".
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "submitted",
       showResultImmediately: false,
       examTitle: "能力测验",
+      hiddenReason: "submitted",
     });
 
     renderPage();
@@ -193,7 +196,39 @@ describe("ResultPage", () => {
     expect(
       await screen.findByTestId("result-status-message"),
     ).toHaveTextContent("已提交，等待评分");
-    expect(screen.queryByText("正在评分")).not.toBeInTheDocument();
+    expect(screen.queryByText("考试尚未开始")).not.toBeInTheDocument();
+  });
+
+  it("shows disrupted message when hiddenReason is disrupted", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "disrupted",
+      showResultImmediately: false,
+      examTitle: "能力测验",
+      hiddenReason: "disrupted",
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByTestId("result-status-message"),
+    ).toHaveTextContent("答题中断，请联系管理员或重新进入");
+  });
+
+  it("shows in-progress message when hiddenReason is in_progress", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "in_progress",
+      showResultImmediately: false,
+      examTitle: "能力测验",
+      hiddenReason: "in_progress",
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByTestId("result-status-message"),
+    ).toHaveTextContent("考试仍在进行中，交卷后可查看成绩");
   });
 
   it("truncates long fill blank answers with the full value in title", async () => {

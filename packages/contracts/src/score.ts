@@ -248,17 +248,31 @@ const CandidateAttemptQuestionResultSchema = AttemptQuestionResultSchema.omit({
 /**
  * Reason the full result is withheld in the hidden response variant.
  *
- * - `not_graded` — grading is incomplete or pending manual scoring; the result
- *   is not yet computable.
+ * For a non-graded attempt the value mirrors the attempt lifecycle state
+ * (AttemptStatus); for a graded attempt it names the gate that still hides
+ * the computable result. The candidate result page renders one message per
+ * value.
+ *
+ * - `not_graded` — attempt is graded but the result is not computable yet
+ *   (score fields incomplete, manual scoring pending, or `after_grading`
+ *   mode demands `fully_graded`).
  * - `pending_publish` — manual publication mode and the admin has not yet
  *   called publish-results (resultsPublishedAt is null).
- * - `not_started` — attempt is in any non-graded lifecycle state (in_progress,
- *   submitted, voided, disrupted, etc.). The result is not yet
- *   computable; the label is historical, not literal.
+ * - `submitted` — answers are frozen, grading has not finished (#698: this
+ *   is the deadline-auto-submit holding state for pending-manual exams).
+ * - `disrupted` — heartbeat scan marked the attempt disconnected.
+ * - `in_progress` — the attempt is still being taken; the result page was
+ *   reached before submission.
+ * - `not_started` — the attempt never began. Covers only the reserved
+ *   lifecycle states (`not_started`/`queued`/`voided`, EXSEM-019: no
+ *   production writer).
  */
 export const HiddenReasonEnum = z.enum([
   "not_graded",
   "pending_publish",
+  "submitted",
+  "disrupted",
+  "in_progress",
   "not_started",
 ]);
 

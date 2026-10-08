@@ -11,9 +11,17 @@ export type CandidateResultView = "own" | "all";
  * Why a candidate result is not visible. The literals deliberately match the
  * wire contract's HiddenReason union (@exam/contracts score.ts) so the API
  * layer can pass the value through without a mapping table.
+ *
+ * For a non-graded attempt the reason mirrors the lifecycle state (the
+ * candidate result page renders one truthful message per value — #698);
+ * `not_started` covers only the reserved states without a production writer
+ * (EXSEM-019).
  */
 export type CandidateResultHiddenReason =
   | "not_started"
+  | "in_progress"
+  | "submitted"
+  | "disrupted"
   | "not_graded"
   | "pending_publish";
 
@@ -55,9 +63,18 @@ export function resolveCandidateResultVisibility(
   attempt: ExamAttempt,
   view: CandidateResultView = "own",
 ): CandidateResultVisibility {
-  // Stage 1: is the result computable?
+  // Stage 1: is the result computable? A non-graded attempt reports its own
+  // lifecycle state as the hidden reason — never a catch-all (#698).
   if (attempt.status !== "graded") {
-    return { visible: false, hiddenReason: "not_started" };
+    const lifecycleReason: CandidateResultHiddenReason =
+      attempt.status === "submitted"
+        ? "submitted"
+        : attempt.status === "disrupted"
+          ? "disrupted"
+          : attempt.status === "in_progress"
+            ? "in_progress"
+            : "not_started"; // not_started/queued/voided — reserved, no writer
+    return { visible: false, hiddenReason: lifecycleReason };
   }
   const scoreFieldsPresent =
     attempt.score != null &&

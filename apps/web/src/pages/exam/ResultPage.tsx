@@ -287,19 +287,23 @@ export function ResultPage() {
               data-testid="result-status-message"
             >
               {(() => {
+                // hiddenReason mirrors the attempt lifecycle state for
+                // non-graded attempts and names the withholding gate for
+                // graded ones (resolveCandidateResultVisibility) — one
+                // message per value, no status-based shadow branches (#698).
                 const reason = result.hiddenReason;
                 if (reason === "pending_publish")
                   return t("candidateResult.status.pending_publish");
                 if (reason === "not_graded")
                   return t("candidateResult.status.not_graded");
+                if (reason === "submitted")
+                  return t("candidateResult.status.submitted");
+                if (reason === "disrupted")
+                  return t("candidateResult.status.disrupted");
+                if (reason === "in_progress")
+                  return t("candidateResult.status.in_progress");
                 if (reason === "not_started")
                   return t("candidateResult.status.not_started");
-                if (result.status === "submitted")
-                  return t("candidateResult.status.submitted");
-                if (result.status === "graded")
-                  return t("candidateResult.status.graded");
-                if (result.status === "disrupted")
-                  return t("candidateResult.status.disrupted");
                 return t("candidateResult.status.default");
               })()}
             </p>

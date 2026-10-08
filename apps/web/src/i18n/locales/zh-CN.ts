@@ -834,10 +834,10 @@ const zhCN = {
     status: {
       pending_publish: "成绩正在审核中，将在公布后可见",
       not_graded: "考试尚未完成评分，请等待",
-      not_started: "考试尚未开始，暂无成绩",
       submitted: "已提交，等待评分",
-      graded: "成绩尚未公布",
       disrupted: "答题中断，请联系管理员或重新进入",
+      in_progress: "考试仍在进行中，交卷后可查看成绩",
+      not_started: "考试尚未开始，暂无成绩",
       default: "已交卷，等待成绩公布",
     },
     actions: {
