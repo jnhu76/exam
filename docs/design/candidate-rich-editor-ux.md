@@ -86,15 +86,39 @@ Single compact command bar rendered from the registry (`RichEditorToolbar`):
   inline code Mod+E, bullet Mod+Shift+8, ordered Mod+Shift+7); `aria-keyshortcuts` set on
   those buttons. No invented shortcuts.
 
-### Responsive behavior (no uncontrolled wrap)
+### Responsive behavior (no uncontrolled wrap, no horizontal scroll)
 
-- Wide (≥ 640px viewport, Tailwind `sm:`): one primary row, all groups visible, `flex-nowrap`.
-- Narrow (< 640px viewport): high-frequency controls remain in the row (undo/redo, inline group,
-  list group, formula); 代码块 and 表格 move into a "更多" overflow menu (`MoreHorizontal`,
-  DropdownMenu). The row never wraps into a second strip; the writing canvas stays primary.
+Revised by the #699 / PR #752 corrective after real-browser acceptance found the row scrolling
+horizontally while an overflow menu already existed beside it. The frozen parts are the IA
+(one row, one overflow menu, registry authority); what changed is what governs the split.
+
+- Toolbar width is governed by its available CONTAINER width, not by a viewport breakpoint:
+  the same editor renders in a wide admin form, in a narrow candidate answer card, and in a
+  half-width option row inside a flex row, so `window.innerWidth` and Tailwind `sm:` cannot
+  answer whether the row fits.
+- Commands exceeding the available width move into the single "更多" overflow menu
+  (`MoreHorizontal`, DropdownMenu); no horizontal toolbar scrolling is required and the row
+  never wraps into a second strip. The writing canvas stays primary.
+- The registry (`commands.ts`) stays authoritative for command identity, action, enabled and
+  active state; the row and the menu read the same per-command projection, and every command
+  appears exactly once — inline or in the menu.
+- Priority is registry order (`COMMAND_GROUP_ORDER`): the longest fitting prefix of
+  history → inline → list → insert stays inline, so high-frequency controls leave the row
+  last. When the whole catalogue fits, there is no overflow and therefore no trigger — a wide
+  container keeps the complete inline toolbar.
+- Keyboard reachability follows the rendered row: the roving Arrow/Home/End order holds
+  exactly the controls present in it, the menu trigger included. A command that collapses into
+  the menu stops being a focus target (it is reached through the trigger, whose Radix menu owns
+  the menu's own keyboard behavior), and focus that was on a collapsed control parks on the
+  trigger rather than being dropped.
+- The row is the fit boundary, never a scroll boundary: it carries no `overflow-x` at all
+  (neither `auto`/`scroll` nor `hidden`, which would only conceal unreachable commands), and
+  `contain-inline-size` keeps its width a fact about the container instead of its own content.
+- Implementation measures the container through the repository's container-measurement
+  owner (`useOverflowObservation`) plus the real control geometry read from an off-layout copy
+  of the row — no hard-coded breakpoints and no hand-maintained control widths.
 - The table contextual bar (below) is a deliberate contextual strip that appears only while
   the caret is inside a table — it is not toolbar wrap.
-- Implementation is viewport-breakpoint-driven (`sm:` classes), not JS width measuring.
 
 ## 3. Active / disabled semantics (#677 F3)
 
