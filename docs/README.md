@@ -27,8 +27,8 @@ has one authority:
 | Engineering and verification policy | [`docs/standards/`](standards/) and executable repository gates |
 | Current implementation state | [`docs/status/`](status/) plus as-built code/test evidence |
 | Phase boundaries | [`docs/roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) |
-| Current backlog sequencing / disposition | Active roadmap tracker; currently GitHub Issue [#584](https://github.com/jnhu76/exam/issues/584) |
-| Current task scope / acceptance / non-goals | The OPEN GitHub Issue selected by the current roadmap |
+| Current backlog sequencing / disposition | Specifically authorized **OPEN** GitHub Issue selected for that work; no universal successor to #584 |
+| Current task scope / acceptance / non-goals | That same OPEN Issue plus any explicitly adopted parent ordering |
 | Historical evidence | [`docs/archive/`](archive/), Git, closed Issues, and merged PRs |
 
 An OPEN Issue is an execution contract, not a substitute for runtime or product
@@ -51,7 +51,7 @@ guidance.
 | [`roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) | Stable phase boundaries and acceptance scope |
 | [`roadmap/current.md`](roadmap/current.md) | Phase-level status summary; intentionally does not duplicate the live Issue queue |
 | [`roadmap/post-mvp-issues.md`](roadmap/post-mvp-issues.md) | Coarse Issue index; live state and ordering remain on GitHub |
-| GitHub Issue [#584](https://github.com/jnhu76/exam/issues/584) | Current execution authority — post-#550 measured-bottleneck + production-deployment closure (successor to the completed [#552](https://github.com/jnhu76/exam/issues/552) production-hardening roadmap); High-Assurance activation is deferred until **this** roadmap closes |
+| GitHub Issue [#584](https://github.com/jnhu76/exam/issues/584) | **Closed historical roadmap**: bounded post-#550 decisions, with NOT_PROVEN residuals; not current execution authority. Future High-Assurance is separately gated by [#293](https://github.com/jnhu76/exam/issues/293). |
 
 ### Architecture (current implemented design)
 
