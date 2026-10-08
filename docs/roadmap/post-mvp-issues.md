@@ -1,14 +1,13 @@
 # Post-MVP Work Index
 
-> This is a coarse navigation index only. GitHub is authoritative for live
-> open/closed state. The current sequencing and disposition authority is
-> [#584](https://github.com/jnhu76/exam/issues/584) — the successor to the
-> completed [#552](https://github.com/jnhu76/exam/issues/552) production-
-> hardening roadmap. Do not duplicate an Issue specification here.
+> Coarse navigation only. GitHub owns live Issue state; each specifically
+> authorized **OPEN** Issue owns its own execution scope and ordering.
+> Closed [#584](https://github.com/jnhu76/exam/issues/584) is historical
+> evidence, NOT current execution authority.
 
 ## Program / convergence
 
-- #584 Post-#550 measured bottleneck + production deployment closure — **CURRENT EXECUTION AUTHORITY**.
+- #584 Post-#550 deployment/performance decision campaign — **CLOSED with documented NOT_PROVEN residuals** (#585 HTTP nginx, #586 KEEP_POOL_10, #587 deferred capacity proof).
 - #552 Generic Production Hardening roadmap — completed historical execution authority (closed after the #550 capacity re-proof).
 - #516 Generic Runtime Completion — completed historical phase boundary.
 - #320 Dedicated email-worker process boundary — bounded KEEP vs CONVERGE decision (CONVERGED; delivery moved in-process, ADR-011 §23).
@@ -37,9 +36,9 @@ and [`docs/ui/visual-foundation.md`](../ui/visual-foundation.md).
 
 ## High-Assurance exam capabilities
 
-High-Assurance is the next major capability phase **after #584 closes**. It is
-not the current execution lane. The remaining High-Assurance-specific runtime
-sequence is:
+High-Assurance is a **future capability lane requiring explicit adoption**.
+Closure of #584 is not proof that Controlled/Strict is implemented or an
+automatic start signal. Remaining runtime requirements are:
 
 - #315 Device/session binding runtime.
 - #316 Secondary identity verification.
@@ -76,9 +75,10 @@ idea into implementation authority.
 
 When selecting work:
 
-1. read the live tracker (#584) for the current lane and ordering;
-2. open the selected Issue and treat its current body/checkpoints as the task
-   contract;
+1. select a specifically authorized OPEN Issue; a closed roadmap such as
+   #584 cannot supply active global ordering;
+2. use that Issue's body, checkpoints, and any explicitly approved parent
+   ordering as the execution contract;
 3. reconcile that contract with current master before editing;
 4. update the Issue when scope, root cause, contract, or disposition changes;
 5. use this file only to navigate the portfolio, never to infer live Issue
