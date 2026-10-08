@@ -50,6 +50,24 @@ pnpm dev              # start API + Web dev servers
 6. Keep the Issue and PR in sync — update the Issue if scope or
    decisions change.
 
+## Direct Vitest development loop (#689)
+
+After editing `packages/domain/src`, you can run **direct** Vitest in the
+`@exam/contracts` or `@exam/api` project without first building domain:
+
+```bash
+pnpm --filter @exam/contracts exec vitest run src/examProfile.test.ts
+pnpm --filter @exam/api exec vitest run src/domainSourceResolution.test.ts
+```
+
+Those two Vitest projects resolve the exact `@exam/domain` package-root import
+to `packages/domain/src/index.ts` via the test-only
+`vitest.sourceAliases.ts`. Production Node and TypeScript package entries
+**still resolve to dist**, as intended. This exception does not mean a direct
+Vitest run automatically rebuilds **other** workspace dependencies; use the
+root `pnpm test` / `pnpm verify` Turbo commands for the complete build-first,
+CI-equivalent graph.
+
 ## Verification Requirements
 
 Every PR must pass `pnpm verify:static` locally before submission.
