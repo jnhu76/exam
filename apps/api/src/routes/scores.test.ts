@@ -101,7 +101,11 @@ describe("score routes", () => {
     });
   }
 
-  async function createGradedAttempt(showResultImmediately: boolean) {
+  /** Real attempt lifecycle through the production routes:
+   * create → publish → enroll → start. The attempt is genuinely in_progress
+   * (never submitted) — hidden-response fixtures must not rewind graded
+   * attempts (#698 review). */
+  async function createStartedAttempt(showResultImmediately: boolean) {
     const createResponse = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
@@ -153,6 +157,11 @@ describe("score routes", () => {
       cookies: { "auth-token": ctx.candidateToken },
     });
     const attemptId = startResponse.json().id as string;
+    return { attemptId, examId };
+  }
+
+  async function createGradedAttempt(showResultImmediately: boolean) {
+    const { attemptId } = await createStartedAttempt(showResultImmediately);
     await ctx.app.inject({
       method: "POST",
       url: `/api/attempts/${attemptId}/answers/${questionId}`,
@@ -287,17 +296,8 @@ describe("score routes", () => {
   });
 
   it("returns a hidden response for an in-progress attempt", async () => {
-    const { attemptId } = await createGradedAttempt(true);
-    const requestContext = {
-      actorId: ctx.candidate.id,
-      organizationId: ctx.org.id,
-      role: "Candidate" as const,
-      permissions: [] as import("@exam/domain").Permission[],
-      sessionId: "test",
-    };
-    await createAttemptRepo(ctx.db).update(requestContext, attemptId, {
-      status: "in_progress",
-    });
+    // Real in-progress lifecycle: started, never submitted.
+    const { attemptId } = await createStartedAttempt(true);
 
     const response = await ctx.app.inject({
       method: "GET",
@@ -306,6 +306,9 @@ describe("score routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    // Non-graded attempts keep the engine's historical catch-all hiddenReason
+    // ("not_started"); the candidate result page keys lifecycle copy on the
+    // status field instead (#698), so the wire contract stays unchanged.
     expect(response.json()).toEqual({
       attemptId,
       status: "in_progress",
@@ -899,6 +902,10 @@ describe("candidate result / answer visibility boundaries", () => {
     title: string;
     resultPublicationMode: "immediate" | "manual";
     includeTextResponse: boolean;
+    /** Skip the terminal grading write and leave the attempt genuinely
+     * submitted + pending_manual — the #698 deadline-auto-submit holding
+     * state. Default: finalize grading. */
+    finalizeGrading?: boolean;
   }): Promise<{ examId: string; attemptId: string }> {
     const createResponse = await ctx.app.inject({
       method: "POST",
@@ -994,8 +1001,10 @@ describe("candidate result / answer visibility boundaries", () => {
     // Mark the attempt fully_graded directly (visibility LOGIC is under test,
     // not the grading command which P1 already proves): set gradingStatus,
     // score, passed, gradedAt, and a terminal gradingResult for the
-    // text_response entry so resolveCandidateResultVisibility sees a ready result.
-    if (opts.includeTextResponse) {
+    // text_response entry so resolveCandidateResultVisibility sees a ready
+    // result. finalizeGrading: false keeps the real submitted+pending_manual
+    // state instead (hidden-response fixtures, #698).
+    if (opts.includeTextResponse && opts.finalizeGrading !== false) {
       const requestContext = {
         actorId: ctx.admin.id,
         organizationId: ctx.org.id,
@@ -1321,6 +1330,56 @@ describe("candidate result / answer visibility boundaries", () => {
       manualGraded: true,
     });
     expect(manualBody.questionResults[0]).not.toHaveProperty("standardAnswer");
+  });
+
+  it("returns a hidden response for a submitted attempt with pending manual grading (#698)", async () => {
+    // The #698 deadline-auto-submit holding state built through the REAL
+    // lifecycle: mixed exam submitted with the text_response still awaiting
+    // manual scoring — status stays "submitted" with no terminal grading
+    // fields (this test asserts exactly that, so the fixture cannot drift
+    // into an impossible graded→submitted rewind). The wire carries the
+    // engine's historical catch-all hiddenReason ("not_started"); the result
+    // page keys lifecycle copy on the status field, never rendering the
+    // catch-all as "考试尚未开始".
+    const { attemptId } = await createManualGradedMixedExam({
+      title: "#698 submitted pending manual",
+      resultPublicationMode: "immediate",
+      includeTextResponse: true,
+      finalizeGrading: false,
+    });
+    const requestContext = {
+      actorId: ctx.candidate.id,
+      organizationId: ctx.org.id,
+      role: "Candidate" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const stored = await createAttemptRepo(ctx.db).findById(
+      requestContext,
+      attemptId,
+    );
+    expect(stored).toMatchObject({
+      status: "submitted",
+      gradingStatus: "pending_manual",
+    });
+    expect(stored?.gradedAt).toBeFalsy();
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+
+    // Exact shape: no score/pass/gradedAt/questionResults may leak on the
+    // hidden variant while manual grading is pending.
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      attemptId,
+      status: "submitted",
+      showResultImmediately: false,
+      hiddenReason: "not_started",
+      examTitle: "#698 submitted pending manual",
+    });
   });
 
   it("candidate can read own result but not another candidate's attempt", async () => {
