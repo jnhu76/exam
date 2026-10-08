@@ -2,7 +2,7 @@
 
 > **性质：架构导航与实现映射（descriptive architecture reference）**  
 > **审计基线：** `dc0fcce62f48dcf98e7c71f2834b70e9caee19b5`（2026-10-08，#733 最终 closeout）  
-> **审计结果：** `PASS_WITH_DEFERRED_DEBT`；24 个已登记的配置语义事实在该基线上各有一个 canonical policy；无已发现的第二权威或生产 API 配置绕过。  
+> **审计结果：** `PASS_WITH_DEFERRED_DEBT`；最终审计摘要报告为 24 个语义事实，但 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 的 registry 表逐行数实际为 **25 行**（§SEED_*§ 与 evidence CLI escape hatch 分列）；本文件保留全部 25 行，不擅自合并为一个 fact。已审计事实未发现第二权威或生产 API 配置绕过。  
 > **重要：** 本文**不是另一套 settings 默认值、解析算法或部署拓扑的规范根**。运行中的配置语义以表中指明的代码 authority 为准；测试/部署契约以现有权威文档及脚本为准。本文的表格是它们的**索引与 DAG 投影**。当代码发生变化，必须同步本文，而不是让本文成为第二 resolver。
 
 ## 目录
@@ -176,9 +176,9 @@ flowchart TD
 
 **关键边界**：当 `APP_MODE` **仅写在根 `.env` 内**且进程没有提前导出 mode，loader 的准入判断会先把进程视为 development，读取文件，后续 runtime resolver 再看到文件内的模式。这是 #733 审计承认的**当前法律**，不是 managed runner 的受支持启动方式；managed test/e2e/ci/production 必须由自己的启动 owner 提前注入 `APP_MODE`。
 
-## 4. 权威归属总表（24 类事实）
+## 4. 权威归属总表（原始 registry 的 25 行）
 
-本节以 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 的 24 行 semantic-fact registry 为基础；**分组复合事实**是审计分类，不暗示单个变量必然等于单个事实。
+本节逐行保留 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 中的 **25 条 registry 记录**。该证据正文与 #733 closeout 摘要均标称“24”，但实际表格有 25 个数据行；计数差异是**证据的记录不一致**，这里显式披露，不能为了让统计漂亮而把本来不同的两个 owner 合并。**分组复合事实**只是审计分类，不暗示一个 env key 必然等于一个 fact。
 
 | 语义事实 / 族 | 唯一权威（或明确 owner pair） | 主要实际消费者 |
 | --- | --- | --- |
@@ -205,9 +205,10 @@ flowchart TD
 | 21. LAUNCHPAD_SETUP_TOKEN | settings secret leaf + runtimeConfig projection | launchpad bootstrap route |
 | 22. APP_TIMEZONE / HOST / DEPLOYMENT_MODE / NODE_ENV(AppEnv) / API_DOCS | settings app leaves + runtimeConfig | server、docs UI、timezone、tenant/public-config 投影 |
 | 23. CAPACITY_RESEARCH | `lib/capacityResearch::isCapacityResearchEnabled`（N-01 P4 例外） | DB plugin instrumentation、capacityResearch route、route registration |
-| 24. SEED_* 与 evidence escape hatch | seed 入口后的机制默认值；`backup-evidence.ts` 自有逃生门 | dev/E2E seed、backup-evidence CLI |
+| 24. SEED_* values | API seed entrypoint 的 admission + DB seed mechanism 自有默认 | dev/E2E seed CLIs、seed orchestrator |
+| 25. ALLOW_UNSAFE_EVIDENCE_TEST_DB | `apps/api/src/scripts/backup-evidence.ts` 的 script-owned fact | backup-evidence CLI 安全选择 |
 
-第 24 行包括不同脚本拥有的**彼此不同的事实**，不是共享的一个 resolver；这些在 [原始 registry](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 内分别列为 `SEED_*` 和 `ALLOW_UNSAFE_EVIDENCE_TEST_DB`。此外 `NODE_ENV` 的宽松 `AppEnv` 展示投影，与 authoritative `RUNTIME_MODE` 也是不同事实，不能误合并。
+第 24、25 行分别属于 seed mechanism 和 evidence CLI 的**不同配置事实**，不共享一个 resolver；原始资料的“24”计数与 25 行表格暂未在证据 issue 内统一。此外 `NODE_ENV` 的宽松 `AppEnv` 展示投影，与 authoritative `RUNTIME_MODE` 也是不同事实，不能误合并。
 
 ## 5. 配置变量 → 解析者 → 消费者索引
 
