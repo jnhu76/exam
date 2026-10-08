@@ -5,11 +5,13 @@ of finding work, setting up your environment, and submitting changes.
 
 ## Finding Issues
 
-All active work is tracked in GitHub Issues. The current execution
-ordering lives in the active roadmap tracker, currently [#584](https://github.com/jnhu76/exam/issues/584)
-(the successor to the completed [#552](https://github.com/jnhu76/exam/issues/552) hardening roadmap).
-Pick an OPEN Issue from the index in
-[`docs/roadmap/post-mvp-issues.md`](docs/roadmap/post-mvp-issues.md).
+All active work is tracked in GitHub Issues. Pick a specifically authorized
+**OPEN** Issue, which owns its task scope and ordering. The closed
+[#584](https://github.com/jnhu76/exam/issues/584) is no longer current
+execution authority; no universal successor was automatically promoted.
+Use [`docs/roadmap/post-mvp-issues.md`](docs/roadmap/post-mvp-issues.md)
+for navigation and [`docs/roadmap/current.md`](docs/roadmap/current.md)
+for phase status.
 
 Before starting work, read the Issue body and confirm it is still
 reconciled with current master — stale Issues are updated rather than
