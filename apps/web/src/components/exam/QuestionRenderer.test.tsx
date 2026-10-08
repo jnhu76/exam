@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { QuestionRenderer } from "./QuestionRenderer";
-import { isContentDocumentV1 } from "@exam/domain";
 
 /**
  * P3-MOD-P0-2 — text_response rendering.
@@ -80,7 +79,7 @@ describe("QuestionRenderer — text_response", () => {
 });
 
 describe("QuestionRenderer — rich text_response (issue 301)", () => {
-  it("mounts the lazy rich editor when answerMode is rich and emits a canonical document", async () => {
+  it("mounts the lazy rich editor when answerMode is rich and emits nothing until a real edit", async () => {
     const onChange = vi.fn();
     render(
       <QuestionRenderer
@@ -95,13 +94,14 @@ describe("QuestionRenderer — rich text_response (issue 301)", () => {
     );
     // Lazy chunk resolves and Tiptap mounts its editable surface.
     const editor = await screen.findByRole("textbox", {}, { timeout: 5000 });
+    expect(editor).toBeInTheDocument();
 
-    // Any transaction (here: the mount/focus transaction jsdom produces)
-    // must surface a canonical ContentDocumentV1 — never raw Tiptap JSON.
-    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
-    for (const [emitted] of onChange.mock.calls) {
-      expect(isContentDocumentV1(emitted)).toBe(true);
-    }
+    // #697: mounting (and its editability sync) is not a document change —
+    // no onChange may fire, so no phantom save can be scheduled. Every real
+    // emission's canonical shape is owned by
+    // richContentEditor.editableSync.test.tsx (real-edit driven).
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(onChange).not.toHaveBeenCalled();
   }, 15000);
 
   it("keeps the plain textarea when answerMode is plain", () => {
