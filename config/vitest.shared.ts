@@ -2,9 +2,15 @@
  * Shared vitest configuration constants and the supported test env-file
  * loader.
  *
- * Single source for environment variables that EVERY vitest config in this
- * monorepo must force, so no two packages can drift into defining their own
- * "test mode" macro. Import this instead of re-declaring APP_MODE/NODE_ENV.
+ * Single source for the forced test-mode environment (APP_MODE/NODE_ENV)
+ * and the test env-file admission, so no two packages drift into defining
+ * their own "test mode" macro. Import this instead of re-declaring
+ * APP_MODE/NODE_ENV. The projects whose suites resolve mode-dependent
+ * config spread TEST_RUNTIME_ENV into `test.env` (API incl. its fixture
+ * child configs, DB — plus auth, which pins a deterministic mode); pure
+ * projects (web, contracts, authz, domain, exam-engine, import-export) set
+ * no `test.env` and rely on vitest's own NODE_ENV=test default —
+ * docs/standards/testing.md §2.4 carries the per-project matrix.
  *
  * Why these are forced (not read from .env): a local .env commonly sets
  * APP_MODE=development / NODE_ENV=development for `pnpm dev`. If vitest
