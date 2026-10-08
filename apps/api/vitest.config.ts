@@ -56,6 +56,11 @@ export default defineConfig(() => ({
   // Production package exports / TS build resolution remain unchanged.
   resolve: { alias: [DOMAIN_TEST_SOURCE_ALIAS] },
   test: {
+    // #689: @exam/contracts is a runtime intermediary importing
+    // @exam/domain. Inline this one linked workspace package so its
+    // transitive import is also routed through the source alias instead
+    // of being resolved by Node directly from domain/dist.
+    server: { deps: { inline: ["@exam/contracts"] } },
     // Fail-fast DB availability pre-check. Runs once before any test file;
     // aborts the run with a clear "run pnpm db:up" message if the test DB is
     // unreachable, instead of letting every integration test file cascade with
