@@ -8,6 +8,34 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-10-09
+
+### Fixed
+
+- Rich answer drafts no longer register false edits or autosave new answer
+  versions merely because Tiptap editability is synchronized on mount,
+  restore, or disabled-state changes (#697, PR #755). Real user document
+  edits still flow through the canonical save path.
+- Candidate result-page copy reflects the attempt's actual lifecycle after
+  deadline-driven submission or disruption, instead of telling an already
+  submitted candidate the exam has not started. Existing result-visibility
+  and hidden-score contracts remain unchanged (#698, PR #753).
+- Candidate Rich answer UI fits narrow viewports without page-level
+  horizontal overflow or hiding commands in an inaccessible toolbar scroller;
+  command overflow follows measured container width, and long Rich prompt/
+  option tokens wrap (#699, PR #752).
+
+### Changed
+
+- Repository-level configuration helpers moved from the repository root into
+  `config/`, preserving their admission, parsing, and test-environment
+  authorities. Vitest environment guidance was reconciled with actual
+  consumers without changing runtime configuration semantics (PR #750).
+- Current documentation no longer presents the closed #584/#587 program as
+  the active universal execution authority; future work is selected through
+  specifically authorized open Issues. High-assurance profiles remain future
+  gated capabilities (PR #754).
+
 ## [0.0.8] - 2026-10-08
 
 ### Added
@@ -551,7 +579,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.8...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/jnhu76/exam/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/jnhu76/exam/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/jnhu76/exam/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/jnhu76/exam/compare/v0.0.5...v0.0.6
