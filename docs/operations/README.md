@@ -69,7 +69,7 @@ Four distinct layers — do not conflate them (#547):
 | `GET /api/health` | none | Liveness | Process/event-loop responsive. Dependency-blind BY DESIGN: stays 200 through DB loss. |
 | `GET /api/ready` | none | Readiness | Deployment gate: mandatory serving dependencies (PostgreSQL; Redis only when `REDIS_MODE=required`) currently usable. Handler body: `200 {"status":"ready"}` / `503 {"status":"not_ready"}` — nothing else is disclosed. One deliberate exception: with `REDIS_MODE=required` and Redis unusable, the rate limiter fails closed first and the answer is the standard 503 `RATE_LIMIT_UNAVAILABLE` error envelope (same gate direction — 503 = not ready). |
 | `GET /api/system/health` | Admin + Maintainer | Diagnostics | DB ping latency, CPU, memory + derived status (CPU/memory thresholds only) |
-| `GET /api/system/diagnostics` | Admin + Maintainer | Diagnostics | Operational: DB latency, Redis, scanner state + stall classification, outbox, integrity |
+| `GET /api/system/diagnostics` | Admin + Maintainer | Diagnostics | Operational: DB latency, Redis, scanner state + stall classification, outbox; Admin responses may additionally include business-integrity anomalies (Maintainer never receives the business-integrity projection) |
 | `GET /api/system/info` | none | — | Version + uptime |
 | `GET /api/system/public-config` | none | — | Deployment mode, feature flags |
 

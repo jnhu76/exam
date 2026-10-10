@@ -180,9 +180,11 @@ from the plain-text workflow above.
 - Collaboration and scoped staff roles move to Phase 3.
 - Platform integration moves to Phase 4.
 - Optional multiTenant remains Phase 4.
-- The generic ADR-008 final-answer submit barrier (Option D — submit carries a
-  final-answer payload / version barrier for all supported answer types, not only
-  rich text; **Issue #302**) remains Phase 3 product work.
+- Historical: the generic ADR-008 final-answer submit barrier (Option D — a
+  final-answer payload / version barrier for all supported answer types;
+  **Issue #302**) is closed not planned / superseded. Normal-submit correctness
+  is owned by the pre-submit flush plus the server-side locked submit/freeze
+  path, not by a future Option-D task.
 
 ## Phase 3: Collaboration, Permissions, and Account Lifecycle
 
@@ -223,7 +225,7 @@ Implemented items are marked ✅; open items are Issue-tracked:
 - ✅ Rich-text/WYSIWYG authoring and answering protocol (ADR-019; **Issue #301**
   closed 2026-08-31) — formula/table/code content delivered; attachments remain
   unsupported and no attachment policy has been adopted.
-- ⏳ Generic final-answer submit barrier (Option D, ADR-008 — `/submit` carries a final-answer payload or version/hash barrier so the UI answer at submit-click time is the grading authority). Answer-type-independent; applies to all supported answer types — **Issue #302**.
+- Closed not planned: the generic final-answer submit barrier (Option D, ADR-008 — `/submit` carrying a final-answer payload or version/hash barrier; **Issue #302**, closed 2026-08-27 as superseded). Normal-submit correctness is owned by the pre-submit flush plus the server-side locked submit/freeze path.
 - ⏳ Remaining i18n page-level copy migration — folded into **Issue #305**.
 - ✅ In-app notification Inbox for selected operational events (architecture: ADR-011).
 - ✅ Asynchronous PostgreSQL-outbox Email delivery with a resident, observable worker (architecture: ADR-011).
@@ -274,7 +276,7 @@ Identity lifecycle remains separate future work.
 - Candidate with a configured email address receives the corresponding asynchronous result email; SMTP never participates in the result-publication transaction.
 - Email worker heartbeat and backlog are observable through diagnostics.
 - ✅ A plain-text subjective question can be authored, published, answered, manually graded, and viewed through the supported product loop without leaking rubric/reference data to the candidate.
-- A future rich-text/WYSIWYG authoring protocol has explicit authority and sanitization rules before activation; the generic final-answer submit barrier (ADR-008 Option D) is tracked separately from rich-text work.
+- A future rich-text/WYSIWYG authoring protocol has explicit authority and sanitization rules before activation; the generic final-answer submit barrier (ADR-008 Option D) was a separate concern from rich-text work and is closed not planned (**#302**, superseded).
 
 ### Explicitly deferred items
 

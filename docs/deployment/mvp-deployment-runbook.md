@@ -568,8 +568,8 @@ curl -s http://localhost:${EXAM_PORT:-80}/api/health
 
 # Admin / Maintainer system health (DB ping + CPU/memory)
 # (requires authentication; obtain the auth-token cookie via the login page)
-# Maintainer is a read-only observer and holds exactly these system read
-# capabilities (ADR-017 R4-5); write surfaces such as PUT /system/ops-policy
+# Maintainer is a read-only system observer under ADR-017; this endpoint
+# requires system.health.view. Write surfaces such as PUT /system/ops-policy
 # stay Admin-only.
 curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/health
 # Expected: {"cpu":..,"memory":..,"dbResponseMs":..,"status":"ok"}
@@ -1151,7 +1151,7 @@ and §24 (deferred capabilities). Highlights:
 - Email bodies render through per-flow pure zh-CN renderer functions (#300);
   a generic template engine and multi-locale backend i18n are NOT implemented
   (by design — see ADR-011 §24).
-- Generic final-answer submit barrier — ADR-008 Option D (answer-type-independent) NOT implemented.
+- Generic final-answer submit barrier — ADR-008 Option D (answer-type-independent) NOT implemented and NOT planned: #302 closed not_planned / superseded (normal-submit correctness is owned by the pre-submit flush plus the server-side locked submit/freeze path).
 - Live backup validation (pg_dump/restore) was not executed in the P6 audit;
   this runbook documents the supported procedure. Validate on first
   production deploy.
