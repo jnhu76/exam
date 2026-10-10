@@ -1,0 +1,12 @@
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  // #741: per-package implicit envDir admission is OFF (pinned by
+  // scripts/check-env-surface.mjs).
+  envDir: false,
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    exclude: ["dist/**", "node_modules/**"],
+  },
+});

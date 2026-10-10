@@ -49,6 +49,20 @@ await forbid("packages/authz/src", [
 await forbid("packages/contracts/src", [
   [/from ["']fastify/, "contracts cannot depend on fastify"],
 ]);
+// @exam/atlas is the offline Architecture Atlas tooling package (#764): it
+// models the repository as data (IR v0.1) and must stay independent of every
+// runtime framework. It reads the Fastify route surface only through the
+// committed apps/api capture artifact, never by importing the app.
+await forbid("packages/atlas/src", [
+  [
+    /from ["'](?:fastify|react|drizzle-orm)["']/,
+    "atlas tooling must stay framework-independent (no fastify/React/Drizzle)",
+  ],
+  [
+    /from ["']@exam\/(?:api|web|db|auth|e2e)["']/,
+    "atlas observes apps through committed capture artifacts, not app imports",
+  ],
+]);
 // @exam/auth owns the JWT/password mechanism only (#733 R3): application mode
 // and secret policy are resolved by the canonical settings/runtimeConfig
 // authority and passed in as explicit arguments, so the package must not read
