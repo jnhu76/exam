@@ -64,6 +64,13 @@ guidance.
 | [`architecture/exam-system/README.md`](architecture/exam-system/README.md) | Exam-system architecture map and known limitations |
 | [`architecture/exam-system/candidate-recovery.md`](architecture/exam-system/candidate-recovery.md) | Candidate recovery sequences and authority boundaries |
 | [`architecture/exam-system/state-and-authority.md`](architecture/exam-system/state-and-authority.md) | Lifecycle, policy, timestamp, and evidence dimensions |
+| [`architecture/exam-system/domain-model.md`](architecture/exam-system/domain-model.md) | Domain objects: classification, ownership, relationships |
+| [`architecture/exam-system/protocol-catalog.md`](architecture/exam-system/protocol-catalog.md) | Protocol catalog: actor, preconditions, writes, transaction boundary, idempotency, audit |
+| [`architecture/exam-system/data-authority.md`](architecture/exam-system/data-authority.md) | Data authority, immutability, and transaction boundaries |
+| [`architecture/exam-system/security-model.md`](architecture/exam-system/security-model.md) | Security and trust boundaries |
+| [`architecture/exam-system/diagrams.md`](architecture/exam-system/diagrams.md) | Evidence-backed architecture diagrams |
+| [`architecture/exam-system/incident-authority.md`](architecture/exam-system/incident-authority.md) | Exam incident authority (ADR-014) |
+| [`architecture/configuration-authority.md`](architecture/configuration-authority.md) | Configuration authority DAG: source → resolver → consumer, precedence, audit baseline |
 | [`architecture/frontend.md`](architecture/frontend.md) | As-built frontend architecture |
 | [`design/candidate-rich-editor-ux.md`](design/candidate-rich-editor-ux.md) | Candidate Rich editor interaction contract (#669 Phase U) — command model, toolbar/keyboard/formula/table behavior, lock-state presentation; consumes, never restates, the Rich semantic authority |
 
@@ -109,7 +116,11 @@ representability, and stored reserved values cannot silently redefine it.
 | Document | Purpose |
 | --- | --- |
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
-| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-021-exam-semantic-authority-adoption.md`](adr/ADR-021-exam-semantic-authority-adoption.md) | Formal architecture decisions |
+| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-022-product-capability-composition.md`](adr/ADR-022-product-capability-composition.md) | Formal architecture decisions |
+
+Adopted design not yet implemented: [`architecture/product-capability-composition.md`](architecture/product-capability-composition.md)
+— adopted by [ADR-022](adr/ADR-022-product-capability-composition.md), zero
+implementation at master, tracked by [#678](https://github.com/jnhu76/exam/issues/678).
 
 Key recovery authority:
 

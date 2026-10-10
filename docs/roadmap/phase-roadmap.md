@@ -171,18 +171,18 @@ The original boundary is historical. Plain-text `text_response` authoring,
 answering, frozen grading basis, Grading Queue discovery, manual grading, and
 result flow were subsequently implemented and closed on 2026-07-31. Fill-blank
 is an implemented auto-graded objective question type (exact/keyword matching,
-with E2E coverage). Rich-text/WYSIWYG answering remains open (Issue #301) and
-must not be conflated with the completed plain-text workflow.
+with E2E coverage). Rich-text/WYSIWYG answering was subsequently delivered and is **no longer open**:
+Issue #301 closed 2026-08-31 (ADR-019 content-document model). It remains distinct
+from the plain-text workflow above.
 
 ### Explicitly deferred items
 
 - Collaboration and scoped staff roles move to Phase 3.
 - Platform integration moves to Phase 4.
 - Optional multiTenant remains Phase 4.
-- rich-text/WYSIWYG answering (**Issue #301**) and the generic ADR-008
-  final-answer submit barrier (Option D — submit carries a final-answer payload
-  / version barrier for all supported answer types, not only rich text;
-  **Issue #302**) remain Phase 3 product work.
+- The generic ADR-008 final-answer submit barrier (Option D — submit carries a
+  final-answer payload / version barrier for all supported answer types, not only
+  rich text; **Issue #302**) remains Phase 3 product work.
 
 ## Phase 3: Collaboration, Permissions, and Account Lifecycle
 
@@ -197,10 +197,11 @@ Issue-tracked).** The MVP role/notification/release-ready
 sequence P4 → P5-0 → P3 → P5-N1 → P6 is closed. The plain-text
 `text_response` product loop is also closed. The P7 hardening program
 (state/authority, backup/DR, operational control plane, exam modes, RBAC
-remediation) is **CLOSED (2026-08-14)**. Resource-scoped authorization,
-identity lifecycle, additional notifications, rich-text/WYSIWYG answering, the
-generic final-answer submit barrier, and other product work remain open and are
-tracked by GitHub Issues (index: [`post-mvp-issues.md`](post-mvp-issues.md)).
+remediation) is **CLOSED (2026-08-14)**. Resource-scoped authorization, identity
+lifecycle, additional notifications, the generic final-answer submit barrier, and
+other product work remain open and are tracked by GitHub Issues (index:
+[`post-mvp-issues.md`](post-mvp-issues.md)). Rich-text/WYSIWYG answering is
+delivered (#301 closed 2026-08-31).
 
 ### In scope
 
@@ -219,7 +220,9 @@ Implemented items are marked ✅; open items are Issue-tracked:
 - ⏳ Audit log search / export UI — **Issue #298**.
 - ✅ Fill-blank answer protocol, auto-grading, result flow, and E2E closeout (auto-graded exact/keyword matching).
 - ✅ Plain-text `text_response` authoring, optional reference answer, candidate answering, snapshot freeze, grading-queue discovery, manual grading, and result flow.
-- ⏳ Rich-text/WYSIWYG authoring and answering protocol, including attachment/formula policy if adopted — **Issue #301**.
+- ✅ Rich-text/WYSIWYG authoring and answering protocol (ADR-019; **Issue #301**
+  closed 2026-08-31) — formula/table/code content delivered; attachments remain
+  unsupported and no attachment policy has been adopted.
 - ⏳ Generic final-answer submit barrier (Option D, ADR-008 — `/submit` carries a final-answer payload or version/hash barrier so the UI answer at submit-click time is the grading authority). Answer-type-independent; applies to all supported answer types — **Issue #302**.
 - ⏳ Remaining i18n page-level copy migration — folded into **Issue #305**.
 - ✅ In-app notification Inbox for selected operational events (architecture: ADR-011).

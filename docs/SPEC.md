@@ -745,6 +745,12 @@ AuditLog {
 - Phase 1 不做 LaTeX / 公式编辑器，纯文本 + 图片
 - 简答题/论文/画图等主观题型留 Phase 2
 
+> **当前状态（非不变量）**：上述两条是 Phase 1 范围的历史声明。Rich 题干/答案
+> 与公式编辑已由 ADR-019 / #301 交付（`docs/architecture/rich-content-semantic-contract.md`、
+> `docs/design/candidate-rich-editor-ux.md`），`text_response` 主观题已交付并进入
+> 工作集批改；画图与文件上传仍未支持。当前能力状态以
+> [`docs/status/implementation-status.md`](status/implementation-status.md) 与生产代码为准。
+
 ### 4.2 组卷
 
 ```
@@ -859,6 +865,13 @@ Phase 2 运营人员点击"开考"
 | 单选 / 判断 | 精确匹配标准答案 |
 | 多选 | 全对满分，少选半分，错选零分（可配置） |
 | 填空 | 精确匹配或关键词匹配（可配置模糊度） |
+
+**人工批改（已交付，超出本节的 Phase 1 自动批改范围）**：`text_response` 由
+`submit` 冻结屏障物化为 `pending_manual` 工作项，评分员经
+`gradeQuestion` 单向完成，终态由 `aggregateGradingEntries` 聚合。协议见
+[`architecture/exam-runtime.md`](architecture/exam-runtime.md) §3.4/§6.6，状态见
+[`status/implementation-status.md`](status/implementation-status.md)。主观题不再属于
+Future；下面的 AI 辅助部分仍然属 Future。
 
 **Future：AI 辅助**
 
@@ -1173,3 +1186,11 @@ Phase 1 最小规则：
 - Phase 1 不做 WebSocket（答案保存走 HTTP API，不依赖实时连接）
 - 不接外部 AI API（AI 批改必须本地部署模型）
 - 答案保存不依赖 WebSocket 作为唯一通道
+
+> **历史范围说明**：以上第 3、4 条（富文本编辑器、主观题）是 Phase 1 的排除项，
+> 均已在后续阶段交付：Rich 内容模型与编辑器见 ADR-019 / #301 与
+> [`design/candidate-rich-editor-ux.md`](design/candidate-rich-editor-ux.md)，
+> `text_response` 主观题批改见
+> [`architecture/exam-runtime.md`](architecture/exam-runtime.md) §3.4/§6.6。
+> 画图、移动端、Electron、WebSocket、外部 AI API 的排除仍然有效；托管平台与
+> 外部集成边界同样保持不变。

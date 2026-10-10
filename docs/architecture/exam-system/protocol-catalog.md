@@ -169,7 +169,7 @@ Each protocol is documented with:
 | **State transition** | `draft → published` |
 | **Writes** | `exams.status = 'published'`; `exams.questionSnapshot` (frozen copy) |
 | **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → `publishExam()` → `repo.update` |
-| **Audit event** | `exam.published` (atomic, in-tx) |
+| **Audit event** | `exam.publish` (atomic, in-tx) |
 
 ## Protocol: Exam Close
 
@@ -314,7 +314,7 @@ Each protocol is documented with:
 | **Writes** | `exam_attempts` row; `exam_enrollments.attemptCount + 1` |
 | **Transaction boundary** | `executeInTransaction` → `startOrRestoreAttempt()` |
 | **Idempotency behavior** | **Idempotent** — if an active `in_progress` attempt exists, returns it directly |
-| **Audit event** | `attempt.started` (best-effort) |
+| **Audit event** | None — `attempt.start` is retained vocabulary with no production emitter (`apps/api/src/audit/auditPolicy.ts`: `deprecated / domain_history`) |
 
 ## Protocol: Attempt Restore
 
@@ -380,7 +380,7 @@ Each protocol is documented with:
 | **Writes** | `exam_attempts.status`, `submitted_answers`, `submittedAt`, `submissionReason = 'deadline'`, grading result |
 | **Transaction boundary** | `executeInTransaction` → `lockEnrollmentAndAttempt` → `ensureAttemptDeadlineReconciled()` |
 | **Idempotency behavior** | **Idempotent** — already-frozen attempts returned unchanged |
-| **Audit event** | `attempt.deadline_reconciled` (atomic) |
+| **Audit event** | None — reconciliation writes no audit event; the closed vocabulary has no deadline-reconciliation action (see `docs/architecture/exam-runtime.md` §5.3/§11) |
 
 ## Protocol: Attempt Submit
 

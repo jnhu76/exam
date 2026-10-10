@@ -106,6 +106,7 @@ exist.
 
 | Field | Runtime consumer (evidence) | Status |
 | --- | --- | --- |
+| `timingMode` | `packages/domain/src/examProfile.ts` (`ExamProfilePolicyDefaults` + `applyExamProfileDefaults`); resolved as an explicit authoring override in `apps/api/src/routes/exam.ts`; persisted as `exam_policy_profiles.timing_mode` (`packages/db/src/schema/pg.ts`) | SUPPORTED（authoring modes only） |
 | `durationMinutes` | `attemptCommands.ts:243` (`calculateDeadlineAt`) | SUPPORTED |
 | `latestStartOffsetMinutes` | `attemptCommands.ts:233-235` (start gate) | SUPPORTED |
 | `minSubmitAfterStartMinutes` | `attemptCommands.ts:375-379` (submit gate) | SUPPORTED |
@@ -117,21 +118,37 @@ exist.
 | `interruptionGracePerIncidentSeconds` | snapshot + restore evaluation | SUPPORTED |
 | `interruptionGracePerAttemptSeconds` | snapshot + restore evaluation | SUPPORTED |
 
+> **Amendment (reconciliation, doc-only).** §6 below records the M2-era exclusion
+> reasoning. Two of its claims are superseded by current master and by the M1
+> support matrix in [`exam-policy-authority.md`](./exam-policy-authority.md) §4/§13,
+> which is authoritative for policy semantics (as §"Binding M1 authority model"
+> above states): `timingMode` **is** a stored profile field, and the
+> `controlFlags` picture is split, not uniformly unenforced. The rows above and
+> the corrected bullets below state the current facts; no M2 architecture
+> decision is reopened.
+
 ## 6. Explicitly excluded fields
 
 - **Exam-instance-specific:** `courseId`, `openAt`, `closeAt`,
   `passingScore`, `totalScore`, `questionIds`, `questionSnapshot`,
   `resultsPublishedAt`, lifecycle `status`, `title`/`description`,
   organization identity, Candidate/enrollment data.
-- **Fixed Phase-1 dimensions (no meaningful choice):** `timingMode` (only
-  `timed_window`), `questionSelectionMode` (only `manual`). Not stored just so
-  a profile "looks complete".
-- **Latent/unenforced control flags (P7-M1 §13):** ALL of `controlFlags`
-  (`shuffleQuestions`, `shuffleOptions`, `detectTabSwitch`,
-  `disableCopyPaste`, `requireQueue`, `batchSize`, `batchInterval`,
-  `restrictIp`, `requireLockdown`) — none are enforced by the engine today.
-  Including them would turn latent promises into profile promises. Recorded
-  P2-CF-1..4 remain the truthfulness follow-ups (unchanged by M2).
+- **Fixed dimensions (no meaningful choice):** `questionSelectionMode` (only
+  `manual`). Not stored just so a profile "looks complete".
+  `timingMode` is **not** in this group: it is a stored profile default over the
+  authoring modes (`timed_window` / `deadline` / `untimed`; never `timed_sync`),
+  see §5 and `exam-policy-authority.md` §4.
+- **Control flags:** not part of the profile, and the M2-era statement that
+  "none are enforced by the engine today" is superseded. Per
+  `exam-policy-authority.md` §4/§13: `shuffleQuestions`/`shuffleOptions`
+  (**SUPPORTED**, #294, applied by `materializeAttemptPresentation` at
+  new-attempt creation and frozen in the attempt snapshot) and
+  `requireQueue`/`batchSize`/`batchInterval` (**SUPPORTED**, #292 durable
+  admission) are enforced; `detectTabSwitch`, `disableCopyPaste`, `restrictIp`,
+  `requireLockdown` are **UNSUPPORTED FOR ACTIVATION** — the canonical validator
+  rejects activating them (`UNSUPPORTED_EXAM_CONTROL`) while historical rows stay
+  readable. Including any of them in a profile would turn latent promises into
+  profile promises.
 - **Legacy flag:** `showResultImmediately` is deprecated input, superseded by
   `resultPublicationMode`; it is not part of profile semantics. It remains an
   explicit-request-input legacy coercion at exam create (see §10 note).

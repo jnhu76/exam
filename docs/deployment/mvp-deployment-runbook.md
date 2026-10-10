@@ -566,8 +566,11 @@ docker compose --env-file .env.production ps
 curl -s http://localhost:${EXAM_PORT:-80}/api/health
 # Expected: {"status":"ok"}
 
-# Admin-only system health (DB ping + CPU/memory)
+# Admin / Maintainer system health (DB ping + CPU/memory)
 # (requires authentication; obtain the auth-token cookie via the login page)
+# Maintainer is a read-only observer and holds exactly these system read
+# capabilities (ADR-017 R4-5); write surfaces such as PUT /system/ops-policy
+# stay Admin-only.
 curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/health
 # Expected: {"cpu":..,"memory":..,"dbResponseMs":..,"status":"ok"}
 ```
