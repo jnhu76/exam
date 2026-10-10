@@ -160,13 +160,12 @@ function classifyPreHandler(preHandler: unknown): PreHandlerClassification {
     const authz = tagged.authz;
     if (authz !== undefined) {
       result.capability += 1;
-      if (authz.kind === "flat" || authz.kind === "scoped") {
-        result.permission = authz.permission;
-        if (authz.kind === "scoped") {
-          result.scoped = true;
-          result.resolver = authz.resolverKey;
-          result.resourceIdKey = authz.resourceIdKey;
-        }
+      // Every authz gate kind carries its capability key on the metadata.
+      result.permission = authz.permission;
+      if (authz.kind === "scoped") {
+        result.scoped = true;
+        result.resolver = authz.resolverKey;
+        result.resourceIdKey = authz.resourceIdKey;
       }
     }
   }
