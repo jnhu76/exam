@@ -23,7 +23,8 @@
     "recover:legacy-grading-workset": "tsx src/scripts/recover-legacy-grading-workset.ts",
     "api:openapi:check": "tsx src/openapi/export.ts --check",
     "worker:email": "node dist/workers/emailDeliveryWorker.js",
-    "worker:email:dev": "tsx src/workers/emailDeliveryWorker.ts"
+    "worker:email:dev": "tsx src/workers/emailDeliveryWorker.ts",
+    "atlas:capture-routes": "tsx src/atlas/extractRouteFacts.ts"
   },
   "dependencies": {
     "@exam/auth": "workspace:*",

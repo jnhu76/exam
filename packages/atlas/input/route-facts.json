@@ -1,0 +1,4048 @@
+{
+  "additional_gate_candidates": [
+    {
+      "enclosing_function": "registerAdminAttemptRoutes",
+      "file": "src/routes/attempts.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 155,
+      "permission_key": "AttemptForceSubmit"
+    },
+    {
+      "enclosing_function": "registerAdminAttemptRoutes",
+      "file": "src/routes/attempts.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 231,
+      "permission_key": "AttemptTimeGrant"
+    },
+    {
+      "enclosing_function": "registerAdminAttemptRoutes",
+      "file": "src/routes/attempts.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 339,
+      "permission_key": "AttemptTimelineView"
+    },
+    {
+      "enclosing_function": "registerAdminAttemptRoutes",
+      "file": "src/routes/attempts.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 405,
+      "permission_key": "AttemptExport"
+    },
+    {
+      "enclosing_function": "registerAdminAttemptRoutes",
+      "file": "src/routes/attempts.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 451,
+      "permission_key": "AttemptExport"
+    },
+    {
+      "enclosing_function": "registerAdminAttemptRoutes",
+      "file": "src/routes/attempts.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 75,
+      "permission_key": "AttemptMisconductMark"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 1133,
+      "permission_key": "AttemptSubmit"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 1193,
+      "permission_key": "AttemptHeartbeatSend"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 1261,
+      "permission_key": "AttemptRestore"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 303,
+      "permission_key": "ExamTake"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 452,
+      "permission_key": "ExamTake"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 537,
+      "permission_key": "AttemptStart"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 629,
+      "permission_key": "AttemptStart"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 773,
+      "permission_key": "AttemptViewOwn"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 820,
+      "permission_key": "AttemptViewOwn"
+    },
+    {
+      "enclosing_function": "registerCandidateAttemptRoutes",
+      "file": "src/routes/attempts.candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 949,
+      "permission_key": "AttemptAnswerSave"
+    },
+    {
+      "enclosing_function": "auditRoutes",
+      "file": "src/routes/audit.ts",
+      "inside_prehandler_registration": true,
+      "line": 138,
+      "permission_key": "AuditLogView"
+    },
+    {
+      "enclosing_function": "auditRoutes",
+      "file": "src/routes/audit.ts",
+      "inside_prehandler_registration": true,
+      "line": 218,
+      "permission_key": "AuditLogView"
+    },
+    {
+      "enclosing_function": "auditRoutes",
+      "file": "src/routes/audit.ts",
+      "inside_prehandler_registration": true,
+      "line": 291,
+      "permission_key": "AuditLogView"
+    },
+    {
+      "enclosing_function": "candidateRoutes",
+      "file": "src/routes/candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 195,
+      "permission_key": "CandidateView"
+    },
+    {
+      "enclosing_function": "candidateRoutes",
+      "file": "src/routes/candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 251,
+      "permission_key": "CandidateCreate"
+    },
+    {
+      "enclosing_function": "candidateRoutes",
+      "file": "src/routes/candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 372,
+      "permission_key": "CandidateUpdate"
+    },
+    {
+      "enclosing_function": "candidateRoutes",
+      "file": "src/routes/candidate.ts",
+      "inside_prehandler_registration": true,
+      "line": 493,
+      "permission_key": "CandidateImport"
+    },
+    {
+      "enclosing_function": "candidateFieldRoutes",
+      "file": "src/routes/candidateField.ts",
+      "inside_prehandler_registration": true,
+      "line": 128,
+      "permission_key": "CandidateFieldUpdate"
+    },
+    {
+      "enclosing_function": "candidateFieldRoutes",
+      "file": "src/routes/candidateField.ts",
+      "inside_prehandler_registration": true,
+      "line": 200,
+      "permission_key": "CandidateFieldDelete"
+    },
+    {
+      "enclosing_function": "candidateFieldRoutes",
+      "file": "src/routes/candidateField.ts",
+      "inside_prehandler_registration": true,
+      "line": 258,
+      "permission_key": "CandidateFieldView"
+    },
+    {
+      "enclosing_function": "candidateFieldRoutes",
+      "file": "src/routes/candidateField.ts",
+      "inside_prehandler_registration": true,
+      "line": 52,
+      "permission_key": "CandidateFieldView"
+    },
+    {
+      "enclosing_function": "candidateFieldRoutes",
+      "file": "src/routes/candidateField.ts",
+      "inside_prehandler_registration": true,
+      "line": 81,
+      "permission_key": "CandidateFieldCreate"
+    },
+    {
+      "enclosing_function": "registerCapacityResearchRoutes",
+      "file": "src/routes/capacityResearch.ts",
+      "inside_prehandler_registration": true,
+      "line": 23,
+      "permission_key": "SystemDiagnosticsView"
+    },
+    {
+      "enclosing_function": "courseRoutes",
+      "file": "src/routes/course.ts",
+      "inside_prehandler_registration": true,
+      "line": 150,
+      "permission_key": "CourseView"
+    },
+    {
+      "enclosing_function": "courseRoutes",
+      "file": "src/routes/course.ts",
+      "inside_prehandler_registration": true,
+      "line": 189,
+      "permission_key": "CourseCreate"
+    },
+    {
+      "enclosing_function": "courseRoutes",
+      "file": "src/routes/course.ts",
+      "inside_prehandler_registration": true,
+      "line": 312,
+      "permission_key": "CourseUpdate"
+    },
+    {
+      "enclosing_function": "courseRoutes",
+      "file": "src/routes/course.ts",
+      "inside_prehandler_registration": true,
+      "line": 394,
+      "permission_key": "CourseDelete"
+    },
+    {
+      "enclosing_function": "courseRoutes",
+      "file": "src/routes/course.ts",
+      "inside_prehandler_registration": true,
+      "line": 89,
+      "permission_key": "CourseView"
+    },
+    {
+      "enclosing_function": "emailRoutes",
+      "file": "src/routes/email.ts",
+      "inside_prehandler_registration": true,
+      "line": 45,
+      "permission_key": "SystemEmailTest"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1242,
+      "permission_key": "ExamPublish"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1312,
+      "permission_key": "ExamClose"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1437,
+      "permission_key": "ExamUnpublish"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1498,
+      "permission_key": "ExamExtend"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1587,
+      "permission_key": "ExamCancel"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1676,
+      "permission_key": "ExamArchive"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1780,
+      "permission_key": "ExamResultPublish"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1871,
+      "permission_key": "ExamDelete"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1917,
+      "permission_key": "ExamEnrollmentManage"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 1984,
+      "permission_key": "ExamEnrollmentManage"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 2126,
+      "permission_key": "ExamEnrollmentManage"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 2198,
+      "permission_key": "ExamEnrollmentManage"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 2250,
+      "permission_key": "ExamView"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 411,
+      "permission_key": "ExamView"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 473,
+      "permission_key": "ExamView"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 524,
+      "permission_key": "ExamCreate"
+    },
+    {
+      "enclosing_function": "examRoutes",
+      "file": "src/routes/exam.ts",
+      "inside_prehandler_registration": true,
+      "line": 876,
+      "permission_key": "ExamUpdate"
+    },
+    {
+      "enclosing_function": "examProfileRoutes",
+      "file": "src/routes/examProfile.ts",
+      "inside_prehandler_registration": true,
+      "line": 135,
+      "permission_key": "ExamView"
+    },
+    {
+      "enclosing_function": "examProfileRoutes",
+      "file": "src/routes/examProfile.ts",
+      "inside_prehandler_registration": true,
+      "line": 159,
+      "permission_key": "ExamCreate"
+    },
+    {
+      "enclosing_function": "examProfileRoutes",
+      "file": "src/routes/examProfile.ts",
+      "inside_prehandler_registration": true,
+      "line": 257,
+      "permission_key": "ExamView"
+    },
+    {
+      "enclosing_function": "examProfileRoutes",
+      "file": "src/routes/examProfile.ts",
+      "inside_prehandler_registration": true,
+      "line": 291,
+      "permission_key": "ExamUpdate"
+    },
+    {
+      "enclosing_function": "examProfileRoutes",
+      "file": "src/routes/examProfile.ts",
+      "inside_prehandler_registration": true,
+      "line": 410,
+      "permission_key": "ExamUpdate"
+    },
+    {
+      "enclosing_function": "exportRoutes",
+      "file": "src/routes/export.ts",
+      "inside_prehandler_registration": true,
+      "line": 37,
+      "permission_key": "ScoreExport"
+    },
+    {
+      "enclosing_function": "registerAdminGraderAssignmentRoutes",
+      "file": "src/routes/graderAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 148,
+      "permission_key": "ExamGraderAssignmentManage"
+    },
+    {
+      "enclosing_function": "registerAdminGraderAssignmentRoutes",
+      "file": "src/routes/graderAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 221,
+      "permission_key": "ExamGraderAssignmentView"
+    },
+    {
+      "enclosing_function": "registerAdminGraderAssignmentRoutes",
+      "file": "src/routes/graderAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 269,
+      "permission_key": "ExamGraderAssignmentManage"
+    },
+    {
+      "enclosing_function": "registerGradingQueueRoutes",
+      "file": "src/routes/gradingQueue.ts",
+      "inside_prehandler_registration": true,
+      "line": 160,
+      "permission_key": "GradingDetailView"
+    },
+    {
+      "enclosing_function": "registerGradingQueueRoutes",
+      "file": "src/routes/gradingQueue.ts",
+      "inside_prehandler_registration": true,
+      "line": 286,
+      "permission_key": "GradingScoreWrite"
+    },
+    {
+      "enclosing_function": "registerGradingQueueRoutes",
+      "file": "src/routes/gradingQueue.ts",
+      "inside_prehandler_registration": true,
+      "line": 69,
+      "permission_key": "GradingQueueView"
+    },
+    {
+      "enclosing_function": "importLogRoutes",
+      "file": "src/routes/importLogs.ts",
+      "inside_prehandler_registration": true,
+      "line": 18,
+      "permission_key": "AuditLogView"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1024,
+      "permission_key": "IncidentInvestigate"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1136,
+      "permission_key": "IncidentInvestigate"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1221,
+      "permission_key": "IncidentInvestigate"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1317,
+      "permission_key": "IncidentRecoveryView"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1415,
+      "permission_key": "IncidentView"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1492,
+      "permission_key": "IncidentView"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1586,
+      "permission_key": "IncidentRecoveryView"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1721,
+      "permission_key": "IncidentRecoveryView"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 1874,
+      "permission_key": "IncidentRecoveryView"
+    },
+    {
+      "enclosing_function": "deriveAllowedActionsForCaller",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": false,
+      "line": 335,
+      "permission_key": "IncidentInvestigate"
+    },
+    {
+      "enclosing_function": "deriveAllowedActionsForCaller",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": false,
+      "line": 339,
+      "permission_key": "IncidentResolve"
+    },
+    {
+      "enclosing_function": "deriveAttemptAllowedActionsForCaller",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": false,
+      "line": 372,
+      "permission_key": "AttemptTimeGrant"
+    },
+    {
+      "enclosing_function": "deriveAttemptAllowedActionsForCaller",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": false,
+      "line": 375,
+      "permission_key": "AttemptForceSubmit"
+    },
+    {
+      "enclosing_function": "deriveAttemptAllowedActionsForCaller",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": false,
+      "line": 380,
+      "permission_key": "AttemptMisconductMark"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 479,
+      "permission_key": "IncidentCreate"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 591,
+      "permission_key": "IncidentView"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 629,
+      "permission_key": "IncidentView"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 664,
+      "permission_key": "IncidentInvestigate"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 738,
+      "permission_key": "IncidentInvestigate"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 802,
+      "permission_key": "IncidentInvestigate"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 878,
+      "permission_key": "IncidentResolve"
+    },
+    {
+      "enclosing_function": "registerAdminIncidentRoutes",
+      "file": "src/routes/incidents.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 951,
+      "permission_key": "IncidentResolve"
+    },
+    {
+      "enclosing_function": "invitationRoutes",
+      "file": "src/routes/invitation.ts",
+      "inside_prehandler_registration": true,
+      "line": 153,
+      "permission_key": "UserView"
+    },
+    {
+      "enclosing_function": "invitationRoutes",
+      "file": "src/routes/invitation.ts",
+      "inside_prehandler_registration": true,
+      "line": 185,
+      "permission_key": "UserCreate"
+    },
+    {
+      "enclosing_function": "invitationRoutes",
+      "file": "src/routes/invitation.ts",
+      "inside_prehandler_registration": true,
+      "line": 71,
+      "permission_key": "UserCreate"
+    },
+    {
+      "enclosing_function": "permissionRegistryRoutes",
+      "file": "src/routes/permissionRegistry.ts",
+      "inside_prehandler_registration": true,
+      "line": 108,
+      "permission_key": "UserView"
+    },
+    {
+      "enclosing_function": "permissionRegistryRoutes",
+      "file": "src/routes/permissionRegistry.ts",
+      "inside_prehandler_registration": true,
+      "line": 53,
+      "permission_key": "UserView"
+    },
+    {
+      "enclosing_function": "registerAdminProctorAssignmentRoutes",
+      "file": "src/routes/proctorAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 182,
+      "permission_key": "ExamProctorAssignmentManage"
+    },
+    {
+      "enclosing_function": "registerAdminProctorAssignmentRoutes",
+      "file": "src/routes/proctorAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 285,
+      "permission_key": "ExamProctorAssignmentView"
+    },
+    {
+      "enclosing_function": "registerAdminProctorAssignmentRoutes",
+      "file": "src/routes/proctorAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 331,
+      "permission_key": "ExamProctorAssignmentManage"
+    },
+    {
+      "enclosing_function": "proctorMonitoringRoutes",
+      "file": "src/routes/proctorMonitoring.ts",
+      "inside_prehandler_registration": true,
+      "line": 108,
+      "permission_key": "ExamRoomView"
+    },
+    {
+      "enclosing_function": "proctorMonitoringRoutes",
+      "file": "src/routes/proctorMonitoring.ts",
+      "inside_prehandler_registration": true,
+      "line": 156,
+      "permission_key": "AttemptTimelineView"
+    },
+    {
+      "enclosing_function": "proctorMonitoringRoutes",
+      "file": "src/routes/proctorMonitoring.ts",
+      "inside_prehandler_registration": true,
+      "line": 220,
+      "permission_key": "AttemptMisconductMark"
+    },
+    {
+      "enclosing_function": "proctorMonitoringRoutes",
+      "file": "src/routes/proctorMonitoring.ts",
+      "inside_prehandler_registration": true,
+      "line": 63,
+      "permission_key": "ExamRoomView"
+    },
+    {
+      "enclosing_function": "questionRoutes",
+      "file": "src/routes/question.ts",
+      "inside_prehandler_registration": true,
+      "line": 170,
+      "permission_key": "QuestionView"
+    },
+    {
+      "enclosing_function": "questionRoutes",
+      "file": "src/routes/question.ts",
+      "inside_prehandler_registration": true,
+      "line": 198,
+      "permission_key": "QuestionView"
+    },
+    {
+      "enclosing_function": "questionRoutes",
+      "file": "src/routes/question.ts",
+      "inside_prehandler_registration": true,
+      "line": 256,
+      "permission_key": "QuestionCreate"
+    },
+    {
+      "enclosing_function": "questionRoutes",
+      "file": "src/routes/question.ts",
+      "inside_prehandler_registration": true,
+      "line": 365,
+      "permission_key": "QuestionUpdate"
+    },
+    {
+      "enclosing_function": "questionRoutes",
+      "file": "src/routes/question.ts",
+      "inside_prehandler_registration": true,
+      "line": 515,
+      "permission_key": "QuestionDelete"
+    },
+    {
+      "enclosing_function": "questionRoutes",
+      "file": "src/routes/question.ts",
+      "inside_prehandler_registration": true,
+      "line": 559,
+      "permission_key": "QuestionImport"
+    },
+    {
+      "enclosing_function": "questionRoutes",
+      "file": "src/routes/question.ts",
+      "inside_prehandler_registration": true,
+      "line": 72,
+      "permission_key": "QuestionView"
+    },
+    {
+      "enclosing_function": "roleAssignmentRoutes",
+      "file": "src/routes/roleAssignments.ts",
+      "inside_prehandler_registration": true,
+      "line": 125,
+      "permission_key": "UserRoleAssign"
+    },
+    {
+      "enclosing_function": "roleAssignmentRoutes",
+      "file": "src/routes/roleAssignments.ts",
+      "inside_prehandler_registration": true,
+      "line": 196,
+      "permission_key": "UserRoleAssign"
+    },
+    {
+      "enclosing_function": "roleAssignmentRoutes",
+      "file": "src/routes/roleAssignments.ts",
+      "inside_prehandler_registration": true,
+      "line": 360,
+      "permission_key": "UserRoleAssign"
+    },
+    {
+      "enclosing_function": "roleAssignmentRoutes",
+      "file": "src/routes/roleAssignments.ts",
+      "inside_prehandler_registration": true,
+      "line": 60,
+      "permission_key": "UserRoleAssign"
+    },
+    {
+      "enclosing_function": "roleAssignmentRoutes",
+      "file": "src/routes/roleAssignments.ts",
+      "inside_prehandler_registration": true,
+      "line": 83,
+      "permission_key": "UserView"
+    },
+    {
+      "enclosing_function": "scoreRoutes",
+      "file": "src/routes/scores.ts",
+      "inside_prehandler_registration": true,
+      "line": 203,
+      "permission_key": "ScoreAllView"
+    },
+    {
+      "enclosing_function": "settingsRoutes",
+      "file": "src/routes/settings.ts",
+      "inside_prehandler_registration": true,
+      "line": 122,
+      "permission_key": "SettingsView"
+    },
+    {
+      "enclosing_function": "settingsRoutes",
+      "file": "src/routes/settings.ts",
+      "inside_prehandler_registration": true,
+      "line": 151,
+      "permission_key": "SettingsView"
+    },
+    {
+      "enclosing_function": "settingsRoutes",
+      "file": "src/routes/settings.ts",
+      "inside_prehandler_registration": true,
+      "line": 182,
+      "permission_key": "SettingsUpdate"
+    },
+    {
+      "enclosing_function": "systemRoutes",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": true,
+      "line": 303,
+      "permission_key": "SystemHealthView"
+    },
+    {
+      "enclosing_function": "systemRoutes",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": true,
+      "line": 335,
+      "permission_key": "SystemBusinessSummaryView"
+    },
+    {
+      "enclosing_function": "systemRoutes",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": true,
+      "line": 377,
+      "permission_key": "SystemDiagnosticsView"
+    },
+    {
+      "enclosing_function": "integrity",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": false,
+      "line": 392,
+      "permission_key": "SystemBusinessIntegrityView"
+    },
+    {
+      "enclosing_function": "systemRoutes",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": true,
+      "line": 414,
+      "permission_key": "SystemBackupView"
+    },
+    {
+      "enclosing_function": "systemRoutes",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": true,
+      "line": 456,
+      "permission_key": "SystemOpsPolicyView"
+    },
+    {
+      "enclosing_function": "systemRoutes",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": true,
+      "line": 485,
+      "permission_key": "SystemOpsPolicyManage"
+    },
+    {
+      "enclosing_function": "systemRoutes",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": true,
+      "line": 540,
+      "permission_key": "SystemRestoreReadinessView"
+    },
+    {
+      "enclosing_function": "systemRoutes",
+      "file": "src/routes/system.ts",
+      "inside_prehandler_registration": true,
+      "line": 583,
+      "permission_key": "SystemRestoreReadinessView"
+    },
+    {
+      "enclosing_function": "registerAdminTeacherAssignmentRoutes",
+      "file": "src/routes/teacherAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 148,
+      "permission_key": "CourseTeacherAssignmentManage"
+    },
+    {
+      "enclosing_function": "registerAdminTeacherAssignmentRoutes",
+      "file": "src/routes/teacherAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 226,
+      "permission_key": "CourseTeacherAssignmentView"
+    },
+    {
+      "enclosing_function": "registerAdminTeacherAssignmentRoutes",
+      "file": "src/routes/teacherAssignments.admin.ts",
+      "inside_prehandler_registration": true,
+      "line": 274,
+      "permission_key": "CourseTeacherAssignmentManage"
+    },
+    {
+      "enclosing_function": "userRoutes",
+      "file": "src/routes/user.ts",
+      "inside_prehandler_registration": true,
+      "line": 163,
+      "permission_key": "UserCreate"
+    },
+    {
+      "enclosing_function": "userRoutes",
+      "file": "src/routes/user.ts",
+      "inside_prehandler_registration": true,
+      "line": 242,
+      "permission_key": "UserUpdate"
+    },
+    {
+      "enclosing_function": "userRoutes",
+      "file": "src/routes/user.ts",
+      "inside_prehandler_registration": true,
+      "line": 408,
+      "permission_key": "UserPasswordReset"
+    },
+    {
+      "enclosing_function": "userRoutes",
+      "file": "src/routes/user.ts",
+      "inside_prehandler_registration": true,
+      "line": 489,
+      "permission_key": "UserDelete"
+    },
+    {
+      "enclosing_function": "userRoutes",
+      "file": "src/routes/user.ts",
+      "inside_prehandler_registration": true,
+      "line": 93,
+      "permission_key": "UserView"
+    }
+  ],
+  "extractor": {
+    "id": "@exam/api/atlas-route-facts",
+    "version": "0.1.0"
+  },
+  "observed_head": "1b230785e6ad2aa2338b7dd0af5167d1570962e4",
+  "registry": [
+    {
+      "legacy_gate": "Admin",
+      "method": "DELETE",
+      "migration_stage": 6,
+      "path": "/candidate-fields/:id",
+      "permission": "candidate_field.delete",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "audit_action": "course.delete",
+      "legacy_gate": "Admin",
+      "method": "DELETE",
+      "migration_stage": 6,
+      "path": "/courses/:id",
+      "permission": "course.delete",
+      "proctor_access": "admin_only",
+      "resolver": "course",
+      "scope": "course",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "DELETE",
+      "migration_stage": 6,
+      "path": "/exams/:examId/enrollments/:enrollmentId",
+      "permission": "exam.enrollment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": false
+    },
+    {
+      "audit_action": "exam.delete",
+      "legacy_gate": "Admin",
+      "method": "DELETE",
+      "migration_stage": 6,
+      "path": "/exams/:id",
+      "permission": "exam.delete",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "DELETE",
+      "migration_stage": 6,
+      "path": "/questions/:id",
+      "permission": "question.delete",
+      "proctor_access": "admin_only",
+      "resolver": "question",
+      "scope": "course",
+      "sensitive": false
+    },
+    {
+      "audit_action": "user.role_changed",
+      "legacy_gate": "Admin",
+      "method": "DELETE",
+      "migration_stage": 8,
+      "path": "/role-assignments/:assignmentId",
+      "permission": "user.role.assign",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "audit_action": "user.delete",
+      "legacy_gate": "Admin",
+      "method": "DELETE",
+      "migration_stage": 6,
+      "path": "/users/:id",
+      "permission": "user.delete",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "audit_action": "attempt.exported",
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/export",
+      "permission": "attempt.export",
+      "proctor_access": "admin_only",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "audit_action": "attempt.exported",
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/export/csv",
+      "permission": "attempt.export",
+      "proctor_access": "admin_only",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "audit_action": "grading.detail_viewed",
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/grading-details",
+      "permission": "grading.detail.view",
+      "proctor_access": "admin_only",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/proctor-events",
+      "permission": "attempt.timeline.view",
+      "proctor_access": "assignment_scoped",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/result",
+      "permission": "score.all.view",
+      "proctor_access": "not_applicable",
+      "resolver": "score",
+      "scope": "attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/timeline",
+      "permission": "attempt.timeline.view",
+      "proctor_access": "assignment_scoped",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/admin/audit-logs",
+      "permission": "audit_log.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/exams/:examId/admissions",
+      "permission": "exam.view",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/admin/exams/:examId/candidates/status",
+      "permission": "exam.enrollment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/exams/:examId/incidents",
+      "permission": "incident.view",
+      "proctor_access": "assignment_scoped",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/exams/:examId/proctor/attempts",
+      "permission": "exam_room.view",
+      "proctor_access": "assignment_scoped",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/exams/:examId/proctors",
+      "permission": "exam.proctor_assignment.view",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/grading-queue",
+      "permission": "grading.queue.view",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/admin/import-logs",
+      "permission": "audit_log.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId",
+      "permission": "incident.view",
+      "proctor_access": "assignment_scoped",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/incidents/:incidentId/detail",
+      "permission": "incident.view",
+      "proctor_access": "assignment_scoped",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/admin/proctor/exams",
+      "permission": "exam_room.view",
+      "proctor_access": "assignment_filtered_collection",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/proctor/incidents",
+      "permission": "incident.view",
+      "proctor_access": "assignment_filtered_collection",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/recovery/attempts/:attemptId",
+      "permission": "incident.recovery.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/recovery/exams/:examId",
+      "permission": "incident.recovery.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/recovery/incidents",
+      "permission": "incident.recovery.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/recovery/incidents/:incidentId",
+      "permission": "incident.recovery.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/admin/settings",
+      "permission": "settings.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/admin/settings/branding",
+      "permission": "settings.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/users/:userId/course-assignments",
+      "permission": "course.teacher_assignment.view",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/admin/users/:userId/exam-assignments",
+      "permission": "exam.grader_assignment.view",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/attempts/:id",
+      "permission": "attempt.view_own",
+      "proctor_access": "not_applicable",
+      "resolver": "attempt",
+      "runtime_authz_kind": "own_attempt",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/candidate-fields",
+      "permission": "candidate_field.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/candidate-fields/template",
+      "permission": "candidate_field.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/candidate/attempts/:attemptId/take",
+      "permission": "attempt.view_own",
+      "proctor_access": "not_applicable",
+      "resolver": "attempt",
+      "runtime_authz_kind": "own_attempt",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/candidate/exams",
+      "permission": "exam.take",
+      "proctor_access": "not_applicable",
+      "resolver": "organization",
+      "runtime_authz_kind": "candidate_context",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/candidate/exams/:examId",
+      "permission": "exam.take",
+      "proctor_access": "not_applicable",
+      "resolver": "exam",
+      "runtime_authz_kind": "exam_eligibility",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/candidates",
+      "permission": "candidate.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/courses",
+      "permission": "course.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/courses/:id",
+      "permission": "course.view",
+      "proctor_access": "admin_only",
+      "resolver": "course",
+      "scope": "course",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/exams",
+      "permission": "exam.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/exams/:examId/enrollments",
+      "permission": "exam.enrollment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/exams/:id",
+      "permission": "exam.view",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": false
+    },
+    {
+      "audit_action": "export_scores",
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/exams/:id/export/scores",
+      "permission": "score.export",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/exams/:id/scores",
+      "permission": "score.all.view",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/questions",
+      "permission": "question.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/questions/:id",
+      "permission": "question.view",
+      "proctor_access": "admin_only",
+      "resolver": "question",
+      "scope": "course",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/roles/assignable",
+      "permission": "user.role.assign",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin+Candidate",
+      "method": "GET",
+      "migration_stage": 7,
+      "path": "/scores/attempts/:attemptId",
+      "permission": "score.own.view",
+      "proctor_access": "not_applicable",
+      "resolver": "score",
+      "scope": "own_score",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 9,
+      "path": "/system/backups",
+      "permission": "system.backup.view",
+      "proctor_access": "admin_only",
+      "resolver": "system",
+      "scope": "system",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/system/dashboard",
+      "permission": "system.business_summary.view",
+      "proctor_access": "admin_only",
+      "resolver": "system",
+      "scope": "system",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/system/diagnostics",
+      "permission": "system.diagnostics.view",
+      "proctor_access": "admin_only",
+      "resolver": "system",
+      "scope": "system",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/system/health",
+      "permission": "system.health.view",
+      "proctor_access": "admin_only",
+      "resolver": "system",
+      "scope": "system",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 10,
+      "path": "/system/ops-policy",
+      "permission": "system.ops.policy.view",
+      "proctor_access": "admin_only",
+      "resolver": "system",
+      "scope": "system",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 9,
+      "path": "/system/restore-readiness",
+      "permission": "system.restore_readiness.view",
+      "proctor_access": "admin_only",
+      "resolver": "system",
+      "scope": "system",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 6,
+      "path": "/users",
+      "permission": "user.view",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "GET",
+      "migration_stage": 8,
+      "path": "/users/:id/role-assignments",
+      "permission": "user.view",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "PATCH",
+      "migration_stage": 6,
+      "path": "/admin/settings/branding",
+      "permission": "settings.update",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "PATCH",
+      "migration_stage": 6,
+      "path": "/candidate-fields/:id",
+      "permission": "candidate_field.update",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "PATCH",
+      "migration_stage": 6,
+      "path": "/candidates/:id",
+      "permission": "candidate.update",
+      "proctor_access": "admin_only",
+      "resolver": "candidate",
+      "scope": "candidate",
+      "sensitive": true
+    },
+    {
+      "audit_action": "course.update",
+      "legacy_gate": "Admin",
+      "method": "PATCH",
+      "migration_stage": 6,
+      "path": "/courses/:id",
+      "permission": "course.update",
+      "proctor_access": "admin_only",
+      "resolver": "course",
+      "scope": "course",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "PATCH",
+      "migration_stage": 6,
+      "path": "/exams/:id",
+      "permission": "exam.update",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "PATCH",
+      "migration_stage": 6,
+      "path": "/questions/:id",
+      "permission": "question.update",
+      "proctor_access": "admin_only",
+      "resolver": "question",
+      "scope": "course",
+      "sensitive": false
+    },
+    {
+      "audit_action": "user.role_changed",
+      "legacy_gate": "Admin",
+      "method": "PATCH",
+      "migration_stage": 8,
+      "path": "/role-assignments/:assignmentId",
+      "permission": "user.role.assign",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "PATCH",
+      "migration_stage": 6,
+      "path": "/users/:id",
+      "permission": "user.update",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "audit_action": "attempt.forceSubmit",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/force-submit",
+      "permission": "attempt.force_submit",
+      "proctor_access": "admin_only",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "audit_action": "grading.score_entered",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/grade-question",
+      "permission": "grading.score.write",
+      "proctor_access": "admin_only",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "audit_action": "attempt.misconductFlagged",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/misconduct",
+      "permission": "attempt.misconduct.mark",
+      "proctor_access": "admin_only",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "audit_action": "proctor.incident_marked",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/proctor-incident",
+      "permission": "attempt.misconduct.mark",
+      "proctor_access": "admin_only",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "audit_action": "attempt.timeGrant",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/attempts/:attemptId/time-grants",
+      "permission": "attempt.time.grant",
+      "proctor_access": "deferred",
+      "resolver": "attempt",
+      "scope": "attempt",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/exams/:examId/incidents",
+      "permission": "incident.create",
+      "proctor_access": "assignment_scoped",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 8,
+      "path": "/admin/exams/:examId/proctors",
+      "permission": "exam.proctor_assignment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 8,
+      "path": "/admin/exams/:examId/proctors/:proctorUserId/revoke",
+      "permission": "exam.proctor_assignment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId/actions",
+      "permission": "incident.investigate",
+      "proctor_access": "assignment_scoped",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId/attempts",
+      "permission": "incident.investigate",
+      "proctor_access": "assignment_scoped",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId/dismiss",
+      "permission": "incident.resolve",
+      "proctor_access": "admin_only",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId/interruptions",
+      "permission": "incident.investigate",
+      "proctor_access": "assignment_scoped",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId/investigate",
+      "permission": "incident.investigate",
+      "proctor_access": "assignment_scoped",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId/notes",
+      "permission": "incident.investigate",
+      "proctor_access": "assignment_scoped",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId/resolve",
+      "permission": "incident.resolve",
+      "proctor_access": "admin_only",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/admin/incidents/:incidentId/severity",
+      "permission": "incident.investigate",
+      "proctor_access": "assignment_scoped",
+      "resolver": "incident",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 8,
+      "path": "/admin/users/:userId/course-assignments",
+      "permission": "course.teacher_assignment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 8,
+      "path": "/admin/users/:userId/course-assignments/:courseId/revoke",
+      "permission": "course.teacher_assignment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 8,
+      "path": "/admin/users/:userId/exam-assignments",
+      "permission": "exam.grader_assignment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 8,
+      "path": "/admin/users/:userId/exam-assignments/:examId/revoke",
+      "permission": "exam.grader_assignment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/attempts/:attemptId/answers/:questionId",
+      "permission": "attempt.answer.save",
+      "proctor_access": "not_applicable",
+      "resolver": "attempt",
+      "runtime_authz_kind": "own_attempt",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/attempts/:attemptId/heartbeat",
+      "permission": "attempt.heartbeat.send",
+      "proctor_access": "not_applicable",
+      "resolver": "attempt",
+      "runtime_authz_kind": "own_attempt",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/attempts/:attemptId/restore",
+      "permission": "attempt.restore",
+      "proctor_access": "not_applicable",
+      "resolver": "attempt",
+      "runtime_authz_kind": "own_attempt",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "audit_action": "attempt.submit",
+      "legacy_gate": "Candidate",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/attempts/:attemptId/submit",
+      "permission": "attempt.submit",
+      "proctor_access": "not_applicable",
+      "resolver": "attempt",
+      "runtime_authz_kind": "own_attempt",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/attempts/:examId/queue",
+      "permission": "attempt.start",
+      "proctor_access": "not_applicable",
+      "resolver": "exam",
+      "runtime_authz_kind": "exam_eligibility",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Candidate",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/attempts/:examId/start",
+      "permission": "attempt.start",
+      "proctor_access": "not_applicable",
+      "resolver": "exam",
+      "runtime_authz_kind": "exam_eligibility",
+      "scope": "own_attempt",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/candidate-fields",
+      "permission": "candidate_field.create",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/candidates",
+      "permission": "candidate.create",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/candidates/import",
+      "permission": "candidate.import",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "audit_action": "course.create",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/courses",
+      "permission": "course.create",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": false
+    },
+    {
+      "audit_action": "system.email.test",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/email/test",
+      "permission": "system.email.test",
+      "proctor_access": "admin_only",
+      "resolver": "system",
+      "scope": "system",
+      "sensitive": true
+    },
+    {
+      "audit_action": "exam.create",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/exams",
+      "permission": "exam.create",
+      "proctor_access": "admin_only",
+      "resolver": "course",
+      "scope": "course",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/exams/:examId/enrollments",
+      "permission": "exam.enrollment.manage",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": false
+    },
+    {
+      "audit_action": "exam.archive",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/exams/:id/archive",
+      "permission": "exam.archive",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "audit_action": "exam.cancel",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/exams/:id/cancel",
+      "permission": "exam.cancel",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "audit_action": "exam.close",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/exams/:id/close",
+      "permission": "exam.close",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "audit_action": "exam.extend",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/exams/:id/extend",
+      "permission": "exam.extend",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "audit_action": "exam.publish",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/exams/:id/publish",
+      "permission": "exam.publish",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "audit_action": "exam.publish_results",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 7,
+      "path": "/exams/:id/publish-results",
+      "permission": "exam.result.publish",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "audit_action": "exam.unpublish",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/exams/:id/unpublish",
+      "permission": "exam.unpublish",
+      "proctor_access": "admin_only",
+      "resolver": "exam",
+      "scope": "exam",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/questions",
+      "permission": "question.create",
+      "proctor_access": "admin_only",
+      "resolver": "course",
+      "scope": "course",
+      "sensitive": false
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/questions/import",
+      "permission": "question.import",
+      "proctor_access": "admin_only",
+      "resolver": "course",
+      "scope": "course",
+      "sensitive": true
+    },
+    {
+      "audit_action": "user.create",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/users",
+      "permission": "user.create",
+      "proctor_access": "admin_only",
+      "resolver": "organization",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 6,
+      "path": "/users/:id/reset-password",
+      "permission": "user.password.reset",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "audit_action": "user.role_changed",
+      "legacy_gate": "Admin",
+      "method": "POST",
+      "migration_stage": 8,
+      "path": "/users/:id/role-assignments",
+      "permission": "user.role.assign",
+      "proctor_access": "admin_only",
+      "resolver": "user",
+      "scope": "organization",
+      "sensitive": true
+    },
+    {
+      "audit_action": "ops.policy.updated",
+      "legacy_gate": "Admin",
+      "method": "PUT",
+      "migration_stage": 10,
+      "path": "/system/ops-policy",
+      "permission": "system.ops.policy.manage",
+      "proctor_access": "admin_only",
+      "resolver": "system",
+      "scope": "system",
+      "sensitive": true
+    }
+  ],
+  "routes": [
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "DELETE",
+      "permission": "candidate_field.delete",
+      "url": "/api/candidate-fields/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "DELETE",
+      "permission": "course.delete",
+      "url": "/api/courses/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "DELETE",
+      "permission": "exam.update",
+      "url": "/api/exam-profiles/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "DELETE",
+      "permission": "exam.enrollment.manage",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/exams/:examId/enrollments/:enrollmentId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "DELETE",
+      "permission": "exam.delete",
+      "url": "/api/exams/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "DELETE",
+      "permission": "user.create",
+      "url": "/api/invitations/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "DELETE",
+      "permission": "question.delete",
+      "resolver": "question",
+      "resource_id_key": "id",
+      "url": "/api/questions/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "DELETE",
+      "permission": "user.role.assign",
+      "url": "/api/role-assignments/:assignmentId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "DELETE",
+      "permission": "user.delete",
+      "url": "/api/users/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "attempt.export",
+      "url": "/api/admin/attempts/:attemptId/export"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "attempt.export",
+      "url": "/api/admin/attempts/:attemptId/export/csv"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "grading.detail.view",
+      "resolver": "attempt",
+      "resource_id_key": "attemptId",
+      "url": "/api/admin/attempts/:attemptId/grading-details"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "attempt.timeline.view",
+      "resolver": "attempt",
+      "resource_id_key": "attemptId",
+      "url": "/api/admin/attempts/:attemptId/proctor-events"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "url": "/api/admin/attempts/:attemptId/result"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "attempt.timeline.view",
+      "resolver": "attempt",
+      "resource_id_key": "attemptId",
+      "url": "/api/admin/attempts/:attemptId/timeline"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "audit_log.view",
+      "url": "/api/admin/audit-log/actions"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "audit_log.view",
+      "url": "/api/admin/audit-logs"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "audit_log.view",
+      "url": "/api/admin/audit-logs/export"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "exam.view",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/admin/exams/:examId/admissions"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "exam.enrollment.manage",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/admin/exams/:examId/candidates/status"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "incident.view",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/admin/exams/:examId/incidents"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "exam_room.view",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/admin/exams/:examId/proctor/attempts"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "exam.proctor_assignment.view",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/admin/exams/:examId/proctors"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "grading.queue.view",
+      "url": "/api/admin/grading-queue"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "audit_log.view",
+      "url": "/api/admin/import-logs"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "incident.view",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "incident.view",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/detail"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "user.view",
+      "url": "/api/admin/permission-registry"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "exam_room.view",
+      "url": "/api/admin/proctor/exams"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "incident.view",
+      "url": "/api/admin/proctor/incidents"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "incident.recovery.view",
+      "url": "/api/admin/recovery/attempts/:attemptId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "incident.recovery.view",
+      "url": "/api/admin/recovery/exams/:examId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "incident.recovery.view",
+      "url": "/api/admin/recovery/incidents"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "incident.recovery.view",
+      "url": "/api/admin/recovery/incidents/:incidentId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "settings.view",
+      "url": "/api/admin/settings"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "settings.view",
+      "url": "/api/admin/settings/branding"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "user.view",
+      "url": "/api/admin/users/:id/effective-authority"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "course.teacher_assignment.view",
+      "url": "/api/admin/users/:userId/course-assignments"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "exam.grader_assignment.view",
+      "url": "/api/admin/users/:userId/exam-assignments"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "url": "/api/attempts/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "AUTH_ONLY",
+      "method": "GET",
+      "url": "/api/auth/me"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "candidate_field.view",
+      "url": "/api/candidate-fields"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "candidate_field.view",
+      "url": "/api/candidate-fields/template"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "url": "/api/candidate/attempts/:attemptId/take"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "url": "/api/candidate/exams"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "url": "/api/candidate/exams/:examId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "candidate.view",
+      "url": "/api/candidates"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "course.view",
+      "url": "/api/courses"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "course.view",
+      "resolver": "course",
+      "resource_id_key": "id",
+      "url": "/api/courses/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "exam.view",
+      "url": "/api/exam-profiles"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "exam.view",
+      "url": "/api/exam-profiles/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "exam.view",
+      "url": "/api/exams"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "exam.enrollment.manage",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/exams/:examId/enrollments"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "exam.view",
+      "resolver": "exam",
+      "resource_id_key": "id",
+      "url": "/api/exams/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "score.export",
+      "url": "/api/exams/:id/export/scores"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "score.all.view",
+      "resolver": "exam",
+      "resource_id_key": "id",
+      "url": "/api/exams/:id/scores"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "GET",
+      "url": "/api/health"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "user.view",
+      "url": "/api/invitations"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "GET",
+      "url": "/api/launchpad/status"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "AUTH_ONLY",
+      "method": "GET",
+      "url": "/api/notifications"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "AUTH_ONLY",
+      "method": "GET",
+      "url": "/api/notifications/unread-count"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "question.view",
+      "url": "/api/questions"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "GET",
+      "permission": "question.view",
+      "resolver": "question",
+      "resource_id_key": "id",
+      "url": "/api/questions/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "question.view",
+      "url": "/api/questions/tags"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "GET",
+      "url": "/api/ready"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "user.role.assign",
+      "url": "/api/roles/assignable"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "url": "/api/scores/attempts/:attemptId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "GET",
+      "url": "/api/settings/branding"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "system.backup.view",
+      "url": "/api/system/backups"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "system.business_summary.view",
+      "url": "/api/system/dashboard"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "system.diagnostics.view",
+      "url": "/api/system/diagnostics"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "system.health.view",
+      "url": "/api/system/health"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "GET",
+      "url": "/api/system/info"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "system.ops.policy.view",
+      "url": "/api/system/ops-policy"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "GET",
+      "url": "/api/system/public-config"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "system.restore_readiness.view",
+      "url": "/api/system/restore-readiness"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "system.restore_readiness.view",
+      "url": "/api/system/retention-readiness"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "user.view",
+      "url": "/api/users"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "GET",
+      "permission": "user.view",
+      "url": "/api/users/:id/role-assignments"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "PATCH",
+      "permission": "settings.update",
+      "url": "/api/admin/settings/branding"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "AUTH_ONLY",
+      "method": "PATCH",
+      "url": "/api/auth/me/password"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "AUTH_ONLY",
+      "method": "PATCH",
+      "url": "/api/auth/me/profile"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "PATCH",
+      "permission": "candidate_field.update",
+      "url": "/api/candidate-fields/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "PATCH",
+      "permission": "candidate.update",
+      "url": "/api/candidates/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "PATCH",
+      "permission": "course.update",
+      "resolver": "course",
+      "resource_id_key": "id",
+      "url": "/api/courses/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "PATCH",
+      "permission": "exam.update",
+      "url": "/api/exam-profiles/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "PATCH",
+      "permission": "exam.update",
+      "resolver": "exam",
+      "resource_id_key": "id",
+      "url": "/api/exams/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "PATCH",
+      "permission": "question.update",
+      "resolver": "question",
+      "resource_id_key": "id",
+      "url": "/api/questions/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "PATCH",
+      "permission": "user.role.assign",
+      "url": "/api/role-assignments/:assignmentId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "PATCH",
+      "permission": "user.update",
+      "url": "/api/users/:id"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "attempt.force_submit",
+      "resolver": "attempt",
+      "resource_id_key": "attemptId",
+      "url": "/api/admin/attempts/:attemptId/force-submit"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "grading.score.write",
+      "resolver": "attempt",
+      "resource_id_key": "attemptId",
+      "url": "/api/admin/attempts/:attemptId/grade-question"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "attempt.misconduct.mark",
+      "resolver": "attempt",
+      "resource_id_key": "attemptId",
+      "url": "/api/admin/attempts/:attemptId/misconduct"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "attempt.misconduct.mark",
+      "resolver": "attempt",
+      "resource_id_key": "attemptId",
+      "url": "/api/admin/attempts/:attemptId/proctor-incident"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "attempt.time.grant",
+      "resolver": "attempt",
+      "resource_id_key": "attemptId",
+      "url": "/api/admin/attempts/:attemptId/time-grants"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.create",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/admin/exams/:examId/incidents"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "exam.proctor_assignment.manage",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/admin/exams/:examId/proctors"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "exam.proctor_assignment.manage",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/admin/exams/:examId/proctors/:proctorUserId/revoke"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.investigate",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/actions"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.investigate",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/attempts"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.resolve",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/dismiss"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.investigate",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/interruptions"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.investigate",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/investigate"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.investigate",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/notes"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.resolve",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/resolve"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "incident.investigate",
+      "resolver": "incident",
+      "resource_id_key": "incidentId",
+      "url": "/api/admin/incidents/:incidentId/severity"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "course.teacher_assignment.manage",
+      "url": "/api/admin/users/:userId/course-assignments"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "course.teacher_assignment.manage",
+      "url": "/api/admin/users/:userId/course-assignments/:courseId/revoke"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "exam.grader_assignment.manage",
+      "url": "/api/admin/users/:userId/exam-assignments"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "exam.grader_assignment.manage",
+      "url": "/api/admin/users/:userId/exam-assignments/:examId/revoke"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "url": "/api/attempts/:attemptId/answers/:questionId"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "url": "/api/attempts/:attemptId/heartbeat"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "url": "/api/attempts/:attemptId/restore"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "url": "/api/attempts/:attemptId/submit"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "url": "/api/attempts/:examId/queue"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "url": "/api/attempts/:examId/start"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "POST",
+      "url": "/api/auth/invitations/accept"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "POST",
+      "url": "/api/auth/login"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "POST",
+      "url": "/api/auth/logout"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "POST",
+      "url": "/api/auth/password-reset/consume"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "POST",
+      "url": "/api/auth/password-reset/request"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "POST",
+      "url": "/api/auth/register"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "candidate_field.create",
+      "url": "/api/candidate-fields"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "candidate.create",
+      "url": "/api/candidates"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "candidate.import",
+      "url": "/api/candidates/import"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "AUTH_ONLY",
+      "method": "POST",
+      "url": "/api/client-events"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "course.create",
+      "url": "/api/courses"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "system.email.test",
+      "url": "/api/email/test"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "exam.create",
+      "url": "/api/exam-profiles"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "exam.create",
+      "resolver": "course",
+      "resource_id_key": "courseId",
+      "url": "/api/exams"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "exam.enrollment.manage",
+      "resolver": "exam",
+      "resource_id_key": "examId",
+      "url": "/api/exams/:examId/enrollments"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "exam.archive",
+      "url": "/api/exams/:id/archive"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "exam.cancel",
+      "url": "/api/exams/:id/cancel"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "exam.close",
+      "resolver": "exam",
+      "resource_id_key": "id",
+      "url": "/api/exams/:id/close"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "exam.extend",
+      "url": "/api/exams/:id/extend"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "exam.publish",
+      "resolver": "exam",
+      "resource_id_key": "id",
+      "url": "/api/exams/:id/publish"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "exam.result.publish",
+      "resolver": "exam",
+      "resource_id_key": "id",
+      "url": "/api/exams/:id/publish-results"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "exam.unpublish",
+      "url": "/api/exams/:id/unpublish"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "user.create",
+      "url": "/api/invitations"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 0,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "PUBLIC",
+      "method": "POST",
+      "url": "/api/launchpad/bootstrap"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "AUTH_ONLY",
+      "method": "POST",
+      "url": "/api/notifications/:id/read"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 0,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "AUTH_ONLY",
+      "method": "POST",
+      "url": "/api/notifications/read-all"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "question.create",
+      "resolver": "course",
+      "resource_id_key": "courseId",
+      "url": "/api/questions"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "method": "POST",
+      "permission": "question.import",
+      "resolver": "course",
+      "resource_id_key": "courseId",
+      "url": "/api/questions/import"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "user.create",
+      "url": "/api/users"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "user.password.reset",
+      "url": "/api/users/:id/reset-password"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "POST",
+      "permission": "user.role.assign",
+      "url": "/api/users/:id/role-assignments"
+    },
+    {
+      "gate": {
+        "authentication_handler_count": 1,
+        "capability_handler_count": 1,
+        "permission_list_handler_count": 0,
+        "role_handler_count": 0
+      },
+      "gate_kind": "CAPABILITY",
+      "method": "PUT",
+      "permission": "system.ops.policy.manage",
+      "url": "/api/system/ops-policy"
+    }
+  ]
+}

@@ -254,6 +254,9 @@ export const NODE_TYPE_FIELDS: Record<NodeKind, ObjectShape> = {
         source_ref: str(),
         permission_ref: optRef(["permission"], FIELD_ABSENT),
         scope_ref: optRef(["scope"], FIELD_ABSENT),
+        // The mirrored catalog scope VALUE from the declared metadata (the
+        // IR scope_ref is curated; the raw value is extra metadata).
+        scope_value: optStr(FIELD_ABSENT),
         gate_kind: optEnum(GATE_KINDS, "gate_kind", FIELD_ABSENT),
         resolver: optStr(FIELD_ABSENT),
         audit_action: optStr(FIELD_ABSENT),
