@@ -154,7 +154,7 @@ sketch in `docs/archive/roadmap/recovery-operations-jobs.md` §7 wished for.
   investigate surface) **on the Exam they are actively assigned to**. This is
   a real backend runtime, not a future capability.
 - The dangerous terminal authority is **NOT** granted to Proctor:
-  `incident.resolve` / `incident.dismiss` (Admin-only terminal judgment),
+  `incident.resolve`（覆盖 dismissal；审计动作 `incident.dismissed`）(Admin-only terminal judgment),
   `AttemptTimeGrant` (Admin-only), `AttemptForceSubmit` (Admin-only),
   `AttemptMisconductMark` (Admin-only). `AttemptForceSubmit` and
   `AttemptMisconductMark` were **removed** from the Proctor preset and its

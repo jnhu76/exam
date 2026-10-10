@@ -276,7 +276,7 @@ sequenceDiagram
     Engine->>ExamRepo: update(examId, {status: published, questionSnapshot})
     ExamRepo->>DB: UPDATE exams
     Engine-->>Route: updated exam
-    Route->>Route: recordAtomicHttpAudit(exam.published)
+    Route->>Route: recordAtomicHttpAudit(exam.publish)
     Route-->>Admin: 200 + exam response
 ```
 

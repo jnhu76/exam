@@ -397,7 +397,7 @@ interface SubmittedAnswersSnapshot {
  8. 设置 attempt.status='submitted', submittedAt=serverNow
  9. 设置 submissionReason='manual'（deadline 路径为 'deadline'）
 10. 设置 attempt.gradingStatus（纯客观 → auto_graded；含 text_response → pending_manual）
-11. 插入 audit log: attempt.submitted
+11. 插入 audit log: attempt.submit（orchestrator 层；deadline 路径见 §5.3）
 12. 整个过程原子提交
 ```
 
@@ -418,7 +418,7 @@ AND attempt 生命周期与 workset 匹配
 
 ### 4.3 Save/Restore 协议
 
-**Save**：`POST /candidate/attempts/:attemptId/answers/save`
+**Save**：`POST /attempts/:attemptId/answers/:questionId`（answer save protocol，按题目提交）
 
 - 前端在每次作答变更后调用 save。
 - 后端守卫拒绝三类保存：`voided`（`ATTEMPT_CLOSED`）、`submitted`/`graded`（`ATTEMPT_ALREADY_SUBMITTED`）、已过有效截止（`DEADLINE_EXCEEDED`）。其余非终态（含 `disrupted`）在服务端协议上可接受——**服务端接受范围 ≠ 页面立即可编辑**：页面编辑权威仍是 `isEditable`（§6.1）与 ADR-012 恢复页面契约，不因服务端可保存而放宽 UI 锁定。
@@ -530,9 +530,9 @@ OR
 | 端点 | 写副作用 |
 | ---- | -------- |
 | `GET /candidate/attempts/:attemptId/take` | 可能触发 reconciliation |
-| `POST /candidate/attempts/:attemptId/answers/save` | 可能触发 reconciliation |
-| `POST /candidate/attempts/:attemptId/submit` | 可能触发 reconciliation |
-| `POST /candidate/attempts/:attemptId/resume` | 可能触发 reconciliation |
+| `POST /attempts/:attemptId/answers/:questionId` | 可能触发 reconciliation |
+| `POST /attempts/:attemptId/submit` | 可能触发 reconciliation |
+| `POST /attempts/:attemptId/restore` | 可能触发 reconciliation |
 
 **GET 写副作用警告**：`GET /take` 是 command-style GET，可能触发事务写入。响应必须包含 `Cache-Control: no-store`。SWR、prefetch、CDN、HTTP cache 禁用此端点。
 
@@ -568,13 +568,9 @@ async function ensureAttemptDeadlineReconciled(attemptId: string, now: Date) {
     // 设置 attempt.status='submitted'、gradingStatus（auto_graded 或
     // pending_manual）。纯客观 attempt 之后由 finalizeGrading 聚合到 graded；
     // 含 text_response 的 attempt 停在 submitted+pending_manual 等人工评分。
-
-    await audit(tx, {
-      action: 'attempt.deadline_reconciled',
-      attemptId,
-      effectiveAt: effectiveDeadline(attempt),
-      occurredAt: now,
-    });
+    //
+    // 本路径不写审计：闭集词表中没有 deadline reconciliation 动作，审计只在
+    // 手动 submit 的 orchestrator 路径以 attempt.submit 写入（§11）。
 
     return next;
   });
@@ -584,8 +580,8 @@ async function ensureAttemptDeadlineReconciled(attemptId: string, now: Date) {
 ### 5.4 时间语义
 
 - `submittedAt` = `effectiveDeadline`（业务生效时间）
-- `audit.occurredAt` = 实际 reconciliation 时间（系统收口时间）
 - `submissionReason` = `'deadline'`（区分考生手动提交）
+- reconciliation 无独立审计事件（§11）；`occurredAt` 语义仅在手动 submit 的 `attempt.submit` 审计上存在
 
 ### 5.5 Save/Submit 过期行为
 
@@ -714,7 +710,7 @@ maxScore
 
 ### 6.3 ResultDTO
 
-`GET /candidate/attempts/:attemptId/result` 的响应。受 resultVisibility / answerVisibility 门控。
+`GET /scores/attempts/:attemptId` 的响应（candidate 面；admin 面对应 `GET /admin/attempts/:attemptId/result`）。受 resultVisibility / answerVisibility 门控。
 
 | 条件 | 返回 |
 | ------ | ---- |
@@ -728,7 +724,7 @@ maxScore
 ### 6.4 Candidate Own-Result 边界
 
 - 考生**只能**看到自己的分数/结果，且仅在发布策略允许时。
-- `GET /candidate/attempts/:attemptId/result` 强制归属校验：attempt 必须属于当前 Candidate。
+- `GET /scores/attempts/:attemptId` 强制归属校验：attempt 必须属于当前 Candidate。
 - 考生**不能**通过任何 API 路径访问其他考生的 attempt、答案或结果。
 - `score_computed` ≠ `result_released`：评分完成只产生可计算的分数；是否对考生可见由发布策略与发布动作决定。
 
@@ -1051,6 +1047,12 @@ type TransientEvent =
 - ~~post-terminal re-grade idempotency~~ → STALE：终态后普通改分被拒，不是幂等
 
 ### Result Visibility Tests
+
+> 本组由 API 集成套件持有：分数可见性见 `resultPublishing.test.ts`
+> （immediate / after_grading / manual 三模式 + 发布幂等/权限）与
+> `candidateResultVisibility.test.ts`（L1–L5 跨 candidate surface 泄漏断言）。
+> `answerVisibility` 两行是保留语义——当前无 writer 翻转为 `visible`（§6.3、EXSEM-019）。
+
 - [ ] graded 但未 release 时 candidate 不能看分数
 - [ ] release score 后 candidate 能看分数
 - [ ] 未 release answers 时 candidate 不能看 standardAnswer
@@ -1086,26 +1088,41 @@ type TransientEvent =
 → 未允许时看不到 standardAnswer
 ```
 
+> **浏览器级覆盖范围**：Playwright 只覆盖到"考生提交"为止（
+> `apps/e2e/e2e/candidate-happy-path.spec.ts`），该 spec 明确把 text_response /
+> grading-status 变体归 API 批改套件所有。评分写路径、结果发布与发布后可见性的
+> 浏览器级 E2E 已在 2026-10-05 的测试精简中移除（`dba53ada`、`b0e7a7ff`，
+> 理由：断言由 API 层持有），当前由 `gradingQueue.test.ts`、
+> `manualGradingClosure.test.ts`、`resultPublishing.test.ts`、
+> `candidateResultVisibility.test.ts` 持有。上面的流程是协议级 happy path，
+> 不是浏览器 E2E 覆盖清单。
+
 ---
 
 ## 11. 审计事件
 
-关键状态变化必须发出已知 audit action：
+关键状态变化必须发出已知 audit action。词表权威是
+`packages/authz/src/auditActions.ts`（闭集，**NO rename**：历史拼写按原样保留），
+每个 action 的生命周期/耐久性/义务由 `apps/api/src/audit/auditPolicy.ts` 定义；
+两者冲突时以代码为准。本表是二者的投影：
 
-| 事件 | 触发时机 |
-| ---- | -------- |
-| `exam.published` | publishExam 成功 |
-| `exam.closed` | closeExam 成功 |
-| `attempt.started` | startAttempt 成功 |
-| `attempt.resumed` | resumeAttempt 成功 |
-| `attempt.saved` | saveAnswer 成功 |
-| `attempt.submitted` | submitAttempt 成功 |
-| `attempt.deadline_reconciled` | ensureAttemptDeadlineReconciled 触发冻结 |
-| `attempt.voided` | （保留）`voidAttempt` 成功——当前无生产 writer，该事件实际不产生（EXSEM-019） |
-| `grading.detail_viewed` | grading-details 路由被访问（敏感读取审计，仅记录 FACT，元数据不含 candidateAnswer/rubric） |
-| `grading.score_entered` | gradeQuestion 成功（每次接受的 pending_manual 完成都发出，含部分完成与最终完成） |
-| `grading.finalized` | 仅当最后一条 pending_manual 完成、attempt 从 submitted+pending_manual → graded+fully_graded 时发出（由 gradeQuestion 终态分支触发；部分完成**不**发出） |
-| `result.released` | publishResults 成功 |
+| Canonical audit action | 触发时机 | 生产状态 |
+| ---- | -------- | -------- |
+| `exam.publish` | publishExam 成功 | ACTIVE（`routes/exam.ts`） |
+| `exam.close` | closeExam 成功 | ACTIVE（`routes/exam.ts`） |
+| `attempt.submit` | submitAttempt 成功 | ACTIVE（`orchestrators/submitAndGradeAttempt.ts`） |
+| `attempt.start` | —（startAttempt 当前不写审计） | **DEPRECATED**：词表保留、无生产 emitter（`auditPolicy.ts` 标 `domain_history`） |
+| `attempt.restore` | —（restore/resume 当前不写审计） | **DEPRECATED**：词表保留、无生产 emitter |
+| `attempt.saveAnswer` | —（saveAnswer 当前不写审计；高频路径） | **DEPRECATED**：词表保留、无生产 emitter |
+| `grading.detail_viewed` | grading-details 路由被访问（敏感读取审计，仅记录 FACT，元数据不含 candidateAnswer/rubric） | ACTIVE |
+| `grading.score_entered` | gradeQuestion 成功（每次接受的 pending_manual 完成都发出，含部分完成与最终完成） | ACTIVE |
+| `grading.finalized` | 仅当最后一条 pending_manual 完成、attempt 从 submitted+pending_manual → graded+fully_graded 时发出（由 gradeQuestion 终态分支触发；部分完成**不**发出） | ACTIVE |
+| `exam.publish_results` | publishResults 成功 | ACTIVE（`routes/exam.ts`） |
+
+**不存在的历史条目**：本表此前列出的 `attempt.deadline_reconciled` 在闭集词表中
+不存在，`ensureAttemptDeadlineReconciled` 也不写审计；`attempt.voided` 同样不在词表
+内——`voidAttempt` 无生产 writer（EXSEM-019 保留词表），该事件只在未来补齐词表与
+writer 后才可能出现。
 
 > **审计元数据边界**：除非当前 contract 显式包含，审计元数据不包含 candidateAnswer / rubric 内容（生产 `gradingQueue.test.ts` 隐私断言）。终态后改分/重评不在当前协议范围内，故无对应的 revision 审计事件。
 
@@ -1120,6 +1137,6 @@ type TransientEvent =
 | per-attempt snapshot 时序 | 不同考生可能因开始时间不同拿到不同 rubric 版本 |
 | 不做后台 deadline scheduler | 仅懒触发 |
 | `submitted_answers_hash` 非数据库列 | hash 工具 `hashSubmittedAnswers()` 存在，用于测试 / backfill 校验 / 可选审计日志；但**不是 DB 列**，幂等性靠事务 + 状态 guard + `submitted_answers` 不可变性保证（不经 hash 比较） |
-| 不做完整 RBAC 迁移 | MVP 三个角色 |
-| 不做富文本 / 画图 / 文件上传 | MVP 范围外 |
-| 不做 Proctor / Email / Redis 业务路径 | MVP 范围外 |
+| 不做完整 RBAC 迁移 | 历史条目：capability RBAC 已交付（`Role` 闭集 7 个：Admin/Teacher/Proctor/Grader/Candidate/Maintainer/System，见 `packages/authz/src/catalog.ts`）；当前权威是 [`authorization.md`](./authorization.md) 与 ADR-010（as amended） |
+| 不做富文本 / 画图 / 文件上传 | 历史条目（Phase 1 范围声明）：富文本题干与 rich answer 已交付（ADR-019、#301，见 §1.7）；画图与文件上传仍未支持 |
+| 不做 Proctor / Email / Redis 业务路径 | 历史条目：Proctor 运行面、Email outbox/worker 均已交付（`docs/status/implementation-status.md`）；Redis 仍为 optional infrastructure（`docs/contracts/redis-baseline.md`） |

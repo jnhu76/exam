@@ -79,7 +79,7 @@ Each protocol is documented with:
 | **State transition** | None (Question has no lifecycle) |
 | **Writes** | `questions` row |
 | **Transaction boundary** | Single repo call (no explicit transaction) |
-| **Audit event** | `question.created` (best-effort) |
+| **Audit event** | `question.create` (best-effort) |
 
 ## Protocol: Question Update
 
@@ -96,7 +96,7 @@ Each protocol is documented with:
 | **State transition** | None |
 | **Writes** | `questions` row (in-place mutation) |
 | **Transaction boundary** | Single repo call |
-| **Audit event** | `question.updated` (best-effort) |
+| **Audit event** | `question.update` (best-effort) |
 | **Security invariants** | Organization scoping; live edits do NOT affect existing snapshots (INV-Q-001) |
 
 ## Protocol: Question Delete
@@ -114,7 +114,7 @@ Each protocol is documented with:
 | **State transition** | None |
 | **Writes** | `questions` row deleted |
 | **Transaction boundary** | Single repo call |
-| **Audit event** | `question.deleted` (best-effort) |
+| **Audit event** | `question.delete` (best-effort) |
 | **Security invariants** | **ACCEPTED LIMITATION**: no referential integrity guard against deleting questions referenced by existing snapshots |
 
 ---
@@ -134,7 +134,7 @@ Each protocol is documented with:
 | **State transition** | None (exam is created as `draft`) |
 | **Writes** | `exams` row with `status = 'draft'` |
 | **Transaction boundary** | Single repo call |
-| **Audit event** | `exam.created` (best-effort) |
+| **Audit event** | `exam.create` (best-effort) |
 
 ## Protocol: Exam Update
 
@@ -151,7 +151,7 @@ Each protocol is documented with:
 | **State transition** | None (status unchanged) |
 | **Writes** | `exams` row |
 | **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → reconcile → guard → update |
-| **Audit event** | `exam.updated` (best-effort for draft; atomic for published-schedule) |
+| **Audit event** | `exam.update` (best-effort for draft); published-schedule edits use atomic `exam.published_schedule_updated` |
 | **Security invariants** | Draft = full edit; Published = schedule fields only (openAt/closeAt); Open/Closed/Canceled/Archived = rejected |
 
 ## Protocol: Exam Publish
@@ -169,7 +169,7 @@ Each protocol is documented with:
 | **State transition** | `draft → published` |
 | **Writes** | `exams.status = 'published'`; `exams.questionSnapshot` (frozen copy) |
 | **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → `publishExam()` → `repo.update` |
-| **Audit event** | `exam.published` (atomic, in-tx) |
+| **Audit event** | `exam.publish` (atomic, in-tx) |
 
 ## Protocol: Exam Close
 
@@ -186,7 +186,7 @@ Each protocol is documented with:
 | **State transition** | `open → closed` |
 | **Writes** | `exams.status = 'closed'` |
 | **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → reconcile → `closeExam()` |
-| **Audit event** | `exam.closed` (atomic) |
+| **Audit event** | `exam.close` (atomic) |
 | **Idempotency behavior** | **Idempotent** — already-closed returns unchanged |
 
 ## Protocol: Exam Cancel
@@ -202,7 +202,7 @@ Each protocol is documented with:
 | **State transition** | `published → canceled` or `open → canceled` |
 | **Writes** | `exams.status = 'canceled'` |
 | **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → reconcile → `cancelExam()` |
-| **Audit event** | `exam.canceled` (atomic) |
+| **Audit event** | `exam.cancel` (atomic) |
 
 ## Protocol: Exam Unpublish
 
@@ -216,7 +216,7 @@ Each protocol is documented with:
 | **State transition** | `published → draft` |
 | **Writes** | `exams.status = 'draft'` |
 | **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → reconcile → `unpublishExam()` |
-| **Audit event** | `exam.unpublished` (atomic) |
+| **Audit event** | `exam.unpublish` (atomic) |
 
 ## Protocol: Exam Extend
 
@@ -230,7 +230,7 @@ Each protocol is documented with:
 | **State transition** | None (status stays `open`; only `closeAt` changes) |
 | **Writes** | `exams.closeAt = oldCloseAt + extendMinutes * 60_000` |
 | **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → reconcile → `extendExam()` |
-| **Audit event** | `exam.extended` (atomic) |
+| **Audit event** | `exam.extend` (atomic) |
 
 ## Protocol: Exam Archive
 
@@ -244,7 +244,7 @@ Each protocol is documented with:
 | **State transition** | `closed → archived` or `canceled → archived` |
 | **Writes** | `exams.status = 'archived'` |
 | **Transaction boundary** | `executeInTransaction` → `findByIdForUpdate` → reconcile → `archiveExam()` |
-| **Audit event** | `exam.archived` (atomic) |
+| **Audit event** | `exam.archive` (atomic) |
 | **Idempotency behavior** | **Idempotent** — already-archived returns unchanged |
 
 ## Protocol: Exam Delete
@@ -260,7 +260,7 @@ Each protocol is documented with:
 | **State transition** | None (row deleted) |
 | **Writes** | `exams` row deleted |
 | **Transaction boundary** | `executeInTransaction` → lock → guard (draft only) → `repo.delete` |
-| **Audit event** | `exam.deleted` (atomic) |
+| **Audit event** | `exam.delete` (atomic) |
 
 ## Protocol: Publish Results
 
@@ -297,7 +297,7 @@ Each protocol is documented with:
 | **State transition** | None (enrollment is created as `assigned`) |
 | **Writes** | `exam_enrollments` rows |
 | **Transaction boundary** | Per-candidate `executeInTransaction` with atomic audit |
-| **Audit event** | `enrollment.created` (atomic) |
+| **Audit event** | `enrollment.add` (atomic) |
 
 ## Protocol: Attempt Start
 
@@ -314,7 +314,7 @@ Each protocol is documented with:
 | **Writes** | `exam_attempts` row; `exam_enrollments.attemptCount + 1` |
 | **Transaction boundary** | `executeInTransaction` → `startOrRestoreAttempt()` |
 | **Idempotency behavior** | **Idempotent** — if an active `in_progress` attempt exists, returns it directly |
-| **Audit event** | `attempt.started` (best-effort) |
+| **Audit event** | None — `attempt.start` is retained vocabulary with no production emitter (`apps/api/src/audit/auditPolicy.ts`: `deprecated / domain_history`) |
 
 ## Protocol: Attempt Restore
 
@@ -380,7 +380,7 @@ Each protocol is documented with:
 | **Writes** | `exam_attempts.status`, `submitted_answers`, `submittedAt`, `submissionReason = 'deadline'`, grading result |
 | **Transaction boundary** | `executeInTransaction` → `lockEnrollmentAndAttempt` → `ensureAttemptDeadlineReconciled()` |
 | **Idempotency behavior** | **Idempotent** — already-frozen attempts returned unchanged |
-| **Audit event** | `attempt.deadline_reconciled` (atomic) |
+| **Audit event** | None — reconciliation writes no audit event; the closed vocabulary has no deadline-reconciliation action (see `docs/architecture/exam-runtime.md` §5.3/§11) |
 
 ## Protocol: Attempt Submit
 

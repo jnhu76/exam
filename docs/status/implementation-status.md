@@ -128,8 +128,10 @@ The authorization **infrastructure** is live (not "not started"):
   Queue UI discovery, manual grading + final result, and post-publish live-edit
   snapshot-freeze proof. Rich-text/WYSIWYG content and rich `text_response`
   answering subsequently shipped under ADR-019 and are now accepted/current;
-  the generic ADR-008 final-answer submit barrier (answer-type-independent)
-  remains a separate follow-up.
+  the generic ADR-008 final-answer submit barrier (answer-type-independent) is
+  historical: **#302** is closed not planned / superseded, and normal-submit
+  correctness is owned by the pre-submit flush plus the server-side locked
+  submit/freeze path.
 - ✅ Candidate answering runtime (P0 CLOSED): all MVP question types render,
   save/restore/submit; `deriveTakeExamView` pure function + transient reducer.
 - ✅ Manual grading closeout (P1 CLOSED): grader views frozen submitted answers,
@@ -233,9 +235,10 @@ notification onto the now-stable result-publication transaction (P5-N1).
 - Plain-text `text_response` authoring UI flow and result loop are CLOSED
   (PRs #237/#238, 2026-07-31). Rich-text/WYSIWYG content and rich
   `text_response` answering subsequently shipped under ADR-019 and are now
-  accepted/current. In this answer/content family, the remaining follow-up is
-  the generic ADR-008 final-answer submit barrier (Option D;
-  answer-type-independent).
+  accepted/current. In this answer/content family there is no remaining
+  submit-barrier follow-up: the generic ADR-008 Option-D barrier (**#302**) is
+  closed not planned / superseded; normal-submit correctness is owned by the
+  pre-submit flush plus the server-side locked submit/freeze path.
 
 ## Phase 4 — Platformization and Integration: ⬜ NOT STARTED
 
