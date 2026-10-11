@@ -36,7 +36,9 @@ export class GitRevisionView implements RevisionView {
   constructor(
     readonly revision: string,
     private readonly repoRoot: string,
-  ) {}
+  ) {
+    this.assertObservable();
+  }
 
   // GIT_NO_REPLACE_OBJECTS: a local refs/replace entry must never change
   // what "revision X" reads — two machines with different replace refs
@@ -47,6 +49,40 @@ export class GitRevisionView implements RevisionView {
       string,
       string
     >;
+  }
+
+  /**
+   * INVARIANT (ATLAS-IR-060): this view reads product sources out of the object
+   * store at `revision`, and freshness/ancestry come from repository history. A
+   * shallow clone has neither, so every read degrades to "missing" and the same
+   * inputs produce a *different* snapshot — that is how a depth-1 checkout
+   * rebuilt the wrong body hash. A repository that cannot be fully observed is
+   * refused, never sampled.
+   */
+  private assertObservable(): void {
+    if (this.gitText(["rev-parse", "--is-shallow-repository"]) === "true") {
+      throw new Error(
+        `shallow repository: product sources are pinned to ${this.revision} in the git object store and freshness is derived from history, so a shallow clone cannot reproduce this snapshot (ATLAS-IR-060). Fetch the full history (git fetch --unshallow, or check out with fetch-depth: 0) and retry.`,
+      );
+    }
+    if (!this.commitExists(this.revision)) {
+      throw new Error(
+        `observed revision ${this.revision} is not present in this repository — it is read from the git object store. Fetch it (git fetch origin ${this.revision}) and retry.`,
+      );
+    }
+  }
+
+  /** Trimmed stdout of a git command; undefined when git refuses. */
+  private gitText(args: string[]): string | undefined {
+    try {
+      return execFileSync("git", args, {
+        cwd: this.repoRoot,
+        encoding: "utf8",
+        env: this.env,
+      }).trim();
+    } catch {
+      return undefined;
+    }
   }
 
   fileExists(path: string): boolean {

@@ -248,10 +248,15 @@ jobs:
       DEPLOYMENT_MODE: singleTenant
 
     steps:
+      # The Atlas extractor pins product sources to the snapshot's observed
+      # revision in the git object store and derives freshness from history, so
+      # its freeze proof needs the full history (a depth-1 checkout makes the
+      # rebuild observe an empty repository and produce a different body hash).
       - name: Checkout
         uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6

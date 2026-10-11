@@ -40,3 +40,13 @@ ATLAS_SOURCE_SHA=<40-hex> pnpm --filter @exam/atlas exec tsx src/cli.ts build <i
 input ⇒ byte-identical normalized snapshot. No wall clock, no filesystem
 enumeration order, no locale collation and no network input reaches the
 semantic bytes; volatile build metadata is not committed at all.
+
+## Full history required
+
+The extractor reads product sources out of the git object store pinned to the
+snapshot's observed revision, and freshness/ancestry are derived from repository
+history. A shallow clone can supply neither, so git-backed observation is
+refused up front (`GitRevisionView`) instead of silently reading every product
+file as missing — which would build a *different* snapshot from identical
+inputs. Check out with full history (`fetch-depth: 0`; the CI job that runs this
+suite does) before `build`, `check` or the conformance suite.

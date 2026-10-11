@@ -198,7 +198,7 @@ golden mapping / fixtures   packages/atlas/curation/*.json (10 files),
                             packages/atlas/test/fixtures.ts
 validator                   packages/atlas/src/ir/validate.ts +
                             `tsx src/cli.ts validate <file>`
-focused tests               packages/atlas/test/*.test.ts (83),
+focused tests               packages/atlas/test/*.test.ts (86),
                             apps/api/src/atlas/routeFactsCapture.test.ts
 review / closeout evidence  this file, generated/atlas-snapshot.json,
                             generated/coverage-report.json
@@ -234,6 +234,7 @@ package boundary).
 | F-14 | anti-demo inventory | Family enumeration bases named the capture artifact as a *source* but not the family's own route basis, so "the family is covered" was not checkable; three families (`questions.bank`, `exams.lifecycle`, `incidents`) sat at `PARTIAL` with no closed search, and `capability:client-events` was named by no family — inviting "not applicable" as the escape hatch. | **Accepted.** Every family states its own route basis and its own closed search; scope that no seed family names is reported as discovered, never dismissed. | All 23 families carry real per-family bases (21 SAME, 1 MERGED, 1 SPLIT — one of R1-C's two MERGED families turned out to be a SPLIT); zero `NOT_APPLICABLE`; `capability:client-events` is recorded `DISCOVERED_BEYOND_SEED` and reported by identifier in the coverage report |
 | F-15 | provenance | Extracted permissions/presets/scopes declared `extraction_method = AST_SYMBOL_LOOKUP` while they are read from the exported catalog tables. | **Accepted.** The method must describe the read that happened. | `SCHEMA_INTROSPECTION` |
 | F-16 | false support / join | `preset_kind` derived `SYNTHETIC_ACTOR` from `isSystem`, which means "built-in", so six application-role presets were classified as synthetic actors. | **Accepted.** A synthetic actor is the non-login, non-assignable preset. | `preset_kind` derives from `login_allowed`/`assignable`; the golden C test asserts presets never carry grantee sets or resource reach |
+| F-17 | determinism / provenance | The rebuild inside CI's `package-coverage` job produced a **different body hash** from the committed artifact (`927b44e2…` vs `347dcc49…`) and the history-walking freeze assertion could not resolve `aec71c2c` at all. Cause: the runner checks out depth 1, so every `git show <SOURCE_SHA>:…` read fell through to `undefined` and the extractor silently observed an *empty* repository — the same inputs building a different snapshot, i.e. the artifact was a function of clone depth. | **Accepted (found by exact-head CI; no local full-clone run can show it).** A repository the extractor cannot fully observe must be refused loudly, never sampled. | `GitRevisionView` refuses a shallow repository or an absent observed revision with an actionable message (`ATLAS-IR-060`), `test/revisionView.test.ts` pins both refusals plus the healthy path, `packages/atlas/README.md` states the requirement, and the `package-coverage` job now checks out `fetch-depth: 0` |
 
 ## 3. Findings raised but NOT adopted as stated
 
@@ -336,9 +337,10 @@ clean-worktree rebuild     a detached worktree at the freeze commit rebuilt the
                            artifact byte-identically (`git status` clean after
                            the rebuild) and its `check` also passed — the
                            snapshot does not depend on this worktree's state
-atlas tests                pnpm --filter @exam/atlas test -> 83/83
+atlas tests                pnpm --filter @exam/atlas test -> 86/86
                            (determinism 23 · golden conformance 24 ·
-                            R0 regressions 13 · resolve 13 · extract 10)
+                            R0 regressions 13 · resolve 13 · extract 10 ·
+                            revisionView 3)
 capture equality           pnpm --filter @exam/api exec vitest run
                            src/atlas/routeFactsCapture.test.ts -> 1/1
 static gates               pnpm verify:static -> PASS
@@ -355,7 +357,11 @@ full-fleet pnpm verify     FAILED in all three local runs — run 1 at
                            at @exam/api#coverage (all host-load timeouts/hook
                            budgets in files this branch never touches). See §6.1
                            for the per-lane, re-run and base-revision evidence
-exact-head CI              -> §7
+exact-head CI (1st run)    FAILED at the `package-coverage` job — the CI checkout
+                           is depth 1, so the in-CI rebuild observed an empty
+                           repository and produced a different body hash (F-17).
+                           Repaired by the shallow/absent-revision refusal plus
+                           `fetch-depth: 0` in that job; re-run -> §7
 ```
 
 ### 6.1 The full-fleet failures, and why they are not R1's
