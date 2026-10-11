@@ -16,7 +16,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   buildAtlasInput,
   curationInputRevisionOf,
@@ -80,9 +80,15 @@ function buildFresh() {
   };
 }
 
+// The full snapshot build (AST ref resolution over ~300 refs) is far slower
+// than the default 5s test timeout under root-suite parallel load, so the
+// shared build runs once in a generously-timed beforeAll.
 let cached: ReturnType<typeof buildFresh> | undefined;
-function built(): ReturnType<typeof buildFresh> {
+beforeAll(() => {
   cached ??= buildFresh();
+}, 240_000);
+function built(): ReturnType<typeof buildFresh> {
+  if (cached === undefined) throw new Error("snapshot build not ready");
   return cached;
 }
 
@@ -398,7 +404,7 @@ describe("snapshot provenance quality and freeze integrity", () => {
     const first = built();
     const second = buildFresh();
     expect(canonicalJson(second.envelope)).toBe(canonicalJson(first.envelope));
-  });
+  }, 240_000);
 
   it("matches the committed canonical snapshot (freeze integrity, bound at the observed revision)", () => {
     const committed = readFileSync(
