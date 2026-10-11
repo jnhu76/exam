@@ -11,7 +11,6 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "support_summary": "UNKNOWN",
       "support_boundary": "B4",
       "mapping_state": "MAPPED",
       "mapping_basis": "the rich contract's feature inventory and V2-extension notes (delivered core; attachments), OPEN #756's residual list (typed shortcuts, visual/source sync), and the candidate-editor design doc's recorded rejections (char count) — golden slice A's named enumeration basis at the R0 base, re-anchored to SOURCE_SHA",
@@ -28,7 +27,6 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "support_summary": "SUPPORTED",
       "support_boundary": "B4",
       "mapping_state": "MAPPED",
       "mapping_basis": "rich contract feature inventory + #679/#756 residual records",
@@ -44,7 +42,6 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "support_summary": "SUPPORTED",
       "support_boundary": "B3",
       "mapping_state": "MAPPED",
       "mapping_basis": "rich contract feature inventory + #679/#756 residual records",
@@ -60,7 +57,6 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "support_summary": "SUPPORTED",
       "support_boundary": "B3",
       "mapping_state": "MAPPED",
       "mapping_basis": "rich contract feature inventory + #679/#756 residual records",
@@ -76,7 +72,6 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "support_summary": "NOT_SUPPORTED",
       "support_boundary": "B5",
       "mapping_state": "MAPPED",
       "mapping_basis": "rich contract feature inventory + #679/#756 residual records"
@@ -91,7 +86,6 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "support_summary": "DEFERRED",
       "support_boundary": "B5",
       "mapping_state": "MAPPED",
       "mapping_basis": "rich contract feature inventory + #679/#756 residual records"
@@ -106,7 +100,6 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "support_summary": "NOT_SUPPORTED",
       "support_boundary": "B5",
       "mapping_state": "MAPPED",
       "mapping_basis": "rich contract feature inventory + #679/#756 residual records"
@@ -121,7 +114,6 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "support_summary": "NOT_SUPPORTED",
       "support_boundary": "B5",
       "mapping_state": "MAPPED",
       "mapping_basis": "rich contract feature inventory + #679/#756 residual records"
@@ -137,7 +129,6 @@
         "kind": "NONE"
       },
       "capability_ref": "capability:content.rich-subjective",
-      "step_count": 0,
       "terminal_step_ref": "operation:answer.save-answer"
     },
     {
@@ -150,8 +141,7 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "capability_ref": "capability:content.rich-subjective",
-      "step_count": 0
+      "capability_ref": "capability:content.rich-subjective"
     },
     {
       "kind": "Workflow",
@@ -164,7 +154,6 @@
         "kind": "NONE"
       },
       "capability_ref": "capability:content.rich-subjective",
-      "step_count": 0,
       "terminal_step_ref": "operation:content.canonicalize"
     },
     {
@@ -520,12 +509,13 @@
     {
       "evidence_id": "ev-rich-contract-attachment-absence",
       "evidence_kind": "CONTRACT",
-      "proves": "attachments are grammatically impossible in V1 (image/attachment nodes absent pending an Asset authority)",
+      "proves": "attachments are grammatically impossible in V1 (image/attachment nodes absent pending an Asset authority) — the frozen grammar's own rejection, stated at the facet's boundary",
       "does_not_prove": ["that no other surface advertises attachments"],
       "strength": "TOKEN_EXISTENCE",
       "boundary_coverage": ["B5"],
       "snapshot": "SOURCE_SHA",
-      "locator": "packages/contracts/src/contentDocument.ts#ContentDocumentV1Schema"
+      "locator": "packages/contracts/src/contentDocument.ts#ContentDocumentV1Schema",
+      "negative_evidence_basis": "CURRENT_AUTHORITY_REJECTION"
     },
     {
       "evidence_id": "ev-rich-typed-shortcut-nonadoption",
@@ -561,6 +551,18 @@
       "snapshot": "SOURCE_SHA",
       "locator": "packages/contracts/src/contentDocument.ts#ContentBlockSchema",
       "negative_evidence_basis": "CURRENT_AUTHORITY_REJECTION"
+    },
+    {
+      "evidence_id": "ev-rich-contract-closed-vocabulary",
+      "evidence_kind": "CONTRACT",
+      "proves": "the authority's own text names a closed ContentDocumentV1 grammar as the single Rich V1 authority (nodes/marks outside it are not representable)",
+      "does_not_prove": [
+        "that the running wire rejects them (B1/B2 evidence carries the enforcement side)"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/architecture/rich-content-semantic-contract.md#closed ContentDocumentV1 grammar"
     }
   ],
   "claims": [
@@ -609,7 +611,11 @@
       "authority_owner": {
         "id": "authority:rich-contract"
       },
-      "supporting_evidence": ["ev-rich-grammar", "ev-rich-wire-strict"],
+      "supporting_evidence": [
+        "ev-rich-contract-closed-vocabulary",
+        "ev-rich-grammar",
+        "ev-rich-wire-strict"
+      ],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
       "open_governance_item": {
@@ -821,8 +827,7 @@
       "open_governance_item": {
         "kind": "NONE"
       },
-      "source_snapshot": "SOURCE_SHA",
-      "boundary": "B4"
+      "source_snapshot": "SOURCE_SHA"
     },
     {
       "claim_id": "A-12",

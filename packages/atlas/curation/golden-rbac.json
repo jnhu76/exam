@@ -176,6 +176,40 @@
       "boundary_coverage": ["B0"],
       "snapshot": "SOURCE_SHA",
       "locator": "apps/api/src/routes/permissionRegistry.ts#permissionRegistryRoutes; apps/web/src/pages/admin/PermissionRegistryPage.tsx"
+    },
+    {
+      "evidence_id": "ev-capture-artifact",
+      "evidence_kind": "RUNTIME_ROUTE_CAPTURE",
+      "proves": "the committed capture artifact records the registry entry count, the runtime route split and the per-module gap list",
+      "does_not_prove": [
+        "that the runtime still matches the artifact (freshness is a separate axis)"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/atlas/input/route-facts.json"
+    },
+    {
+      "evidence_id": "ev-whole-app-test-independence",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the whole-app conformance test asserts the route-count split and never imports the registry module",
+      "does_not_prove": ["that no other test consumes the registry"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/routeRegistryConformanceWholeApp.test.ts"
+    },
+    {
+      "evidence_id": "ev-registry-forward-tests",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "two conformance tests compare registry entries against the runtime capture in the forward direction",
+      "does_not_prove": [
+        "the runtime-to-registry direction (no test asserts it)"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/routeRegistryConformance.test.ts"
     }
   ],
   "claims": [
@@ -300,7 +334,11 @@
       "authority_owner": {
         "id": "authority:adr-017"
       },
-      "supporting_evidence": ["ev-assignment-resolver", "ev-adr-017"],
+      "supporting_evidence": [
+        "ev-adr-017",
+        "ev-assignment-resolver",
+        "ev-assignment-runtime"
+      ],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
       "open_governance_item": {
@@ -682,7 +720,7 @@
       "claim_kind": "DECLARED_METADATA",
       "axes": {},
       "authority_owner": "UNKNOWN",
-      "supporting_evidence": ["ev-capture-o07"],
+      "supporting_evidence": ["ev-capture-artifact", "ev-capture-o07"],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
       "open_governance_item": {
@@ -701,7 +739,7 @@
         "implementation": "PRESENT"
       },
       "authority_owner": "UNKNOWN",
-      "supporting_evidence": ["ev-capture-o07"],
+      "supporting_evidence": ["ev-capture-artifact", "ev-capture-o07"],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
       "open_governance_item": {
@@ -718,7 +756,7 @@
       "claim_kind": "RUNTIME_OBSERVATION",
       "axes": {},
       "authority_owner": "UNKNOWN",
-      "supporting_evidence": ["ev-capture-o07"],
+      "supporting_evidence": ["ev-capture-artifact", "ev-capture-o07"],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
       "open_governance_item": {
@@ -738,7 +776,10 @@
         "implementation": "PRESENT"
       },
       "authority_owner": "UNKNOWN",
-      "supporting_evidence": ["ev-whole-app-capture"],
+      "supporting_evidence": [
+        "ev-whole-app-capture",
+        "ev-whole-app-test-independence"
+      ],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
       "open_governance_item": {
@@ -757,7 +798,10 @@
         "implementation": "PRESENT"
       },
       "authority_owner": "UNKNOWN",
-      "supporting_evidence": ["ev-registry-forward-conformance"],
+      "supporting_evidence": [
+        "ev-registry-forward-conformance",
+        "ev-registry-forward-tests"
+      ],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
       "open_governance_item": {
@@ -775,8 +819,10 @@
       "axes": {},
       "authority_owner": "UNKNOWN",
       "supporting_evidence": [
+        "ev-registry-forward-conformance",
+        "ev-registry-forward-tests",
         "ev-whole-app-capture",
-        "ev-registry-forward-conformance"
+        "ev-whole-app-test-independence"
       ],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
@@ -794,7 +840,7 @@
       "claim_kind": "DECLARED_METADATA",
       "axes": {},
       "authority_owner": "UNKNOWN",
-      "supporting_evidence": ["ev-capture-o07"],
+      "supporting_evidence": ["ev-capture-artifact", "ev-capture-o07"],
       "challenging_evidence": [],
       "review_state": "REVIEWED",
       "open_governance_item": {
@@ -913,14 +959,22 @@
       "parties": [
         {
           "party": "work:jnhu76/exam#762 input description",
-          "statement": "runbook states the host-operator exclusion",
+          "statement": "attributes the host-operator exclusion statement to the runbook",
           "source_refs": ["work:jnhu76/exam#762"]
         },
         {
-          "party": "ADR-017",
-          "statement": "NOT Exam RBAC — granted by host/CLI access (the runbook and operations README contain no RBAC occurrence)",
+          "party": "docs/adr/ADR-017-operational-authority-maintainer-boundary.md",
+          "statement": "the operational authority is NOT Exam RBAC — it is granted by host/CLI access (the exclusion lives in the ADR, not in the operations docs)",
           "source_refs": [
             "docs/adr/ADR-017-operational-authority-maintainer-boundary.md#host operator"
+          ]
+        },
+        {
+          "party": "closed search over docs/operations/ and docs/deployment/ at SOURCE_SHA",
+          "statement": "zero RBAC occurrences in docs/operations/README.md and the deployment runbook — the runbook carries no host-operator statement",
+          "source_refs": [
+            "docs/operations/README.md",
+            "docs/deployment/mvp-deployment-runbook.md"
           ]
         }
       ],
@@ -929,7 +983,8 @@
         "kind": "NONE"
       },
       "source_refs": [
-        "docs/adr/ADR-017-operational-authority-maintainer-boundary.md"
+        "docs/adr/ADR-017-operational-authority-maintainer-boundary.md",
+        "docs/operations/README.md"
       ]
     }
   ],

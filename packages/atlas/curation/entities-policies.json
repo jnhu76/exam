@@ -233,8 +233,7 @@
       "storable": "TRUE",
       "write_reachable": "TRUE",
       "read_compatible": "TRUE",
-      "activation_status": "SUPPORTED",
-      "activation_claim_ref": "B-06",
+      "activation_claim_ref": "B-01",
       "refusing_seams": [],
       "transition_refs": []
     },
@@ -254,8 +253,7 @@
       "storable": "TRUE",
       "write_reachable": "TRUE",
       "read_compatible": "TRUE",
-      "activation_status": "SUPPORTED",
-      "activation_claim_ref": "B-07",
+      "activation_claim_ref": "B-01",
       "refusing_seams": [],
       "transition_refs": []
     },
@@ -275,8 +273,7 @@
       "storable": "TRUE",
       "write_reachable": "TRUE",
       "read_compatible": "TRUE",
-      "activation_status": "SUPPORTED",
-      "activation_claim_ref": "B-09",
+      "activation_claim_ref": "B-01",
       "refusing_seams": [],
       "transition_refs": []
     },
@@ -296,8 +293,7 @@
       "storable": "TRUE",
       "write_reachable": "TRUE",
       "read_compatible": "TRUE",
-      "activation_status": "SUPPORTED",
-      "activation_claim_ref": "B-09",
+      "activation_claim_ref": "B-01",
       "refusing_seams": [],
       "transition_refs": []
     },
@@ -317,8 +313,7 @@
       "storable": "TRUE",
       "write_reachable": "TRUE",
       "read_compatible": "TRUE",
-      "activation_status": "SUPPORTED",
-      "activation_claim_ref": "B-10",
+      "activation_claim_ref": "B-01",
       "refusing_seams": [],
       "transition_refs": []
     },
@@ -344,7 +339,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "GATED",
       "activation_claim_ref": "D-04",
       "activation_gate": {
         "locator": "docs/contracts/exam-policy-authority.md#NOT ACTIVATED",
@@ -373,7 +367,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-CF",
       "refusing_seams": [
         "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS (canonical validator rejects true; UNSUPPORTED_EXAM_CONTROL)"
@@ -396,7 +389,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-CF",
       "refusing_seams": [
         "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS"
@@ -419,7 +411,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-CF",
       "refusing_seams": [
         "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS"
@@ -444,7 +435,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-CF",
       "refusing_seams": [
         "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS"
@@ -467,7 +457,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-RS",
       "refusing_seams": [
         "closed structural search: apps/api/src/runtime/reserved-status-writers.structural.test.ts#no production writer"
@@ -490,7 +479,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-RS",
       "refusing_seams": [
         "closed structural search: apps/api/src/runtime/reserved-status-writers.structural.test.ts#no production writer"
@@ -513,7 +501,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-RS",
       "refusing_seams": [
         "closed structural search: apps/api/src/runtime/reserved-status-writers.structural.test.ts#no production writer"
@@ -536,7 +523,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-RS",
       "refusing_seams": [
         "closed structural search: no production writer; a legal stored value by explicit design (EXSEM §5)"
@@ -559,7 +545,6 @@
       "storable": "TRUE",
       "write_reachable": "FALSE",
       "read_compatible": "TRUE",
-      "activation_status": "NOT_SUPPORTED",
       "activation_claim_ref": "D-RS",
       "refusing_seams": [
         "the only producer is a constant: apps/api/src/routes/attempts.shared.ts#ANSWER_VISIBILITY (no production path emits visible)"
@@ -582,7 +567,6 @@
       "storable": "TRUE",
       "write_reachable": "TRUE",
       "read_compatible": "TRUE",
-      "activation_status": "SUPPORTED",
       "activation_claim_ref": "A-01",
       "refusing_seams": [],
       "transition_refs": []
