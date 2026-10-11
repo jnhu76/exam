@@ -1,16 +1,31 @@
 {
   "ambiguous_source_refs": 0,
-  "capabilities_mapped": 27,
-  "capabilities_partial": 3,
+  "capabilities_mapped": 23,
+  "capabilities_not_named_by_family": 1,
+  "capabilities_not_named_by_family_ids": [
+    "capability:client-events"
+  ],
+  "capabilities_partial": 0,
   "capabilities_total": 23,
   "capabilities_unknown": 0,
   "capabilities_unmapped": 0,
+  "claims_boundary_not_covered": 1,
+  "claims_boundary_not_covered_ids": [
+    "D-04"
+  ],
   "claims_total": 83,
-  "conflict_records": 12,
+  "conflict_records": 10,
   "declared_only_orphans": 0,
+  "facets_mapped": 7,
+  "facets_partial": 0,
+  "facets_total": 7,
+  "facets_unknown": 0,
+  "facets_unmapped": 0,
+  "interface_family_orphan_ids": [],
+  "interface_family_orphans": 0,
   "interfaces_total": 149,
   "missing_source_refs": 0,
-  "operations_total": 29,
+  "operations_total": 150,
   "permissions_total": 88,
   "protected_routes_total": 127,
   "registry_entries": 113,
@@ -20,11 +35,11 @@
   "scopes_total": 12,
   "seed_families_reconciled": 23,
   "seed_families_total": 23,
-  "seed_merged": 2,
+  "seed_merged": 1,
   "seed_not_applicable": 0,
   "seed_renamed": 0,
   "seed_same": 21,
-  "seed_split": 0,
+  "seed_split": 1,
   "stale_source_refs": 0,
   "support_verdicts": {
     "DEFERRED": 1,
@@ -35,6 +50,6 @@
     "SUPPORTED": 6
   },
   "unaccounted_seed_families": [],
-  "unresolved_conflicts": 9,
-  "workflows_total": 11
+  "unresolved_conflicts": 8,
+  "workflows_total": 25
 }
