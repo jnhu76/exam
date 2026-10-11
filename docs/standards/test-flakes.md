@@ -18,6 +18,30 @@
 
 ## 已修复事故
 
+### 2026-10-11 — 全量 `pnpm verify` 4-worker coverage 下 api lane 漂移受害点（3 个全量 run + 2 次 standalone；BUG-FLAKE-005 复发 + auth amplification 子类复发 + `systemIncidentDelivery` 断言漂移第 1 次；#764 Atlas R1 验证期间）
+
+- **现象**：同一 head 上该 lane（`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4` + coverage）共 4 次 run，3 次失败、1 次全绿；受害点在 run 之间移动：
+  - run A（`pnpm verify`）：文件级 `3 failed | 221 passed | 4 skipped (228)`，测试级 `3 failed | 2783 passed | 11 skipped (2797)`：
+    - `src/scripts/bootstrap-admin.test.ts:375`（audit 插入失败时 org+user+assignment 的原子回滚）— `Error: Test timed out in 5000ms.`（该行是 2026-10-08 条目逐字命名的 BUG-FLAKE-005 受害点）；
+    - `src/routes/auth.test.ts:126`（`non-e2e mode enforces the route-level login limiter`）— `Error: Test timed out in 5000ms.`（BUG-FLAKE-001 auth amplification 子类的既有受害用例）；
+    - `src/orchestrators/systemIncidentDelivery.test.ts:460`（C3：两个 reconciler 同起于一个 episode，应恰好收敛出一条 System incident/link）— 断言漂移 `expected 1 to be 2`（`createdCount + replayedCount`），不是 timeout。该文件此前未登记，记为本签名第 1 次。
+    - lane 饱和见证：同 lane 内 `src/runtime/processRestartDeadline.process.test.ts` 单文件 52.7s（用例 7.6s / 20.8s / 22.8s）；`tests 976.78s` 压在 `378.40s` 墙上时间内。
+  - run B（standalone，同一命令）：`7 failed | 217 passed | 4 skipped (228)`，`2 failed | 2762 passed | 33 skipped (2797)`——失败面为 6 个 suite 的 hook 预算（`afterAll` 30s：`e2e-reseed-convergence`、`bootstrapLifetime/bootstrap-lifetime`、`slotReuse/slot-reuse-isolation`；`beforeAll` 10s：`authz/backupEvidence`、`routes/clientEvents.referenceTrust`、`tests/security/exam-protocol-security`）加 `routes/email.test.ts` 两个 5s timeout；**没有断言失败**。`tests 1268.74s` 压在 `421.43s` 内。
+  - run C（`pnpm verify`，宿主空闲）：`1 failed | 223 passed | 4 skipped (228)`，`1 failed | 2785 passed (2797)`，受害点又是 `src/scripts/bootstrap-admin.test.ts:375` 的 5s timeout，无断言失败。`tests 770.71s` 压在 `276.23s` 内。
+  - run D（standalone，run B 之后约 30 分钟，同 head 同命令）：`224 passed | 4 skipped (228)`，`2786 passed | 11 skipped (2797)`，**EXIT=0**。
+- **证据（同代码再跑就过，登记规则 #1）**：① run D 全 lane 复跑 EXIT=0（run B 的同一命令、同一 head）；② 同 head、同 lane env 定向复跑 run A 的三个受害文件：`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api exec vitest run --coverage src/orchestrators/systemIncidentDelivery.test.ts src/routes/auth.test.ts src/scripts/bootstrap-admin.test.ts` → `Test Files 3 passed (3)` / `Tests 56 passed (56)`（单文件 14.3s / 18.9s / 18.2s）；该次退出码 1 **只**来自 3 文件子集无法满足全局覆盖率阈值（lines 40.56% < 60%），不是测试失败；③ 隔离的 base 工作树（`0044e2a0`）跑同一 lane → `222 passed | 4 skipped (226)`，`2780 passed | 11 skipped (2791)`，EXIT=0。
+- **根因假设**：BUG-FLAKE-001 宿主负载 / I/O 争用家族在 4-worker coverage lane 上的漂移性受害（`apps/api/vitest.config.ts` 自己把该模式记为家族来源、把 serial 记为安全网）。**待观察的叠加因素**：本项验证分支新增的 `apps/api/src/atlas/{extractRouteFacts.test.ts,routeFactsCapture.test.ts}` 在该 lane 下有 2.5s + 1.2s 的 CPU 突发（capture 用例会在 worker 内合成整个 app），理论上会与其它 worker 的 10s/30s hook 预算争抢 CPU——但这不能解释 run B 的 6 个 hook 预算同时击穿，且 base 只有 1 次 run 作对照（head 4 次中 1 次全绿）。受害文件在 base 与 head 上逐字节相同（`git diff --stat <base>..HEAD -- apps/api/src/{orchestrators,scripts,routes} packages/db apps/web` 为空）。
+- **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry、不降低并发）。
+- **后续动作**：BUG-FLAKE-005 与 auth amplification 子类各归既有条目；`systemIncidentDelivery` C3 断言漂移为第 1 次观测——若再现，按 2026-09-26 `repository.test.ts` 与 2026-10-08 `admissions.durability.process.test.ts` 条目先例，评估该"两方重叠"用例是否应改为显式 convergence 谓词。上述"待观察的叠加因素"需在**未改动 api 测试**的其它分支上继续对照（base 样本太少，不足以判定该 lane 的基线稳定性）。
+
+### 2026-10-11 — 全量 `pnpm test` turbo 并行下 `RichTextAnswerInput.readTrust.test.tsx` 同签名第 2 次复发（#764 Atlas R1 验证期间）
+
+- **现象**：全量 `pnpm test`（turbo，api+db+web 并行）中 web 套件 1 个用例失败：`apps/web/src/components/exam/RichTextAnswerInput.readTrust.test.tsx` — `R1 positive control: a string on a plain-mode slot upgrades into the editor (authorized mapping)`，错误 `Error: editor not mounted`（用例内 1000ms 默认 `vi.waitFor` 窗口内 Tiptap 未挂载）。文件级 `1 failed | 165 passed (166)`，测试级 `1 failed | 2337 passed (2338)`。turbo 随后中止了仍在运行的 `@exam/api#test`，该次 run 因此没有 api 套件结论。
+- **证据（同代码再跑就过，登记规则 #1）**：单文件隔离重跑 `pnpm --filter @exam/web exec vitest run src/components/exam/RichTextAnswerInput.readTrust.test.tsx` → 9/9 PASS（受害用例本体 701ms，远在其 1000ms 窗口之内）；同批串行 `pnpm --filter @exam/web coverage` → 166 文件 / 2338 测试 `EXIT=0`；随后全量 `pnpm test` 重跑 → 17/17 turbo 任务 `EXIT=0`（web 166/166，api 2776 passed / 21 skipped）。
+- **根因假设**：与 2026-10-08 条目同机制（turbo 全量并行下宿主瞬时饱和，jsdom + Tiptap 挂载时序最先受害）。与本项验证的分支改动无因果：该分支未触碰 `apps/web/**`（`git diff --stat <base>..HEAD -- apps/web` 为空）。
+- **当前缓解**：无代码改动（不调 timeout、不 skip、不 retry、不降低并发）。
+- **后续动作**：本签名第 2 次（2026-10-08、2026-10-11）。按登记规则 #3，再复发 1 次即升级为正式跟踪条目；届时应收紧该用例的挂载等待为显式收敛谓词，而不是放宽文件级 test timeout（1000ms `vi.waitFor` 默认窗口是受害面本身）。
+
 ### 2026-10-08 — `pnpm test` turbo 并行（api+db+web 同时）下 `RichTextAnswerInput.readTrust.test.tsx` 单点 "editor not mounted"（#741 验证期间；本签名第 1 次）
 
 - **现象**：turbo `pnpm test` 全量（api/db/web 并行）中 web 套件 1 个用例失败：
@@ -25,7 +49,7 @@
 - **证据（同代码再跑就过，登记规则 #1）**：单文件隔离重跑 9/9 过；随后完整 web 套件串行重跑 165 文件 / 2328 测试全过（EXIT=0），同一工作树。
 - **根因假设**：与 2026-08-31 宿主负载型家族同机制（turbo 并行多套件瞬时饱和，jsdom+Tiptap 挂载的时序敏感用例最先受害）。#741 新增的 `vite-env-file-admission.test.ts`（子进程 vite build，~2s CPU 突发）是套件内新增负载之一，但失败签名与该测试无执行交集。
 - **当前缓解**：无代码改动（不调 timeout、不 skip）。重套件串行执行（既有约定）。
-- **后续动作**：若串行执行下同签名复发 ≥3 次，按登记规则升级；届时再评估 build 探针测试的调度隔离。
+- **后续动作**：若串行执行下同签名复发 ≥3 次，按登记规则升级；届时再评估 build 探针测试的调度隔离。（**复发记录**：2026-10-11 第 2 次——#764 Atlas R1 验证期间的全量 `pnpm test`，见同日条目；累计 2 次，未达升级门槛。）
 
 ### 2026-10-08 — `pnpm verify` 全量 4-worker coverage 下 `bootstrap-admin.test.ts` 单点 5s 超时（#733 R5 验证期间；2026-10-06 同签名第 3 次复发 → 已升级 BUG-FLAKE-005）
 

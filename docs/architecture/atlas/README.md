@@ -6,13 +6,24 @@
 > contract and an IR/provenance model. It implements **no extractor**, **no UI**,
 > **no drift gate**.
 >
+> **R1 has since implemented the first snapshot** (execution issue
+> [#764](https://github.com/jnhu76/exam/issues/764), PR
+> [#769](https://github.com/jnhu76/exam/pull/769)): the extraction code lives in
+> [`packages/atlas/`](../../../packages/atlas/), its output in
+> `packages/atlas/generated/` (`atlas-snapshot.json`, `coverage-report.json`),
+> and its review/freeze record in
+> [`r1-extraction-review.md`](r1-extraction-review.md). R1 renegotiated nothing:
+> the contract below is the one it implements.
+>
 > **Versions:** IR schema `v0.1` · source-ref schema `SREF-1`
 >
 > **Snapshot:** every factual claim in this directory is bound to the R0 base
 > revision **`cbe33db1a7f241ba85aadbf21c4f6dea01133f03`** unless a source ref is
 > explicitly marked `historical` or `external`. See
 > [`provenance-v0.1.md`](provenance-v0.1.md) for the source-ref schema and
-> [`r0-review.md`](r0-review.md) for the review/freeze record.
+> [`r0-review.md`](r0-review.md) for the review/freeze record. (The R1 snapshot
+> binds to its own observed revision `aec71c2c701c0d1c80dc8ba5360116d538af1e8d`,
+> recorded in its manifest.)
 
 ## 1. What the Atlas is
 
@@ -64,6 +75,7 @@ Atlas phase (R1–R4) and on this directory's own content.
 | [`golden/rbac-maintainer-admin.md`](golden/rbac-maintainer-admin.md) | Falsification fixture C — `RolePreset` ≠ effective authorization; declared metadata ≠ runtime truth |
 | [`golden/timed-sync-negative-control.md`](golden/timed-sync-negative-control.md) | Falsification fixture D — representable ≠ supported |
 | [`r0-review.md`](r0-review.md) | Adversarial review findings, adjudications, correction record, R0 verdict |
+| [`r1-extraction-review.md`](r1-extraction-review.md) | R1 adversarial review, adjudications and correction record, snapshot freeze verification, R1 verdict |
 
 There is **one** semantic contract. The four golden slices are consumers of it;
 none of them may define a private schema variant (see `ATLAS-SEM-090`).
