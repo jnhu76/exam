@@ -173,7 +173,33 @@ describe("R0-D regression inputs", () => {
 
   it("H: a shape/representability claim vs an activation-legality claim is not automatically a conflict", () => {
     const input = emptyInput();
-    input.nodes.push(capabilityNode({ id: "capability:exam.timing" }));
+    input.nodes.push(capabilityNode({ id: "capability:exam.timing" }), {
+      kind: "WorkItem",
+      id: "work:jnhu76/exam#292",
+      label: "Queue admission",
+      source_refs: [],
+      authority_refs: [],
+      review_state: "PROPOSED",
+      // A decision gate is only a gate when its lift condition is nameable
+      // (ATLAS-SEM-071); the frozen negative control names this one.
+      open_governance_item: {
+        kind: "DECISION_GATED",
+        lift_condition:
+          "the explicit activation decision named by docs/SPEC.md:292",
+      },
+      work_kind: "ISSUE",
+      external_ref: "jnhu76/exam#292",
+      title: "Queue admission",
+      requested_scope: "queue admission",
+      closure_semantics: "OPEN",
+      state: "OPEN",
+    });
+    input.edges.push({
+      kind: "tracked_by",
+      source: "capability:exam.timing",
+      target: "work:jnhu76/exam#292",
+      relation: "DECISION_GATE",
+    });
     input.claims.push(
       claimRecord({
         claim_id: "claim-shape",

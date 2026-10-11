@@ -159,9 +159,35 @@ describe("golden slice A — rich subjective content (MIXED, not flattened)", ()
 });
 
 describe("golden slice B — manual grading trace", () => {
-  it("rolls grading.manual up as MIXED with its boundary rendered", () => {
-    expect(node("capability:grading.manual")["support_summary"]).toBe("MIXED");
+  it("rolls grading.manual up as SUPPORTED at B4 from its own activation claim", () => {
+    // The roll-up parts of a capability are the capability itself and its
+    // facets (ATLAS-IR-032): grading.manual has no facets, and its workflow is
+    // composition, not a part. B-01 is then its sole CAPABILITY_SUPPORT
+    // activation claim, qualifying at B4 (design ACCEPTED, implementation
+    // PRESENT, verification PASS, evidence covering B4) with the closed-search
+    // statement present — so clause 2 holds. Flattening it to MIXED would
+    // invent a residual part that the slice does not have.
+    expect(node("capability:grading.manual")["support_summary"]).toBe(
+      "SUPPORTED",
+    );
     expect(node("capability:grading.manual")["support_boundary"]).toBe("B4");
+  });
+
+  it("keeps result publication a separate SUPPORTED capability (never fused)", () => {
+    expect(node("capability:result.publication")["support_summary"]).toBe(
+      "SUPPORTED",
+    );
+    expect(node("capability:result.publication")["support_boundary"]).toBe(
+      "B4",
+    );
+    const dependsOn = built().envelope.body.edges.filter(
+      (e) =>
+        e["kind"] === "depends_on" &&
+        e["source"] === "capability:result.publication",
+    );
+    expect(dependsOn.map((e) => e["target"])).toContain(
+      "capability:grading.manual",
+    );
   });
 
   it("resolves the authority chain: authority → workflow → operations", () => {
@@ -299,9 +325,31 @@ describe("golden slice D — timed_sync negative control (GATED, non-bypassable)
     expect(String(evidence!["search_scope"]).length).toBeGreaterThan(0);
   });
 
-  it("resolves D-K3 by scope and keeps D-K1 dissonance visible", () => {
-    expect(conflict("D-K3")["resolution_status"]).toBe("RESOLVED_BY_SCOPE");
-    expect(conflict("D-K1")["resolution_status"]).toBe("UNRESOLVED");
+  it("records both worked non-examples as hazards, never as conflict records", () => {
+    // D-K1 (wire shape vs canonical refusal) and D-K3 (design freeze vs support
+    // matrix) are boundary/scope distinctions: different propositions about
+    // different fact types (ATLAS-SEM-115/-116). Recording either as a conflict
+    // would be the FALSE_CONFLICT the frozen slice counts as 0, so each lives
+    // as a documentation hazard on the evidence that establishes its own side.
+    const ids = built().envelope.body.conflicts.map((c) => c["conflict_id"]);
+    expect(ids.filter((id) => id === "D-K1" || id === "D-K3")).toEqual([]);
+    // The slice contributes exactly one conflict record, and it stays open.
+    expect(ids.filter((id) => String(id).startsWith("D-K"))).toEqual(["D-K2"]);
+    expect(conflict("D-K2")["resolution_status"]).toBe("UNRESOLVED");
+
+    const hazardOf = (evidenceId: string) => {
+      const evidence = built().envelope.body.evidence.find(
+        (e) => e["evidence_id"] === evidenceId,
+      );
+      if (evidence === undefined) throw new Error(`${evidenceId} missing`);
+      return (evidence["does_not_prove"] as string[]).join(" ");
+    };
+    expect(hazardOf("ev-ts-shape-intentional")).toMatch(
+      /documentation\/API-reference hazard/,
+    );
+    expect(hazardOf("ev-ts-design-contract")).toMatch(
+      /scope distinction, not a conflict/,
+    );
   });
 });
 
@@ -368,8 +416,54 @@ describe("anti-demo inventory — 23 families, all accounted", () => {
         (n["kind"] === "Capability" || n["kind"] === "Facet") &&
         n["support_summary"] !== "UNKNOWN",
     );
+    // Every capability the deep review named, but did not claim activation
+    // for, must stay UNKNOWN rather than borrow a verdict from its mapping
+    // state, from a closed work item or from an enumeration.
+    expect(verdictful.length).toBeGreaterThan(0);
     for (const n of verdictful) {
       expect(goldenSubjects.has(String(n["id"]))).toBe(true);
+    }
+    for (const id of [
+      "capability:runtime.candidate-exam", // candidate-facing + durable state
+      "capability:audit", // operational
+      "capability:proctoring", // authorization-heavy
+      "capability:runtime.answer-persistence",
+    ]) {
+      expect(node(id)["support_summary"]).toBe("UNKNOWN");
+    }
+  });
+
+  it("derives no verdict from a gate that cannot name its lift condition (ATLAS-SEM-071)", () => {
+    // A DECISION_GATE edge once pointed at a CLOSED_SUPERSEDED work item with
+    // no lift condition, and the roll-up manufactured the missing text — a
+    // GATED verdict no record supported. A gate must name its lift condition
+    // or the edge is a curation defect, so no part may carry one silently.
+    const workItems = new Map(
+      built()
+        .envelope.body.nodes.filter((n) => n["kind"] === "WorkItem")
+        .map((n) => [String(n["id"]), n]),
+    );
+    const partIds = new Set(
+      built()
+        .envelope.body.nodes.filter(
+          (n) => n["kind"] === "Capability" || n["kind"] === "Facet",
+        )
+        .map((n) => String(n["id"])),
+    );
+    for (const edge of built().envelope.body.edges) {
+      if (
+        edge["kind"] !== "tracked_by" ||
+        edge["relation"] !== "DECISION_GATE"
+      ) {
+        continue;
+      }
+      if (!partIds.has(String(edge["source"]))) continue;
+      const gate = workItems.get(String(edge["target"]));
+      expect(gate).toBeDefined();
+      const governance = gate!["open_governance_item"] as
+        | Record<string, unknown>
+        | undefined;
+      expect(String(governance?.["lift_condition"] ?? "")).not.toBe("");
     }
   });
 });

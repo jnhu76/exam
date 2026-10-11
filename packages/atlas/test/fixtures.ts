@@ -100,6 +100,19 @@ export function claimRecord(
   };
 }
 
+export function factRecord(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    fact_id: "fact-1",
+    statement: "the declared route table lists the grading route",
+    source_ref: sourceRef(),
+    snapshot: SHA,
+    observed_kind: "DECLARED",
+    ...overrides,
+  };
+}
+
 export function emptyInput(): SemanticInput {
   return {
     repo: "jnhu76/exam",

@@ -21,6 +21,7 @@ import {
   emptyInput,
   evidenceRecord,
   facetNode,
+  factRecord,
   shuffle,
   sourceRef,
 } from "./fixtures.js";
@@ -124,6 +125,11 @@ function richInput() {
       target: "facet:grading.manual.retry",
     },
     {
+      kind: "contains",
+      source: "facet:grading.manual.retry",
+      target: "workflow:x",
+    },
+    {
       kind: "performs",
       source: "workflow:x",
       target: "operation:grading.grade-question",
@@ -158,6 +164,20 @@ function richInput() {
       claim_id: "claim-grading",
       subject: "capability:grading.manual",
       supporting_evidence: ["ev-2"],
+    }),
+  );
+  input.facts.push(
+    factRecord({
+      fact_id: "fact-grading-route",
+      statement:
+        "the registry declares the grading route under the grading capability",
+      observed_kind: "DECLARED",
+    }),
+    factRecord({
+      fact_id: "fact-grading-write",
+      statement:
+        "the grading command writes the grading entry in one transaction",
+      observed_kind: "DURABLE",
     }),
   );
   input.conflicts.push({
@@ -215,6 +235,7 @@ describe("determinism (ATLAS-IR-060)", () => {
       const shuffled = emptyInput();
       shuffled.nodes = shuffle(input.nodes, rounds);
       shuffled.edges = shuffle(input.edges, rounds);
+      shuffled.facts = shuffle(input.facts, rounds);
       shuffled.evidence = shuffle(input.evidence, rounds);
       shuffled.claims = shuffle(input.claims, rounds);
       shuffled.conflicts = shuffle(input.conflicts, rounds);
@@ -395,6 +416,93 @@ describe("canonical normalization (ir §7)", () => {
   });
 });
 
+describe("intra-record set order is not semantic (ATLAS-IR-063/067)", () => {
+  it("reversing set-valued fields inside records leaves the bytes identical", () => {
+    const input = richInput();
+    const claimSide = input.claims.find(
+      (c) => c["claim_id"] === "claim-grading",
+    )!;
+    claimSide["supporting_evidence"] = ["ev-2", "ev-seam"];
+    const evidenceSide = input.evidence.find(
+      (e) => e["evidence_id"] === "ev-2",
+    )!;
+    evidenceSide["boundary_coverage"] = ["B4", "B3", "B2"];
+    const graded = input.nodes.find((n) => n["kind"] === "RolePreset")!;
+    graded["permissions"] = [
+      "permission:grading.score.write",
+      "permission:grading.queue.view",
+    ];
+    graded["sensitive_permissions"] = [
+      "permission:grading.queue.view",
+      "permission:grading.score.write",
+    ];
+    input.conflicts[0]!["source_refs"] = ["loc-b", "loc-a"];
+    const bound = new MemoryRevisionView(SHA, new Map());
+    const canonical = buildSnapshot(input, { bound }, "cur", "rf");
+
+    const permuted = JSON.parse(JSON.stringify(input)) as typeof input;
+    for (const claim of permuted.claims) {
+      const list = claim["supporting_evidence"];
+      if (Array.isArray(list))
+        claim["supporting_evidence"] = [...list].reverse();
+    }
+    for (const evidence of permuted.evidence) {
+      const list = evidence["boundary_coverage"];
+      if (Array.isArray(list))
+        evidence["boundary_coverage"] = [...list].reverse();
+    }
+    for (const node of permuted.nodes) {
+      for (const field of ["permissions", "sensitive_permissions"]) {
+        const list = node[field];
+        if (Array.isArray(list)) node[field] = [...list].reverse();
+      }
+    }
+    for (const conflict of permuted.conflicts) {
+      const refs = conflict["source_refs"];
+      if (Array.isArray(refs)) conflict["source_refs"] = [...refs].reverse();
+      const parties = conflict["parties"];
+      if (Array.isArray(parties)) conflict["parties"] = [...parties].reverse();
+    }
+    const other = buildSnapshot(permuted, { bound }, "cur", "rf");
+    expect(Buffer.from(other.bytes).toString("utf8")).toBe(
+      Buffer.from(canonical.bytes).toString("utf8"),
+    );
+    // …and the rendered order is the canonical one, not the input's.
+    const rendered = other.envelope.body.evidence.find(
+      (e) => e["evidence_id"] === "ev-2",
+    );
+    expect(rendered!["boundary_coverage"]).toEqual(["B2", "B3", "B4"]);
+    const renderedConflict = other.envelope.body.conflicts[0]!;
+    expect(
+      (renderedConflict["parties"] as Array<Record<string, unknown>>).map(
+        (p) => p["party"],
+      ),
+    ).toEqual(["DECLARED_METADATA", "RUNTIME_OBSERVATION"]);
+  });
+
+  it("free-prose lists keep the author's order — they are content, not enumeration", () => {
+    const input = richInput();
+    const evidence = input.evidence.find((e) => e["evidence_id"] === "ev-2")!;
+    evidence["does_not_prove"] = [
+      "lock contention",
+      "that the seam fails closed when the assignment lookup is unavailable",
+    ];
+    const output = buildSnapshot(
+      input,
+      { bound: new MemoryRevisionView(SHA, new Map()) },
+      "cur",
+      "rf",
+    );
+    const rendered = output.envelope.body.evidence.find(
+      (e) => e["evidence_id"] === "ev-2",
+    );
+    expect(rendered!["does_not_prove"]).toEqual([
+      "lock contention",
+      "that the seam fails closed when the assignment lookup is unavailable",
+    ]);
+  });
+});
+
 describe("derived fields are computed, not trusted (ATLAS-IR-003)", () => {
   it("Permission.inert and preset_refs are derived from the graph", () => {
     const output = buildSnapshot(
@@ -440,6 +548,21 @@ describe("derived fields are computed, not trusted (ATLAS-IR-003)", () => {
       facetNode({ id: "facet:content.rich.formula" }),
       facetNode({ id: "facet:content.rich.char-count" }),
     );
+    input.nodes.push({
+      kind: "WorkItem",
+      id: "work:jnhu76/exam#900",
+      label: "Rich follow-up",
+      source_refs: [],
+      authority_refs: [],
+      review_state: "PROPOSED",
+      open_governance_item: { kind: "NONE" },
+      work_kind: "ISSUE",
+      external_ref: "jnhu76/exam#900",
+      title: "Rich follow-up",
+      requested_scope: "rich content",
+      closure_semantics: "OPEN",
+      state: "OPEN",
+    });
     input.edges.push(
       {
         kind: "contains",
@@ -450,6 +573,24 @@ describe("derived fields are computed, not trusted (ATLAS-IR-003)", () => {
         kind: "contains",
         source: "capability:content.rich",
         target: "facet:content.rich.char-count",
+      },
+      {
+        kind: "tracked_by",
+        source: "capability:content.rich",
+        target: "work:jnhu76/exam#900",
+        relation: "DELIVERS",
+      },
+      {
+        kind: "tracked_by",
+        source: "facet:content.rich.formula",
+        target: "work:jnhu76/exam#900",
+        relation: "DELIVERS",
+      },
+      {
+        kind: "tracked_by",
+        source: "facet:content.rich.char-count",
+        target: "work:jnhu76/exam#900",
+        relation: "RESIDUAL",
       },
     );
     input.evidence.push(
@@ -495,5 +636,203 @@ describe("derived fields are computed, not trusted (ATLAS-IR-003)", () => {
       (n) => n["id"] === "capability:content.rich",
     );
     expect(capability["support_summary"]).toBe("MIXED");
+  });
+
+  it("a hand-set support_summary cannot survive the IR-032 roll-up", () => {
+    const input = richInput();
+    // One qualifying capability-level claim at B4 plus one non-qualifying
+    // facet part is clause 1: MIXED must be rendered. A curator writing
+    // SUPPORTED by hand must not survive derivation.
+    const capability = input.nodes.find(
+      (n) => n["id"] === "capability:grading.manual",
+    )!;
+    capability["support_summary"] = "SUPPORTED";
+    const bound = new MemoryRevisionView(
+      SHA,
+      new Map([["docs/example.md", "x"]]),
+    );
+    const output = buildSnapshot(input, { bound }, "cur", "rf");
+    const derived = output.envelope.body.nodes.find(
+      (n) => n["id"] === "capability:grading.manual",
+    );
+    expect(derived!["support_summary"]).toBe("MIXED");
+  });
+
+  it("a hand-set PolicyValue.activation_status cannot survive ATLAS-IR-040a", () => {
+    const input = richInput();
+    input.nodes.push({
+      kind: "PolicyValue",
+      id: "policy:exam.timingMode/timed_sync",
+      label: "typed sync mode",
+      source_refs: [sourceRef()],
+      authority_refs: [],
+      review_state: "PROPOSED",
+      open_governance_item: { kind: "NONE" },
+      value: "timed_sync",
+      vocabulary_class: "MODE",
+      representable: "TRUE",
+      storable: "TRUE",
+      write_reachable: "FALSE",
+      read_compatible: "TRUE",
+      activation_status: "SUPPORTED", // hand-set: derives from the claim instead
+      activation_claim_ref: "claim-policy",
+      activation_gate: {
+        locator: "docs/SPEC.md:292",
+        lift_condition: "an explicit activation decision by the product owner",
+      },
+      refusing_seams: ["canonical authoring validator", "publish guard"],
+    });
+    input.claims.push(
+      claimRecord({
+        claim_id: "claim-policy",
+        subject: "policy:exam.timingMode/timed_sync",
+        value: "GATED",
+        boundary: "B4",
+        axes: {
+          design: "ACCEPTED",
+          implementation: "PARTIAL",
+          verification: "PASS",
+          activation_support: "GATED",
+        },
+        supporting_evidence: ["ev-2"],
+      }),
+    );
+    const output = buildSnapshot(
+      input,
+      { bound: new MemoryRevisionView(SHA, new Map()) },
+      "cur",
+      "rf",
+    );
+    const policy = output.envelope.body.nodes.find(
+      (n) => n["id"] === "policy:exam.timingMode/timed_sync",
+    );
+    expect(policy!["activation_status"]).toBe("GATED");
+  });
+
+  it("a PolicyValue with no owning claim records UNKNOWN, never a stale value", () => {
+    const input = richInput();
+    input.nodes.push({
+      kind: "PolicyValue",
+      id: "policy:attempt.status/voided",
+      label: "voided",
+      source_refs: [sourceRef()],
+      authority_refs: [],
+      review_state: "PROPOSED",
+      open_governance_item: { kind: "NONE" },
+      value: "voided",
+      vocabulary_class: "STATE",
+      representable: "TRUE",
+      storable: "TRUE",
+      write_reachable: "FALSE",
+      read_compatible: "TRUE",
+      activation_status: "NOT_SUPPORTED", // no claim owns it
+      refusing_seams: ["no production writer"],
+    });
+    const output = buildSnapshot(
+      input,
+      { bound: new MemoryRevisionView(SHA, new Map()) },
+      "cur",
+      "rf",
+    );
+    const policy = output.envelope.body.nodes.find(
+      (n) => n["id"] === "policy:attempt.status/voided",
+    );
+    expect(policy!["activation_status"]).toBe("UNKNOWN");
+  });
+});
+
+describe("ATLAS-IR-080 — a MAPPED part must carry a sanctioned mapping", () => {
+  it("MAPPED with no operation path and no work item is a build error", () => {
+    const input = emptyInput();
+    input.nodes.push(capabilityNode({ id: "capability:prose.only" }));
+    expect(() =>
+      buildSnapshot(
+        input,
+        { bound: new MemoryRevisionView(SHA, new Map()) },
+        "cur",
+        "rf",
+      ),
+    ).toThrow(/ATLAS-IR-080/);
+  });
+
+  it("PARTIAL without a sanctioned mapping is a reported finding, never dropped", () => {
+    const input = emptyInput();
+    input.nodes.push(
+      capabilityNode({
+        id: "capability:partial.only",
+        mapping_state: "PARTIAL",
+      }),
+    );
+    const output = buildSnapshot(
+      input,
+      { bound: new MemoryRevisionView(SHA, new Map()) },
+      "cur",
+      "rf",
+    );
+    const finding = output.findings.find((f) => f.code === "ATLAS-IR-080");
+    expect(finding).toBeDefined();
+    expect(String(finding!.path)).toBe("capability:partial.only");
+    // An incomplete mapping yields no aggregate verdict (clause 0).
+    expect(output.envelope.body.nodes[0]!["support_summary"]).toBe("UNKNOWN");
+  });
+});
+
+describe("ATLAS-SEM-071 — a gate must name its lift condition", () => {
+  function gatedInput(liftCondition: string): ReturnType<typeof emptyInput> {
+    const input = emptyInput();
+    input.nodes.push(
+      capabilityNode({ id: "capability:runtime.candidate-exam" }),
+      {
+        kind: "WorkItem",
+        id: "work:jnhu76/exam#302",
+        label: "Submit barrier",
+        source_refs: [],
+        authority_refs: [],
+        review_state: "PROPOSED",
+        open_governance_item:
+          liftCondition === ""
+            ? { kind: "WORK_ITEM", ref: "work:jnhu76/exam#302" }
+            : { kind: "DECISION_GATED", lift_condition: liftCondition },
+        work_kind: "ISSUE",
+        external_ref: "jnhu76/exam#302",
+        title: "Submit barrier",
+        requested_scope: "submit",
+        closure_semantics: "CLOSED_SUPERSEDED",
+        state: "CLOSED",
+      },
+    );
+    input.edges.push({
+      kind: "tracked_by",
+      source: "capability:runtime.candidate-exam",
+      target: "work:jnhu76/exam#302",
+      relation: "DECISION_GATE",
+    });
+    return input;
+  }
+
+  it("a gate whose work item states no lift condition cannot yield GATED", () => {
+    // A closed, superseded work item is not a decision gate: without a lift
+    // condition there is nothing to name, so no verdict may be manufactured.
+    expect(() =>
+      buildSnapshot(
+        gatedInput(""),
+        { bound: new MemoryRevisionView(SHA, new Map()) },
+        "cur",
+        "rf",
+      ),
+    ).toThrow(/lift condition/);
+  });
+
+  it("a gate with a stated lift condition rolls the capability up as GATED", () => {
+    const output = buildSnapshot(
+      gatedInput("an explicit activation decision by the product owner"),
+      { bound: new MemoryRevisionView(SHA, new Map()) },
+      "cur",
+      "rf",
+    );
+    const capability = output.envelope.body.nodes.find(
+      (n) => n["id"] === "capability:runtime.candidate-exam",
+    );
+    expect(capability!["support_summary"]).toBe("GATED");
   });
 });
