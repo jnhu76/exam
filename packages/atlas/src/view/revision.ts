@@ -38,11 +38,23 @@ export class GitRevisionView implements RevisionView {
     private readonly repoRoot: string,
   ) {}
 
+  // GIT_NO_REPLACE_OBJECTS: a local refs/replace entry must never change
+  // what "revision X" reads — two machines with different replace refs
+  // would otherwise produce different snapshots of the same commit
+  // (ATLAS-IR-060).
+  private get env(): Record<string, string> {
+    return { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" } as Record<
+      string,
+      string
+    >;
+  }
+
   fileExists(path: string): boolean {
     try {
       execFileSync("git", ["cat-file", "-e", `${this.revision}:${path}`], {
         cwd: this.repoRoot,
         stdio: "ignore",
+        env: this.env,
       });
       return true;
     } catch {
@@ -56,6 +68,7 @@ export class GitRevisionView implements RevisionView {
         cwd: this.repoRoot,
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
+        env: this.env,
       });
     } catch {
       return undefined;
@@ -67,6 +80,7 @@ export class GitRevisionView implements RevisionView {
       execFileSync("git", ["cat-file", "-e", `${sha}^{commit}`], {
         cwd: this.repoRoot,
         stdio: "ignore",
+        env: this.env,
       });
       return true;
     } catch {

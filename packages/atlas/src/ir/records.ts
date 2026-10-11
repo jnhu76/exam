@@ -206,7 +206,9 @@ const AUTHORITY_REQ_SHAPE = shape({
 
 /** ir §4 — the type-specific fields per node kind. */
 const CAPABILITY_FACET_FIELDS = shape({
-  support_summary: enumOf(SUPPORT_SUMMARY, "support_summary"),
+  // DERIVED by the ATLAS-IR-032 roll-up; raw input may omit it, and a
+  // supplied value is overwritten — the claims are the single authority.
+  support_summary: optEnum(SUPPORT_SUMMARY, "support_summary", "UNKNOWN"),
   support_boundary: enumOf(BOUNDARIES, "support_boundary"),
   mapping_state: enumOf(MAPPING_STATE, "mapping_state"),
   // ATLAS-IR-080: MAPPED requires a NAMED enumeration basis.
@@ -338,7 +340,13 @@ export const NODE_TYPE_FIELDS: Record<NodeKind, ObjectShape> = {
     storable: enumOf(TRI_STATE, "storable"),
     write_reachable: enumOf(TRI_STATE, "write_reachable"),
     read_compatible: enumOf(TRI_STATE, "read_compatible"),
-    activation_status: enumOf(ACTIVATION_SUPPORT_AXIS, "activation_status"),
+    // DERIVED from activation_claim_ref (ATLAS-IR-040a); raw input may omit
+    // it, and a supplied value is overwritten.
+    activation_status: optEnum(
+      ACTIVATION_SUPPORT_AXIS,
+      "activation_status",
+      "UNKNOWN",
+    ),
     activation_claim_ref: optStr(FIELD_ABSENT),
     activation_gate: optRec(
       shape({ locator: str(), lift_condition: str() }),

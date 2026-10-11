@@ -31,7 +31,6 @@ export interface RouteFacts {
     permission?: string;
     resolver?: string;
     resource_id_key?: string;
-    score_capability?: boolean;
   }>;
   registry: Array<{
     method: string;
@@ -173,9 +172,7 @@ export function interfaceNodesFromRouteFacts(
         route.gate_kind === "RESOURCE_AWARE_CAPABILITY"
           ? "RESOURCE_AWARE_CAPABILITY"
           : route.gate_kind === "CAPABILITY"
-            ? route.score_capability === true
-              ? "CAPABILITY"
-              : "CAPABILITY"
+            ? "CAPABILITY"
             : route.gate_kind === "AUTH_ONLY"
               ? "AUTH_ONLY"
               : "PUBLIC";

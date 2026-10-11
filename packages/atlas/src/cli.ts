@@ -61,8 +61,6 @@ function assertCaptureMatchesProductTree(
   }
   const git = (args: string[]): string =>
     execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" }).trim();
-  const isAncestor =
-    git(["merge-base", "--is-ancestor", captureHead, sourceSha]) !== "" || true;
   try {
     execFileSync(
       "git",
@@ -77,7 +75,6 @@ function assertCaptureMatchesProductTree(
       `route-facts observed_head ${captureHead} is not an ancestor of the observed revision ${sourceSha} — re-run the capture`,
     );
   }
-  void isAncestor;
   const drift = git([
     "diff",
     "--name-only",
@@ -97,6 +94,43 @@ function assertCaptureMatchesProductTree(
   }
 }
 
+/**
+ * Build preconditions on the repository itself: the extraction reads the
+ * WORKING TREE workspace packages (@exam/authz) while pinning refs to
+ * SOURCE_SHA, so uncommitted edits outside packages/atlas would produce a
+ * snapshot no clean checkout can reproduce. A shallow clone cannot serve
+ * pinned reads at all.
+ */
+function assertBuildableRepository(): void {
+  const shallow = execFileSync(
+    "git",
+    ["rev-parse", "--is-shallow-repository"],
+    { cwd: REPO_ROOT, encoding: "utf8" },
+  ).trim();
+  if (shallow === "true") {
+    fail(
+      "shallow clone: pinned-revision reads may fail silently — run git fetch --unshallow before building",
+    );
+  }
+  const dirty = execFileSync(
+    "git",
+    [
+      "status",
+      "--porcelain",
+      "--",
+      "apps/",
+      "packages/",
+      ":(exclude)packages/atlas/",
+    ],
+    { cwd: REPO_ROOT, encoding: "utf8" },
+  ).trim();
+  if (dirty.length > 0) {
+    fail(
+      `working tree has uncommitted changes outside packages/atlas — the extraction would observe them:\n${dirty} — commit or stash before building`,
+    );
+  }
+}
+
 interface LoadedInputs {
   sourceSha: string;
   routeFacts: RouteFacts;
@@ -104,8 +138,9 @@ interface LoadedInputs {
   curationRevision: string;
 }
 
-function loadInputs(): LoadedInputs {
-  const sourceSha = readSourceSha();
+function loadInputs(pinnedSha?: string): LoadedInputs {
+  assertBuildableRepository();
+  const sourceSha = readSourceSha(pinnedSha);
   const routeFactsPath = join(PACKAGE_ROOT, "input", "route-facts.json");
   if (!existsSync(routeFactsPath)) {
     fail(
@@ -189,7 +224,19 @@ async function main(argv: string[]): Promise<void> {
         fail("no generated snapshot — run `build` first");
       }
       const committed = readFileSync(snapshotPath, "utf8");
-      const output = buildFromInputs(loadInputs());
+      const manifest = JSON.parse(committed)["manifest"] as {
+        git_sha?: string;
+      };
+      // The freeze check rebuilds at the OBSERVED revision recorded in the
+      // committed manifest — never at HEAD, which moves with every commit
+      // that contains the snapshot (SOURCE_SHA != final PR head).
+      if (
+        manifest.git_sha === undefined ||
+        !/^[0-9a-f]{40}$/.test(manifest.git_sha)
+      ) {
+        fail("committed manifest carries no valid git_sha to rebind at");
+      }
+      const output = buildFromInputs(loadInputs(manifest.git_sha));
       const rebuilt = Buffer.from(output.bytes).toString("utf8");
       if (rebuilt !== committed) {
         fail(
@@ -234,9 +281,14 @@ async function main(argv: string[]): Promise<void> {
 }
 
 /** The observed revision: ATLAS_SOURCE_SHA env, else the worktree HEAD. */
-function readSourceSha(): string {
-  const fromEnv = process.env["ATLAS_SOURCE_SHA"];
-  if (fromEnv !== undefined && /^[0-9a-f]{40}$/.test(fromEnv)) {
+function readSourceSha(explicit?: string): string {
+  const fromEnv = explicit ?? process.env["ATLAS_SOURCE_SHA"];
+  if (fromEnv !== undefined) {
+    if (!/^[0-9a-f]{40}$/.test(fromEnv)) {
+      fail(
+        `ATLAS_SOURCE_SHA "${fromEnv}" is not full 40-hex — refusing to fall back to HEAD`,
+      );
+    }
     return fromEnv;
   }
   const sha = execFileSync("git", ["rev-parse", "HEAD"], {

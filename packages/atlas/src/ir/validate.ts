@@ -232,6 +232,28 @@ export function validateRecordSemantics(
       }
     }
 
+    // ATLAS-SEM-021 — verification PASS asserts proof: a claim that carries
+    // PASS but cites no supporting evidence asserts what nothing attests.
+    // Recorded roll-up outputs (predicate `support_summary`) are exempt:
+    // they restate a derivation, and their inputs carry the evidence.
+    const verificationAxis =
+      typeof raw["axes"] === "object" && raw["axes"] !== null
+        ? (raw["axes"] as Record<string, unknown>)["verification"]
+        : undefined;
+    const supportingForPass = Array.isArray(raw["supporting_evidence"])
+      ? (raw["supporting_evidence"] as string[])
+      : [];
+    const predicate = requireStringField(raw, "predicate");
+    if (
+      verificationAxis === "PASS" &&
+      supportingForPass.length === 0 &&
+      predicate !== "support_summary"
+    ) {
+      errors.push(
+        `${path}: verification PASS with no supporting_evidence (ATLAS-SEM-021)`,
+      );
+    }
+
     // ATLAS-SEM-041 — the falsification attempt must exist for
     // verdict-bearing claims (the ones a reader may act on).
     const VERDICT_BEARING = new Set([
@@ -347,6 +369,57 @@ export function validateSnapshotGraph(input: {
       errors.push(`claims[${i}]: subject ${subject} has no node`);
     }
   });
+
+  // ATLAS-IR-080 — Capability/Facet/Workflow must carry a sanctioned
+  // mapping: an operation path (contains→Workflow→performs→Operation, or
+  // an exposes edge from an operation) or a tracked_by work item. A
+  // mapping_state of MAPPED without one is the mapping-coverage demo
+  // pattern: prose asserts what the graph does not carry.
+  // An operation path: the node performs operations, or contains a
+  // workflow that does (frozen exposes direction is interface→operation,
+  // so exposes never originates from these kinds).
+  const performsSources = new Set(
+    input.edges
+      .filter((e) => e["kind"] === "performs")
+      .map((e) => String(e["source"])),
+  );
+  const containsStepOwner = new Set(
+    input.edges
+      .filter(
+        (e) =>
+          e["kind"] === "contains" && performsSources.has(String(e["target"])),
+      )
+      .map((e) => String(e["source"])),
+  );
+  const trackedNodes = new Set(
+    input.edges
+      .filter((e) => e["kind"] === "tracked_by")
+      .map((e) => String(e["source"])),
+  );
+  for (const node of input.nodes) {
+    const kind = node["kind"];
+    if (kind !== "Capability" && kind !== "Facet" && kind !== "Workflow") {
+      continue;
+    }
+    const id = String(node["id"] ?? "");
+    const hasOperationPath =
+      performsSources.has(id) || containsStepOwner.has(id);
+    const hasWorkItem = trackedNodes.has(id);
+    if (!hasOperationPath && !hasWorkItem) {
+      const state = String(node["mapping_state"] ?? "UNKNOWN");
+      if (state === "MAPPED") {
+        errors.push(
+          `${id}: mapping_state MAPPED without a sanctioned mapping — no operation path and no tracked_by work item (ATLAS-IR-080)`,
+        );
+      } else if (state === "PARTIAL" || state === "UNMAPPED") {
+        findings.push({
+          code: "ATLAS-IR-080",
+          path: id,
+          message: `${kind} ${id} carries no sanctioned mapping (mapping_state ${state})`,
+        });
+      }
+    }
+  }
 
   return { errors, findings };
 }

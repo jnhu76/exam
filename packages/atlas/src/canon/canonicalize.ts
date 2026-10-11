@@ -172,6 +172,94 @@ function sortedByKey(
  * computed here — the builder computes them before calling this; this
  * function is the last deterministic gate.
  */
+/**
+ * ATLAS-IR-063/065/067 — set-valued fields are deduplicated and sorted at
+ * the SINGLE-RECORD level too, not only when two records merge: two
+ * curation files that list the same set in different orders are the same
+ * semantic input and must produce the same bytes. Keyed record sets
+ * (`source_refs`, `additional_gates`, `parties`) are ordered by their key
+ * with duplicate entries collapsed; free-prose lists (`does_not_prove`) keep
+ * the author's order, which is content, not enumeration.
+ */
+const SET_VALUED_STRING_FIELDS: ReadonlySet<string> = new Set([
+  "supporting_evidence",
+  "challenging_evidence",
+  "boundary_coverage",
+  "permissions",
+  "sensitive_permissions",
+  "authority_refs",
+  "state_values",
+  "refusing_seams",
+  "preset_refs",
+  "consumed_by",
+  "claim_refs",
+]);
+
+/**
+ * Order a keyed record set by its key prefix and collapse byte-identical
+ * duplicates (ATLAS-IR-067). The trailing index keeps the sort a stable
+ * refinement for records that share a key prefix. Items may be locator
+ * strings (an unresolved record's `source_refs`) or resolved SRef objects.
+ */
+function orderKeyedRecords(
+  record: Record<string, unknown>,
+  field: string,
+  keyOf: (item: unknown) => string,
+): void {
+  const items = record[field];
+  if (!Array.isArray(items)) return;
+  const keyed = items.map((item, i) => ({
+    item,
+    key: `${keyOf(item)}|${String(i).padStart(6, "0")}`,
+  }));
+  keyed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const seen = new Set<string>();
+  const out: unknown[] = [];
+  for (const entry of keyed) {
+    const canonical = canonicalJson(entry.item);
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    out.push(entry.item);
+  }
+  record[field] = out;
+}
+
+function canonicalizeSetValuedFields(record: Record<string, unknown>): void {
+  for (const field of SET_VALUED_STRING_FIELDS) {
+    const value = record[field];
+    if (!Array.isArray(value)) continue;
+    const strings = value.filter((v): v is string => typeof v === "string");
+    if (strings.length !== value.length) continue; // mixed types: leave to schema validation
+    record[field] = [...new Set(strings)].sort();
+  }
+  orderKeyedRecords(record, "source_refs", (raw) => {
+    if (typeof raw === "string") return raw;
+    const ref = (raw ?? {}) as Record<string, unknown>;
+    return [
+      String(ref["repo"] ?? ""),
+      String(ref["source_kind"] ?? ""),
+      String(ref["path_or_uri"] ?? ""),
+      String(ref["symbol"] ?? ""),
+      String(ref["section"] ?? ""),
+    ].join("|");
+  });
+  orderKeyedRecords(record, "additional_gates", (raw) => {
+    const gate = (raw ?? {}) as Record<string, unknown>;
+    return `${String(gate["capability_ref"] ?? "")}|${String(gate["effect"] ?? "")}`;
+  });
+  orderKeyedRecords(record, "parties", (raw) => {
+    const party = (raw ?? {}) as Record<string, unknown>;
+    return String(party["party"] ?? "");
+  });
+}
+
+function canonicalizeRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  canonicalizeSetValuedFields(record);
+  return record;
+}
+
 export function normalizeRecords(raw: {
   nodes: Array<Record<string, unknown>>;
   edges: Array<Record<string, unknown>>;
@@ -206,7 +294,7 @@ export function normalizeRecords(raw: {
       throw new SemanticConflictError(errors.join("\n"));
     }
     findings.push(...recordFindings);
-    canonicalNodes.push(fields.applyDefaults(node));
+    canonicalNodes.push(canonicalizeRecord(fields.applyDefaults(node)));
   });
 
   const canonicalEdges: Array<Record<string, unknown>> = [];
@@ -223,13 +311,13 @@ export function normalizeRecords(raw: {
     const fields = schemas.edges[kind as EdgeKind];
     const path = `edges[${i}]`;
     validateRecord(fields, edge, path);
-    canonicalEdges.push(fields.applyDefaults(edge));
+    canonicalEdges.push(canonicalizeRecord(fields.applyDefaults(edge)));
   });
 
   const canonicalFacts: Array<Record<string, unknown>> = [];
   raw.facts.forEach((fact, i) => {
     validateRecord(schemas.fact, fact, `facts[${i}]`);
-    canonicalFacts.push(schemas.fact.applyDefaults(fact));
+    canonicalFacts.push(canonicalizeRecord(schemas.fact.applyDefaults(fact)));
   });
 
   const canonicalEvidence: Array<Record<string, unknown>> = [];
@@ -245,7 +333,9 @@ export function normalizeRecords(raw: {
       throw new SemanticConflictError(errors.join("\n"));
     }
     findings.push(...recordFindings);
-    canonicalEvidence.push(schemas.evidence.applyDefaults(evidence));
+    canonicalEvidence.push(
+      canonicalizeRecord(schemas.evidence.applyDefaults(evidence)),
+    );
   });
 
   const canonicalClaims: Array<Record<string, unknown>> = [];
@@ -261,13 +351,17 @@ export function normalizeRecords(raw: {
       throw new SemanticConflictError(errors.join("\n"));
     }
     findings.push(...recordFindings);
-    canonicalClaims.push(schemas.claim.applyDefaults(claim));
+    canonicalClaims.push(
+      canonicalizeRecord(schemas.claim.applyDefaults(claim)),
+    );
   });
 
   const canonicalConflicts: Array<Record<string, unknown>> = [];
   raw.conflicts.forEach((conflict, i) => {
     validateRecord(schemas.conflict, conflict, `conflicts[${i}]`);
-    canonicalConflicts.push(schemas.conflict.applyDefaults(conflict));
+    canonicalConflicts.push(
+      canonicalizeRecord(schemas.conflict.applyDefaults(conflict)),
+    );
   });
 
   return {

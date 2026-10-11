@@ -41,6 +41,26 @@ export interface CoverageReport {
   missing_source_refs: number;
   ambiguous_source_refs: number;
 
+  facets_total: number;
+  facets_mapped: number;
+  facets_partial: number;
+  facets_unmapped: number;
+  facets_unknown: number;
+  interface_family_orphans: number;
+  interface_family_orphan_ids: string[];
+
+  /** Capabilities the coverage seed names in no family row (discovered
+   * beyond the seed — explained by the inventory's beyond_seed_capabilities). */
+  capabilities_not_named_by_family: number;
+  capabilities_not_named_by_family_ids: string[];
+
+  /** Claims that declare a boundary and cite evidence, where NO cited record's
+   * boundary_coverage includes that boundary (ATLAS-SEM-083 membership). A
+   * claim citing nothing at all is reported by the incomplete-claim finding
+   * instead, never here. */
+  claims_boundary_not_covered: number;
+  claims_boundary_not_covered_ids: string[];
+
   runtime_routes_total: number;
   protected_routes_total: number;
   registry_entries: number;
@@ -122,12 +142,89 @@ export function coverageReport(
     if (state === "AMBIGUOUS") refStates.ambiguous += 1;
   }
 
-  const mappingState = (value: string): number =>
-    nodes.filter(
+  const mappingState = (kind: "Capability" | "Facet", value: string): number =>
+    nodes.filter((n) => n["kind"] === kind && n["mapping_state"] === value)
+      .length;
+
+  // Orphan interfaces: captured routes no capability/facet reaches through
+  // the graph (contains → performs → exposes). Route count and family
+  // reconciliation can both look green while double-digit routes are
+  // claimed by no family — this metric makes that visible.
+  // frozen exposes direction is interface --exposes--> operation, so
+  // interfaces are reached by walking contains/performs forward and then
+  // reversing exposes.
+  const reachableOperations = new Set<string>();
+  const children = new Map<string, string[]>();
+  for (const edge of envelope.body.edges) {
+    const kind = String(edge["kind"]);
+    if (kind === "contains" || kind === "performs") {
+      const list = children.get(String(edge["source"])) ?? [];
+      list.push(String(edge["target"]));
+      children.set(String(edge["source"]), list);
+    }
+  }
+  const roots = nodes
+    .filter((n) => n["kind"] === "Capability" || n["kind"] === "Facet")
+    .map((n) => String(n["id"]));
+  const walk = (id: string): void => {
+    if (reachableOperations.has(id)) return;
+    const node = nodes.find((n) => String(n["id"]) === id);
+    if (node?.["kind"] === "Operation") reachableOperations.add(id);
+    for (const child of children.get(id) ?? []) walk(child);
+  };
+  for (const root of roots) walk(root);
+  const reachableInterfaces = new Set(
+    envelope.body.edges
+      .filter(
+        (e) =>
+          String(e["kind"]) === "exposes" &&
+          reachableOperations.has(String(e["target"])),
+      )
+      .map((e) => String(e["source"])),
+  );
+  const orphanInterfaces = nodes
+    .filter(
       (n) =>
-        (n["kind"] === "Capability" || n["kind"] === "Facet") &&
-        n["mapping_state"] === value,
-    ).length;
+        n["kind"] === "Interface" && !reachableInterfaces.has(String(n["id"])),
+    )
+    .map((n) => String(n["id"]));
+
+  // Capabilities no family row names: the coverage seed may have missed a
+  // capability the graph carries. Reported, never silently folded into a
+  // neighbouring family.
+  const namedCapabilities = new Set(
+    families.map((f) => String(f["capability_ref"])),
+  );
+  const unnamedCapabilities = [...capabilityIds]
+    .filter((id) => !namedCapabilities.has(id))
+    .sort();
+
+  // Boundary membership (ATLAS-SEM-083): a claim that cites evidence none of
+  // which covers its declared boundary is asserting more than it can show.
+  const coverageByEvidence = new Map<string, Set<string>>();
+  for (const evidence of body.evidence) {
+    const coverage = Array.isArray(evidence["boundary_coverage"])
+      ? (evidence["boundary_coverage"] as string[])
+      : [];
+    coverageByEvidence.set(String(evidence["evidence_id"]), new Set(coverage));
+  }
+  const uncoveredBoundaryClaims = body.claims
+    .filter((claim) => {
+      const boundary = claim["boundary"];
+      if (typeof boundary !== "string") return false;
+      const cited = [
+        ...(Array.isArray(claim["supporting_evidence"])
+          ? (claim["supporting_evidence"] as string[])
+          : []),
+        ...(Array.isArray(claim["challenging_evidence"])
+          ? (claim["challenging_evidence"] as string[])
+          : []),
+      ];
+      if (cited.length === 0) return false;
+      return !cited.some((id) => coverageByEvidence.get(id)?.has(boundary));
+    })
+    .map((claim) => String(claim["claim_id"]))
+    .sort();
 
   return {
     seed_families_total: families.length,
@@ -140,10 +237,21 @@ export function coverageReport(
     unaccounted_seed_families: unaccounted,
 
     capabilities_total: countBy(nodes, "Capability"),
-    capabilities_mapped: mappingState("MAPPED"),
-    capabilities_partial: mappingState("PARTIAL"),
-    capabilities_unmapped: mappingState("UNMAPPED"),
-    capabilities_unknown: mappingState("UNKNOWN"),
+    capabilities_mapped: mappingState("Capability", "MAPPED"),
+    capabilities_partial: mappingState("Capability", "PARTIAL"),
+    capabilities_unmapped: mappingState("Capability", "UNMAPPED"),
+    capabilities_unknown: mappingState("Capability", "UNKNOWN"),
+    facets_total: countBy(nodes, "Facet"),
+    facets_mapped: mappingState("Facet", "MAPPED"),
+    facets_partial: mappingState("Facet", "PARTIAL"),
+    facets_unmapped: mappingState("Facet", "UNMAPPED"),
+    facets_unknown: mappingState("Facet", "UNKNOWN"),
+    interface_family_orphans: orphanInterfaces.length,
+    interface_family_orphan_ids: orphanInterfaces.slice(0, 30),
+    capabilities_not_named_by_family: unnamedCapabilities.length,
+    capabilities_not_named_by_family_ids: unnamedCapabilities,
+    claims_boundary_not_covered: uncoveredBoundaryClaims.length,
+    claims_boundary_not_covered_ids: uncoveredBoundaryClaims,
 
     workflows_total: countBy(nodes, "Workflow"),
     operations_total: countBy(nodes, "Operation"),

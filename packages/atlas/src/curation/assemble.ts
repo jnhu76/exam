@@ -23,6 +23,7 @@ import {
 import { authzFragment } from "../extract/authz.js";
 import { routeFragment } from "../extract/routes.js";
 import type { SemanticInput } from "../snapshot/types.js";
+import { EXTRACTOR_ID, EXTRACTOR_VERSION } from "../snapshot/types.js";
 
 export interface CurationBundle {
   files: Map<string, Record<string, unknown>>;
@@ -46,6 +47,16 @@ const CURATION_FILE_ORDER = [
 export function loadCurationInputs(curationDir: string): CurationBundle {
   const files = new Map<string, Record<string, unknown>>();
   const present = new Set(readdirSync(curationDir));
+  // An unexpected file in curation/ is a build error, not a silent drop:
+  // curation_input_revision claims to identify EVERY curation input.
+  const unexpected = [...present].filter(
+    (name) => !(CURATION_FILE_ORDER as readonly string[]).includes(name),
+  );
+  if (unexpected.length > 0) {
+    throw new Error(
+      `curation directory contains unknown input files (not loaded, not hashed): ${unexpected.sort().join(", ")}`,
+    );
+  }
   const parts: string[] = [];
   for (const name of CURATION_FILE_ORDER) {
     if (!present.has(name)) {
@@ -129,7 +140,7 @@ function sourceRefFromLocator(
     git_sha: snapshot,
     source_kind,
     path_or_uri: path,
-    extractor: { id: "@exam/atlas", version: "0.1.0" },
+    extractor: { id: EXTRACTOR_ID, version: EXTRACTOR_VERSION },
     extraction_method: "MANUAL_CURATION",
     resolution_state: "RESOLVED",
     repo_freshness: "CURRENT",
@@ -151,27 +162,27 @@ function externalRefFromLocator(
   }
   const ref = `work:${match[1]}${match[2]}#${match[3]}`;
   const observed = externalRevisions.get(ref);
+  // ATLAS-SREF-013: an external object without a captured observation has
+  // no external_revision — the resolver reports UNKNOWN, never a
+  // fabricated empty triple marked RESOLVED.
+  const triple =
+    observed === undefined
+      ? undefined
+      : {
+          observed_state: String(observed["observed_state"]),
+          observed_updated_at: String(observed["observed_updated_at"]),
+          observed_at: String(observed["observed_at"]),
+        };
   return {
     source_ref_version: "SREF-1",
     source_kind: "GITHUB_ISSUE",
     path_or_uri: `https://github.com/${match[1]}${match[2]}/issues/${match[3]}`,
-    extractor: { id: "@exam/atlas", version: "0.1.0" },
+    extractor: { id: EXTRACTOR_ID, version: EXTRACTOR_VERSION },
     extraction_method: "GITHUB_API",
-    resolution_state: "RESOLVED",
-    external_revision:
-      observed !== undefined
-        ? {
-            observed_state: String(observed["observed_state"]),
-            observed_updated_at: String(observed["observed_updated_at"]),
-            observed_at: String(observed["observed_at"]),
-          }
-        : {
-            observed_state: "UNKNOWN",
-            observed_updated_at: "",
-            observed_at: "",
-          },
+    resolution_state: triple !== undefined ? "RESOLVED" : "UNKNOWN",
     external_freshness: "UNKNOWN",
     sensitivity: "NONE",
+    ...(triple !== undefined ? { external_revision: triple } : {}),
   };
 }
 
@@ -182,6 +193,42 @@ function bindSourceRefs(bundle: CurationBundle, sourceSha: string): void {
     | Array<Record<string, unknown>>
     | undefined) ?? []) {
     externalRevisions.set(String(item["ref"]), item);
+  }
+  // One authoritative capture per external object: inline triples on
+  // work-item refs must agree with external-revisions.json or the snapshot
+  // would embed two different captures of the same issue.
+  const workItemsFile = bundle.files.get("work-items.json");
+  for (const node of (workItemsFile?.["nodes"] as
+    | Array<Record<string, unknown>>
+    | undefined) ?? []) {
+    for (const ref of (node["source_refs"] as
+      | Array<Record<string, unknown>>
+      | undefined) ?? []) {
+      const uri = ref["path_or_uri"];
+      if (typeof uri !== "string" || !uri.includes("/issues/")) continue;
+      const inline = ref["external_revision"] as
+        | Record<string, unknown>
+        | undefined;
+      if (inline === undefined) continue;
+      const match = /\/issues\/(\d+)$/.exec(uri);
+      if (match === null) continue;
+      const canonicalEntry = [...externalRevisions.entries()].find(([refId]) =>
+        refId.endsWith(`#${match[1]}`),
+      );
+      if (canonicalEntry === undefined) continue;
+      const canonical = canonicalEntry[1];
+      const same =
+        String(inline["observed_state"]) ===
+          String(canonical["observed_state"]) &&
+        String(inline["observed_updated_at"]) ===
+          String(canonical["observed_updated_at"]) &&
+        String(inline["observed_at"]) === String(canonical["observed_at"]);
+      if (!same) {
+        throw new Error(
+          `external capture mismatch for ${uri}: work-items.json inline triple disagrees with external-revisions.json`,
+        );
+      }
+    }
   }
   const bind = (ref: Record<string, unknown>): void => bindRef(ref, sourceSha);
   for (const file of bundle.files.values()) {

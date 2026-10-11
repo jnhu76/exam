@@ -121,26 +121,28 @@ export function rollupSupport(input: {
   );
 
   // Clause 3 — GATED | DEFERRED from the strongest such part, naming it.
+  // Binding rules: a part whose gate names a lift condition is GATED (no
+  // design conjunct); DEFERRED requires an ACCEPTED design AND an owning
+  // work item.
   if (!anySupporting) {
-    const ownedParts = parts.filter(
-      (p) =>
-        p.hasAcceptedDesign &&
-        (p.owningWorkItem !== undefined || p.decisionGate !== undefined),
+    const gatedParts = parts.filter((p) => p.decisionGate !== undefined);
+    if (gatedParts.length >= 1) {
+      const gated = gatedParts[0]!;
+      return {
+        summary: "GATED",
+        clause: 3,
+        basis: `gate ${String(gated.decisionGate?.locator)} on part ${gated.partId}; lift: ${String(gated.decisionGate?.lift_condition)}`,
+      };
+    }
+    const deferredParts = parts.filter(
+      (p) => p.hasAcceptedDesign && p.owningWorkItem !== undefined,
     );
-    if (ownedParts.length >= 1) {
-      const gated = ownedParts.find((p) => p.decisionGate !== undefined);
-      if (gated?.decisionGate) {
-        return {
-          summary: "GATED",
-          clause: 3,
-          basis: `gate ${gated.decisionGate.locator} on part ${gated.partId}; lift: ${gated.decisionGate.lift_condition}`,
-        };
-      }
-      const deferred = ownedParts.find((p) => p.owningWorkItem !== undefined);
+    if (deferredParts.length >= 1) {
+      const deferred = deferredParts[0]!;
       return {
         summary: "DEFERRED",
         clause: 3,
-        basis: `design accepted; owned by ${deferred?.owningWorkItem} on part ${deferred?.partId}`,
+        basis: `design accepted; owned by ${String(deferred.owningWorkItem)} on part ${deferred.partId}`,
       };
     }
 

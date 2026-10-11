@@ -5,13 +5,17 @@
  * Pipeline (all deterministic; no wall clock, no filesystem enumeration
  * order, no network):
  *
- *   1. resolve every source ref against the bound revision (and live, when
+ *   1. normalize: validate, apply defaults, canonicalize set-valued fields,
+ *      merge duplicates, sort — ir §7. Derivations run on MERGED records so
+ *      a collapsed duplicate edge can never inflate a derived count
+ *      (ATLAS-IR-066);
+ *   2. resolve every source ref against the bound revision (and live, when
  *      provided) — ATLAS-SREF resolution states + repo freshness;
- *   2. compute DERIVED fields from the resolved graph (ATLAS-IR-003: derived
- *      fields are never hand-set — input values are overwritten);
- *   3. normalize: validate, apply defaults, merge duplicates, sort —
- *      ir §7;
- *   4. hash the canonical body, seal the manifest.
+ *   3. compute DERIVED fields from the resolved graph (ATLAS-IR-003: derived
+ *      fields are never hand-set — input values are overwritten), sorting
+ *      each derived set field where it is written;
+ *   4. re-validate the merged records, hash the canonical body, seal the
+ *      manifest.
  */
 
 import {
@@ -38,6 +42,7 @@ import {
 } from "../sref/resolve.js";
 import {
   usableAsBoundRevisionEvidence,
+  validateSourceRef,
   type SourceRef,
 } from "../sref/types.js";
 import {
@@ -156,6 +161,57 @@ function computeDerivedFields(input: SemanticInput): void {
     }
   }
 
+  const evidenceAdequateFor = (
+    claim: Record<string, unknown>,
+    boundary: string,
+  ): boolean => {
+    const supporting = Array.isArray(claim["supporting_evidence"])
+      ? (claim["supporting_evidence"] as string[])
+      : [];
+    return supporting.some((evidenceId) => {
+      const evidence = evidenceById.get(evidenceId);
+      if (evidence === undefined) return false;
+      const coverage = Array.isArray(evidence["boundary_coverage"])
+        ? (evidence["boundary_coverage"] as string[])
+        : [];
+      if (!coverage.includes(boundary)) return false;
+      // The ref must still be usable as evidence about the bound revision.
+      // Only human review is exempt from carrying a ref (ATLAS-SREF-003).
+      const ref = getRecord(evidence, "source_ref");
+      if (ref === undefined) {
+        return evidence["evidence_kind"] === "HUMAN_REVIEW";
+      }
+      return usableAsBoundRevisionEvidence(ref as unknown as SourceRef);
+    });
+  };
+
+  // ATLAS-SEM-084 negative evidence: a recorded non-support statement at the
+  // boundary, carried by ONE evidence record that has BOTH the boundary
+  // coverage and the negative basis — splitting basis and coverage across
+  // two records would launder the boundary. A captured external work-item
+  // record counts (the frozen slices cite closed issues as the authority
+  // for non-adoption decisions) but the ref must actually RESOLVE.
+  const negativeEvidenceCovers = (
+    claim: Record<string, unknown>,
+    boundary: string,
+  ): boolean => {
+    const supporting = Array.isArray(claim["supporting_evidence"])
+      ? (claim["supporting_evidence"] as string[])
+      : [];
+    return supporting.some((evidenceId) => {
+      const evidence = evidenceById.get(evidenceId);
+      if (evidence === undefined) return false;
+      const coverage = Array.isArray(evidence["boundary_coverage"])
+        ? (evidence["boundary_coverage"] as string[])
+        : [];
+      if (!coverage.includes(boundary)) return false;
+      if (typeof evidence["negative_evidence_basis"] !== "string") return false;
+      const ref = getRecord(evidence, "source_ref");
+      if (ref === undefined) return false;
+      return ref["resolution_state"] === "RESOLVED";
+    });
+  };
+
   // ——— claims: freshness / resolution / eligibility (ATLAS-SREF-034) ———
   for (const claim of input.claims) {
     const citedIds = [
@@ -192,9 +248,9 @@ function computeDerivedFields(input: SemanticInput): void {
     node["resolution"] = derivation.resolution;
     node["resolution_causes"] = derivation.resolution_causes;
     const subject = getString(node, "id");
-    node["claim_refs"] = (claimsOf.get(subject ?? "") ?? []).map(
-      (c) => getString(c, "claim_id") ?? "",
-    );
+    node["claim_refs"] = (claimsOf.get(subject ?? "") ?? [])
+      .map((c) => getString(c, "claim_id") ?? "")
+      .sort();
   }
 
   // ——— Workflow.step_count from performs edges (DERIVED) ———
@@ -241,6 +297,20 @@ function computeDerivedFields(input: SemanticInput): void {
           const list = consumingPermissions.get(permission) ?? [];
           list.push(interfaceId);
           consumingPermissions.set(permission, list);
+        }
+      }
+      // In-handler additional gates (ATLAS-IR-091) consume their capability
+      // just like pre-handler gates — omitting them mislabels real
+      // consumption as GRANTED_BUT_UNCONSUMED.
+      const gates = Array.isArray(node["additional_gates"])
+        ? (node["additional_gates"] as Array<Record<string, unknown>>)
+        : [];
+      for (const gate of gates) {
+        const capability = getString(gate, "capability_ref");
+        if (capability !== undefined) {
+          const list = consumingPermissions.get(capability) ?? [];
+          list.push(getString(node, "id") ?? "");
+          consumingPermissions.set(capability, list);
         }
       }
     }
@@ -308,11 +378,17 @@ function computeDerivedFields(input: SemanticInput): void {
       node["declared_vs_runtime"] = "RUNTIME_ONLY";
       continue;
     }
-    const divergent =
-      declared!["permission_ref"] !== runtime!["permission_ref"] ||
-      declared!["scope_ref"] !== runtime!["scope_ref"] ||
-      declared!["gate_kind"] !== runtime!["gate_kind"] ||
-      declared!["resolver"] !== runtime!["resolver"];
+    // ATLAS-IR-036 compares the permission gate the two observation modes
+    // can both speak about. The blocks are produced differently (declared
+    // registry metadata vs runtime introspection) and legitimately carry
+    // different field sets — declared has scope_value, runtime has authz
+    // kinds, and the two `resolver` fields have different semantics — so
+    // only permission_ref is compared. Presence asymmetry IS divergence:
+    // a declared permission gate the runtime capture cannot see (dynamic
+    // score gates) is exactly the C-K1 seam.
+    const declaredPermission = declared!["permission_ref"];
+    const runtimePermission = runtime!["permission_ref"];
+    const divergent = declaredPermission !== runtimePermission;
     node["declared_vs_runtime"] = divergent ? "DIVERGENT" : "MATCH";
   }
 
@@ -335,22 +411,76 @@ function computeDerivedFields(input: SemanticInput): void {
     if (getString(node, "kind") === "PolicyValue") {
       node["transition_refs"] = (
         transitionsBySource.get(getString(node, "id") ?? "") ?? []
-      ).sort((a, b) =>
-        `${String(a["target"])}|${String(a["direction"])}` <
-        `${String(b["target"])}|${String(b["direction"])}`
-          ? -1
-          : 1,
+      ).sort((a, b) => {
+        const ka = `${String(a["target"])}|${String(a["direction"])}`;
+        const kb = `${String(b["target"])}|${String(b["direction"])}`;
+        return ka < kb ? -1 : ka > kb ? 1 : 0;
+      });
+    }
+  }
+
+  // ——— PolicyValue.activation_status (DERIVED, ATLAS-IR-040a) ———
+  // SUPPORTED only when the owning claim carries all four SEM-080 conjuncts
+  // at its boundary with adequate evidence; otherwise the strongest
+  // non-supported value the claim itself carries; UNKNOWN when the claim
+  // carries no activation information. This is what makes the timed_sync
+  // negative control non-bypassable at node level: flipping a hand-set
+  // field cannot survive derivation.
+  const claimById = new Map<string, Record<string, unknown>>();
+  for (const claim of input.claims) {
+    const claimId = getString(claim, "claim_id");
+    if (claimId !== undefined) {
+      claimById.set(claimId, claim);
+    }
+  }
+  for (const node of input.nodes) {
+    if (getString(node, "kind") !== "PolicyValue") {
+      continue;
+    }
+    const claimRef = getString(node, "activation_claim_ref");
+    if (claimRef === undefined) {
+      node["activation_status"] = "UNKNOWN";
+      continue;
+    }
+    const claim = claimById.get(claimRef);
+    if (claim === undefined) {
+      throw new BuildError(
+        `PolicyValue ${String(node["id"])}: activation_claim_ref "${claimRef}" does not resolve to a claim (ATLAS-IR-040a)`,
       );
+    }
+    const axes = getRecord(claim, "axes") ?? {};
+    const activation = axes["activation_support"];
+    const conjunctsComplete =
+      activation === "SUPPORTED" &&
+      axes["design"] === "ACCEPTED" &&
+      axes["implementation"] === "PRESENT" &&
+      axes["verification"] === "PASS" &&
+      evidenceAdequateFor(claim, getString(claim, "boundary") ?? "B4");
+    if (conjunctsComplete) {
+      node["activation_status"] = "SUPPORTED";
+    } else if (typeof activation === "string") {
+      node["activation_status"] = activation;
+    } else {
+      node["activation_status"] = "UNKNOWN";
     }
   }
 
   // ——— Capability/Facet.support_summary via ATLAS-IR-032 ———
+  // IR-032 is a function over the capability's own claims and its FACETS'
+  // claims; Workflow children are composition, never roll-up parts (a
+  // workflow carries no claims, so counting it as a part would force MIXED
+  // on every workflow-bearing capability — the false-MIXED the R1-D
+  // reviewers caught on grading.manual / result.publication).
   const facetsOf = new Map<string, string[]>();
   for (const edge of input.edges) {
     if (edge["kind"] === "contains") {
       const source = getString(edge, "source");
       const target = getString(edge, "target");
-      if (source !== undefined && target !== undefined) {
+      if (
+        source !== undefined &&
+        target !== undefined &&
+        nodeById.get(target)?.["kind"] === "Facet"
+      ) {
         const list = facetsOf.get(source) ?? [];
         list.push(target);
         facetsOf.set(source, list);
@@ -369,49 +499,26 @@ function computeDerivedFields(input: SemanticInput): void {
     }
   }
 
-  const evidenceAdequateFor = (
-    claim: Record<string, unknown>,
-    boundary: string,
-  ): boolean => {
-    const supporting = Array.isArray(claim["supporting_evidence"])
-      ? (claim["supporting_evidence"] as string[])
-      : [];
-    return supporting.some((evidenceId) => {
-      const evidence = evidenceById.get(evidenceId);
-      if (evidence === undefined) return false;
-      const coverage = Array.isArray(evidence["boundary_coverage"])
-        ? (evidence["boundary_coverage"] as string[])
-        : [];
-      if (!coverage.includes(boundary)) return false;
-      // The ref must still be usable as evidence about the bound revision.
-      const ref = getRecord(evidence, "source_ref");
-      if (ref === undefined) return true; // HUMAN_REVIEW evidence has no ref.
-      return usableAsBoundRevisionEvidence(ref as unknown as SourceRef);
+  // A part's support claim is its CAPABILITY_SUPPORT claim about activation
+  // (predicate `activation_support`). Claims whose predicate is
+  // `support_summary` are recorded roll-up OUTPUTS (A-11), never inputs; two
+  // competing activation claims on one part is a CONFLICT, not first-wins
+  // (ATLAS-IR-065).
+  const supportClaimOf = (
+    partId: string,
+  ): Record<string, unknown> | undefined => {
+    const candidates = (claimsOf.get(partId) ?? []).filter((claim) => {
+      if (getString(claim, "claim_kind") !== "CAPABILITY_SUPPORT") return false;
+      return getString(claim, "predicate") === "activation_support";
     });
-  };
-
-  // ATLAS-SEM-084 negative evidence: a recorded non-support statement at the
-  // boundary. Unlike positive support, a captured external work-item record
-  // counts — the frozen slices cite closed issues as the authority for
-  // non-adoption decisions — but the ref must actually RESOLVE.
-  const negativeEvidenceCovers = (
-    claim: Record<string, unknown>,
-    boundary: string,
-  ): boolean => {
-    const supporting = Array.isArray(claim["supporting_evidence"])
-      ? (claim["supporting_evidence"] as string[])
-      : [];
-    return supporting.some((evidenceId) => {
-      const evidence = evidenceById.get(evidenceId);
-      if (evidence === undefined) return false;
-      const coverage = Array.isArray(evidence["boundary_coverage"])
-        ? (evidence["boundary_coverage"] as string[])
-        : [];
-      if (!coverage.includes(boundary)) return false;
-      const ref = getRecord(evidence, "source_ref");
-      if (ref === undefined) return false;
-      return ref["resolution_state"] === "RESOLVED";
-    });
+    if (candidates.length > 1) {
+      throw new SemanticConflictError(
+        `part ${partId} carries ${String(candidates.length)} activation_support claims (${candidates
+          .map((c) => getString(c, "claim_id") ?? "?")
+          .join(", ")}) — ATLAS-IR-065 forbids first-wins`,
+      );
+    }
+    return candidates[0];
   };
 
   for (const node of input.nodes) {
@@ -420,32 +527,48 @@ function computeDerivedFields(input: SemanticInput): void {
       continue;
     }
     const id = getString(node, "id") ?? "";
-    const supportBoundary = getString(node, "support_boundary") ?? "B4";
-    const ownClaims = (claimsOf.get(id) ?? []).filter(
-      (claim) => getString(claim, "claim_kind") === "CAPABILITY_SUPPORT",
-    );
+    // ATLAS-SEM-001: a support_summary without a boundary is invalid —
+    // never silently default one.
+    const supportBoundary = getString(node, "support_boundary");
+    if (supportBoundary === undefined) {
+      throw new BuildError(
+        `${id}: support_boundary missing — a support_summary without a boundary is invalid (ATLAS-SEM-001)`,
+      );
+    }
 
-    const partIds =
-      kind === "Capability"
-        ? [id, ...(facetsOf.get(id) ?? [])]
-        : [id, ...(facetsOf.get(id) ?? [])];
+    const partIds = [id, ...(facetsOf.get(id) ?? [])];
     const parts: RollupPart[] = partIds.map((partId) => {
-      const partNode = nodeById.get(partId);
-      const claims =
-        partId === id
-          ? ownClaims
-          : (claimsOf.get(partId) ?? []).filter(
-              (claim) =>
-                getString(claim, "claim_kind") === "CAPABILITY_SUPPORT",
-            );
-      const supportClaim = claims[0];
+      const supportClaim = supportClaimOf(partId);
       const tracked = trackedByOwners.get(partId) ?? [];
       const owningWorkItem = tracked.find(
         (e) => e["relation"] === "DELIVERS" || e["relation"] === "RESIDUAL",
       );
-      const decisionGate = tracked.find(
+      const decisionGateEdge = tracked.find(
         (e) => e["relation"] === "DECISION_GATE",
       );
+      // A clause-3 gate is only a gate when its lift condition is nameable:
+      // `GATED` requires the gate's locator AND lift condition, and a
+      // synthesized placeholder would manufacture a verdict no record
+      // supports (ATLAS-SEM-071). The gate's lift condition lives on the
+      // gate work item, so an unnamed one is a curation defect, not a
+      // tolerated gap.
+      const gateTarget =
+        decisionGateEdge === undefined
+          ? undefined
+          : getString(decisionGateEdge, "target");
+      const gateNode =
+        gateTarget === undefined ? undefined : nodeById.get(gateTarget);
+      const gateLift = getRecord(gateNode ?? {}, "open_governance_item")?.[
+        "lift_condition"
+      ];
+      if (
+        decisionGateEdge !== undefined &&
+        !(typeof gateLift === "string" && gateLift.length > 0)
+      ) {
+        throw new BuildError(
+          `${partId}: DECISION_GATE edge to ${String(gateTarget)} names no lift condition — a gate that cannot state its lift condition cannot carry GATED (ATLAS-SEM-071)`,
+        );
+      }
       const axes = getRecord(supportClaim ?? {}, "axes");
       // Clause-3 ownership is claim-kind-agnostic: a RESIDUAL_OR_EXCLUSION
       // claim can carry the accepted design for a deferred future (A-08).
@@ -476,11 +599,11 @@ function computeDerivedFields(input: SemanticInput): void {
             ? undefined
             : getString(owningWorkItem, "target"),
         decisionGate:
-          decisionGate === undefined
+          decisionGateEdge === undefined
             ? undefined
             : {
-                locator: getString(decisionGate, "target") ?? "",
-                lift_condition: "see DECISION_GATE work item",
+                locator: gateTarget ?? "",
+                lift_condition: gateLift as string,
               },
       };
     });
@@ -520,7 +643,8 @@ export function buildSnapshot(
     throw new BuildError(`source_sha "${input.source_sha}" is not full 40-hex`);
   }
 
-  // Resolve refs + compute derived fields on the working copies.
+  // Normalize on the working copies, THEN resolve + derive on the merged
+  // records (see pipeline note above).
   const working: SemanticInput = {
     repo: input.repo,
     source_sha: input.source_sha,
@@ -531,10 +655,41 @@ export function buildSnapshot(
     claims: input.claims.map(clone),
     conflicts: input.conflicts.map(clone),
   };
-  resolveAllRefs(working, context);
-  computeDerivedFields(working);
-
   const normalized = normalizeRecords(working);
+  // Findings recorded by the normalizer name PRE-merge indices, and the merge
+  // drops duplicates, shifting every later index; keeping both sets would
+  // report one finding twice with two different paths. Re-derive them below
+  // against the merged record set so each `path` names the record the
+  // snapshot actually carries.
+  normalized.findings.length = 0;
+  const merged: SemanticInput = {
+    repo: input.repo,
+    source_sha: input.source_sha,
+    nodes: normalized.nodes,
+    edges: normalized.edges,
+    facts: normalized.facts,
+    evidence: normalized.evidence,
+    claims: normalized.claims,
+    conflicts: normalized.conflicts,
+  };
+  resolveAllRefs(merged, context);
+  computeDerivedFields(merged);
+
+  // SREF-1 field discipline on every ref (ATLAS-SREF-020/051): shape rules
+  // were checked per-record during normalization; these are the ref-level
+  // cross rules that were previously unenforced.
+  for (const [i, node] of merged.nodes.entries()) {
+    const refs = node["source_refs"];
+    if (!Array.isArray(refs)) continue;
+    for (const [j, ref] of (refs as SourceRef[]).entries()) {
+      const refErrors = validateSourceRef(ref);
+      if (refErrors.length > 0) {
+        throw new BuildError(
+          `nodes[${i}].source_refs[${j}] (${String(node["id"])}): ${refErrors.join("; ")}`,
+        );
+      }
+    }
+  }
 
   // Graph-level validation on the normalized records.
   const graph = validateSnapshotGraph({
@@ -547,27 +702,35 @@ export function buildSnapshot(
       `snapshot graph validation failed:\n${graph.errors.join("\n")}`,
     );
   }
+  // Graph-level conformance findings (e.g. ATLAS-IR-080's unmapped-part
+  // report) are part of the build output, never dropped.
+  normalized.findings.push(...graph.findings);
 
-  // Every semantic-validation error on normalized records is fatal here too
-  // (records were already validated pre-merge; merged records must still
-  // satisfy the cross-field rules).
-  for (const [i, claim] of normalized.claims.entries()) {
-    const { errors, findings } = validateRecordSemantics(
-      "claim",
-      claim,
-      `claims[${i}]`,
-    );
-    if (errors.length > 0) {
-      throw new BuildError(errors.join("\n"));
+  // Semantic re-validation on the merged records: errors stay fatal, findings
+  // are reported once with the merged indices (see the note above).
+  const revalidate = (
+    kind: "node" | "edge" | "fact" | "evidence" | "claim" | "conflict",
+    records: Array<Record<string, unknown>>,
+    label: string,
+  ): void => {
+    for (const [i, record] of records.entries()) {
+      const { errors, findings } = validateRecordSemantics(
+        kind,
+        record,
+        `${label}[${i}]`,
+      );
+      if (errors.length > 0) {
+        throw new BuildError(errors.join("\n"));
+      }
+      normalized.findings.push(...findings);
     }
-    normalized.findings.push(...findings);
-  }
-  for (const [i, node] of normalized.nodes.entries()) {
-    const { errors } = validateRecordSemantics("node", node, `nodes[${i}]`);
-    if (errors.length > 0) {
-      throw new BuildError(errors.join("\n"));
-    }
-  }
+  };
+  revalidate("node", normalized.nodes, "nodes");
+  revalidate("edge", normalized.edges, "edges");
+  revalidate("fact", normalized.facts, "facts");
+  revalidate("evidence", normalized.evidence, "evidence");
+  revalidate("claim", normalized.claims, "claims");
+  revalidate("conflict", normalized.conflicts, "conflicts");
 
   // ATLAS-SEM-084 — a NOT_SUPPORTED claim must cite positive negative
   // evidence: ≥1 supporting evidence record carrying a negative-evidence

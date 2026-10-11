@@ -89,10 +89,7 @@ export function resolveRef(
     if (bound.commitExists?.(sha)) {
       return { resolution_state: "RESOLVED" };
     }
-    if (ref.historical === true) {
-      // Intentionally historical binding whose commit exists in history but
-      // outside the bound view's capabilities: a declared historical ref
-      // resolves as HISTORICAL only when its binding can be confirmed.
+    if (bound.commitExists === undefined) {
       return {
         resolution_state: "UNKNOWN",
         resolution_detail: {
@@ -100,10 +97,16 @@ export function resolveRef(
         },
       };
     }
+    // The view CAN verify commits and this one is absent: SREF-1 §4 —
+    // the object is not found at the bound revision → MISSING. A declared
+    // historical ref whose commit the view cannot confirm stays UNKNOWN.
     return {
-      resolution_state: "UNKNOWN",
+      resolution_state: ref.historical === true ? "UNKNOWN" : "MISSING",
       resolution_detail: {
-        reason: "commit existence not verifiable in this view",
+        reason:
+          ref.historical === true
+            ? "historical commit not verifiable in this view"
+            : "commit absent from the bound repository",
       },
     };
   }

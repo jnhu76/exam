@@ -32,7 +32,7 @@ export function permissionNodes(
         sourceRefRecord(sourceSha, {
           path_or_uri: AUTHZ_SOURCE,
           symbol: "Permission",
-          extraction_method: "AST_SYMBOL_LOOKUP",
+          extraction_method: "SCHEMA_INTROSPECTION",
         }),
       ],
       authority_refs: [],
@@ -63,14 +63,20 @@ export function rolePresetNodes(
           sourceRefRecord(sourceSha, {
             path_or_uri: PRESETS_SOURCE,
             symbol: "ROLE_PRESETS",
-            extraction_method: "AST_SYMBOL_LOOKUP",
+            extraction_method: "SCHEMA_INTROSPECTION",
           }),
         ],
         authority_refs: [],
         review_state: "CURATED",
         open_governance_item: { kind: "NONE" },
         key: preset.key,
-        preset_kind: preset.isSystem ? "SYNTHETIC_ACTOR" : "APPLICATION_ROLE",
+        // `isSystem` means "built-in preset" — every role preset is
+        // built-in. A synthetic actor is the narrower non-login,
+        // non-assignable preset (only System).
+        preset_kind:
+          !preset.loginAllowed && !preset.assignable
+            ? "SYNTHETIC_ACTOR"
+            : "APPLICATION_ROLE",
         login_allowed: preset.loginAllowed ? "TRUE" : "FALSE",
         assignable: preset.assignable ? "TRUE" : "FALSE",
         default_scope: `scope:${preset.defaultScope}`,
@@ -101,7 +107,7 @@ export function scopeDimensionNodes(
         sourceRefRecord(sourceSha, {
           path_or_uri: AUTHZ_SOURCE,
           symbol: "Scope",
-          extraction_method: "AST_SYMBOL_LOOKUP",
+          extraction_method: "SCHEMA_INTROSPECTION",
         }),
       ],
       authority_refs: [],
@@ -150,7 +156,7 @@ export function authzFragment(
       source_ref: sourceRefRecord(sourceSha, {
         path_or_uri: AUTHZ_SOURCE,
         symbol: "PermissionKey",
-        extraction_method: "AST_SYMBOL_LOOKUP",
+        extraction_method: "SCHEMA_INTROSPECTION",
       }),
       snapshot: sourceSha,
       observed_kind: "DECLARED",
@@ -161,7 +167,7 @@ export function authzFragment(
       source_ref: sourceRefRecord(sourceSha, {
         path_or_uri: AUTHZ_SOURCE,
         symbol: "Role",
-        extraction_method: "AST_SYMBOL_LOOKUP",
+        extraction_method: "SCHEMA_INTROSPECTION",
       }),
       snapshot: sourceSha,
       observed_kind: "DECLARED",
