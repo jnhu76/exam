@@ -1,0 +1,569 @@
+{
+  "description": "Golden slice D — timed_sync / reserved-value negative control (R0 base re-anchored to SOURCE_SHA). Required outcome: representable=TRUE, storable=TRUE, read-compatible=TRUE while activation_support=GATED (never SUPPORTED); the shape/validator pair is a boundary distinction, not a conflict (D-K1/D-K3 recorded non-conflicts); the control-flag class stays distinct (implementation ABSENT vs PARTIAL, ATLAS-SEM-072).",
+  "nodes": [],
+  "edges": [],
+  "facts": [],
+  "evidence": [
+    {
+      "evidence_id": "ev-ts-enum",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the value is representable in the domain enum and the wire contract; authoring is type-excluded",
+      "does_not_prove": ["anything about activation"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0", "B1"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/domain/src/enums.ts#TimedSync; packages/contracts/src/exam.ts#TimingModeEnum"
+    },
+    {
+      "evidence_id": "ev-ts-shape-intentional",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "shape-level acceptance is INTENTIONAL — the wire contract is deliberately not the gate (CreateExamRequestSchema accepts timed_sync at shape level; canonical validator rejects)",
+      "does_not_prove": ["that the canonical validator accepts it"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B1"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/contracts/src/__tests__/contracts.test.ts#CreateExamRequestSchema accepts timed_sync at shape level (canonical validator rejects)"
+    },
+    {
+      "evidence_id": "ev-ts-profile-reject",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "exam profiles reject the value (a second authoring surface)",
+      "does_not_prove": ["exam create/update/publish"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B1"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/contracts/src/examProfile.test.ts#rejects a profile carrying timed_sync (latent mode)"
+    },
+    {
+      "evidence_id": "ev-ts-validator",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the canonical validator rejects regardless of the other fields",
+      "does_not_prove": ["the HTTP path"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B1"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/examPolicy.timingModes.test.ts"
+    },
+    {
+      "evidence_id": "ev-ts-create-refusal-wire",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the refusal is reachable over the real HTTP surface: POST /api/exams with timingMode timed_sync → 400 VALIDATION_ERROR, code EXAM_TIMING_MODE_INVALID",
+      "does_not_prove": [
+        "the draft-update path (no API-level timed_sync update test exists — D-U1)"
+      ],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/examPolicyValidation.test.ts#rejects timed_sync with EXAM_TIMING_MODE_INVALID"
+    },
+    {
+      "evidence_id": "ev-ts-publish-refusal",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "publish refuses a timed_sync draft (the second canonical seam)",
+      "does_not_prove": [
+        "reachability of publish for such a draft over HTTP (it cannot exist)"
+      ],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/examCommands.test.ts#rejects publish of a timed_sync draft (latent mode)"
+    },
+    {
+      "evidence_id": "ev-ts-kernel",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the deadline equations hold (T0 anchor, duration bound, closeAt cap, fail-closed without duration)",
+      "does_not_prove": ["activation"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B6"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/timer.ts#computeSyncDeadline; packages/exam-engine/src/deadlineKernel.sync.test.ts"
+    },
+    {
+      "evidence_id": "ev-ts-kernel-rows",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the kernel behaves correctly IF rows exist (shared deadline; pre-T0 start refused) — this is what makes implementation=PARTIAL precise",
+      "does_not_prove": ["that such rows are producible by the product"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B6"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/attemptCommands.timingModes.test.ts#rejects start before the operator trigger even inside the open window"
+    },
+    {
+      "evidence_id": "ev-ts-scanner",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the status scanner does not auto-open a timed_sync exam (the operator trigger owns open) and still auto-closes an already-open one",
+      "does_not_prove": [
+        "that no other scanner path opens one; HTTP behaviour"
+      ],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/examCommands.test.ts#does not auto-open a timed_sync exam at openAt (the operator start owns open)"
+    },
+    {
+      "evidence_id": "ev-ts-writer-absence",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "no production writer of exams.sync_started_at exists within the stated closed scope",
+      "does_not_prove": [
+        "manual/operational SQL outside the repo (excluded and declared)"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/db/src/schema/pg.ts#syncStartedAt; closed symbol search over packages/ + apps/ for syncStartedAt|sync_started_at|sync_start|startSync returned no production writer",
+      "negative_evidence_basis": "CLOSED_ABSENCE_SEARCH",
+      "search_scope": "packages/** and apps/** (*.ts, *.sql), excluding dist/ and node_modules/; matches: schema column, migration, domain type, two pure readers, one scanner branch, tests — no command writes it"
+    },
+    {
+      "evidence_id": "ev-ts-reserved-status-structural",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "no production assignment of the reserved attempt/enrollment statuses (structural scan)",
+      "does_not_prove": [
+        "syncStartedAt specifically (the closed search above covers it)"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/runtime/reserved-status-writers.structural.test.ts",
+      "negative_evidence_basis": "CLOSED_ABSENCE_SEARCH",
+      "search_scope": "structural scan of production writers for reserved statuses (not_started/queued/voided/blocked) at SOURCE_SHA"
+    },
+    {
+      "evidence_id": "ev-ts-control-flags",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the control-flag class: rejected at authoring with UNSUPPORTED_EXAM_CONTROL, no coercion, historical rows readable",
+      "does_not_prove": ["any runtime enforcement (there is none)"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B1"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS; packages/exam-engine/src/examPolicy.test.ts",
+      "negative_evidence_basis": "CURRENT_AUTHORITY_REJECTION"
+    },
+    {
+      "evidence_id": "ev-ts-spec",
+      "evidence_kind": "CONTRACT",
+      "proves": "the product's own statement that the value is reserved-and-unsupported, the design contract is dormant, and activation needs an explicit superseding decision",
+      "does_not_prove": ["implementation"],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/SPEC.md#保留值，当前不受支持"
+    },
+    {
+      "evidence_id": "ev-ts-policy-authority",
+      "evidence_kind": "CONTRACT",
+      "proves": "the activation matrix incl. NOT ACTIVATED (timed_sync), LATENT, and UNSUPPORTED FOR ACTIVATION (control flags) — the explicit current-authority non-support statement",
+      "does_not_prove": [
+        "implementation; the future direction of any reserved value"
+      ],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/contracts/exam-policy-authority.md#NOT ACTIVATED",
+      "negative_evidence_basis": "CURRENT_AUTHORITY_REJECTION"
+    },
+    {
+      "evidence_id": "ev-ts-design-contract",
+      "evidence_kind": "CONTRACT",
+      "proves": "the frozen clock semantics (B1 slice implemented: durable T0 column, computeSyncDeadline, the timed_sync start branch, the auto-open exemption); the B2 activation slice is design, not authorization",
+      "does_not_prove": ["that the plan authorizes implementation"],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/contracts/timed-sync-semantics.md"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "D-01a",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "representable_and_read_compatible",
+      "value": "TRUE",
+      "claim_kind": "IMPLEMENTATION_STATUS",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exam-policy"
+      },
+      "supporting_evidence": ["ev-ts-enum", "ev-ts-shape-intentional"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B1"
+    },
+    {
+      "claim_id": "D-01b",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "storable_schema_capacity",
+      "value": "TRUE",
+      "claim_kind": "IMPLEMENTATION_STATUS",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exam-policy"
+      },
+      "supporting_evidence": ["ev-ts-enum"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "D-01c",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "durably_writable",
+      "value": "FALSE",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "ABSENT",
+        "verification": "INSUFFICIENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-ts-writer-absence"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "D-02",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "activation_refused",
+      "value": "refused at two canonical seams; no production writer establishes the operator T0",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "ABSENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": [
+        "ev-ts-create-refusal-wire",
+        "ev-ts-publish-refusal",
+        "ev-ts-writer-absence"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "D-03",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "design_status",
+      "value": "frozen design, dated and adopted in-tree; a DORMANT design authority, explicitly not a current implementation authorization",
+      "claim_kind": "AUTHORITY_STATEMENT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:timed-sync-semantics"
+      },
+      "supporting_evidence": ["ev-ts-design-contract", "ev-ts-spec"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "D-04",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "activation_support",
+      "value": "GATED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "design": "ACCEPTED",
+        "implementation": "PARTIAL",
+        "verification": "INSUFFICIENT",
+        "activation_support": "GATED"
+      },
+      "authority_owner": {
+        "id": "authority:exam-policy"
+      },
+      "supporting_evidence": [
+        "ev-ts-policy-authority",
+        "ev-ts-create-refusal-wire",
+        "ev-ts-publish-refusal",
+        "ev-ts-writer-absence"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "authority:exam-policy",
+        "lift_condition": "explicit activation decision (docs/SPEC.md); both refusal seams lifted together"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B4"
+    },
+    {
+      "claim_id": "D-05",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "gate_ownership",
+      "value": "DECISION_GATED with no currently-open work item owning the activation slice",
+      "claim_kind": "WORK_STATUS",
+      "axes": {},
+      "authority_owner": {
+        "id": "authority:exam-policy"
+      },
+      "supporting_evidence": ["ev-ts-policy-authority"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "authority:exam-policy",
+        "lift_condition": "the explicit activation decision named by docs/SPEC.md"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "D-06",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "missing_constituent",
+      "value": "B1 slice implemented (durable T0 column, deadline kernel, start branch, auto-open exemption); B2 activation slice (canonical operator start command, admin trigger surface, authoring/publish activation, candidate waiting UX) is not",
+      "claim_kind": "IMPLEMENTATION_STATUS",
+      "axes": {
+        "implementation": "PARTIAL",
+        "verification": "PASS"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [
+        "ev-ts-design-contract",
+        "ev-ts-kernel",
+        "ev-ts-kernel-rows"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "D-07",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "issue_closed_implies_supported",
+      "value": "REJECTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "verification": "INSUFFICIENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [],
+      "challenging_evidence": ["ev-ts-policy-authority"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "D-08",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "enum_schema_column_implies_supported",
+      "value": "REJECTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "verification": "INSUFFICIENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [],
+      "challenging_evidence": ["ev-ts-shape-intentional", "ev-ts-enum"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "D-09",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "gated_does_not_imply_will_work",
+      "value": "implementation stays PARTIAL after any lift of the rejections",
+      "claim_kind": "IMPLEMENTATION_STATUS",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-ts-kernel-rows"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "D-10",
+      "subject": "policy:exam.timingMode/timed_sync",
+      "predicate": "activation_requires_superseding_decision",
+      "value": "TRUE — agents must not treat the missing pieces as an implementation defect to complete",
+      "claim_kind": "AUTHORITY_STATEMENT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:exam-policy"
+      },
+      "supporting_evidence": ["ev-ts-spec", "ev-ts-policy-authority"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "D-CF",
+      "subject": "policy:exam.controlFlags/requireLockdown",
+      "predicate": "activation_support",
+      "value": "NOT_SUPPORTED — enforcement-less control flags: canonical validator rejects true (UNSUPPORTED_EXAM_CONTROL); zero enforcement implementation exists",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "ABSENT",
+        "verification": "PASS",
+        "activation_support": "NOT_SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:exam-policy"
+      },
+      "supporting_evidence": ["ev-ts-control-flags"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "work:jnhu76/exam#295",
+        "lift_condition": "lockdown adoption decision (#295)"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "D-RS",
+      "subject": "policy:attempt.status/voided",
+      "predicate": "activation_support",
+      "value": "NOT_SUPPORTED — reserved statuses: representable and read-tolerant with no production writer (closed structural search)",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "ABSENT",
+        "verification": "PASS",
+        "activation_support": "NOT_SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": ["ev-ts-reserved-status-structural"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    }
+  ],
+  "conflicts": [
+    {
+      "conflict_id": "D-K1",
+      "kind": "DOCUMENTATION_DISSONANCE",
+      "proposition": "NO CONFLICT — boundary distinction (recorded non-conflict): the OpenAPI/wire request shape admits timed_sync while the canonical validator refuses activation. Different propositions (representable at B1 vs activatable), exactly EXSEM-019. Recorded as a documentation/API-reference hazard for a consumer reading the generated OpenAPI alone.",
+      "parties": [
+        {
+          "party": "OpenAPI wire shape",
+          "statement": "request enum includes timed_sync",
+          "source_refs": ["apps/api/openapi.json#/paths/~1api~1exams/post"]
+        },
+        {
+          "party": "canonical validator",
+          "statement": "rejects timed_sync (EXAM_TIMING_MODE_INVALID)",
+          "source_refs": [
+            "packages/exam-engine/src/examPolicy.ts#validateExamPolicy"
+          ]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_refs": [
+        "apps/api/openapi.json",
+        "packages/exam-engine/src/examPolicy.ts"
+      ]
+    },
+    {
+      "conflict_id": "D-K2",
+      "kind": "DECLARED_VS_RUNTIME_DIVERGENCE",
+      "proposition": "the T0 column's comment/migration claim a canonical sync-start command that does not exist",
+      "parties": [
+        {
+          "party": "packages/db/src/schema/pg.ts + migration 0041",
+          "statement": "Written exactly once by the canonical sync-start command (present tense)",
+          "source_refs": [
+            "packages/db/src/schema/pg.ts#sync_started_at comment",
+            "packages/db/migrations/postgres/0041_phase_b_sync_started_at.sql"
+          ]
+        },
+        {
+          "party": "closed symbol search",
+          "statement": "no such command exists at SOURCE_SHA",
+          "source_refs": ["ev-ts-writer-absence"]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "packages/db/src/schema/pg.ts owner",
+        "lift_condition": "stale/misleading-comment correction by the source owner (#757 O-09 input class)"
+      },
+      "source_refs": [
+        "packages/db/src/schema/pg.ts",
+        "packages/db/migrations/postgres/0041_phase_b_sync_started_at.sql"
+      ]
+    },
+    {
+      "conflict_id": "D-K3",
+      "kind": "TEMPORAL_CONFLICT",
+      "proposition": "NO CONFLICT FOUND (recorded non-example): between the design freeze and the support matrix — timed-sync-semantics.md's own dated header (2026-09-25, #614) scopes exam-policy-authority.md §4 as the current support authority while this record stays current for semantics; docs/SPEC.md agrees. RESOLVED_BY_SCOPE under all four ATLAS-SEM-115 conditions.",
+      "parties": [
+        {
+          "party": "authority:timed-sync-semantics",
+          "statement": "point-in-time baseline; support authority is exam-policy-authority.md §4",
+          "source_refs": ["docs/contracts/timed-sync-semantics.md#header"]
+        },
+        {
+          "party": "authority:exam-policy",
+          "statement": "NOT ACTIVATED matrix row for timed_sync",
+          "source_refs": ["docs/contracts/exam-policy-authority.md#timed_sync"]
+        }
+      ],
+      "resolution_status": "RESOLVED_BY_SCOPE",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_refs": [
+        "docs/contracts/timed-sync-semantics.md",
+        "docs/contracts/exam-policy-authority.md"
+      ]
+    }
+  ]
+}

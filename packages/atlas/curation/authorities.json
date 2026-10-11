@@ -1,0 +1,174 @@
+{
+  "description": "NormativeAuthority nodes (semantic-contract §2.2). The fact-type → owner index is owned by docs/README.md § Authority by fact type; this file only instantiates the authorities the golden slices and inventory actually cite. authority_status follows ATLAS-SEM-012/013 (supersession never inferred).",
+  "nodes": [
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:exsem",
+      "label": "Exam semantic boundaries (EXSEM)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": [
+        "cross-boundary exam semantics",
+        "fact ownership and freeze/transfer points",
+        "candidate boundary",
+        "supported-capability rule (EXSEM §5)",
+        "representability vs support (EXSEM-019)",
+        "manual grading semantics (EXSEM-006/008/009/010)",
+        "result visibility (EXSEM-018)"
+      ],
+      "source_ref": "docs/architecture/exam-semantic-boundaries.md",
+      "authority_status": "CURRENT",
+      "declared_scope": "Adopted by ADR-021; owns cross-boundary Exam semantics and the SUPPORTED_SEMANTIC_TEST.",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": []
+    },
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:rich-contract",
+      "label": "Rich content semantic contract",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": [
+        "rich V1 grammar",
+        "canonicalization",
+        "content limits",
+        "read/write/render seams"
+      ],
+      "source_ref": "docs/architecture/rich-content-semantic-contract.md",
+      "authority_status": "CURRENT",
+      "declared_scope": "Adopted by ADR-019; owns the ContentDocumentV1 grammar and its durable boundaries.",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": []
+    },
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:adr-019",
+      "label": "ADR-019 content document model",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": ["the content document model decision"],
+      "source_ref": "docs/adr/ADR-019-content-document-model.md",
+      "authority_status": "AMENDED",
+      "declared_scope": "Accepted; amended 2026-10-02.",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": []
+    },
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:exam-policy",
+      "label": "Exam policy support/activation authority (P7-M1)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": [
+        "exam policy support/activation matrix",
+        "per-value reservation/activation status",
+        "the LATENT definition"
+      ],
+      "source_ref": "docs/contracts/exam-policy-authority.md",
+      "authority_status": "CURRENT",
+      "declared_scope": "Current admission/timing support authority (§4).",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": []
+    },
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:timed-sync-semantics",
+      "label": "timed_sync clock semantics (frozen design)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": ["timed_sync clock semantics (design freeze)"],
+      "source_ref": "docs/contracts/timed-sync-semantics.md",
+      "authority_status": "AMENDED",
+      "declared_scope": "Current authority for timed_sync SEMANTICS; its header records (2026-09-25, #614) that exam-policy-authority.md §4 is the current support authority — a RESOLVED_BY_SCOPE division per golden D D-K3.",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": ["authority:exam-policy"]
+    },
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:authorization",
+      "label": "Authorization architecture",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": [
+        "authorization facts: capability, preset, scope, assignment, enforcement"
+      ],
+      "source_ref": "docs/architecture/authorization.md",
+      "authority_status": "CURRENT",
+      "declared_scope": "Owns the capability × assignment model; leaves specific mechanisms to the mechanism ADRs; the catalog/preset modules are implementation.",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": []
+    },
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:adr-017",
+      "label": "ADR-017 operational authority / maintainer boundary",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": [
+        "operational (Maintainer) authority boundary",
+        "host/infrastructure authority placement",
+        "Admin/Maintainer exclusion"
+      ],
+      "source_ref": "docs/adr/ADR-017-operational-authority-maintainer-boundary.md",
+      "authority_status": "CURRENT",
+      "declared_scope": "Owns the operational boundary incl. the host operator's OUTSIDE_APPLICATION_RBAC placement.",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": []
+    },
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:exam-runtime",
+      "label": "Exam runtime architecture",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": ["current implemented exam runtime architecture"],
+      "source_ref": "docs/architecture/exam-runtime.md",
+      "authority_status": "CURRENT",
+      "declared_scope": "Describes the as-built runtime incl. the grading protocol and result-visibility matrix.",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": []
+    },
+    {
+      "kind": "NormativeAuthority",
+      "id": "authority:candidate-editor-ux",
+      "label": "Candidate rich editor UX design authority",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": { "kind": "NONE" },
+      "governs_fact_types": [
+        "candidate editor interaction contract incl. the char-count decision"
+      ],
+      "source_ref": "docs/design/candidate-rich-editor-ux.md",
+      "authority_status": "CURRENT",
+      "declared_scope": "Design authority for candidate interaction (records the char-count exclusion and rationale).",
+      "supersedes": [],
+      "superseded_by": [],
+      "amendment_of": []
+    }
+  ]
+}

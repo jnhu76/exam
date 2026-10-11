@@ -1,0 +1,1014 @@
+{
+  "description": "Golden slice C — RBAC / Maintainer vs Admin (falsification fixture, R0 base re-anchored to SOURCE_SHA). Required outcomes: RolePreset ≠ effective authorization is structural; declared metadata ≠ runtime truth with BOTH facts preserved and O-07 re-derived (not fixed); the diagnostics route carries two authorization truths via additional_gates (ATLAS-IR-091); the System synthetic actor and the OUTSIDE_APPLICATION_RBAC host scope are modelled without inventing a role.",
+  "nodes": [],
+  "edges": [
+    {
+      "kind": "governed_by",
+      "source": "role:Maintainer",
+      "target": "authority:adr-017"
+    },
+    {
+      "kind": "governed_by",
+      "source": "role:System",
+      "target": "authority:adr-017"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "authority:authorization",
+      "target": "work:jnhu76/exam#762",
+      "relation": "DECISION_GATE"
+    }
+  ],
+  "facts": [],
+  "evidence": [
+    {
+      "evidence_id": "ev-authz-closed-sets",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the role/permission/scope sets are closed and the preset invariants hold (incl. Maintainer's five reads, Admin superset, boundary exclusions)",
+      "does_not_prove": ["any runtime enforcement"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/authz/src/catalog-closed-union.test.ts"
+    },
+    {
+      "evidence_id": "ev-assignment-resolver",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the resolver's fail-closed rules (subject/org anchor, dual-role Admin∩Maintainer refusal, unknown role)",
+      "does_not_prove": ["database integration"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/assignmentAuthority.test.ts"
+    },
+    {
+      "evidence_id": "ev-assignment-runtime",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "active-assignment resolution against real rows, incl. revocation effective on the next request",
+      "does_not_prove": ["physical locking"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/assignmentAuthorityRuntime.test.ts"
+    },
+    {
+      "evidence_id": "ev-scope-matrices",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the capability×assignment matrices per scoped role, including the 404 anti-enumeration fold and SQL-side list filtering before pagination",
+      "does_not_prove": ["lock contention"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/teacherCourseMatrix.test.ts"
+    },
+    {
+      "evidence_id": "ev-operational-boundary",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the Maintainer/Admin operational boundary as enforced, incl. the diagnostics split and the Admin-only integrity block",
+      "does_not_prove": [
+        "coverage of routes outside the exercised files; physical lock behaviour; browser behaviour"
+      ],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/operationalBoundary.test.ts"
+    },
+    {
+      "evidence_id": "ev-whole-app-capture",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the whole-app route split and its structural classification (0 requireRole consumers, no route left unclassified); it does NOT read the registry",
+      "does_not_prove": ["registry agreement"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/routeRegistryConformanceWholeApp.test.ts"
+    },
+    {
+      "evidence_id": "ev-registry-forward-conformance",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "registry→runtime FORWARD agreement for the covered entries (proctorAccessConformance enumerates every registry entry)",
+      "does_not_prove": ["runtime→registry completeness (C-29)"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/routeRegistryConformance.test.ts"
+    },
+    {
+      "evidence_id": "ev-scope-resolvers",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the scope-resolver/deny-mapping units (scoped/score/own-attempt/candidate-context/exam-eligibility)",
+      "does_not_prove": ["wire surface"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/scopedCapability.test.ts"
+    },
+    {
+      "evidence_id": "ev-authorization-doc",
+      "evidence_kind": "CONTRACT",
+      "proves": "the declared model: capability × assignment; presets declare capability sets and a scope KIND, never resource reach",
+      "does_not_prove": ["implementation"],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/architecture/authorization.md#The authority kernel is"
+    },
+    {
+      "evidence_id": "ev-adr-017",
+      "evidence_kind": "CONTRACT",
+      "proves": "the operational boundary: Maintainer read-only five reads; host operator NOT Exam RBAC; Admin∩Maintainer forbidden",
+      "does_not_prove": ["implementation"],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/adr/ADR-017-operational-authority-maintainer-boundary.md"
+    },
+    {
+      "evidence_id": "ev-system-actor",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the synthetic actor's closed id set and refusal behaviour; the runtime context carries an empty permission slot",
+      "does_not_prove": ["route-level effect"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/authz/src/systemActor.test.ts"
+    },
+    {
+      "evidence_id": "ev-host-authority-closed-search",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "no permission key grants host authority, no preset contains one, and no application route performs host-level restore/secret/PGDATA operations (closed search: catalog closed union × preset boundaries × captured route surface × handler scan)",
+      "does_not_prove": [
+        "operational SQL outside the repository (excluded and declared)"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/authz/src/catalog.ts#PermissionKey",
+      "negative_evidence_basis": "CLOSED_ABSENCE_SEARCH",
+      "search_scope": "catalog closed union × all preset permission arrays × every captured runtime gate permission × apps/api/src/routes/** handler scan for pgdata|pg_restore|pg_dump|wal_|process.env.PG*|process.env.POSTGRES*|secret"
+    },
+    {
+      "evidence_id": "ev-registry-declared-header",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the registry header declares exhaustive intent and TEST-ONLY status verbatim",
+      "does_not_prove": ["that the runtime agrees"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/routeRegistry.ts"
+    },
+    {
+      "evidence_id": "ev-capture-o07",
+      "evidence_kind": "RUNTIME_ROUTE_CAPTURE",
+      "proves": "the composed-app capture at SOURCE_SHA: 148 primary routes, 127 capability-protected, 21 non-protected; 14 protected runtime routes absent from the 113-entry registry; 0 registry orphans",
+      "does_not_prove": ["anything about registry intent"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/atlas/input/route-facts.json"
+    },
+    {
+      "evidence_id": "ev-projection-limitation",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the product's own effective-authority projection states it answers capabilities, never resource reach; the admin matrix page renders preset membership checkmarks without a scope dimension",
+      "does_not_prove": ["user comprehension"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/permissionRegistry.ts#permissionRegistryRoutes; apps/web/src/pages/admin/PermissionRegistryPage.tsx"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "C-01",
+      "subject": "role:Teacher",
+      "predicate": "presets_declare",
+      "value": "capability sets and a scope KIND (defaultScope), never resource reach",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-authorization-doc", "ev-authz-closed-sets"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "C-02",
+      "subject": "authority:authorization",
+      "predicate": "effective_authority_model",
+      "value": "capability × assignment; the scope row alone grants zero capabilities; scopes resolve fresh per request",
+      "claim_kind": "AUTHORITY_STATEMENT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-authorization-doc"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "C-03",
+      "subject": "authority:authorization",
+      "predicate": "runtime_capability_derivation",
+      "value": "the runtime capability set is derived from ACTIVE assignments (union over each active role's preset), not from users.role or JWT claims",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-assignment-runtime", "ev-authorization-doc"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-04",
+      "subject": "scope:exam.assignment",
+      "predicate": "grader_without_assignment_denied_404",
+      "value": "a grader without an active Grader→Exam assignment is denied as 404 (anti-enumeration); the check fails closed (503)",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-scope-matrices", "ev-scope-resolvers"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-05",
+      "subject": "authority:authorization",
+      "predicate": "scope_carriers",
+      "value": "Teacher = teacher_course_assignments (course); Proctor = exam_proctor_assignments (exam); Grader = grader_exam_assignments (exam); collection reads filter in SQL before pagination",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-scope-matrices", "ev-authorization-doc"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-06",
+      "subject": "role:Admin",
+      "predicate": "admin_maintainer_exclusion",
+      "value": "Admin∩Maintainer is forbidden at the active-assignment level, enforced transactionally at a single chokepoint used by login and per-request authentication",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-assignment-resolver", "ev-adr-017"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-07",
+      "subject": "role:Grader",
+      "predicate": "preset_implies_global_access",
+      "value": "REJECTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "verification": "INSUFFICIENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [],
+      "challenging_evidence": ["ev-scope-matrices", "ev-authorization-doc"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "C-08",
+      "subject": "authority:authorization",
+      "predicate": "projection_contract",
+      "value": "the product's own Admin projection answers which capabilities the active roles grant, never which resources a user can reach",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": [
+        "ev-projection-limitation",
+        "ev-authorization-doc"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "C-09",
+      "subject": "role:Maintainer",
+      "predicate": "maintainer_readonly",
+      "value": "read-only operational observability identity: observation only, zero business/write permissions, frozen at exactly five read capabilities",
+      "claim_kind": "AUTHORITY_STATEMENT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-adr-017", "ev-authz-closed-sets"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "C-10",
+      "subject": "interface:http.GET./api/system/health",
+      "predicate": "shared_admin_maintainer_gate",
+      "value": "GET /system/health and GET /system/diagnostics are gated by capabilities held by BOTH Admin and Maintainer",
+      "claim_kind": "RUNTIME_OBSERVATION",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-operational-boundary", "ev-capture-o07"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-11",
+      "subject": "interface:http.GET./api/system/diagnostics",
+      "predicate": "admin_only_integrity_block",
+      "value": "the business-integrity block loads only for system.business_integrity.view, which the Maintainer preset does not contain",
+      "claim_kind": "RUNTIME_OBSERVATION",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-operational-boundary"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-12",
+      "subject": "interface:http.PUT./api/system/ops-policy",
+      "predicate": "ops_policy_admin_only_write",
+      "value": "PUT /system/ops-policy is Admin-only; the Maintainer may view the policy intent (system.ops.policy.view) but never modify it",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-operational-boundary", "ev-capture-o07"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-13",
+      "subject": "authority:adr-017",
+      "predicate": "admin_only_projections",
+      "value": "Admin-only business projections exist and are not Maintainer-visible: audit-log export and the organization-wide Recovery Center incident queue",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-operational-boundary", "ev-capture-o07"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-14",
+      "subject": "interface:http.GET./api/system/diagnostics",
+      "predicate": "two_authorization_truths_one_route",
+      "value": "the operational projection is shared (Admin+Maintainer) while the sub-block inside it is Admin-only — authority_requirement is per-operation and the integrity block is its own claim",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-operational-boundary"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-15",
+      "subject": "role:System",
+      "predicate": "synthetic_actor",
+      "value": "System is a synthetic non-human actor: non-login, non-assignable, not resolved by the assignment kernel",
+      "claim_kind": "RUNTIME_OBSERVATION",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-system-actor"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-16",
+      "subject": "role:System",
+      "predicate": "closed_actor_ids",
+      "value": "its contexts are constructed with a closed set of actor ids enforced at compile time and runtime, with an empty permissions slot — a stray string cannot produce an untracked audit actor",
+      "claim_kind": "RUNTIME_OBSERVATION",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-system-actor"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-17",
+      "subject": "role:System",
+      "predicate": "preset_vs_context",
+      "value": "the System preset holds four system-operation capabilities while the runtime context carries an empty permission slot — the actor's authorization does not come from preset membership resolved at authentication",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-system-actor", "ev-authz-closed-sets"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-18",
+      "subject": "scope:host-infrastructure",
+      "predicate": "outside_application_rbac",
+      "value": "host/infrastructure authority is NOT Exam RBAC: granted by host/CLI access, not an RBAC assignment",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-adr-017"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "C-19",
+      "subject": "scope:host-infrastructure",
+      "predicate": "no_permission_path",
+      "value": "no permission key grants host authority; no preset contains one; no application route performs host-level restore/secret/PGDATA operations (closed search; the two exposed infrastructure surfaces are read-only views)",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-host-authority-closed-search"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-20",
+      "subject": "role:Maintainer",
+      "predicate": "infrastructure_view_only",
+      "value": "the Maintainer may view status/evidence for infrastructure configuration but does not hold it",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": [
+        "ev-operational-boundary",
+        "ev-authz-closed-sets"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "C-21",
+      "subject": "scope:host-infrastructure",
+      "predicate": "authority_channel",
+      "value": "the operator's real authority channel is the host: backup/restore procedures are host-side commands; app-side visibility is limited to Admin+Maintainer",
+      "claim_kind": "RUNTIME_OBSERVATION",
+      "axes": {
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:adr-017"
+      },
+      "supporting_evidence": ["ev-adr-017"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "C-22",
+      "subject": "authority:authorization",
+      "predicate": "registry_declares_exhaustive_intent",
+      "value": "the registry declares a route → permission → scope → audit mapping for EVERY route gated by a capability gate",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-registry-declared-header"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-23",
+      "subject": "authority:authorization",
+      "predicate": "registry_is_test_only",
+      "value": "the registry is test-only metadata: no production code reads it; conformance tests check it against the live capture",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {
+        "implementation": "PRESENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-registry-declared-header"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-24",
+      "subject": "authority:authorization",
+      "predicate": "registry_entry_count",
+      "value": "the registry contains 113 entries at SOURCE_SHA (counted from the module, not inherited)",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-capture-o07"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-25",
+      "subject": "authority:authorization",
+      "predicate": "runtime_capture_split",
+      "value": "the whole-application capture asserts 148 primary routes: 127 capability-protected + 8 authenticate-only + 13 public",
+      "claim_kind": "RUNTIME_OBSERVATION",
+      "axes": {
+        "implementation": "PRESENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-capture-o07"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-26",
+      "subject": "authority:authorization",
+      "predicate": "declared_vs_runtime",
+      "value": "DIVERGENT: the declared mapping and the runtime surface diverge by 14 protected routes; the reverse direction is 0 orphans",
+      "claim_kind": "RUNTIME_OBSERVATION",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-capture-o07"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#762"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-27",
+      "subject": "authority:authorization",
+      "predicate": "whole_app_test_independence",
+      "value": "the whole-app conformance test does not consume the registry: it asserts the route-count split and classification only",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {
+        "implementation": "PRESENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-whole-app-capture"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-28",
+      "subject": "authority:authorization",
+      "predicate": "forward_conformance",
+      "value": "the registry IS consumed by two other conformance tests comparing registry → runtime in the forward direction",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {
+        "implementation": "PRESENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-registry-forward-conformance"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-29",
+      "subject": "authority:authorization",
+      "predicate": "covered_direction",
+      "value": "the covered direction is registry→runtime; the uncovered direction is runtime→registry; no test asserts every protected runtime route appears in the registry",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [
+        "ev-whole-app-capture",
+        "ev-registry-forward-conformance"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-30",
+      "subject": "work:jnhu76/exam#762",
+      "predicate": "per_module_gap_attribution",
+      "value": "the per-entry gap breakdown is RE-DERIVED by R1 from the capture (exam-profiles×5, invitations×3, audit-log×2, permission-registry×2, questions/tags×1, retention-readiness×1); not inherited",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-capture-o07"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "C-31",
+      "subject": "authority:authorization",
+      "predicate": "two_truths_preserved",
+      "value": "DECLARED_METADATA ≠ RUNTIME_TRUTH and neither source is discarded",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-capture-o07", "ev-registry-declared-header"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    }
+  ],
+  "conflicts": [
+    {
+      "conflict_id": "C-K1",
+      "kind": "DECLARED_VS_RUNTIME_DIVERGENCE",
+      "proposition": "the registry (113 entries, declared exhaustive) vs the whole-app runtime capture (127 protected routes)",
+      "parties": [
+        {
+          "party": "DECLARED_METADATA",
+          "statement": "registry declares a mapping for every capability-gated route; 113 entries",
+          "source_refs": [
+            "apps/api/src/authz/routeRegistry.ts",
+            "packages/atlas/input/route-facts.json#registry"
+          ]
+        },
+        {
+          "party": "RUNTIME_OBSERVATION",
+          "statement": "the composed app registers 127 capability-protected routes",
+          "source_refs": ["packages/atlas/input/route-facts.json#routes"]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#762",
+        "lift_condition": "add the missing entries and a runtime→registry completeness assertion, or explicitly narrow the declared contract (O-07)"
+      },
+      "source_refs": [
+        "apps/api/src/authz/routeRegistry.ts",
+        "packages/atlas/input/route-facts.json"
+      ]
+    },
+    {
+      "conflict_id": "C-K2",
+      "kind": "DECLARED_VS_RUNTIME_DIVERGENCE",
+      "proposition": "the Admin permission matrix renders preset membership as checkmarks without a scope dimension, against the projection's own capability-not-resource contract",
+      "parties": [
+        {
+          "party": "apps/web/src/pages/admin/PermissionRegistryPage.tsx",
+          "statement": "checkmark matrix from role.permissions.includes(entry.key)",
+          "source_refs": ["apps/web/src/pages/admin/PermissionRegistryPage.tsx"]
+        },
+        {
+          "party": "apps/api/src/routes/permissionRegistry.ts",
+          "statement": "the projection answers capabilities, never resource reach",
+          "source_refs": [
+            "apps/api/src/routes/permissionRegistry.ts#permissionRegistryRoutes"
+          ]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#762",
+        "lift_condition": "owner/product decision on the matrix's scope dimension (#762 O-08)"
+      },
+      "source_refs": [
+        "apps/web/src/pages/admin/PermissionRegistryPage.tsx",
+        "apps/api/src/routes/permissionRegistry.ts"
+      ]
+    },
+    {
+      "conflict_id": "C-K3",
+      "kind": "TEMPORAL_CONFLICT",
+      "proposition": "ADR-010's historical sections (Shadow Permission Mode; registry draft marked Not implemented) vs the runtime (no shadow mode; the registry exists)",
+      "parties": [
+        {
+          "party": "docs/adr/ADR-010-scoped-rbac-architecture.md",
+          "statement": "historical sections read as current without a dated amendment note",
+          "source_refs": [
+            "docs/adr/ADR-010-scoped-rbac-architecture.md#Shadow Permission Mode; registry draft"
+          ]
+        },
+        {
+          "party": "runtime",
+          "statement": "no shadow-mode evaluation exists; the registry exists and is consumed by conformance tests",
+          "source_refs": ["apps/api/src/authz/routeRegistry.ts"]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "docs/adr/ADR-010-scoped-rbac-architecture.md owner",
+        "lift_condition": "a dated amendment note per #762 O-03/O-04"
+      },
+      "source_refs": ["docs/adr/ADR-010-scoped-rbac-architecture.md"]
+    },
+    {
+      "conflict_id": "C-K4",
+      "kind": "EVIDENCE_CONTRADICTION",
+      "proposition": "the #762 input description attributed the host-operator statement to the runbook; only ADR-017 carries it",
+      "parties": [
+        {
+          "party": "work:jnhu76/exam#762 input description",
+          "statement": "runbook states the host-operator exclusion",
+          "source_refs": ["work:jnhu76/exam#762"]
+        },
+        {
+          "party": "ADR-017",
+          "statement": "NOT Exam RBAC — granted by host/CLI access (the runbook and operations README contain no RBAC occurrence)",
+          "source_refs": [
+            "docs/adr/ADR-017-operational-authority-maintainer-boundary.md#host operator"
+          ]
+        }
+      ],
+      "resolution_status": "RESOLVED_BY_CORRECTION",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_refs": [
+        "docs/adr/ADR-017-operational-authority-maintainer-boundary.md"
+      ]
+    }
+  ],
+  "interface_patches": [
+    {
+      "interface_id": "interface:http.GET./api/system/diagnostics",
+      "additional_gates": [
+        {
+          "capability_ref": "permission:system.business_integrity.view",
+          "effect": "NARROW",
+          "evidence": "ev-operational-boundary",
+          "applies_to_responses": ["integrity"],
+          "candidate_locator": "apps/api/src/routes/system.ts:392"
+        }
+      ]
+    },
+    {
+      "interface_id": "interface:http.GET./api/admin/incidents/:incidentId/detail",
+      "additional_gates": [
+        {
+          "capability_ref": "permission:incident.investigate",
+          "effect": "NARROW",
+          "evidence": "ev-operational-boundary",
+          "applies_to_responses": ["allowedActions"],
+          "candidate_locator": "apps/api/src/routes/incidents.admin.ts:335"
+        },
+        {
+          "capability_ref": "permission:incident.resolve",
+          "effect": "NARROW",
+          "evidence": "ev-operational-boundary",
+          "applies_to_responses": ["allowedActions"],
+          "candidate_locator": "apps/api/src/routes/incidents.admin.ts:339"
+        }
+      ]
+    },
+    {
+      "interface_id": "interface:http.GET./api/admin/recovery/incidents/:incidentId",
+      "additional_gates": [
+        {
+          "capability_ref": "permission:incident.investigate",
+          "effect": "NARROW",
+          "evidence": "ev-operational-boundary",
+          "applies_to_responses": ["allowedActions"],
+          "candidate_locator": "apps/api/src/routes/incidents.admin.ts:335"
+        },
+        {
+          "capability_ref": "permission:incident.resolve",
+          "effect": "NARROW",
+          "evidence": "ev-operational-boundary",
+          "applies_to_responses": ["allowedActions"],
+          "candidate_locator": "apps/api/src/routes/incidents.admin.ts:339"
+        }
+      ]
+    },
+    {
+      "interface_id": "interface:http.GET./api/admin/recovery/attempts/:attemptId",
+      "additional_gates": [
+        {
+          "capability_ref": "permission:attempt.time.grant",
+          "effect": "NARROW",
+          "evidence": "ev-operational-boundary",
+          "applies_to_responses": ["allowedActions"],
+          "candidate_locator": "apps/api/src/routes/incidents.admin.ts:372"
+        },
+        {
+          "capability_ref": "permission:attempt.force_submit",
+          "effect": "NARROW",
+          "evidence": "ev-operational-boundary",
+          "applies_to_responses": ["allowedActions"],
+          "candidate_locator": "apps/api/src/routes/incidents.admin.ts:375"
+        },
+        {
+          "capability_ref": "permission:attempt.misconduct.mark",
+          "effect": "NARROW",
+          "evidence": "ev-operational-boundary",
+          "applies_to_responses": ["allowedActions"],
+          "candidate_locator": "apps/api/src/routes/incidents.admin.ts:380"
+        }
+      ]
+    }
+  ]
+}

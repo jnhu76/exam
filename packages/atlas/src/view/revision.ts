@@ -7,6 +7,8 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { RevisionView } from "../sref/resolve.js";
 
 /** In-memory view — tests and synthetic fixtures. */
@@ -70,5 +72,48 @@ export class GitRevisionView implements RevisionView {
     } catch {
       return false;
     }
+  }
+}
+
+/**
+ * Composite view: the atlas package's OWN files (curation input, capture
+ * artifact, generated snapshot) are part of the PR under construction and
+ * are read from the working tree; everything else is read pinned to the
+ * observed revision. This breaks the snapshot-SHA circularity (R1 handoff
+ * §6) without weakening pinning: observed product sources always come from
+ * the git object store at SOURCE_SHA.
+ */
+export class CompositeRevisionView implements RevisionView {
+  constructor(
+    readonly revision: string,
+    private readonly pinned: RevisionView,
+    private readonly workingTreePrefix: string,
+    private readonly workingTreeRoot: string,
+  ) {}
+
+  private isWorkingTreePath(path: string): boolean {
+    return path.startsWith(this.workingTreePrefix);
+  }
+
+  fileExists(path: string): boolean {
+    if (this.isWorkingTreePath(path)) {
+      return existsSync(join(this.workingTreeRoot, path));
+    }
+    return this.pinned.fileExists(path);
+  }
+
+  readFile(path: string): string | undefined {
+    if (this.isWorkingTreePath(path)) {
+      try {
+        return readFileSync(join(this.workingTreeRoot, path), "utf8");
+      } catch {
+        return undefined;
+      }
+    }
+    return this.pinned.readFile(path);
+  }
+
+  commitExists(sha: string): boolean {
+    return this.pinned.commitExists?.(sha) ?? false;
   }
 }

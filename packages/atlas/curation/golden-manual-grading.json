@@ -1,0 +1,1121 @@
+{
+  "description": "Golden slice B — Manual grading (falsification fixture, R0 base re-anchored to SOURCE_SHA). Required outcomes: the full capability→workflow→operation→interface→permission→scope→durable-entity→evidence trace resolves against real extracted interfaces; manual grading ≠ result publication (separate capabilities, workflows, operations, permissions, scopes); F-16 rejected (permission existence is never evidence of consumption).",
+  "nodes": [
+    {
+      "kind": "Capability",
+      "id": "capability:grading.manual",
+      "label": "Manual grading",
+      "source_refs": [],
+      "authority_refs": [
+        "authority:exsem",
+        "authority:exam-runtime",
+        "authority:authorization"
+      ],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B4",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "EXSEM-006/008/009 grading protocol + the grading route surface (queue, detail, grade-question) as captured; every enumerated part carries a sanctioned mapping",
+      "closed_search_statement": "the grading route surface of the capture is the complete HTTP grading surface; every enumerated part is mapped"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:result.publication",
+      "label": "Result publication / candidate result visibility",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B4",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "EXSEM-018 visibility authority + the publish-results route + the visibility module; every enumerated part carries a sanctioned mapping",
+      "closed_search_statement": "the publication surface is publish-results plus the visibility projection; both enumerated parts are mapped"
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:grading.manual.review",
+      "label": "Manual grading review",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:grading.manual",
+      "step_count": 0,
+      "terminal_step_ref": "operation:grading.grade-question"
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:result.publish",
+      "label": "Publish results",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:result.publication",
+      "step_count": 0,
+      "terminal_step_ref": "operation:exam.publish-results"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:grading.grade-question",
+      "label": "Grade one question of a submitted attempt",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:grading.score.write"
+        },
+        "scope_ref": "scope:exam.assignment",
+        "resource_anchor_ref": "scope:attempt",
+        "assignment_required": "TRUE",
+        "assignment_applies_to": ["!Admin"],
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#buildScopedCapabilityPreHandler (grader seam; wired at apps/api/src/plugins/authz.ts)",
+        "enforcement_evidence": "ev-grader-assignment-seam",
+        "resource_resolution": "attemptId → examId via the attempt resolver; the assignment must target the resolved exam",
+        "deny_mapping": "404 RESOURCE_NOT_FOUND (anti-enumeration fold); 503 AUTHZ_UNAVAILABLE fail-closed on lookup failure or mis-declared route"
+      },
+      "state_prerequisites": [
+        "attempt.status = submitted",
+        "attempt.gradingStatus = pending_manual",
+        "grading entry status = pending_manual (an auto-graded entry is rejected with a permission-class error)"
+      ],
+      "durable_effects": [
+        {
+          "entity_ref": "entity:grading.entry",
+          "effect_kind": "WRITE",
+          "mutability": "APPEND_ONLY"
+        },
+        {
+          "entity_ref": "entity:answer.frozen-submission",
+          "effect_kind": "READ",
+          "mutability": "IMMUTABLE"
+        },
+        {
+          "entity_ref": "entity:attempt.terminal-score",
+          "effect_kind": "WRITE",
+          "mutability": "MUTABLE"
+        },
+        {
+          "entity_ref": "entity:enrollment.final-score-projection",
+          "effect_kind": "WRITE",
+          "mutability": "MUTABLE"
+        }
+      ],
+      "durable_effects_state": "ESTABLISHED",
+      "idempotency": "NOT_IDEMPOTENT",
+      "atomicity": "locks Enrollment→Attempt (canonical order), completes the manual entry via a conditional UPDATE and — when it is the last outstanding entry — aggregates and writes the terminal attempt score plus the enrollment projection in ONE transaction"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:exam.publish-results",
+      "label": "Publish exam results",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:exam.result.publish"
+        },
+        "scope_ref": "scope:course.assignment",
+        "resource_anchor_ref": "scope:exam",
+        "assignment_required": "TRUE",
+        "assignment_applies_to": ["!Admin"],
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#buildScopedCapabilityPreHandler (assignment carrier teacher_course_assignments; resolved resource is the exam)",
+        "enforcement_evidence": "ev-teacher-assignment-seam",
+        "resource_resolution": "exam id resolved directly; the assignment must target the exam's course",
+        "deny_mapping": "404/403 canonical deny per the scoped-gate seam; 503 fail-closed"
+      },
+      "state_prerequisites": [
+        "exam exists and is in a publishable state",
+        "for manual mode: grading complete (a pending_manual attempt stays hidden regardless)"
+      ],
+      "durable_effects": [
+        {
+          "entity_ref": "entity:exam.result-publication",
+          "effect_kind": "WRITE",
+          "mutability": "MUTABLE"
+        }
+      ],
+      "durable_effects_state": "ESTABLISHED",
+      "idempotency": "SINGLE_WINNER",
+      "atomicity": "single-winner publication of results_published_at under a row lock; does not itself advance grading"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "contains",
+      "source": "capability:grading.manual",
+      "target": "workflow:grading.manual.review"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:result.publication",
+      "target": "workflow:result.publish"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:grading.manual.review",
+      "target": "operation:grading.grade-question",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:result.publish",
+      "target": "operation:exam.publish-results",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/admin/attempts/:attemptId/grade-question",
+      "target": "operation:grading.grade-question"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/exams/:id/publish-results",
+      "target": "operation:exam.publish-results"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:grading.grade-question",
+      "target": "permission:grading.score.write"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:exam.publish-results",
+      "target": "permission:exam.result.publish"
+    },
+    {
+      "kind": "scoped_by",
+      "source": "operation:grading.grade-question",
+      "target": "scope:exam.assignment"
+    },
+    {
+      "kind": "scoped_by",
+      "source": "operation:exam.publish-results",
+      "target": "scope:course.assignment"
+    },
+    {
+      "kind": "writes",
+      "source": "operation:grading.grade-question",
+      "target": "entity:grading.entry",
+      "effect_kind": "WRITE",
+      "mutability": "APPEND_ONLY"
+    },
+    {
+      "kind": "reads",
+      "source": "operation:grading.grade-question",
+      "target": "entity:answer.frozen-submission",
+      "effect_kind": "READ",
+      "mutability": "IMMUTABLE"
+    },
+    {
+      "kind": "writes",
+      "source": "operation:grading.grade-question",
+      "target": "entity:attempt.terminal-score",
+      "effect_kind": "WRITE",
+      "mutability": "MUTABLE"
+    },
+    {
+      "kind": "writes",
+      "source": "operation:grading.grade-question",
+      "target": "entity:enrollment.final-score-projection",
+      "effect_kind": "WRITE",
+      "mutability": "MUTABLE"
+    },
+    {
+      "kind": "writes",
+      "source": "operation:exam.publish-results",
+      "target": "entity:exam.result-publication",
+      "effect_kind": "WRITE",
+      "mutability": "MUTABLE"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:grading.manual",
+      "target": "authority:exsem"
+    },
+    {
+      "kind": "governed_by",
+      "source": "operation:grading.grade-question",
+      "target": "authority:exsem"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:result.publication",
+      "target": "authority:exsem"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "scope:exam.assignment",
+      "target": "work:jnhu76/exam#296",
+      "relation": "DELIVERS"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "scope:course.assignment",
+      "target": "work:jnhu76/exam#286",
+      "relation": "DELIVERS"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "capability:result.publication",
+      "target": "work:jnhu76/exam#324",
+      "relation": "DELIVERS"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "entity:grading.entry",
+      "target": "work:jnhu76/exam#542",
+      "relation": "DELIVERS"
+    },
+    {
+      "kind": "depends_on",
+      "source": "capability:result.publication",
+      "target": "capability:grading.manual"
+    }
+  ],
+  "facts": [],
+  "evidence": [
+    {
+      "evidence_id": "ev-grading-domain",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the manual-grading domain rules exist where the trace says (gradeQuestion; hold/refusal, one-way, score-bound guards)",
+      "does_not_prove": ["reachability, persistence, authorization"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/manualGrading.ts#gradeQuestion"
+    },
+    {
+      "evidence_id": "ev-grading-discriminator",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the manual-mode discriminator is the question type in the frozen snapshot (requiresManualGrading / isManualGradedQuestion)",
+      "does_not_prove": ["that the frozen snapshot is consulted at submit"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/domain/src/gradingEngine.ts#requiresManualGrading"
+    },
+    {
+      "evidence_id": "ev-grading-domain-tests",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "domain invariants: hold/refusal, one-way completion, workset materialization/consistency, aggregation, identity/poison handling",
+      "does_not_prove": [
+        "HTTP surface, real persistence, authorization, concurrency"
+      ],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/manualGradingHold.test.ts"
+    },
+    {
+      "evidence_id": "ev-grading-entry-repo",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the one-way transition is enforced by a SQL CAS-style conditional UPDATE (grading_mode='manual' AND status='pending_manual'), returning null on no-match",
+      "does_not_prove": [
+        "that the predicate is exercised, that it wins any race, any lock schedule"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/db/src/repository/attemptGradingEntryRepo.ts#completeManualEntry"
+    },
+    {
+      "evidence_id": "ev-grading-queue-wire",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "duplicate/conflicting grading is refused at the wire (409) and leaves no second effect",
+      "does_not_prove": ["physical lock contention (its own oracle)"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3", "B4"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/gradingQueue.test.ts#rejects different-value re-grade of a completed_manual entry before terminal completion"
+    },
+    {
+      "evidence_id": "ev-grading-concurrency",
+      "evidence_kind": "TEST_PHYSICAL",
+      "proves": "the lock order Enrollment→Attempt and the contended-block oracle (two physical sessions, observer evidence)",
+      "does_not_prove": [
+        "product capability (that comes from the composition evidence)"
+      ],
+      "strength": "BEHAVIOURAL_PHYSICAL",
+      "boundary_coverage": ["B6"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/attempts/gradingConcurrency.test.ts",
+      "mechanism": "two physical connections contend on the Enrollment row lock; the oracle is the observed block plus the loser's error"
+    },
+    {
+      "evidence_id": "ev-grading-closure",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the closure writes the enrollment projection together with the terminal attempt score",
+      "does_not_prove": ["locking mechanism"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B2", "B4"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/attempts/manualGradingClosure.test.ts"
+    },
+    {
+      "evidence_id": "ev-grading-atomicity",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "atomicity/rollback of the multi-fact grading closure (incl. manual terminalization rollback)",
+      "does_not_prove": ["lock contention"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/crashAtomicity.test.ts"
+    },
+    {
+      "evidence_id": "ev-publish-tests",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the publication gate and the visibility truth table",
+      "does_not_prove": ["grading itself; the lock schedule"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3", "B4"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/resultPublishing.test.ts"
+    },
+    {
+      "evidence_id": "ev-publish-concurrency",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the single-winner transition of results_published_at; the loser observes committed truth (the test's own header states the blocking overlap is HIGHLY LIKELY, not deterministically proven by this coordination alone — classified TEST_INTEGRATION, not TEST_PHYSICAL)",
+      "does_not_prove": ["a deterministic row-lock blocking proof"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B4"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/publishResults.concurrency.test.ts",
+      "mechanism": "two physical connections race the single-winner UPDATE"
+    },
+    {
+      "evidence_id": "ev-grading-matrix",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the capability×assignment matrix for grading: who is allowed where",
+      "does_not_prove": ["physical locking"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/permissionMatrix.grading.test.ts"
+    },
+    {
+      "evidence_id": "ev-assignment-carrier",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the assignment carrier's durable semantics (active assignment, partial unique index)",
+      "does_not_prove": ["route-level enforcement"],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/graderAssignments.admin.test.ts"
+    },
+    {
+      "evidence_id": "ev-grader-assignment-seam",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the assignment dimension is real, with the grader gate at scopedCapability and its wiring in the authz plugin; authority = capability × assignment (the scope row alone grants zero capabilities)",
+      "does_not_prove": [
+        "that the gate is applied on every grading surface (the matrix tests prove the enumerated surfaces)"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/scopedCapability.ts#buildScopedCapabilityPreHandler; wired at apps/api/src/plugins/authz.ts"
+    },
+    {
+      "evidence_id": "ev-teacher-assignment-seam",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the teacher course-assignment gate resolves course scope for publish-results and filters collections in SQL before pagination",
+      "does_not_prove": [
+        "that every teacher-gated surface applies it identically (B-U1 class)"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/authz/scopedCapability.ts#buildScopedCapabilityPreHandler"
+    },
+    {
+      "evidence_id": "ev-exsem-grading",
+      "evidence_kind": "CONTRACT",
+      "proves": "the frozen semantics of manual grading, freezing, one-way completion, terminal projection and the visibility door (EXSEM-006/008/009/010/018)",
+      "does_not_prove": ["implementation"],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/architecture/exam-semantic-boundaries.md#EXSEM-006"
+    },
+    {
+      "evidence_id": "ev-visibility-authority",
+      "evidence_kind": "CONTRACT",
+      "proves": "the authoritative separation of grading completion from result visibility and the two-stage gate (publish done AND result computable)",
+      "does_not_prove": [
+        "that every candidate surface applies it (proven by the visibility tests)"
+      ],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/candidateResultVisibility.ts"
+    },
+    {
+      "evidence_id": "ev-publish-command",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "publishing is a separate command, idempotent, single-winner, and explicitly does not advance grading",
+      "does_not_prove": ["route gating"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/exam-engine/src/examCommands.ts#publishResults"
+    },
+    {
+      "evidence_id": "ev-catalog-inert",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the catalog itself records grading.finalize / grading.identity.view as RESERVED with no HTTP route gating on them (inert grants)",
+      "does_not_prove": ["runtime behaviour of other keys"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/authz/src/catalog.ts#GradingFinalize",
+      "negative_evidence_basis": "CURRENT_AUTHORITY_REJECTION"
+    },
+    {
+      "evidence_id": "ev-grading-answer-view-unconsumed",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "grading.answer.view is granted to the Grader preset and consumed by no production route (derived inert; closed registry×capture search)",
+      "does_not_prove": ["that a future route will not consume it"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/authz/src/presets.ts#GRADER_PERMISSIONS",
+      "negative_evidence_basis": "CLOSED_ABSENCE_SEARCH",
+      "search_scope": "every captured runtime gate permission at SOURCE_SHA × the preset membership of the catalog"
+    },
+    {
+      "evidence_id": "ev-browser-absence-grading",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "no browser-level grading/result-publication spec exists (deleted 2026-10-05 under the reversed E2E retention bar; a deliberate coverage boundary)",
+      "does_not_prove": [
+        "anything else — absence of browser evidence is not evidence of absence of the capability"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/e2e/e2e"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "B-01",
+      "subject": "capability:grading.manual",
+      "predicate": "activation_support",
+      "value": "SUPPORTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "design": "ACCEPTED",
+        "implementation": "PRESENT",
+        "verification": "PASS",
+        "activation_support": "SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": [
+        "ev-grading-domain",
+        "ev-grading-discriminator",
+        "ev-grading-domain-tests",
+        "ev-grading-entry-repo",
+        "ev-grading-queue-wire",
+        "ev-grading-closure",
+        "ev-grading-atomicity",
+        "ev-grading-matrix",
+        "ev-exsem-grading",
+        "ev-grading-concurrency"
+      ],
+      "challenging_evidence": ["ev-browser-absence-grading"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B4"
+    },
+    {
+      "claim_id": "B-02",
+      "subject": "operation:grading.grade-question",
+      "predicate": "reachable_only_through_resource_aware_gate",
+      "value": "SUPPORTED",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": ["ev-grader-assignment-seam", "ev-grading-matrix"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "B-03",
+      "subject": "operation:grading.grade-question",
+      "predicate": "capability_keys_gating_the_three_grading_surfaces",
+      "value": "grading.queue.view / grading.detail.view / grading.score.write",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-grading-matrix"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "B-04",
+      "subject": "operation:grading.grade-question",
+      "predicate": "effective_authority",
+      "value": "CAPABILITY_x_ACTIVE_GRADER_EXAM_ASSIGNMENT",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": [
+        "ev-grader-assignment-seam",
+        "ev-grading-matrix",
+        "ev-assignment-carrier"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "B-05",
+      "subject": "scope:exam.assignment",
+      "predicate": "enforcement_carrier_and_fail_closed",
+      "value": "grader_exam_assignments; 503 AUTHZ_UNAVAILABLE fail-closed",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": [
+        "ev-grader-assignment-seam",
+        "ev-assignment-carrier"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "B-06",
+      "subject": "operation:grading.grade-question",
+      "predicate": "runtime_state_prerequisites",
+      "value": "submitted + pending_manual + entry pending_manual; auto-graded entry rejected",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": [
+        "ev-grading-domain",
+        "ev-grading-domain-tests",
+        "ev-grading-queue-wire"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "B-07",
+      "subject": "policy:gradingEntry.status/completed_manual",
+      "predicate": "transition_oneway",
+      "value": "pending_manual → completed_manual with NO revision path",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "design": "REJECTED",
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": [
+        "ev-grading-entry-repo",
+        "ev-grading-domain-tests",
+        "ev-grading-queue-wire"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "B-08",
+      "subject": "scope:exam.assignment",
+      "predicate": "restriction_location",
+      "value": "the seam, not the preset — graders are not globally authorized",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-grader-assignment-seam", "ev-grading-matrix"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "B-09",
+      "subject": "entity:answer.frozen-submission",
+      "predicate": "submit_freeze",
+      "value": "submit freezes accepted answers, flips the attempt, sets gradingStatus from the frozen snapshot and materializes the workset in ONE protected transaction",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": ["ev-grading-domain-tests", "ev-grading-closure"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "B-10",
+      "subject": "entity:attempt.terminal-score",
+      "predicate": "grading_completion_commit",
+      "value": "one transaction completes the entry (conditional UPDATE) and — on the last outstanding entry — aggregates and writes the terminal score plus the enrollment projection",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": [
+        "ev-grading-closure",
+        "ev-grading-atomicity",
+        "ev-grading-concurrency"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "B-11",
+      "subject": "entity:attempt.terminal-score",
+      "predicate": "projection_is_not_input",
+      "value": "the terminal score projection is a derived output and never a scoring input",
+      "claim_kind": "AUTHORITY_STATEMENT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": ["ev-exsem-grading"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "B-12",
+      "subject": "operation:grading.grade-question",
+      "predicate": "partial_credit",
+      "value": "entry score bounded 0 ≤ score ≤ maxScore; correct derived from earnedScore >= maxScore",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exam-runtime"
+      },
+      "supporting_evidence": ["ev-grading-domain", "ev-grading-domain-tests"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "B-13",
+      "subject": "operation:grading.grade-question",
+      "predicate": "auto_finalization_boundary",
+      "value": "auto-finalization cannot close a pending_manual attempt; only manual completion owns submitted → graded for manual attempts",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": ["ev-grading-domain-tests"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "B-14",
+      "subject": "capability:result.publication",
+      "predicate": "grading_neq_visibility",
+      "value": "grading completion is not candidate result visibility; manual mode hides results until results_published_at != null and a pending_manual attempt is hidden regardless",
+      "claim_kind": "AUTHORITY_STATEMENT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": ["ev-visibility-authority", "ev-publish-tests"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "B-15",
+      "subject": "capability:result.publication",
+      "predicate": "activation_support",
+      "value": "SUPPORTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS",
+        "activation_support": "SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": [
+        "ev-publish-command",
+        "ev-publish-tests",
+        "ev-publish-concurrency",
+        "ev-exsem-grading"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B4"
+    },
+    {
+      "claim_id": "B-16",
+      "subject": "entity:exam.result-publication",
+      "predicate": "visibility_conjunct",
+      "value": "visibility is the AND of publish-done (manual mode) and result-computable (grading done)",
+      "claim_kind": "AUTHORITY_STATEMENT",
+      "axes": {
+        "design": "ACCEPTED"
+      },
+      "authority_owner": {
+        "id": "authority:exsem"
+      },
+      "supporting_evidence": ["ev-visibility-authority", "ev-exsem-grading"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "B-17",
+      "subject": "operation:exam.publish-results",
+      "predicate": "admin_view_bypass",
+      "value": "the Admin all-view bypasses the publication gate — a deliberate, documented branch, not a leak",
+      "claim_kind": "RUNTIME_OBSERVATION",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:exam-runtime"
+      },
+      "supporting_evidence": ["ev-visibility-authority", "ev-publish-tests"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "B-18",
+      "subject": "capability:result.publication",
+      "predicate": "depends_on",
+      "value": "result publication depends on grading completion for manual attempts",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-visibility-authority"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B4"
+    },
+    {
+      "claim_id": "B-19",
+      "subject": "permission:grading.finalize",
+      "predicate": "inert",
+      "value": "GRANTED_BUT_UNCONSUMED — no HTTP route gates on it; the catalog itself records this",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {
+        "implementation": "PRESENT",
+        "activation_support": "NOT_SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-catalog-inert"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "B-20",
+      "subject": "permission:grading.answer.view",
+      "predicate": "inert",
+      "value": "GRANTED_BUT_UNCONSUMED — granted to the Grader preset, consumed by no production route",
+      "claim_kind": "DECLARED_METADATA",
+      "axes": {
+        "implementation": "PRESENT",
+        "activation_support": "NOT_SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-grading-answer-view-unconsumed"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B0"
+    },
+    {
+      "claim_id": "B-21",
+      "subject": "permission:grading.score.write",
+      "predicate": "key_exists_implies_gated_operation",
+      "value": "REJECTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "verification": "INSUFFICIENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [],
+      "challenging_evidence": ["ev-catalog-inert"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "B-22",
+      "subject": "operation:grading.grade-question",
+      "predicate": "finalize_separation",
+      "value": "the route layer does not separate score-write from finalize authority; finalization is implicit in the grading command (recorded limitation)",
+      "claim_kind": "AUTHORIZATION_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:authorization"
+      },
+      "supporting_evidence": ["ev-catalog-inert", "ev-grading-domain"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    }
+  ],
+  "conflicts": [
+    {
+      "conflict_id": "B-K1",
+      "kind": "TEMPORAL_CONFLICT",
+      "proposition": "a non-authoritative research document still cites deleted grading E2E specs as evidence",
+      "parties": [
+        {
+          "party": "docs/research/product-semantics-audit-1-code-reality.md",
+          "statement": "lists E2E manual-grading* as SC-12 evidence",
+          "source_refs": [
+            "docs/research/product-semantics-audit-1-code-reality.md#SC-12"
+          ]
+        },
+        {
+          "party": "apps/e2e/e2e current contents",
+          "statement": "the cited specs were deleted (dba53ada/b0e7a7ff)",
+          "source_refs": ["apps/e2e/e2e"]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "docs/research owner",
+        "lift_condition": "stale citation correction by the docs owner"
+      },
+      "source_refs": ["docs/research/product-semantics-audit-1-code-reality.md"]
+    },
+    {
+      "conflict_id": "B-K2",
+      "kind": "DECLARED_VS_RUNTIME_DIVERGENCE",
+      "proposition": "the grading-queue JSDoc claims a write/overwrite mode the one-way domain rule forbids",
+      "parties": [
+        {
+          "party": "apps/api/src/routes/gradingQueue.ts",
+          "statement": "JSDoc: saves (or overwrites)",
+          "source_refs": ["apps/api/src/routes/gradingQueue.ts#queue JSDoc"]
+        },
+        {
+          "party": "domain rule + tests",
+          "statement": "one-way completion; repeat/revise return 409",
+          "source_refs": [
+            "packages/exam-engine/src/manualGrading.ts#gradeQuestion guards",
+            "apps/api/src/routes/gradingQueue.test.ts#409 assertions"
+          ]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#762",
+        "lift_condition": "stale production-comment follow-up (#762 O-09 class)"
+      },
+      "source_refs": ["apps/api/src/routes/gradingQueue.ts"]
+    },
+    {
+      "conflict_id": "B-K3",
+      "kind": "DECLARED_VS_RUNTIME_DIVERGENCE",
+      "proposition": "grading.finalize / grading.identity.view / grading.answer.view exist and are granted while no route consumes them",
+      "parties": [
+        {
+          "party": "packages/authz/src/catalog.ts + presets.ts",
+          "statement": "the keys exist and Admin/Grader presets grant them",
+          "source_refs": [
+            "packages/authz/src/catalog.ts#GradingFinalize annotation",
+            "packages/authz/src/presets.ts#GRADER_PERMISSIONS"
+          ]
+        },
+        {
+          "party": "captured runtime surface",
+          "statement": "no captured route gates on them",
+          "source_refs": [
+            "packages/atlas/input/route-facts.json#gate permissions"
+          ]
+        }
+      ],
+      "resolution_status": "RESOLVED_BY_DERIVATION",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_refs": [
+        "packages/authz/src/catalog.ts",
+        "packages/atlas/input/route-facts.json"
+      ]
+    }
+  ]
+}

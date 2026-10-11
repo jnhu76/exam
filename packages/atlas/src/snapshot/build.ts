@@ -390,6 +390,30 @@ function computeDerivedFields(input: SemanticInput): void {
     });
   };
 
+  // ATLAS-SEM-084 negative evidence: a recorded non-support statement at the
+  // boundary. Unlike positive support, a captured external work-item record
+  // counts — the frozen slices cite closed issues as the authority for
+  // non-adoption decisions — but the ref must actually RESOLVE.
+  const negativeEvidenceCovers = (
+    claim: Record<string, unknown>,
+    boundary: string,
+  ): boolean => {
+    const supporting = Array.isArray(claim["supporting_evidence"])
+      ? (claim["supporting_evidence"] as string[])
+      : [];
+    return supporting.some((evidenceId) => {
+      const evidence = evidenceById.get(evidenceId);
+      if (evidence === undefined) return false;
+      const coverage = Array.isArray(evidence["boundary_coverage"])
+        ? (evidence["boundary_coverage"] as string[])
+        : [];
+      if (!coverage.includes(boundary)) return false;
+      const ref = getRecord(evidence, "source_ref");
+      if (ref === undefined) return false;
+      return ref["resolution_state"] === "RESOLVED";
+    });
+  };
+
   for (const node of input.nodes) {
     const kind = getString(node, "kind");
     if (kind !== "Capability" && kind !== "Facet") {
@@ -423,6 +447,11 @@ function computeDerivedFields(input: SemanticInput): void {
         (e) => e["relation"] === "DECISION_GATE",
       );
       const axes = getRecord(supportClaim ?? {}, "axes");
+      // Clause-3 ownership is claim-kind-agnostic: a RESIDUAL_OR_EXCLUSION
+      // claim can carry the accepted design for a deferred future (A-08).
+      const hasAcceptedDesign = (claimsOf.get(partId) ?? []).some(
+        (c) => getRecord(c, "axes")?.["design"] === "ACCEPTED",
+      );
       return {
         partId,
         support:
@@ -439,8 +468,9 @@ function computeDerivedFields(input: SemanticInput): void {
                   getString(supportClaim, "boundary") ?? supportBoundary,
                 ),
               },
-        hasAcceptedDesign:
-          axes?.["design"] === "ACCEPTED" || axes?.["design"] === "PROPOSED",
+        // Clause 3's frozen wording is "an accepted design" — PROPOSED alone
+        // does not own a future (IR-032 binding rules).
+        hasAcceptedDesign,
         owningWorkItem:
           owningWorkItem === undefined
             ? undefined
@@ -461,13 +491,15 @@ function computeDerivedFields(input: SemanticInput): void {
       support_boundary: supportBoundary as never,
       closedSearchStatement:
         getString(node, "closed_search_statement") !== undefined,
-      positiveNegativeEvidenceAtBoundary: ownClaims.some((claim) => {
-        const value = getString(claim, "value");
-        const axes = getRecord(claim, "axes");
-        const activation = (axes?.["activation_support"] as string) ?? value;
-        if (activation !== "NOT_SUPPORTED") return false;
-        return evidenceAdequateFor(claim, supportBoundary);
-      }),
+      positiveNegativeEvidenceAtBoundary: partIds.some((partId) =>
+        (claimsOf.get(partId) ?? []).some((claim) => {
+          const value = getString(claim, "value");
+          const axes = getRecord(claim, "axes");
+          const activation = (axes?.["activation_support"] as string) ?? value;
+          if (activation !== "NOT_SUPPORTED") return false;
+          return negativeEvidenceCovers(claim, supportBoundary);
+        }),
+      ),
     });
     node["support_summary"] = result.summary;
   }

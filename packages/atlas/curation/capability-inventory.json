@@ -1,0 +1,1737 @@
+{
+  "description": "Major capability inventory (#764 §1.1 coverage seed, reconciled against live repository reality at SOURCE_SHA). Reconciliation values: SAME/RENAMED/SPLIT/MERGED/NOT_APPLICABLE (a coverage-seed disposition, NOT an IR mapping_state value). Deep-review sample beyond the golden slices: candidate exam runtime (candidate-facing + durable state), audit (operational), proctoring (authorization-heavy), operations/diagnostics (operational + authorization boundary). Support verdicts stay UNKNOWN except where golden-slice claims establish them — mapping coverage is this inventory's deliverable, never a support claim.",
+  "families": [
+    {
+      "seed_label": "Identity / authentication / sessions",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:identity.auth",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Users / staff / invitations",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:users.staff",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": [
+        "the GET /api/invitations, POST /api/invitations, DELETE /api/invitations/:id routes are O-07 runtime-only (absent from the declared registry)"
+      ]
+    },
+    {
+      "seed_label": "Candidates",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:candidates",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Courses",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:courses",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Question bank / tags",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:questions.bank",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "PARTIAL",
+      "known_gaps": [
+        "GET /api/questions/tags is O-07 runtime-only; question import/export breadth not enumerated"
+      ]
+    },
+    {
+      "seed_label": "Rich content",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:content.rich-subjective",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": ["residual facets per golden slice A"]
+    },
+    {
+      "seed_label": "Exams / lifecycle",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:exams.lifecycle",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "PARTIAL",
+      "known_gaps": [
+        "large surface: transitions enumerated from the capture, but per-transition durable-effect workflows are not yet curated"
+      ]
+    },
+    {
+      "seed_label": "Exam policies / profiles",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:exams.policies",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": [
+        "all five exam-profile routes are O-07 runtime-only (absent from the declared registry)"
+      ]
+    },
+    {
+      "seed_label": "Enrollment / admission",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:enrollment.admission",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Candidate exam runtime",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:runtime.candidate-exam",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": ["queue admission semantics tracked by #292"]
+    },
+    {
+      "seed_label": "Answer save / restore",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:runtime.answer-persistence",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Submission / freeze",
+      "reconciliation": "MERGED",
+      "capability_ref": "capability:runtime.candidate-exam",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": [
+        "the submit/freeze path is the runtime family's terminal step; freeze semantics carried by entity:answer.frozen-submission (golden B B-09)"
+      ]
+    },
+    {
+      "seed_label": "Deadline / time grants",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:deadlines.time-grants",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Proctoring",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:proctoring",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Incidents",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:incidents",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "PARTIAL",
+      "known_gaps": [
+        "incident routes enumerated in the capture and their narrowing gates mapped in golden C's patches; dedicated incident workflows not yet curated (the recovery queue is Admin-only per golden C C-13)"
+      ]
+    },
+    {
+      "seed_label": "Manual grading",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:grading.manual",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": ["golden slice B"]
+    },
+    {
+      "seed_label": "Result publishing / visibility",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:result.publication",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": ["golden slice B"]
+    },
+    {
+      "seed_label": "Scores / exports",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:scores.exports",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Audit",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:audit",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    },
+    {
+      "seed_label": "Notifications / email",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:notifications.email",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": [
+        "the side-effecting email test is mapped under operations.diagnostics (ADR-017 D7)"
+      ]
+    },
+    {
+      "seed_label": "Operations / diagnostics",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:operations.diagnostics",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": ["diagnostics carries the IR-091 additional gate"]
+    },
+    {
+      "seed_label": "Configuration / runtime policy",
+      "reconciliation": "MERGED",
+      "capability_ref": "capability:operations.diagnostics",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": [
+        "runtime policy view/manage is the ops family's policy workflow (ops-policy GET/PUT)"
+      ]
+    },
+    {
+      "seed_label": "Import / export",
+      "reconciliation": "SAME",
+      "capability_ref": "capability:import-export",
+      "enumeration_basis": "route-capture subset at SOURCE_SHA (packages/atlas/input/route-facts.json) with the family's stated scope; every enumerated part carries a sanctioned operation/interface/permission mapping",
+      "coverage_result": "MAPPED",
+      "known_gaps": []
+    }
+  ],
+  "nodes": [
+    {
+      "kind": "Capability",
+      "id": "capability:audit",
+      "label": "Audit log viewing and export (Admin-only projections)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the audit route-capture subset (audit_log.view gates) with every enumerated part mapped",
+      "closed_search_statement": "the audit HTTP surface of the capture is the complete HTTP audit surface; every enumerated part is mapped"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:candidates",
+      "label": "Candidates and candidate fields",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/candidates route-capture subset; every enumerated part mapped",
+      "closed_search_statement": "the candidate-management HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:client-events",
+      "label": "Client event telemetry",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/client-events captured route; every enumerated part mapped",
+      "closed_search_statement": "the client-event HTTP surface of the capture is the complete surface"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:configuration.settings",
+      "label": "Deployment settings and public configuration",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/settings route-capture subset; every enumerated part mapped",
+      "closed_search_statement": "the settings HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:courses",
+      "label": "Courses",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/courses route-capture subset; every enumerated part mapped",
+      "closed_search_statement": "the course HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:deadlines.time-grants",
+      "label": "Deadlines and time grants",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the time-grants captured route plus the internal deadline scanner seam; every enumerated part mapped",
+      "closed_search_statement": "the deadline surface is the time-grants route and the internal scanner; both enumerated parts are mapped"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:enrollment.admission",
+      "label": "Enrollment and admission",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/exams/:examId/enrollments route-capture subset; every enumerated part mapped",
+      "closed_search_statement": "the enrollment HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:exams.lifecycle",
+      "label": "Exams and their lifecycle transitions",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "PARTIAL",
+      "mapping_basis": "the /api/exams route-capture subset (create/publish/unpublish/close/cancel/archive/extend/enrollments); every enumerated part mapped to its captured gate"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:exams.policies",
+      "label": "Exam policies and profiles",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/exam-profiles route-capture subset; every enumerated part mapped to its captured gate",
+      "closed_search_statement": "the exam-profile HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:identity.auth",
+      "label": "Identity, authentication and sessions",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/auth + /api/launchpad route-capture subset (login/logout/register/password-reset/accept/me/me-password/me-profile/status/bootstrap); every enumerated part is a captured route with its captured gate",
+      "closed_search_statement": "the identity HTTP surface of the capture is the complete HTTP identity/auth surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:import-export",
+      "label": "Import / export",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the import/export route-capture subset (candidates/import, questions/import, score export, attempt export); every enumerated part mapped",
+      "closed_search_statement": "the import/export HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:incidents",
+      "label": "Incidents and recovery queue",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "PARTIAL",
+      "mapping_basis": "the incident route-capture subset (incident.view/create/investigate/resolve/recovery gates); every enumerated route part is mapped to its captured gate, but dedicated incident workflows are not yet curated"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:notifications.email",
+      "label": "Notifications and email",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/notifications route-capture subset (authenticate-only surface); every enumerated part mapped",
+      "closed_search_statement": "the notification HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:operations.diagnostics",
+      "label": "Operations, diagnostics and runtime policy (Admin/Maintainer boundary)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/system route-capture subset with every enumerated part mapped; the diagnostics route carries the ATLAS-IR-091 additional gate",
+      "closed_search_statement": "the operations surface of the capture is the complete /api/system HTTP surface plus the email test; every enumerated part is mapped"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:proctoring",
+      "label": "Proctoring (room view, proctor attempts, incident raising)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the proctoring route-capture subset (exam_room.view / attempt.misconduct.mark / exam.proctor_assignment.*) with every enumerated part mapped",
+      "closed_search_statement": "the proctoring HTTP surface of the capture is the complete HTTP proctoring surface; every enumerated part is mapped"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:questions.bank",
+      "label": "Question bank and tags",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "PARTIAL",
+      "mapping_basis": "the /api/questions route-capture subset; every enumerated part mapped to its captured gate"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:runtime.answer-persistence",
+      "label": "Answer save / restore (versioned, idempotent, conflict-detected)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the answer save + restore captured routes; every enumerated part mapped (save shared with golden slice A's operation)",
+      "closed_search_statement": "the answer persistence surface is the save and restore routes; both enumerated parts are mapped"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:runtime.candidate-exam",
+      "label": "Candidate exam runtime (list, take, start, heartbeat, submit)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the candidate runtime route-capture subset (exam.take/attempt.* gates) with every enumerated part mapped to a curated operation; scope stated as the captured candidate-surface routes",
+      "closed_search_statement": "the candidate runtime HTTP surface of the capture is the complete HTTP candidate runtime; every enumerated part is mapped"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:scores.exports",
+      "label": "Scores and exports",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/scores + score-export route-capture subset; every enumerated part mapped",
+      "closed_search_statement": "the scores HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Capability",
+      "id": "capability:users.staff",
+      "label": "Users, staff administration, invitations and role assignments",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the /api/users + /api/role-assignments + /api/invitations route-capture subset; every enumerated part mapped to its captured gate",
+      "closed_search_statement": "the user-management HTTP surface of the capture is the complete surface; every enumerated part is a captured route"
+    },
+    {
+      "kind": "Interface",
+      "id": "interface:internal.deadline-scanner",
+      "label": "Internal deadline scanner entry point",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "seam_kind": "INTERNAL",
+      "contract_identity": "internal: deadline scanner loop",
+      "additional_gates": []
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:audit.export-logs",
+      "label": "Export audit logs (Admin-only projection, not Maintainer-visible)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:audit_log.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:audit.list-actions",
+      "label": "List canonical audit actions",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:audit_log.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:audit.list-import-logs",
+      "label": "List import logs",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:audit_log.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:audit.list-logs",
+      "label": "List audit logs (Admin)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:audit_log.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:deadlines.grant-time",
+      "label": "Grant additional time to an attempt",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.time.grant"
+        },
+        "assignment_required": "TRUE",
+        "assignment_applies_to": ["!Admin"],
+        "scope_ref": "scope:exam.assignment",
+        "resource_anchor_ref": "scope:attempt",
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#buildScopedCapabilityPreHandler (grader seam)",
+        "enforcement_evidence": "ev-scope-matrices",
+        "deny_mapping": "404 anti-enumeration fold"
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:deadlines.scan",
+      "label": "Background deadline scanner (auto-close transitions)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "INTERNAL_SYNTHETIC",
+      "authority_requirement": {
+        "capability_ref": "NONE",
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "scanner-owned transitions follow the engine command state machine"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.test-email",
+      "label": "Send the side-effecting email test",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.email.test"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.update-ops-policy",
+      "label": "Update the runtime ops policy (Admin-only)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.ops.policy.manage"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.view-backups",
+      "label": "View backup evidence (read-only infrastructure view)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.backup.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.view-dashboard",
+      "label": "View the business summary dashboard",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.business_summary.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.view-diagnostics",
+      "label": "View operational diagnostics (Admin+Maintainer) with the Admin-only integrity block",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.diagnostics.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.view-health",
+      "label": "View liveness/health projection",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.health.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.view-ops-policy",
+      "label": "View the runtime ops policy intent",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.ops.policy.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.view-restore-readiness",
+      "label": "View restore readiness",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.restore_readiness.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:ops.view-retention-readiness",
+      "label": "View retention readiness",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:system.restore_readiness.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:proctoring.list-proctor-exams",
+      "label": "List exams the proctor is assigned to",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:exam_room.view"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": ["!Admin"],
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#proctor-exam-gate",
+        "enforcement_evidence": "ev-scope-matrices",
+        "deny_mapping": "404 anti-enumeration fold"
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:proctoring.raise-incident",
+      "label": "Raise a misconduct incident from a proctor view",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.misconduct.mark"
+        },
+        "assignment_required": "TRUE",
+        "assignment_applies_to": ["!Admin"],
+        "scope_ref": "scope:exam.proctor-assignment",
+        "resource_anchor_ref": "scope:attempt",
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#proctor-exam-gate",
+        "enforcement_evidence": "ev-scope-matrices",
+        "deny_mapping": "404 anti-enumeration fold"
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:proctoring.view-exam-attempts",
+      "label": "View the proctor-monitored attempts of one exam",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "RESOURCE_AWARE_CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:exam_room.view"
+        },
+        "assignment_required": "TRUE",
+        "assignment_applies_to": ["!Admin"],
+        "scope_ref": "scope:exam.proctor-assignment",
+        "resource_anchor_ref": "scope:exam",
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#proctor-exam-gate",
+        "enforcement_evidence": "ev-scope-matrices",
+        "deny_mapping": "404 anti-enumeration fold"
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:runtime.attempt-queue",
+      "label": "Enter the admission queue for an exam",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.start"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:runtime.attempt-restore",
+      "label": "Restore a candidate attempt in progress",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.restore"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:runtime.attempt-start",
+      "label": "Start (or dequeue into) an attempt",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.start"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:runtime.attempt-submit",
+      "label": "Submit the attempt (freezes accepted answers)",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.submit"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [
+        "the attempt is open and owned by the requesting candidate"
+      ],
+      "durable_effects": [
+        {
+          "entity_ref": "entity:answer.frozen-submission",
+          "effect_kind": "WRITE",
+          "mutability": "IMMUTABLE"
+        },
+        {
+          "entity_ref": "entity:attempt.terminal-score",
+          "effect_kind": "WRITE",
+          "mutability": "MUTABLE"
+        }
+      ],
+      "durable_effects_state": "ESTABLISHED",
+      "idempotency": "SINGLE_WINNER",
+      "atomicity": "submit + freeze + workset materialization commit in one protected transaction (golden B B-09)"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:runtime.heartbeat",
+      "label": "Send a candidate heartbeat",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.heartbeat.send"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:runtime.list-taking-exams",
+      "label": "List exams available to the candidate",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:exam.take"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:runtime.open-take-view",
+      "label": "Open the take view for an attempt",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.view_own"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [],
+      "durable_effects_state": "UNKNOWN",
+      "idempotency": "UNKNOWN",
+      "atomicity": "single command scope"
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:audit.inspect",
+      "label": "Admin inspects the audit trail",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:audit",
+      "step_count": 0
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:deadlines.manage",
+      "label": "Manage and scan deadlines",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:deadlines.time-grants",
+      "step_count": 0
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:ops.observe",
+      "label": "Operate and observe the deployment",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:operations.diagnostics",
+      "step_count": 0
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:proctoring.monitor",
+      "label": "Proctor monitors a running exam",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:proctoring",
+      "step_count": 0
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:runtime.answer-restore",
+      "label": "Candidate restores an in-progress attempt",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:runtime.answer-persistence",
+      "step_count": 0,
+      "terminal_step_ref": "operation:runtime.attempt-restore"
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:runtime.take-exam",
+      "label": "Candidate takes an exam",
+      "source_refs": [],
+      "authority_refs": [],
+      "review_state": "CURATED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:runtime.candidate-exam",
+      "step_count": 0,
+      "terminal_step_ref": "operation:runtime.attempt-submit"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/candidate/exams",
+      "target": "operation:runtime.list-taking-exams"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:runtime.list-taking-exams",
+      "target": "permission:exam.take"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/candidate/attempts/:attemptId/take",
+      "target": "operation:runtime.open-take-view"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:runtime.open-take-view",
+      "target": "permission:attempt.view_own"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/attempts/:examId/start",
+      "target": "operation:runtime.attempt-start"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:runtime.attempt-start",
+      "target": "permission:attempt.start"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/attempts/:examId/queue",
+      "target": "operation:runtime.attempt-queue"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:runtime.attempt-queue",
+      "target": "permission:attempt.start"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/attempts/:attemptId/heartbeat",
+      "target": "operation:runtime.heartbeat"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:runtime.heartbeat",
+      "target": "permission:attempt.heartbeat.send"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/attempts/:attemptId/submit",
+      "target": "operation:runtime.attempt-submit"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:runtime.attempt-submit",
+      "target": "permission:attempt.submit"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:runtime.take-exam",
+      "target": "operation:runtime.list-taking-exams",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:runtime.take-exam",
+      "target": "operation:runtime.open-take-view",
+      "step_index": 1,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:runtime.take-exam",
+      "target": "operation:runtime.attempt-start",
+      "step_index": 2,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:runtime.take-exam",
+      "target": "operation:runtime.attempt-queue",
+      "step_index": 3,
+      "optionality": "OPTIONAL"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:runtime.take-exam",
+      "target": "operation:runtime.heartbeat",
+      "step_index": 4,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:runtime.take-exam",
+      "target": "operation:runtime.attempt-submit",
+      "step_index": 5,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:runtime.candidate-exam",
+      "target": "authority:exsem"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "capability:runtime.candidate-exam",
+      "target": "work:jnhu76/exam#302",
+      "relation": "DECISION_GATE"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/attempts/:attemptId/restore",
+      "target": "operation:runtime.attempt-restore"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:runtime.attempt-restore",
+      "target": "permission:attempt.restore"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:runtime.answer-restore",
+      "target": "operation:runtime.attempt-restore",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:answer.save-rich",
+      "target": "operation:runtime.attempt-restore",
+      "step_index": 1,
+      "optionality": "OPTIONAL"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:runtime.answer-persistence",
+      "target": "authority:exsem"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/admin/proctor/exams",
+      "target": "operation:proctoring.list-proctor-exams"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:proctoring.list-proctor-exams",
+      "target": "permission:exam_room.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/admin/exams/:examId/proctor/attempts",
+      "target": "operation:proctoring.view-exam-attempts"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:proctoring.view-exam-attempts",
+      "target": "permission:exam_room.view"
+    },
+    {
+      "kind": "scoped_by",
+      "source": "operation:proctoring.view-exam-attempts",
+      "target": "scope:exam.proctor-assignment"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/admin/attempts/:attemptId/proctor-incident",
+      "target": "operation:proctoring.raise-incident"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:proctoring.raise-incident",
+      "target": "permission:attempt.misconduct.mark"
+    },
+    {
+      "kind": "scoped_by",
+      "source": "operation:proctoring.raise-incident",
+      "target": "scope:exam.proctor-assignment"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:proctoring.monitor",
+      "target": "operation:proctoring.list-proctor-exams",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:proctoring.monitor",
+      "target": "operation:proctoring.view-exam-attempts",
+      "step_index": 1,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:proctoring.monitor",
+      "target": "operation:proctoring.raise-incident",
+      "step_index": 2,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:proctoring",
+      "target": "authority:authorization"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/admin/audit-logs",
+      "target": "operation:audit.list-logs"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:audit.list-logs",
+      "target": "permission:audit_log.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/admin/audit-logs/export",
+      "target": "operation:audit.export-logs"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:audit.export-logs",
+      "target": "permission:audit_log.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/admin/audit-log/actions",
+      "target": "operation:audit.list-actions"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:audit.list-actions",
+      "target": "permission:audit_log.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/admin/import-logs",
+      "target": "operation:audit.list-import-logs"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:audit.list-import-logs",
+      "target": "permission:audit_log.view"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:audit.inspect",
+      "target": "operation:audit.list-logs",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:audit.inspect",
+      "target": "operation:audit.export-logs",
+      "step_index": 1,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:audit.inspect",
+      "target": "operation:audit.list-actions",
+      "step_index": 2,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:audit.inspect",
+      "target": "operation:audit.list-import-logs",
+      "step_index": 3,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:audit",
+      "target": "authority:adr-017"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "capability:audit",
+      "target": "work:jnhu76/exam#613",
+      "relation": "DELIVERS"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/system/health",
+      "target": "operation:ops.view-health"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.view-health",
+      "target": "permission:system.health.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/system/diagnostics",
+      "target": "operation:ops.view-diagnostics"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.view-diagnostics",
+      "target": "permission:system.diagnostics.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/system/backups",
+      "target": "operation:ops.view-backups"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.view-backups",
+      "target": "permission:system.backup.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/system/restore-readiness",
+      "target": "operation:ops.view-restore-readiness"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.view-restore-readiness",
+      "target": "permission:system.restore_readiness.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/system/retention-readiness",
+      "target": "operation:ops.view-retention-readiness"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.view-retention-readiness",
+      "target": "permission:system.restore_readiness.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/system/dashboard",
+      "target": "operation:ops.view-dashboard"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.view-dashboard",
+      "target": "permission:system.business_summary.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.GET./api/system/ops-policy",
+      "target": "operation:ops.view-ops-policy"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.view-ops-policy",
+      "target": "permission:system.ops.policy.view"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.PUT./api/system/ops-policy",
+      "target": "operation:ops.update-ops-policy"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.update-ops-policy",
+      "target": "permission:system.ops.policy.manage"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/email/test",
+      "target": "operation:ops.test-email"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:ops.test-email",
+      "target": "permission:system.email.test"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.view-health",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.view-diagnostics",
+      "step_index": 1,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.view-backups",
+      "step_index": 2,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.view-restore-readiness",
+      "step_index": 3,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.view-retention-readiness",
+      "step_index": 4,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.view-dashboard",
+      "step_index": 5,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.view-ops-policy",
+      "step_index": 6,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.update-ops-policy",
+      "step_index": 7,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:ops.observe",
+      "target": "operation:ops.test-email",
+      "step_index": 8,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:operations.diagnostics",
+      "target": "authority:adr-017"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/admin/attempts/:attemptId/time-grants",
+      "target": "operation:deadlines.grant-time"
+    },
+    {
+      "kind": "requires_permission",
+      "source": "operation:deadlines.grant-time",
+      "target": "permission:attempt.time.grant"
+    },
+    {
+      "kind": "scoped_by",
+      "source": "operation:deadlines.grant-time",
+      "target": "scope:exam.assignment"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:internal.deadline-scanner",
+      "target": "operation:deadlines.scan"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:deadlines.manage",
+      "target": "operation:deadlines.grant-time",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:deadlines.manage",
+      "target": "operation:deadlines.scan",
+      "step_index": 1,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:deadlines.time-grants",
+      "target": "authority:exsem"
+    }
+  ],
+  "facts": [],
+  "evidence": [],
+  "claims": [],
+  "conflicts": []
+}

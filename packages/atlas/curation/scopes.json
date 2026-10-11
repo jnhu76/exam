@@ -1,0 +1,119 @@
+{
+  "description": "Carrier-bearing Scope nodes and the OUTSIDE_APPLICATION_RBAC host scope (ir §4.8, golden B/C). Catalog scope DIMENSIONS (system/organization/course/...) are extracted from @exam/authz; this file adds the assignment carriers whose existence is an enforcement claim with evidence, plus the host-infrastructure scope that is structurally outside application RBAC (ATLAS-IR-031/031a).",
+  "nodes": [
+    {
+      "kind": "Scope",
+      "id": "scope:exam.assignment",
+      "label": "Grader→Exam active assignment",
+      "source_refs": [],
+      "authority_refs": ["authority:authorization"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "exam",
+      "rbac_participation": "APPLICATION_SCOPE",
+      "resource_domain": "exam",
+      "assignment_carrier": {
+        "entity_ref": "entity:assignment.grader-exam",
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#buildScopedCapabilityPreHandler (grader seam; wired at apps/api/src/plugins/authz.ts)",
+        "evidence": "ev-grader-assignment-seam"
+      },
+      "list_filtering": "TRUE"
+    },
+    {
+      "kind": "Scope",
+      "id": "scope:course.assignment",
+      "label": "Teacher→Course active assignment",
+      "source_refs": [],
+      "authority_refs": ["authority:authorization"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "course",
+      "rbac_participation": "APPLICATION_SCOPE",
+      "resource_domain": "course",
+      "assignment_carrier": {
+        "entity_ref": "entity:assignment.teacher-course",
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#buildScopedCapabilityPreHandler (teacher-course seam)",
+        "evidence": "ev-teacher-assignment-seam"
+      },
+      "list_filtering": "TRUE"
+    },
+    {
+      "kind": "Scope",
+      "id": "scope:exam.proctor-assignment",
+      "label": "Proctor→Exam active assignment",
+      "source_refs": [],
+      "authority_refs": ["authority:authorization"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "exam",
+      "rbac_participation": "APPLICATION_SCOPE",
+      "resource_domain": "exam",
+      "assignment_carrier": {
+        "entity_ref": "entity:assignment.proctor-exam",
+        "enforcement_seam": "apps/api/src/authz/scopedCapability.ts#proctor-exam-gate",
+        "evidence": "ev-proctor-assignment-seam"
+      },
+      "list_filtering": "TRUE"
+    },
+    {
+      "kind": "Scope",
+      "id": "scope:host-infrastructure",
+      "label": "Host / infrastructure authority (outside Exam RBAC)",
+      "source_refs": [],
+      "authority_refs": ["authority:adr-017"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "host-infrastructure",
+      "rbac_participation": "OUTSIDE_APPLICATION_RBAC",
+      "resource_domain": "host infrastructure",
+      "assignment_carrier": "NONE",
+      "list_filtering": "UNKNOWN",
+      "outside_authority": {
+        "holder_identity": "HOST_CLI_ACCESS",
+        "granted_by": "host/CLI access, independently of any Exam account (ADR-017)",
+        "governed_by": "authority:adr-017",
+        "resources": [
+          "Docker/Compose lifecycle",
+          "PostgreSQL",
+          "WAL",
+          "backup destination",
+          "secrets",
+          "restore/PITR",
+          "service lifecycle",
+          "filesystem"
+        ],
+        "excluded_from": ["permission", "role_preset", "route"]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "kind": "governed_by",
+      "source": "scope:host-infrastructure",
+      "target": "authority:adr-017"
+    },
+    {
+      "kind": "governed_by",
+      "source": "scope:exam.assignment",
+      "target": "authority:authorization"
+    },
+    {
+      "kind": "governed_by",
+      "source": "scope:course.assignment",
+      "target": "authority:authorization"
+    },
+    {
+      "kind": "governed_by",
+      "source": "scope:exam.proctor-assignment",
+      "target": "authority:authorization"
+    }
+  ]
+}

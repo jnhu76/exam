@@ -1,0 +1,974 @@
+{
+  "description": "Golden slice A — Rich Subjective (falsification fixture, R0 base re-anchored to SOURCE_SHA). Required outcome: #679/#301 CLOSED does NOT imply every discussed facet delivered (A-16 rejected) while delivered core = SUPPORTED and residual facets hold simultaneously; roll-up MIXED (A-11), never flattened.",
+  "nodes": [
+    {
+      "kind": "Capability",
+      "id": "capability:content.rich-subjective",
+      "label": "Rich subjective content (authoring, saving, rendering, re-editing)",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract", "authority:adr-019"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "UNKNOWN",
+      "support_boundary": "B4",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "the rich contract's feature inventory and V2-extension notes (delivered core; attachments), OPEN #756's residual list (typed shortcuts, visual/source sync), and the candidate-editor design doc's recorded rejections (char count) — golden slice A's named enumeration basis at the R0 base, re-anchored to SOURCE_SHA",
+      "closed_search_statement": "no known non-supported part is unmapped: every facet enumerated by the named basis carries a sanctioned mapping (A-04..A-10)",
+      "external_identity": "work:jnhu76/exam#669"
+    },
+    {
+      "kind": "Facet",
+      "id": "facet:content.rich.formula",
+      "label": "Formula (inline + block) authoring/save/render/re-edit",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "SUPPORTED",
+      "support_boundary": "B4",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "rich contract feature inventory + #679/#756 residual records",
+      "closed_search_statement": "The frozen rich-content contract's feature inventory (§2) enumerates the closed block/inline grammar; formula support is one enumerated member with delivered authoring/save/render paths — no unmapped facet variant exists inside the grammar."
+    },
+    {
+      "kind": "Facet",
+      "id": "facet:content.rich.table",
+      "label": "Table authoring/save/render",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "SUPPORTED",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "rich contract feature inventory + #679/#756 residual records",
+      "closed_search_statement": "Tables are an enumerated member of the frozen closed block grammar (cells = paragraphs only); the contract names no other table variant, so no unmapped table part exists. Declared at B3 per A-C6: component-level tests cover the boundary; browser E2E does not."
+    },
+    {
+      "kind": "Facet",
+      "id": "facet:content.rich.code",
+      "label": "Code-block authoring/save/render",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "SUPPORTED",
+      "support_boundary": "B3",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "rich contract feature inventory + #679/#756 residual records",
+      "closed_search_statement": "Code blocks are an enumerated member of the frozen closed block grammar; the contract names no other code variant, so no unmapped code part exists. Declared at B3 per A-C6: component-level tests cover the boundary; browser E2E does not."
+    },
+    {
+      "kind": "Facet",
+      "id": "facet:content.rich.typed-shortcuts",
+      "label": "Global formula-entry shortcut + $…$ typed delimiters",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "NOT_SUPPORTED",
+      "support_boundary": "B5",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "rich contract feature inventory + #679/#756 residual records"
+    },
+    {
+      "kind": "Facet",
+      "id": "facet:content.rich.visual-source-sync",
+      "label": "Bidirectional expert-source ↔ visual-field synchronization",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "DEFERRED",
+      "support_boundary": "B5",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "rich contract feature inventory + #679/#756 residual records"
+    },
+    {
+      "kind": "Facet",
+      "id": "facet:content.rich.char-count",
+      "label": "Character count in the candidate editor",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "NOT_SUPPORTED",
+      "support_boundary": "B5",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "rich contract feature inventory + #679/#756 residual records"
+    },
+    {
+      "kind": "Facet",
+      "id": "facet:content.rich.attachments",
+      "label": "Image / file attachment nodes",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "support_summary": "NOT_SUPPORTED",
+      "support_boundary": "B5",
+      "mapping_state": "MAPPED",
+      "mapping_basis": "rich contract feature inventory + #679/#756 residual records"
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:answer.save-rich",
+      "label": "Candidate writes a rich answer draft",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:content.rich-subjective",
+      "step_count": 0,
+      "terminal_step_ref": "operation:answer.save-answer"
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:answer.render-rich",
+      "label": "A stored document is rendered (take / result / grading / preview)",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:content.rich-subjective",
+      "step_count": 0
+    },
+    {
+      "kind": "Workflow",
+      "id": "workflow:content.author-rich",
+      "label": "Staff authors rich question content",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "capability_ref": "capability:content.rich-subjective",
+      "step_count": 0,
+      "terminal_step_ref": "operation:content.canonicalize"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:answer.save-answer",
+      "label": "Save candidate answer (rich-capable)",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "CAPABILITY",
+      "authority_requirement": {
+        "capability_ref": {
+          "id": "permission:attempt.answer.save"
+        },
+        "assignment_required": "FALSE",
+        "assignment_applies_to": [],
+        "deny_mapping": "401/403 canonical deny (candidate own-attempt context gate)"
+      },
+      "state_prerequisites": [
+        "the attempt is open and owned by the requesting candidate (candidate context)"
+      ],
+      "durable_effects": [
+        {
+          "entity_ref": "entity:content.document-v1",
+          "effect_kind": "WRITE",
+          "mutability": "MUTABLE"
+        }
+      ],
+      "durable_effects_state": "ESTABLISHED",
+      "idempotency": "IDEMPOTENT",
+      "atomicity": "answer payload + attempt progress commit in one protected transaction"
+    },
+    {
+      "kind": "Operation",
+      "id": "operation:content.canonicalize",
+      "label": "Canonicalize + validate a document at a durable boundary",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "gate_kind": "INTERNAL_SYNTHETIC",
+      "authority_requirement": {
+        "capability_ref": "NONE",
+        "assignment_required": "FALSE",
+        "assignment_applies_to": []
+      },
+      "state_prerequisites": [],
+      "durable_effects": [
+        {
+          "entity_ref": "entity:content.document-v1",
+          "effect_kind": "MATERIALIZE",
+          "mutability": "APPEND_ONLY"
+        }
+      ],
+      "durable_effects_state": "ESTABLISHED",
+      "idempotency": "IDEMPOTENT",
+      "atomicity": "runs inside the accepting write's transaction"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "facet:content.rich.formula"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "facet:content.rich.table"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "facet:content.rich.code"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "facet:content.rich.typed-shortcuts"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "facet:content.rich.visual-source-sync"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "facet:content.rich.char-count"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "facet:content.rich.attachments"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "workflow:answer.save-rich"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "workflow:answer.render-rich"
+    },
+    {
+      "kind": "contains",
+      "source": "capability:content.rich-subjective",
+      "target": "workflow:content.author-rich"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:answer.save-rich",
+      "target": "operation:answer.save-answer",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:content.author-rich",
+      "target": "operation:content.canonicalize",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "performs",
+      "source": "workflow:answer.render-rich",
+      "target": "operation:content.canonicalize",
+      "step_index": 0,
+      "optionality": "REQUIRED"
+    },
+    {
+      "kind": "exposes",
+      "source": "interface:http.POST./api/attempts/:attemptId/answers/:questionId",
+      "target": "operation:answer.save-answer"
+    },
+    {
+      "kind": "writes",
+      "source": "operation:answer.save-answer",
+      "target": "entity:content.document-v1",
+      "effect_kind": "WRITE",
+      "mutability": "MUTABLE"
+    },
+    {
+      "kind": "writes",
+      "source": "operation:content.canonicalize",
+      "target": "entity:content.document-v1",
+      "effect_kind": "MATERIALIZE",
+      "mutability": "APPEND_ONLY"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:content.rich-subjective",
+      "target": "authority:rich-contract"
+    },
+    {
+      "kind": "governed_by",
+      "source": "capability:content.rich-subjective",
+      "target": "authority:adr-019"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "capability:content.rich-subjective",
+      "target": "work:jnhu76/exam#669",
+      "relation": "DELIVERS"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "facet:content.rich.formula",
+      "target": "work:jnhu76/exam#679",
+      "relation": "DELIVERS"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "facet:content.rich.typed-shortcuts",
+      "target": "work:jnhu76/exam#756",
+      "relation": "RESIDUAL"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "facet:content.rich.visual-source-sync",
+      "target": "work:jnhu76/exam#756",
+      "relation": "RESIDUAL"
+    },
+    {
+      "kind": "tracked_by",
+      "source": "facet:content.rich.attachments",
+      "target": "work:jnhu76/exam#301",
+      "relation": "RESIDUAL"
+    }
+  ],
+  "facts": [],
+  "evidence": [
+    {
+      "evidence_id": "ev-rich-grammar",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the ContentDocumentV1 grammar is closed and enumerable (closed block/inline/mark unions)",
+      "does_not_prove": ["that any surface uses it"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/domain/src/content/contentDocument.ts#ContentDocumentV1"
+    },
+    {
+      "evidence_id": "ev-rich-wire-strict",
+      "evidence_kind": "CONTRACT",
+      "proves": "wire-level strictness is required (ContentDocumentV1Schema .strict())",
+      "does_not_prove": ["runtime rejection behaviour"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B1"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/contracts/src/contentDocument.ts#ContentDocumentV1Schema"
+    },
+    {
+      "evidence_id": "ev-rich-canonicalize-seam",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "a canonicalization seam exists at the durable boundary",
+      "does_not_prove": ["that it is applied at every durable boundary"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/contracts/src/contentDocument.ts#canonicalizeContentDocument"
+    },
+    {
+      "evidence_id": "ev-rich-closure-reject",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the save path re-validates the canonical value before durable acceptance and rejects non-canonical documents with INVALID_ANSWER",
+      "does_not_prove": ["that the rejection is reachable over the wire"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/lib/validateAnswerForQuestion.ts#validateAnswerForQuestion"
+    },
+    {
+      "evidence_id": "ev-rich-answer-route",
+      "evidence_kind": "STATIC_SOURCE",
+      "proves": "the answer-save interface is registered on the candidate surface",
+      "does_not_prove": [
+        "composed-app exposure (the whole-app capture asserts the split, not this route's metadata); scope/idempotency behaviour"
+      ],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/attempts.candidate.ts#registerCandidateAttemptRoutes"
+    },
+    {
+      "evidence_id": "ev-rich-closure-wire",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the closure rejection is reachable through the HTTP composition and no durable write is accepted for the merge-class seed",
+      "does_not_prove": [
+        "browser behaviour; the set of all non-canonical classes"
+      ],
+      "strength": "BEHAVIOURAL_COMPOSITION",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/routes/answerRichClosure.test.ts#rejects the merge-class seed at the wire with INVALID_ANSWER"
+    },
+    {
+      "evidence_id": "ev-rich-validate-pure",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "the pure validation decision rejects the merge-class seed",
+      "does_not_prove": ["HTTP surface, persistence"],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B2"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/api/src/lib/validateAnswerForQuestion.test.ts#rejects the merge-class seed before durable acceptance (#669/#686)"
+    },
+    {
+      "evidence_id": "ev-rich-browser-formula",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "the browser composition contenteditable → adapter → save → reload → re-edit survives (a browser-only mechanism)",
+      "does_not_prove": ["table/code node families; staff authoring"],
+      "strength": "BEHAVIOURAL_BROWSER",
+      "boundary_coverage": ["B4"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/e2e/e2e/rich-content.spec.ts",
+      "mechanism": "real browser: insert → save → reload → re-edit"
+    },
+    {
+      "evidence_id": "ev-rich-browser-boundaries",
+      "evidence_kind": "TEST_INTEGRATION",
+      "proves": "editor interaction boundaries in a real browser (first-keystroke survival, list Tab containment, persisted-formula re-edit)",
+      "does_not_prove": ["anything outside the exercised interactions"],
+      "strength": "BEHAVIOURAL_BROWSER",
+      "boundary_coverage": ["B4"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/e2e/e2e/rich-editor-input-boundaries.spec.ts",
+      "mechanism": "real browser interaction boundaries"
+    },
+    {
+      "evidence_id": "ev-rich-components",
+      "evidence_kind": "TEST_SEMANTIC",
+      "proves": "read-classification and render-path decisions incl. the math trust boundary (component/jsdom)",
+      "does_not_prove": [
+        "real layout, real KaTeX rendering fidelity, browser selection behaviour"
+      ],
+      "strength": "BEHAVIOURAL_PURE",
+      "boundary_coverage": ["B3"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "apps/web/src/components/shared/content/contentAdapter.test.ts"
+    },
+    {
+      "evidence_id": "ev-rich-charcount-authority",
+      "evidence_kind": "CONTRACT",
+      "proves": "the char-count exclusion and its rationale are recorded by the design authority",
+      "does_not_prove": [
+        "what any other surface displays; whether a future counting semantic will be adopted"
+      ],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/design/candidate-rich-editor-ux.md#Character count: NOT shipped"
+    },
+    {
+      "evidence_id": "ev-rich-contract-grammar",
+      "evidence_kind": "CONTRACT",
+      "proves": "the frozen grammar and the B-F01 seam's declared status",
+      "does_not_prove": [
+        "that the seam's declared status matches as-built (A-C3 divergence retained)"
+      ],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/architecture/rich-content-semantic-contract.md#Known closure failure"
+    },
+    {
+      "evidence_id": "ev-rich-756-residuals",
+      "evidence_kind": "HISTORICAL_WORK_ITEM",
+      "proves": "what is explicitly still outstanding and un-adopted (the four named residuals)",
+      "does_not_prove": [
+        "current implementation of those residuals (they are absent)"
+      ],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "work:jnhu76/exam#756 (external, captured 2026-10-11)"
+    },
+    {
+      "evidence_id": "ev-rich-679-exclusions",
+      "evidence_kind": "HISTORICAL_WORK_ITEM",
+      "proves": "the author's own exclusion of shortcuts/sync (not adopted, not claimed as implemented)",
+      "does_not_prove": ["anything about delivered code"],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "work:jnhu76/exam#679 (external, captured 2026-10-11)"
+    },
+    {
+      "evidence_id": "ev-rich-contract-attachment-absence",
+      "evidence_kind": "CONTRACT",
+      "proves": "attachments are grammatically impossible in V1 (image/attachment nodes absent pending an Asset authority)",
+      "does_not_prove": ["that no other surface advertises attachments"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/contracts/src/contentDocument.ts#ContentDocumentV1Schema"
+    },
+    {
+      "evidence_id": "ev-rich-typed-shortcut-nonadoption",
+      "evidence_kind": "HISTORICAL_WORK_ITEM",
+      "proves": "the owner record states global shortcuts and typed delimiters were not adopted",
+      "does_not_prove": [
+        "that no other path adopts them (a UI-inventory question this slice does not answer)"
+      ],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "work:jnhu76/exam#679 header; work:jnhu76/exam#756 residual list",
+      "negative_evidence_basis": "CURRENT_AUTHORITY_REJECTION"
+    },
+    {
+      "evidence_id": "ev-rich-charcount-absence",
+      "evidence_kind": "CONTRACT",
+      "proves": "character count deliberately not shipped: no ContentDocument-independent counting semantic exists and no product limit depends on one",
+      "does_not_prove": ["whether a future owner adopts one"],
+      "strength": "OWNER_JUDGEMENT",
+      "boundary_coverage": ["B5"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "docs/design/candidate-rich-editor-ux.md#No ContentDocument-independent counting semantic",
+      "negative_evidence_basis": "CURRENT_AUTHORITY_REJECTION"
+    },
+    {
+      "evidence_id": "ev-rich-attachment-closed-contract",
+      "evidence_kind": "CONTRACT",
+      "proves": "the V1 closed grammar contains no attachment node family (contract-declared absence)",
+      "does_not_prove": ["UI advertising outside the document model"],
+      "strength": "TOKEN_EXISTENCE",
+      "boundary_coverage": ["B0"],
+      "snapshot": "SOURCE_SHA",
+      "locator": "packages/contracts/src/contentDocument.ts#ContentBlockSchema",
+      "negative_evidence_basis": "CURRENT_AUTHORITY_REJECTION"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "A-01",
+      "subject": "capability:content.rich-subjective",
+      "predicate": "activation_support",
+      "value": "SUPPORTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "design": "ACCEPTED",
+        "implementation": "PRESENT",
+        "verification": "PASS",
+        "activation_support": "SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:rich-contract"
+      },
+      "supporting_evidence": [
+        "ev-rich-grammar",
+        "ev-rich-wire-strict",
+        "ev-rich-closure-reject",
+        "ev-rich-closure-wire",
+        "ev-rich-browser-formula",
+        "ev-rich-browser-boundaries",
+        "ev-rich-answer-route"
+      ],
+      "challenging_evidence": ["ev-rich-contract-grammar"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B4"
+    },
+    {
+      "claim_id": "A-02",
+      "subject": "capability:content.rich-subjective",
+      "predicate": "grammar_closedness",
+      "value": "CLOSED_VOCABULARY_REJECTS_UNKNOWN",
+      "claim_kind": "AUTHORITY_STATEMENT",
+      "axes": {
+        "design": "ACCEPTED",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:rich-contract"
+      },
+      "supporting_evidence": ["ev-rich-grammar", "ev-rich-wire-strict"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "A-03",
+      "subject": "capability:content.rich-subjective",
+      "predicate": "durable_canonicalization",
+      "value": "ENFORCED_AT_DURABLE_BOUNDARY",
+      "claim_kind": "DURABLE_EFFECT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS"
+      },
+      "authority_owner": {
+        "id": "authority:rich-contract"
+      },
+      "supporting_evidence": [
+        "ev-rich-canonicalize-seam",
+        "ev-rich-closure-reject",
+        "ev-rich-closure-wire"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B2"
+    },
+    {
+      "claim_id": "A-04",
+      "subject": "facet:content.rich.formula",
+      "predicate": "activation_support",
+      "value": "SUPPORTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS",
+        "activation_support": "SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:rich-contract"
+      },
+      "supporting_evidence": ["ev-rich-browser-formula", "ev-rich-components"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B4"
+    },
+    {
+      "claim_id": "A-05",
+      "subject": "facet:content.rich.table",
+      "predicate": "activation_support",
+      "value": "SUPPORTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS",
+        "activation_support": "SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:rich-contract"
+      },
+      "supporting_evidence": ["ev-rich-components"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "A-06",
+      "subject": "facet:content.rich.code",
+      "predicate": "activation_support",
+      "value": "SUPPORTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "implementation": "PRESENT",
+        "verification": "PASS",
+        "activation_support": "SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:rich-contract"
+      },
+      "supporting_evidence": ["ev-rich-components"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B3"
+    },
+    {
+      "claim_id": "A-07",
+      "subject": "facet:content.rich.typed-shortcuts",
+      "predicate": "activation_support",
+      "value": "NOT_SUPPORTED",
+      "claim_kind": "RESIDUAL_OR_EXCLUSION",
+      "axes": {
+        "design": "REJECTED",
+        "implementation": "ABSENT",
+        "activation_support": "NOT_SUPPORTED"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-rich-typed-shortcut-nonadoption"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "A-08",
+      "subject": "facet:content.rich.visual-source-sync",
+      "predicate": "activation_support",
+      "value": "DEFERRED",
+      "claim_kind": "RESIDUAL_OR_EXCLUSION",
+      "axes": {
+        "design": "ACCEPTED",
+        "implementation": "PARTIAL",
+        "activation_support": "DEFERRED"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-rich-756-residuals"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#756"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "A-09",
+      "subject": "facet:content.rich.char-count",
+      "predicate": "activation_support",
+      "value": "NOT_SUPPORTED",
+      "claim_kind": "RESIDUAL_OR_EXCLUSION",
+      "axes": {
+        "design": "REJECTED",
+        "implementation": "ABSENT",
+        "activation_support": "NOT_SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:candidate-editor-ux"
+      },
+      "supporting_evidence": ["ev-rich-charcount-absence"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "A-10",
+      "subject": "facet:content.rich.attachments",
+      "predicate": "activation_support",
+      "value": "NOT_SUPPORTED",
+      "claim_kind": "RESIDUAL_OR_EXCLUSION",
+      "axes": {
+        "design": "PROPOSED",
+        "implementation": "ABSENT",
+        "activation_support": "NOT_SUPPORTED"
+      },
+      "authority_owner": {
+        "id": "authority:rich-contract"
+      },
+      "supporting_evidence": [
+        "ev-rich-attachment-closed-contract",
+        "ev-rich-contract-attachment-absence"
+      ],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B5"
+    },
+    {
+      "claim_id": "A-11",
+      "subject": "capability:content.rich-subjective",
+      "predicate": "support_summary",
+      "value": "MIXED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "verification": "PASS"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA",
+      "boundary": "B4"
+    },
+    {
+      "claim_id": "A-12",
+      "subject": "work:jnhu76/exam#301",
+      "predicate": "closure",
+      "value": "CLOSED_PARTIAL",
+      "claim_kind": "WORK_STATUS",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-rich-756-residuals"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "A-13",
+      "subject": "work:jnhu76/exam#679",
+      "predicate": "closure",
+      "value": "CLOSED_PARTIAL",
+      "claim_kind": "WORK_STATUS",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-rich-679-exclusions"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "A-14",
+      "subject": "work:jnhu76/exam#756",
+      "predicate": "state",
+      "value": "OPEN_OWNS_FOUR_RESIDUALS",
+      "claim_kind": "WORK_STATUS",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": ["ev-rich-756-residuals"],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#756"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "A-15",
+      "subject": "work:jnhu76/exam#669",
+      "predicate": "closure",
+      "value": "CLOSED_IMPLEMENTED_UMBRELLA_STAGES",
+      "claim_kind": "WORK_STATUS",
+      "axes": {},
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [],
+      "challenging_evidence": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    },
+    {
+      "claim_id": "A-16",
+      "subject": "capability:content.rich-subjective",
+      "predicate": "work_item_closure_implies_delivery",
+      "value": "REJECTED",
+      "claim_kind": "CAPABILITY_SUPPORT",
+      "axes": {
+        "verification": "INSUFFICIENT"
+      },
+      "authority_owner": "UNKNOWN",
+      "supporting_evidence": [],
+      "challenging_evidence": [
+        "ev-rich-679-exclusions",
+        "ev-rich-756-residuals"
+      ],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "source_snapshot": "SOURCE_SHA"
+    }
+  ],
+  "conflicts": [
+    {
+      "conflict_id": "A-K1",
+      "kind": "DOCUMENTATION_DISSONANCE",
+      "proposition": "the rich contract §4 declares the B-F01 merge-class seam NOT FIXED while as-built code rejects the merge class at the closure seam",
+      "parties": [
+        {
+          "party": "authority:rich-contract",
+          "statement": "§4: NOT FIXED by this Phase-B authority pass",
+          "source_refs": [
+            "docs/architecture/rich-content-semantic-contract.md#§4"
+          ]
+        },
+        {
+          "party": "as-built",
+          "statement": "validateAnswerForQuestion rejects the merge class; answerRichClosure.test proves it at the wire",
+          "source_refs": [
+            "apps/api/src/lib/validateAnswerForQuestion.ts#validateAnswerForQuestion",
+            "apps/api/src/routes/answerRichClosure.test.ts#rejects the merge-class seed at the wire with INVALID_ANSWER"
+          ]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "work:jnhu76/exam#762",
+        "lift_condition": "contract-owner classification of the seam's state (#762 O-06)"
+      },
+      "source_refs": [
+        "docs/architecture/rich-content-semantic-contract.md#§4",
+        "apps/api/src/lib/validateAnswerForQuestion.ts#validateAnswerForQuestion"
+      ]
+    },
+    {
+      "conflict_id": "A-K2",
+      "kind": "TEMPORAL_CONFLICT",
+      "proposition": "historical status-document closeout wording vs the current browser-test surface",
+      "parties": [
+        {
+          "party": "docs/status/implementation-status.md",
+          "statement": "closeout wording reads as broad acceptance",
+          "source_refs": [
+            "docs/status/implementation-status.md#ADR-019 closeout"
+          ]
+        },
+        {
+          "party": "current test surface",
+          "statement": "the browser specs were later removed; the wording predates the current surface",
+          "source_refs": ["apps/e2e/e2e"]
+        }
+      ],
+      "resolution_status": "UNRESOLVED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "work:jnhu76/exam#762",
+        "lift_condition": "the status-document owner's wording decision (#762 O-10)"
+      },
+      "source_refs": ["docs/status/implementation-status.md"]
+    }
+  ]
+}

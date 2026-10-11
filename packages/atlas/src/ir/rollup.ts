@@ -34,7 +34,7 @@ export interface RollupPart {
         evidenceAdequateForDeclaredBoundary: boolean;
       }
     | undefined;
-  /** design ∈ {ACCEPTED, PROPOSED} — accepted (or owner-proposed) intent. */
+  /** design = ACCEPTED — a proposal alone does not own a future. */
   hasAcceptedDesign: boolean;
   /** A work item owning the future (DEFERRED carrier). */
   owningWorkItem?: string | undefined;

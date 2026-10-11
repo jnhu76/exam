@@ -1,0 +1,831 @@
+{
+  "description": "Work items referenced by the golden slices and the inventory. closure_semantics per ATLAS-SEM-050/-051/-052: only scopes the items' own records name; anything not re-established is CLOSED_UNKNOWN/OPEN rather than guessed. External revisions come from curation/external-revisions.json.",
+  "nodes": [
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#286",
+      "label": "[RBAC] Enforce Teacher@Course scoped authority (F-04)",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/286",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-08-28",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#286",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-08-28",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[RBAC] Enforce Teacher@Course scoped authority (F-04)",
+      "requested_scope": "Teacher@Course scoped authority (F-04)",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": ["scope:course.assignment"],
+      "related_claims": ["B-15", "C-05"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#291",
+      "label": "Additional exam timing modes — Phase A deadline/untimed; Phase B timed_sync",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/291",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-09-04",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#291",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-09-04",
+        "observed_at": "2026-10-11"
+      },
+      "title": "Additional exam timing modes — Phase A deadline/untimed; Phase B timed_sync",
+      "requested_scope": "Additional exam timing modes — Phase A deadline/untimed; Phase B timed_sync (a semantic freeze, not an activation)",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": ["policy:exam.timingMode/timed_sync"],
+      "related_claims": ["D-03", "D-07"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#292",
+      "label": "Operational admission queue (durable requireQueue runtime)",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/292",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-09-12",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#292",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-09-12",
+        "observed_at": "2026-10-11"
+      },
+      "title": "Operational admission queue (durable requireQueue runtime)",
+      "requested_scope": "Operational admission queue (durable requireQueue runtime)",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": [],
+      "related_claims": []
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#293",
+      "label": "Controlled / Strict exam readiness (umbrella tracker)",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/293",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "OPEN",
+            "observed_updated_at": "2026-10-08",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#293"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#293",
+      "external_revision": {
+        "observed_state": "OPEN",
+        "observed_updated_at": "2026-10-08",
+        "observed_at": "2026-10-11"
+      },
+      "title": "Controlled / Strict exam readiness (umbrella tracker)",
+      "requested_scope": "Controlled / Strict exam readiness (umbrella tracker)",
+      "closure_semantics": "OPEN",
+      "state": "OPEN",
+      "owns": [],
+      "related_claims": []
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#295",
+      "label": "[Decision Gate] Managed desktop / lockdown runtime adoption",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/295",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "OPEN",
+            "observed_updated_at": "2026-09-05",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#295"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#295",
+      "external_revision": {
+        "observed_state": "OPEN",
+        "observed_updated_at": "2026-09-05",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Decision Gate] Managed desktop / lockdown runtime adoption",
+      "requested_scope": "Managed desktop / lockdown runtime adoption (decision gate)",
+      "closure_semantics": "OPEN",
+      "state": "OPEN",
+      "owns": ["policy:exam.controlFlags/requireLockdown"],
+      "related_claims": ["D-CF"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#296",
+      "label": "Grader@Exam scoped authority and assignment flow (M11 Grader slice)",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/296",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-08-28",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#296",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-08-28",
+        "observed_at": "2026-10-11"
+      },
+      "title": "Grader@Exam scoped authority and assignment flow (M11 Grader slice)",
+      "requested_scope": "Grader@Exam scoped authority and assignment flow (M11 Grader slice)",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": ["scope:exam.assignment"],
+      "related_claims": ["B-04", "B-05", "C-04"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#301",
+      "label": "Content/WYSIWYG V1 — Plain/Rich content model, math/table/code, asset-ready, performance-first",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/301",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-08-31",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#301",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-08-31",
+        "observed_at": "2026-10-11"
+      },
+      "title": "Content/WYSIWYG V1 — Plain/Rich content model, math/table/code, asset-ready, performance-first",
+      "requested_scope": "Content/WYSIWYG V1 — plain/rich content model, math/table/code; body defers image/asset work pending an Asset authority",
+      "closure_semantics": "CLOSED_PARTIAL",
+      "state": "CLOSED",
+      "owns": ["capability:content.rich-subjective"],
+      "related_claims": ["A-10", "A-12"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#302",
+      "label": "Generic final-answer submit barrier (ADR-008 Option D)",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/302",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-08-27",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#302",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-08-27",
+        "observed_at": "2026-10-11"
+      },
+      "title": "Generic final-answer submit barrier (ADR-008 Option D)",
+      "requested_scope": "Generic final-answer submit barrier (ADR-008 Option D) — superseded by the pre-submit flush plus the locked submit/freeze path",
+      "closure_semantics": "CLOSED_SUPERSEDED",
+      "state": "CLOSED",
+      "owns": [],
+      "related_claims": ["B-09"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#324",
+      "label": "P1: unify candidate result-visibility projection; close manual publish score leaks",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/324",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-08-25",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#324",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-08-25",
+        "observed_at": "2026-10-11"
+      },
+      "title": "P1: unify candidate result-visibility projection; close manual publish score leaks",
+      "requested_scope": "Unify candidate result-visibility projection; close manual-publish score leaks",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": ["entity:exam.result-publication"],
+      "related_claims": ["B-14", "B-16"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#542",
+      "label": "[Hardening][A1] Core persisted-state contract — DB CHECKs + phantom grading state",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/542",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-09-14",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#542",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-09-14",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Hardening][A1] Core persisted-state contract — DB CHECKs + phantom grading state",
+      "requested_scope": "Core persisted-state contract — DB CHECKs + phantom grading state",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": ["entity:grading.entry"],
+      "related_claims": ["B-06", "B-10"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#613",
+      "label": "[Security][P1] Close sensitive audit-evidence and auth-context oracle gaps",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/613",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-09-25",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#613",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-09-25",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Security][P1] Close sensitive audit-evidence and auth-context oracle gaps",
+      "requested_scope": "Close sensitive audit-evidence and auth-context oracle gaps",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": [],
+      "related_claims": []
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#669",
+      "label": "[Umbrella][Rich Subjective] Protocol/backend closure → candidate editor UX → adversarial proof",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/669",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-10-05",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#669",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-10-05",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Umbrella][Rich Subjective] Protocol/backend closure → candidate editor UX → adversarial proof",
+      "requested_scope": "Rich Subjective umbrella: protocol/backend closure → candidate editor UX → adversarial proof",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": ["capability:content.rich-subjective"],
+      "related_claims": ["A-15"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#679",
+      "label": "[Design][Rich UX] Math editing UX — visual formula entry, shortcuts, preview, and re-editing",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/679",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-10-09",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#679",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-10-09",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Design][Rich UX] Math editing UX — visual formula entry, shortcuts, preview, and re-editing",
+      "requested_scope": "Math editing UX — visual formula entry delivered; global shortcuts and visual/source synchronization NOT adopted",
+      "closure_semantics": "CLOSED_PARTIAL",
+      "state": "CLOSED",
+      "owns": ["facet:content.rich.formula"],
+      "related_claims": ["A-07", "A-08", "A-13"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#718",
+      "label": "[Maintenance][Testing] PostgreSQL proof-integrity audit — remove incidental, pseudo-concurrent and redundant real-PG tests",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/718",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-10-06",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#718",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-10-06",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Maintenance][Testing] PostgreSQL proof-integrity audit — remove incidental, pseudo-concurrent and redundant real-PG tests",
+      "requested_scope": "PostgreSQL proof-integrity audit (source of the pg_class vocabulary, consumed as historical evidence only)",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": [],
+      "related_claims": []
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#756",
+      "label": "[Rich][Follow-up][Decision] Formula UX residuals — shortcuts, visual/source sync and focused accessibility proof",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/756",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "OPEN",
+            "observed_updated_at": "2026-10-09",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#756"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#756",
+      "external_revision": {
+        "observed_state": "OPEN",
+        "observed_updated_at": "2026-10-09",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Rich][Follow-up][Decision] Formula UX residuals — shortcuts, visual/source sync and focused accessibility proof",
+      "requested_scope": "Formula UX residuals — shortcuts, visual/source sync, bounded $$$…$$$ inventory, accessibility/viewport proof",
+      "closure_semantics": "OPEN",
+      "state": "OPEN",
+      "owns": [
+        "facet:content.rich.typed-shortcuts",
+        "facet:content.rich.visual-source-sync"
+      ],
+      "related_claims": ["A-07", "A-08", "A-14"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#757",
+      "label": "[Design][Architecture Atlas] Master plan — semantic IR, provenance, extraction, views, living docs and drift",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/757",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "OPEN",
+            "observed_updated_at": "2026-10-10",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#757"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#757",
+      "external_revision": {
+        "observed_state": "OPEN",
+        "observed_updated_at": "2026-10-10",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Design][Architecture Atlas] Master plan — semantic IR, provenance, extraction, views, living docs and drift",
+      "requested_scope": "Architecture Atlas master plan",
+      "closure_semantics": "OPEN",
+      "state": "OPEN",
+      "owns": [],
+      "related_claims": []
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#762",
+      "label": "[Design][Architecture Atlas][R0.5] ADR/docs ⇄ code reconciliation — unified findings register, authority dispositions and docs-only fixes (base 0fbad891)",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/762",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "OPEN",
+            "observed_updated_at": "2026-10-10",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#762"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#762",
+      "external_revision": {
+        "observed_state": "OPEN",
+        "observed_updated_at": "2026-10-10",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Design][Architecture Atlas][R0.5] ADR/docs ⇄ code reconciliation — unified findings register, authority dispositions and docs-only fixes (base 0fbad891)",
+      "requested_scope": "R0.5 ADR/docs ⇄ code reconciliation register (O-07 route-registry gap owner; O-08 projection hazard; O-09 stale comments)",
+      "closure_semantics": "OPEN",
+      "state": "OPEN",
+      "owns": [],
+      "related_claims": ["B-K2", "C-K1", "C-K2"]
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#763",
+      "label": "[Architecture Atlas][R0] Freeze semantic IR v0.1, provenance and four golden slices",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/763",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "CLOSED",
+            "observed_updated_at": "2026-10-10",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#763",
+      "external_revision": {
+        "observed_state": "CLOSED",
+        "observed_updated_at": "2026-10-10",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Architecture Atlas][R0] Freeze semantic IR v0.1, provenance and four golden slices",
+      "requested_scope": "Atlas R0: freeze semantic IR v0.1, provenance and four golden slices",
+      "closure_semantics": "CLOSED_IMPLEMENTED",
+      "state": "CLOSED",
+      "owns": [],
+      "related_claims": []
+    },
+    {
+      "kind": "WorkItem",
+      "id": "work:jnhu76/exam#764",
+      "label": "[Architecture Atlas][R1] Deterministic extraction, major capability inventory and verified snapshot",
+      "source_refs": [
+        {
+          "source_ref_version": "SREF-1",
+          "source_kind": "GITHUB_ISSUE",
+          "path_or_uri": "https://github.com/jnhu76/exam/issues/764",
+          "extractor": {
+            "id": "@exam/atlas",
+            "version": "0.1.0"
+          },
+          "extraction_method": "GITHUB_API",
+          "resolution_state": "RESOLVED",
+          "external_revision": {
+            "observed_state": "OPEN",
+            "observed_updated_at": "2026-10-10",
+            "observed_at": "2026-10-11"
+          },
+          "external_freshness": "UNKNOWN",
+          "sensitivity": "NONE"
+        }
+      ],
+      "authority_refs": [],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "WORK_ITEM",
+        "ref": "work:jnhu76/exam#764"
+      },
+      "work_kind": "ISSUE",
+      "external_ref": "jnhu76/exam#764",
+      "external_revision": {
+        "observed_state": "OPEN",
+        "observed_updated_at": "2026-10-10",
+        "observed_at": "2026-10-11"
+      },
+      "title": "[Architecture Atlas][R1] Deterministic extraction, major capability inventory and verified snapshot",
+      "requested_scope": "Atlas R1: deterministic extraction, major capability inventory and verified snapshot",
+      "closure_semantics": "OPEN",
+      "state": "OPEN",
+      "owns": [],
+      "related_claims": []
+    }
+  ]
+}

@@ -232,11 +232,25 @@ export function validateRecordSemantics(
       }
     }
 
-    // ATLAS-SEM-041 — the falsification attempt must exist.
+    // ATLAS-SEM-041 — the falsification attempt must exist for
+    // verdict-bearing claims (the ones a reader may act on).
+    const VERDICT_BEARING = new Set([
+      "CAPABILITY_SUPPORT",
+      "AUTHORIZATION_EFFECT",
+      "VERIFICATION_STATUS",
+      "IMPLEMENTATION_STATUS",
+      "DURABLE_EFFECT",
+      "RUNTIME_OBSERVATION",
+    ]);
     const challenging = Array.isArray(raw["challenging_evidence"])
       ? (raw["challenging_evidence"] as string[])
       : [];
-    if (challenging.length === 0) {
+    const claimKind = requireStringField(raw, "claim_kind");
+    if (
+      challenging.length === 0 &&
+      claimKind !== undefined &&
+      VERDICT_BEARING.has(claimKind)
+    ) {
       findings.push({
         code: "ATLAS-SEM-041",
         path,

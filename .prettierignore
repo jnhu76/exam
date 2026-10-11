@@ -15,3 +15,4 @@ formal/
 apps/e2e/test-results-patrol/
 .tmp/
 gui-test-screenshots/
+packages/atlas/generated/

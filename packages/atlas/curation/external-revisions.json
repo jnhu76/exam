@@ -1,0 +1,138 @@
+{
+  "description": "Captured external work-item revisions (SREF-1 external_revision triple). Captured 2026-10-11 via the GitHub API; the deterministic build consumes this capture and performs no network access. external_freshness is UNKNOWN for every item because no re-check has been performed (ATLAS-SREF-032).",
+  "items": [
+    {
+      "ref": "work:jnhu76/exam#286",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-08-28",
+      "observed_at": "2026-10-11",
+      "title": "[RBAC] Enforce Teacher@Course scoped authority (F-04)"
+    },
+    {
+      "ref": "work:jnhu76/exam#291",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-09-04",
+      "observed_at": "2026-10-11",
+      "title": "Additional exam timing modes — Phase A deadline/untimed; Phase B timed_sync"
+    },
+    {
+      "ref": "work:jnhu76/exam#292",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-09-12",
+      "observed_at": "2026-10-11",
+      "title": "Operational admission queue (durable requireQueue runtime)"
+    },
+    {
+      "ref": "work:jnhu76/exam#293",
+      "observed_state": "OPEN",
+      "observed_updated_at": "2026-10-08",
+      "observed_at": "2026-10-11",
+      "title": "Controlled / Strict exam readiness (umbrella tracker)"
+    },
+    {
+      "ref": "work:jnhu76/exam#295",
+      "observed_state": "OPEN",
+      "observed_updated_at": "2026-09-05",
+      "observed_at": "2026-10-11",
+      "title": "[Decision Gate] Managed desktop / lockdown runtime adoption"
+    },
+    {
+      "ref": "work:jnhu76/exam#296",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-08-28",
+      "observed_at": "2026-10-11",
+      "title": "Grader@Exam scoped authority and assignment flow (M11 Grader slice)"
+    },
+    {
+      "ref": "work:jnhu76/exam#301",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-08-31",
+      "observed_at": "2026-10-11",
+      "title": "Content/WYSIWYG V1 — Plain/Rich content model, math/table/code, asset-ready, performance-first"
+    },
+    {
+      "ref": "work:jnhu76/exam#302",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-08-27",
+      "observed_at": "2026-10-11",
+      "title": "Generic final-answer submit barrier (ADR-008 Option D)"
+    },
+    {
+      "ref": "work:jnhu76/exam#324",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-08-25",
+      "observed_at": "2026-10-11",
+      "title": "P1: unify candidate result-visibility projection; close manual publish score leaks"
+    },
+    {
+      "ref": "work:jnhu76/exam#542",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-09-14",
+      "observed_at": "2026-10-11",
+      "title": "[Hardening][A1] Core persisted-state contract — DB CHECKs + phantom grading state"
+    },
+    {
+      "ref": "work:jnhu76/exam#613",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-09-25",
+      "observed_at": "2026-10-11",
+      "title": "[Security][P1] Close sensitive audit-evidence and auth-context oracle gaps"
+    },
+    {
+      "ref": "work:jnhu76/exam#669",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-10-05",
+      "observed_at": "2026-10-11",
+      "title": "[Umbrella][Rich Subjective] Protocol/backend closure → candidate editor UX → adversarial proof"
+    },
+    {
+      "ref": "work:jnhu76/exam#679",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-10-09",
+      "observed_at": "2026-10-11",
+      "title": "[Design][Rich UX] Math editing UX — visual formula entry, shortcuts, preview, and re-editing"
+    },
+    {
+      "ref": "work:jnhu76/exam#718",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-10-06",
+      "observed_at": "2026-10-11",
+      "title": "[Maintenance][Testing] PostgreSQL proof-integrity audit — remove incidental, pseudo-concurrent and redundant real-PG tests"
+    },
+    {
+      "ref": "work:jnhu76/exam#756",
+      "observed_state": "OPEN",
+      "observed_updated_at": "2026-10-09",
+      "observed_at": "2026-10-11",
+      "title": "[Rich][Follow-up][Decision] Formula UX residuals — shortcuts, visual/source sync and focused accessibility proof"
+    },
+    {
+      "ref": "work:jnhu76/exam#757",
+      "observed_state": "OPEN",
+      "observed_updated_at": "2026-10-10",
+      "observed_at": "2026-10-11",
+      "title": "[Design][Architecture Atlas] Master plan — semantic IR, provenance, extraction, views, living docs and drift"
+    },
+    {
+      "ref": "work:jnhu76/exam#762",
+      "observed_state": "OPEN",
+      "observed_updated_at": "2026-10-10",
+      "observed_at": "2026-10-11",
+      "title": "[Design][Architecture Atlas][R0.5] ADR/docs ⇄ code reconciliation — unified findings register, authority dispositions and docs-only fixes (base 0fbad891)"
+    },
+    {
+      "ref": "work:jnhu76/exam#763",
+      "observed_state": "CLOSED",
+      "observed_updated_at": "2026-10-10",
+      "observed_at": "2026-10-11",
+      "title": "[Architecture Atlas][R0] Freeze semantic IR v0.1, provenance and four golden slices"
+    },
+    {
+      "ref": "work:jnhu76/exam#764",
+      "observed_state": "OPEN",
+      "observed_updated_at": "2026-10-10",
+      "observed_at": "2026-10-11",
+      "title": "[Architecture Atlas][R1] Deterministic extraction, major capability inventory and verified snapshot"
+    }
+  ]
+}

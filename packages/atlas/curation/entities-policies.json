@@ -1,0 +1,609 @@
+{
+  "description": "DurableEntity and PolicyValue nodes curated by the golden slices (B: grading/publishing; D: timed_sync negative control + the reserved vocabulary registered in golden D §3/§4). Physical carriers are locators (SCHEMA_OBJECT refs), never copies; carrier_resolution reflects resolution at SOURCE_SHA.",
+  "nodes": [
+    {
+      "kind": "DurableEntity",
+      "id": "entity:grading.entry",
+      "label": "Per-question manual grading entry",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "per-question grading entry with its own one-way state",
+      "physical_carrier": {
+        "schema_ref": "packages/db/src/schema/pg.ts#attempt_grading_entries",
+        "table": "attempt_grading_entries",
+        "columns": ["status", "score", "feedback", "grading_mode"],
+        "migrations": [
+          "packages/db/src/migrations (attempt_grading_entries family)"
+        ]
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": [
+        "policy:gradingEntry.status/pending_manual",
+        "policy:gradingEntry.status/completed_manual"
+      ],
+      "freeze_rule": "one-way completion: pending_manual → completed_manual with no revision path (EXSEM-009)",
+      "semantic_authority_refs": ["authority:exsem"]
+    },
+    {
+      "kind": "DurableEntity",
+      "id": "entity:answer.frozen-submission",
+      "label": "Frozen submitted answers",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "answers frozen once at submit",
+      "physical_carrier": {
+        "schema_ref": "packages/db/src/schema/pg.ts#exam_attempts.submitted_answers",
+        "table": "exam_attempts",
+        "columns": ["submitted_answers"],
+        "migrations": []
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": [],
+      "freeze_rule": "freeze-once-at-submit; the same protected transaction flips the attempt and materializes the grading workset (EXSEM-008)",
+      "semantic_authority_refs": ["authority:exsem"]
+    },
+    {
+      "kind": "DurableEntity",
+      "id": "entity:attempt.terminal-score",
+      "label": "Terminal attempt score",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "terminal attempt score and grading outcome",
+      "physical_carrier": {
+        "schema_ref": "packages/db/src/schema/pg.ts#exam_attempts.score",
+        "table": "exam_attempts",
+        "columns": [
+          "score",
+          "passed",
+          "grading_result",
+          "graded_at",
+          "grading_status"
+        ],
+        "migrations": []
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": [
+        "policy:attempt.gradingStatus/pending_manual",
+        "policy:attempt.gradingStatus/auto_graded",
+        "policy:attempt.gradingStatus/fully_graded"
+      ],
+      "freeze_rule": "derived output, never a scoring input (EXSEM-010)",
+      "semantic_authority_refs": ["authority:exsem"]
+    },
+    {
+      "kind": "DurableEntity",
+      "id": "entity:enrollment.final-score-projection",
+      "label": "Enrollment final score projection",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "enrollment final selection projection",
+      "physical_carrier": {
+        "schema_ref": "packages/db/src/schema/pg.ts#enrollments.final_score",
+        "table": "enrollments",
+        "columns": ["final_score", "final_passed", "final_attempt_id"],
+        "migrations": []
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": [],
+      "freeze_rule": "written together with the terminal attempt score in the grading closure transaction",
+      "semantic_authority_refs": ["authority:exsem"]
+    },
+    {
+      "kind": "DurableEntity",
+      "id": "entity:exam.result-publication",
+      "label": "Exam result publication",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "results released for an exam",
+      "physical_carrier": {
+        "schema_ref": "packages/db/src/schema/pg.ts#exams.results_published_at",
+        "table": "exams",
+        "columns": ["results_published_at"],
+        "migrations": []
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": [],
+      "freeze_rule": "single-winner publication under a row lock; idempotent",
+      "semantic_authority_refs": ["authority:exsem"]
+    },
+    {
+      "kind": "DurableEntity",
+      "id": "entity:content.document-v1",
+      "label": "Stored ContentDocumentV1 payloads",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract", "authority:adr-019"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "stored rich content documents (closed V1 grammar)",
+      "physical_carrier": {
+        "schema_ref": "packages/domain/src/content/contentDocument.ts#ContentDocumentV1",
+        "table": "(JSON payloads on answer/question content columns)",
+        "columns": [],
+        "migrations": []
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": ["policy:content.docVersion/v1"],
+      "freeze_rule": "canonicalized before durable acceptance; unknown nodes/marks/attributes fail validation (closed grammar)",
+      "semantic_authority_refs": [
+        "authority:rich-contract",
+        "authority:adr-019"
+      ]
+    },
+    {
+      "kind": "DurableEntity",
+      "id": "entity:assignment.grader-exam",
+      "label": "Grader→Exam assignments",
+      "source_refs": [],
+      "authority_refs": ["authority:authorization"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "active Grader→Exam assignment rows",
+      "physical_carrier": {
+        "schema_ref": "packages/db/src/schema/pg.ts#grader_exam_assignments",
+        "table": "grader_exam_assignments",
+        "columns": ["grader_user_id", "exam_id", "active"],
+        "migrations": [
+          "packages/db/src/migrations/0037-grader-exam-assignment family"
+        ]
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": [],
+      "freeze_rule": "partial unique index keeps one active assignment per (grader, exam)",
+      "semantic_authority_refs": ["authority:authorization"]
+    },
+    {
+      "kind": "DurableEntity",
+      "id": "entity:assignment.teacher-course",
+      "label": "Teacher→Course assignments",
+      "source_refs": [],
+      "authority_refs": ["authority:authorization"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "active Teacher→Course assignment rows",
+      "physical_carrier": {
+        "schema_ref": "packages/db/src/schema/pg.ts#teacher_course_assignments",
+        "table": "teacher_course_assignments",
+        "columns": ["teacher_user_id", "course_id", "active"],
+        "migrations": []
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": [],
+      "semantic_authority_refs": ["authority:authorization"]
+    },
+    {
+      "kind": "DurableEntity",
+      "id": "entity:assignment.proctor-exam",
+      "label": "Proctor→Exam assignments",
+      "source_refs": [],
+      "authority_refs": ["authority:authorization"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "semantic_name": "active Proctor→Exam assignment rows",
+      "physical_carrier": {
+        "schema_ref": "packages/db/src/schema/pg.ts#exam_proctor_assignments",
+        "table": "exam_proctor_assignments",
+        "columns": ["proctor_user_id", "exam_id", "active"],
+        "migrations": []
+      },
+      "carrier_resolution": "RESOLVED",
+      "state_values": [],
+      "semantic_authority_refs": ["authority:authorization"]
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:gradingEntry.status/pending_manual",
+      "label": "grading entry pending_manual",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "pending_manual",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "TRUE",
+      "read_compatible": "TRUE",
+      "activation_status": "SUPPORTED",
+      "activation_claim_ref": "B-06",
+      "refusing_seams": [],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:gradingEntry.status/completed_manual",
+      "label": "grading entry completed_manual",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "completed_manual",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "TRUE",
+      "read_compatible": "TRUE",
+      "activation_status": "SUPPORTED",
+      "activation_claim_ref": "B-07",
+      "refusing_seams": [],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:attempt.gradingStatus/pending_manual",
+      "label": "attempt gradingStatus pending_manual",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "pending_manual",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "TRUE",
+      "read_compatible": "TRUE",
+      "activation_status": "SUPPORTED",
+      "activation_claim_ref": "B-09",
+      "refusing_seams": [],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:attempt.gradingStatus/auto_graded",
+      "label": "attempt gradingStatus auto_graded",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "auto_graded",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "TRUE",
+      "read_compatible": "TRUE",
+      "activation_status": "SUPPORTED",
+      "activation_claim_ref": "B-09",
+      "refusing_seams": [],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:attempt.gradingStatus/fully_graded",
+      "label": "attempt gradingStatus fully_graded",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "fully_graded",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "TRUE",
+      "read_compatible": "TRUE",
+      "activation_status": "SUPPORTED",
+      "activation_claim_ref": "B-10",
+      "refusing_seams": [],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:exam.timingMode/timed_sync",
+      "label": "timed_sync timing mode",
+      "source_refs": [],
+      "authority_refs": [
+        "authority:exam-policy",
+        "authority:timed-sync-semantics",
+        "authority:exsem"
+      ],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "authority:exam-policy",
+        "lift_condition": "the explicit activation decision named by docs/SPEC.md (golden D-05); no OPEN work item owns the activation slice"
+      },
+      "value": "timed_sync",
+      "vocabulary_class": "MODE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "GATED",
+      "activation_claim_ref": "D-04",
+      "activation_gate": {
+        "locator": "docs/contracts/exam-policy-authority.md#NOT ACTIVATED",
+        "lift_condition": "explicit superseding activation decision (B2 product decision); both refusal seams must be lifted together"
+      },
+      "refusing_seams": [
+        "packages/exam-engine/src/examPolicy.ts#validateExamPolicy (authoring refusal, EXAM_TIMING_MODE_INVALID)",
+        "packages/exam-engine/src/examCommands.ts#publishExam (publish refusal)",
+        "closed search: no production writer of exams.sync_started_at (the operator T0)"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:exam.controlFlags/detectTabSwitch",
+      "label": "control flag detectTabSwitch",
+      "source_refs": [],
+      "authority_refs": ["authority:exam-policy"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "detectTabSwitch",
+      "vocabulary_class": "FLAG",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-CF",
+      "refusing_seams": [
+        "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS (canonical validator rejects true; UNSUPPORTED_EXAM_CONTROL)"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:exam.controlFlags/disableCopyPaste",
+      "label": "control flag disableCopyPaste",
+      "source_refs": [],
+      "authority_refs": ["authority:exam-policy"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "disableCopyPaste",
+      "vocabulary_class": "FLAG",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-CF",
+      "refusing_seams": [
+        "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:exam.controlFlags/restrictIp",
+      "label": "control flag restrictIp",
+      "source_refs": [],
+      "authority_refs": ["authority:exam-policy"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "restrictIp",
+      "vocabulary_class": "FLAG",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-CF",
+      "refusing_seams": [
+        "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:exam.controlFlags/requireLockdown",
+      "label": "control flag requireLockdown",
+      "source_refs": [],
+      "authority_refs": ["authority:exam-policy"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "DECISION_GATED",
+        "ref": "work:jnhu76/exam#295",
+        "lift_condition": "managed desktop / lockdown runtime adoption decision (#295)"
+      },
+      "value": "requireLockdown",
+      "vocabulary_class": "FLAG",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-CF",
+      "refusing_seams": [
+        "packages/exam-engine/src/examPolicy.ts#UNSUPPORTED_CONTROL_FLAGS"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:attempt.status/not_started",
+      "label": "reserved attempt status not_started",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "not_started",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-RS",
+      "refusing_seams": [
+        "closed structural search: apps/api/src/runtime/reserved-status-writers.structural.test.ts#no production writer"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:attempt.status/queued",
+      "label": "reserved attempt status queued",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "queued",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-RS",
+      "refusing_seams": [
+        "closed structural search: apps/api/src/runtime/reserved-status-writers.structural.test.ts#no production writer"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:attempt.status/voided",
+      "label": "reserved attempt status voided",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "voided",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-RS",
+      "refusing_seams": [
+        "closed structural search: apps/api/src/runtime/reserved-status-writers.structural.test.ts#no production writer"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:enrollment.status/blocked",
+      "label": "reserved enrollment status blocked",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "blocked",
+      "vocabulary_class": "STATE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-RS",
+      "refusing_seams": [
+        "closed structural search: no production writer; a legal stored value by explicit design (EXSEM §5)"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:attempt.answerVisibility/visible",
+      "label": "answerVisibility visible (reserved)",
+      "source_refs": [],
+      "authority_refs": ["authority:exsem"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "visible",
+      "vocabulary_class": "VISIBILITY",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "FALSE",
+      "read_compatible": "TRUE",
+      "activation_status": "NOT_SUPPORTED",
+      "activation_claim_ref": "D-RS",
+      "refusing_seams": [
+        "the only producer is a constant: apps/api/src/routes/attempts.shared.ts#ANSWER_VISIBILITY (no production path emits visible)"
+      ],
+      "transition_refs": []
+    },
+    {
+      "kind": "PolicyValue",
+      "id": "policy:content.docVersion/v1",
+      "label": "content document version v1",
+      "source_refs": [],
+      "authority_refs": ["authority:rich-contract", "authority:adr-019"],
+      "review_state": "REVIEWED",
+      "open_governance_item": {
+        "kind": "NONE"
+      },
+      "value": "v1",
+      "vocabulary_class": "POLICY_VALUE",
+      "representable": "TRUE",
+      "storable": "TRUE",
+      "write_reachable": "TRUE",
+      "read_compatible": "TRUE",
+      "activation_status": "SUPPORTED",
+      "activation_claim_ref": "A-01",
+      "refusing_seams": [],
+      "transition_refs": []
+    }
+  ],
+  "edges": [
+    {
+      "kind": "transitions_to",
+      "source": "policy:gradingEntry.status/pending_manual",
+      "target": "policy:gradingEntry.status/completed_manual",
+      "direction": "ONE_WAY",
+      "guard_ref": "packages/db/src/repository/attemptGradingEntryRepo.ts#completeManualEntry (conditional UPDATE grading_mode='manual' AND status='pending_manual')",
+      "reachability": "REACHABLE"
+    },
+    {
+      "kind": "transitions_to",
+      "source": "policy:attempt.gradingStatus/pending_manual",
+      "target": "policy:attempt.gradingStatus/fully_graded",
+      "direction": "ONE_WAY",
+      "guard_ref": "packages/exam-engine/src/grading.ts#finalizeTerminalGrading",
+      "reachability": "REACHABLE"
+    }
+  ]
+}

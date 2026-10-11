@@ -155,10 +155,12 @@ export function interfaceNodesFromRouteFacts(
   routeFacts: RouteFacts,
   sourceSha: string,
 ): Array<Record<string, unknown>> {
-  const captureRef = (symbol: string): ReturnType<typeof sourceRefRecord> =>
+  // The capture artifact is the runtime observation as a whole; per-route
+  // identity lives on the node (contract_identity), not in the artifact's
+  // byte text — so the ref stays file-level and always resolves.
+  const captureRef = (): ReturnType<typeof sourceRefRecord> =>
     sourceRefRecord(sourceSha, {
       path_or_uri: "packages/atlas/input/route-facts.json",
-      symbol,
       extraction_method: "ROUTE_CAPTURE",
       source_kind: "RUNTIME_CAPTURE",
     });
@@ -181,7 +183,7 @@ export function interfaceNodesFromRouteFacts(
         kind: "Interface",
         id,
         label: `${route.method} ${route.url}`,
-        source_refs: [captureRef(`${route.method} ${route.url}`)],
+        source_refs: [captureRef()],
         authority_refs: [],
         review_state: "CURATED",
         open_governance_item: { kind: "NONE" },
