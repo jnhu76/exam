@@ -395,6 +395,9 @@ FALSIFICATION_TEST = 复发 run 开 TEST_INFRA_TRACE=1，比较受害用例两�
 
 > **UPDATE（#774 R3–R5，2026-10-13）**：`TEST_INFRA_TRACE` 已从“stderr 的 `acquired wait=` 文本”升级为结构化 NDJSON 事件（`OPERATION_BEGIN` / `LOCK_CALL_BEGIN` / `LOCK_GRANTED_ACK` / `UNLOCK_ACK` + 子阶段事件，附 server read-back 的 session 身份）。下列历史 FALSIFICATION_TEST 中“读 `acquired wait=`”的正确做法是改为按 `(process_instance_id, operation_id)` 归并 NDJSON 事件计算 wait/hold；历史记录本身保留不改写。
 > `TEST_INFRA_TRACE=1` 为主要仪器，而该仪器**单独不足以判别**——`acquired wait=` 只在
+> ↓ 该句中的两条仪器限额（`acquired wait=` 只在成功获锁后打印；`pid` 是 Node 进程 PID）
+> 已被上文 UPDATE 取代：`LOCK_REQUEST_DISPATCHED` 在取锁前发出，且 `pg_backend_pid` 现在是
+> server read-back 的 PostgreSQL backend PID。
 > 成功获得锁之后才打印（等待期间被 5s 预算中止的取锁不留下可归属的 wait 记录），
 > `pid` 是 Node 进程 PID（非 PostgreSQL backend PID），`caller` 为首个外部栈帧文本、
 > 不保证区分同文件内的 4 个用例。判别前须按修正后的 Next action 协议，把

@@ -403,13 +403,19 @@ never garbage-collected.
 **Event contract (read this before writing a consumer):**
 
 - `OPERATION_BEGIN` marks an operation exactly once and a matching terminal
-  event (`OPERATION_COMPLETED` / `OPERATION_FAILED`) is always emitted, on the
-  precheck fast path included. `LOCK_CALL_BEGIN` is a *separate* signal: one
-  per lock acquisition, carrying its own call site, so counting acquisitions
-  and counting operations are different questions with different answers.
+  event (`OPERATION_COMPLETED` / `OPERATION_FAILED`) is emitted on every exit,
+  the precheck fast path and a failed lock acquisition included. Two exceptions
+  are by design: disabling `TEST_INFRA_TRACE` mid-operation truncates the stream
+  from that point, and a sink failure drops events (reported once per process on
+  stderr). `LOCK_CALL_BEGIN` is a *separate* signal: one per lock acquisition,
+  carrying its own call site, so counting acquisitions and counting operations
+  are different questions with different answers.
 - Emitting is best-effort and cannot affect the run: a failing sink (full
   disk, permissions, closed stderr) drops events, never the lock release, the
-  critical section or the test outcome.
+  critical section or the test outcome. If the release of the advisory lock
+  fails on the first attempt, the traced path retries it to guarantee the lock
+  is not orphaned and emits `UNLOCK_ACK outcome=released_on_retry`; the caller
+  still sees the first attempt's failure, exactly like the untraced path.
 - `EVENT_LOOP_SAMPLE` is process-level and cumulative-since-`enable()`; its
   `eld_*` fields are not per-window values and can never prove that a specific
   operation's client was stalled.

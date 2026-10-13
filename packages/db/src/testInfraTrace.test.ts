@@ -567,6 +567,38 @@ PG_DESCRIBE("trace identity oracles (real PostgreSQL)", () => {
     );
   }, 30_000);
 
+  it("C13: a failed lock acquisition still emits a terminal event and rethrows", async () => {
+    // Regression for the re-review finding that acquisition failure produced an
+    // operation with zero terminal events — exactly the shape a flake
+    // investigation needs to read (lane contention, authority misconfiguration).
+    const sink: Sink = [];
+    enableTrace(sink);
+    vi.stubEnv("TEST_ADMIN_DATABASE", "nonexistent_db_trace_probe_zz");
+
+    let rejected = false;
+    try {
+      await withTestInfraLifecycleLock(BASE_URL, async () => undefined);
+    } catch {
+      rejected = true;
+    }
+    const opId = sink.find((e) => e.event_type === "OPERATION_BEGIN")
+      ?.operation_id as string;
+    const terminals = eventsOfOp(sink, opId).filter((e) =>
+      /OPERATION_(COMPLETED|FAILED)/.test(e.event_type),
+    );
+    const pass =
+      rejected === true &&
+      typeof opId === "string" &&
+      terminals.length === 1 &&
+      terminals[0]?.event_type === "OPERATION_FAILED";
+    record(
+      "C13",
+      "lock acquisition fails (unreachable coordination database)",
+      "the operation still gets exactly one terminal event (OPERATION_FAILED) and the error propagates",
+      pass,
+    );
+  }, 30_000);
+
   it("C12: one OPERATION_BEGIN and one terminal event per operation; lock calls carry their own site", async () => {
     const sink: Sink = [];
     enableTrace(sink);

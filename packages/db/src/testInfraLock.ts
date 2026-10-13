@@ -327,12 +327,14 @@ async function tracedLockBody<T>(
   fn: () => Promise<T>,
   ownsOperation: boolean,
 ): Promise<T> {
-  const admin = postgresWithTraceIdentity(coordinationUrl, "lock", { max: 1 });
+  let admin: { sql: postgres.Sql; connectionId: string } | null = null;
   let acquired = false;
+  let acquisitionError: unknown;
   let fnOk = false;
   let fnError: unknown;
   let unlockOk = false;
   let unlockError: unknown;
+  let unlockRetriedOk = false;
   let endError: unknown;
   let result: T | undefined;
   // Backend identity read back from the server, carried into the holder's own
@@ -348,6 +350,7 @@ async function tracedLockBody<T>(
         }
       : {};
   try {
+    admin = postgresWithTraceIdentity(coordinationUrl, "lock", { max: 1 });
     holderIdentity = await identifyBackend(
       admin.sql,
       "lock",
@@ -357,80 +360,98 @@ async function tracedLockBody<T>(
     );
     emitTraceEvent("LOCK_REQUEST_DISPATCHED", op, identityFields());
     const requestNs = monotonicNs();
-    await acquireAdvisoryLock(admin.sql, key);
-    acquired = true;
-    emitTraceEvent("LOCK_GRANTED_ACK", op, {
-      ...identityFields(),
-      outcome: "granted",
-      duration_ms: msSince(requestNs),
-    });
-    const holdNs = monotonicNs();
-    emitTraceEvent("CRITICAL_SECTION_ENTER", op, identityFields());
     try {
-      result = await fn();
-      fnOk = true;
-      emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
+      await acquireAdvisoryLock(admin.sql, key);
+      acquired = true;
+      emitTraceEvent("LOCK_GRANTED_ACK", op, {
         ...identityFields(),
-        outcome: "ok",
-        duration_ms: msSince(holdNs),
+        outcome: "granted",
+        duration_ms: msSince(requestNs),
       });
-    } catch (err) {
-      fnError = err;
-      emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
-        ...identityFields(),
-        outcome: `error:${errName(err)}`,
-        duration_ms: msSince(holdNs),
-      });
-    }
-    emitTraceEvent("UNLOCK_REQUEST_DISPATCHED", op, identityFields());
-    const unlockNs = monotonicNs();
-    try {
-      await releaseAdvisoryLock(admin.sql, key);
-      unlockOk = true;
-      emitTraceEvent("UNLOCK_ACK", op, {
-        ...identityFields(),
-        outcome: "released",
-        duration_ms: msSince(unlockNs),
-      });
-    } catch (err) {
-      unlockError = err;
-      emitTraceEvent("UNLOCK_ACK", op, {
-        ...identityFields(),
-        outcome: `error:${errName(err)}`,
-      });
-    }
-  } finally {
-    // LOCK RELEASE INVARIANT: no path out of this function may leave the
-    // session-level advisory lock held. Every known throw source is handled
-    // above, so this is defence in depth for the invariant that matters most
-    // — a survivor session would wedge every other worker on the single
-    // lifecycle key for the life of the process.
-    if (acquired && !unlockOk) {
+      const holdNs = monotonicNs();
+      emitTraceEvent("CRITICAL_SECTION_ENTER", op, identityFields());
+      try {
+        result = await fn();
+        fnOk = true;
+        emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
+          ...identityFields(),
+          outcome: "ok",
+          duration_ms: msSince(holdNs),
+        });
+      } catch (err) {
+        fnError = err;
+        emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
+          ...identityFields(),
+          outcome: `error:${errName(err)}`,
+          duration_ms: msSince(holdNs),
+        });
+      }
+      emitTraceEvent("UNLOCK_REQUEST_DISPATCHED", op, identityFields());
+      const unlockNs = monotonicNs();
       try {
         await releaseAdvisoryLock(admin.sql, key);
         unlockOk = true;
+        emitTraceEvent("UNLOCK_ACK", op, {
+          ...identityFields(),
+          outcome: "released",
+          duration_ms: msSince(unlockNs),
+        });
       } catch (err) {
-        if (unlockError === undefined) unlockError = err;
+        unlockError = err;
+        emitTraceEvent("UNLOCK_ACK", op, {
+          ...identityFields(),
+          outcome: `error:${errName(err)}`,
+        });
       }
-    }
-    emitTraceEvent("POOL_END_BEGIN", op, identityFields());
-    try {
-      await admin.sql.end();
-      emitTraceEvent("POOL_END_COMPLETE", op, {
-        ...identityFields(),
-        outcome: "ended",
-      });
     } catch (err) {
-      endError = err;
-      emitTraceEvent("POOL_END_COMPLETE", op, {
-        ...identityFields(),
-        outcome: `error:${errName(err)}`,
-      });
+      // Acquisition (or identity read-back) failed: the operation still needs
+      // its terminal event, and the error is rethrown unchanged below.
+      acquisitionError = err;
+    }
+  } finally {
+    if (admin !== null) {
+      // LOCK RELEASE INVARIANT: no path out of this function may leave the
+      // session-level advisory lock held — a survivor session would wedge every
+      // other worker on the single lifecycle key for the life of the process.
+      // The retry only guarantees the release; it never rewrites the outcome of
+      // the first attempt, which stays authoritative for the caller (master's
+      // untraced path rejects on a failed release and so does this one).
+      if (acquired && !unlockOk) {
+        try {
+          await releaseAdvisoryLock(admin.sql, key);
+          unlockRetriedOk = true;
+          emitTraceEvent("UNLOCK_ACK", op, {
+            ...identityFields(),
+            outcome: "released_on_retry",
+          });
+        } catch (err) {
+          if (unlockError === undefined) unlockError = err;
+        }
+      }
+      emitTraceEvent("POOL_END_BEGIN", op, identityFields());
+      try {
+        await admin.sql.end();
+        emitTraceEvent("POOL_END_COMPLETE", op, {
+          ...identityFields(),
+          outcome: "ended",
+        });
+      } catch (err) {
+        endError = err;
+        emitTraceEvent("POOL_END_COMPLETE", op, {
+          ...identityFields(),
+          outcome: `error:${errName(err)}`,
+        });
+      }
     }
   }
   const totalMs = Number(monotonicNs() - op.beginMonotonicNs) / 1e6;
+  const failed =
+    acquisitionError !== undefined ||
+    !fnOk ||
+    !unlockOk ||
+    endError !== undefined;
   if (ownsOperation) {
-    if (fnOk && unlockOk && endError === undefined) {
+    if (!failed) {
       emitTraceEvent("OPERATION_COMPLETED", op, {
         ...identityFields(),
         outcome: "completed",
@@ -440,19 +461,21 @@ async function tracedLockBody<T>(
       emitTraceEvent("OPERATION_FAILED", op, {
         ...identityFields(),
         outcome:
-          endError !== undefined
-            ? `pool_end_error:${errName(endError)}`
-            : !unlockOk
-              ? `unlock_error:${errName(unlockError)}`
-              : `fn_error:${errName(fnError)}`,
+          acquisitionError !== undefined
+            ? `lock_acquisition_error:${errName(acquisitionError)}`
+            : endError !== undefined
+              ? `pool_end_error:${errName(endError)}`
+              : !unlockOk
+                ? `unlock_error:${errName(unlockError)}`
+                : `fn_error:${errName(fnError)}`,
         duration_ms: totalMs,
       });
     }
   }
-  // Error-precedence parity with the trace-off try/finally: `end()` runs in the
-  // outermost finally there, so its failure wins over an unlock failure, which
-  // in turn wins over the fn error. Swallowing the end() error would let a
-  // traced run report success where the untraced run fails.
+  // Error-precedence parity with the trace-off path: acquisition failure first,
+  // then `end()` (outermost finally there, so it wins over an unlock failure),
+  // then the unlock failure, then the fn error.
+  if (acquisitionError !== undefined) throw acquisitionError;
   if (endError !== undefined) throw endError;
   if (!unlockOk) throw unlockError;
   if (!fnOk) throw fnError;

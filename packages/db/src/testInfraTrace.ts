@@ -179,6 +179,7 @@ export interface TraceSink {
 }
 
 let seq = 0;
+let emitFailureReported = false;
 let customSink: TraceSink | null = null;
 let processTraceFile: string | null = null;
 
@@ -260,6 +261,19 @@ export function emit(
     }
   } catch {
     // Diagnostics are best-effort: a broken sink drops events, never the run.
+    // Silent degradation is the one failure mode an instrument must not have,
+    // so the first failure is reported once per process (a rate-limited stderr
+    // line cannot throw and cannot recurse into emit()).
+    if (!emitFailureReported) {
+      emitFailureReported = true;
+      try {
+        process.stderr.write(
+          "[test-infra-trace] event emission failed; trace output is degraded for this process\n",
+        );
+      } catch {
+        /* stderr itself is gone; nothing left to report to */
+      }
+    }
   }
 }
 
@@ -511,8 +525,15 @@ export async function withTraceSubOperation<T>(
 ): Promise<T> {
   const op = currentTraceOperation();
   if (!op) return fn();
+  // These events are emitted for the phase itself and carry no session
+  // identity of their own; declaring that is the honesty contract, rather than
+  // shipping `pg_backend_pid: null` with an empty `missing` list.
+  const unidentified = {
+    missing: ["pg_backend_pid", "connection_role"],
+  };
   emit("DDL_REQUEST_DISPATCHED", op, {
     sub_operation: tag,
+    ...unidentified,
     ...(target !== undefined ? { target } : {}),
   });
   try {
@@ -520,12 +541,14 @@ export async function withTraceSubOperation<T>(
     emit("DDL_RESPONSE_RECEIVED", op, {
       sub_operation: tag,
       outcome: "ok",
+      ...unidentified,
     });
     return result;
   } catch (err) {
     emit("DDL_RESPONSE_RECEIVED", op, {
       sub_operation: tag,
       outcome: `error:${errName(err)}`,
+      ...unidentified,
     });
     throw err;
   }
