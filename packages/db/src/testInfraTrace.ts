@@ -1,5 +1,8 @@
 /**
- * Test-infra structured trace V2 (research #774 R3–R5).
+ * Test-infra structured trace V2 — the instrument generation is "V2"; the
+ * event schema it emits is `schema_version: 3` (v2 archives exist where
+ * `pg_backend_start` held the postmaster start — see the identity model).
+ * Research #774 R3–R5.
  *
  * TEST-ONLY module. Never imported by production code.
  *
@@ -512,9 +515,10 @@ export interface TracedConnectOptions {
 
 /**
  * TRACE-AWARE connect helper. When an ambient trace operation exists, the
- * connection carries `exi:<role>:<operation_id>` as its startup
+ * connection carries `exi:<role>:<operation_id>` as startup
  * application_name; when there is no ambient operation or tracing is off,
- * this is exactly `postgres(url, override)` with the repo's default options.
+ * this is exactly `postgres(url, merged)` — the caller's options (e.g. the
+ * `max: 1` single-session pin), applied identically in both modes.
  *
  * Returns the Sql plus the trace connection_id ("" when untraced).
  */
@@ -555,6 +559,20 @@ export function postgresWithTraceIdentity(
   return { sql: postgres(url, merged), connectionId: "" };
 }
 
+/**
+ * Identity fields that phase-scoped events (sub-phase / pool-end) do NOT
+ * carry: they are emitted for a step of an operation, not for a session, so
+ * they declare the identity gap in `missing` instead of shipping nulls with
+ * an empty list. Single authority for the field list — extend it here when
+ * the identity schema grows.
+ */
+export const UNATTACHED_IDENTITY_FIELDS: readonly string[] = [
+  "pg_backend_pid",
+  "pg_backend_start",
+  "pg_postmaster_start",
+  "connection_role",
+];
+
 // ---------------------------------------------------------------------------
 // Sub-operation wrapper (per-SQL phase decomposition)
 // ---------------------------------------------------------------------------
@@ -573,9 +591,9 @@ export async function withTraceSubOperation<T>(
   if (!op) return fn();
   // These events are emitted for the phase itself and carry no session
   // identity of their own; declaring that is the honesty contract, rather than
-  // shipping `pg_backend_pid: null` with an empty `missing` list.
+  // shipping identity fields as null with an empty `missing` list.
   const unidentified = {
-    missing: ["pg_backend_pid", "connection_role"],
+    missing: [...UNATTACHED_IDENTITY_FIELDS],
   };
   emit("DDL_REQUEST_DISPATCHED", op, {
     sub_operation: tag,

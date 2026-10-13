@@ -289,6 +289,10 @@ PG_DESCRIBE("trace identity oracles (real PostgreSQL)", () => {
         lockEv.missing.length === 0 &&
         ddlEv.missing.length === 0 &&
         migEv.missing.length === 0 &&
+        // The v2/v3 boundary is executable: emitted events carry schema v3.
+        lockEv.schema_version === 3 &&
+        ddlEv.schema_version === 3 &&
+        migEv.schema_version === 3 &&
         // Three sessions of ONE postmaster: session starts differ, the
         // instance start is shared (the field defect collapsed these).
         new Set([lockEv, ddlEv, migEv].map((e) => e.pg_backend_start)).size ===
@@ -479,17 +483,26 @@ PG_DESCRIBE("trace identity oracles (real PostgreSQL)", () => {
       } finally {
         await observer.end().catch(() => {});
       }
+      const identified2 = eventsOfOp(sink, op.operationId).filter(
+        (e) =>
+          e.event_type === "DDL_CONNECTION_IDENTIFIED" &&
+          e.pg_backend_pid === id2?.pid,
+      );
+      // Session GENERATION is witnessed by the session start, not by the pid:
+      // a recycled pid with a new backend_start is still a new session.
       const pass =
         id1 !== null &&
         id2 !== null &&
         oldSessionGone &&
-        id2.pid !== id1.pid &&
         id2.backendStart !== id1.backendStart &&
-        id2.postmasterStart === id1.postmasterStart;
+        id2.postmasterStart === id1.postmasterStart &&
+        identified2.length === 1 &&
+        identified2[0]?.pg_backend_start === id2.backendStart &&
+        identified2[0]?.missing.length === 0;
       record(
         "C15",
         "session generation is distinguishable within ONE postmaster",
-        "old session gone → new backend_start (and pid) under a constant pg_postmaster_start; pid reuse cannot alias two sessions",
+        "old session gone → new backend_start under a constant pg_postmaster_start, emitted in the identification event; pid reuse cannot alias two sessions",
         pass,
       );
     });

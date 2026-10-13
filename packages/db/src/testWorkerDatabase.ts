@@ -50,6 +50,7 @@ import {
   monotonicNs,
   postgresWithTraceIdentity,
   runWithTraceOperation,
+  UNATTACHED_IDENTITY_FIELDS,
   withTraceSubOperation,
 } from "./testInfraTrace.js";
 import {
@@ -303,10 +304,16 @@ async function ensureDatabaseExistsUnlocked(
     }
   } finally {
     if (op)
-      emitTraceEvent("POOL_END_BEGIN", op, { sub_operation: "ENSURE_DB" });
+      emitTraceEvent("POOL_END_BEGIN", op, {
+        sub_operation: "ENSURE_DB",
+        missing: [...UNATTACHED_IDENTITY_FIELDS],
+      });
     await admin.end();
     if (op)
-      emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: "ENSURE_DB" });
+      emitTraceEvent("POOL_END_COMPLETE", op, {
+        sub_operation: "ENSURE_DB",
+        missing: [...UNATTACHED_IDENTITY_FIELDS],
+      });
   }
 }
 
@@ -380,10 +387,16 @@ export async function dropDatabaseIfExists(
         }
       } finally {
         if (op)
-          emitTraceEvent("POOL_END_BEGIN", op, { sub_operation: "DROP_DB" });
+          emitTraceEvent("POOL_END_BEGIN", op, {
+            sub_operation: "DROP_DB",
+            missing: [...UNATTACHED_IDENTITY_FIELDS],
+          });
         await admin.end();
         if (op)
-          emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: "DROP_DB" });
+          emitTraceEvent("POOL_END_COMPLETE", op, {
+            sub_operation: "DROP_DB",
+            missing: [...UNATTACHED_IDENTITY_FIELDS],
+          });
       }
     },
     // Same wrapper authority contract as ensureDatabaseExists above.
@@ -632,10 +645,17 @@ async function migrateWorkerUrlWithTraceIdentity(
     }
     await withTraceSubOperation("MIGRATE", () => migratePostgres(db));
   } finally {
-    if (op) emitTraceEvent("POOL_END_BEGIN", op, { sub_operation: "MIGRATE" });
+    if (op)
+      emitTraceEvent("POOL_END_BEGIN", op, {
+        sub_operation: "MIGRATE",
+        missing: [...UNATTACHED_IDENTITY_FIELDS],
+      });
     await traced.sql.end();
     if (op)
-      emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: "MIGRATE" });
+      emitTraceEvent("POOL_END_COMPLETE", op, {
+        sub_operation: "MIGRATE",
+        missing: [...UNATTACHED_IDENTITY_FIELDS],
+      });
   }
 }
 

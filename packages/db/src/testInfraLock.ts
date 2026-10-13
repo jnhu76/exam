@@ -338,21 +338,16 @@ async function tracedLockBody<T>(
   let endError: unknown;
   let result: T | undefined;
   // Backend identity read back from the server, carried into the holder's own
-  // events so they are not emitted with a null pid while the identity is known.
-  // `pg_backend_start` is the SESSION start and `pg_postmaster_start` the
-  // INSTANCE start; a null read-back value is omitted rather than shipped as a
-  // silently-empty field (the identification event reports `missing`).
+  // events so they are not emitted with a null pid while the identity is known
+  // (`pg_backend_start` is the SESSION start, `pg_postmaster_start` the
+  // INSTANCE start).
   let holderIdentity: BackendIdentity | null = null;
   const identityFields = (): Partial<TestInfraTraceEvent> =>
     holderIdentity
       ? {
           pg_backend_pid: holderIdentity.pid,
-          ...(holderIdentity.backendStart !== null
-            ? { pg_backend_start: holderIdentity.backendStart }
-            : {}),
-          ...(holderIdentity.postmasterStart !== null
-            ? { pg_postmaster_start: holderIdentity.postmasterStart }
-            : {}),
+          pg_backend_start: holderIdentity.backendStart,
+          pg_postmaster_start: holderIdentity.postmasterStart,
           pg_database_oid: holderIdentity.databaseOid,
           connection_role: "lock",
         }

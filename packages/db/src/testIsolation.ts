@@ -9,6 +9,7 @@ import {
   identifyBackend,
   monotonicNs,
   postgresWithTraceIdentity,
+  UNATTACHED_IDENTITY_FIELDS,
 } from "./testInfraTrace.js";
 import type { ResolverEnv } from "./testScope.js";
 
@@ -169,10 +170,16 @@ async function withAdminConnection<T>(
     }
   } finally {
     if (op)
-      emitTraceEvent("POOL_END_BEGIN", op, { sub_operation: subOperation });
+      emitTraceEvent("POOL_END_BEGIN", op, {
+        sub_operation: subOperation,
+        missing: [...UNATTACHED_IDENTITY_FIELDS],
+      });
     await sql.end();
     if (op)
-      emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: subOperation });
+      emitTraceEvent("POOL_END_COMPLETE", op, {
+        sub_operation: subOperation,
+        missing: [...UNATTACHED_IDENTITY_FIELDS],
+      });
   }
 }
 
