@@ -387,15 +387,36 @@ never garbage-collected.
   `testInfraLock.ts` / `testIsolation.ts` / `testWorkerDatabase.ts` /
   `testDb.ts`). With `TEST_INFRA_TRACE` unset, the traced call sites take the
   pre-trace code path: no extra SQL, no connection-option changes, no
-  scheduler samplers, no AsyncLocalStorage.
+  scheduler samplers, and no operation context is ever entered.
 - When enabled, traced test-infra connections set
   `application_name = exi:<role>:<operation_id>` at startup (verified by a
   trace-only server read-back), so a PostgreSQL backend can be attributed to
   the owning operation without pid adjacency or timestamp joins. Identity
-  joins use `(process_instance_id, operation_id)` only.
+  joins use `(process_instance_id, operation_id)` only. The migration session
+  of a pre-created pool is annotated with a session-level `SET` and the tag is
+  cleared when the operation ends, so post-operation business SQL on that pool
+  is never attributed to a finished migration.
 - All four variables are declared in the `env` key of the DB-backed
   `turbo.json` tasks (hashed into the cache key — a traced run can never
   replay a cached untraced result or vice versa).
+
+**Event contract (read this before writing a consumer):**
+
+- `OPERATION_BEGIN` marks an operation exactly once and a matching terminal
+  event (`OPERATION_COMPLETED` / `OPERATION_FAILED`) is always emitted, on the
+  precheck fast path included. `LOCK_CALL_BEGIN` is a *separate* signal: one
+  per lock acquisition, carrying its own call site, so counting acquisitions
+  and counting operations are different questions with different answers.
+- Emitting is best-effort and cannot affect the run: a failing sink (full
+  disk, permissions, closed stderr) drops events, never the lock release, the
+  critical section or the test outcome.
+- `EVENT_LOOP_SAMPLE` is process-level and cumulative-since-`enable()`; its
+  `eld_*` fields are not per-window values and can never prove that a specific
+  operation's client was stalled.
+- `event_seq` is monotonic and unique per process instance but not dense, and
+  `monotonic_ns` is comparable only within one process. `run_id` falls back to
+  `adhoc-<process instance>` when `TEST_INFRA_TRACE_RUN_ID` is unset, i.e. it
+  is a run identifier only when the variable is set.
 
 ---
 

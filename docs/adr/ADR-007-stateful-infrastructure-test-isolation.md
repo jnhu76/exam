@@ -965,7 +965,10 @@ opens) plus an end-to-end conflict against the enclosing run's REAL held
 lease, and the child-config fixture-only boundary regressions, for rule 8;
 the two-stage
 slot-reuse fixture pair for rule 2), never by timing. `TEST_INFRA_TRACE=1`
-emits per-acquisition wait/hold diagnostics to stderr for future audits.
+emits structured NDJSON events per lock operation (lock/DDL/sub-phase events
+with server-read-back session identity); with `TEST_INFRA_TRACE_DIR` unset they
+go to stderr. See `docs/standards/testing.md` §2.9 for the event contract and
+its guarantees.
 
 ## Relationship to existing flake records
 

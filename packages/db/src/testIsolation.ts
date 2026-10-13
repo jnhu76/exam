@@ -5,6 +5,7 @@ import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 import {
   currentTraceOperation,
   emit as emitTraceEvent,
+  errName,
   identifyBackend,
   monotonicNs,
   postgresWithTraceIdentity,
@@ -169,10 +170,6 @@ async function withAdminConnection<T>(
     if (op)
       emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: subOperation });
   }
-}
-
-function errName(err: unknown): string {
-  return err instanceof Error ? err.name : typeof err;
 }
 
 /**

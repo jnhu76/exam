@@ -392,6 +392,8 @@ FALSIFICATION_TEST = 复发 run 开 TEST_INFRA_TRACE=1，比较受害用例两�
 ```
 
 > **观测仪器限额（REC-2026-10-12-004）**：H1/H2/H3 当前的 falsification test 都以
+
+> **UPDATE（#774 R3–R5，2026-10-13）**：`TEST_INFRA_TRACE` 已从“stderr 的 `acquired wait=` 文本”升级为结构化 NDJSON 事件（`OPERATION_BEGIN` / `LOCK_CALL_BEGIN` / `LOCK_GRANTED_ACK` / `UNLOCK_ACK` + 子阶段事件，附 server read-back 的 session 身份）。下列历史 FALSIFICATION_TEST 中“读 `acquired wait=`”的正确做法是改为按 `(process_instance_id, operation_id)` 归并 NDJSON 事件计算 wait/hold；历史记录本身保留不改写。
 > `TEST_INFRA_TRACE=1` 为主要仪器，而该仪器**单独不足以判别**——`acquired wait=` 只在
 > 成功获得锁之后才打印（等待期间被 5s 预算中止的取锁不留下可归属的 wait 记录），
 > `pid` 是 Node 进程 PID（非 PostgreSQL backend PID），`caller` 为首个外部栈帧文本、
@@ -706,6 +708,7 @@ MODIFICATION_SUCCESS = YES
 （经 turbo）0 条 trace，B1/B2/B3（`pnpm --filter @exam/api exec vitest …`，绕过 turbo）
 trace 正常。后果：任何"lane 级 trace 归因"要么把该变量加入 `turbo.json` 任务 env 列表
 （仓库改动，需授权；本次未做），要么绕过 turbo 直接调用 vitest（本次聚焦诊断采用）。
+**UPDATE（#774 R3–R5，2026-10-13）**：`turbo.json` 的 `test` / `@exam/api#test` / `coverage` / `@exam/api#coverage` / `test:integration` / `@exam/api#test:integration` 任务 env 列表已加入四个 `TEST_INFRA_TRACE*` 变量，lane 内经 turbo 也能收到该变量（见 `docs/standards/testing.md` §2.9）。
 这也意味着：即便当时的 lane 设置了该变量，历史 occurrence 也不会留下 trace。
 
 #### 独立记录：`envSurfaceGuard.test.ts` × 未跟踪 `.env.deploy`（确定性策略冲突，NOT_A_FLAKE，不并入本 case 聚合）

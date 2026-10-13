@@ -88,7 +88,11 @@ export function isTraceGcDiagnosticEnabled(
 /** Fixed-per-process identity: same pid across runs ≠ same process instance. */
 export const PROCESS_INSTANCE_ID: string = randomUUID();
 
-/** Run id: constant across all processes of one traced invocation. */
+/**
+ * Run id: constant across all processes of one traced invocation WHEN
+ * `TEST_INFRA_TRACE_RUN_ID` is set; otherwise each process falls back to its
+ * own `adhoc-<process instance>` id (so it is not a shared join key then).
+ */
 export function traceRunId(env: NodeJS.ProcessEnv = process.env): string {
   return (
     env.TEST_INFRA_TRACE_RUN_ID || `adhoc-${PROCESS_INSTANCE_ID.slice(0, 8)}`
@@ -113,6 +117,9 @@ export interface TraceOperation {
 // ---------------------------------------------------------------------------
 
 export type TestInfraTraceEventType =
+  // Exactly one per operation, whether or not the lifecycle lock is taken:
+  // LOCK_CALL_BEGIN counts lock ACQUISITIONS, OPERATION_BEGIN counts flows.
+  | "OPERATION_BEGIN"
   | "LOCK_CALL_BEGIN"
   | "COORD_CONNECTION_CREATE"
   | "COORD_BACKEND_IDENTIFIED"
@@ -174,7 +181,6 @@ export interface TraceSink {
 let seq = 0;
 let customSink: TraceSink | null = null;
 let processTraceFile: string | null = null;
-let processTraceDir: string | null = null;
 
 /** Test seam: replace the process sink (never used outside unit tests). */
 export function __setTraceSinkForTests(sink: TraceSink | null): void {
@@ -203,6 +209,14 @@ export function monotonicNs(): bigint {
   return process.hrtime.bigint();
 }
 
+/**
+ * Emit one trace event. INVARIANT: emitting must never change the behaviour of
+ * the run it observes. Every failure mode of the sink (ENOSPC, EACCES, EPIPE
+ * on stderr, a throwing test seam) is contained here — an exception escaping
+ * from an emit that sits between lock acquisition and unlock would otherwise
+ * skip the release and orphan the session-level advisory lock, wedging every
+ * other worker on the single lifecycle key.
+ */
 export function emit(
   eventType: TestInfraTraceEventType,
   op: TraceOperation | null,
@@ -210,38 +224,42 @@ export function emit(
 ): void {
   const enabled = isTestInfraTraceEnabled();
   if (!enabled) return;
-  const { missing, ...rest } = fields;
-  const event: TestInfraTraceEvent = {
-    schema_version: 2,
-    run_id: traceRunId(),
-    operation_id: op ? op.operationId : null,
-    process_instance_id: PROCESS_INSTANCE_ID,
-    node_pid: process.pid,
-    event_seq: seq++,
-    event_type: eventType,
-    clock_domain: "NODE_MONOTONIC",
-    monotonic_ns: monotonicNs().toString(),
-    wall_time_utc: new Date().toISOString(),
-    pg_backend_pid: null,
-    pg_backend_start: null,
-    pg_database_oid: null,
-    connection_role: null,
-    lock_key: op ? op.lockKey : null,
-    outcome: null,
-    missing: missing ?? [],
-    ...rest,
-  };
+  try {
+    const { missing, ...rest } = fields;
+    const event: TestInfraTraceEvent = {
+      schema_version: 2,
+      run_id: traceRunId(),
+      operation_id: op ? op.operationId : null,
+      process_instance_id: PROCESS_INSTANCE_ID,
+      node_pid: process.pid,
+      event_seq: seq++,
+      event_type: eventType,
+      clock_domain: "NODE_MONOTONIC",
+      monotonic_ns: monotonicNs().toString(),
+      wall_time_utc: new Date().toISOString(),
+      pg_backend_pid: null,
+      pg_backend_start: null,
+      pg_database_oid: null,
+      connection_role: null,
+      lock_key: op ? op.lockKey : null,
+      outcome: null,
+      missing: missing ?? [],
+      ...rest,
+    };
 
-  if (customSink !== null) {
-    customSink(event);
-    return;
-  }
-  const dir = process.env.TEST_INFRA_TRACE_DIR;
-  const line = `${JSON.stringify(event)}\n`;
-  if (dir) {
-    appendFileSync(resolveTraceFile(dir), line);
-  } else {
-    process.stderr.write(line);
+    if (customSink !== null) {
+      customSink(event);
+      return;
+    }
+    const dir = process.env.TEST_INFRA_TRACE_DIR;
+    const line = `${JSON.stringify(event)}\n`;
+    if (dir) {
+      appendFileSync(resolveTraceFile(dir), line);
+    } else {
+      process.stderr.write(line);
+    }
+  } catch {
+    // Diagnostics are best-effort: a broken sink drops events, never the run.
   }
 }
 
@@ -286,14 +304,23 @@ export function beginLockOperation(
 // ---------------------------------------------------------------------------
 
 /**
- * application_name is NAMEDATALEN-1 = 63 bytes server-side. Encoding
- * `exi:<role>:<uuid>` stays within the limit (prefix 5 + role ≤ 8 + 1 + 36).
+ * application_name is NAMEDATALEN-1 = 63 bytes server-side, and PostgreSQL
+ * truncates silently. Encoding `exi:<role>:<uuid>` stays within the limit
+ * (prefix 5 + role ≤ 8 + 1 + 36 = 50), but the invariant is enforced rather
+ * than assumed: a longer id must fail loudly here instead of degrading the
+ * server-side identity to a truncated tag that no longer matches.
  */
 export function traceApplicationName(
   role: ConnectionRole,
   operationId: string,
 ): string {
-  return `exi:${role}:${operationId}`;
+  const encoded = `exi:${role}:${operationId}`;
+  if (Buffer.byteLength(encoded, "utf8") > 63) {
+    throw new Error(
+      `trace application_name would exceed 63 bytes (got ${Buffer.byteLength(encoded, "utf8")}); identity must not be silently truncated`,
+    );
+  }
+  return encoded;
 }
 
 /** Decode an application_name encoded by {@link traceApplicationName}. */
@@ -409,7 +436,11 @@ export async function identifyBackend(
   }
 }
 
-function errName(err: unknown): string {
+/**
+ * Error name for trace outcomes. Single authority: emitters must never record
+ * error messages (they can carry connection strings or row data).
+ */
+export function errName(err: unknown): string {
   return err instanceof Error ? err.name : typeof err;
 }
 
@@ -434,6 +465,12 @@ export function postgresWithTraceIdentity(
 ): { sql: postgres.Sql; connectionId: string } {
   const ambient = currentTraceOperation();
   const connectionId = ambient ? `c${connectionCounter++}` : "";
+  // Both branches merge the caller's options identically, so enabling the
+  // trace cannot change pool sizing or any other connection option.
+  const merged = {
+    ...options.override,
+    ...(options.max !== undefined ? { max: options.max } : {}),
+  };
   if (ambient && isTestInfraTraceEnabled()) {
     if (role === "lock") {
       emit("COORD_CONNECTION_CREATE", ambient, {
@@ -447,8 +484,7 @@ export function postgresWithTraceIdentity(
     // (DDL_CONNECTION_IDENTIFIED) — no premature event here.
     return {
       sql: postgres(url, {
-        ...options.override,
-        ...(options.max !== undefined ? { max: options.max } : {}),
+        ...merged,
         connection: {
           application_name: traceApplicationName(role, ambient.operationId),
         },
@@ -456,14 +492,7 @@ export function postgresWithTraceIdentity(
       connectionId,
     };
   }
-  return {
-    sql: postgres(
-      url,
-      options.override ??
-        (options.max !== undefined ? { max: options.max } : {}),
-    ),
-    connectionId: "",
-  };
+  return { sql: postgres(url, merged), connectionId: "" };
 }
 
 // ---------------------------------------------------------------------------

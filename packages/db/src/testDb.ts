@@ -139,32 +139,45 @@ export async function getIsolatedTestDb(namespace: string): Promise<{
     // on packages/db coverage — see docs/standards/test-flakes.md).
     await withTestInfraLifecycleLock(baseUrl, async () => {
       const op = currentTraceOperation();
-      if (op) {
-        // TRACE-ONLY identity annotation: the connection was created before
-        // the operation existed, so its startup application_name cannot carry
-        // the operation id. The searchPath pool is pinned to max:1, so a
-        // session-level SET annotates THE one backend this migration runs on.
-        await conn.sql.unsafe(
-          `SET application_name = '${traceApplicationName("mig", op.operationId)}'`,
+      try {
+        if (op) {
+          // TRACE-ONLY identity annotation: the connection was created before
+          // the operation existed, so its startup application_name cannot carry
+          // the operation id. The searchPath pool is pinned to max:1, so a
+          // session-level SET annotates THE one backend this migration runs on.
+          await conn.sql.unsafe(
+            `SET application_name = '${traceApplicationName("mig", op.operationId)}'`,
+          );
+          await identifyBackend(
+            conn.sql,
+            "mig",
+            op,
+            "precreated-conn",
+            "DDL_CONNECTION_IDENTIFIED",
+          );
+        }
+        // CREATE SCHEMA runs through its own admin connection, which already
+        // emits the CREATE_SCHEMA sub-phase (withAdminConnection); wrapping it
+        // here again double-counted the phase in the trace.
+        await createTestSchemaUnlocked(baseUrl, schemaName);
+        await withTraceSubOperation(
+          "MIGRATE",
+          () => migratePostgres(conn.db, { migrationsSchema: schemaName }),
+          schemaName,
         );
-        await identifyBackend(
-          conn.sql,
-          "mig",
-          op,
-          "precreated-conn",
-          "DDL_CONNECTION_IDENTIFIED",
-        );
+      } finally {
+        // The annotated session is the long-lived isolated-DB pool handed back
+        // to the test. Leaving `exi:mig:<op>` on it would make post-operation
+        // business SQL attributable to a finished migration in any
+        // pg_stat_activity-based join, so the tag is removed with the
+        // operation. CREATE SCHEMA runs through its own admin connection
+        // (withAdminConnection already emits the CREATE_SCHEMA sub-phase).
+        if (op) {
+          await conn.sql
+            .unsafe(`SET application_name = ''`)
+            .catch(() => undefined);
+        }
       }
-      await withTraceSubOperation(
-        "CREATE_SCHEMA",
-        () => createTestSchemaUnlocked(baseUrl, schemaName),
-        schemaName,
-      );
-      await withTraceSubOperation(
-        "MIGRATE",
-        () => migratePostgres(conn.db, { migrationsSchema: schemaName }),
-        schemaName,
-      );
     });
   } catch (err) {
     await conn.sql.end().catch(() => {});

@@ -56,6 +56,7 @@ import {
   beginLockOperation,
   currentTraceOperation,
   emit as emitTraceEvent,
+  errName,
   ensureSchedulerObserver,
   identifyBackend,
   isTestInfraTraceEnabled,
@@ -63,6 +64,7 @@ import {
   postgresWithTraceIdentity,
   runWithTraceOperation,
 } from "./testInfraTrace.js";
+import type { BackendIdentity, TestInfraTraceEvent } from "./testInfraTrace.js";
 
 /**
  * Resolve the canonical test-infra coordination database URL.
@@ -293,9 +295,17 @@ export async function withTestInfraLifecycleLock<T>(
   const ambient = currentTraceOperation();
   const op =
     ambient ?? beginLockOperation(firstExternalFrame(), key.toString());
-  emitTraceEvent("LOCK_CALL_BEGIN", op, { caller: op.caller });
+  // ONE begin per operation. OPERATION_BEGIN (owner: whoever created the
+  // identity) is distinct from LOCK_CALL_BEGIN (one per actual lock
+  // acquisition), so a consumer can count operations and acquisitions
+  // separately; the lock-level event carries its OWN call site even when it
+  // runs inside an ambient operation.
+  if (ambient === null) {
+    emitTraceEvent("OPERATION_BEGIN", op, { caller: op.caller });
+  }
+  emitTraceEvent("LOCK_CALL_BEGIN", op, { caller: firstExternalFrame() });
   return runWithTraceOperation(op, () =>
-    tracedLockBody(coordinationUrl, key, op, fn),
+    tracedLockBody(coordinationUrl, key, op, fn, ambient === null),
   );
 }
 
@@ -304,87 +314,146 @@ export async function withTestInfraLifecycleLock<T>(
  * the trace-off path exactly (unlock in a finally-equivalent position even on
  * fn failure; a failing unlock replaces the fn error; `admin.end()` always
  * follows the unlock attempt).
+ *
+ * `ownsOperation` is true when this call created the operation identity: it
+ * then also emits the terminal event. Inside a larger flow (e.g. the worker
+ * bootstrap) the flow owner emits the terminal event instead, so every
+ * operation has exactly one terminal event.
  */
 async function tracedLockBody<T>(
   coordinationUrl: string,
   key: bigint,
   op: ReturnType<typeof beginLockOperation>,
   fn: () => Promise<T>,
+  ownsOperation: boolean,
 ): Promise<T> {
   const admin = postgresWithTraceIdentity(coordinationUrl, "lock", { max: 1 });
-  await identifyBackend(
-    admin.sql,
-    "lock",
-    op,
-    admin.connectionId,
-    "COORD_BACKEND_IDENTIFIED",
-  );
-  emitTraceEvent("LOCK_REQUEST_DISPATCHED", op);
-  const requestNs = monotonicNs();
-  await acquireAdvisoryLock(admin.sql, key);
-  emitTraceEvent("LOCK_GRANTED_ACK", op, {
-    outcome: "granted",
-    duration_ms: msSince(requestNs),
-  });
-  const holdNs = monotonicNs();
-  emitTraceEvent("CRITICAL_SECTION_ENTER", op);
-  let result: T | undefined;
+  let acquired = false;
   let fnOk = false;
   let fnError: unknown;
-  try {
-    result = await fn();
-    fnOk = true;
-    emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
-      outcome: "ok",
-      duration_ms: msSince(holdNs),
-    });
-  } catch (err) {
-    fnError = err;
-    emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
-      outcome: `error:${errName(err)}`,
-      duration_ms: msSince(holdNs),
-    });
-  }
-  emitTraceEvent("UNLOCK_REQUEST_DISPATCHED", op);
-  const unlockNs = monotonicNs();
   let unlockOk = false;
   let unlockError: unknown;
+  let endError: unknown;
+  let result: T | undefined;
+  // Backend identity read back from the server, carried into the holder's own
+  // events so they are not emitted with a null pid while the identity is known.
+  let holderIdentity: BackendIdentity | null = null;
+  const identityFields = (): Partial<TestInfraTraceEvent> =>
+    holderIdentity
+      ? {
+          pg_backend_pid: holderIdentity.pid,
+          pg_backend_start: holderIdentity.postmasterStart,
+          pg_database_oid: holderIdentity.databaseOid,
+          connection_role: "lock",
+        }
+      : {};
   try {
-    await releaseAdvisoryLock(admin.sql, key);
-    unlockOk = true;
-    emitTraceEvent("UNLOCK_ACK", op, {
-      outcome: "released",
-      duration_ms: msSince(unlockNs),
+    holderIdentity = await identifyBackend(
+      admin.sql,
+      "lock",
+      op,
+      admin.connectionId,
+      "COORD_BACKEND_IDENTIFIED",
+    );
+    emitTraceEvent("LOCK_REQUEST_DISPATCHED", op, identityFields());
+    const requestNs = monotonicNs();
+    await acquireAdvisoryLock(admin.sql, key);
+    acquired = true;
+    emitTraceEvent("LOCK_GRANTED_ACK", op, {
+      ...identityFields(),
+      outcome: "granted",
+      duration_ms: msSince(requestNs),
     });
-  } catch (err) {
-    unlockError = err;
-    emitTraceEvent("UNLOCK_ACK", op, { outcome: `error:${errName(err)}` });
-  }
-  emitTraceEvent("POOL_END_BEGIN", op);
-  try {
-    await admin.sql.end();
-    emitTraceEvent("POOL_END_COMPLETE", op, { outcome: "ended" });
-  } catch (err) {
-    emitTraceEvent("POOL_END_COMPLETE", op, {
-      outcome: `error:${errName(err)}`,
-    });
+    const holdNs = monotonicNs();
+    emitTraceEvent("CRITICAL_SECTION_ENTER", op, identityFields());
+    try {
+      result = await fn();
+      fnOk = true;
+      emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
+        ...identityFields(),
+        outcome: "ok",
+        duration_ms: msSince(holdNs),
+      });
+    } catch (err) {
+      fnError = err;
+      emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
+        ...identityFields(),
+        outcome: `error:${errName(err)}`,
+        duration_ms: msSince(holdNs),
+      });
+    }
+    emitTraceEvent("UNLOCK_REQUEST_DISPATCHED", op, identityFields());
+    const unlockNs = monotonicNs();
+    try {
+      await releaseAdvisoryLock(admin.sql, key);
+      unlockOk = true;
+      emitTraceEvent("UNLOCK_ACK", op, {
+        ...identityFields(),
+        outcome: "released",
+        duration_ms: msSince(unlockNs),
+      });
+    } catch (err) {
+      unlockError = err;
+      emitTraceEvent("UNLOCK_ACK", op, {
+        ...identityFields(),
+        outcome: `error:${errName(err)}`,
+      });
+    }
+  } finally {
+    // LOCK RELEASE INVARIANT: no path out of this function may leave the
+    // session-level advisory lock held. Every known throw source is handled
+    // above, so this is defence in depth for the invariant that matters most
+    // — a survivor session would wedge every other worker on the single
+    // lifecycle key for the life of the process.
+    if (acquired && !unlockOk) {
+      try {
+        await releaseAdvisoryLock(admin.sql, key);
+        unlockOk = true;
+      } catch (err) {
+        if (unlockError === undefined) unlockError = err;
+      }
+    }
+    emitTraceEvent("POOL_END_BEGIN", op, identityFields());
+    try {
+      await admin.sql.end();
+      emitTraceEvent("POOL_END_COMPLETE", op, {
+        ...identityFields(),
+        outcome: "ended",
+      });
+    } catch (err) {
+      endError = err;
+      emitTraceEvent("POOL_END_COMPLETE", op, {
+        ...identityFields(),
+        outcome: `error:${errName(err)}`,
+      });
+    }
   }
   const totalMs = Number(monotonicNs() - op.beginMonotonicNs) / 1e6;
-  if (fnOk && unlockOk) {
-    emitTraceEvent("OPERATION_COMPLETED", op, {
-      outcome: "completed",
-      duration_ms: totalMs,
-    });
-  } else {
-    emitTraceEvent("OPERATION_FAILED", op, {
-      outcome: !unlockOk
-        ? `unlock_error:${errName(unlockError)}`
-        : `fn_error:${errName(fnError)}`,
-      duration_ms: totalMs,
-    });
+  if (ownsOperation) {
+    if (fnOk && unlockOk && endError === undefined) {
+      emitTraceEvent("OPERATION_COMPLETED", op, {
+        ...identityFields(),
+        outcome: "completed",
+        duration_ms: totalMs,
+      });
+    } else {
+      emitTraceEvent("OPERATION_FAILED", op, {
+        ...identityFields(),
+        outcome:
+          endError !== undefined
+            ? `pool_end_error:${errName(endError)}`
+            : !unlockOk
+              ? `unlock_error:${errName(unlockError)}`
+              : `fn_error:${errName(fnError)}`,
+        duration_ms: totalMs,
+      });
+    }
   }
-  // Error-precedence parity with the trace-off try/finally: a failing unlock
-  // replaces the fn error; otherwise the fn error propagates.
+  // Error-precedence parity with the trace-off try/finally: `end()` runs in the
+  // outermost finally there, so its failure wins over an unlock failure, which
+  // in turn wins over the fn error. Swallowing the end() error would let a
+  // traced run report success where the untraced run fails.
+  if (endError !== undefined) throw endError;
   if (!unlockOk) throw unlockError;
   if (!fnOk) throw fnError;
   return result as T;
@@ -392,10 +461,6 @@ async function tracedLockBody<T>(
 
 function msSince(beginNs: bigint): number {
   return Number(monotonicNs() - beginNs) / 1e6;
-}
-
-function errName(err: unknown): string {
-  return err instanceof Error ? err.name : typeof err;
 }
 
 /** First stack frame outside this module, for TEST_INFRA_TRACE diagnostics. */

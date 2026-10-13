@@ -106,7 +106,12 @@ const PG_DESCRIBE = PG_UP ? describe : describe.skip;
 const ORACLE_DB = `test_trace_oracle_${randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
 afterAll(async () => {
-  await dropDatabaseIfExists(COORD_URL, ORACLE_DB, { keepMissing: true });
+  // The fixture DB only exists when PostgreSQL was reachable (`PG_UP`); an
+  // unconditional drop turns a soft-skip environment (no PG) into a red file,
+  // contradicting the package's self-skip contract (vitest.globalSetup.ts).
+  if (PG_UP) {
+    await dropDatabaseIfExists(COORD_URL, ORACLE_DB, { keepMissing: true });
+  }
   process.stdout.write(
     `${JSON.stringify({ trace_identity_oracles: oracleRecords })}\n`,
   );
@@ -524,6 +529,92 @@ PG_DESCRIBE("trace identity oracles (real PostgreSQL)", () => {
       "A2",
       "ensure operation decomposes into per-SQL sub-phases",
       "critical section is decomposed (no single DDL blob)",
+      pass,
+    );
+  }, 30_000);
+
+  it("C11: a throwing trace sink cannot orphan the lifecycle lock or fail the operation", async () => {
+    // Regression for the sink-error wedge found in independent review: an
+    // exception escaping an emit between lock acquisition and unlock would
+    // skip the release, leaving a session-level advisory lock held for the
+    // life of the process and queueing every other worker on the single key.
+    vi.stubEnv("TEST_INFRA_TRACE", "1");
+    __setTraceSinkForTests(() => {
+      throw new Error("synthetic sink failure (ENOSPC/EACCES class)");
+    });
+
+    let bodyRan = false;
+    await expect(
+      withTestInfraLifecycleLock(COORD_URL, async () => {
+        bodyRan = true;
+      }),
+    ).resolves.toBeUndefined();
+
+    // The lock must be free immediately: this acquisition runs with the trace
+    // sink still throwing, i.e. under the worst-case sink behaviour.
+    const second = withTestInfraLifecycleLock(COORD_URL, async () => "ok");
+    const raced = await Promise.race([
+      second,
+      new Promise((resolve) => setTimeout(() => resolve("TIMEOUT"), 5_000)),
+    ]);
+    __setTraceSinkForTests(null);
+    const pass = bodyRan && raced === "ok";
+    record(
+      "C11",
+      "sink throws during the critical section",
+      "operation completes and the advisory lock is released (no orphaned holder)",
+      pass,
+    );
+  }, 30_000);
+
+  it("C12: one OPERATION_BEGIN and one terminal event per operation; lock calls carry their own site", async () => {
+    const sink: Sink = [];
+    enableTrace(sink);
+
+    // Owner path: the lock wrapper creates the operation identity itself.
+    await withTestInfraLifecycleLock(COORD_URL, async () => undefined);
+    const ownerOp = sink.find((e) => e.event_type === "OPERATION_BEGIN")
+      ?.operation_id as string;
+    const ownerEvents = eventsOfOp(sink, ownerOp);
+    const ownerBegins = ownerEvents.filter(
+      (e) => e.event_type === "OPERATION_BEGIN",
+    ).length;
+    const ownerTerminals = ownerEvents.filter(
+      (e) => e.event_type === "OPERATION_COMPLETED",
+    ).length;
+    const ownerLockBegins = ownerEvents.filter(
+      (e) => e.event_type === "LOCK_CALL_BEGIN",
+    ).length;
+    const ownerLockSites = ownerEvents
+      .filter((e) => e.event_type === "LOCK_CALL_BEGIN")
+      .map((e) => e.caller ?? "");
+
+    // Nested path: an ambient operation (a larger flow owns the identity) must
+    // NOT get a second begin or the terminal event from the lock wrapper.
+    sink.length = 0;
+    const ambient = beginLockOperation("synthetic.flow.owner", "42");
+    await runWithTraceOperation(ambient, async () => {
+      await withTestInfraLifecycleLock(COORD_URL, async () => undefined);
+    });
+    const nestedEvents = eventsOfOp(sink, ambient.operationId);
+    const nestedTerminals = nestedEvents.filter((e) =>
+      /OPERATION_(COMPLETED|FAILED)/.test(e.event_type),
+    ).length;
+    const nestedBegins = nestedEvents.filter(
+      (e) => e.event_type === "OPERATION_BEGIN",
+    ).length;
+
+    const pass =
+      ownerBegins === 1 &&
+      ownerTerminals === 1 &&
+      ownerLockBegins === 1 &&
+      ownerLockSites.every((c) => c.length > 0) &&
+      nestedBegins === 0 &&
+      nestedTerminals === 0;
+    record(
+      "C12",
+      "operation vs lock-call event contract",
+      "exactly one OPERATION_BEGIN + one terminal per operation; nested lock call emits neither",
       pass,
     );
   }, 30_000);

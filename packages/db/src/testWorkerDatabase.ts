@@ -44,6 +44,7 @@ import {
   beginLockOperation,
   currentTraceOperation,
   emit as emitTraceEvent,
+  errName,
   identifyBackend,
   isTestInfraTraceEnabled,
   monotonicNs,
@@ -459,19 +460,23 @@ async function isWorkerDatabaseBootstrapped(
     });
     admin = tracedAdmin.sql;
     if (op) {
-      await withTraceSubOperation("PRECHECK_ADMIN", async () => {
-        await identifyBackend(
-          admin!,
-          "precheck",
-          op,
-          tracedAdmin.connectionId,
-          "DDL_CONNECTION_IDENTIFIED",
-        );
-      });
+      await identifyBackend(
+        admin,
+        "precheck",
+        op,
+        tracedAdmin.connectionId,
+        "DDL_CONNECTION_IDENTIFIED",
+      );
     }
-    const exists = (await admin`
-      SELECT 1 FROM pg_database WHERE datname = ${databaseName}
-    `) as Array<{ "?column?": number }>;
+    // The sub-phase must bracket the PRECHECK statement itself, not the trace
+    // read-back above: a phase whose duration excludes the query it names
+    // reports a fake precheck cost.
+    const adminSql = admin;
+    const exists = await withTraceSubOperation("PRECHECK_ADMIN", async () => {
+      return (await adminSql`
+        SELECT 1 FROM pg_database WHERE datname = ${databaseName}
+      `) as Array<{ "?column?": number }>;
+    });
     if (exists.length === 0) return false;
   } catch {
     return false;
@@ -485,19 +490,20 @@ async function isWorkerDatabaseBootstrapped(
     });
     conn = tracedConn.sql;
     if (op) {
-      await withTraceSubOperation("PRECHECK_WORKER", async () => {
-        await identifyBackend(
-          conn!,
-          "precheck",
-          op,
-          tracedConn.connectionId,
-          "DDL_CONNECTION_IDENTIFIED",
-        );
-      });
+      await identifyBackend(
+        conn,
+        "precheck",
+        op,
+        tracedConn.connectionId,
+        "DDL_CONNECTION_IDENTIFIED",
+      );
     }
-    const rows = (await conn`
-      SELECT count(*)::int AS c FROM drizzle.__drizzle_migrations
-    `) as Array<{ c: number }>;
+    const connSql = conn;
+    const rows = await withTraceSubOperation("PRECHECK_WORKER", async () => {
+      return (await connSql`
+        SELECT count(*)::int AS c FROM drizzle.__drizzle_migrations
+      `) as Array<{ c: number }>;
+    });
     return Number(rows[0]?.c) === expected;
   } catch {
     return false;
@@ -522,16 +528,38 @@ function ensureWorkerDatabaseBootstrapped(
     bootstrap = (async () => {
       // Trace V2: the whole flow (precheck → lock → ensure → migrate) is ONE
       // operation identity; the nested withTestInfraLifecycleLock reuses it
-      // from the ambient context.
+      // from the ambient context and does NOT emit the terminal event.
       if (isTestInfraTraceEnabled()) {
         const op = beginLockOperation(
           "ensureWorkerDatabaseBootstrapped",
           getTestInfraLifecycleLockKey().toString(),
         );
-        emitTraceEvent("LOCK_CALL_BEGIN", op, { caller: op.caller });
-        return runWithTraceOperation(op, () =>
-          bootstrapFlow(adminUrl, workerUrl, databaseName, env),
-        );
+        emitTraceEvent("OPERATION_BEGIN", op, { caller: op.caller });
+        return runWithTraceOperation(op, async () => {
+          try {
+            const flowResult = await bootstrapFlow(
+              adminUrl,
+              workerUrl,
+              databaseName,
+              env,
+            );
+            // Terminal event is emitted on BOTH exits: the precheck fast path
+            // (no lock taken) and the serialized path. Without this, a warm
+            // slot — the common case — produced an operation with no terminal
+            // event at all.
+            emitTraceEvent("OPERATION_COMPLETED", op, {
+              outcome: "completed",
+              duration_ms: Number(monotonicNs() - op.beginMonotonicNs) / 1e6,
+            });
+            return flowResult;
+          } catch (err) {
+            emitTraceEvent("OPERATION_FAILED", op, {
+              outcome: `flow_error:${errName(err)}`,
+              duration_ms: Number(monotonicNs() - op.beginMonotonicNs) / 1e6,
+            });
+            throw err;
+          }
+        });
       }
       return bootstrapFlow(adminUrl, workerUrl, databaseName, env);
     })().catch((err: unknown) => {
