@@ -24,6 +24,10 @@
     "test": {
       "dependsOn": ["^build"],
       "env": [
+        "TEST_INFRA_TRACE",
+        "TEST_INFRA_TRACE_DIR",
+        "TEST_INFRA_TRACE_RUN_ID",
+        "TEST_INFRA_TRACE_GC",
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
         "DB_HOST_PORT",
@@ -41,6 +45,10 @@
     "@exam/api#test": {
       "dependsOn": ["^build", "@exam/db#test"],
       "env": [
+        "TEST_INFRA_TRACE",
+        "TEST_INFRA_TRACE_DIR",
+        "TEST_INFRA_TRACE_RUN_ID",
+        "TEST_INFRA_TRACE_GC",
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
         "DB_HOST_PORT",
@@ -58,6 +66,10 @@
     "coverage": {
       "dependsOn": ["^build"],
       "env": [
+        "TEST_INFRA_TRACE",
+        "TEST_INFRA_TRACE_DIR",
+        "TEST_INFRA_TRACE_RUN_ID",
+        "TEST_INFRA_TRACE_GC",
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
         "DB_HOST_PORT",
@@ -75,6 +87,10 @@
     "@exam/api#coverage": {
       "dependsOn": ["^build", "@exam/db#coverage"],
       "env": [
+        "TEST_INFRA_TRACE",
+        "TEST_INFRA_TRACE_DIR",
+        "TEST_INFRA_TRACE_RUN_ID",
+        "TEST_INFRA_TRACE_GC",
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
         "DB_HOST_PORT",
@@ -92,6 +108,10 @@
     "test:integration": {
       "dependsOn": ["^build"],
       "env": [
+        "TEST_INFRA_TRACE",
+        "TEST_INFRA_TRACE_DIR",
+        "TEST_INFRA_TRACE_RUN_ID",
+        "TEST_INFRA_TRACE_GC",
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
         "DB_HOST_PORT",
@@ -109,6 +129,10 @@
     "@exam/api#test:integration": {
       "dependsOn": ["^build", "@exam/db#test:integration"],
       "env": [
+        "TEST_INFRA_TRACE",
+        "TEST_INFRA_TRACE_DIR",
+        "TEST_INFRA_TRACE_RUN_ID",
+        "TEST_INFRA_TRACE_GC",
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
         "DB_HOST_PORT",
