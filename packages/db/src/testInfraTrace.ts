@@ -6,9 +6,13 @@
  * Opt-in observational tracing for the test-infra lifecycle advisory-lock
  * critical sections (`withTestInfraLifecycleLock` and the DDL helpers that
  * execute inside them). Enabled ONLY when `TEST_INFRA_TRACE=1`. When disabled
- * the module is inert: no extra SQL, no connection-option changes, no
- * AsyncLocalStorage, no scheduler samplers — the traced call sites take
- * byte-identical code paths to the pre-trace implementation.
+ * the module is inert: no extra SQL, no query or session-option changes, no
+ * AsyncLocalStorage, no scheduler samplers — the traced call sites run the
+ * pre-trace statements on the same connections. The one deliberate deviation
+ * from the pre-trace shape is the `max: 1` pin on the lifecycle DDL and
+ * migration connections (applied identically with tracing on and off): a
+ * server read-back is a session-identity claim only for single-session
+ * connections.
  *
  * Identity model (the reason this module exists — R1/R2 left
  * EXAM_HOLDER_TO_DDL_IDENTITY unresolved):
@@ -32,6 +36,15 @@
  *     recorded in `COORD_BACKEND_IDENTIFIED` / `DDL_CONNECTION_IDENTIFIED`
  *     events, so application_name propagation is verified per connection, not
  *     assumed.
+ *   - The read-back records TWO distinct PostgreSQL clocks: `pg_backend_start`
+ *     is the SESSION's `pg_stat_activity.backend_start` (connection time) and
+ *     `pg_postmaster_start` is the INSTANCE's `pg_postmaster_start_time()`.
+ *     Only the session start distinguishes two sessions of one postmaster (and
+ *     survives pid reuse); the instance start identifies the postmaster
+ *     generation. A read-back is a session-identity claim only when the
+ *     connection is single-session, so every traced DDL/migration/precheck
+ *     call site pins `max: 1` (the pin is passed identically with tracing on
+ *     and off, so the trace never changes pool sizing).
  *
  * Clock domain: every event carries `monotonic_ns` (process-local
  * `process.hrtime.bigint()`, domain `NODE_MONOTONIC`) and `wall_time_utc`
@@ -113,7 +126,7 @@ export interface TraceOperation {
 }
 
 // ---------------------------------------------------------------------------
-// Event schema V2 + sink
+// Event schema V3 + sink
 // ---------------------------------------------------------------------------
 
 export type TestInfraTraceEventType =
@@ -141,7 +154,7 @@ export type TestInfraTraceEventType =
   | "NODE_GC_WINDOW";
 
 export interface TestInfraTraceEvent {
-  schema_version: 2;
+  schema_version: 3;
   run_id: string;
   operation_id: string | null;
   process_instance_id: string;
@@ -152,7 +165,10 @@ export interface TestInfraTraceEvent {
   monotonic_ns: string;
   wall_time_utc: string;
   pg_backend_pid: number | null;
+  /** SESSION start — `pg_stat_activity.backend_start`, never the instance start. */
   pg_backend_start: string | null;
+  /** INSTANCE start — `pg_postmaster_start_time()`, constant per postmaster. */
+  pg_postmaster_start: string | null;
   pg_database_oid: number | null;
   connection_role: ConnectionRole | null;
   lock_key: string | null;
@@ -228,7 +244,7 @@ export function emit(
   try {
     const { missing, ...rest } = fields;
     const event: TestInfraTraceEvent = {
-      schema_version: 2,
+      schema_version: 3,
       run_id: traceRunId(),
       operation_id: op ? op.operationId : null,
       process_instance_id: PROCESS_INSTANCE_ID,
@@ -240,6 +256,7 @@ export function emit(
       wall_time_utc: new Date().toISOString(),
       pg_backend_pid: null,
       pg_backend_start: null,
+      pg_postmaster_start: null,
       pg_database_oid: null,
       connection_role: null,
       lock_key: op ? op.lockKey : null,
@@ -374,7 +391,10 @@ export function traceIdentityKey(event: {
 
 export interface BackendIdentity {
   pid: number;
-  postmasterStart: string;
+  /** SESSION start (`pg_stat_activity.backend_start`) — not the instance start. */
+  backendStart: string | null;
+  /** INSTANCE start (`pg_postmaster_start_time()`) — constant per postmaster. */
+  postmasterStart: string | null;
   databaseOid: number;
   applicationNameReadback: string | null;
 }
@@ -383,6 +403,14 @@ export interface BackendIdentity {
  * TRACE-ONLY statement: identify the backend behind `sql` and verify the
  * session's application_name as the SERVER sees it. Never called when
  * tracing is disabled.
+ *
+ * The read-back carries the session's `backend_start` as `pg_backend_start`
+ * and the instance's `pg_postmaster_start_time()` as `pg_postmaster_start`;
+ * conflating the two would make every session of one postmaster look like the
+ * same generation and hide pid reuse. This statement runs on the caller's own
+ * handle, so the identity refers to the session that serves it — a session
+ * identity for the statements that follow ONLY for single-session pools
+ * (every traced call site pins `max: 1`).
  */
 export async function identifyBackend(
   sql: postgres.Sql,
@@ -393,12 +421,15 @@ export async function identifyBackend(
 ): Promise<BackendIdentity | null> {
   try {
     const rows = (await sql.unsafe(
-      "SELECT pg_backend_pid() AS pid, pg_postmaster_start_time()::text AS pm_start, " +
+      "SELECT pg_backend_pid() AS pid, " +
+        "(SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS backend_start, " +
+        "pg_postmaster_start_time()::text AS pm_start, " +
         "(SELECT oid FROM pg_database WHERE datname = current_database()) AS db_oid, " +
         "current_setting('application_name') AS app_name",
     )) as Array<{
       pid: number;
-      pm_start: string;
+      backend_start: string | null;
+      pm_start: string | null;
       db_oid: number;
       app_name: string;
     }>;
@@ -408,19 +439,28 @@ export async function identifyBackend(
         connection_role: role,
         connection_id: connectionId,
         outcome: "empty_readback",
-        missing: ["pg_backend_pid", "pg_backend_start", "pg_database_oid"],
+        missing: [
+          "pg_backend_pid",
+          "pg_backend_start",
+          "pg_postmaster_start",
+          "pg_database_oid",
+        ],
       });
       return null;
     }
     const identity: BackendIdentity = {
       pid: Number(row.pid),
-      postmasterStart: String(row.pm_start),
+      backendStart:
+        row.backend_start === null ? null : String(row.backend_start),
+      postmasterStart: row.pm_start === null ? null : String(row.pm_start),
       databaseOid: Number(row.db_oid),
       applicationNameReadback:
         row.app_name === null ? null : String(row.app_name),
     };
     const expectedApp = traceApplicationName(role, op.operationId);
     const missing: string[] = [];
+    if (identity.backendStart === null) missing.push("pg_backend_start");
+    if (identity.postmasterStart === null) missing.push("pg_postmaster_start");
     if (identity.applicationNameReadback !== expectedApp) {
       // The server does not see the intended application_name — the
       // server-side join for THIS connection is unresolved, not inferred.
@@ -428,7 +468,8 @@ export async function identifyBackend(
     }
     emit(eventType, op, {
       pg_backend_pid: identity.pid,
-      pg_backend_start: identity.postmasterStart,
+      pg_backend_start: identity.backendStart,
+      pg_postmaster_start: identity.postmasterStart,
       pg_database_oid: identity.databaseOid,
       connection_role: role,
       connection_id: connectionId,
@@ -444,7 +485,12 @@ export async function identifyBackend(
       connection_role: role,
       connection_id: connectionId,
       outcome: `identify_failed:${errName(err)}`,
-      missing: ["pg_backend_pid", "pg_backend_start", "pg_database_oid"],
+      missing: [
+        "pg_backend_pid",
+        "pg_backend_start",
+        "pg_postmaster_start",
+        "pg_database_oid",
+      ],
     });
     return null;
   }

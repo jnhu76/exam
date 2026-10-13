@@ -20,6 +20,7 @@ import {
   runWithTraceOperation,
   traceApplicationName,
   traceIdentityKey,
+  type BackendIdentity,
   type TestInfraTraceEvent,
 } from "./testInfraTrace.js";
 import { getIsolatedTestDb, resolveTestDbUrl } from "./testDb.js";
@@ -124,7 +125,7 @@ function ev(
   backendPid: number,
 ): TestInfraTraceEvent {
   return {
-    schema_version: 2,
+    schema_version: 3,
     run_id: "unit",
     operation_id: opId,
     process_instance_id: processInstance,
@@ -136,6 +137,7 @@ function ev(
     wall_time_utc: "1970-01-01T00:00:00.000Z",
     pg_backend_pid: backendPid,
     pg_backend_start: "1970-01-01T00:00:00Z",
+    pg_postmaster_start: "1969-12-31T23:59:00Z",
     pg_database_oid: 1,
     connection_role: "lock",
     lock_key: LOCK_KEY.toString(),
@@ -286,11 +288,17 @@ PG_DESCRIBE("trace identity oracles (real PostgreSQL)", () => {
         migEv.application_name === traceApplicationName("mig", opId) &&
         lockEv.missing.length === 0 &&
         ddlEv.missing.length === 0 &&
-        migEv.missing.length === 0;
+        migEv.missing.length === 0 &&
+        // Three sessions of ONE postmaster: session starts differ, the
+        // instance start is shared (the field defect collapsed these).
+        new Set([lockEv, ddlEv, migEv].map((e) => e.pg_backend_start)).size ===
+          3 &&
+        new Set([lockEv, ddlEv, migEv].map((e) => e.pg_postmaster_start))
+          .size === 1;
       record(
         "C2",
-        "lock/ddl/mig sessions of ONE operation are distinct backends with server-verified app names",
-        "holder→DDL identity closed within one operation",
+        "lock/ddl/mig sessions of ONE operation are three distinct sessions of one instance, app names server-verified",
+        "holder→DDL identity closed within one operation; session starts distinct, postmaster start shared",
         pass,
       );
     } finally {
@@ -351,6 +359,137 @@ PG_DESCRIBE("trace identity oracles (real PostgreSQL)", () => {
         "C4",
         "connection rebuild → new backend pid, app-name identity re-verified, same operation id",
         "session identity follows the physical session, not the Sql handle",
+        pass,
+      );
+    });
+  }, 20_000);
+
+  it("C14: pg_backend_start is the SESSION's backend_start (not the postmaster start); pg_postmaster_start is the instance start", async () => {
+    // Regression for the review finding that the read-back shipped
+    // pg_postmaster_start_time() under the pg_backend_start name: identical
+    // for every session of one postmaster, so two sessions looked like one
+    // generation and pid reuse was undetectable. The oracle compares the
+    // trace's read-back against the SERVER's own values for the same pid,
+    // read from a third session.
+    const sink: Sink = [];
+    enableTrace(sink);
+    const op = beginLockOperation("C14-oracle", LOCK_KEY.toString());
+    await runWithTraceOperation(op, async () => {
+      const a = postgresWithTraceIdentity(COORD_URL, "ddl", { max: 1 });
+      const b = postgresWithTraceIdentity(COORD_URL, "ddl", { max: 1 });
+      const observer = postgres(COORD_URL, { max: 1 });
+      try {
+        const idA = await identifyBackend(
+          a.sql,
+          "ddl",
+          op,
+          a.connectionId,
+          "DDL_CONNECTION_IDENTIFIED",
+        );
+        const idB = await identifyBackend(
+          b.sql,
+          "ddl",
+          op,
+          b.connectionId,
+          "DDL_CONNECTION_IDENTIFIED",
+        );
+        expect(idA).not.toBeNull();
+        expect(idB).not.toBeNull();
+        const truth = (await observer`
+          SELECT s.backend_start::text AS backend_start,
+                 pg_postmaster_start_time()::text AS pm_start
+          FROM pg_stat_activity s
+          WHERE s.pid = ${idA!.pid}
+        `) as Array<{ backend_start: string; pm_start: string }>;
+        const t = truth[0];
+        const identified = eventsOfOp(sink, op.operationId).filter(
+          (e) =>
+            e.event_type === "DDL_CONNECTION_IDENTIFIED" &&
+            e.outcome === "identified",
+        );
+        const evA = identified.find((e) => e.pg_backend_pid === idA!.pid);
+        const pass =
+          t !== undefined &&
+          idA!.backendStart === t.backend_start &&
+          idA!.postmasterStart === t.pm_start &&
+          idA!.backendStart !== idA!.postmasterStart &&
+          idB!.pid !== idA!.pid &&
+          idB!.backendStart !== idA!.backendStart &&
+          idB!.postmasterStart === idA!.postmasterStart &&
+          evA?.pg_backend_start === t.backend_start &&
+          evA?.pg_postmaster_start === t.pm_start &&
+          evA?.missing.length === 0;
+        record(
+          "C14",
+          "session start and instance start are read back as distinct server facts",
+          "pg_backend_start tracks pg_stat_activity.backend_start; pg_postmaster_start identifies the postmaster; two sessions of one postmaster are distinguishable",
+          pass,
+        );
+      } finally {
+        await a.sql.end().catch(() => {});
+        await b.sql.end().catch(() => {});
+        await observer.end().catch(() => {});
+      }
+    });
+    expect(sink.length).toBeGreaterThan(0);
+  }, 20_000);
+
+  it("C15: a NEW session on the same postmaster gets a NEW session start while the postmaster start stays constant", async () => {
+    // Field-semantics oracle (C4 covers the driver's own rebuild of a dead
+    // socket): the previous session ends server-side, the handle is torn
+    // down, and the next read-back must describe a genuinely NEW session —
+    // same postmaster start, different session start and pid.
+    const sink: Sink = [];
+    enableTrace(sink);
+    const op = beginLockOperation("C15-oracle", LOCK_KEY.toString());
+    await runWithTraceOperation(op, async () => {
+      const first = postgresWithTraceIdentity(COORD_URL, "ddl", { max: 1 });
+      const observer = postgres(COORD_URL, { max: 1 });
+      let id1: BackendIdentity | null = null;
+      let id2: BackendIdentity | null = null;
+      let oldSessionGone = false;
+      try {
+        id1 = await identifyBackend(
+          first.sql,
+          "ddl",
+          op,
+          first.connectionId,
+          "DDL_CONNECTION_IDENTIFIED",
+        );
+        expect(id1).not.toBeNull();
+        await observer.unsafe(`SELECT pg_terminate_backend(${id1!.pid})`);
+        const gone = (await observer`
+          SELECT count(*)::int AS c FROM pg_stat_activity
+          WHERE pid = ${id1!.pid}
+        `) as Array<{ c: number }>;
+        oldSessionGone = Number(gone[0]?.c) === 0;
+        await first.sql.end().catch(() => {});
+        const second = postgresWithTraceIdentity(COORD_URL, "ddl", { max: 1 });
+        try {
+          id2 = await identifyBackend(
+            second.sql,
+            "ddl",
+            op,
+            second.connectionId,
+            "DDL_CONNECTION_IDENTIFIED",
+          );
+        } finally {
+          await second.sql.end().catch(() => {});
+        }
+      } finally {
+        await observer.end().catch(() => {});
+      }
+      const pass =
+        id1 !== null &&
+        id2 !== null &&
+        oldSessionGone &&
+        id2.pid !== id1.pid &&
+        id2.backendStart !== id1.backendStart &&
+        id2.postmasterStart === id1.postmasterStart;
+      record(
+        "C15",
+        "session generation is distinguishable within ONE postmaster",
+        "old session gone → new backend_start (and pid) under a constant pg_postmaster_start; pid reuse cannot alias two sessions",
         pass,
       );
     });

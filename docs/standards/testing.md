@@ -386,8 +386,11 @@ never garbage-collected.
 - The trace is test-infra observation only (`testInfraTrace.ts`, consumed by
   `testInfraLock.ts` / `testIsolation.ts` / `testWorkerDatabase.ts` /
   `testDb.ts`). With `TEST_INFRA_TRACE` unset, the traced call sites take the
-  pre-trace code path: no extra SQL, no connection-option changes, no
-  scheduler samplers, and no operation context is ever entered.
+  pre-trace code path: no extra SQL, no query or session-option changes, no
+  scheduler samplers, and no operation context is ever entered. The one
+  deliberate deviation from the pre-trace shape is the `max: 1` pin on the
+  lifecycle DDL / migration connections (see the next bullet), applied
+  identically with tracing on and off.
 - When enabled, traced test-infra connections set
   `application_name = exi:<role>:<operation_id>` at startup (verified by a
   trace-only server read-back), so a PostgreSQL backend can be attributed to
@@ -396,6 +399,14 @@ never garbage-collected.
   of a pre-created pool is annotated with a session-level `SET` and the tag is
   cleared when the operation ends, so post-operation business SQL on that pool
   is never attributed to a finished migration.
+- The read-back records two distinct server clocks: `pg_backend_start` is the
+  *session's* `pg_stat_activity.backend_start` (connection time), and
+  `pg_postmaster_start` is the *instance's* `pg_postmaster_start_time()`. Only
+  the session start distinguishes two sessions of one postmaster or detects
+  pid reuse; the instance start identifies the postmaster generation. Because
+  the read-back carries identity for the statements that follow it, every
+  traced DDL / migration / precheck connection is pinned to one session
+  (`max: 1`) — a pool observation is not a session identity.
 - All four variables are declared in the `env` key of the DB-backed
   `turbo.json` tasks (hashed into the cache key — a traced run can never
   replay a cached untraced result or vice versa).
@@ -419,6 +430,10 @@ never garbage-collected.
 - `EVENT_LOOP_SAMPLE` is process-level and cumulative-since-`enable()`; its
   `eld_*` fields are not per-window values and can never prove that a specific
   operation's client was stalled.
+- Trace events are schema `schema_version: 3`. Version 2 archives exist where
+  `pg_backend_start` was populated with the postmaster start instead of the
+  session start — v2 `pg_backend_start` values are NOT session identities and
+  must not be read as such.
 - `event_seq` is monotonic and unique per process instance but not dense, and
   `monotonic_ns` is comparable only within one process. `run_id` falls back to
   `adhoc-<process instance>` when `TEST_INFRA_TRACE_RUN_ID` is unset, i.e. it

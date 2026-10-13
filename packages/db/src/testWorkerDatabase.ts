@@ -265,7 +265,9 @@ async function ensureDatabaseExistsUnlocked(
   databaseName: string,
 ): Promise<void> {
   const op = currentTraceOperation();
-  const traced = postgresWithTraceIdentity(adminUrl, "ddl");
+  // max:1 → the identity read-back names the session that runs the DDL
+  // (single-session pin, passed identically with tracing on and off).
+  const traced = postgresWithTraceIdentity(adminUrl, "ddl", { max: 1 });
   const admin = traced.sql;
   try {
     if (op) {
@@ -333,7 +335,7 @@ export async function dropDatabaseIfExists(
     adminUrl,
     async () => {
       const op = currentTraceOperation();
-      const traced = postgresWithTraceIdentity(adminUrl, "ddl");
+      const traced = postgresWithTraceIdentity(adminUrl, "ddl", { max: 1 });
       const admin = traced.sql;
       try {
         if (op) {
@@ -600,12 +602,14 @@ async function bootstrapFlow(
 
 /**
  * Run `migratePostgres` over a migration connection that, under tracing,
- * carries `exi:mig:<operation_id>` as startup application_name on EVERY pool
- * connection (postgres.js `connection` startup parameter), so migration SQL
- * is attributable to the operation server-side even on a multi-backend pool.
+ * carries `exi:mig:<operation_id>` as startup application_name, so migration
+ * SQL is attributable to the operation server-side. The pool is pinned to
+ * ONE session (max:1): the identity read-back then names the session that
+ * runs the migration instead of one arbitrary pool member, and the migrator's
+ * statement sequence is strictly sequential, so a single session is its
+ * truthful shape. The pin is passed identically with tracing on and off.
  *
- * The trace-off path is byte-equivalent to
- * `createPostgresDatabase(workerUrl)` (postgres(url) + drizzle(sql, schema));
+ * The trace-off path is `postgres(url, { max: 1 })` + `drizzle(sql, schema)`;
  * the local binding exists so the production factory signature stays
  * untouched (research #774: annotate at test-only call sites, never extend
  * the production API for tracing).
@@ -614,7 +618,7 @@ async function migrateWorkerUrlWithTraceIdentity(
   workerUrl: string,
 ): Promise<void> {
   const op = currentTraceOperation();
-  const traced = postgresWithTraceIdentity(workerUrl, "mig");
+  const traced = postgresWithTraceIdentity(workerUrl, "mig", { max: 1 });
   const db = drizzle(traced.sql, { schema });
   try {
     if (op) {

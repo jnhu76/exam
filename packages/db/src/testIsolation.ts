@@ -127,7 +127,11 @@ async function withAdminConnection<T>(
 ): Promise<T> {
   const adminUrl = stripOptionsFromUrl(databaseUrl);
   const op = currentTraceOperation();
-  const traced = postgresWithTraceIdentity(adminUrl, "ddl");
+  // max:1 pins this ephemeral DDL connection to ONE session: the identity
+  // read-back must name the session that executes the statement, not an
+  // arbitrary pool member. The pin is passed in both trace modes, so the trace
+  // never changes pool sizing.
+  const traced = postgresWithTraceIdentity(adminUrl, "ddl", { max: 1 });
   const sql = traced.sql;
   try {
     if (op) {
