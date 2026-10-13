@@ -372,6 +372,31 @@ identity binding, not cumulative growth. A later run with a smaller
 `maxWorkers` may leave idle `w3/w4` behind — bounded residue, acceptable,
 never garbage-collected.
 
+### 2.9 `TEST_INFRA_TRACE*` (opt-in test-infra tracing, research #774)
+
+| Variable | Meaning |
+|----------|---------|
+| `TEST_INFRA_TRACE` | Master switch; tracing is active only for the exact value `1`. Off by default. |
+| `TEST_INFRA_TRACE_DIR` | When set, structured NDJSON events append to a per-process file `<dir>/trace-<instance8>-pid<pid>.ndjson`; otherwise events go to stderr. |
+| `TEST_INFRA_TRACE_RUN_ID` | Constant run identifier shared by all processes of one traced invocation (join key). Unset → `adhoc-<process instance>`. |
+| `TEST_INFRA_TRACE_GC` | `1` additionally records GC windows (diagnostic; never read as lock evidence). |
+
+**Rules:**
+
+- The trace is test-infra observation only (`testInfraTrace.ts`, consumed by
+  `testInfraLock.ts` / `testIsolation.ts` / `testWorkerDatabase.ts` /
+  `testDb.ts`). With `TEST_INFRA_TRACE` unset, the traced call sites take the
+  pre-trace code path: no extra SQL, no connection-option changes, no
+  scheduler samplers, no AsyncLocalStorage.
+- When enabled, traced test-infra connections set
+  `application_name = exi:<role>:<operation_id>` at startup (verified by a
+  trace-only server read-back), so a PostgreSQL backend can be attributed to
+  the owning operation without pid adjacency or timestamp joins. Identity
+  joins use `(process_instance_id, operation_id)` only.
+- All four variables are declared in the `env` key of the DB-backed
+  `turbo.json` tasks (hashed into the cache key — a traced run can never
+  replay a cached untraced result or vice versa).
+
 ---
 
 ## 3. Time / Async Testing Contract
