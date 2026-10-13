@@ -52,6 +52,17 @@
  */
 
 import postgres from "postgres";
+import {
+  beginLockOperation,
+  currentTraceOperation,
+  emit as emitTraceEvent,
+  ensureSchedulerObserver,
+  identifyBackend,
+  isTestInfraTraceEnabled,
+  monotonicNs,
+  postgresWithTraceIdentity,
+  runWithTraceOperation,
+} from "./testInfraTrace.js";
 
 /**
  * Resolve the canonical test-infra coordination database URL.
@@ -258,35 +269,133 @@ export async function withTestInfraLifecycleLock<T>(
   options?: TestInfraLifecycleLockOptions,
 ): Promise<T> {
   const key = TEST_INFRA_LIFECYCLE_LOCK_KEY;
-  const trace = process.env.TEST_INFRA_TRACE === "1";
-  const t0 = trace ? performance.now() : 0;
-  const caller = trace ? firstExternalFrame() : "";
   const coordinationUrl = resolveTestInfraCoordinationUrl(
     adminUrl,
     options?.env ?? process.env,
   );
-  const admin = postgres(coordinationUrl, { max: 1 });
-  await acquireAdvisoryLock(admin, key);
-  if (trace) {
-    process.stderr.write(
-      `[infra-lock] pid=${process.pid} acquired wait=${(performance.now() - t0).toFixed(0)}ms caller=${caller}\n`,
-    );
-  }
-  const tHold = trace ? performance.now() : 0;
-  try {
-    return await fn();
-  } finally {
+  // Trace-off path is the untouched pre-trace implementation: no events, no
+  // AsyncLocalStorage, no application_name override, identical statement set.
+  if (!isTestInfraTraceEnabled()) {
+    const admin = postgres(coordinationUrl, { max: 1 });
+    await acquireAdvisoryLock(admin, key);
     try {
-      await releaseAdvisoryLock(admin, key);
+      return await fn();
     } finally {
-      await admin.end();
-      if (trace) {
-        process.stderr.write(
-          `[infra-lock] pid=${process.pid} released hold=${(performance.now() - tHold).toFixed(0)}ms caller=${caller}\n`,
-        );
+      try {
+        await releaseAdvisoryLock(admin, key);
+      } finally {
+        await admin.end();
       }
     }
   }
+  // Traced path (opt-in only): same statements plus structured V2 events.
+  ensureSchedulerObserver();
+  const ambient = currentTraceOperation();
+  const op =
+    ambient ?? beginLockOperation(firstExternalFrame(), key.toString());
+  emitTraceEvent("LOCK_CALL_BEGIN", op, { caller: op.caller });
+  return runWithTraceOperation(op, () =>
+    tracedLockBody(coordinationUrl, key, op, fn),
+  );
+}
+
+/**
+ * Traced execution of ONE lock critical section. Statement semantics mirror
+ * the trace-off path exactly (unlock in a finally-equivalent position even on
+ * fn failure; a failing unlock replaces the fn error; `admin.end()` always
+ * follows the unlock attempt).
+ */
+async function tracedLockBody<T>(
+  coordinationUrl: string,
+  key: bigint,
+  op: ReturnType<typeof beginLockOperation>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const admin = postgresWithTraceIdentity(coordinationUrl, "lock", { max: 1 });
+  await identifyBackend(
+    admin.sql,
+    "lock",
+    op,
+    admin.connectionId,
+    "COORD_BACKEND_IDENTIFIED",
+  );
+  emitTraceEvent("LOCK_REQUEST_DISPATCHED", op);
+  const requestNs = monotonicNs();
+  await acquireAdvisoryLock(admin.sql, key);
+  emitTraceEvent("LOCK_GRANTED_ACK", op, {
+    outcome: "granted",
+    duration_ms: msSince(requestNs),
+  });
+  const holdNs = monotonicNs();
+  emitTraceEvent("CRITICAL_SECTION_ENTER", op);
+  let result: T | undefined;
+  let fnOk = false;
+  let fnError: unknown;
+  try {
+    result = await fn();
+    fnOk = true;
+    emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
+      outcome: "ok",
+      duration_ms: msSince(holdNs),
+    });
+  } catch (err) {
+    fnError = err;
+    emitTraceEvent("CRITICAL_SECTION_EXIT", op, {
+      outcome: `error:${errName(err)}`,
+      duration_ms: msSince(holdNs),
+    });
+  }
+  emitTraceEvent("UNLOCK_REQUEST_DISPATCHED", op);
+  const unlockNs = monotonicNs();
+  let unlockOk = false;
+  let unlockError: unknown;
+  try {
+    await releaseAdvisoryLock(admin.sql, key);
+    unlockOk = true;
+    emitTraceEvent("UNLOCK_ACK", op, {
+      outcome: "released",
+      duration_ms: msSince(unlockNs),
+    });
+  } catch (err) {
+    unlockError = err;
+    emitTraceEvent("UNLOCK_ACK", op, { outcome: `error:${errName(err)}` });
+  }
+  emitTraceEvent("POOL_END_BEGIN", op);
+  try {
+    await admin.sql.end();
+    emitTraceEvent("POOL_END_COMPLETE", op, { outcome: "ended" });
+  } catch (err) {
+    emitTraceEvent("POOL_END_COMPLETE", op, {
+      outcome: `error:${errName(err)}`,
+    });
+  }
+  const totalMs = Number(monotonicNs() - op.beginMonotonicNs) / 1e6;
+  if (fnOk && unlockOk) {
+    emitTraceEvent("OPERATION_COMPLETED", op, {
+      outcome: "completed",
+      duration_ms: totalMs,
+    });
+  } else {
+    emitTraceEvent("OPERATION_FAILED", op, {
+      outcome: !unlockOk
+        ? `unlock_error:${errName(unlockError)}`
+        : `fn_error:${errName(fnError)}`,
+      duration_ms: totalMs,
+    });
+  }
+  // Error-precedence parity with the trace-off try/finally: a failing unlock
+  // replaces the fn error; otherwise the fn error propagates.
+  if (!unlockOk) throw unlockError;
+  if (!fnOk) throw fnError;
+  return result as T;
+}
+
+function msSince(beginNs: bigint): number {
+  return Number(monotonicNs() - beginNs) / 1e6;
+}
+
+function errName(err: unknown): string {
+  return err instanceof Error ? err.name : typeof err;
 }
 
 /** First stack frame outside this module, for TEST_INFRA_TRACE diagnostics. */

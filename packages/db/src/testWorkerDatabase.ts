@@ -31,12 +31,26 @@
 import postgres from "postgres";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { parseAppMode, resolveTestBranchUrl } from "./databaseUrl.js";
 import { createPostgresDatabase, migratePostgres } from "./postgres.js";
+import { schema } from "./schema/pg.js";
 import {
+  getTestInfraLifecycleLockKey,
   resolveTestInfraCoordinationUrl,
   withTestInfraLifecycleLock,
 } from "./testInfraLock.js";
+import {
+  beginLockOperation,
+  currentTraceOperation,
+  emit as emitTraceEvent,
+  identifyBackend,
+  isTestInfraTraceEnabled,
+  monotonicNs,
+  postgresWithTraceIdentity,
+  runWithTraceOperation,
+  withTraceSubOperation,
+} from "./testInfraTrace.js";
 import {
   resolveTestScope,
   type ResolvedTestScope,
@@ -240,21 +254,56 @@ export async function ensureDatabaseExists(
  * Existence check + optional `CREATE DATABASE` WITHOUT the lifecycle lock —
  * the caller must already hold it (the worker-DB bootstrap merges ensure and
  * migrate into ONE critical section). Never call unlocked from test setup.
+ *
+ * Trace V2: under an ambient trace operation the admin connection is
+ * annotated `exi:ddl:<operation_id>` and the two SQL steps are separate
+ * sub-operations (DB_EXISTS_CHECK / CREATE_DATABASE).
  */
 async function ensureDatabaseExistsUnlocked(
   adminUrl: string,
   databaseName: string,
 ): Promise<void> {
-  const admin = postgres(adminUrl);
+  const op = currentTraceOperation();
+  const traced = postgresWithTraceIdentity(adminUrl, "ddl");
+  const admin = traced.sql;
   try {
-    const rows = (await admin`
-      SELECT 1 FROM pg_database WHERE datname = ${databaseName}
-    `) as Array<{ "?column?": number }>;
-    if (rows.length === 0) {
-      await admin.unsafe(`CREATE DATABASE ${quotePgIdentifier(databaseName)}`);
+    if (op) {
+      await identifyBackend(
+        admin,
+        "ddl",
+        op,
+        traced.connectionId,
+        "DDL_CONNECTION_IDENTIFIED",
+      );
+    }
+    // Same single existence check + optional CREATE as the pre-trace body.
+    let rows: Array<{ "?column?": number }>;
+    await withTraceSubOperation(
+      "DB_EXISTS_CHECK",
+      async () => {
+        rows = (await admin`
+          SELECT 1 FROM pg_database WHERE datname = ${databaseName}
+        `) as Array<{ "?column?": number }>;
+      },
+      databaseName,
+    );
+    if (rows!.length === 0) {
+      await withTraceSubOperation(
+        "CREATE_DATABASE",
+        async () => {
+          await admin.unsafe(
+            `CREATE DATABASE ${quotePgIdentifier(databaseName)}`,
+          );
+        },
+        databaseName,
+      );
     }
   } finally {
+    if (op)
+      emitTraceEvent("POOL_END_BEGIN", op, { sub_operation: "ENSURE_DB" });
     await admin.end();
+    if (op)
+      emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: "ENSURE_DB" });
   }
 }
 
@@ -282,19 +331,42 @@ export async function dropDatabaseIfExists(
   await withTestInfraLifecycleLock(
     adminUrl,
     async () => {
-      const admin = postgres(adminUrl);
+      const op = currentTraceOperation();
+      const traced = postgresWithTraceIdentity(adminUrl, "ddl");
+      const admin = traced.sql;
       try {
+        if (op) {
+          await identifyBackend(
+            admin,
+            "ddl",
+            op,
+            traced.connectionId,
+            "DDL_CONNECTION_IDENTIFIED",
+          );
+        }
         // Terminate any lingering connections to the target DB so DROP DATABASE
         // cannot fail with "database ... is being accessed by other users".
         // Exclude our own backend pid. Safe to run even if the DB is gone.
-        await admin`
-          SELECT pg_terminate_backend(pid)
-          FROM pg_stat_activity
-          WHERE datname = ${databaseName} AND pid <> pg_backend_pid()
-        `;
+        await withTraceSubOperation(
+          "TERMINATE_BACKENDS",
+          async () => {
+            await admin`
+              SELECT pg_terminate_backend(pid)
+              FROM pg_stat_activity
+              WHERE datname = ${databaseName} AND pid <> pg_backend_pid()
+            `;
+          },
+          databaseName,
+        );
         try {
-          await admin.unsafe(
-            `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+          await withTraceSubOperation(
+            "DROP_DATABASE",
+            async () => {
+              await admin.unsafe(
+                `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+              );
+            },
+            databaseName,
           );
         } catch (err) {
           // `IF EXISTS` already covers the missing case; if keepMissing and the
@@ -304,7 +376,11 @@ export async function dropDatabaseIfExists(
           throw err;
         }
       } finally {
+        if (op)
+          emitTraceEvent("POOL_END_BEGIN", op, { sub_operation: "DROP_DB" });
         await admin.end();
+        if (op)
+          emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: "DROP_DB" });
       }
     },
     // Same wrapper authority contract as ensureDatabaseExists above.
@@ -375,9 +451,24 @@ async function isWorkerDatabaseBootstrapped(
   databaseName: string,
 ): Promise<boolean> {
   const expected = localMigrationCount();
+  const op = currentTraceOperation();
   let admin: postgres.Sql | undefined;
   try {
-    admin = postgres(adminUrl, { max: 1 });
+    const tracedAdmin = postgresWithTraceIdentity(adminUrl, "precheck", {
+      max: 1,
+    });
+    admin = tracedAdmin.sql;
+    if (op) {
+      await withTraceSubOperation("PRECHECK_ADMIN", async () => {
+        await identifyBackend(
+          admin!,
+          "precheck",
+          op,
+          tracedAdmin.connectionId,
+          "DDL_CONNECTION_IDENTIFIED",
+        );
+      });
+    }
     const exists = (await admin`
       SELECT 1 FROM pg_database WHERE datname = ${databaseName}
     `) as Array<{ "?column?": number }>;
@@ -389,7 +480,21 @@ async function isWorkerDatabaseBootstrapped(
   }
   let conn: postgres.Sql | undefined;
   try {
-    conn = postgres(workerUrl, { max: 1 });
+    const tracedConn = postgresWithTraceIdentity(workerUrl, "precheck", {
+      max: 1,
+    });
+    conn = tracedConn.sql;
+    if (op) {
+      await withTraceSubOperation("PRECHECK_WORKER", async () => {
+        await identifyBackend(
+          conn!,
+          "precheck",
+          op,
+          tracedConn.connectionId,
+          "DDL_CONNECTION_IDENTIFIED",
+        );
+      });
+    }
     const rows = (await conn`
       SELECT count(*)::int AS c FROM drizzle.__drizzle_migrations
     `) as Array<{ c: number }>;
@@ -415,35 +520,20 @@ function ensureWorkerDatabaseBootstrapped(
   let bootstrap = bootstrappedWorkerDatabases.get(memoKey);
   if (!bootstrap) {
     bootstrap = (async () => {
-      if (
-        await isWorkerDatabaseBootstrapped(adminUrl, workerUrl, databaseName)
-      ) {
-        return;
+      // Trace V2: the whole flow (precheck → lock → ensure → migrate) is ONE
+      // operation identity; the nested withTestInfraLifecycleLock reuses it
+      // from the ambient context.
+      if (isTestInfraTraceEnabled()) {
+        const op = beginLockOperation(
+          "ensureWorkerDatabaseBootstrapped",
+          getTestInfraLifecycleLockKey().toString(),
+        );
+        emitTraceEvent("LOCK_CALL_BEGIN", op, { caller: op.caller });
+        return runWithTraceOperation(op, () =>
+          bootstrapFlow(adminUrl, workerUrl, databaseName, env),
+        );
       }
-      await withTestInfraLifecycleLock(
-        adminUrl,
-        async () => {
-          // Re-check under the lock: a sibling worker may have bootstrapped
-          // this slot while this one queued.
-          if (
-            await isWorkerDatabaseBootstrapped(
-              adminUrl,
-              workerUrl,
-              databaseName,
-            )
-          ) {
-            return;
-          }
-          await ensureDatabaseExistsUnlocked(adminUrl, databaseName);
-          const conn = await createPostgresDatabase(workerUrl);
-          try {
-            await migratePostgres(conn.db);
-          } finally {
-            await conn.sql.end();
-          }
-        },
-        { env },
-      );
+      return bootstrapFlow(adminUrl, workerUrl, databaseName, env);
     })().catch((err: unknown) => {
       bootstrappedWorkerDatabases.delete(memoKey);
       throw err;
@@ -451,6 +541,70 @@ function ensureWorkerDatabaseBootstrapped(
     bootstrappedWorkerDatabases.set(memoKey, bootstrap);
   }
   return bootstrap;
+}
+
+/** Precheck → (lock) re-check → ensure → migrate. One lock critical section. */
+async function bootstrapFlow(
+  adminUrl: string,
+  workerUrl: string,
+  databaseName: string,
+  env: ResolverEnv,
+): Promise<void> {
+  if (await isWorkerDatabaseBootstrapped(adminUrl, workerUrl, databaseName)) {
+    return;
+  }
+  await withTestInfraLifecycleLock(
+    adminUrl,
+    async () => {
+      // Re-check under the lock: a sibling worker may have bootstrapped
+      // this slot while this one queued.
+      if (
+        await isWorkerDatabaseBootstrapped(adminUrl, workerUrl, databaseName)
+      ) {
+        return;
+      }
+      await ensureDatabaseExistsUnlocked(adminUrl, databaseName);
+      await migrateWorkerUrlWithTraceIdentity(workerUrl);
+    },
+    { env },
+  );
+}
+
+/**
+ * Run `migratePostgres` over a migration connection that, under tracing,
+ * carries `exi:mig:<operation_id>` as startup application_name on EVERY pool
+ * connection (postgres.js `connection` startup parameter), so migration SQL
+ * is attributable to the operation server-side even on a multi-backend pool.
+ *
+ * The trace-off path is byte-equivalent to
+ * `createPostgresDatabase(workerUrl)` (postgres(url) + drizzle(sql, schema));
+ * the local binding exists so the production factory signature stays
+ * untouched (research #774: annotate at test-only call sites, never extend
+ * the production API for tracing).
+ */
+async function migrateWorkerUrlWithTraceIdentity(
+  workerUrl: string,
+): Promise<void> {
+  const op = currentTraceOperation();
+  const traced = postgresWithTraceIdentity(workerUrl, "mig");
+  const db = drizzle(traced.sql, { schema });
+  try {
+    if (op) {
+      await identifyBackend(
+        traced.sql,
+        "mig",
+        op,
+        traced.connectionId,
+        "DDL_CONNECTION_IDENTIFIED",
+      );
+    }
+    await withTraceSubOperation("MIGRATE", () => migratePostgres(db));
+  } finally {
+    if (op) emitTraceEvent("POOL_END_BEGIN", op, { sub_operation: "MIGRATE" });
+    await traced.sql.end();
+    if (op)
+      emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: "MIGRATE" });
+  }
 }
 
 /**

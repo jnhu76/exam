@@ -2,6 +2,13 @@ import postgres from "postgres";
 import { resolveTestBranchUrl } from "./databaseUrl.js";
 import { quoteIdent } from "./sqlIdent.js";
 import { withTestInfraLifecycleLock } from "./testInfraLock.js";
+import {
+  currentTraceOperation,
+  emit as emitTraceEvent,
+  identifyBackend,
+  monotonicNs,
+  postgresWithTraceIdentity,
+} from "./testInfraTrace.js";
 import type { ResolverEnv } from "./testScope.js";
 
 /**
@@ -106,18 +113,66 @@ export function stripOptionsFromUrl(databaseUrl: string): string {
 
 /**
  * Create a temporary connection for admin DDL operations (CREATE/DROP SCHEMA).
+ *
+ * Trace V2: when an ambient trace operation exists, the connection carries
+ * `exi:ddl:<operation_id>` as startup application_name and emits
+ * DDL_CONNECTION_IDENTIFIED (server read-back). `subOperation` decomposes the
+ * critical section into per-SQL phases (no raw SQL text is recorded).
  */
 async function withAdminConnection<T>(
   databaseUrl: string,
+  subOperation: string,
   fn: (sql: postgres.Sql) => Promise<T>,
 ): Promise<T> {
   const adminUrl = stripOptionsFromUrl(databaseUrl);
-  const sql = postgres(adminUrl);
+  const op = currentTraceOperation();
+  const traced = postgresWithTraceIdentity(adminUrl, "ddl");
+  const sql = traced.sql;
   try {
-    return await fn(sql);
+    if (op) {
+      await identifyBackend(
+        sql,
+        "ddl",
+        op,
+        traced.connectionId,
+        "DDL_CONNECTION_IDENTIFIED",
+      );
+      emitTraceEvent("DDL_REQUEST_DISPATCHED", op, {
+        sub_operation: subOperation,
+      });
+    }
+    const beginNs = op ? monotonicNs() : 0n;
+    try {
+      const result = await fn(sql);
+      if (op) {
+        emitTraceEvent("DDL_RESPONSE_RECEIVED", op, {
+          sub_operation: subOperation,
+          outcome: "ok",
+          duration_ms: Number(monotonicNs() - beginNs) / 1e6,
+        });
+      }
+      return result;
+    } catch (err) {
+      if (op) {
+        emitTraceEvent("DDL_RESPONSE_RECEIVED", op, {
+          sub_operation: subOperation,
+          outcome: `error:${errName(err)}`,
+          duration_ms: Number(monotonicNs() - beginNs) / 1e6,
+        });
+      }
+      throw err;
+    }
   } finally {
+    if (op)
+      emitTraceEvent("POOL_END_BEGIN", op, { sub_operation: subOperation });
     await sql.end();
+    if (op)
+      emitTraceEvent("POOL_END_COMPLETE", op, { sub_operation: subOperation });
   }
+}
+
+function errName(err: unknown): string {
+  return err instanceof Error ? err.name : typeof err;
 }
 
 /**
@@ -157,7 +212,7 @@ export async function createTestSchemaUnlocked(
   databaseUrl: string,
   schemaName: string,
 ): Promise<void> {
-  await withAdminConnection(databaseUrl, async (sql) => {
+  await withAdminConnection(databaseUrl, "CREATE_SCHEMA", async (sql) => {
     await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(schemaName)}`);
   });
 }
@@ -180,7 +235,7 @@ export async function dropTestSchema(
   }
   const adminUrl = stripOptionsFromUrl(databaseUrl);
   await withTestInfraLifecycleLock(adminUrl, async () => {
-    await withAdminConnection(databaseUrl, async (sql) => {
+    await withAdminConnection(databaseUrl, "DROP_SCHEMA", async (sql) => {
       await sql.unsafe(
         `DROP SCHEMA IF EXISTS ${quoteIdent(schemaName)} CASCADE`,
       );

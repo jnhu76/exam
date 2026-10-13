@@ -3,6 +3,12 @@ import { resolveTestBranchUrl } from "./databaseUrl.js";
 import { migratePostgres } from "./postgres.js";
 import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 import {
+  currentTraceOperation,
+  identifyBackend,
+  traceApplicationName,
+  withTraceSubOperation,
+} from "./testInfraTrace.js";
+import {
   createTestSchemaUnlocked,
   dropTestSchema,
   generateUniqueSchemaName,
@@ -132,8 +138,33 @@ export async function getIsolatedTestDb(namespace: string): Promise<{
     // most of a test's default budget (median wait ~0.7s, p95 ~2.7s measured
     // on packages/db coverage — see docs/standards/test-flakes.md).
     await withTestInfraLifecycleLock(baseUrl, async () => {
-      await createTestSchemaUnlocked(baseUrl, schemaName);
-      await migratePostgres(conn.db, { migrationsSchema: schemaName });
+      const op = currentTraceOperation();
+      if (op) {
+        // TRACE-ONLY identity annotation: the connection was created before
+        // the operation existed, so its startup application_name cannot carry
+        // the operation id. The searchPath pool is pinned to max:1, so a
+        // session-level SET annotates THE one backend this migration runs on.
+        await conn.sql.unsafe(
+          `SET application_name = '${traceApplicationName("mig", op.operationId)}'`,
+        );
+        await identifyBackend(
+          conn.sql,
+          "mig",
+          op,
+          "precreated-conn",
+          "DDL_CONNECTION_IDENTIFIED",
+        );
+      }
+      await withTraceSubOperation(
+        "CREATE_SCHEMA",
+        () => createTestSchemaUnlocked(baseUrl, schemaName),
+        schemaName,
+      );
+      await withTraceSubOperation(
+        "MIGRATE",
+        () => migratePostgres(conn.db, { migrationsSchema: schemaName }),
+        schemaName,
+      );
     });
   } catch (err) {
     await conn.sql.end().catch(() => {});
