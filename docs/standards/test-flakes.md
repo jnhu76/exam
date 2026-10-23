@@ -3000,6 +3000,19 @@ OWNER_DISPOSITION = 登记 + 在本 PR 内重跑 CI 获取新权威 run（失败
   （`bash scripts/e2e/run.sh`）全绿。PR：`test(e2e): make admin Back oracle
   behavior-authoritative`（OPEN，未合并；CI 结果以该 PR head 为准）。
 
+- **独立复审修订（2026-10-23，PR #811 review REVISE → 已落实）**：
+  1. ⑤ 步 oracle 补入难度控件断言（Back 后 `按难度筛选` combobox 必须显示
+     「难度 2」）。反事实验证 M9：把 Select `value` 与 URL 解耦
+     （`value={ALL}`）——URL 保持 `difficulty=2`、搜索框与数据断言全过，
+     新断言 RED（`Expected "难度 2", Received "全部难度"`，⑤ 步新断言行）；
+     恢复产品代码后同 grep 复跑 GREEN。首次 M9 运行在 ① 步失败为取证操作
+     失误（`--grep` 漏选 seed 测试，空库无 fixture），与突变无关，如实记录。
+  2. ⑤ 步注释原「stale or wrong-identity body … still fails」为过强声明，
+     已修正为仅声明本 L3 见证实际证明的范围（单一 fixture 身份内的控件、
+     total、页范围、行内容），跨身份行集契约显式归于 L2 `queryState`
+     套件（A08/A09/A16）——与上表 NOT_COVERED 行一致。
+  根因结论 `ORACLE_DEFECT_CAUSALLY_PROVEN` 维持不变；merge 仍为人工门禁。
+
 ---
 
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）

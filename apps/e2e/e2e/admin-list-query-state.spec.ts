@@ -386,10 +386,14 @@ test.describe.serial("admin list URL query state (#784 A3 BDD L3)", () => {
     //    and the pop into one render that reuses the mounted list instance),
     //    the list never unmounts, no request fires, and every user-visible
     //    fact is still correct — waiting for a list GET here times out against
-    //    CORRECT behaviour (OBS-2026-10-23-002). The rows asserted below are
-    //    the settled response of exactly this request identity, so the
-    //    freshness contract stays observable: a stale or wrong-identity body,
-    //    a wrong page range, or a lost control value still fails.
+    //    CORRECT behaviour (OBS-2026-10-23-002). What this witness proves is
+    //    the settled state of the committed query within ONE fixture
+    //    identity: the restored controls (search text and the difficulty
+    //    trigger), the total, the page range and the fixture row must all
+    //    reappear. It cannot discriminate a body rendered from a different
+    //    filter identity — this fixture draws identical rows across adjacent
+    //    identities — so cross-identity rowset contracts stay with the L2
+    //    queryState suite (A08/A09/A16), not here.
     await page
       .getByRole("table")
       .getByRole("button", { name: "编辑题目" })
@@ -406,6 +410,9 @@ test.describe.serial("admin list URL query state (#784 A3 BDD L3)", () => {
         url.searchParams.get("page") === null,
     );
     await expect(page.getByLabel("搜索题目")).toHaveValue(KEYWORD);
+    await expect(
+      page.getByRole("combobox", { name: "按难度筛选" }),
+    ).toContainText("难度 2");
     await expect(page.getByText(/共 21 条/)).toBeVisible();
     await expect(page.getByText(/显示 1-20 条/)).toBeVisible();
     await expect(
