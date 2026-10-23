@@ -7,12 +7,18 @@
 Run exams on your own infrastructure — from authoring and delivery to grading,
 recovery, audit, and day-2 operations.
 
-[![CI](https://github.com/jnhu76/exam/actions/workflows/ci.yml/badge.svg)](https://github.com/jnhu76/exam/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jnhu76/exam?display_name=tag)](https://github.com/jnhu76/exam/releases)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Self-hosted](https://img.shields.io/badge/deployment-self--hosted-success.svg)](INSTALL.md)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](INSTALL.md)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-24-5FA04E.svg?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-19-149ECA.svg?logo=react&logoColor=white)](https://react.dev/)
+[![pnpm](https://img.shields.io/badge/pnpm-11-F69220.svg?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Playwright](https://img.shields.io/badge/E2E-Playwright-2EAD33.svg?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![AI-assisted: Codex](https://img.shields.io/badge/AI--assisted-Codex-412991.svg?logo=openai&logoColor=white)](AGENTS.md)
 
 [**Install**](INSTALL.md) · [**Documentation**](docs/README.md) · [**Roadmap**](docs/roadmap/current.md) · [**Contributing**](CONTRIBUTING.md)
 
