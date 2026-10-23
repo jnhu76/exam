@@ -8,6 +8,74 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-10-23
+
+### Added
+
+- Admin exam/candidate/course/results lists gain real server-side
+  pagination with server-side search and status filters; candidates accept
+  an optional `search` query parameter and exams an optional validated
+  `statuses` filter, both applied before pagination so list and count
+  agree (#785, PR #786).
+- The question and exam lists keep their submitted query (page + filters)
+  in the URL, restore it on refresh/direct link, and detail/import/create
+  pages return to the exact originating list view through validated
+  same-origin history state (#784 A3, PR #787).
+- The Admin dashboard shows capability-gated todo queues for grading and
+  unresolved recovery incidents, loaded once with manual refresh and
+  bounded-count labeling (#784 B3, PR #788).
+- `GET /api/system/public-config` projects the deployment's resolved
+  product capability set (`product`: closed Standard catalog, revision 1)
+  from a fail-closed Standard preset resolver (#678 Phase 1, PR #802).
+
+### Changed
+
+- Candidate deadline reconciliation and answer saves read the exam
+  authority under `FOR SHARE` instead of `FOR UPDATE`, so same-exam
+  readers coexist while writer exclusion, linearization and 40001 retry
+  semantics are unchanged (#668, PR #804).
+- Workspace `@exam/*` packages declare unified exports: tests resolve
+  workspace source directly, production resolves `dist`, with permanent
+  source-freshness oracles (#794, PR #797).
+- Runtime base image and `.nvmrc` move to Node.js 24.22.1 (PR #803).
+
+### Fixed
+
+- Admin list records beyond the default first page are reachable again;
+  totals and page counts reflect the filtered server result set (#785,
+  PR #786).
+- Extending an already-closed exam explains the conflict, refreshes the
+  exam view and closes the dialog instead of leaving a raw 409 (#792,
+  PR #796).
+
+### Security
+
+- Node.js runtime updated 24.15.0 → 24.22.1 (October 2026 security
+  release, PR #803).
+- `/.env.deploy` (local deployment credentials) is ignored by Git (PR
+  #793).
+
+### Deployment / operations
+
+- The API production image payload is restricted to a declared allowlist
+  (application `dist` plus PostgreSQL migrations) with a fail-closed CI
+  oracle over the real image tree and a no-network production-resolution
+  verification (#798, PR #799).
+- Both E2E shards and the production transport regression run in one
+  pinned Playwright browser image from a single version authority, with
+  fail-closed identity-drift checks replacing duplicated browser installs
+  (PRs #805, #806).
+
+### Internal / infrastructure
+
+- Permanent oracles for exam transitions (#784 C2), grader assignment
+  revocation/regrant and closed-exam projection (#791), and the
+  isolated-schema test lifecycle (BUG-FLAKE-005, #771).
+- Documentation and research: Atlas R0 semantic IR (#763), #719
+  test-evidence-adequacy closeout, flake register epistemic v2, R0.5
+  doc/code reconciliation, #668 serialization evidence.
+- No database migration in this release.
+
 ## [0.0.9] - 2026-10-09
 
 ### Fixed
@@ -579,7 +647,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.10...HEAD
+[0.0.10]: https://github.com/jnhu76/exam/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/jnhu76/exam/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/jnhu76/exam/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/jnhu76/exam/compare/v0.0.6...v0.0.7
