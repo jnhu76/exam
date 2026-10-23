@@ -2893,6 +2893,59 @@ OWNER_DISPOSITION = 仅登记（2026-10-23 Owner 指示）；诊断/修复推迟
 
 ---
 
+### OBS-2026-10-23-002 — `admin-list-query-state.spec.ts` A04/A06 `waitForResponse` 15s 超时（PR #809 CI E2E shard 2/2；纯文档 diff 的 CI run）
+
+```text
+OBSERVED_AT = 2026-10-23T08:52Z 前后（CI run 39927162323，E2E shard 2/2；shard 内
+  "10 passed (41.2s)"）
+GIT_SHA = 5da7d6950e7d4eca21b198daf39d2498e6ecfec5（PR #809 head；唯一 diff =
+  docs/standards/test-flakes.md +55 行 Markdown，产品代码与 b9b7fabb 完全一致）
+BRANCH = docs/flake-obs-2026-10-23-recoveryrepo（PR #809）
+COMMAND = CI `E2E (shard 2/2)` job（--shard=2/2，1 worker，13 tests）
+EXECUTION_TOPOLOGY = GitHub Actions ubuntu-latest + 服务容器 postgres:18.4；E2E 在
+  钉定 Playwright 容器镜像内运行（--ipc=host）（#805 topology）
+FAILED_FILE = apps/e2e/e2e/admin-list-query-state.spec.ts
+FAILED_TEST = "admin list URL query state (#784 A3 BDD L3) > A04/A06: Back restores
+  the query, and the next write does not revive what Back left"（:299；同 shard 后续
+  2 个用例 did not run——serial describe）
+FAILURE_PHASE = it 体 ⑤ 步：从题目编辑器 `goBack()` 返回列表时，`nextListResponse`
+  的 `page.waitForResponse`（15s 默认超时）未等到任何匹配的列表 GET（:371-376）
+FAILURE_CLASS = test timeout（waitForResponse 15000ms）；无断言失败
+ERROR = TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting
+  for event "response"（at nextListResponse ... spec.ts:71:26 / :376:25 / :379:8）
+ASSERTION_FAILURE = NO
+AUTHORITATIVE_RUN_RESULT = FAIL（CI 门禁 run 39927162323：shard 2/2 failure，
+  shard 1/2 cancelled by matrix；其余 job success。结果不可被重跑改写）
+HOST_OR_RUNNER_CONTEXT = CI runner（非本地）；trace.zip、error-context.md、失败截图
+  与 server log 由 CI artifacts 保全（run 39927162323，
+  artifact `e2e-failure-diagnostics-2` id 12489703964）
+RELEVANT_OBSERVED_STATE = 失败时页面快照显示列表状态本身已正确恢复：URL 处于
+  /admin/questions、搜索框含 KEYWORD（a3kwmvkqdt1b）、"共 21 条，显示 1-20 条"、
+  "上一页" disabled（= 第 1 页）——即 Back 后 UI 正确，但未观测到新的列表 GET 响应
+RERUN_EVIDENCE = 尚未重跑（登记先于重跑）。对照证据：
+  ① PR #808 CI run 39925426281（head 1a364ace：同一产品代码基线 b9b7fabb + 三个
+     发布权威文件的纯文档 diff）同日更早时刻全绿，shard 2/2（含本用例）SUCCESS；
+  ② 该用例在 PR #786/#787 的实现期 CI 与其合并后的 exact-head CI 中均通过
+NONDETERMINISM_CONFIRMED = PENDING（等待重跑；当前证据 = 同代码在对照 run 通过 +
+  本次失败，符合非确定性的一般形态，但按本册规则以重跑确认）
+CURRENT_CHANGE_CAUSALITY = PLAUSIBLY_UNRELATED（对照 run ① 与失败 run 的产品代码
+  完全相同，候选改动为纯 Markdown；但该对照是两个自然 run 的比较，非受控操纵实验，
+  不写 PROVEN_UNRELATED）
+ROOT_CAUSE_CONFIDENCE = UNKNOWN
+ROOT_CAUSE_HYPOTHESIS = ⑤ 步 goBack() 返回的列表参数组合（search=KEYWORD &
+  difficulty=2 & page=1）与 ④ 步刚提交并请求过的组合完全相同；若列表数据层在 Back
+  恢复时命中同 key 缓存/既有状态而不发起新 GET（或真实请求先于监听注册完成），
+  waitForResponse 将无事件可等。该假设可解释"页面状态正确但响应事件缺失"，尚未
+  用 trace 复核，不作为结论
+FIRST_CAUSAL_DIVERGENCE = UNKNOWN
+CASE_ID = UNASSIGNED（AGGREGATION_BASIS = NONE；签名首登）
+OWNER_DISPOSITION = 登记 + 在本 PR 内重跑 CI 获取新权威 run（失败 run 保持 FAIL
+  并存）；机制诊断与测试加固推迟到 v0.0.10 发布流程结束后（与
+  OBS-2026-10-23-001 同一 Owner 指示）
+```
+
+---
+
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
 
 ```text
