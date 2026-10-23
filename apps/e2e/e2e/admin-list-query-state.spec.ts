@@ -22,7 +22,10 @@ import { adminApiToken, adminPost, adminGet } from "../lib/flow";
  * Determinism contract: every seeded record carries a per-run unique stamp, so
  * assertions never depend on baseline data (the exam_e2e database is
  * persistent). Every step is event-synced on the list response it depends on —
- * no sleeps, no fixed page caps, no assumed global page position.
+ * no sleeps, no fixed page caps, no assumed global page position. The one
+ * exception is the A04 Back restoration in step ⑤, whose oracle is the
+ * restored state itself: a Back that lands before the editor route rendered
+ * legitimately issues no list GET at all (OBS-2026-10-23-002).
  *
  * A04/A05/A06/A13/A15 must leave inspectable evidence, so this file forces
  * traces on (the global setting is `retain-on-failure`) and attaches an
@@ -341,13 +344,26 @@ test.describe.serial("admin list URL query state (#784 A3 BDD L3)", () => {
     //    parameter set (the one that still had `page=2`) it would resurrect the
     //    page the user just left; if the control did not follow the URL the
     //    search box would be empty and the commit would drop the keyword.
+    //    The waiter binds to the commit's own request identity
+    //    (search + difficulty), not to "the next list response": the Back of
+    //    step ③ fires a list GET for the restored query, and under compressed
+    //    timing that response can still be in flight when this waiter arms
+    //    (OBS-2026-10-23-002, step-④ variant).
     const commitUrl = new URL(
-      await (async () => {
-        const pending = nextListResponse(page, QUESTIONS_LIST);
-        await page.getByRole("combobox", { name: "按难度筛选" }).click();
-        await page.getByRole("option", { name: "难度 2" }).click();
-        return pending;
-      })(),
+      (
+        await (async () => {
+          const pending = page.waitForResponse(
+            (r) =>
+              r.request().method() === "GET" &&
+              r.url().includes(QUESTIONS_LIST) &&
+              r.url().includes(`search=${KEYWORD}`) &&
+              r.url().includes("difficulty=2"),
+          );
+          await page.getByRole("combobox", { name: "按难度筛选" }).click();
+          await page.getByRole("option", { name: "难度 2" }).click();
+          return pending;
+        })()
+      ).url(),
     );
     expect(commitUrl.searchParams.get("search")).toBe(KEYWORD);
     expect(commitUrl.searchParams.get("difficulty")).toBe("2");
@@ -363,7 +379,17 @@ test.describe.serial("admin list URL query state (#784 A3 BDD L3)", () => {
     await expect(page.getByText(/共 21 条/)).toBeVisible();
 
     // ⑤ A04: entering a row's editor is a PUSH, so Back returns to the query the
-    //    user was on — URL, control and rows all describe it again.
+    //    user was on — URL, control and rows all describe it again. The oracle
+    //    is the restored STATE, not a fresh list GET: whether the restoration
+    //    replays the request is an implementation detail. When the popstate
+    //    lands before the editor route has rendered (React batches the push
+    //    and the pop into one render that reuses the mounted list instance),
+    //    the list never unmounts, no request fires, and every user-visible
+    //    fact is still correct — waiting for a list GET here times out against
+    //    CORRECT behaviour (OBS-2026-10-23-002). The rows asserted below are
+    //    the settled response of exactly this request identity, so the
+    //    freshness contract stays observable: a stale or wrong-identity body,
+    //    a wrong page range, or a lost control value still fails.
     await page
       .getByRole("table")
       .getByRole("button", { name: "编辑题目" })
@@ -371,23 +397,21 @@ test.describe.serial("admin list URL query state (#784 A3 BDD L3)", () => {
       .click();
     await expect(page).toHaveURL(/\/admin\/questions\/[^/]+\/edit$/);
     const editorPath = new URL(page.url()).pathname;
-    const backResponse = new URL(
-      await (async () => {
-        const pending = nextListResponse(page, QUESTIONS_LIST);
-        await page.goBack();
-        return pending;
-      })(),
-    );
-    expect(backResponse.searchParams.get("search")).toBe(KEYWORD);
-    expect(backResponse.searchParams.get("difficulty")).toBe("2");
+    await page.goBack();
     await expect(page).toHaveURL(
       (url) =>
         url.pathname === "/admin/questions" &&
         url.searchParams.get("search") === KEYWORD &&
-        url.searchParams.get("difficulty") === "2",
+        url.searchParams.get("difficulty") === "2" &&
+        url.searchParams.get("page") === null,
     );
     await expect(page.getByLabel("搜索题目")).toHaveValue(KEYWORD);
     await expect(page.getByText(/共 21 条/)).toBeVisible();
+    await expect(page.getByText(/显示 1-20 条/)).toBeVisible();
+    await expect(
+      page.getByRole("table").getByText(`${KEYWORD} 题目 01`, { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "上一页" })).toBeDisabled();
 
     // ⑥ Back from the committed state LEAVES the list. A filter commit is a
     //    history REPLACEMENT, so the query the user committed over is not an
@@ -408,7 +432,8 @@ test.describe.serial("admin list URL query state (#784 A3 BDD L3)", () => {
         "Back restored URL = control value = footer range (page 1)",
         `post-Back commit  -> search=${commitUrl.searchParams.get("search")} difficulty=${commitUrl.searchParams.get("difficulty")} page=${commitUrl.searchParams.get("page")}`,
         `editor entry      -> ${editorPath} (push)`,
-        `Back from editor  -> search=${backResponse.searchParams.get("search")} difficulty=${backResponse.searchParams.get("difficulty")}`,
+        "Back from editor  -> URL = control = footer = fixture rows (page 1, difficulty 2)",
+        "restoration verified by the restored state, not by a replayed GET",
         "no page=2 revived after Back; the keyword survived the commit",
         "Back from the committed query left the list (commit replaced its entry)",
       ].join("\n"),
