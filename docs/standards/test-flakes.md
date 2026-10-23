@@ -2838,6 +2838,61 @@ v1 缓解（保留）：无代码改动（不调 timeout、不 skip）；重套�
 
 ---
 
+### OBS-2026-10-23-001 — `recoveryRepo.test.ts` 单点 5s 超时（v0.0.10 发布审计本地 coverage；宿主 node 版本与 `.nvmrc` 偏差上下文）
+
+```text
+OBSERVED_AT = 2026-10-23T16:23+08:00（@exam/db vitest "Start at 16:21:23"，包耗时
+  131.88s；turbo 全量 2m14.856s）
+GIT_SHA = b9b7fabb2ac693c1995042f036d9842950637f7a（= origin/master，v0.0.10 发布审计
+  基线）
+BRANCH = master（无 tracked 未提交改动；ignored 本地 .env / .env.deploy /
+  .env.test.local 在场，与本 run 失败无执行交集）
+COMMAND = TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage
+EXECUTION_TOPOLOGY = 全 turbo coverage（15 tasks，7 cached）；@exam/db lane：
+  worker-database 隔离，65 文件 / 748 用例；API_TEST_MAX_WORKERS=4 按根 coverage 编排
+  传入（@exam/db vitest 实际 maxWorkers 未单独观测，不得推断）
+FAILED_FILE = packages/db/src/repository/recoveryRepo.test.ts
+FAILED_TEST = "recovery incident aggregate detail repository > fails closed when a
+  candidate-focused incident's action link belongs to a different candidate"
+  （it 定义于 :2458）
+FAILURE_PHASE = it 体内（非钩子）
+FAILURE_CLASS = testTimeout 5000ms
+ERROR = Error: Test timed out in 5000ms.；Tests: 1 failed | 747 passed (748)；
+  Test Files: 1 failed | 64 passed (65)
+ASSERTION_FAILURE = NO
+AUTHORITATIVE_RUN_RESULT = FAIL（v0.0.10 发布审计的本地验证 run；非 CI 门禁。同基线
+  组合的 CI Package coverage 两次 SUCCESS，见 RERUN_EVIDENCE ③——两者并存，互不改写）
+HOST_OR_RUNNER_CONTEXT = 本地 WSL2 开发机；失败 run 使用 node v24.15.0（nvm 默认），
+  与 .nvmrc 24.22.1 存在宿主偏差（失败后才发现；24.22.1 本地已安装）。该偏差是否
+  参与失败未知（见 ROOT_CAUSE_CONFIDENCE）
+DB_ISOLATION_MODE = worker-database
+TRACE_OR_LOG_LOCATION = 会话临时输出文件（ephemeral，不持久）；完整流被 `tail -30`
+  截断，失败头（文件/用例/错误类）与统计尾部已逐字保全于本条目（STEP 9 保全范围
+  以此为限）
+RERUN_EVIDENCE =
+  ① 同机同 node v24.15.0，单文件 -t 过滤重跑该用例：3 passed | 72 skipped（tests
+     1.33s）——PASS；
+  ② 切换 node v24.22.1（= .nvmrc）后整包 `TEST_DB_ISOLATION=worker-database pnpm
+     coverage`（packages/db）：65 文件 / 748/748 全过，exit 0——PASS；
+  ③ 同基线 GitHub Actions Package coverage 两次 SUCCESS：PR #807 head CI run
+     39921646313（head 851f8f9f）、PR #808 head CI run 39925426281（head 1a364ace）
+NONDETERMINISM_CONFIRMED = YES（同代码 FAIL + 同代码 PASS）
+CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED（VACUOUS，准入依据 STEP 7(a)：失败 run
+  位于干净工作树 b9b7fabb，无候选改动；纯诊断 run）
+ROOT_CAUSE_CONFIDENCE = UNKNOWN
+ROOT_CAUSE_HYPOTHESIS = 满负载 coverage lane 下该用例 5s 预算不充足（宿主调度/负载
+  包络）；node 版本偏差是否参与未知——同一 v24.15.0 上单文件重跑通过（证据①）说明
+  偏差本身不必然失败，但①②各自改变了执行拓扑与宿主状态，不构成对任何假设的判别
+FIRST_CAUSAL_DIVERGENCE = UNKNOWN
+CASE_ID = UNASSIGNED（AGGREGATION_BASIS = NONE——与 BUG-FLAKE-005 同 lane、同错误类
+  但受害文件/受害身份不同；与 OBS-2026-09-27-001 同文件但失败形态不同且该次机制
+  未观测；按 STEP 5 均不聚合）
+OWNER_DISPOSITION = 仅登记（2026-10-23 Owner 指示）；诊断/修复推迟到 v0.0.10 发布
+  流程结束后进行，本条目不触发任何测试或基础设施改动
+```
+
+---
+
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
 
 ```text
