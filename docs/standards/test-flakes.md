@@ -2946,6 +2946,60 @@ OWNER_DISPOSITION = 登记 + 在本 PR 内重跑 CI 获取新权威 run（失败
   OBS-2026-10-23-001 同一 Owner 指示）
 ```
 
+2026-10-23 深夜后续（v0.0.10 后专项诊断完成：CDP 因果追踪 + BDD 裁定 + TDD 修复；
+本段只追加，不改写上方原始登记的任何事实与当时判断）：
+
+- **结论升级：ORACLE_DEFECT_CAUSALLY_PROVEN**（原 `ROOT_CAUSE_CONFIDENCE =
+  UNKNOWN` 就此收敛；产品行为被裁定为契约合法，本专项未改动任何生产代码）。
+- **根因（受控调制证明）**：react-router v7 声明式 `<BrowserRouter>` 下，编辑器
+  入口点击的 pushState 与紧随其后的 `goBack()` popstate 落入同一个 React 渲染
+  批次时，React 只渲染最终状态（列表路由）；QuestionPage 在新旧树中处于同一元素
+  位置 → 组件实例复用 → 不卸载不重挂 → mount effects 不重跑 → **零网络请求**，
+  而 URL / 搜索框控件 / 行 / 页码 / 页脚全部正确。旧 oracle 的 ⑤ 步
+  `waitForResponse` 等待一个契约上并不必须发生的 GET，对正确行为 15s 超时。
+  触发是纯时序：`trace: "on"` 的快照开销拉大「点击→goBack」间隔（编辑器先渲染，
+  Back 退化为 remount，列表 GET 正常发出）→ 通过；trace 关闭后 goBack 在 2-6ms
+  内 resolve → 合并窗口确定性复现。诊断开关双向翻转：trace-off 诊断轮 14 次
+  （C1 系列 ×2 迭代 + DUAL ×3）中合并窗口命中 26/28 迭代，全部呈现
+  「pushState + popstate + react:commit、无任何 fetch」签名；trace-on 对照 3/3
+  走 remount 路径。CI 的失败发生在 trace-on 慢速/分张环境下概率性落入同一合并
+  窗口——CI server.log（15s 窗口零请求、编辑器数据 GET 缺失）与合并机制签名
+  一致；同产品代码重跑全绿与之相容。
+- **备择假设排除**：HTTP 缓存（`/api/questions` 无 Cache-Control，同 URL 二次
+  GET 到达服务端）；BFCache（同文档 SPA 导航，`pageshow persisted:false`，无跨
+  文档事件）；CDP 探针自扰（LAYERS=0 全裸消融仍复现）；监听/等待注册次序（单
+  探针消融均复现）。
+- **BDD 裁定**：`docs/design/admin-list-query-state-bdd.md` §1/§4/§5(e) 只要求
+  Back 恢复「用户所在查询的状态」（URL=控件=行=页码=页脚一致），恢复是否重放
+  GET 属实现细节——合并路径下组件状态从未销毁，④ 步已结算响应正是当前身份的
+  数据，§5(e) 同身份翻页保持行可见的既定不对称也依赖「不因重复请求清空身份」。
+- **修复（仅测试 oracle，`admin-list-query-state.spec.ts`）**：⑤ 步改为行为
+  权威 oracle（URL 参数含 `page` 缺省 + 搜索框控件值 + 共 21 条 + 显示 1-20 条
+  + fixture 行文本 + 上一页 disabled）；④ 步 waiter 从「下一个列表响应」改为
+  绑定请求身份（search+difficulty）——③ 步 Back 自己的列表 GET 在压缩时序下可
+  在 waiter armed 之后才到达，与 ⑤ 同属事件绑定缺陷（诊断中实测命中一次）。无
+  生产代码改动，无 sleep / timeout 提升 / retry。
+- **反事实检出验证**（每个 mutation 一次全文件 serial 运行，RED 后还原复绿；
+  含诚实登记的未检出项）：
+
+  | 注入 | 注入点 | 结果 |
+  | --- | --- | --- |
+  | 控件值被外部导航清空 | external-nav effect `setSearchInput` | RED ③ `toHaveValue` |
+  | 挂载初值丢失（initializer 置空） | `useState` initializer | 未检出（URL→draft 回填效应冗余恢复，控件权威在 URL 不在初值） |
+  | difficulty 规范化丢弃 | `canonicalParamValue` | RED ④ 身份绑定 waiter 超时 |
+  | Back 落点被改写为 page=2（负控制） | spec 内 `replaceState` 篡改当前历史条目 | RED ⑤ URL `page=null` 断言 |
+  | stale 参数复活 page=2（单点：latestParams 不同步 **或** commitFilters 丢 delete） | 二者各一 | 均未检出（A06 双层冗余互为备份） |
+  | stale 参数复活 page=2（双层同破） | 两者同时 | RED ④ commit 请求 `page=2` |
+  | 陈旧/错身份行集 | — | **NOT_COVERED**：21 行 fixture 在相邻 filter 身份下行集相同，L3 不可区分；身份渲染门由 L2 `QuestionPage.queryState` 套件（A08/A09/A16）覆盖 |
+  | total 污染 | `setTotal` | RED ① 「共 21 条」 |
+  | 写入一律 push（replace 契约破坏） | `writeParams` | RED ⑥ `not.toHaveURL`（pre-commit 条目复活） |
+  | 失败渲染成成功 | loadQuestions catch 吞错 + route 500 注入 | RED ④ 「共 21 条」 |
+
+- **稳定性**（修复后，最终形态）：合并窗口确定性开启（诊断 trace 开关）×3 轮
+  全文件全绿；默认形态（trace-on）×4 轮全文件全绿；全量 E2E 双 shard
+  （`bash scripts/e2e/run.sh`）全绿。PR：`test(e2e): make admin Back oracle
+  behavior-authoritative`（OPEN，未合并；CI 结果以该 PR head 为准）。
+
 ---
 
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
