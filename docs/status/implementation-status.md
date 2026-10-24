@@ -286,6 +286,21 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
 - **Operational Control Plane (P7-E) is COMPLETE — on master** (merged via
   PR #282, 2026-08-12; E2A/E2B/E2C/E3 implemented; see
   [`docs/archive/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../archive/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
+  **Disposition update (2026-10-24):**
+  [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) **declines
+  and orders the removal of the backup-evidence subsystem** — the E2B
+  ledger/read routes/evidence CLI, the E2C backup-posture and
+  restore-readiness views, and the E3 operational-policy intent mechanism
+  (ADR-023 amends ADR-017 to rev 5 and supersedes ADR-018 in part for this
+  scope). **As of this note the runtime still implements all of it** (routes
+  `GET /system/backups`, `GET /system/restore-readiness`,
+  `GET /system/retention-readiness`, `GET/PUT /system/ops-policy`; the five
+  `backup_runs` / `backup_run_events` / `backup_operational_policy` /
+  `restore_drill_runs` / `retention_runs` tables; the Maintainer's five view
+  capabilities; `backup-evidence.ts`): removal lands in **PR-B** (product
+  code) and **PR-C** (a new forward-only DROP migration — the applied
+  migrations 0031–0034 and the journal stay untouched). The E2B/E2C/E3
+  descriptions below are the pre-removal as-built record.
   The post-P7-E RBAC role-reality remediation (PR #284, 2026-08-13) further
   corrected the Admin authority + Maintainer observability boundary; ADR-017
   rev 4 + ADR-018 were accepted by the P7 final program closeout. See the
@@ -305,6 +320,12 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   suite green. Deployment Readiness (real scheduled retention +
   production-volume restore acceptance) is an explicit deployment-site runbook
   obligation (runbook §17; `scripts/db-backup.sh`).
+  *(ADR-023, 2026-10-24: the product-side half of this mechanism — the typed
+  RTO authority, the drill/retention evidence ledgers, and the readiness
+  projections — is removed by ADR-023 (code in PR-B, tables in PR-C); the
+  historical P7-3 PASS verdict stays as history. The deployment-site
+  obligation in the preceding sentence is unaffected and remains the
+  surviving backup/restore authority.)*
   ADR-017 revision 4 and ADR-018 are **ACCEPTED** (the PR #314 merge is the
   human acceptance event — an AI-written verdict alone is not acceptance).
   Deferred capabilities are
@@ -321,7 +342,9 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
     business-integrity block projected server-side by
     `system.business_integrity.view` (Admin-only) — Maintainer never receives
     it. Business dashboard gated Admin-only (`system.business_summary.view`).
-  - **E2B — Backup Evidence Ledger**: typed `backup_runs` /
+  - **E2B — Backup Evidence Ledger** *(removed by ADR-023 — code in PR-B,
+    tables in PR-C; description below is the pre-removal as-built record)*:
+    typed `backup_runs` /
     `backup_run_events` / `restore_drill_runs` (NOT a generic event/settings
     store). SUCCESS requires artifact + readable + verification + durable
     commit (DB CHECK + partial-unique at most-one-success-per-operation);
@@ -332,11 +355,15 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
     (automated vs operator-declared). Read-only
     `GET /system/backups` + `GET /system/restore-readiness` (Admin +
     Maintainer).
-  - **E2C — Operations views**: `/admin/operations` (health, backup posture,
+  - **E2C — Operations views** *(backup-posture and restore-readiness
+    sections removed by ADR-023 in PR-B; health/diagnostics views remain)*:
+    `/admin/operations` (health, backup posture,
     restore readiness, operational diagnostics; truthful NO EVIDENCE / NOT
     VERIFIED / warning states), capability-gated navigation (no dead business
     nav for Maintainer; direct business routes 403), E2E coverage.
-  - **E3 — Operational Policy Intent**: typed `backup_operational_policy`
+  - **E3 — Operational Policy Intent** *(removed by ADR-023 — code in PR-B,
+    table in PR-C; description below is the pre-removal as-built record)*:
+    typed `backup_operational_policy`
     (safe ranges, CAS version, required reason, atomic audit); Admin sole
     intent owner (`system.ops.policy.manage`), Maintainer read-only
     (`system.ops.policy.view`); DESIRED vs OBSERVED vs STATUS projection
@@ -347,6 +374,10 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
     `backup.retention.manage`, `service.restart` → **DEFERRED (NO-GO)** with
     explicit rationale (host cron/scripts remain execution authority; see
     [`docs/archive/audits/P7-E3-DECISION-GATES.md`](../archive/audits/P7-E3-DECISION-GATES.md)).
+    *(ADR-023, 2026-10-24: the three `backup.*` gates are upgraded from
+    deferred to **declined** — the subsystem they would have gated no longer
+    exists as a future surface; `service.restart` keeps this NO-GO record
+    and its ADR-017 D5 future-gate disposition unchanged.)*
     Email worker/runtime settings stay env + restart-required (no confirmed
     online-edit requirement).
   - **E0 residue**: `DEADLINE_SCAN_INTERVAL_MS` canonical-loader bypass

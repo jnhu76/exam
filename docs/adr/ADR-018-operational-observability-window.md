@@ -2,16 +2,30 @@
 
 ## Status
 
-* Status: **ACCEPTED** (2026-08-14 — P7 final program closeout,
+* Status: **ACCEPTED; superseded in part by
+  [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)** (2026-10-24 —
+  **prospective**: the Backup-Evidence and Recovery/Restore-Evidence window
+  content, and the backups/restore-readiness/ops-policy realization of the
+  window, lose their authority under ADR-023 and are removed by its PR-B
+  (routes) / PR-C (tables); **until PR-B lands, the live runtime still
+  implements all of those surfaces**. The window contract itself — the D2
+  invariants, the D3 taxonomy, the D4 redaction boundary, the D6 host
+  boundary, and the D7 per-source ADR requirement — remains in force;
+  post-PR-B the window is realized by health/diagnostics). Original
+  acceptance: 2026-08-14 — P7 final program closeout,
   [`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
   proposed 2026-08-13 with ADR-017 rev 4, accepted after the runtime boundary
-  check in that closeout — the current `/system/*` surfaces already realize
+  check in that closeout — the then-current `/system/*` surfaces realized
   the window contract)
-* Date: 2026-08-13 (proposed); 2026-08-14 (accepted)
+* Date: 2026-08-13 (proposed); 2026-08-14 (accepted); 2026-10-24 (superseded in part by ADR-023)
 * Decision owners: project
 * Supersedes: none
-* Superseded by: none
+* Superseded by: [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)
+  (in part — the backup/restore-readiness/ops-policy window content only)
 * Related decisions:
+  * ADR-023 — Remove the Backup-Evidence Subsystem (**supersedes this
+    ADR in part** — backup/restore-readiness/ops-policy window content;
+    health/diagnostics window and the contract retained)
   * ADR-017 — Operational Authority and Maintainer Boundary (**revision 4
     references this ADR**). ADR-017 rev 4 defines *who* observes (the
     Application Maintainer, read-only); this ADR defines *what may flow
@@ -30,6 +44,12 @@ backup/recovery evidence, runtime state — may all be presented through that
 window, but the product must **never** mutate, execute, configure, restart, or
 restore through it.
 
+> ADR-023 (2026-10-24): backup/recovery evidence is no longer a window
+> content source by decision of [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)
+> — the subsystem behind it is removed in that ADR's PR-B/PR-C (the live
+> window still presents it until PR-B). The window principle and this ADR's
+> contract are unchanged.
+
 This ADR establishes the **clean read-only product boundary** that future
 runtime data plugs into. It deliberately does **NOT** introduce a generic
 observability platform, a new storage system, or any data backend. It freezes
@@ -41,6 +61,8 @@ ClickHouse, OpenTelemetry collectors, log shipping, a generic observability
 database, a plugin framework, a browser terminal / shell console, a backup
 trigger / restore / restart / secret-editor button. None is introduced. Each
 would require its own ADR and is out of scope for the current milestone.
+([ADR-023](ADR-023-remove-backup-evidence-subsystem.md) (2026-10-24)
+subsequently declined the backup-trigger direction outright.)
 
 ---
 
@@ -66,6 +88,17 @@ Today the window is realized by the existing read-only `/system/*` routes
 (health, diagnostics, backups, restore-readiness, ops-policy) and the
 Operations page. The current data is **truthful and bounded**; nothing is
 faked and no dead button pretends a backend exists.
+
+> ADR-023 (2026-10-24): the `Backup Evidence` and `Recovery / Restore
+> Evidence` branches lose their authority and are removed by ADR-023's
+> PR-B (routes) / PR-C (tables) — **prospectively; the live window still
+> presents them until PR-B**. Post-removal the window is realized by
+> health + diagnostics (and the Operations page sections presenting them).
+> Historical precision on the "read-only `/system/*` routes" sentence above:
+> the pre-ADR-023 window also contained `PUT /system/ops-policy`, an Admin
+> write face (`system.ops.policy.manage`) outside the `*.view` read-only
+> invariant; it is removed as well. The D2.1 read-only invariant always
+> applied to `*.view` capabilities and is unchanged.
 
 ### D2. The data-provider contract (six invariants)
 
@@ -107,11 +140,24 @@ The current `/system/*` surfaces are a partial realization: health/diagnostics
 (metrics + operational logs), backups (materials/evidence), restore-readiness
 (drill evidence), ops-policy (reliability objective + compliance projection).
 
+> ADR-023 (2026-10-24): the backup-related examples above (`backup
+> completed`, `backup failed`, `recovery drill recorded`; `backup evidence`,
+> `restore-drill evidence`) and the backups/restore-readiness/ops-policy
+> entries of the "current surfaces" mapping describe the subsystem that
+> ADR-023 removes (live until PR-B/PR-C). Post-removal the realized surfaces
+> are health/diagnostics only. The taxonomy method — keep the four kinds
+> distinct — is unchanged.
+
 ### D4. Correlation direction — and its boundary
 
 The window should make it possible to correlate by timestamp, `requestId`,
 service, worker, `operationId`, backup-run id, and `examId`/`attemptId`
-**only when safe and redacted**. The hard rule:
+**only when safe and redacted**.
+
+> ADR-023 (2026-10-24): the `backup-run id` correlation-key example above is
+> historical — the ledger it keyed is removed by ADR-023's PR-C.
+
+The hard rule:
 
 > An operational Maintainer must **NOT** automatically receive business-domain
 > detail just because a correlation key exists.
@@ -140,6 +186,11 @@ Operations / 系统运维
     ├── Events            (future)
     └── Materials         (future)
 ```
+
+> ADR-023 (2026-10-24): the `Evidence (backup, restore readiness) — TODAY`
+> branch is removed by ADR-023 in PR-B (the live Operations page still
+> presents it until then); the Overview branch and the Runtime-Data shape
+> are unchanged.
 
 Acceptable preparation: a neutral route/layout structure; a typed frontend
 section model; clearly marked `UNAVAILABLE` / not-yet-connected states;

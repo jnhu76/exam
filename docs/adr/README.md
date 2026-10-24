@@ -128,7 +128,8 @@ Architecture decisions
 +-- D. Authorization & operations
 |   +-- ADR-010 scoped RBAC
 |   +-- ADR-017 operational authority / maintainer boundary
-|   `-- ADR-018 operational observability window
+|   +-- ADR-018 operational observability window
+|   `-- ADR-023 backup-evidence subsystem removal
 |
 +-- E. Application, client & content evolution
 |   +-- ADR-009 frontend state-machine adoption
@@ -186,8 +187,9 @@ unrelated ADR cleanup.
 | ADR | Primary responsibility | Status |
 | --- | --- | --- |
 | [ADR-010](ADR-010-scoped-rbac-architecture.md) | Capability + resource-scope authorization | ACCEPTED |
-| [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational/Maintainer authority boundary | ACCEPTED through revision 4 |
-| [ADR-018](ADR-018-operational-observability-window.md) | Read-only operational observability contract | ACCEPTED |
+| [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational/Maintainer authority boundary | ACCEPTED through revision 5 (backup-evidence scopes superseded by ADR-023) |
+| [ADR-018](ADR-018-operational-observability-window.md) | Read-only operational observability contract | ACCEPTED; backup/restore-readiness/ops-policy window content superseded by ADR-023 |
+| [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) | Backup-evidence subsystem removal (Host owns operational evidence) | ACCEPTED |
 
 ### E. Application, client & content evolution
 
@@ -252,7 +254,7 @@ These paths are navigation only:
   ADR-014.
 - **Proctor intervention:** ADR-010 -> ADR-015, then the relevant exam/time/
   recovery ADRs.
-- **Operations:** ADR-010 -> ADR-017 -> ADR-018.
+- **Operations:** ADR-010 -> ADR-017 -> ADR-018 -> ADR-023.
 - **Client/content:** ADR-009 / ADR-016 / ADR-019 according to the capability;
   ADR-011 owns current notification/delivery specialization.
 - **Product composition:** ADR-021 -> ADR-022, then consult ADR-010/019 and the
@@ -280,15 +282,16 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-014](ADR-014-exam-incident-authority.md) | Exam Incident Authority | ACCEPTED | none | none |
 | [ADR-015](ADR-015-proctor-exam-scope-authority.md) | Proctor-to-Exam Resource Scope Authority | ACCEPTED | none | none |
 | [ADR-016](ADR-016-future-offline-resilient-client-data-and-recovery-model.md) | Future Offline-Resilient Client Data and Recovery Model | DEFERRED | none | none |
-| [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational Authority and Maintainer Boundary | ACCEPTED through revision 4 | none | none |
-| [ADR-018](ADR-018-operational-observability-window.md) | Operational Observability Window | ACCEPTED | none | none |
+| [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational Authority and Maintainer Boundary | ACCEPTED through revision 5 | none | none (backup-evidence scopes superseded by ADR-023; see its rev-5 note) |
+| [ADR-018](ADR-018-operational-observability-window.md) | Operational Observability Window | ACCEPTED, superseded in part (2026-10-24) | none | ADR-023 (backup/restore-readiness/ops-policy window content only) |
 | [ADR-019](ADR-019-content-document-model.md) | Content Document Model | ACCEPTED, amended (2026-10-02) | none | none |
 | [ADR-020](ADR-020-http-surface-routing-authority.md) | HTTP Surface Routing & Policy Authority | ACCEPTED | none | none |
 | [ADR-021](ADR-021-exam-semantic-authority-adoption.md) | Exam Semantic Authority Adoption | ACCEPTED | Stale assertions listed in its supersession table (incl. ADR-008 Phase-2 scope statements) | none |
 | [ADR-022](ADR-022-product-capability-composition.md) | Bounded Product Capability Composition | ACCEPTED | none | none |
+| [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) | Remove the Backup-Evidence Subsystem (Host Owns Operational Evidence) | ACCEPTED | ADR-018 (backup/restore-readiness/ops-policy window content); ADR-017 rev-4 backup-evidence scopes as enumerated in ADR-017 §Revision 5 (incl. R4-3 category B, R4-4, D5 `backup.*` gates, D6, D9, D10, D1 backup items, five-capability freeze, R4-1 window-content statement, D13 E2B/E2C line items) | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-023**.
+ADR numbers are stable and never reused. The next free number is **ADR-024**.
 Files that are audits *about* an ADR belong under `docs/archive/`, not in this
 folder with a conflicting ADR number.

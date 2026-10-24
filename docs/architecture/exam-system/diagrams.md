@@ -42,7 +42,13 @@ C4Context
 ```
 
 **Authority**: `apps/api/src/server.ts`, `packages/authz/src/presets.ts`, `apps/api/src/plugins/emailOutboxLoop.ts` (#320 CONVERGE — in-process outbox loop; standalone `workers/emailDeliveryWorker.ts` remains as an optional escape hatch)
-**Evidence**: 7 built-in role presets total — 6 assignable human roles (Admin, Teacher, Proctor, Grader, Candidate, Maintainer; Maintainer added by P7-E2A — read-only Operational Observer; ADR-017) + 1 synthetic non-assignable System actor (not rendered as a person; deadline auto-submit / heartbeat scan / reconcile). Maintainer holds exactly 5 operational `*.view` capabilities, 0 business permissions, 0 writes — the relation is **observation only: no business mutation, no infrastructure execution**. Admin ∩ Maintainer = ∅ is enforced server-side (D14). SMTP is the only external system dependency (async via the in-process email outbox loop).
+
+> [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md)
+> (2026-10-24) removes the backup-evidence surface from the Maintainer
+> window in its PR-B (routes) / PR-C (tables); the diagram above shows the
+> live implementation until that removal lands.
+
+**Evidence**: 7 built-in role presets total — 6 assignable human roles (Admin, Teacher, Proctor, Grader, Candidate, Maintainer; Maintainer added by P7-E2A — read-only Operational Observer; ADR-017) + 1 synthetic non-assignable System actor (not rendered as a person; deadline auto-submit / heartbeat scan / reconcile). Maintainer holds exactly 5 operational `*.view` capabilities, 0 business permissions, 0 writes *(ADR-023 re-baselines the set to health/diagnostics — 5 → 2 — in its PR-B; the five remain the live implementation until then)* — the relation is **observation only: no business mutation, no infrastructure execution**. Admin ∩ Maintainer = ∅ is enforced server-side (D14). SMTP is the only external system dependency (async via the in-process email outbox loop).
 **Known limitations**: Teacher/Proctor/Grader are Phase 3 roles (capability infrastructure exists; product role UI is incomplete). Teacher course-scope is NOT enforced — see P7-RBAC F-04. Email delivery is the only async external dependency. No CDN, no cloud services, no external APIs.
 
 ---
