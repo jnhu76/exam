@@ -12,8 +12,8 @@
  *
  * Field scenario being frozen: a worker DB survives a failed E2E run
  * (E2E_KEEP_WORKER_DB_ON_FAILURE retention, or a crash that bypassed
- * cleanup) carrying that run's mutable state — backup-evidence ledger rows,
- * leftover Maintainer users, finished attempts. The next run reseeds the
+ * cleanup) carrying that run's mutable state — leftover Maintainer users,
+ * finished attempts. The next run reseeds the
  * same database. The contract under test:
  *
  *   reseed (reset: true)  →  the database CONVERGES to the canonical E2E
@@ -76,21 +76,6 @@ async function poisonWithFailedRunState(): Promise<void> {
     role: "Maintainer",
     isActive: true,
   });
-  await conn.db.insert(schema.backupRuns).values({
-    id: "stale-backup-run-001",
-    organizationId: orgId,
-    operationId: "logical:e2e-verified",
-    backupType: "logical",
-    status: "succeeded",
-    startedAt: new Date(),
-    completedAt: new Date(),
-    artifactLabel: "e2e-verified.dump",
-    artifactSizeBytes: 1024,
-    verificationMethod: "pg_restore_list",
-    verificationStatus: "verified",
-    verifiedAt: new Date(),
-    executorType: "host_script",
-  });
 }
 
 // Queue-participant hang protection (see docs/standards/test-flakes.md PR
@@ -141,12 +126,7 @@ describe(
         .select()
         .from(schema.users)
         .where(eq(schema.users.id, "stale-maintainer-001"));
-      const staleEvidence = await conn.db
-        .select()
-        .from(schema.backupRuns)
-        .where(eq(schema.backupRuns.id, "stale-backup-run-001"));
       expect(staleUser).toHaveLength(1);
-      expect(staleEvidence).toHaveLength(1);
 
       // Next run's reseed must converge, not upsert on top.
       const reseed = await runE2eSeed(conn.db, memoizedHash, {
@@ -159,14 +139,9 @@ describe(
         .select()
         .from(schema.users)
         .where(eq(schema.users.id, "stale-maintainer-001"));
-      const staleEvidenceAfter = await conn.db.select().from(schema.backupRuns);
       expect(
         staleUserAfter,
         "stale user from the retained failed run must not survive the reseed",
-      ).toHaveLength(0);
-      expect(
-        staleEvidenceAfter,
-        "backup evidence ledger must be empty after the reseed (canonical baseline)",
       ).toHaveLength(0);
 
       // The canonical baseline is fully rebuilt: admin + demo candidates exist
@@ -211,9 +186,7 @@ describe(
         .select()
         .from(schema.users)
         .where(eq(schema.users.id, "stale-maintainer-001"));
-      const staleEvidenceAfter = await conn.db.select().from(schema.backupRuns);
       expect(staleUserAfter).toHaveLength(1);
-      expect(staleEvidenceAfter).toHaveLength(1);
     });
   },
 );

@@ -1,5 +1,11 @@
 # P7-CLOSE — RTO + Retention Gate P7-3 Closeout
 
+> **Status annotation (2026-10-24):** the backup-evidence subsystem this
+> document describes was removed by
+> [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md); its
+> records here are historical evidence, not current authority for the
+> removed scope.
+
 > **Superseded (2026-08-14):** this document's verdict — "IMPLEMENTED —
 > OPERATIONAL_ACCEPTANCE_PENDING (NOT PASS)" — was true on 2026-08-13 and is
 > **historical evidence**. The operational acceptance it awaited was resolved

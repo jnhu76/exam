@@ -284,4 +284,4 @@ If the candidate's browser crashes:
 
 ### 13.3 Retention
 
-30-day fixed horizon from `receivedAt` (`DELETE WHERE received_at < cutoff`). No durable cleanup evidence; `retention_runs` is reserved for backup/WAL evidence and is NOT reused for client-event GC.
+30-day fixed horizon from `receivedAt` (`DELETE WHERE received_at < cutoff`). No durable cleanup evidence table and no evidence subsystem (ADR-023 removed the backup-evidence tables; none may be reused for client-event GC).

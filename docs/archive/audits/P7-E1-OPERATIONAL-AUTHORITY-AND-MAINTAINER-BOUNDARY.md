@@ -1,5 +1,11 @@
 # P7-E1 — Operational Authority & Maintainer Boundary
 
+> **Status annotation (2026-10-24):** the backup-evidence subsystem this
+> document describes was removed by
+> [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md); its
+> records here are historical evidence, not current authority for the
+> removed scope.
+
 **Status:** ACCEPTED (2026-08-12 — human review completed, PR #281 merged;
 design contract for P7-E2)
 **Program:** P7-E — Operational authority separation (Admin ≠ Maintainer)

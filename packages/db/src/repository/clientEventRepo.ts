@@ -229,8 +229,8 @@ export function createClientEventRepo(db: Database) {
      *
      * Idempotent and restart-safe by construction (pure convergence delete).
      * Backed by `client_events_org_received_at_idx`. Never touches any other
-     * table; authoritative records (audit logs, attempts, retention_runs) have
-     * independent lifecycle.
+     * table; authoritative records (audit logs, attempts) have independent
+     * lifecycle.
      *
      * @returns The number of rows deleted.
      */

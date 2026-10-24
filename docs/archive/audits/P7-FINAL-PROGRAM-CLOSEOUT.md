@@ -1,5 +1,11 @@
 # P7 — FINAL PROGRAM CLOSEOUT
 
+> **Status annotation (2026-10-24):** the backup-evidence subsystem this
+> closeout records as built and accepted was later removed by
+> [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md)
+> (PR-B/PR-C). Its capability records here are historical evidence of what
+> was built, not current authority for the removed scope.
+>
 > **This document is the final authority for P7 closure.** It closes the P7
 > hardening program truthfully, reconciles every P7 workstream and document,
 > resolves Gate P7-3 with real executed evidence, moves ADR-017 revision 4 and

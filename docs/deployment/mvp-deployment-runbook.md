@@ -1183,3 +1183,27 @@ Schedule backups with cron/systemd on the Docker host and copy the dumps
 off-host; retention is operator policy. The platform ships no backup
 scheduler, catalog, or retention engine, and no filesystem-level, physical
 (`pg_basebackup`), or WAL-archive/PITR mechanism.
+
+### 17.1 Operator obligations (retained; ADR-023)
+
+The product no longer owns backup evidence, RPO/RTO projection, or an
+ops-policy record (ADR-023 removed the backup-evidence subsystem and PR-C
+dropped its tables). The following obligations stay with the operator and
+have no product representation — record the deployment's profile and the
+drill/audit trail in the operator's own documentation:
+
+- **Scheduling & retention**: backup cadence, off-host copy destination, and
+  the retention horizon are operator decisions, enforced by host tooling.
+- **Recovery verification**: verification means an **actual restore into a
+  scratch database** (`db-backup.sh restore` against a disposable target or
+  equivalent `pg_restore` rehearsal) — `pg_dump` exit 0 or file existence
+  alone proves nothing. Application health and domain-level acceptance are
+  separate checks on top of a restore, never implied by it.
+- **Recurring restore drills**: run the scratch-restore drill on a cadence
+  the deployment profile commits to (the operator sets the cadence; the
+  product neither stores nor renders it).
+- **Profile record**: write down the deployment's RPO, RTO, retention
+  horizon, and drill cadence, and measure the drills against that record.
+- **Evidence honesty**: historical backup/restore evidence must not be
+  rendered greener than reality; absence of a recent verified drill is
+  reported as such in operator documentation, not silently elided.

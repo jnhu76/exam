@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it, afterAll } from "vitest";
 import { getWorkerScopedTestDb } from "../testDb.js";
 import { createClientEventRepo } from "./clientEventRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
-import { retentionRuns, schema } from "../schema/pg.js";
+import { schema } from "../schema/pg.js";
 import type { Database } from "../types.js";
 
 /**
@@ -173,16 +173,15 @@ describe("clientEventRepo.deleteOlderThan (retention primitive)", () => {
       metadata: {},
       createdAt: new Date(cutoff.getTime() - DAY_MS), // even "expired-looking" rows
     });
-    const sentinelRunId = randomUUID();
-    await db.insert(retentionRuns).values({
-      id: sentinelRunId,
+    const sentinelUserId = randomUUID();
+    await db.insert(schema.users).values({
+      id: sentinelUserId,
       organizationId: orgA,
-      operationId: `guard:${randomUUID().slice(0, 8)}`,
-      tool: "guard",
-      result: "succeeded",
-      verificationStatus: "verified",
-      startedAt: new Date(cutoff.getTime() - DAY_MS),
-      completedAt: new Date(cutoff.getTime() - DAY_MS),
+      username: `guard-stale-${randomUUID().slice(0, 8)}`,
+      passwordHash: "not-a-real-hash",
+      name: "Retention Guard",
+      role: "Maintainer",
+      isActive: true,
     });
 
     const deleted = await repo.deleteOlderThan(ctxA, cutoff);
@@ -192,17 +191,17 @@ describe("clientEventRepo.deleteOlderThan (retention primitive)", () => {
       .select({ id: schema.auditLogs.id })
       .from(schema.auditLogs)
       .where(eq(schema.auditLogs.id, sentinelAuditId));
-    const run = await db
-      .select({ id: retentionRuns.id })
-      .from(retentionRuns)
-      .where(eq(retentionRuns.id, sentinelRunId));
-    // ...but the sentinel evidence rows are still present.
+    const user = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.id, sentinelUserId));
+    // ...but the sentinel authoritative rows are still present.
     expect(audit).toHaveLength(1);
-    expect(run).toHaveLength(1);
+    expect(user).toHaveLength(1);
 
     await db
       .delete(schema.auditLogs)
       .where(eq(schema.auditLogs.id, sentinelAuditId));
-    await db.delete(retentionRuns).where(eq(retentionRuns.id, sentinelRunId));
+    await db.delete(schema.users).where(eq(schema.users.id, sentinelUserId));
   });
 });

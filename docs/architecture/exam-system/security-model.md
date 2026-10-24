@@ -253,7 +253,7 @@ Ownership fencing prevents a stale/lost worker from updating delivery state; it 
 | INV-CE-001 | `client_events` rows are advisory telemetry — never incident/violation/scoring authority. | Route + docs | Trust boundary comment; `warningLevel` is advisory only |
 | INV-CE-002 | `attemptId`/`examId`/`questionId` are NULLed unless server-provable for the actor; anti-enumeration: response always `{accepted: N}`. | `clientEventReferenceNormalizer.ts` | Ownership chain + frozen question-set check |
 | INV-CE-003 | Monitoring timeline ordering is server-owned `receivedAt + id`; `occurredAt` is display-only. | `clientEventRepo.ts` + `proctorMonitoringService.ts` | `orderBy(desc(receivedAt), desc(id))` |
-| INV-CE-004 | `client_events` retention is 30 days from `receivedAt`; no durable cleanup evidence; `retention_runs` is NOT reused. | `clientEventRetention.ts` | `deleteOlderThan` + structured operational log |
+| INV-CE-004 | `client_events` retention is 30 days from `receivedAt`; no durable cleanup evidence table. | `clientEventRetention.ts` | `deleteOlderThan` + structured operational log |
 
 ## 15. Client-Event Trust Boundary
 
@@ -296,6 +296,6 @@ Unprovable references are NULLed. **The event is always accepted** (`{accepted: 
 
 ### 15.6 Retention (INV-CE-004)
 
-30-day fixed horizon from server-owned `receivedAt`. No per-tenant configurability, no generic retention framework. The executor is application-owned (plugin following the `deadlineScanner` pattern): startup convergence + daily interval + in-flight guard + `onClose` join. No durable cleanup evidence (no new DB tables); `retention_runs` is reserved for authoritative backup/WAL evidence and is NOT reused.
+30-day fixed horizon from server-owned `receivedAt`. No per-tenant configurability, no generic retention framework. The executor is application-owned (plugin following the `deadlineScanner` pattern): startup convergence + daily interval + in-flight guard + `onClose` join. No durable cleanup evidence table (no new DB tables; ADR-023 removed the backup-evidence tables and none may be reused for client-event GC).
 
 ## 16. Security Invariant Summary (continued)

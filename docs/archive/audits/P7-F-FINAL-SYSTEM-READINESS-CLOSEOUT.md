@@ -1,5 +1,11 @@
 # P7-F Final System Readiness Closeout
 
+> **Status annotation (2026-10-24):** the backup-evidence subsystem this
+> document describes was removed by
+> [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md); its
+> records here are historical evidence, not current authority for the
+> removed scope.
+
 > **Superseded (2026-08-14):** this document's verdict — "P7-F COMPLETE —
 > P7 REMAINS OPEN", Gate P7-3 `NOT PASS — HUMAN_DECISION_REQUIRED`, and the
 > pending ADR-017 rev4 / ADR-018 / #286 items — was true on 2026-08-13 and is

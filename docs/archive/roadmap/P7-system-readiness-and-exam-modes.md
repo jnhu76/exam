@@ -1,5 +1,11 @@
 # P7 — System Readiness and Configurable Exam Modes
 
+> **Status annotation (2026-10-24):** the backup-evidence subsystem this
+> document describes was removed by
+> [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md); its
+> records here are historical evidence, not current authority for the
+> removed scope.
+
 > **STATUS: CLOSED (2026-08-14).**
 >
 > P7 is a **closed historical program record** — not a live backlog. The final

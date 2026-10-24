@@ -218,7 +218,7 @@ flowchart TD
 | 原始键 | 解析/组合权威 → 投影 | 最终使用方 / 影响 |
 | --- | --- | --- |
 | `JWT_SECRET` | settings secret leaf → `authSecret.jwtSecret` | auth plugin 验签、auth route 签发（显式参数）；生产必填 |
-| `APP_MODE` | **委托** `@exam/db::parseAppMode` → `app.mode` | runtimeConfig mode/profile、seed/backup safety、DB routing |
+| `APP_MODE` | **委托** `@exam/db::parseAppMode` → `app.mode` | runtimeConfig mode/profile、seed safety（seed/demo-seed guard）、DB routing |
 | `NODE_ENV` | settings 的 lenient AppEnv → `env`；mode fallback **另由 parseAppMode 拥有** | build/fallback 展示投影；不得用它取代 RUNTIME_MODE |
 | `DEPLOYMENT_MODE` | settings（仅 `singleTenant`）→ `mode/tenancy` | 租户运行边界、public config；`multiTenant` 不可运行 |
 | `HOST` | settings → `host` | `server.ts app.listen` |
@@ -344,7 +344,7 @@ sequenceDiagram
 - **Managed test/E2E/CI**：runner 自有 env（CI job `env:`）或 Vitest 的 `TEST_RUNTIME_ENV` worker 投影提前固定 mode，runner env 提供端口和 test DB target；API `loadRootEnv` 不加载开发者 `.env`。Vitest 自身可以按**测试 harness contract**读取根 `.env` + `.env.test.local`，但这不是 `loadRootEnv` 在 managed API 子进程读取文件。
 - **Production**：部署命令通过 `--env-file .env.production` 供 Compose 插值，Compose 显式生成 container environment；容器 `APP_MODE=production` 阻断 API 的开发 dotenv admission；production DB 和 JWT/起源类必需项 fail-fast。
 - **Web**：Vite 在 development 模式精确读取根 `.env` 来决定 `VITE_PORT` 和 `DEV_API_PORT` 代理目标；`envDir: false`，所以不存在 package-local `.env*` 的前端打包权限。客户端 `VITE_API_BASE_URL` / `VITE_APP_TIMEZONE` 通过**构建进程环境**进入 `import.meta.env`，而非前端绕过 `settings.ts` 读取服务器秘密。
-- **Independent DB tools**：migrate、rollback、backup 等调用 `resolveDatabaseUrlFromEnv`；test-schema shell tools 调用 `testDatabaseUrlCli.ts`。CLI 的 env 输入是 process env，不自行运行 dotenv 或复制 TEST_DB_URL fallback。
+- **Independent DB tools**：migrate、rollback 等调用 `resolveDatabaseUrlFromEnv`；test-schema shell tools 调用 `testDatabaseUrlCli.ts`。CLI 的 env 输入是 process env，不自行运行 dotenv 或复制 TEST_DB_URL fallback。
 
 ### 6.3 两个经常误判的区别
 

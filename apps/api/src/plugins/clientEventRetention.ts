@@ -17,10 +17,9 @@ import type { Database } from "@exam/db/types";
  * Deliberate NON-goals (#544 §9):
  * - No durable database evidence: no `client_event_cleanup_runs` table, no
  *   generic `maintenance_runs` table. Cleanup runs leave only structured
- *   operational logs. Durable run evidence is reserved for authoritative
- *   data lifecycles (backup/WAL `retention_runs`); low-trust telemetry GC
- *   does not warrant an evidence contract, and `retention_runs` must NOT be
- *   reused for it (different subsystem semantics).
+ *   operational logs; low-trust telemetry GC does not warrant an evidence
+ *   contract (ADR-023 removed the backup-evidence evidence tables; no
+ *   replacement evidence subsystem is authorized).
  * - No generic scheduler framework: this is a dedicated executor following
  *   the proven `deadlineScanner` plugin shape (startup run for convergence +
  *   unref'd daily interval with an in-flight guard + awaited onClose).

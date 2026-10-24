@@ -1,5 +1,11 @@
 # P7-E — Operational Control Plane Closeout
 
+> **Status annotation (2026-10-24):** the backup-evidence subsystem this
+> document describes was removed by
+> [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md); its
+> records here are historical evidence, not current authority for the
+> removed scope.
+
 > **Superseded (2026-08-14):** the "READY FOR HUMAN REVIEW" status below was
 > superseded by P7-F (2026-08-13) and finally by the
 > [`P7-FINAL-PROGRAM-CLOSEOUT.md`](P7-FINAL-PROGRAM-CLOSEOUT.md) (P7 CLOSED;
