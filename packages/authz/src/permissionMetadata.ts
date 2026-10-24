@@ -151,12 +151,6 @@ export const PERMISSION_METADATA = {
   [Permission.SystemBusinessSummaryView]: {
     category: PermissionCategory.System,
   },
-  [Permission.SystemBackupView]: { category: PermissionCategory.System },
-  [Permission.SystemRestoreReadinessView]: {
-    category: PermissionCategory.System,
-  },
-  [Permission.SystemOpsPolicyView]: { category: PermissionCategory.System },
-  [Permission.SystemOpsPolicyManage]: { category: PermissionCategory.System },
   [Permission.SystemEmailTest]: { category: PermissionCategory.System },
   [Permission.SystemInfoView]: { category: PermissionCategory.System },
   [Permission.SystemAutoSubmit]: { category: PermissionCategory.System },

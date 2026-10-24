@@ -352,11 +352,12 @@ export const AUDIT_ACTION_DEFINITIONS = {
       })
       .strict(),
   ),
-  // ADR-017 D9: Admin's operational policy INTENT change — atomic with the
-  // write, carrying the desired values + reason. `desiredRtoSeconds` is nullable:
-  // NULL means no RTO objective is configured.
+  // Retired with the backup-evidence subsystem removal: PUT /system/ops-policy
+  // and its only emitter are gone. The action stays declared + deprecated so
+  // historical audit rows keep rendering; the emitter inventory test asserts
+  // no production writer is reintroduced.
   [AuditAction.OpsPolicyUpdated]: definition(
-    "active",
+    "deprecated",
     "atomic",
     "domain_state",
     "low",

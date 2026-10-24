@@ -2,7 +2,7 @@
 
 > **性质：架构导航与实现映射（descriptive architecture reference）**  
 > **审计基线：** `dc0fcce62f48dcf98e7c71f2834b70e9caee19b5`（2026-10-08，#733 最终 closeout）  
-> **审计结果：** `PASS_WITH_DEFERRED_DEBT`；最终审计摘要报告为 24 个语义事实，但 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 的 registry 表逐行数实际为 **25 行**（`SEED_*` 与 evidence CLI escape hatch 分列）；本文件保留全部 25 行，不擅自合并为一个 fact。已审计事实未发现第二权威或生产 API 配置绕过。  
+> **审计结果：** `PASS_WITH_DEFERRED_DEBT`；最终审计摘要报告为 24 个语义事实，但 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 的 registry 表逐行数实际为 **25 行**（`SEED_*` 与 evidence CLI escape hatch 分列）；本文件逐行保留该 registry，不擅自合并为一个 fact。原第 25 行（evidence CLI 的 `ALLOW_UNSAFE_EVIDENCE_TEST_DB`）已随 backup-evidence 子系统移除，现表保留其余 24 行。已审计事实未发现第二权威或生产 API 配置绕过。  
 > **重要：** 本文**不是另一套 settings 默认值、解析算法或部署拓扑的规范根**。运行中的配置语义以表中指明的代码 authority 为准；测试/部署契约以现有权威文档及脚本为准。本文的表格是它们的**索引与 DAG 投影**。当代码发生变化，必须同步本文，而不是让本文成为第二 resolver。
 
 ## 目录
@@ -176,13 +176,13 @@ flowchart TD
 
 **关键边界**：当 `APP_MODE` **仅写在根 `.env` 内**且进程没有提前导出 mode，loader 的准入判断会先把进程视为 development，读取文件，后续 runtime resolver 再看到文件内的模式。这是 #733 审计承认的**当前法律**，不是 managed runner 的受支持启动方式；managed test/e2e/ci/production 必须由自己的启动 owner 提前注入 `APP_MODE`。
 
-## 4. 权威归属总表（原始 registry 的 25 行）
+## 4. 权威归属总表（原始 registry 25 行；现表 24 行）
 
-本节逐行保留 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 中的 **25 条 registry 记录**。该证据正文与 #733 closeout 摘要均标称“24”，但实际表格有 25 个数据行；计数差异是**证据的记录不一致**，这里显式披露，不能为了让统计漂亮而把本来不同的两个 owner 合并。**分组复合事实**只是审计分类，不暗示一个 env key 必然等于一个 fact。
+本节逐行保留 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 中的 registry 记录。该证据正文与 #733 closeout 摘要均标称“24”，但实际表格有 25 个数据行；计数差异是**证据的记录不一致**，这里显式披露，不能为了让统计漂亮而把本来不同的两个 owner 合并。原第 25 行（`ALLOW_UNSAFE_EVIDENCE_TEST_DB`，owner 为 backup-evidence CLI）已随该子系统整体移除，不再属于运行时配置事实；其余 24 行仍逐行保留。**分组复合事实**只是审计分类，不暗示一个 env key 必然等于一个 fact。
 
 | 语义事实 / 族 | 唯一权威（或明确 owner pair） | 主要实际消费者 |
 | --- | --- | --- |
-| 1. RUNTIME_MODE | `packages/db::parseAppMode` | runtimeConfig、loadRootEnv、backup-evidence、demo-seed、DB mode routing |
+| 1. RUNTIME_MODE | `packages/db::parseAppMode` | runtimeConfig、loadRootEnv、demo-seed、DB mode routing |
 | 2. API_BIND_PORT | `runtimeConfig::resolveApiBindPort`（原始 port leaf 在 settings） | `server.ts app.listen` |
 | 3. DATABASE_TARGET | `packages/db::resolveDatabaseUrl` | API DB plugin、migrate/rollback/admin CLI、Drizzle |
 | 4. TEST_DATABASE_TARGET | `packages/db::resolveTestBranchUrl` | testDb/testIsolation、globalSetup、testDatabase adapter、shell CLI projection |
@@ -206,9 +206,8 @@ flowchart TD
 | 22. APP_TIMEZONE / HOST / DEPLOYMENT_MODE / NODE_ENV(AppEnv) / API_DOCS | settings app leaves + runtimeConfig | server、docs UI、timezone、tenant/public-config 投影 |
 | 23. CAPACITY_RESEARCH | `lib/capacityResearch::isCapacityResearchEnabled`（N-01 P4 例外） | DB plugin instrumentation、capacityResearch route、route registration |
 | 24. SEED_* values | API seed entrypoint 的 admission + DB seed mechanism 自有默认 | dev/E2E seed CLIs、seed orchestrator |
-| 25. ALLOW_UNSAFE_EVIDENCE_TEST_DB | `apps/api/src/scripts/backup-evidence.ts` 的 script-owned fact | backup-evidence CLI 安全选择 |
 
-第 24、25 行分别属于 seed mechanism 和 evidence CLI 的**不同配置事实**，不共享一个 resolver；原始资料的“24”计数与 25 行表格暂未在证据 issue 内统一。此外 `NODE_ENV` 的宽松 `AppEnv` 展示投影，与 authoritative `RUNTIME_MODE` 也是不同事实，不能误合并。
+第 24 行属于 seed mechanism 的独立配置事实，不与其他行共享 resolver。原第 25 行（evidence CLI 的 `ALLOW_UNSAFE_EVIDENCE_TEST_DB`）已随 backup-evidence 子系统移除，与 seed mechanism 的差异不再构成运行时事实。原始资料的“24”计数与 25 行表格的不一致在证据 issue 内未统一，属历史记录，不因本次移除而改写。此外 `NODE_ENV` 的宽松 `AppEnv` 展示投影，与 authoritative `RUNTIME_MODE` 也是不同事实，不能误合并。
 
 ## 5. 配置变量 → 解析者 → 消费者索引
 
@@ -309,7 +308,6 @@ flowchart TD
 | `TEST_DB_ISOLATION` | `isTestDbIsolationEnabled` + **不同的** worker opt-in/strategy owner | `testIsolation`、testDatabase adapter / worker routing；同一 raw key 可能参与不同事实，不能合并算法 |
 | `TEST_DB_NAMESPACE`、`TEST_INFRA_TRACE` 等 | `packages/db` test harness | schema namespace、测试基础设施调试；生产应用 settings 外 |
 | `SEED_ORG_NAME`、`SEED_ADMIN_*`、`SEED_CANDIDATE_*` | API seed entrypoint 的 admission + DB seed mechanism 自有默认 | dev/E2E seed chain；共享 DB package **不加载 dotenv** |
-| `ALLOW_UNSAFE_EVIDENCE_TEST_DB` | `apps/api/src/scripts/backup-evidence.ts` | evidence CLI 的自有写入安全选择，**不同于** test-name escape hatch |
 | `CAPACITY_RESEARCH` | `lib/capacityResearch.ts::isCapacityResearchEnabled` | DB instrumentation、capacityResearch route、route registration；单解析器但未登记为 `settings` leaf（N-01 / P4） |
 | `npm_package_version` | npm package manager 注入 | system 版本展示/诊断（process metadata，不是部署配置） |
 | `E2E_*`、`PLAYWRIGHT_*`、`QD_*`、`OPTICAL_*` | E2E/Playwright harness | base URL、shards、账号、图像测试等拓扑；与 API runtime 不同事实 |

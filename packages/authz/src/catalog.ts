@@ -124,25 +124,6 @@ export const Permission = {
   // The Maintainer preset must never receive business statistics through an
   // operational capability.
   SystemBusinessSummaryView: "system.business_summary.view",
-  // SystemBackupView (system.backup.view): read-only backup evidence
-  // projection (latest / latest verified / history / last failure). No write
-  // sibling exists: backup.trigger / schedule / retention are decision-gated
-  // (ADR-017 D5).
-  SystemBackupView: "system.backup.view",
-  // SystemRestoreReadinessView (system.restore_readiness.view):
-  // read-only restore-readiness / drill evidence projection. Restore itself
-  // stays host-only (ADR-017 D4); only drill EVIDENCE is readable.
-  SystemRestoreReadinessView: "system.restore_readiness.view",
-  // SystemOpsPolicyView (system.ops.policy.view): read the Admin's
-  // DESIRED operational objectives (intent) + the compliance projection.
-  // Granted to Admin AND Maintainer (Maintainer may view intent, never
-  // modify it — ADR-017 D9).
-  SystemOpsPolicyView: "system.ops.policy.view",
-  // SystemOpsPolicyManage (system.ops.policy.manage): Admin is the
-  // SOLE intent owner. Writes the typed, audited, non-binding policy intent
-  // record. Never granted to Maintainer (execution-side policy authority is
-  // decision-gated, ADR-017 D5/D9).
-  SystemOpsPolicyManage: "system.ops.policy.manage",
   // SystemEmailTest (system.email.test): (ADR-017 D7) — the
   // side-effecting email test action split out of the diagnostics VIEW
   // capability. VIEW CAPABILITY MUST NOT AUTHORIZE SIDE EFFECT; POST /email/test

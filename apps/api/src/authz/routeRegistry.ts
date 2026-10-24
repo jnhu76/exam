@@ -897,61 +897,6 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       proctorAccess: "admin_only",
       migrationStage: 6,
     },
-    {
-      // Read-only backup evidence projection (Admin + Maintainer).
-      // No write sibling exists — backup.trigger/schedule/retention are
-      // decision-gated (ADR-017 D5) and NOT implemented.
-      method: "GET",
-      path: "/system/backups",
-      legacyGate: "Admin",
-      permission: Permission.SystemBackupView,
-      scope: Scope.System,
-      resolver: "system",
-      sensitive: false,
-      proctorAccess: "admin_only",
-      migrationStage: 9,
-    },
-    {
-      // Read-only restore-readiness / drill evidence projection
-      // (Admin + Maintainer). Restore itself stays host-only (ADR-017 D4).
-      method: "GET",
-      path: "/system/restore-readiness",
-      legacyGate: "Admin",
-      permission: Permission.SystemRestoreReadinessView,
-      scope: Scope.System,
-      resolver: "system",
-      sensitive: false,
-      proctorAccess: "admin_only",
-      migrationStage: 9,
-    },
-    {
-      // ADR-017 D9: read the Admin's operational policy intent +
-      // compliance projection (Admin + Maintainer).
-      method: "GET",
-      path: "/system/ops-policy",
-      legacyGate: "Admin",
-      permission: Permission.SystemOpsPolicyView,
-      scope: Scope.System,
-      resolver: "system",
-      sensitive: false,
-      proctorAccess: "admin_only",
-      migrationStage: 10,
-    },
-    {
-      // ADR-017 D9: Admin is the SOLE intent owner. Writes the
-      // typed, audited, non-binding policy intent record. Never granted to
-      // Maintainer.
-      method: "PUT",
-      path: "/system/ops-policy",
-      legacyGate: "Admin",
-      permission: Permission.SystemOpsPolicyManage,
-      scope: Scope.System,
-      resolver: "system",
-      auditAction: "ops.policy.updated",
-      sensitive: true,
-      proctorAccess: "admin_only",
-      migrationStage: 10,
-    },
 
     // ── Exam lifecycle ──
     {

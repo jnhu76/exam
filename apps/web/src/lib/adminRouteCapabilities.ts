@@ -63,8 +63,8 @@ export const ADMIN_ROUTE_CAPABILITIES: readonly AdminRouteCapability[] = [
     capability: Permission.SystemBusinessSummaryView,
     label: "dashboard",
   },
-  // Operational surface (health / diagnostics / backup / restore readiness);
-  // membership follows the operational presets, not a role label.
+  // Operational surface (health / diagnostics); membership follows the
+  // operational presets, not a role label.
   {
     pattern: "operations",
     capability: Permission.SystemHealthView,

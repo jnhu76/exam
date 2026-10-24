@@ -46,7 +46,6 @@ const ERROR_CODE_KEYS: Record<ErrorCode, keyof typeof zhCN.errors.codes> = {
   ATTEMPT_ALREADY_STARTED: "attemptAlreadyStarted",
   ATTEMPT_CLOSED: "attemptClosed",
   ANSWER_VERSION_CONFLICT: "answerVersionConflict",
-  OPS_POLICY_VERSION_CONFLICT: "opsPolicyVersionConflict",
   EXAM_NOT_OPEN: "examNotOpen",
   ATTEMPT_DEADLINE_EXCEEDED: "attemptDeadlineExceeded",
   DEADLINE_EXCEEDS_EXAM_CLOSE: "deadlineExceedsExamClose",

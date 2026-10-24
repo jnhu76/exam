@@ -150,10 +150,8 @@ export function canSeeDashboard(
   return can(user, Permission.SystemBusinessSummaryView);
 }
 
-/**
- * Operations surface (health / diagnostics / backup evidence / restore
- * readiness).
- */
+/** Operations page (health / diagnostics) — the gate is SystemHealthView
+ *  (membership is owned by packages/authz presets). */
 export function canSeeOperations(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): boolean {

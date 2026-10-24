@@ -1,16 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Permission } from "@exam/authz";
 import type {
   SystemHealthResponse,
   DiagnosticsResponse,
-  BackupEvidenceResponse,
-  RestoreReadinessResponse,
-  OpsPolicyResponse,
 } from "@exam/contracts";
-import { api, ApiError } from "@/lib/api";
-import { can } from "@/lib/capabilities";
-import { useAuth } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -19,13 +13,9 @@ import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { PageSection } from "@/components/shared/PageSection";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { PageContainer } from "@/components/shared/PageContainer";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Database, HeartPulse, MemoryStick } from "lucide-react";
 
 const HEALTH_REFRESH_MS = 15_000;
@@ -34,62 +24,31 @@ const HEALTH_REFRESH_MS = 15_000;
  * Operations surface (Admin business-owner summary + Application Maintainer
  * detail).
  *
- * Renders the operational control-plane truth: overall health, backup posture
- * (latest / latest VERIFIED / last failure / status counts), restore readiness
- * (drill evidence, automated vs operator-declared), and the operational
- * diagnostics projection (DB latency, Redis, scanners, email worker). The
- * business-integrity diagnostics block renders ONLY when the backend includes
- * it — the field is absent, not zeroed, for a caller without the capability
- * (who holds it is owned by the @exam/authz presets).
+ * Renders the operational control-plane truth: overall health and the
+ * operational diagnostics projection (DB latency, Redis, scanners, email
+ * worker). The business-integrity diagnostics block renders ONLY when the
+ * backend includes it — the field is absent, not zeroed, for a caller without
+ * the capability (who holds it is owned by the @exam/authz presets).
  *
- * Truthfulness rules:
- *   - no verified backup → "NO EVIDENCE / NOT VERIFIED", never a green state;
- *   - last backup failed → warning banner;
- *   - no secrets, no host paths — artifact labels only.
+ * Truthfulness rule: no secrets, no host paths.
  */
 export function OperationsPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const { formatDateTime, formatDuration } = useProductDateTime();
-  // ADR-017 D9: operational policy INTENT is the Admin owner's decision, not the
-  // Maintainer observation plane, so the edit control is capability-gated
-  // (backend remains authoritative; this prevents a Maintainer from reaching the
-  // draft form and a dead 403-on-save).
-  const canManagePolicy =
-    user !== null && can(user, Permission.SystemOpsPolicyManage);
+  const { formatDateTime } = useProductDateTime();
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
-  const [backup, setBackup] = useState<BackupEvidenceResponse | null>(null);
-  const [restore, setRestore] = useState<RestoreReadinessResponse | null>(null);
-  const [policy, setPolicy] = useState<OpsPolicyResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
-  const [policyDraft, setPolicyDraft] = useState<{
-    desiredRpoSeconds: string;
-    desiredRtoSeconds: string | null;
-    desiredRetentionDays: string;
-    desiredDrillCadenceDays: string;
-    reason: string;
-  } | null>(null);
-  const [policySaving, setPolicySaving] = useState(false);
-  const [policyError, setPolicyError] = useState<string | null>(null);
-  const [policySaved, setPolicySaved] = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
-      const [h, d, b, r, p] = await Promise.all([
+      const [h, d] = await Promise.all([
         api.get<SystemHealthResponse>("/api/system/health"),
         api.get<DiagnosticsResponse>("/api/system/diagnostics"),
-        api.get<BackupEvidenceResponse>("/api/system/backups"),
-        api.get<RestoreReadinessResponse>("/api/system/restore-readiness"),
-        api.get<OpsPolicyResponse>("/api/system/ops-policy"),
       ]);
       setHealth(h);
       setDiag(d);
-      setBackup(b);
-      setRestore(r);
-      setPolicy(p);
       setError(null);
       setStale(false);
     } catch (err) {
@@ -111,51 +70,6 @@ export function OperationsPage() {
     return () => clearInterval(timer);
   }, [loadAll]);
 
-  async function savePolicy() {
-    const current = policy?.policy;
-    if (!policyDraft) return;
-    setPolicySaving(true);
-    setPolicyError(null);
-    setPolicySaved(false);
-    try {
-      const updated = await api.put<OpsPolicyResponse>(
-        "/api/system/ops-policy",
-        {
-          desiredRpoSeconds: Number(policyDraft.desiredRpoSeconds),
-          desiredRtoSeconds: policyDraft.desiredRtoSeconds
-            ? Number(policyDraft.desiredRtoSeconds)
-            : null,
-          desiredRetentionDays: Number(policyDraft.desiredRetentionDays),
-          desiredDrillCadenceDays: Number(policyDraft.desiredDrillCadenceDays),
-          version: current?.version ?? 0,
-          reason: policyDraft.reason,
-        },
-      );
-      setPolicy(updated);
-      setPolicyDraft(null);
-      setPolicySaved(true);
-    } catch (err) {
-      // CAS conflict: the intent changed under the editor. Reload the latest
-      // version and close the draft — saving again against the stale version
-      // would fail the same way.
-      const conflict =
-        err instanceof ApiError && err.code === "OPS_POLICY_VERSION_CONFLICT";
-      setPolicyError(
-        conflict ? t("ops.policy.conflict") : t("ops.policy.saveFailed"),
-      );
-      if (conflict) {
-        setPolicyDraft(null);
-        void loadAll();
-      }
-      logger.warn("ops_policy.save_failed", {
-        error: err instanceof Error ? err.message : String(err),
-        conflict,
-      });
-    } finally {
-      setPolicySaving(false);
-    }
-  }
-
   if (isLoading && !health) {
     return (
       <div className="space-y-4">
@@ -167,7 +81,7 @@ export function OperationsPage() {
     );
   }
 
-  if (error && !health && !backup) {
+  if (error && !health) {
     return (
       <div>
         <PageHeader title={t("ops.title")} />
@@ -182,52 +96,11 @@ export function OperationsPage() {
     );
   }
 
-  // ── Backup posture computation (truthful states) ──
-  const latestVerified = backup?.latestVerified ?? null;
-  const lastFailure = backup?.lastFailure ?? null;
-  const hasAnyRun =
-    (backup?.counts.succeeded ?? 0) +
-      (backup?.counts.failed ?? 0) +
-      (backup?.counts.abandoned ?? 0) >
-    0;
-  const failureAfterVerified =
-    lastFailure !== null &&
-    latestVerified !== null &&
-    new Date(lastFailure.completedAt ?? lastFailure.startedAt) >
-      new Date(latestVerified.verifiedAt ?? latestVerified.startedAt);
-  // Warning when the last attempt failed AND there is no verified backup
-  // after it (no verified backup at all, or a failure newer than the last
-  // verified one) — a lone failure must never look healthy.
-  const showFailureWarning =
-    lastFailure !== null && (latestVerified === null || failureAfterVerified);
-  let backupTone: "healthy" | "warning" | "critical" | "neutral" = "neutral";
-  if (!hasAnyRun)
-    backupTone = "neutral"; // NO EVIDENCE
-  else if (latestVerified === null)
-    backupTone = "warning"; // NOT VERIFIED
-  else if (failureAfterVerified) backupTone = "warning";
-  else backupTone = "healthy";
-
-  const backupAgeMs =
-    latestVerified?.verifiedAt != null
-      ? Math.max(0, Date.now() - new Date(latestVerified.verifiedAt).getTime())
-      : null;
-
-  const drill = restore?.latestDrill ?? null;
-  let drillTone: "healthy" | "warning" | "neutral" = "neutral";
-  if (drill === null)
-    drillTone = "neutral"; // NO EVIDENCE
-  else if (drill.result === "succeeded") drillTone = "healthy";
-  else drillTone = "warning";
-
   return (
     <PageContainer role="admin-standard" className="space-y-6">
       <PageHeader title={t("ops.title")} description={t("ops.subtitle")} />
 
       {stale && <InlineErrorBanner>{t("ops.staleWarning")}</InlineErrorBanner>}
-      {showFailureWarning && (
-        <InlineErrorBanner>{t("ops.backup.failureWarning")}</InlineErrorBanner>
-      )}
 
       {/* ── Overall health ── */}
       <section aria-label={t("ops.health.section")}>
@@ -260,363 +133,6 @@ export function OperationsPage() {
           />
         </div>
       </section>
-
-      {/* ── Backup posture ── */}
-      <PageSection
-        title={t("ops.backup.title")}
-        actions={
-          backup ? (
-            <Badge
-              variant={
-                backupTone === "healthy"
-                  ? "default"
-                  : backupTone === "warning"
-                    ? "secondary"
-                    : "outline"
-              }
-              data-testid="backup-status-badge"
-            >
-              {latestVerified === null && hasAnyRun
-                ? t("ops.backup.notVerified")
-                : !hasAnyRun
-                  ? t("ops.backup.noEvidence")
-                  : failureAfterVerified
-                    ? t("ops.backup.warning")
-                    : t("ops.backup.healthy")}
-            </Badge>
-          ) : (
-            <Skeleton className="h-6 w-24" />
-          )
-        }
-        contentClassName="space-y-3"
-      >
-        {backup === null ? (
-          <Skeleton className="h-20 w-full" />
-        ) : (
-          <>
-            <div
-              data-slot="diagnostic-data-row"
-              className="flex items-baseline justify-between gap-2 py-1"
-            >
-              <span className="type-secondary">
-                {t("ops.backup.lastVerified")}
-              </span>
-              <span className="type-numeric text-sm">
-                {latestVerified?.verifiedAt
-                  ? `${latestVerified.artifactLabel} · ${formatDateTime(
-                      new Date(latestVerified.verifiedAt),
-                    )}`
-                  : t("ops.backup.noVerifiedArtifact")}
-              </span>
-            </div>
-            <div
-              data-slot="diagnostic-data-row"
-              className="flex items-baseline justify-between gap-2 py-1"
-            >
-              <span className="type-secondary">{t("ops.backup.age")}</span>
-              <span className="type-numeric text-sm">
-                {backupAgeMs !== null ? formatDuration(backupAgeMs) : "—"}
-              </span>
-            </div>
-            <div
-              data-slot="diagnostic-data-row"
-              className="flex items-baseline justify-between gap-2 py-1"
-            >
-              <span className="type-secondary">
-                {t("ops.backup.lastFailure")}
-              </span>
-              <span className="type-numeric text-sm">
-                {lastFailure
-                  ? `${lastFailure.failureReason ?? lastFailure.status} · ${formatDateTime(
-                      new Date(
-                        lastFailure.completedAt ?? lastFailure.startedAt,
-                      ),
-                    )}`
-                  : t("ops.backup.noFailure")}
-              </span>
-            </div>
-            <div
-              data-slot="diagnostic-data-row"
-              className="flex items-baseline justify-between gap-2 py-1"
-            >
-              <span className="type-secondary">{t("ops.backup.counts")}</span>
-              <span className="type-numeric text-sm">
-                {t("ops.backup.succeeded")}: {backup.counts.succeeded} ·{" "}
-                {t("ops.backup.failed")}: {backup.counts.failed} ·{" "}
-                {t("ops.backup.abandoned")}: {backup.counts.abandoned} ·{" "}
-                {t("ops.backup.running")}: {backup.counts.running}
-              </span>
-            </div>
-          </>
-        )}
-      </PageSection>
-
-      {/* ── Operational policy intent (ADR-017 D9) ── */}
-      <PageSection title={t("ops.policy.title")} contentClassName="space-y-3">
-        <p className="type-secondary">{t("ops.policy.intentNote")}</p>
-        {policy === null ? (
-          <Skeleton className="h-24 w-full" />
-        ) : (
-          <>
-            <div className="space-y-1">
-              {(
-                [
-                  ["rpo", policy.compliance.rpo],
-                  ["rto", policy.compliance.rto],
-                  ["retention", policy.compliance.retention],
-                  ["drill", policy.compliance.drill],
-                ] as const
-              ).map(([key, item]) => (
-                <div
-                  key={key}
-                  data-slot="diagnostic-data-row"
-                  className="flex flex-wrap items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="type-secondary">
-                    {t(`ops.policy.fields.${key}`)}
-                  </span>
-                  <span className="type-numeric text-sm">
-                    {t("ops.policy.desired")}: {item.desired ?? "—"} ·{" "}
-                    {t("ops.policy.observed")}: {item.observed ?? "—"}
-                    <StatusBadge
-                      status={complianceBadgeKey(item.status)}
-                      className="ml-2"
-                    />
-                  </span>
-                </div>
-              ))}
-              {policy.policy && (
-                <div
-                  data-slot="diagnostic-data-row"
-                  className="flex flex-wrap items-baseline justify-between gap-2 py-1"
-                >
-                  <span className="type-secondary">
-                    {t("ops.policy.lastChange")}
-                  </span>
-                  <span className="type-numeric text-sm">
-                    {policy.policy.reason} · {policy.policy.updatedBy} ·{" "}
-                    {formatDateTime(new Date(policy.policy.updatedAt))}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {policyDraft !== null ? (
-              <div className="mt-3 space-y-3 border-t pt-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="policy-rpo">
-                      {t("ops.policy.fields.rpo")} (s)
-                    </Label>
-                    <Input
-                      id="policy-rpo"
-                      type="number"
-                      min={300}
-                      max={604800}
-                      value={policyDraft.desiredRpoSeconds}
-                      onChange={(e) =>
-                        setPolicyDraft({
-                          ...policyDraft,
-                          desiredRpoSeconds: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="policy-rto">
-                      {t("ops.policy.fields.rto")} (s)
-                    </Label>
-                    <Input
-                      id="policy-rto"
-                      type="number"
-                      min={30}
-                      max={172800}
-                      placeholder={t("ops.policy.rtoPlaceholder")}
-                      value={policyDraft.desiredRtoSeconds ?? ""}
-                      onChange={(e) =>
-                        setPolicyDraft({
-                          ...policyDraft,
-                          desiredRtoSeconds: e.target.value || null,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="policy-retention">
-                      {t("ops.policy.fields.retention")} (d)
-                    </Label>
-                    <Input
-                      id="policy-retention"
-                      type="number"
-                      min={1}
-                      max={3650}
-                      value={policyDraft.desiredRetentionDays}
-                      onChange={(e) =>
-                        setPolicyDraft({
-                          ...policyDraft,
-                          desiredRetentionDays: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="policy-drill">
-                      {t("ops.policy.fields.drill")} (d)
-                    </Label>
-                    <Input
-                      id="policy-drill"
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={policyDraft.desiredDrillCadenceDays}
-                      onChange={(e) =>
-                        setPolicyDraft({
-                          ...policyDraft,
-                          desiredDrillCadenceDays: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="policy-reason">
-                    {t("ops.policy.reason")}
-                  </Label>
-                  <Input
-                    id="policy-reason"
-                    value={policyDraft.reason}
-                    onChange={(e) =>
-                      setPolicyDraft({
-                        ...policyDraft,
-                        reason: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => void savePolicy()}
-                    disabled={policySaving}
-                  >
-                    {policySaving
-                      ? t("ops.policy.saving")
-                      : t("ops.policy.save")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setPolicyDraft(null)}
-                  >
-                    {t("ops.policy.cancel")}
-                  </Button>
-                </div>
-              </div>
-            ) : canManagePolicy ? (
-              <Button
-                type="button"
-                variant="outline"
-                data-testid="policy-edit-button"
-                onClick={() =>
-                  setPolicyDraft({
-                    desiredRpoSeconds: String(
-                      policy.policy?.desiredRpoSeconds ?? 3600,
-                    ),
-                    desiredRtoSeconds:
-                      policy.policy?.desiredRtoSeconds != null
-                        ? String(policy.policy.desiredRtoSeconds)
-                        : null,
-                    desiredRetentionDays: String(
-                      policy.policy?.desiredRetentionDays ?? 30,
-                    ),
-                    desiredDrillCadenceDays: String(
-                      policy.policy?.desiredDrillCadenceDays ?? 7,
-                    ),
-                    reason: "",
-                  })
-                }
-              >
-                {t("ops.policy.edit")}
-              </Button>
-            ) : null}
-            {policyError && (
-              <p role="alert" className="text-sm text-destructive">
-                {policyError}
-              </p>
-            )}
-            {policySaved && (
-              <p className="type-body">{t("ops.policy.saved")}</p>
-            )}
-          </>
-        )}
-      </PageSection>
-
-      {/* ── Restore readiness ── */}
-      <PageSection
-        title={t("ops.restore.title")}
-        actions={
-          restore ? (
-            <Badge
-              variant={
-                drillTone === "healthy"
-                  ? "default"
-                  : drillTone === "warning"
-                    ? "secondary"
-                    : "outline"
-              }
-              data-testid="restore-status-badge"
-            >
-              {drill === null
-                ? t("ops.restore.noEvidence")
-                : drill.result === "succeeded"
-                  ? t("ops.restore.proven")
-                  : t("ops.restore.declared")}
-            </Badge>
-          ) : (
-            <Skeleton className="h-6 w-24" />
-          )
-        }
-        contentClassName="space-y-3"
-      >
-        {restore === null ? (
-          <Skeleton className="h-16 w-full" />
-        ) : drill === null ? (
-          <p className="type-secondary">{t("ops.restore.noDrill")}</p>
-        ) : (
-          <>
-            <div
-              data-slot="diagnostic-data-row"
-              className="flex items-baseline justify-between gap-2 py-1"
-            >
-              <span className="type-secondary">
-                {t("ops.restore.lastDrill")}
-              </span>
-              <span className="type-numeric text-sm">
-                {drill.operationId} ·{" "}
-                {formatDateTime(new Date(drill.completedAt ?? drill.startedAt))}
-              </span>
-            </div>
-            <div
-              data-slot="diagnostic-data-row"
-              className="flex items-baseline justify-between gap-2 py-1"
-            >
-              <span className="type-secondary">{t("ops.restore.result")}</span>
-              <span className="type-numeric text-sm">
-                {drill.result === "succeeded"
-                  ? t("ops.restore.resultSucceeded")
-                  : drill.result === "failed"
-                    ? t("ops.restore.resultFailed")
-                    : t("ops.restore.resultDeclared")}
-                {drill.source === "automated"
-                  ? ` · ${t("ops.restore.sourceAutomated")}`
-                  : ` · ${t("ops.restore.sourceDeclared")}`}
-                {drill.durationMs !== null &&
-                  ` · ${formatDuration(drill.durationMs)}`}
-              </span>
-            </div>
-          </>
-        )}
-      </PageSection>
 
       {/* ── Runtime diagnostics (operational projection) ── */}
       <PageSection
@@ -701,22 +217,4 @@ export function OperationsPage() {
       </PageSection>
     </PageContainer>
   );
-}
-
-/** Compliance status → StatusBadge vocabulary (the status presentation authority). */
-function complianceBadgeKey(status: string): string {
-  switch (status) {
-    case "SATISFIED":
-      return "compliance_satisfied";
-    case "NOT_SATISFIED":
-      return "compliance_not_satisfied";
-    case "UNKNOWN":
-      return "compliance_unknown";
-    case "NOT_CONFIGURED":
-      return "compliance_not_configured";
-    case "NOT_ENFORCED":
-      return "compliance_not_enforced";
-    default:
-      return "unknown";
-  }
 }

@@ -26,9 +26,6 @@ describe("RBAC Maintainer preset — operational-only boundary", () => {
     expect(perms).toEqual([
       Permission.SystemHealthView,
       Permission.SystemDiagnosticsView,
-      Permission.SystemBackupView,
-      Permission.SystemRestoreReadinessView,
-      Permission.SystemOpsPolicyView,
     ]);
     // Every permission is from the system domain (operational observation).
     for (const p of perms) {

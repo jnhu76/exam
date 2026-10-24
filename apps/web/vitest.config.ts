@@ -46,6 +46,14 @@ export default defineConfig({
     // Web suite parallelism. Each worker gets its own fork, so module state is
     // isolated. If flake reappears, step down to 2 (not 1) and record it in
     // docs/standards/test-flakes.md before going serial again.
+    //
+    // INVARIANT: the local 5000ms budget assumes web coverage never stacks
+    // with the API coverage lane — turbo.json orders @exam/web#coverage after
+    // @exam/api#coverage (same heavy-suite serialization rule as db→api).
+    // jsdom + V8 coverage forks competing with the API's 4 coverage workers
+    // saturate the host and push timing-sensitive tests (editor mount, 5s
+    // timeouts, post-test prosemirror DOM reads) past their budgets;
+    // OBS-2026-10-08-003 and OBS-2026-10-24-001 are that family.
     maxWorkers: 4,
     minWorkers: 2,
     server: {

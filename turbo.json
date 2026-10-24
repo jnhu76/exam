@@ -94,6 +94,9 @@
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
+    "@exam/web#coverage": {
+      "dependsOn": ["^build", "@exam/api#coverage"]
+    },
     "test:integration": {
       "dependsOn": ["^build"],
       "env": [

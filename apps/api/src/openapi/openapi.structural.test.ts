@@ -397,9 +397,6 @@ describe("OpenAPI structural baseline — security & x-role metadata", () => {
   it.each([
     ["get", "/api/system/health"],
     ["get", "/api/system/diagnostics"],
-    ["get", "/api/system/backups"],
-    ["get", "/api/system/restore-readiness"],
-    ["get", "/api/system/ops-policy"],
   ] as const)(
     "%s %s documents Maintainer parity (F-02)",
     async (method, path) => {

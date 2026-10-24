@@ -87,15 +87,6 @@ const zhCN = {
     fallback: {
       unknown: "未知",
     },
-    ops: {
-      compliance: {
-        satisfied: "已满足",
-        not_satisfied: "未满足",
-        unknown: "未知",
-        not_configured: "未配置",
-        not_enforced: "未强制执行",
-      },
-    },
   },
 
   /**
@@ -229,7 +220,6 @@ const zhCN = {
       attemptAlreadyStarted: "考试尝试已开始",
       attemptClosed: "考试已结束",
       answerVersionConflict: "答案版本冲突，请刷新后重试",
-      opsPolicyVersionConflict: "策略意图已被其他操作修改，请刷新后重试",
       examNotOpen: "考试当前不在开放时间内",
       attemptDeadlineExceeded: "考试时间已到",
       deadlineExceedsExamClose: "延长后的截止时间不能超过考试结束时间",
@@ -459,12 +449,11 @@ const zhCN = {
     },
   },
 
-  /** Admin-console route guard (403 / Access-Denied) copy. */
   /** Operations surface copy (Admin business-owner summary +
    *  Application Maintainer detail). */
   ops: {
     title: "运维总览",
-    subtitle: "系统运行状态、备份证据与恢复就绪度",
+    subtitle: "系统运行状态与运行时诊断",
     staleWarning: "数据刷新失败，页面显示的是上次成功加载的结果。",
     errors: {
       loadFailed: "运维数据加载失败",
@@ -477,40 +466,6 @@ const zhCN = {
       memory: "内存使用率",
       dbLatency: "数据库延迟",
     },
-    backup: {
-      section: "备份状态",
-      title: "备份证据",
-      healthy: "健康",
-      warning: "需要关注",
-      notVerified: "未验证",
-      noEvidence: "无证据",
-      lastVerified: "最近已验证备份",
-      noVerifiedArtifact: "无（从未有已验证备份）",
-      age: "备份年龄",
-      lastFailure: "最近失败",
-      noFailure: "无失败记录",
-      counts: "运行统计",
-      succeeded: "成功",
-      failed: "失败",
-      abandoned: "中断",
-      running: "进行中",
-      failureWarning: "最近一次备份失败，且晚于最近一次已验证备份。",
-    },
-    restore: {
-      section: "恢复就绪度",
-      title: "恢复演练证据",
-      noEvidence: "无证据",
-      proven: "已验证",
-      declared: "人工确认",
-      noDrill: "尚无恢复演练记录",
-      lastDrill: "最近演练",
-      result: "结果",
-      resultSucceeded: "成功",
-      resultFailed: "失败",
-      resultDeclared: "人工声明",
-      sourceAutomated: "自动证明",
-      sourceDeclared: "人工记录",
-    },
     diagnostics: {
       section: "运行时诊断",
       title: "运行状态",
@@ -520,39 +475,9 @@ const zhCN = {
       deadlineScanner: "截止扫描",
       emailWorker: "邮件 Worker",
     },
-    policy: {
-      section: "可靠性目标",
-      title: "可靠性目标",
-      intentNote:
-        "此处记录的是考试管理员期望的可靠性目标（意图），仅用于对比实际状态；它不会改变任何基础设施配置。",
-      desired: "期望",
-      observed: "实际",
-      status: {
-        SATISFIED: "已满足",
-        NOT_SATISFIED: "未满足",
-        UNKNOWN: "未知",
-        NOT_CONFIGURED: "未配置",
-        NOT_ENFORCED: "未强制执行",
-      },
-      fields: {
-        rpo: "恢复点目标 (RPO)",
-        rto: "恢复时间目标 (RTO)",
-        retention: "保留期目标",
-        drill: "恢复演练周期",
-      },
-      rtoPlaceholder: "留空 = 未配置",
-      lastChange: "最近变更",
-      edit: "编辑意图",
-      save: "保存",
-      saving: "保存中...",
-      cancel: "取消",
-      saved: "已保存（仅意图记录，不影响基础设施）",
-      saveFailed: "保存失败：版本冲突或输入无效，请刷新后重试",
-      conflict: "策略意图已被其他操作修改，已刷新最新版本，请重新编辑",
-      reason: "变更原因（必填）",
-    },
   },
 
+  /** Admin-console route guard (403 / Access-Denied) copy. */
   adminRouteGuard: {
     accessDenied: "您没有权限访问该页面。",
     backToPermitted: "返回可访问的页面",

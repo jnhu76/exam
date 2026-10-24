@@ -118,15 +118,9 @@ const ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // (ADR-017 D8) the business-integrity diagnostics block is an
   // Admin-only business-domain surface; Maintainer never receives it.
   Permission.SystemBusinessIntegrityView,
-  // Backup evidence + restore-readiness drill evidence read views.
-  Permission.SystemBackupView,
-  Permission.SystemRestoreReadinessView,
   // The business-owner summary dashboard is Admin-only business
   // observation — never granted to Maintainer.
   Permission.SystemBusinessSummaryView,
-  // ADR-017 D9: Admin is the SOLE operational-policy intent owner.
-  Permission.SystemOpsPolicyView,
-  Permission.SystemOpsPolicyManage,
   // ADR-017 D7: email test is a side effect, split out of the
   // diagnostics view capability. Admin keeps it (compatibility preserved);
   // Maintainer does NOT receive it by default.
@@ -240,11 +234,6 @@ const GRADER_PERMISSIONS: readonly PermissionKey[] = [
 const MAINTAINER_PERMISSIONS: readonly PermissionKey[] = [
   Permission.SystemHealthView,
   Permission.SystemDiagnosticsView,
-  // Backup evidence + restore-readiness drill evidence read views.
-  Permission.SystemBackupView,
-  Permission.SystemRestoreReadinessView,
-  // Maintainer MAY view the Admin's policy intent — never modify it.
-  Permission.SystemOpsPolicyView,
 ];
 
 // ───────────────────────── Candidate (own-scope runtime) ─────────────────────────

@@ -237,8 +237,10 @@ describe("table contract v2 structural guards", () => {
   it("binds the status column token to the auto-deriving fixture", () => {
     const rows = statusBadgeFixture();
     // Full coverage: every statusMeta key × every supported locale enters the
-    // universe automatically (no hand-copied label list).
-    expect(rows.length).toBeGreaterThanOrEqual(52);
+    // universe automatically (no hand-copied label list). The floor tracks the
+    // live statusMeta universe (re-derived when a status legitimately leaves
+    // it — e.g. the backup-evidence compliance statuses, PR-B #814 follow-up).
+    expect(rows.length).toBeGreaterThanOrEqual(47);
     // Every label resolves through i18n in its own locale. i18next returns
     // the key itself for a missing translation, so `label !== key` is the
     // loud-fail guard: a new status without catalog copy reds the test.

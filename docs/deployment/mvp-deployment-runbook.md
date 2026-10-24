@@ -569,8 +569,7 @@ curl -s http://localhost:${EXAM_PORT:-80}/api/health
 # Admin / Maintainer system health (DB ping + CPU/memory)
 # (requires authentication; obtain the auth-token cookie via the login page)
 # Maintainer is a read-only system observer under ADR-017; this endpoint
-# requires system.health.view. Write surfaces such as PUT /system/ops-policy
-# stay Admin-only.
+# requires system.health.view.
 curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/health
 # Expected: {"cpu":..,"memory":..,"dbResponseMs":..,"status":"ok"}
 ```
@@ -1178,12 +1177,6 @@ db container, not re-parsed from the env file):
 # Restore (typed confirmation; stops the app, DROP + CREATE from template0,
 # pg_restore, restarts the app, waits for health):
 ./scripts/db-backup.sh restore /mnt/nas/exam-20260926.dump
-
-# P7-E2B — record the restore drill in the product ledger after restart
-# (with the measured duration):
-docker compose --env-file .env.production exec app node dist/scripts/backup-evidence.js drill \
-  --operation-id logical-restore:$(date +%F) --backup-type logical \
-  --result succeeded --source operator_declared --duration-ms <ms>
 ```
 
 Schedule backups with cron/systemd on the Docker host and copy the dumps

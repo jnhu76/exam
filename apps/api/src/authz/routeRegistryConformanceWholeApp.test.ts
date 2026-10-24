@@ -369,7 +369,7 @@ describe("whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 148 primary routes (127 protected + 21 non-protected)", () => {
+  it("the full composition reconciles to 143 primary routes (122 protected + 21 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
@@ -384,11 +384,11 @@ describe("whole-application authorization route regression lock", () => {
     expect(
       protectedCount,
       "protected (capability/ownership-gated) routes",
-    ).toBe(127);
+    ).toBe(122);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
       21,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(148);
+    expect(capturedRoutes.length, "total primary routes").toBe(143);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {
@@ -475,6 +475,72 @@ describe("whole-application authorization route regression lock", () => {
         .map((r) => `${r.method} ${r.url}`)
         .join(", ")}`,
     ).toEqual([]);
+  });
+
+  it("the retired backup-evidence capability keys are absent from both the catalog and every route gate", () => {
+    // ADR-023 removed the backup-evidence subsystem together with the four
+    // capability keys that gated its surface (GET /system/backups,
+    // GET/PUT /system/ops-policy, GET /system/restore-readiness; retention
+    // readiness shared system.backup.view's surface family). Same guard shape
+    // as the dead-capability locks above: a literal PermissionKey comparison
+    // is a TS error once a key leaves the union, so the catalog and the
+    // captured route gates are scanned as raw strings. Reintroducing any of
+    // these keys — catalog entry, route gate, or both — fails here and needs
+    // a new explicit product decision.
+    const RETIRED = [
+      "system.backup.view",
+      "system.restore_readiness.view",
+      "system.ops.policy.view",
+      "system.ops.policy.manage",
+    ];
+    const catalogValues = Object.values(Permission) as readonly string[];
+    for (const key of RETIRED) {
+      expect(
+        catalogValues,
+        `Permission catalog must not contain the retired ${key}`,
+      ).not.toContain(key);
+    }
+    const offenders = capturedRoutes.filter((r) =>
+      r.classified.some(
+        (c) =>
+          c.authz !== null &&
+          "permission" in c.authz &&
+          RETIRED.includes(c.authz.permission as string),
+      ),
+    );
+    expect(
+      offenders,
+      `routes still gated by a retired backup-evidence key: ${offenders
+        .map((r) => `${r.method} ${r.url}`)
+        .join(", ")}`,
+    ).toEqual([]);
+  });
+
+  describe("retired backup-evidence HTTP surface", () => {
+    // The five retired endpoints must not exist in the FULL production
+    // composition. Admin is the authority-maximal actor (compatibility
+    // superset of every preset), so a surviving route gated by ANY capability
+    // would answer 2xx or 403 for Admin — a 404 proves surface absence, not
+    // denial. (Route-gate absence above is static; this is the live-router
+    // witness on the same composition.)
+    it.each([
+      ["GET", "/api/system/backups"],
+      ["GET", "/api/system/ops-policy"],
+      ["PUT", "/api/system/ops-policy"],
+      ["GET", "/api/system/restore-readiness"],
+      ["GET", "/api/system/retention-readiness"],
+    ] as const)(
+      "%s %s does not exist (Admin → 404, not 403)",
+      async (method, url) => {
+        const res = await ctx!.app.inject({
+          method,
+          url,
+          payload: method === "PUT" ? {} : undefined,
+          cookies: { "auth-token": ctx!.adminToken },
+        });
+        expect(res.statusCode, `${method} ${url}`).toBe(404);
+      },
+    );
   });
 
   // ────────────────── Negative control (non-vacuity) ──────────────────

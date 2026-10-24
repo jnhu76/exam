@@ -108,3 +108,40 @@ describe("ADR-014 — Incident permission matrix", () => {
     expect(candidatePerms.has(Permission.IncidentResolve)).toBe(false);
   });
 });
+
+describe("retired backup-evidence capability keys are ungrantable", () => {
+  // The backup-evidence subsystem was removed with its four capability keys
+  // (system.backup.view / system.restore_readiness.view /
+  // system.ops.policy.view / system.ops.policy.manage). Runtime grants are
+  // derived exclusively from the role presets, so the grant-source pin lives
+  // here: NO preset may carry a retired key. Catalog absence and route-gate
+  // absence are pinned by the API whole-app conformance lock; a reintroduced
+  // catalog key without a preset grant, or with one, fails one of the two.
+  const RETIRED = [
+    "system.backup.view",
+    "system.restore_readiness.view",
+    "system.ops.policy.view",
+    "system.ops.policy.manage",
+  ];
+
+  it("no role preset grants any retired backup-evidence key", () => {
+    for (const role of Object.values(Role)) {
+      const granted = permissionsForRole(role) as readonly string[];
+      for (const key of RETIRED) {
+        expect(granted, `${role} must not grant retired ${key}`).not.toContain(
+          key,
+        );
+      }
+    }
+  });
+
+  it("the retired keys no longer exist in the catalog at all", () => {
+    const catalogValues = Object.values(Permission) as readonly string[];
+    for (const key of RETIRED) {
+      expect(
+        catalogValues,
+        `catalog must not contain retired ${key}`,
+      ).not.toContain(key);
+    }
+  });
+});

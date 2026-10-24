@@ -98,9 +98,9 @@ const groups: NavGroup[] = [
   },
   {
     // The operations group is the operational control-plane surface (health /
-    // diagnostics / backup / restore readiness). It is distinct from business
-    // management navigation; membership follows the operational capabilities
-    // (lib/capabilities.ts), not a role label.
+    // diagnostics). It is distinct from business management navigation;
+    // membership follows the operational capabilities (lib/capabilities.ts),
+    // not a role label.
     labelKey: "nav.groups.operations",
     items: [
       {

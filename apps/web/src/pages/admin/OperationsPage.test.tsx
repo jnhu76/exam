@@ -1,32 +1,15 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { permissionsForRole } from "@exam/authz";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
 import { OperationsPage } from "./OperationsPage";
 
 vi.mock("@/lib/api", () => ({
   api: {
     get: vi.fn(),
-    put: vi.fn(),
-  },
-  ApiError: class ApiError extends Error {
-    constructor(
-      readonly status: number,
-      message: string,
-      readonly code?: string,
-    ) {
-      super(message);
-      this.name = "ApiError";
-    }
   },
   setNavigate: () => {},
 }));
@@ -41,7 +24,6 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 const getMock = vi.mocked(api.get);
-const putMock = vi.mocked(api.put);
 
 /** Health response shape used by the page. */
 function health() {
@@ -95,114 +77,9 @@ function diag() {
   };
 }
 
-function backup(overrides: Record<string, unknown> = {}) {
-  return {
-    latest: {
-      id: "00000000-0000-4000-8000-000000000001",
-      operationId: "logical:2026-08-12",
-      backupType: "logical",
-      status: "succeeded",
-      startedAt: "2026-08-12T10:00:00.000Z",
-      completedAt: "2026-08-12T10:05:00.000Z",
-      artifactLabel: "exam-2026-08-12.dump",
-      artifactSizeBytes: 1024,
-      verificationMethod: "pg_restore_list",
-      verificationStatus: "verified",
-      verifiedAt: "2026-08-12T10:05:00.000Z",
-      failureReason: null,
-      executorType: "host_script",
-    },
-    latestVerified: {
-      id: "00000000-0000-4000-8000-000000000001",
-      operationId: "logical:2026-08-12",
-      backupType: "logical",
-      status: "succeeded",
-      startedAt: "2026-08-12T10:00:00.000Z",
-      completedAt: "2026-08-12T10:05:00.000Z",
-      artifactLabel: "exam-2026-08-12.dump",
-      artifactSizeBytes: 1024,
-      verificationMethod: "pg_restore_list",
-      verificationStatus: "verified",
-      verifiedAt: "2026-08-12T10:05:00.000Z",
-      failureReason: null,
-      executorType: "host_script",
-    },
-    lastFailure: null,
-    counts: { running: 0, succeeded: 1, failed: 0, abandoned: 0 },
-    history: [],
-    ...overrides,
-  };
-}
-
-function policyResponse(overrides: Record<string, unknown> = {}) {
-  return {
-    policy: {
-      desiredRpoSeconds: 3600,
-      desiredRtoSeconds: null,
-      desiredRetentionDays: 30,
-      desiredDrillCadenceDays: 7,
-      version: 1,
-      reason: "initial setup",
-      updatedBy: "admin",
-      updatedAt: "2026-08-12T10:00:00.000Z",
-    },
-    compliance: {
-      rpo: {
-        desired: "3600s",
-        observed: "7200s",
-        status: "NOT_SATISFIED",
-        observedDetail: "last verified backup age 7200s > desired 3600s",
-      },
-      rto: {
-        desired: null,
-        observed: null,
-        status: "NOT_CONFIGURED",
-        observedDetail: "desired RTO not configured",
-      },
-      retention: {
-        desired: "30d",
-        observed: "host-managed",
-        status: "NOT_ENFORCED",
-        observedDetail: "retention/pruning is host-managed",
-      },
-      drill: {
-        desired: "7d",
-        observed: "1d ago",
-        status: "SATISFIED",
-        observedDetail: "last drill 1d ago <= desired 7d (automated)",
-      },
-    },
-    ...overrides,
-  };
-}
-
-function restore(overrides: Record<string, unknown> = {}) {
-  return {
-    latestDrill: {
-      id: "00000000-0000-4000-8000-000000000002",
-      operationId: "logical-restore:2026-08-11",
-      backupType: "logical",
-      result: "succeeded",
-      source: "automated",
-      startedAt: "2026-08-11T09:00:00.000Z",
-      completedAt: "2026-08-11T09:40:00.000Z",
-      durationMs: 2400000,
-      failureReason: null,
-    },
-    latestSuccessfulDrill: {
-      id: "00000000-0000-4000-8000-000000000002",
-      operationId: "logical-restore:2026-08-11",
-      backupType: "logical",
-      result: "succeeded",
-      source: "automated",
-      startedAt: "2026-08-11T09:00:00.000Z",
-      completedAt: "2026-08-11T09:40:00.000Z",
-      durationMs: 2400000,
-      failureReason: null,
-    },
-    drillHistory: [],
-    ...overrides,
-  };
+/** The page polls exactly the two surviving system endpoints, in this order. */
+function mockSurvivingEndpoints() {
+  getMock.mockResolvedValueOnce(health()).mockResolvedValueOnce(diag());
 }
 
 async function renderPage(role: "Admin" | "Maintainer" = "Admin") {
@@ -229,20 +106,14 @@ async function renderPage(role: "Admin" | "Maintainer" = "Admin") {
 describe("OperationsPage", () => {
   beforeEach(() => {
     getMock.mockReset();
-    putMock.mockReset();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders health, backup posture, restore readiness, and diagnostics", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore())
-      .mockResolvedValueOnce(policyResponse());
+  it("renders health and runtime diagnostics from exactly the two surviving endpoints", async () => {
+    mockSurvivingEndpoints();
     await renderPage();
 
     await waitFor(() => {
@@ -251,119 +122,19 @@ describe("OperationsPage", () => {
     // Health stats (StatsCard renders value + suffix separately)
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
-    // Backup posture
-    expect(screen.getByText("健康")).toBeInTheDocument();
-    expect(
-      screen.getByText("exam-2026-08-12.dump", { exact: false }),
-    ).toBeInTheDocument();
-    // Restore readiness
-    expect(screen.getByText("已验证")).toBeInTheDocument();
     // Diagnostics
     expect(screen.getByText("运行状态")).toBeInTheDocument();
-  });
-
-  it("says NOT VERIFIED when runs exist but none verified (no false green)", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(
-        backup({
-          latest: null,
-          latestVerified: null,
-          lastFailure: null,
-          counts: { running: 0, succeeded: 0, failed: 1, abandoned: 0 },
-        }),
-      )
-      .mockResolvedValueOnce(
-        restore({ latestDrill: null, latestSuccessfulDrill: null }),
-      )
-      .mockResolvedValueOnce(policyResponse());
-    await renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backup-status-badge")).toHaveTextContent(
-        "未验证",
-      );
-    });
-    expect(screen.getByText("无（从未有已验证备份）")).toBeInTheDocument();
-  });
-
-  it("says NO EVIDENCE when the ledger is empty (truthful empty state)", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(
-        backup({
-          latest: null,
-          latestVerified: null,
-          lastFailure: null,
-          counts: { running: 0, succeeded: 0, failed: 0, abandoned: 0 },
-        }),
-      )
-      .mockResolvedValueOnce(
-        restore({ latestDrill: null, latestSuccessfulDrill: null }),
-      )
-      .mockResolvedValueOnce(policyResponse());
-    await renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backup-status-badge")).toHaveTextContent(
-        "无证据",
-      );
-    });
-    expect(screen.getByTestId("restore-status-badge")).toHaveTextContent(
-      "无证据",
-    );
-  });
-
-  it("shows a warning when the last failure is newer than the last verified backup", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(
-        backup({
-          lastFailure: {
-            id: "00000000-0000-4000-8000-000000000003",
-            operationId: "logical:2026-08-13",
-            backupType: "logical",
-            status: "failed",
-            startedAt: "2026-08-13T10:00:00.000Z",
-            completedAt: "2026-08-13T10:01:00.000Z",
-            artifactLabel: null,
-            artifactSizeBytes: null,
-            verificationMethod: null,
-            verificationStatus: "failed",
-            verifiedAt: null,
-            failureReason:
-              "verification failed: pg_restore --list rejected the archive",
-            executorType: "host_script",
-          },
-          counts: { running: 0, succeeded: 1, failed: 1, abandoned: 0 },
-        }),
-      )
-      .mockResolvedValueOnce(restore())
-      .mockResolvedValueOnce(policyResponse());
-    await renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("backup-status-badge")).toHaveTextContent(
-        "需要关注",
-      );
-    });
-    expect(
-      screen.getByText("最近一次备份失败，且晚于最近一次已验证备份。"),
-    ).toBeInTheDocument();
+    // No dangling fetch to the removed backup-evidence endpoints.
+    expect(getMock.mock.calls.map((c) => c[0])).toEqual([
+      "/api/system/health",
+      "/api/system/diagnostics",
+    ]);
   });
 
   it("renders the operational diagnostics without the business-integrity block", async () => {
     // diag() above has NO `integrity` key — the Maintainer shape. The page
     // must render fine and must not fabricate integrity content.
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore())
-      .mockResolvedValueOnce(policyResponse());
+    mockSurvivingEndpoints();
     await renderPage();
 
     await waitFor(() => {
@@ -374,12 +145,7 @@ describe("OperationsPage", () => {
   });
 
   it("never renders host paths or credential-bearing strings", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore())
-      .mockResolvedValueOnce(policyResponse());
+    mockSurvivingEndpoints();
     await renderPage();
 
     await waitFor(() => {
@@ -396,238 +162,5 @@ describe("OperationsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("运维数据加载失败")).toBeInTheDocument();
     });
-  });
-});
-
-describe("OperationsPage policy intent", () => {
-  beforeEach(() => {
-    getMock.mockReset();
-    putMock.mockReset();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("renders DESIRED vs OBSERVED vs STATUS truthfully", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore())
-      .mockResolvedValueOnce(policyResponse());
-    await renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByText("可靠性目标")).toBeInTheDocument();
-    });
-    // NOT_SATISFIED RPO renders through the StatusBadge authority.
-    expect(screen.getByText("未满足")).toBeInTheDocument();
-    expect(screen.getByText("未强制执行")).toBeInTheDocument();
-    expect(screen.getByText("已满足")).toBeInTheDocument();
-  });
-
-  it("shows NOT_CONFIGURED when no intent exists (truthful)", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore())
-      .mockResolvedValueOnce(
-        policyResponse({
-          policy: null,
-          compliance: {
-            rpo: {
-              desired: null,
-              observed: null,
-              status: "NOT_CONFIGURED",
-              observedDetail: "no operational policy intent recorded",
-            },
-            rto: {
-              desired: null,
-              observed: null,
-              status: "NOT_CONFIGURED",
-              observedDetail: "no operational policy intent recorded",
-            },
-            retention: {
-              desired: null,
-              observed: "host-managed",
-              status: "NOT_CONFIGURED",
-              observedDetail: "no operational policy intent recorded",
-            },
-            drill: {
-              desired: null,
-              observed: null,
-              status: "NOT_CONFIGURED",
-              observedDetail: "no operational policy intent recorded",
-            },
-          },
-        }),
-      );
-    await renderPage();
-
-    await waitFor(() => {
-      expect(screen.getAllByText("未配置").length).toBeGreaterThanOrEqual(1);
-    });
-  });
-
-  it("the edit button exists for Admin (capability-gated UI)", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore())
-      .mockResolvedValueOnce(policyResponse());
-    await renderPage("Admin");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
-    });
-  });
-
-  it("Maintainer never sees the policy edit control (Admin is sole owner)", async () => {
-    getMock
-      .mockResolvedValueOnce(health())
-      .mockResolvedValueOnce(diag())
-      .mockResolvedValueOnce(backup())
-      .mockResolvedValueOnce(restore())
-      .mockResolvedValueOnce(policyResponse());
-    await renderPage("Maintainer");
-
-    await waitFor(() => {
-      expect(screen.getByText("可靠性目标")).toBeInTheDocument();
-    });
-    expect(screen.queryByTestId("policy-edit-button")).not.toBeInTheDocument();
-  });
-
-  it("Admin saves the intent through PUT with the current CAS version", async () => {
-    getMock.mockImplementation((path: string) => {
-      if (path.includes("/health")) return Promise.resolve(health());
-      if (path.includes("/diagnostics")) return Promise.resolve(diag());
-      if (path.includes("/backups")) return Promise.resolve(backup());
-      if (path.includes("/restore-readiness"))
-        return Promise.resolve(restore());
-      return Promise.resolve(policyResponse());
-    });
-    putMock.mockResolvedValue(
-      policyResponse({
-        policy: {
-          desiredRpoSeconds: 600,
-          desiredRtoSeconds: null,
-          desiredRetentionDays: 30,
-          desiredDrillCadenceDays: 7,
-          version: 2,
-          reason: "rpo tightened",
-          updatedBy: "admin",
-          updatedAt: "2026-08-12T11:00:00.000Z",
-        },
-        compliance: {
-          rpo: {
-            desired: "600s",
-            observed: "7200s",
-            status: "NOT_SATISFIED",
-            observedDetail: "last verified backup age 7200s > desired 600s",
-          },
-          rto: {
-            desired: null,
-            observed: null,
-            status: "NOT_CONFIGURED",
-            observedDetail: "desired RTO not configured",
-          },
-          retention: {
-            desired: "30d",
-            observed: "host-managed",
-            status: "NOT_ENFORCED",
-            observedDetail: "retention/pruning is host-managed",
-          },
-          drill: {
-            desired: "7d",
-            observed: "1d ago",
-            status: "SATISFIED",
-            observedDetail: "last drill 1d ago <= desired 7d (automated)",
-          },
-        },
-      }),
-    );
-    await renderPage("Admin");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
-    });
-    await act(async () => {
-      screen.getByTestId("policy-edit-button").click();
-    });
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText("恢复点目标 (RPO) (s)"), {
-        target: { value: "600" },
-      });
-      fireEvent.change(screen.getByLabelText("变更原因（必填）"), {
-        target: { value: "rpo tightened" },
-      });
-    });
-    await act(async () => {
-      screen.getByRole("button", { name: "保存" }).click();
-    });
-
-    await waitFor(() => {
-      expect(putMock).toHaveBeenCalledWith("/api/system/ops-policy", {
-        desiredRpoSeconds: 600,
-        desiredRtoSeconds: null,
-        desiredRetentionDays: 30,
-        desiredDrillCadenceDays: 7,
-        version: 1,
-        reason: "rpo tightened",
-      });
-      expect(
-        screen.getByText("已保存（仅意图记录，不影响基础设施）"),
-      ).toBeInTheDocument();
-    });
-    // The draft closed after a successful save.
-    expect(screen.queryByTestId("policy-edit-button")).toBeInTheDocument();
-  });
-
-  it("a CAS version conflict closes the draft and refetches the latest policy", async () => {
-    getMock.mockImplementation((path: string) => {
-      if (path.includes("/health")) return Promise.resolve(health());
-      if (path.includes("/diagnostics")) return Promise.resolve(diag());
-      if (path.includes("/backups")) return Promise.resolve(backup());
-      if (path.includes("/restore-readiness"))
-        return Promise.resolve(restore());
-      return Promise.resolve(policyResponse());
-    });
-    putMock.mockRejectedValue(
-      new ApiError(
-        409,
-        "策略意图已被其他操作修改，请刷新后重试",
-        "OPS_POLICY_VERSION_CONFLICT",
-      ),
-    );
-    await renderPage("Admin");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
-    });
-    await act(async () => {
-      screen.getByTestId("policy-edit-button").click();
-    });
-    await act(async () => {
-      screen.getByRole("button", { name: "保存" }).click();
-    });
-
-    // Conflict message shown, draft closed (edit button back), data refetched.
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "策略意图已被其他操作修改，已刷新最新版本，请重新编辑",
-        ),
-      ).toBeInTheDocument();
-      expect(screen.getByTestId("policy-edit-button")).toBeInTheDocument();
-    });
-    expect(putMock).toHaveBeenCalledWith(
-      "/api/system/ops-policy",
-      expect.any(Object),
-    );
-    // Refetch: get called again after the failed save (5 initial + 5 refresh).
-    expect(getMock.mock.calls.length).toBeGreaterThan(5);
   });
 });

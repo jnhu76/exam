@@ -57,7 +57,10 @@ export const AuditAction = {
   // POST /email/test is a side-effecting action; it is audited under its own
   // action, never under a diagnostics-view action.
   SystemEmailTest: "system.email.test",
-  // ADR-017 D9: Admin records the operational policy INTENT.
+  // Retired with the backup-evidence subsystem removal: the only emitter
+  // (PUT /system/ops-policy) is gone and the audit policy marks this action
+  // deprecated. The key stays declared for historical audit-row rendering.
+  // Formerly (ADR-017 D9): Admin records the operational policy INTENT.
   OpsPolicyUpdated: "ops.policy.updated",
 
   // ── Candidate ──

@@ -213,13 +213,7 @@ describe("Operational RBAC Boundary", () => {
     });
 
     it("all operational responses are free of secrets and host paths", async () => {
-      const urls = [
-        "/api/system/health",
-        "/api/system/diagnostics",
-        "/api/system/backups",
-        "/api/system/restore-readiness",
-        "/api/system/ops-policy",
-      ];
+      const urls = ["/api/system/health", "/api/system/diagnostics"];
       for (const url of urls) {
         const res = await asAdmin("GET", url);
         expect(res.statusCode, `GET ${url}`).toBe(200);
