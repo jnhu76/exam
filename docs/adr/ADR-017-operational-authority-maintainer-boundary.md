@@ -2,15 +2,21 @@
 
 ## Status
 
-* Status: **ACCEPTED through revision 4** (2026-08-14 — P7 final program
+* Status: **ACCEPTED through revision 5** (rev 5, 2026-10-24, via
+  [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) — the backup-evidence
+  scopes of rev 4 are superseded/amended; see **§Revision 5** below. The
+  rev-5 Maintainer capability re-baseline is **prospective**: the live
+  runtime still implements the rev-4 five-capability Maintainer preset until
+  ADR-023's PR-B lands). Earlier: **ACCEPTED through revision 4**
+  (2026-08-14 — P7 final program
   closeout, [`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
-  the runtime already implements the rev-4 model — verified in that closeout).
+  the runtime implements the rev-4 model — verified in that closeout).
   Revision 4 was proposed 2026-08-13 (P7-RBAC-ROLE-REALITY-AUDIT remediation)
   and accepted by the P7 final program closeout after the code/runtime
   boundary check (Maintainer = read-only Operational Observer; zero business
   and zero write permissions; Admin ↔ Maintainer mutual exclusion D14
   enforced on every assignment path).
-* Date: 2026-08-12 (rev 1–3); 2026-08-13 (rev 4 proposed); 2026-08-14 (rev 4 accepted)
+* Date: 2026-08-12 (rev 1–3); 2026-08-13 (rev 4 proposed); 2026-08-14 (rev 4 accepted); 2026-10-24 (rev 5 via ADR-023)
 * Revision: 4 (2026-08-14, **ACCEPTED**) — narrows/clarifies the
   **Application Maintainer model** from the revision-2 "viewer/controller"
   wording to a **read-only operational observability identity** ("Exam gives
@@ -21,8 +27,17 @@
   explicitly that **no "Configurer" persona exists**, reframes operational
   policy as a **reliability objective**, and tightens D5's default stance on
   Maintainer write capabilities. See **§Revision 4** below for the binding
-  corrections. **Revision 4 is the governing contract since acceptance
-  (2026-08-14).**
+  corrections. **In the superseded scopes, ADR-023 (rev 5) governs;
+  everywhere else rev 4 remains the governing contract.**
+* Revision: 5 (2026-10-24, **ACCEPTED** via
+  [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)) — the
+  backup-evidence scopes of rev 4 (R4-3 category B, R4-4, D5's `backup.*`
+  gates, D6, D9, D10, the D1 backup summary items, and the five-capability
+  Maintainer freeze) are superseded/amended. Maintainer target set after
+  ADR-023's PR-B: `system.health.view` + `system.diagnostics.view`
+  (five → two). Preserved unchanged: D4 (restore/PITR host-only), D11, D12,
+  D14, the R4-1 window principle, and the System synthetic actor. See
+  **§Revision 5** below.
 * Earlier revisions: revision 2 corrected the model to the **Hybrid
   Maintainer Model (Option C)**; revision 3 froze the **Admin ↔ Maintainer
   mutual-exclusion invariant** (D14) and folded it into the E2A scope.
@@ -31,6 +46,10 @@
 * Decision owners: project
 * Supersedes: none
 * Superseded by: none
+* Amended by: [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)
+  (2026-10-24) — supersedes the backup-evidence scopes listed in
+  **§Revision 5**; the capability re-baseline is prospective until
+  ADR-023's PR-B. All other rev-4 decisions remain in force.
 * Related decisions:
   * ADR-001 — Post-MVP Decision (P7)
   * ADR-010 — Scoped RBAC Architecture (**amended by this ADR** — role
@@ -40,6 +59,9 @@
   * ADR-016 — Future Offline-Resilient Client Data and Recovery Model
   * ADR-018 — Operational Observability Window (future runtime-data contract;
     added by rev 4 — see §Revision 4)
+  * ADR-023 — Remove the Backup-Evidence Subsystem (**amends this ADR** —
+    rev 5: backup-evidence scopes superseded, Maintainer capabilities
+    re-baselined 5 → 2 prospectively; see §Revision 5)
   * P7-C portable persistence / backup / PostgreSQL DR (closeout)
   * P7-E0 Configuration Reality Audit (verdict: no generic settings subsystem)
 
@@ -56,6 +78,39 @@ LAN/on-premise product. It does **not** authorize any new UI, role, schema,
 route, or infrastructure execution surface in E1. It freezes the authority
 **architecture** the product must grow into, and prohibits specific future
 regressions.
+
+---
+
+## Revision 5 (ACCEPTED) — Backup-Evidence Subsystem Removal (via ADR-023)
+
+> **Status: ACCEPTED (2026-10-24), via
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)** — which records
+> the #739 owner disposition (REMOVE the backup-evidence subsystem; the Host
+> Operator owns backup execution, scheduling, retention, off-host copies,
+> restore execution/verification, drills, and DR operational records). Where
+> rev-4 wording conflicts with rev 5 in the scopes below, **rev 5 (ADR-023)
+> governs**. The rev-4 text is retained below as history, annotated at each
+> site.
+
+| Scope | Rev-4 statement | Rev-5 disposition |
+| --- | --- | --- |
+| R4-1 window content | backup/recovery evidence may be presented through the window | backup-evidence content source removed; the window principle itself is unchanged |
+| R4-2 identity table | Admin holds reliability-objective authority (desired RPO / retention / drill cadence) | **amended** — the reliability-objective authority is withdrawn by ADR-023; the role structure and other rows are unchanged |
+| R4-3 category B | Admin reliability-objective intent record (`desired RPO / retention / drill cadence`) | **superseded** — category B is withdrawn with the intent-record mechanism |
+| R4-4 `system.ops.policy.*` | reliability-objective intent + DESIRED-vs-OBSERVED compliance projection | **superseded** — capability, table, routes, and projection are removed (PR-B code, PR-C schema) |
+| R4-5 / D2 / D3 / D7 Maintainer capability statements | frozen at exactly five read capabilities (stated at each site) | **amended** — target = `system.health.view` + `system.diagnostics.view`; **prospective**: the live implementation stays at five until ADR-023's PR-B removes the three backup-related views |
+| D1 / R4-6 business-owner summary & intent | `backup healthy? / RPO satisfied? / last verified backup?` items + reliability-objective intent | **amended** — the backup items and the intent are withdrawn (PR-B); the summary keeps `system healthy? / critical warning?` |
+| D5 decision gates | `backup.trigger`, `backup.schedule.manage`, `backup.retention.manage` future decision-gated | **amended** — the three `backup.*` gates are **declined** (converging D5 with the P7-E3 "DEFERRED (NO-GO)" record); `service.restart` keeps its pre-existing disposition |
+| D6 backup trigger abstraction | future typed product-side trigger acceptable in principle | **superseded** — declined outright, not merely future-gated |
+| D9 objectives | Admin intent record + compliance projection ("Admin sets objectives; Maintainer observes compliance") | **superseded** — the intent capability and projection are removed |
+| D10 SUCCESS invariants | four ledger truthfulness invariants | **superseded** — the `backup_runs` ledger they govern is removed; the underlying obligation (operational evidence must not lie) transfers to the operator runbook: verification = an actual restore into a scratch database, with application health and domain-level acceptance as additional, separate checks |
+| D13 E2B/E2C sequencing | Backup Evidence Ledger + operational views | **historical** — implemented in P7-E and removed by ADR-023 (PR-B/PR-C); the sequencing principle itself is history |
+
+Unchanged by rev 5: **D4** (restore/PITR permanently host-only), **D11**
+(secrets), **D12** (honest trust boundary), **D14** (Admin ↔ Maintainer
+mutual exclusion), the **R4-1 window principle**, R4-2's read-only observer
+model, and the System synthetic actor. Existing backup/restore security
+obligations continue after the removal (see ADR-023 "Preserved invariants").
 
 ---
 
@@ -78,6 +133,12 @@ state — may all be presented through that window. But the Application
 Maintainer **never** mutates, executes, configures infrastructure, restarts
 services, or restores through the Exam product. Real infrastructure maintenance
 happens **outside** the Exam boundary (Host Operator — see R4-3).
+
+> Rev 5 (2026-10-24): backup/recovery evidence is no longer a window content
+> source by decision of [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)
+> — the backup-evidence subsystem is removed in that ADR's PR-B/PR-C (the
+> live window still presents it until PR-B). The window
+> principle above is unchanged.
 
 ### R4-2. Corrected role model
 
@@ -119,6 +180,13 @@ control-plane write authority in the current Maintainer model.
 | **Host Operator / Host Maintainer** | Real infrastructure execution identity | Docker/Compose, PostgreSQL, WAL, backup destination, secrets, restore/PITR, service lifecycle, filesystem. **NOT Exam RBAC** — granted by host/CLI access, independently of any Exam account. |
 | **Configurer** | **DOES NOT EXIST** | There is no separate Configurer persona, and no role named Configurer / Configuration Manager / System Administrator / Ops Admin / Backup Admin / Platform Admin may be invented to solve configuration ownership. |
 
+> Rev 5 (2026-10-24): the Admin row's **reliability-objective authority**
+> (desired RPO / retention / drill cadence) is withdrawn by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) — see
+> **§Revision 5**; the live `system.ops.policy.manage` capability remains
+> until that ADR's PR-B. The role structure and the other rows are
+> unchanged.
+
 **No human actor may hold active Admin + Maintainer assignments simultaneously**
 (D14, unchanged). Host access is not an RBAC assignment and is unaffected (D12).
 
@@ -133,6 +201,11 @@ resource-authority question, classified into three categories:
 | **B. Reliability objectives / desired operational outcomes** | desired RPO, desired retention objective, desired restore-drill cadence | **Admin** (intent only — never binds infrastructure) |
 | **C. Infrastructure / runtime configuration** | cron schedule, `postgres.conf`, backup destination, WAL archive configuration, Docker/Compose, secrets | **Host Operator** — **outside Exam RBAC** |
 
+> Rev 5 (2026-10-24): **category B is withdrawn** — the intent-record
+> mechanism it authorized was removed by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md). Categories A and C
+> are unchanged.
+
 The Maintainer **may view** relevant status/evidence for category C, but does
 **not own** those settings inside Exam. This is why the product exposes
 category B as an **intent record** (Admin sets the objective; the System
@@ -140,6 +213,15 @@ evaluates whether observed evidence satisfies it) and never as infrastructure
 configuration.
 
 ### R4-4. Operational policy = reliability objective (D9 reframe)
+
+> **Rev 5 (2026-10-24): superseded by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md).** The
+> `system.ops.policy.*` objective/compliance-projection mechanism defined
+> here is removed (`system.ops.policy.manage`/`.view` lose their future
+> authorization; the `backup_operational_policy` table, the
+> `/system/ops-policy` routes, and the projection are deleted in PR-B/PR-C).
+> The text below is retained as the historical rationale for the framing
+> that existed between rev 4 and ADR-023.
 
 `system.ops.policy.*` is **not** infrastructure configuration. It is a
 **Reliability Objective / Desired Operational Outcome**. The mental model:
@@ -180,11 +262,22 @@ The Maintainer permission set is frozen at exactly five **read** capabilities
 `system.restore_readiness.view`, `system.ops.policy.view`): business
 permission count = 0, write permission count = 0.
 
+> Rev 5 (2026-10-24): the frozen set is re-baselined by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) to exactly two read
+> capabilities (`system.health.view`, `system.diagnostics.view`). The
+> re-baseline is **prospective**: the live implementation still carries the
+> five capabilities above until ADR-023's PR-B removes the three
+> backup-related views.
+
 ### R4-6. What revision 4 does NOT change
 
 - **D1** — Admin remains the Exam business owner (plus operational
   **observation** summary + reliability-objective intent). Admin **never**
   receives infrastructure execution authority.
+  *(Rev 5: the reliability-objective intent and the backup summary items
+  are withdrawn by [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) —
+  see §Revision 5; the summary keeps "system healthy? / critical
+  warning?".)*
 - **D4** — restore/PITR/PGDATA/raw-secret/raw-host authority remain
   permanently excluded from the ordinary browser control plane.
 - **D12** — host authority does not imply or auto-grant an Application
@@ -207,6 +300,9 @@ human-approved correction in this task
 > code reality
 > old roadmap prose
 ```
+
+> Rev 5 (2026-10-24): read the second line above as "ADR-023 governs the
+> §Revision-5 scopes; ADR-017 rev 4 governs everywhere else."
 
 ### R4-8. Related: F-04 (Teacher course-scope) is an explicit deferral
 
@@ -266,6 +362,10 @@ them Admin. This revision therefore selects the **Hybrid Maintainer Model**.
   operational visibility** — a business-owner summary:
   `system healthy? / backup healthy? / RPO satisfied? / last verified backup?
   / critical warning?`.
+  *(Rev 5, 2026-10-24: the `backup healthy? / RPO satisfied? / last verified
+  backup?` items are removed by
+  [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) in PR-B; the
+  summary keeps `system healthy? / critical warning?`.)*
 - **Admin MAY observe system health. Admin DOES NOT thereby become System
   Maintainer.** Observation does not imply control-plane or execution
   authority.
@@ -309,6 +409,11 @@ execution authority                     NOT product RBAC authority
      `system.restore_readiness.view`, `system.ops.policy.view`
      (naming per repo `domain.resource.action` convention; each is
      individually decision-gated when introduced).
+     *(Rev 5, 2026-10-24: re-baselined by
+     [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) — target set is
+     `system.health.view` + `system.diagnostics.view`; the three
+     backup-related views above lose their future authorization. Prospective
+     until ADR-023's PR-B: the live preset still carries all five.)*
    - Explicitly NOT granted, ever: `user.*`, `candidate.*`, `course.*`,
      `question.*`, `exam.*`, `grading.*`, `score.*`, incident business
      mutation, attempt force-submit, time grant, misconduct marking,
@@ -364,6 +469,13 @@ execution authority                     NOT product RBAC authority
 | **A. Business authority** | Admin only (Maintainer default none) | users, roles, candidates, courses, questions, exam profiles, exam authoring, exam publish, grading, result publish, business recovery decisions (force-submit / time-grant / misconduct / incident resolve), organization settings |
 | **B. Operational control-plane authority** | Application Maintainer (future preset) — Admin holds the observation subset today | `system.health.view`, `system.diagnostics.view`, `system.backup.view`, `system.restore_readiness.view`, `system.ops.policy.view`; decision-gated mutations (`backup.trigger`, `backup.schedule.manage`, `backup.retention.manage`, `service.restart`) only under D5 — intent (`system.ops.policy.manage`) is Admin-only (D9). *(Rev 4, ACCEPTED: current-model row B is **observation only** — the decision-gated mutations are future-only per R4-5.)* |
 | **C. Infrastructure execution authority** | Host Maintainer (host/CLI) | Docker/Compose, PostgreSQL, WAL archive, filesystem, backup destination, secret store, service lifecycle, restore, PITR, PGDATA, migration/rollback/backfill |
+
+> Rev 5 (2026-10-24): row B's backup-related views and the `backup.*`
+> decision-gated mutations are removed/declined by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md). After ADR-023's
+> PR-B, row B's Maintainer set is `system.health.view` +
+> `system.diagnostics.view` (Admin retains its observation subset); the
+> row-B observation-only principle is unchanged.
 
 ### D4. Permanently forbidden through normal product UI
 
@@ -426,7 +538,22 @@ operational policy has exactly ONE intent owner (Admin, D9). Maintainer's
 policy authority is execution-side only (`backup.schedule.manage`,
 `backup.retention.manage`), not intent management.
 
+> **Rev 5 (2026-10-24): `backup.trigger`, `backup.schedule.manage`, and
+> `backup.retention.manage` are DECLINED** —
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) removed the
+> backup-evidence subsystem they would have gated; they are no longer future
+> capabilities. This converges D5 with the P7-E3 "DEFERRED (NO-GO)" record
+> ([`docs/archive/audits/P7-E3-DECISION-GATES.md`](../archive/audits/P7-E3-DECISION-GATES.md)).
+> `service.restart` is **not** a backup capability and is unaffected by
+> ADR-023: it keeps the D5 future-gate disposition and the E3 NO-GO record,
+> and any future product-side form still requires its own independent ADR.
+
 ### D6. Backup trigger abstraction (if ever built)
+
+> **Rev 5 (2026-10-24): superseded by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)** — a product-side
+> typed backup trigger is **declined**, not merely future-gated. The text
+> below is retained as history.
 
 Backup and Restore have different risk levels and must be treated
 differently. A future product-side **backup trigger** is acceptable in
@@ -459,7 +586,10 @@ SMTP channel). **It is gated by the dedicated `system.email.test`
 the **Admin preset only** — it is NOT part of the Maintainer preset, and
 `system.diagnostics.view` never authorizes it. The invariant is enforced in
 the current runtime; the Maintainer receives the five read capabilities
-(`R4-5`) and zero side-effect capabilities.
+(`R4-5` *(rev 5: re-baselined to two — `system.health.view` +
+`system.diagnostics.view` — by
+[ADR-023](ADR-023-remove-backup-evidence-subsystem.md), prospectively until
+its PR-B; see §Revision 5)*) and zero side-effect capabilities.
 
 > History: revisions 1–3 of this ADR recorded the pre-E2A state, where the
 > route was gated by `system.diagnostics.view` (safe only because Admin alone
@@ -488,6 +618,14 @@ Maintainer viewer; E2A must define the semantic split.
 
 ### D9. Admin sets objectives; Maintainer observes compliance
 
+> **Rev 5 (2026-10-24): superseded by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)** — the
+> objective-intent record (`system.ops.policy.manage`) and the
+> desired-vs-observed compliance projection are removed with the
+> backup-evidence subsystem. What survives of the principle below is only
+> the ordinary health/diagnostics observation that remains in the window.
+> The text is retained as history.
+
 > **Revision 4 (ACCEPTED) correction:** under the observability-window model
 > (R4-4/R4-5) the Maintainer **observes** intent and the desired-vs-observed
 > compliance projection; the "execution / control-plane" framing below is
@@ -514,6 +652,15 @@ System:     whether reality satisfies it   (evidence/status)
 ```
 
 ### D10. Backup SUCCESS is evidence-defined — invariants only
+
+> **Rev 5 (2026-10-24): superseded by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)** — the
+> `backup_runs` ledger these invariants govern is removed. The underlying
+> safety obligation ("operational evidence must not lie") transfers to the
+> operator runbook: verification = an actual restore into a scratch
+> database; application health and domain-level acceptance are additional,
+> separate checks — not proven by the restore evidence alone. The text is
+> retained as history.
 
 E1 freezes the **invariants**:
 
@@ -556,6 +703,13 @@ Deployment selection of whom to trust with host access is a documented
 operational decision, not a software guarantee.
 
 ### D13. E2 sequencing (authority first)
+
+> Rev 5 (2026-10-24) historical note: the E2B Backup Evidence Ledger and the
+> E2C/E3 backup-evidence views were implemented in P7-E and are **removed by
+> [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)** (product code in
+> PR-B; the five tables via a new forward-only DROP migration in PR-C). The
+> E2A RBAC boundary and the sequencing principle below stand; the
+> backup-evidence line items describe the removed scope.
 
 No further **Admin-only** operations surface may be added before the
 operational RBAC boundary exists. The E2 order is:
@@ -660,6 +814,9 @@ Positive:
   one actor, no matter which assignment path was used.
 - Decision-gated capabilities (D5) leave room for safe future control-plane
   actions (e.g. a typed backup trigger, D6) without committing to them.
+  *(Rev 5, 2026-10-24: the `backup.*` examples are declined by
+  [ADR-023](ADR-023-remove-backup-evidence-subsystem.md); only
+  `service.restart` remains future-gated.)*
 
 Negative:
 
@@ -678,7 +835,8 @@ Risks:
 
 - Scope creep: an "Admin backup button" or "Maintainer dashboard with raw
   actions" would violate D4/D5. Any proposal must be reviewed against this
-  ADR before design.
+  ADR before design. *(Rev 5, 2026-10-24: the backup-button direction is
+  outright declined by [ADR-023](ADR-023-remove-backup-evidence-subsystem.md).)*
 - E2A must resist the temptation to seed a Maintainer preset with any
   business capability; the preset principle (D2) is a hard constraint.
 - E2A must implement D14 transactionally with a concurrency fence — a

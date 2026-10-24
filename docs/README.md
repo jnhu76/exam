@@ -27,7 +27,7 @@ has one authority:
 | Engineering and verification policy | [`docs/standards/`](standards/) and executable repository gates |
 | Current implementation state | [`docs/status/`](status/) plus as-built code/test evidence |
 | Phase boundaries | [`docs/roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) |
-| Current backlog sequencing / disposition | Specifically authorized **OPEN** GitHub Issue selected for that work; no universal successor to #584 |
+| Current backlog sequencing / disposition | Specifically authorized **OPEN** GitHub Issue selected for that work; currently [#739](https://github.com/jnhu76/exam/issues/739) (backup-evidence subsystem removal: PR-A docs → PR-B code → PR-C schema, per [ADR-023](adr/ADR-023-remove-backup-evidence-subsystem.md)); no universal successor to #584 |
 | Current task scope / acceptance / non-goals | That same OPEN Issue plus any explicitly adopted parent ordering |
 | Historical evidence | [`docs/archive/`](archive/), Git, closed Issues, and merged PRs |
 
@@ -120,7 +120,7 @@ representability, and stored reserved values cannot silently redefine it.
 | Document | Purpose |
 | --- | --- |
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
-| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-022-product-capability-composition.md`](adr/ADR-022-product-capability-composition.md) | Formal architecture decisions |
+| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-023-remove-backup-evidence-subsystem.md`](adr/ADR-023-remove-backup-evidence-subsystem.md) | Formal architecture decisions |
 
 Product capability composition: [`architecture/product-capability-composition.md`](architecture/product-capability-composition.md)
 — adopted by [ADR-022](adr/ADR-022-product-capability-composition.md), tracked by

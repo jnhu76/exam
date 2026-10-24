@@ -319,6 +319,12 @@ ADR-018, and migrates every deferred capability to GitHub Issues (index:
 open execution checklist; it is the historical program record. Anything not
 done by P7 is **not part of P7 closure** and is tracked by its Issue
 (#286/#291–#313).
+(2026-10-24 disposition:
+[ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) subsequently
+**declined** the Exam-owned backup-evidence product capabilities described in
+this section's Backup/DR and UI bullets; the Host/operator backup and DR
+obligations are explicitly not declined and remain deployment-runbook
+duties.)
 
 ### In scope
 
@@ -353,6 +359,23 @@ done by P7 is **not part of P7 closure** and is tracked by its Issue
 - clean-host restore CLI/runbook;
 - recurring restore drills and Admin-visible evidence.
 
+> **ADR-023 disposition (2026-10-24):** of this historical list, the
+> Exam-owned product capabilities are **declined**: "declared RPO/RTO
+> profiles" as product-declared values feeding product-side compliance
+> projections, and the "Admin-visible evidence" half of the drills bullet.
+> **Not declined** (Host/operator obligations, retained): PostgreSQL backup
+> and PITR design, attachments/settings/version metadata backup,
+> encryption/retention/checksums/verification, the clean-host restore
+> CLI/runbook, and recurring restore drills themselves. Verification = an
+> actual restore into a scratch database; application health and
+> domain-level acceptance are additional, separate checks. Documentation
+> note: only the PostgreSQL path has a documented deployment program today
+> (runbook §17 covers `pg_dump`/`pg_restore`); attachments/settings/
+> version-metadata backup has no deployment-side documentation — a host-side
+> documentation gap (not a product capability), recordable alongside the
+> ADR-023 PR-C convergence. See
+> [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md).
+
 #### Crash and outage recovery
 
 - API/host/PostgreSQL/Redis/worker/scanner failure matrix;
@@ -365,6 +388,12 @@ done by P7 is **not part of P7 closure** and is tracked by its Issue
 - classify deployment secrets vs runtime operational settings vs Exam policies;
 - database-backed typed/versioned/audited settings where safe;
 - effective-value/source display, preview, rollback, import/export, restart marker;
+  *(import/export was never implemented and stays declined under the P7-E0
+  "no generic settings subsystem" verdict;
+  [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) records an
+  authorized non-sensitive application configuration export as an
+  independent, unimplemented candidate capability — not part of this
+  campaign)*;
 - publish and Attempt policy snapshots that isolate active exams from later edits.
 
 #### Exam policy profiles
@@ -380,6 +409,9 @@ done by P7 is **not part of P7 closure** and is tracked by its Issue
 - system status center;
 - settings center;
 - backup/recovery center;
+  *(declined by [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md)
+  — the product-side backup/recovery evidence center is removed; the status
+  center's health/diagnostics presentation remains)*;
 - exam-profile creation wizard and resolved-policy preview;
 - responsive/accessibility and existing visual-authority migration closeout.
 
@@ -394,11 +426,22 @@ done by P7 is **not part of P7 closure** and is tracked by its Issue
   is satisfied by the recorded decision.
 - Redis queue/cache/coordination workloads declare persistence and eviction policy.
 - a clean-host restore drill meets the declared deployment profile.
+  *(Retained as a Host/operator obligation.
+  [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) removes the
+  product-side RPO/RTO record (code in PR-B, tables in PR-C) — until then
+  the declared profile still lives in that product-side record; deployment
+  documentation stating the profile does not exist today. Recording the
+  retained drill obligation and the deployment profile in deployment
+  documentation is assigned to PR-C by ADR-023's Transition contract.)*
 - startup reconciliation repairs or reports supported incomplete states.
 - Admin can inspect and safely change supported non-secret settings with audit and rollback.
 - minimal/standard/controlled/strict profiles resolve to one validated policy schema.
 - published exams and active attempts are isolated from later profile/settings edits.
 - status/settings/backup/recovery/profile flows are usable through real UI.
+  *(The backup/recovery UI flows are declined by
+  [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md); the
+  historical P7 acceptance applied to the surfaces that existed at P7
+  close, and the status/settings/profile flows remain.)*
 
 ### Explicit boundaries
 
