@@ -10,6 +10,13 @@ Verification scope:
 Confirmed delivery-state drift families (P5-N1 notification labels) corrected
 and re-verified against current master. Earlier sections retain their
 point-in-time snapshot at cac6b85c (P5-0 / PR #210 baseline).
+
+ADR-023 target-state qualifier (2026-10-24):
+The §1 System Context Maintainer persona/relation render the accepted
+ADR-023 target (health / diagnostics only — ADR-017 rev 5 capability
+authority), not a runtime-verified snapshot; the live pre-PR-B preset holds
+five read capabilities until PR-B lands. All other content retains the
+commit baselines above.
 ```
 
 ---
@@ -25,7 +32,7 @@ C4Context
     person(proctor, "Proctor", "Exam-room runtime authority")
     person(grader, "Grader", "Manual scoring of subjective questions")
     person(candidate, "Candidate", "Takes assigned exams")
-    person(maintainer, "Maintainer", "Read-only operational observer (health / diagnostics / backup evidence)")
+    person(maintainer, "Maintainer", "Read-only operational observer (health / diagnostics)")
 
     system(exam_system, "Exam Platform", "LAN/on-premise exam and assessment platform")
 
@@ -36,7 +43,7 @@ C4Context
     rel(proctor, exam_system, "Monitors", "HTTPS / Web UI")
     rel(grader, exam_system, "Grades", "HTTPS / Web UI")
     rel(candidate, exam_system, "Takes exams", "HTTPS / Web UI")
-    rel(maintainer, exam_system, "Views operational health / diagnostics / evidence", "HTTPS / Web UI")
+    rel(maintainer, exam_system, "Views operational health / diagnostics", "HTTPS / Web UI")
 
     rel(exam_system, smtp, "Sends email", "SMTP (async)")
 ```
@@ -45,10 +52,17 @@ C4Context
 
 > [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md)
 > (2026-10-24) removes the backup-evidence surface from the Maintainer
-> window in its PR-B (routes) / PR-C (tables); the diagram above shows the
-> live implementation until that removal lands.
+> window in its PR-B (routes) / PR-C (tables). The Maintainer persona and
+> relation above render the **ADR-023 target set** — health / diagnostics
+> only; no business mutation, no Host-infrastructure authority. The live
+> runtime until PR-B lands is the **historical as-built / pre-PR-B** preset
+> of [ADR-017 rev 4](../../adr/ADR-017-operational-authority-maintainer-boundary.md):
+> five read capabilities, three of which observe the backup-evidence
+> surfaces being removed. **ADR-017 §Revision 5 is the capability
+> authority**; this diagram renders that decision, not a second RBAC
+> source.
 
-**Evidence**: 7 built-in role presets total — 6 assignable human roles (Admin, Teacher, Proctor, Grader, Candidate, Maintainer; Maintainer added by P7-E2A — read-only Operational Observer; ADR-017) + 1 synthetic non-assignable System actor (not rendered as a person; deadline auto-submit / heartbeat scan / reconcile). Maintainer holds exactly 5 operational `*.view` capabilities, 0 business permissions, 0 writes *(ADR-023 re-baselines the set to health/diagnostics — 5 → 2 — in its PR-B; the five remain the live implementation until then)* — the relation is **observation only: no business mutation, no infrastructure execution**. Admin ∩ Maintainer = ∅ is enforced server-side (D14). SMTP is the only external system dependency (async via the in-process email outbox loop).
+**Evidence**: 7 built-in role presets total — 6 assignable human roles (Admin, Teacher, Proctor, Grader, Candidate, Maintainer; Maintainer added by P7-E2A — read-only Operational Observer; ADR-017) + 1 synthetic non-assignable System actor (not rendered as a person; deadline auto-submit / heartbeat scan / reconcile). Maintainer target set (ADR-017 rev 5 via ADR-023) is exactly 2 read capabilities — `system.health.view`, `system.diagnostics.view` — 0 business permissions, 0 writes, no Host-infrastructure authority *(until PR-B lands, the live preset still implements the rev-4 set of 5 `*.view` capabilities — historical as-built / pre-PR-B; see the ADR-023 note above)* — the relation is **observation only: no business mutation, no infrastructure execution**. Admin ∩ Maintainer = ∅ is enforced server-side (D14). SMTP is the only external system dependency (async via the in-process email outbox loop).
 **Known limitations**: Teacher/Proctor/Grader are Phase 3 roles (capability infrastructure exists; product role UI is incomplete). Teacher course-scope is NOT enforced — see P7-RBAC F-04. Email delivery is the only async external dependency. No CDN, no cloud services, no external APIs.
 
 ---
