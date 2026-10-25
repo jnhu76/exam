@@ -133,7 +133,7 @@ async function resolveBystander(runId, svc) {
 }
 
 /** Image id + PGDATA bind-mount source for a container (D5 identity evidence). */
-async function containerDetails(id) {
+export async function containerDetails(id) {
   const { stdout } = await execFileP("docker", ["inspect", id], {
     encoding: "utf8",
     maxBuffer: 8 * 1024 * 1024,
@@ -145,6 +145,19 @@ async function containerDetails(id) {
     image_ref: insp.Config?.Image ?? null,
     pgdata_mount_source: pgMount?.Source ?? pgMount?.source ?? null,
   };
+}
+
+/**
+ * Survival check shell (F9 regression, D5-01): the postgres:18 Debian image
+ * puts PGDATA at /var/lib/postgresql/<major>/docker and every file is owned
+ * by the container's postgres uid — the host process can neither assume the
+ * unversioned <pgdata>/PG_VERSION path nor stat inside at all. The check
+ * therefore runs INSIDE a throwaway read-only container bind-mounting
+ * EXACTLY this run's postgres dir, and searches by layout, not by a fixed
+ * path.
+ */
+export function pgdataSurvivalShell() {
+  return 'found=0; for f in $(find /pgdata -maxdepth 3 -name PG_VERSION 2>/dev/null); do echo "FOUND $f version=$(cat "$f")"; found=1; done; test "$found" = "1"';
 }
 
 /** Compose-scoped command for THIS run's project only. */
@@ -265,10 +278,15 @@ export async function executeFault(runId, { arm, trialId, autoRestartWindowMs, p
     });
     await step("pgdata_survival", async () => {
       const p = runPaths(runId);
-      if (!fs.existsSync(path.join(p.pgdata, "PG_VERSION"))) {
-        throw new Error(`PG_VERSION missing after down — PGDATA did not survive`);
-      }
-      return { pgdata: p.pgdata, pg_version_file: fs.readFileSync(path.join(p.pgdata, "PG_VERSION"), "utf8").trim() };
+      // F9: host-side stat cannot reach the versioned, postgres-uid-owned
+      // PGDATA (D5-01 failure). Verify from inside a throwaway read-only
+      // container bind-mounting EXACTLY this run's postgres dir.
+      const { stdout } = await execFileP(
+        "docker",
+        ["run", "--rm", "-v", `${p.pgdata}:/pgdata:ro`, "alpine:latest", "sh", "-c", pgdataSurvivalShell()],
+        { encoding: "utf8", timeout: 60000, maxBuffer: 1024 * 1024 },
+      );
+      return { pgdata: p.pgdata, findings: stdout.trim().split("\n").filter(Boolean) };
     });
     await step("observe_faulted_dwell", async () => {
       const dwell = postActionDwellMs ?? POST_ACTION_DWELL_MS[arm] ?? 0;

@@ -32,6 +32,7 @@ import {
   parseBrowserVerified,
 } from "./browser-schema.mjs";
 import { summarizeProbeSamples } from "./probe.mjs";
+import { pgdataSurvivalShell } from "./fault.mjs";
 import { parsePsqlJsonRows } from "./oracle.mjs";
 
 const args = process.argv.slice(2);
@@ -694,6 +695,40 @@ function winEvent(overrides = {}) {
       s.observed_api_outage === "OBSERVED" && s.static.observed === false,
     );
   }
+}
+
+// ── T33 F9 regression: PGDATA survival vs the versioned layout ─────
+// D5-01 live failure: the postgres:18 Debian image puts PGDATA at
+// /var/lib/postgresql/<major>/docker, so a host-side check of
+// <pgdata>/PG_VERSION mis-fires and aborts a real trial. The fixed check
+// runs inside a throwaway read-only container and searches by layout.
+{
+  const dir = fs.mkdtempSync("/tmp/e817-r0-t33-");
+  fs.mkdirSync(path.join(dir, "18", "docker"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "18", "docker", "PG_VERSION"), "18\n");
+  // The old (buggy) check: fixed unversioned path.
+  const oldCheck = fs.existsSync(path.join(dir, "PG_VERSION"));
+  // Host-side mirror of the fixed shell's find semantics (the real check
+  // runs in-container where postgres-uid permissions do not apply).
+  const findLike = (root, depth = 0) => {
+    let hits = [];
+    for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+      const p = path.join(root, e.name);
+      if (e.isDirectory() && depth + 1 < 3) hits = hits.concat(findLike(p, depth + 1));
+      else if (e.isFile() && e.name === "PG_VERSION") hits.push(p);
+    }
+    return hits;
+  };
+  const hits = findLike(dir);
+  const shell = pgdataSurvivalShell();
+  record(
+    "T33",
+    "F9: PGDATA survival searches the versioned layout, not a fixed host path",
+    { oldCheckFails: true, newHits: 1, shellSearchesByFind: true },
+    { oldCheckFails: oldCheck === false, newHits: hits.length, shellSearchesByFind: /find \/pgdata -maxdepth 3 -name PG_VERSION/.test(shell) },
+    oldCheck === false && hits.length === 1 && /find \/pgdata -maxdepth 3 -name PG_VERSION/.test(shell),
+    { dir },
+  );
 }
 
 // ── Receipt + events ──────────────────────────────────────────────

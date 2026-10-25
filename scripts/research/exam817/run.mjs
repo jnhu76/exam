@@ -36,9 +36,10 @@ import {
   snapshotAttempt,
   writePgSnapshotEvidence,
 } from "./oracle.mjs";
-import { executeFault, FAULT_PLAN, probeRecovery, resolveInterruptedFault, captureServiceLogs, composeStartService, D3_APP_AUTO_RECOVERY_WINDOW_MS } from "./fault.mjs";
+import { executeFault, FAULT_PLAN, probeRecovery, resolveInterruptedFault, captureServiceLogs, composeStartService, containerDetails, resolveTarget, D3_APP_AUTO_RECOVERY_WINDOW_MS } from "./fault.mjs";
 import { startFaultWindowProbe, summarizeProbeFile } from "./probe.mjs";
 import { BrowserSchemaError, browserResultContract, parseBrowserVerified } from "./browser-schema.mjs";
+import { faultStatePath } from "./fault.mjs";
 
 const execFileP = promisify(execFile);
 
@@ -1251,6 +1252,119 @@ async function cmdVerdict(runId) {
   await writeVerdict(runId, st, writer, {});
 }
 
+/**
+ * Continue a trial whose fault FAILED after its mutating step completed
+ * (F9/D5-01: a harness-side check aborted between `compose down` and
+ * `compose up`). The fault itself demonstrably fired (journaled); this
+ * command performs the DOCUMENTED REMAINING HALF — never a re-fault:
+ *   D5         → compose up (same project, same PGDATA)
+ *   stop_start → compose start <target>
+ * The early UNKNOWN verdict stays in history (revision chain); the amended
+ * FAULT_APPLIED receipt marks the continuation explicitly.
+ */
+async function cmdResumeRecovery(runId) {
+  const st = loadState(runId);
+  if (st.phase !== "incomplete" || st.fault_terminal?.kind !== "FAULT_FAILED") {
+    throw new Error(`resume-recovery requires phase=incomplete + FAULT_FAILED terminal (got phase=${st.phase}, terminal=${st.fault_terminal?.kind ?? "none"})`);
+  }
+  const originalFailure = st.fault_terminal.reason;
+  const faultState = JSON.parse(fs.readFileSync(faultStatePath(runId), "utf8"));
+  if (faultState.trial_id !== st.trial_id || faultState.arm !== st.arm) {
+    throw new Error("resume-recovery: fault journal does not match run state");
+  }
+  const okSteps = new Set((faultState.steps ?? []).filter((s) => s.ok).map((s) => s.name));
+  const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
+  const receipt = {
+    arm: st.arm,
+    trial_id: st.trial_id,
+    started_at: faultState.started_at,
+    resumed_after_fault_failed: true,
+    original_failure: originalFailure,
+  };
+
+  if (st.arm === "D5") {
+    if (!okSteps.has("compose_down")) {
+      throw new Error("resume-recovery: compose_down not journaled as complete — refusing (stack state unproven)");
+    }
+    receipt.pre = (faultState.steps ?? []).find((s) => s.name === "pre_identity")?.result ?? null;
+    receipt.down_at =
+      (faultState.steps ?? []).find((s) => s.name === "compose_down")?.result?.down_at ??
+      (faultState.steps ?? []).find((s) => s.name === "compose_down")?.at ??
+      null;
+    receipt.down_ms = (faultState.steps ?? []).find((s) => s.name === "compose_down")?.result?.down_ms ?? null;
+    receipt.fault_command_duration_ms = receipt.down_ms;
+    console.log("resume-recovery: compose up (same project, same PGDATA)...");
+    const upStart = Date.now();
+    const { composeUp } = await import("./stack.mjs");
+    await composeUp(runId);
+    receipt.up_at = new Date().toISOString();
+    receipt.up_ms = Date.now() - upStart;
+    // Wait for Running state, then rebuild post identity.
+    const deadline = Date.now() + 90000;
+    let lastErr = null;
+    for (;;) {
+      try {
+        for (const svc of ["app", "web", "db"]) await resolveTarget(runId, svc);
+        break;
+      } catch (e) {
+        lastErr = e.message;
+        if (Date.now() > deadline) throw new Error(`containers not running within 90s after resume up: ${lastErr}`);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+    receipt.post = {};
+    for (const svc of ["app", "web", "db"]) {
+      const t = await resolveTarget(runId, svc);
+      receipt.post[svc] = { ...t, ...(await containerDetails(t.id)) };
+    }
+    receipt.container_ids_changed = Object.fromEntries(
+      Object.keys(receipt.post).map((svc) => [svc, receipt.pre?.[svc]?.id !== receipt.post[svc].id]),
+    );
+    receipt.pgdata_mount_source_same =
+      receipt.pre?.db?.pgdata_mount_source != null && receipt.pre.db.pgdata_mount_source === receipt.post.db.pgdata_mount_source;
+    receipt.image_ids_same = Object.fromEntries(
+      Object.keys(receipt.post).map((svc) => [svc, receipt.pre?.[svc]?.image_id != null && receipt.pre[svc].image_id === receipt.post[svc].image_id]),
+    );
+  } else if (st.fault_plan.action === "stop_start") {
+    if (!okSteps.has("graceful_stop")) {
+      throw new Error("resume-recovery: graceful_stop not journaled as complete — refusing");
+    }
+    receipt.container_id = (faultState.steps ?? []).find((s) => s.name === "pre_identity")?.result?.id ?? null;
+    receipt.stop_at = (faultState.steps ?? []).find((s) => s.name === "graceful_stop")?.at ?? null;
+    console.log(`resume-recovery: compose start ${st.fault_plan.target}...`);
+    const startRes = await composeStartService(runId, st.fault_plan.target);
+    receipt.start_at = startRes.at;
+    receipt.start_ms = startRes.ms;
+    const post = await resolveTarget(runId, st.fault_plan.target);
+    receipt.post_restart = { id: post.id, startedAt: post.startedAt, same_container_id: post.id === receipt.container_id };
+  } else {
+    throw new Error(`resume-recovery: no continuation defined for arm ${st.arm}`);
+  }
+
+  // Fresh probe segment for the continuation, appended to the same samples
+  // file so the outage summary spans the full real down window.
+  const probe = await startFaultWindowProbe({
+    runId: st.run_id,
+    origin: st.origin,
+    evidenceDir: runPaths(runId).evidenceDir,
+    trialId: st.trial_id,
+  });
+
+  st.fault_terminal = { kind: "FAULT_APPLIED", receipt };
+  st.phase = "fault_done";
+  saveState(runId, st);
+  writer.append("RESUME_RECOVERY", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    arm: st.arm,
+    original_failure: originalFailure,
+    continuation: st.arm === "D5" ? "compose up (same PGDATA)" : `compose start ${st.fault_plan.target}`,
+    up_at: receipt.up_at ?? receipt.start_at ?? null,
+  });
+  console.log("RESUME_RECOVERY journaled; running recovery phase");
+  await runRecoveryPhase(runId, st, writer, receipt, probe);
+}
+
 // ── cleanup / report ──────────────────────────────────────────────
 
 async function cmdCleanup(runId, { deleteData = false } = {}) {
@@ -1379,6 +1493,9 @@ const getOpt = (name, dflt) => {
         browserTimeoutSec: Number(getOpt("--browser-timeout-sec", "900")),
       });
       break;
+    case "resume-recovery":
+      await cmdResumeRecovery(runId);
+      break;
     case "status":
       cmdStatus(runId);
       break;
@@ -1389,7 +1506,7 @@ const getOpt = (name, dflt) => {
       cmdReport(runId);
       break;
     default:
-      console.error(`usage: run.mjs <init|deploy|seed|publish|wait|status|cleanup|report> <run_id> [options]`);
+      console.error(`usage: run.mjs <init|deploy|seed|publish|wait|resume-recovery|status|cleanup|report> <run_id> [options]`);
       process.exit(2);
   }
 })().catch((e) => {

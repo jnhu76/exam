@@ -81,7 +81,10 @@ export async function startFaultWindowProbe({ runId, origin, evidenceDir, trialI
   let lastError = null;
 
   fs.mkdirSync(evidenceDir, { recursive: true });
-  fs.writeFileSync(
+  // Append, never overwrite: a resumed trial (fault-failed continuation)
+  // appends segment 2 to the same samples file so the outage summary spans
+  // the full wall-clock window the service was really down.
+  fs.appendFileSync(
     samplesPath,
     JSON.stringify({ kind: "exam817/fault-window-probe", run_id: runId, trial_id: trialId, origin, interval_ms: intervalMs, started_at: startedAtIso }) + "\n",
   );
