@@ -196,6 +196,101 @@ docker compose --env-file .env.production up -d
 
 ---
 
+### 2.7 ADR-023 upgrade gate — backup-evidence preservation before 0045
+
+ADR-023 removed the product-owned backup-evidence subsystem; the release
+carrying migration `0045_drop_backup_evidence_tables` drops the five
+tables that applied migrations 0031–0034 created (`backup_runs`,
+`backup_run_events`, `restore_drill_runs`, `retention_runs`,
+`backup_operational_policy`).
+
+**Why an upgrade can intentionally fail to start:** the entrypoint
+migrates on every boot (§2.3), and 0045 carries a built-in
+evidence-preservation gate — if ANY of the five tables still holds rows,
+the migration aborts BEFORE any DROP, the whole migrate transaction rolls
+back, no journal entry is recorded, and the `app` container stays down
+with the gate error in its logs (`docker compose ... logs app`). Tables
+and rows are intact. That abort is the designed outcome: a deployment
+cannot silently lose backup evidence by upgrading. Deployments that never
+used the feature (all five tables empty) pass the gate and need nothing
+from this section.
+
+Gate workflow for deployments holding rows:
+
+1. **Inventory (read-only).**
+   ```bash
+   PROD="docker compose --env-file .env.production -f docker-compose.yml"
+   PGUSER="$($PROD exec -T db printenv POSTGRES_USER < /dev/null)"
+   PGDB="$($PROD exec -T db printenv POSTGRES_DB < /dev/null)"
+   for t in backup_runs backup_run_events restore_drill_runs \
+            retention_runs backup_operational_policy; do
+     $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -tAc \
+       "SELECT '$t =', count(*) FROM $t"
+   done
+   ```
+2. **Owner decision.** The deployment owner records the evidence
+   disposition (export-then-drop, or discard). No production DELETE or
+   TRUNCATE runs before this disposition is recorded — the migration
+   itself never deletes rows (it refuses non-empty tables), so any
+   deletion is always a human-executed, owner-authorized step, in this
+   workflow.
+3. **Export.** The upgrade checklist's mandatory pre-upgrade backup
+   (runbook §15, `db-backup.sh backup`) already contains all five tables.
+   For a focused artifact, additionally export the table set with the
+   runbook §17 canonical mechanism, table-scoped (`db-backup.sh` is
+   whole-database only):
+   ```bash
+   $PROD exec -T db pg_dump -U "$PGUSER" -Fc \
+     -t backup_runs -t backup_run_events -t restore_drill_runs \
+     -t retention_runs -t backup_operational_policy \
+     "$PGDB" < /dev/null > exam-backup-evidence-$(date +%F).dump
+   ```
+4. **Verify the export.** Restore the dump with the runbook §17.2
+   isolated drill (one-off container, identity assertion, production
+   canary) and check the five tables' row counts against step 1 — extend
+   the drill's canned acceptance queries with the five evidence tables
+   when verifying this export.
+5. **Authorized cleanup.** Only with the disposition recorded and the
+   export verified:
+   ```bash
+   $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 \
+     -c 'TRUNCATE backup_run_events, backup_runs, restore_drill_runs, retention_runs, backup_operational_policy' \
+     < /dev/null
+   ```
+6. **Recheck empty.** Re-run step 1 — all five counts must be `0`.
+7. **Apply 0045.** `docker compose --env-file .env.production up -d` with
+   the new release: the entrypoint migrates, the gate passes, the journal
+   records 0045, the tables are dropped.
+8. **Post-verify.** §2.6 checklist plus:
+   ```bash
+   $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -tAc \
+     "SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND tablename IN
+        ('backup_runs','backup_run_events','restore_drill_runs','retention_runs','backup_operational_policy')"
+   # expected: 0
+   ```
+
+Declining the upgrade (keeping the evidence in place): redeploy the
+previous release. The aborted 0045 recorded no journal entry, so the
+database is still at the pre-0045 schema and runs unchanged under the old
+image. After step 7 has succeeded, rollback is only the §2.5
+restore path — in the migrated database the tables are gone.
+
+Record the gate outcome per deployment, in the operator's own records
+(never in this repository): deployment identifier, environment type,
+whether a production database exists, current schema/migration head, the
+five table counts, whether historical evidence is present, whether an
+export was required, export verification result, the data-destruction
+authorization (who, when), and 0045 rollout readiness. Production record
+contents, credentials, and sensitive paths stay out of GitHub.
+
+The DO gate inside 0045 is the LAST line of defense, not a deployment
+approval system: the disposition workflow above is the actual gate, and
+blocking the rollout before `up -d` (runbook §15) is the primary control.
+An operator who sees the gate error has skipped the workflow, not hit a
+tooling failure.
+
+---
+
 ## 3. Uninstall guide
 
 Choose the mode that matches the intent:
