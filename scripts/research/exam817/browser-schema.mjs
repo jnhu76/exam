@@ -43,7 +43,10 @@ export const BROWSER_RESULT_LEGACY_FIELDS = new Set([
 ]);
 
 // Event-envelope keys that legitimately coexist on a merged event object
-// (normalizeWindowsEvent merges payload into the envelope).
+// (normalizeWindowsEvent merges payload into the envelope). `writer` is part
+// of the event identity convention (run_id+trial_id+writer+seq) — F12/D5-02:
+// the strict whitelist must cover every legitimate envelope field or the
+// gate rejects conforming receipts.
 const ENVELOPE_KEYS = new Set([
   "schema_version",
   "run_id",
@@ -53,6 +56,7 @@ const ENVELOPE_KEYS = new Set([
   "event",
   "timestamp_utc",
   "payload",
+  "writer",
 ]);
 
 export class BrowserSchemaError extends Error {

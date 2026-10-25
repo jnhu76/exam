@@ -502,10 +502,11 @@ function winEvent(overrides = {}) {
 
   // T20: a conforming v2 event parses and maps to the oracle's browser_state.
   {
-    const parsed = parseBrowserVerified(validEvent, { manifestQuestions, attemptId });
+    const withWriter = { ...validEvent, writer: "windows" };
+    const parsed = parseBrowserVerified(withWriter, { manifestQuestions, attemptId });
     record(
       "T20",
-      "F7: conforming v2 BROWSER_VERIFIED parses to oracle browser_state",
+      "F7: conforming v2 BROWSER_VERIFIED (incl. envelope writer) parses to oracle browser_state",
       { questions: 2, schema: 2 },
       { questions: Object.keys(parsed.browser_state).length, schema: parsed.schema_version },
       parsed.schema_version === 2 &&

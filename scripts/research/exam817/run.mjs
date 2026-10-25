@@ -14,7 +14,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { atomicWriteJson, EventWriter, JsonlFileReader, dedupKey, SCHEMA_VERSION, sha256Hex } from "./mailbox.mjs";
+import { atomicWriteJson, EventWriter, JsonlFileReader, dedupKey, readPublishedJson, SCHEMA_VERSION, sha256Hex } from "./mailbox.mjs";
 import {
   BASE_SHA,
   captureDeploymentEvidence,
@@ -1206,6 +1206,13 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
       deployment_identity: "deployment-identity.json",
     },
     window_error: st.window_error ?? null,
+    // The Windows harness's aggregate result attestation (windows-result.json).
+    // NOT a substitute for the per-question BROWSER_VERIFIED event — recorded
+    // so a destroyed/absent browser event is visible next to what Windows
+    // claims it observed (F13: an events-file rewrite destroyed D5-02's
+    // per-question receipt; the attestation survives here, the verdict
+    // stays fail-closed).
+    windows_result_summary: st.windows_result ?? null,
     generated_at: new Date().toISOString(),
   };
   atomicWriteJson(path.join(mailboxDir(runId), "verdict.json"), verdictBody);
@@ -1254,6 +1261,51 @@ async function cmdVerdict(runId) {
       saveState(runId, st);
     }
   }
+  // F12 repair-clause replay: a browser receipt rejected by an older
+  // validator's whitelist stays in windows.events.jsonl as the raw receipt.
+  // After a deterministic schema-gate fix, re-parse it with the current
+  // frozen schema and adopt it — the earlier UNKNOWN verdict stays in the
+  // journal (revision chain), and only STRICTLY VALID receipts are adopted.
+  if (!st.browser_state && st.attempt_id) {
+    const eventsPath = path.join(mailboxDir(runId), WINDOWS_EVENTS);
+    if (fs.existsSync(eventsPath)) {
+      for (const line of fs.readFileSync(eventsPath, "utf8").split("\n").filter(Boolean)) {
+        let rec = null;
+        try {
+          rec = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (rec?.event !== "BROWSER_VERIFIED" || rec.run_id !== st.run_id || rec.trial_id !== st.trial_id) continue;
+        const ev = normalizeWindowsEvent(rec);
+        try {
+          const parsed = parseBrowserVerified(ev, {
+            manifestQuestions: st.manifest_questions ?? [],
+            attemptId: st.attempt_id,
+          });
+          st.browser_verified = {
+            at: ev.timestamp_utc,
+            attempt_id: parsed.attempt_id,
+            schema_version: parsed.schema_version,
+            reload_at: parsed.reload_at,
+            identity_confirmed: parsed.identity_confirmed,
+            session_reauth_required: parsed.session_reauth_required,
+            evidence_ref: ev.evidence_ref ?? `event:${ev.event_id}`,
+            raw_event_id: ev.event_id,
+            replayed_after_schema_fix: true,
+          };
+          st.browser_state = parsed.browser_state;
+          saveState(runId, st);
+          console.log(`browser receipt replayed from raw event ${ev.event_id} (schema-gate fix)`);
+          break;
+        } catch (e) {
+          console.log(`browser receipt ${rec.event_id} still rejected by the frozen schema: ${e.code ?? ""} ${e.message.slice(0, 120)}`);
+        }
+      }
+    }
+  }
+  // Windows aggregate result attestation, if the Windows harness published one.
+  st.windows_result = readPublishedJson(path.join(mailboxDir(runId), "windows-result.json")) ?? null;
   // F7: no alias-chain re-derivation. browser_state comes exclusively from
   // the strict v2 parse at BROWSER_VERIFIED dispatch time.
   const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
