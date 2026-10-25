@@ -1104,7 +1104,11 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
           manifestQuestions: st.manifest_questions,
           attemptRow: loadSnapshotRow(runId, st.post_snapshot?.ref),
           ackState: st.ack_state,
-          browserState: st.phase === "verdict_phase" ? st.browser_state : null,
+          // F11: an absent browser leg must surface as per-question NOT_RUN
+          // (fail closed), never as an empty map that vacuously passes the
+          // COMPLETE branch. Only the BROWSER_VERIFIED handler (phase
+          // verdict_phase) populates st.browser_state.
+          browserState: st.browser_state ?? {},
           apiState: st.api_state ?? null,
         })
       : null;
@@ -1144,7 +1148,11 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
       finalReason = `API leg incomplete for ${apiCounts.NOT_RUN ?? 0}/${apiCounts.UNKNOWN ?? 0} question(s)`;
     } else if ((browserCounts.NOT_RUN ?? 0) > 0 || (browserCounts.UNKNOWN ?? 0) > 0) {
       finalVerdict = "UNKNOWN";
-      finalReason = `browser leg incomplete for ${browserCounts.NOT_RUN ?? 0}/${browserCounts.UNKNOWN ?? 0} question(s)`;
+      finalReason = `browser leg incomplete (NOT_RUN=${browserCounts.NOT_RUN ?? 0}, UNKNOWN=${browserCounts.UNKNOWN ?? 0})`;
+    } else if (!st.browser_verified) {
+      // Belt and suspenders: COMPLETE requires a received BROWSER_VERIFIED.
+      finalVerdict = "UNKNOWN";
+      finalReason = "browser leg never received (no BROWSER_VERIFIED event) — COMPLETE is not available";
     } else if (st.rto?.graceful_stop_escalated === true) {
       // D1 discipline (#817 D135 brief §6): a stop that ended in SIGKILL is
       // never reported as a pure graceful-stop success, even when every

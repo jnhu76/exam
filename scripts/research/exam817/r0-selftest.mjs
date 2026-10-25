@@ -33,6 +33,7 @@ import {
 } from "./browser-schema.mjs";
 import { summarizeProbeSamples } from "./probe.mjs";
 import { pgdataSurvivalShell } from "./fault.mjs";
+import { classifyPerQuestion } from "./oracle.mjs";
 import { parsePsqlJsonRows } from "./oracle.mjs";
 
 const args = process.argv.slice(2);
@@ -728,6 +729,30 @@ function winEvent(overrides = {}) {
     { oldCheckFails: oldCheck === false, newHits: hits.length, shellSearchesByFind: /find \/pgdata -maxdepth 3 -name PG_VERSION/.test(shell) },
     oldCheck === false && hits.length === 1 && /find \/pgdata -maxdepth 3 -name PG_VERSION/.test(shell),
     { dir },
+  );
+}
+
+// ── T34 F11 regression: absent browser leg = NOT_RUN, never vacuous pass ──
+{
+  const manifestQuestions = [
+    { question_id: "00000000-0000-0000-0000-0000000000q1", order: 1, type: "fill_blank", expected_gen1: "x", expected_gen2: null },
+  ];
+  const attemptRow = {
+    id: "00000000-0000-0000-0000-00000000000a",
+    status: "in_progress",
+    answers: [{ questionId: "00000000-0000-0000-0000-0000000000q1", answer: "x", version: 1, savedAt: "2026-10-26T00:00:00.000Z" }],
+  };
+  const ackState = { "00000000-0000-0000-0000-0000000000q1": { generation: 1, serverVersion: 1, evidence_ref: "synthetic", answer_value: "x" } };
+  // browserState = {} (no BROWSER_VERIFIED received): PG leg matches, but the
+  // browser classification must be NOT_RUN — the verdict layer treats any
+  // NOT_RUN as fail-closed UNKNOWN.
+  const r = classifyPerQuestion({ manifestQuestions, attemptRow, ackState, browserState: {}, apiState: {} });
+  record(
+    "T34",
+    "F11: absent browser/API legs classify per-question NOT_RUN (never vacuously absent)",
+    { browser: "NOT_RUN", api: "NOT_RUN", pg: "ACK_MATCHED" },
+    { browser: r[0].browser_classification, api: r[0].api_classification, pg: r[0].classification },
+    r[0].browser_classification === "NOT_RUN" && r[0].api_classification === "NOT_RUN" && r[0].classification === "ACK_MATCHED",
   );
 }
 
