@@ -410,8 +410,9 @@ duties.)
 - settings center;
 - backup/recovery center;
   *(declined by [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md)
-  — the product-side backup/recovery evidence center is removed; the status
-  center's health/diagnostics presentation remains)*;
+  — the product-side backup/recovery evidence center is removed by
+  ADR-023's PR-B; the status center's health/diagnostics presentation
+  remains)*;
 - exam-profile creation wizard and resolved-policy preview;
 - responsive/accessibility and existing visual-authority migration closeout.
 
