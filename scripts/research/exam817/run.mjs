@@ -552,7 +552,8 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
           st.browser_state = {};
           for (const b of perQ) {
             st.browser_state[b.question_id] = {
-              visible_value: b.browser_value !== undefined ? b.browser_value : (b.visible_value !== undefined ? b.visible_value : null),
+              // Windows layouts seen so far: browser_value (D0), browser_answer (D2).
+              visible_value: b.browser_value ?? b.visible_value ?? b.browser_answer ?? null,
               answer_digest: b.answer_digest ?? null,
               evidence_ref: b.evidence_ref ?? st.browser_verified.evidence_ref,
             };
@@ -1061,6 +1062,47 @@ function loadSnapshotRow(runId, snapshotFile) {
   return JSON.parse(fs.readFileSync(p, "utf8")).row;
 }
 
+/**
+ * Republish the trial verdict from persisted state (idempotent; no fault
+ * execution, no mailbox dispatch — a fresh VERDICT_PUBLISHED with a unique
+ * seq is appended, which the protocol already treats as normal). Used when
+ * evidence parsing improved after a fail-closed verdict, or to bake the F5
+ * RTO correction into the verdict body from the persisted fault receipt.
+ */
+async function cmdVerdict(runId) {
+  const st = loadState(runId);
+  if (!st.pre_snapshot || !st.post_snapshot) {
+    throw new Error(`verdict requires both snapshots (pre=${!!st.pre_snapshot} post=${!!st.post_snapshot})`);
+  }
+  // F5 correction: if the live path failed to compute the true outage window
+  // (receipt.steps lookup gap), recompute it from the persisted fault
+  // receipt's own mutating-step timestamp + the probe's first_ok_at.
+  if (st.rto && st.rto.outage_window_ms == null && st.rto.first_ok_at && st.fault_terminal?.receipt) {
+    const r = st.fault_terminal.receipt;
+    const appliedAt = r.kill_at ?? r.stop_at ?? r.down_at ?? null;
+    if (appliedAt) {
+      st.rto.outage_window_ms = Date.parse(st.rto.first_ok_at) - Date.parse(appliedAt);
+      st.rto.outage_note = "recomputed at verdict time from the fault receipt timestamp + probe first_ok_at (F5)";
+      saveState(runId, st);
+    }
+  }
+  // Re-derive browser_state from the raw per-question array: the persisted
+  // state may hold a browser_state built by an older field mapping.
+  if (Array.isArray(st.browser_verified?.browser_answers)) {
+    st.browser_state = {};
+    for (const b of st.browser_verified.browser_answers) {
+      st.browser_state[b.question_id] = {
+        visible_value: b.browser_value ?? b.visible_value ?? b.browser_answer ?? null,
+        answer_digest: b.answer_digest ?? null,
+        evidence_ref: b.evidence_ref ?? st.browser_verified.evidence_ref,
+      };
+    }
+    saveState(runId, st);
+  }
+  const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
+  await writeVerdict(runId, st, writer, {});
+}
+
 // ── cleanup / report ──────────────────────────────────────────────
 
 async function cmdCleanup(runId, { deleteData = false } = {}) {
@@ -1179,6 +1221,9 @@ const getOpt = (name, dflt) => {
       break;
     case "publish":
       await cmdPublish(runId);
+      break;
+    case "verdict":
+      await cmdVerdict(runId);
       break;
     case "wait":
       await cmdWait(runId, {
