@@ -71,9 +71,11 @@ export class ApiClient {
 //   - fill_blank / text_response: free text carrying the full marker
 //     `${runId}|${trialId}|q<order>|g<generation>` plus fixed prose, so PG
 //     content comparison is marker-exact.
-// Question 10 embeds a CRLF pair inside the answer text — the real PG row
-// then exercises the same CRLF preservation semantics the mailbox was
-// R0-tested for.
+// Question 10 is multi-line: authored in canonical LF form (F1, #819 — a
+// real HTML textarea normalizes Enter to LF, so the browser can only ever
+// submit LF; the manifest must not promise CRLF it cannot deliver). The
+// persisted PG row then exercises real newline preservation through the
+// versioned save protocol.
 
 export function buildQuestionSpecs(markerFor) {
   return [
@@ -194,13 +196,14 @@ export function buildQuestionSpecs(markerFor) {
     {
       order: 10,
       type: "text_response",
-      content: "#817-TR-10：简述 CRLF 在本协议中的语义（答案内包含换行，请保留原文换行）",
+      content: "#817-TR-10：简述换行符在本协议中的语义（答案内包含换行，请保留原文换行）",
       standardAnswer: null,
-      rubric: "参考：记录只以 LF 结束；字符串内部的 CRLF 必须转义传输并原样保留。",
+      rubric: "参考：记录只以 LF 结束；浏览器 textarea 会把 Enter 归一化为 LF，多行答案以 LF 形式提交并原样持久化。",
       score: 10,
-      // Real CRLF inside the persisted answer — ties mailbox CRLF semantics
-      // to actual PostgreSQL content.
-      gen1: (m) => `第一行：标记 ${m}|q10|g1。\r\n第二行：本答案包含真实 CRLF，用于验证 PG 内容逐字节保留。`,
+      // Canonical LF newline inside the persisted answer (F1: matches what a
+      // real textarea submits) — ties newline preservation to actual
+      // PostgreSQL content.
+      gen1: (m) => `第一行：标记 ${m}|q10|g1。\n第二行：本答案包含真实 LF 换行，用于验证 PG 内容逐字节保留。`,
       gen2: null,
     },
   ];

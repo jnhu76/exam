@@ -25,6 +25,7 @@ import {
   sha256Hex,
   validateEnvelope,
 } from "./mailbox.mjs";
+import { parsePsqlJsonRows } from "./oracle.mjs";
 
 const args = process.argv.slice(2);
 if (args.length < 2) {
@@ -415,6 +416,52 @@ function winEvent(overrides = {}) {
     { ts: r1.ok, seq: r2.ok },
     r1.ok === false && r2.ok === false,
     { reasons: [r1.reason, r2.reason] },
+  );
+}
+
+// ── T17/T18/T19 F3 regression: psql stdout parsing (#819) ─────────
+// Historical failure: `psql -At` echoes BEGIN/COMMIT command tags when a
+// query runs multi-statement; the snapshot parser must never let that shape
+// corrupt (or silently shrink) an attempt snapshot.
+{
+  const row = JSON.stringify({ id: "00000000-0000-0000-0000-00000000000a", status: "in_progress", answers: [] });
+  // T17: clean single-statement output parses to exactly one row, no tags.
+  const clean = parsePsqlJsonRows(`${row}\n`);
+  record(
+    "T17",
+    "F3: single-SELECT psql stdout parses to exactly one JSON row",
+    { rows: 1, tags: 0 },
+    { rows: clean.rows.length, tags: clean.psqlTags.length },
+    clean.rows.length === 1 && clean.rows[0].id === "00000000-0000-0000-0000-00000000000a" && clean.psqlTags.length === 0,
+  );
+
+  // T18: the historical F3 shape (tag echo around the JSON row) still parses
+  // AND the tags are reported — tolerated, never silently dropped.
+  const tagged = parsePsqlJsonRows(`BEGIN\n${row}\nCOMMIT\n`);
+  record(
+    "T18",
+    "F3: BEGIN/COMMIT tag echo tolerated and surfaced, row intact",
+    { rows: 1, tags: ["BEGIN", "COMMIT"] },
+    { rows: tagged.rows.length, tags: tagged.psqlTags },
+    tagged.rows.length === 1 && tagged.rows[0].status === "in_progress" && JSON.stringify(tagged.psqlTags) === JSON.stringify(["BEGIN", "COMMIT"]),
+  );
+
+  // T19: any other unexpected stdout is a LOUD error — the parser must not
+  // skip lines it does not recognize ("cannot silently ignore stdout").
+  let threw = false;
+  let threwMessage = "";
+  try {
+    parsePsqlJsonRows(`psql: warning: connection reset\n${row}\n`, { what: "T19 probe" });
+  } catch (e) {
+    threw = true;
+    threwMessage = e.message;
+  }
+  record(
+    "T19",
+    "F3: unexpected non-JSON psql stdout throws (never silently ignored)",
+    { threw: true, mentions: "T19 probe" },
+    { threw, message: threwMessage.slice(0, 120) },
+    threw && threwMessage.includes("T19 probe"),
   );
 }
 

@@ -25,12 +25,13 @@ import {
   runPaths,
   waitForHealthy,
 } from "./stack.mjs";
-import { seedExamData } from "./seed.mjs";
+import { seedExamData, ApiClient } from "./seed.mjs";
 import {
   capturePgSettings,
   captureWalRecoveryLog,
   classifyPerQuestion,
   oracleMutationRedTest,
+  parsePsqlJsonRows,
   pgQuery,
   snapshotAttempt,
   writePgSnapshotEvidence,
@@ -204,6 +205,7 @@ async function cmdSeed(runId) {
 
 function buildScenario(st) {
   const gen2Questions = st.manifest_questions.filter((q) => q.expected_gen2 !== null).map((q) => q.question_id);
+  const signalForAction = { kill: "SIGKILL", stop_start: "SIGTERM (graceful docker stop)" };
   return {
     schema_version: SCHEMA_VERSION,
     kind: "exam817/scenario",
@@ -217,6 +219,7 @@ function buildScenario(st) {
     fault: {
       arm: st.arm,
       target: st.fault_plan.target,
+      signal: signalForAction[st.fault_plan.action] ?? null,
       trigger: "ALL_EXPECTED_SAVES_ACCEPTED",
       description: st.fault_plan.label,
     },
@@ -230,7 +233,10 @@ function buildScenario(st) {
         single_choice: "option id string, e.g. \"A\"",
         multiple_choice: "array of option ids, e.g. [\"A\",\"B\"]",
         fill_blank: "exact marker string, type it verbatim",
-        text_response: "exact string including any newlines (use the editor's own line breaks for \\r\\n)",
+        // F1 (#819): a real textarea normalizes Enter to LF — the manifest's
+        // multi-line values are authored in that canonical LF form, so typing
+        // them verbatim produces exactly the ACKed expectation.
+        text_response: "exact string; multi-line values already use LF (\\n) line breaks, type verbatim (the textarea's Enter produces the same LF)",
       },
     },
     answer_flow: {
@@ -512,6 +518,7 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
             continue;
           }
           st.attempt_id = attemptId;
+          st.last_save_at = ev.timestamp_utc ?? null;
           st.ack_state[qid] = {
             generation: ev.generation ?? null,
             serverVersion: ack.serverVersion,
@@ -645,7 +652,7 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   const sql =
     `SELECT row_to_json(t) FROM (SELECT id, status FROM exam_attempts WHERE exam_id = '${st.exam_id}') t;`;
   const { stdout } = await pgQuery(runId, sql);
-  const attempts = stdout.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const attempts = parsePsqlJsonRows(stdout, { what: "checkpoint attempt identity" }).rows;
   const active = attempts.filter((a) => a.status === "in_progress");
   if (active.length !== 1 || active[0].id !== ev.attempt_id) {
     throw new Error(
@@ -655,7 +662,7 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
 
   // 3. PRE-fault authoritative snapshot (read-only; latency recorded).
   const pre = await snapshotAttempt(runId, ev.attempt_id);
-  if (!pre) throw new Error("pre-fault snapshot: attempt row not found");
+  if (!pre?.row) throw new Error("pre-fault snapshot: attempt row not found");
   const preEv = await writePgSnapshotEvidence(runId, st.trial_id, "pre", pre);
   writer.append("PG_SNAPSHOT_TAKEN", {
     run_id: st.run_id,
@@ -669,6 +676,38 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   console.log(`pre-fault snapshot taken (${preEv.latencyMs.toFixed(0)}ms)`);
   st.pre_snapshot = { ref: path.basename(preEv.file), sha256: preEv.sha256, latency_ms: preEv.latencyMs };
 
+  // 3b. Pre-fault consistency gate (§5): PostgreSQL must already hold every
+  // ACKed answer BEFORE any fault. A divergence here is a harness/protocol
+  // problem, not a fault result — STOP, never fire the fault on top of it.
+  const preClassified = classifyPerQuestion({
+    manifestQuestions: st.manifest_questions,
+    attemptRow: pre.row,
+    ackState: st.ack_state,
+  });
+  const preBad = preClassified.filter((q) => q.classification !== "ACK_MATCHED");
+  st.pre_consistency = {
+    classifications: Object.fromEntries(preClassified.map((q) => [q.question_id, q.classification])),
+    scenario_deviations: preClassified.filter((q) => q.scenario_deviation).map((q) => q.question_id),
+    last_save_to_checkpoint_ms:
+      st.last_save_at && ev.timestamp_utc ? Date.parse(ev.timestamp_utc) - Date.parse(st.last_save_at) : null,
+  };
+  if (preBad.length > 0) {
+    writer.append("CHECKPOINT_REJECTED", {
+      run_id: st.run_id,
+      trial_id: st.trial_id,
+      attempt_id: ev.attempt_id,
+      problems: preBad.map((q) => ({ question_id: q.question_id, classification: q.classification, pg_version: q.pg_version, expected_server_version: q.expected_server_version })),
+      reason: "pre-fault PG state does not match the last verified ACKs — fault NOT fired (fail closed)",
+    });
+    st.phase = "checkpoint_rejected";
+    saveState(runId, st);
+    await writeVerdict(runId, st, writer, {
+      verdict: "UNKNOWN",
+      reason: `CHECKPOINT_REJECTED: ${preBad.length} question(s) not ACK_MATCHED pre-fault (${preBad.slice(0, 3).map((q) => `${q.question_id.slice(0, 8)}:${q.classification}`).join(",")})`,
+    });
+    return;
+  }
+
   // 4. Persist FAULT_INTENT BEFORE touching Docker (replay-safety anchor).
   writer.append("FAULT_INTENT", {
     run_id: st.run_id,
@@ -679,15 +718,21 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
     attempt_id: ev.attempt_id,
     planned_action: st.fault_plan.action,
     planned_target: st.fault_plan.target,
+    pre_consistency: st.pre_consistency,
   });
   st.fault_intent_written = true;
   st.phase = "fault_phase";
   saveState(runId, st);
 
-  // 5. Execute the fault (identity-gated inside).
+  // 5. Execute the fault (identity-gated inside). D2 freezes a 5s
+  // auto-restart observation window (experiment condition, not an SLA).
   let receipt;
   try {
-    receipt = await executeFault(runId, { arm: st.arm, trialId: st.trial_id });
+    receipt = await executeFault(runId, {
+      arm: st.arm,
+      trialId: st.trial_id,
+      autoRestartWindowMs: st.arm === "D2" ? 5000 : undefined,
+    });
     st.fault_terminal = { kind: "FAULT_APPLIED", receipt };
   } catch (e) {
     st.fault_terminal = { kind: "FAULT_FAILED", reason: e.message };
@@ -709,20 +754,78 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   saveState(runId, st);
   console.log(`fault applied: ${st.arm} (${st.fault_plan.label})`);
 
+  // 5b. Static-page probe: nginx (web) must keep serving the SPA while the
+  // app is down/restarting. Recorded with the app's state AT PROBE TIME so
+  // the "during outage" claim is never overstated.
+  st.static_page_probe = null;
+  if (st.fault_plan.target === "app") {
+    try {
+      const t0 = Date.now();
+      const res = await fetch(`${st.origin}/`, { signal: AbortSignal.timeout(5000) });
+      const body = await res.text();
+      const { stdout: appState } = await execFileP(
+        "docker",
+        ["inspect", "-f", "{{.State.Status}}", receipt.container_id],
+        { encoding: "utf8" },
+      );
+      st.static_page_probe = {
+        at: new Date(t0).toISOString(),
+        status: res.status,
+        html: body.slice(0, 80).includes("<!doctype html") || body.slice(0, 80).includes("<html"),
+        content_type: res.headers.get("content-type"),
+        app_state_at_probe: appState.trim(),
+        ms: Date.now() - t0,
+      };
+      console.log(`static page probe: ${res.status} (app ${appState.trim()} at probe time)`);
+    } catch (e) {
+      st.static_page_probe = { at: new Date().toISOString(), error: e.message.slice(0, 200) };
+    }
+  }
+
   // 6. Recovery: probe until the full chain answers again.
   const faultEndedAt = new Date().toISOString();
   const recovery = await probeRecovery(runId, { timeoutMs: 300000 });
   if (!recovery.recovered) {
     st.phase = "incomplete";
     saveState(runId, st);
-    await writeVerdict(runId, st, writer, { verdict: "UNKNOWN", reason: "service did not recover within 300s" });
+    await writeVerdict(runId, st, writer, { verdict: "RECOVERY_TIMEOUT", reason: "service did not recover within 300s" });
     return;
   }
   console.log(`service recovered in ${recovery.window_ms}ms`);
 
   // 7. POST snapshot + PG settings + WAL recovery logs.
   const post = await snapshotAttempt(runId, ev.attempt_id);
+  if (!post?.row) {
+    st.phase = "incomplete";
+    saveState(runId, st);
+    await writeVerdict(runId, st, writer, { verdict: "UNKNOWN", reason: "attempt row missing after fault — cannot classify" });
+    return;
+  }
   const postEv = await writePgSnapshotEvidence(runId, st.trial_id, "post", post);
+  // 7b. Lifecycle guard (§8): the attempt must still exist in its original
+  // status — no unexpected submit/void/disrupted transition from the fault.
+  if (pre.row.status !== post.row.status) {
+    st.phase = "incomplete";
+    saveState(runId, st);
+    await writeVerdict(runId, st, writer, {
+      verdict: "UNKNOWN",
+      reason: `attempt lifecycle anomaly: status changed ${pre.row.status} → ${post.row.status} across the fault`,
+    });
+    return;
+  }
+
+  // 7c. API third leg: fetch the authoritative Take Snapshot through the
+  // REAL serving path (nginx → app → db) as the recovered candidate.
+  // COMPLETE requires ACK → PG → API → Browser agreement (§8).
+  let apiLeg = null;
+  try {
+    apiLeg = await captureApiTakeSnapshot(runId, st);
+    st.api_snapshot = { ref: path.basename(apiLeg.file), sha256: apiLeg.sha256, attempt_status: apiLeg.attemptStatus };
+    st.api_state = apiLeg.apiState;
+  } catch (e) {
+    st.api_snapshot_error = e.message.slice(0, 300);
+  }
+
   const wal = st.arm.startsWith("D3") || st.arm.startsWith("D4") ? await captureWalRecoveryLog(runId, faultEndedAt) : { log: "", note: "not a db arm" };
   const pgSettings = await capturePgSettings(runId);
   const recoveryRef = `pg-recovery-${st.trial_id}.json`;
@@ -733,6 +836,9 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
     wal_recovery_log: wal,
     pg_settings: pgSettings,
     post_snapshot_ref: path.basename(postEv.file),
+    api_snapshot_ref: st.api_snapshot?.ref ?? null,
+    api_snapshot_error: st.api_snapshot_error ?? null,
+    static_page_probe: st.static_page_probe,
   });
 
   st.post_snapshot = { ref: path.basename(postEv.file), sha256: postEv.sha256, latency_ms: postEv.latencyMs };
@@ -745,6 +851,7 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
     .map((s) => s.at)[0];
   const outageWindowMs =
     recovery.first_ok_at && faultStepAt ? Date.parse(recovery.first_ok_at) - Date.parse(faultStepAt) : null;
+  const probeSawFailure = (recovery.probes ?? []).some((p) => p.error || (p.status && p.status >= 500));
   st.rto = {
     window_ms: recovery.window_ms,
     probe: recovery.url,
@@ -752,6 +859,15 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
     fault_applied_at: faultStepAt ?? receipt.started_at ?? null,
     outage_window_ms: outageWindowMs,
     outage_note: outageWindowMs === null ? null : "SIGKILL/stop -> chain /api/ready first OK (includes any restart-policy observation window)",
+    fault_command_duration_ms: receipt.fault_command_duration_ms ?? receipt.stop_ms ?? null,
+    app_restart_mode: receipt.auto_restart === undefined ? null : receipt.auto_restart ? "restart_policy" : "operator_manual_start",
+    app_restart_started_at: receipt.restarted_started_at ?? receipt.manual_start_at ?? null,
+    auto_restart_window_ms: receipt.auto_restart_window_ms ?? null,
+    operator_wait_ms:
+      receipt.manual_start_at && receipt.kill_at ? Date.parse(receipt.manual_start_at) - Date.parse(receipt.kill_at) : null,
+    app_unavailable_observed: probeSawFailure,
+    app_unavailable_note: probeSawFailure ? null : "recovery probe started after the fault step and saw no failure — outage window measured from kill timestamp, not from a failed probe",
+    bystanders_unchanged: receipt.bystanders_unchanged ?? null,
   };
   st.phase = "service_recovered";
   saveState(runId, st);
@@ -761,11 +877,59 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
     trial_id: st.trial_id,
     arm: st.arm,
     rto_window_ms: recovery.window_ms,
+    outage_window_ms: outageWindowMs,
     probe: recovery.url,
+    app_restart_mode: st.rto.app_restart_mode,
     pg_recovery_evidence_ref: `../evidence/${recoveryRef}`,
+    api_snapshot_ref: st.api_snapshot?.ref ?? null,
     note: st.arm === "D0" ? "no-fault arm: baseline reload checkpoint" : "service chain healthy; browser reload may proceed",
   });
   console.log("SERVICE_RECOVERED emitted; waiting for BROWSER_VERIFIED");
+}
+
+/**
+ * API take-snapshot leg: log in as the candidate over the REAL serving path
+ * and fetch GET /candidate/attempts/:attemptId/take (CandidateTakeSnapshot —
+ * the frontend's business truth source). Credentials come from the local-only
+ * channel; the snapshot is stored as evidence with its sha256, and a compact
+ * apiState {questionId → {value, version, source}} is returned for the
+ * three-way comparator.
+ */
+async function captureApiTakeSnapshot(runId, st) {
+  const creds = JSON.parse(fs.readFileSync(path.join(mailboxDir(runId), "credentials.local.json"), "utf8"));
+  const client = new ApiClient(st.origin);
+  await client.login(creds.candidate.username, creds.candidate.password);
+  const snap = await client.must("GET", `/api/candidate/attempts/${st.attempt_id}/take`, undefined, [200]);
+  const apiState = {};
+  for (const q of snap.questions ?? []) {
+    apiState[q.id] = {
+      value: q.answerValue ?? null,
+      version: q.currentVersion ?? null,
+      source: q.answerSource ?? null,
+    };
+  }
+  const capturedAt = new Date().toISOString();
+  const file = path.join(runPaths(runId).evidenceDir, `api-snapshot-${st.trial_id}.json`);
+  const body = {
+    schema_version: SCHEMA_VERSION,
+    kind: "exam817/api-take-snapshot",
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    attempt_id: st.attempt_id,
+    captured_at: capturedAt,
+    attempt_status: snap.attemptStatus,
+    server_revision: snap.serverRevision,
+    snapshot: snap,
+    api_state: apiState,
+  };
+  atomicWriteJson(file, body);
+  return {
+    file,
+    sha256: sha256Hex(fs.readFileSync(file)),
+    attemptStatus: snap.attemptStatus,
+    apiState,
+    capturedAt,
+  };
 }
 
 async function writeVerdict(runId, st, writer, { verdict, reason }) {
@@ -778,14 +942,48 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
           attemptRow: loadSnapshotRow(runId, st.post_snapshot?.ref),
           ackState: st.ack_state,
           browserState: st.phase === "verdict_phase" ? st.browser_state : null,
+          apiState: st.api_state ?? null,
         })
       : null;
+  // counts = PG durability leg (ACK−P), the D0/D4 vocabulary.
   const counts = {};
   for (const q of perQuestion ?? []) counts[q.classification] = (counts[q.classification] ?? 0) + 1;
+  const browserCounts = {};
+  for (const q of perQuestion ?? []) {
+    if (q.browser_classification) browserCounts[q.browser_classification] = (browserCounts[q.browser_classification] ?? 0) + 1;
+  }
+  const apiCounts = {};
+  for (const q of perQuestion ?? []) {
+    if (q.api_classification) apiCounts[q.api_classification] = (apiCounts[q.api_classification] ?? 0) + 1;
+  }
   const deviations = (perQuestion ?? []).filter((q) => q.scenario_deviation);
 
+  // Fault-domain purity: any bystander id/StartedAt change poisons the trial.
+  const bystanders = st.fault_terminal?.receipt?.bystanders_unchanged ?? null;
+  const contaminated = bystanders !== null && Object.values(bystanders).some((v) => v === false);
+
   const mutation = oracleMutationRedTest();
-  const finalVerdict = verdict ?? (counts.ACK_LOST > 0 ? "LOSS_OBSERVED" : "COMPLETE");
+  let finalVerdict = verdict;
+  let finalReason = reason ?? null;
+  if (!finalVerdict) {
+    // Verdict vocabulary per #817 D2 brief §8. DATA_MISMATCH covers both the
+    // PG durability leg and the API serving leg (LOSS_OBSERVED in the #819
+    // D0/D4 vocabulary corresponds to DATA_MISMATCH here).
+    if (contaminated) finalVerdict = "FAULT_DOMAIN_CONTAMINATED";
+    else if ((counts.ACK_LOST ?? 0) > 0 || (counts.UNACKNOWLEDGED_UNKNOWN ?? 0) > 0) finalVerdict = "DATA_MISMATCH";
+    else if ((apiCounts.API_MISMATCH ?? 0) > 0) finalVerdict = "DATA_MISMATCH";
+    else if ((browserCounts.BROWSER_MISMATCH ?? 0) > 0) finalVerdict = "BROWSER_MISMATCH";
+    else if (st.api_snapshot_error) {
+      finalVerdict = "UNKNOWN";
+      finalReason = `COMPLETE requires the API serving leg; take snapshot failed: ${st.api_snapshot_error}`;
+    } else if ((apiCounts.NOT_RUN ?? 0) > 0 || (apiCounts.UNKNOWN ?? 0) > 0) {
+      finalVerdict = "UNKNOWN";
+      finalReason = `API leg incomplete for ${apiCounts.NOT_RUN ?? 0}/${apiCounts.UNKNOWN ?? 0} question(s)`;
+    } else if ((browserCounts.NOT_RUN ?? 0) > 0 || (browserCounts.UNKNOWN ?? 0) > 0) {
+      finalVerdict = "UNKNOWN";
+      finalReason = `browser leg incomplete for ${browserCounts.NOT_RUN ?? 0}/${browserCounts.UNKNOWN ?? 0} question(s)`;
+    } else finalVerdict = "COMPLETE";
+  }
 
   const verdictBody = {
     schema_version: SCHEMA_VERSION,
@@ -795,10 +993,16 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
     arm: st.arm,
     source_sha: BASE_SHA,
     verdict: finalVerdict,
-    reason: reason ?? null,
+    reason: finalReason,
+    verdict_semantics:
+      "COMPLETE requires real fault identity, 10/10 ACK_MATCHED on the PG leg, service recovery, and ACK→PG→API→Browser agreement; DATA_MISMATCH = server-side authority differs from the last ACK (PG or API leg); BROWSER_MISMATCH = server correct but candidate page diverges; FAULT_DOMAIN_CONTAMINATED = a non-target fault domain (db/redis) changed identity.",
     attempt_id: st.attempt_id,
     exam_id: st.exam_id,
     counts,
+    browser_counts: browserCounts,
+    api_counts: apiCounts,
+    fault_domain_contaminated: contaminated,
+    bystanders_unchanged: bystanders,
     scenario_deviations: deviations.map((d) => ({
       question_id: d.question_id,
       order: d.order,
@@ -809,12 +1013,16 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
     })),
     per_question: perQuestion,
     rto: st.rto ?? null,
+    static_page_probe: st.static_page_probe ?? null,
+    pre_consistency: st.pre_consistency ?? null,
     fault: st.fault_terminal ?? null,
     fault_resolved: st.fault_resolved ?? null,
     oracle_mutation_test: { red: mutation.red, green: mutation.green, detail: mutation.detail },
     evidence_refs: {
       pre_snapshot: st.pre_snapshot ?? null,
       post_snapshot: st.post_snapshot ?? null,
+      api_snapshot: st.api_snapshot ?? null,
+      api_snapshot_error: st.api_snapshot_error ?? null,
       browser: st.browser_verified?.evidence_ref ?? null,
       deployment_identity: "deployment-identity.json",
     },
@@ -827,10 +1035,13 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
     trial_id: st.trial_id,
     verdict: finalVerdict,
     counts,
+    browser_counts: browserCounts,
+    api_counts: apiCounts,
+    fault_domain_contaminated: contaminated,
     verdict_ref: "verdict.json",
     oracle_mutation_test: { red: mutation.red, green: mutation.green },
   });
-  console.log(`verdict: ${finalVerdict} ${JSON.stringify(counts)}`);
+  console.log(`verdict: ${finalVerdict} ${JSON.stringify(counts)} browser=${JSON.stringify(browserCounts)} api=${JSON.stringify(apiCounts)}`);
 }
 
 function loadSnapshotRow(runId, snapshotFile) {

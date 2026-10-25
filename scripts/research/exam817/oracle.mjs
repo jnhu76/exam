@@ -55,6 +55,47 @@ export async function pgQuery(runId, sql, { timeoutMs = 30000 } = {}) {
 }
 
 /**
+ * Parse psql stdout into JSON row objects (F3 regression, #819).
+ *
+ * psql -At echoes transaction command tags ("BEGIN"/"COMMIT"/"ROLLBACK")
+ * into stdout when a query runs multi-statement — the historical F3 failure.
+ * Known tags are tolerated but RETURNED (never silently dropped); empty
+ * lines are skipped; any other non-JSON line is a loud error. Unexpected
+ * stdout must fail the snapshot, never shrink it.
+ */
+const PSQL_TRANSACTION_TAGS = new Set(["BEGIN", "COMMIT", "ROLLBACK"]);
+
+export function parsePsqlJsonRows(stdout, { what = "psql output" } = {}) {
+  const rows = [];
+  const psqlTags = [];
+  const unexpected = [];
+  for (const rawLine of stdout.split("\n")) {
+    const line = rawLine.trim();
+    if (line === "") continue;
+    if (PSQL_TRANSACTION_TAGS.has(line)) {
+      psqlTags.push(line);
+      continue;
+    }
+    if (line.startsWith("{")) {
+      try {
+        rows.push(JSON.parse(line));
+        continue;
+      } catch (e) {
+        throw new Error(`${what}: JSON line failed to parse: ${e.message} :: ${line.slice(0, 120)}`);
+      }
+    }
+    unexpected.push(line);
+  }
+  if (unexpected.length > 0) {
+    throw new Error(
+      `${what}: unexpected non-JSON stdout (${unexpected.length} line(s)) — refusing to ignore: ` +
+        JSON.stringify(unexpected.slice(0, 3)),
+    );
+  }
+  return { rows, psqlTags };
+}
+
+/**
  * Authoritative pre/post snapshot of the attempt row. Uses row_to_json so
  * the answers jsonb array is compared verbatim.
  */
@@ -65,14 +106,16 @@ export async function snapshotAttempt(runId, attemptId) {
   }
   // Single SELECT = single implicit transaction (statement snapshot).
   // No explicit BEGIN/COMMIT: psql -At echoes their "BEGIN"/"COMMIT" tags
-  // into stdout, which is not JSON.
+  // into stdout, which is not JSON (F3).
   const sql =
     `SELECT row_to_json(t) FROM (SELECT id, exam_id, status, deadline_at, started_at, submitted_at, ` +
     `answers, submitted_answers, updated_at FROM exam_attempts WHERE id = '${safeId}') t;`;
   const { stdout, latencyMs } = await pgQuery(runId, sql);
-  const line = stdout.trim().split("\n").filter((l) => l.startsWith("{"))[0];
-  if (!line) return null;
-  return { row: JSON.parse(line), latencyMs, captured_at: new Date().toISOString() };
+  const { rows, psqlTags } = parsePsqlJsonRows(stdout, { what: "snapshotAttempt" });
+  if (rows.length > 1) {
+    throw new Error(`snapshotAttempt: expected 0..1 row, got ${rows.length}`);
+  }
+  return { row: rows[0] ?? null, latencyMs, captured_at: new Date().toISOString(), psql_tags: psqlTags };
 }
 
 export async function capturePgSettings(runId) {
@@ -84,8 +127,11 @@ export async function capturePgSettings(runId) {
       "current_setting('data_directory') AS data_directory, " +
       "current_setting('wal_level') AS wal_level, version() AS version) t;",
   );
-  const line = stdout.trim().split("\n").filter(Boolean)[0];
-  return { settings: JSON.parse(line), latencyMs, captured_at: new Date().toISOString() };
+  const { rows } = parsePsqlJsonRows(stdout, { what: "capturePgSettings" });
+  if (rows.length !== 1) {
+    throw new Error(`capturePgSettings: expected exactly 1 row, got ${rows.length}`);
+  }
+  return { settings: rows[0], latencyMs, captured_at: new Date().toISOString() };
 }
 
 export async function captureWalRecoveryLog(runId, sinceIso) {
@@ -145,8 +191,12 @@ function valuesEqual(expected, actual, type) {
  * @param attemptRow        row_to_json of exam_attempts (answers jsonb array)
  * @param ackState          per question {serverVersion, generation, evidence_ref, answer_value?, answer_digest?}
  * @param browserState      per question {visible_value?, answer_digest?} from BROWSER_VERIFIED (optional)
+ * @param apiState          per question {value, version, source} from the recovered
+ *                          GET /candidate/attempts/:id/take snapshot (optional; D2
+ *                          adds the ACK→PG→API third leg — the serving-path
+ *                          authority must re-present exactly what PG holds)
  */
-export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, browserState }) {
+export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, browserState, apiState }) {
   const answers = Array.isArray(attemptRow?.answers) ? attemptRow.answers : [];
   const latestByQuestion = new Map();
   for (const rec of answers) {
@@ -212,6 +262,26 @@ export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, b
       }
     }
 
+    let apiClassification = null;
+    if (apiState) {
+      const a = apiState[q.question_id] ?? null;
+      if (!a) apiClassification = "NOT_RUN";
+      else if (classification !== "ACK_MATCHED") apiClassification = "UNKNOWN"; // PG leg already failed; API leg secondary
+      else {
+        let match = null;
+        if (a.value !== null && a.value !== undefined) {
+          match = valuesEqual(ack?.answer_value ?? expectedValue, a.value, q.type);
+        }
+        const versionMismatch =
+          a.version !== null &&
+          a.version !== undefined &&
+          ack &&
+          Number(a.version) !== Number(ack.serverVersion);
+        apiClassification =
+          match === null ? "NOT_RUN" : match && !versionMismatch ? "ACK_MATCHED" : "API_MISMATCH";
+      }
+    }
+
     return {
       question_id: q.question_id,
       order: q.order,
@@ -230,6 +300,9 @@ export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, b
       scenario_deviation: scenarioDeviation,
       browser_classification: browserClassification,
       browser_value: browserState?.[q.question_id]?.visible_value ?? null,
+      api_classification: apiClassification,
+      api_value: apiState?.[q.question_id]?.value ?? null,
+      api_version: apiState?.[q.question_id]?.version ?? null,
     };
   });
 }

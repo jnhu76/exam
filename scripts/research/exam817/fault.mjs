@@ -26,6 +26,16 @@ export const FAULT_PLAN = {
   D5: { label: "compose down/up, same PGDATA", action: "down_up", target: null },
 };
 
+// Experiment condition, not an SLA: how long observe_auto_restart waits for
+// the restart policy before recording "no auto-restart" and recovering as the
+// operator. D2 freezes 5s (#817 D2 brief); D4 keeps its historical 30s for
+// comparability with #819.
+const AUTO_RESTART_WINDOW_MS = { D1: 30000, D2: 5000, D3: 30000, D4: 30000 };
+
+// Non-target services whose identity must stay untouched for a trial to
+// count as a pure single-domain fault (FAULT_DOMAIN_CONTAMINATED otherwise).
+const BYSTANDER_SERVICES = ["app", "db", "redis"];
+
 function runRoot(runId) {
   return runPaths(runId).root;
 }
@@ -99,9 +109,10 @@ export async function resolveTarget(runId, service) {
  * Execute one fault. Returns a receipt. Throws only on unexpected harness
  * errors; the receipt itself records command success/failure honestly.
  */
-export async function executeFault(runId, { arm, trialId }) {
+export async function executeFault(runId, { arm, trialId, autoRestartWindowMs } = {}) {
   const plan = FAULT_PLAN[arm];
   if (!plan) throw new Error(`unknown arm ${arm}`);
+  const restartWindowMs = autoRestartWindowMs ?? AUTO_RESTART_WINDOW_MS[arm] ?? 30000;
   const startedAt = new Date().toISOString();
   const state = {
     run_id: runId,
@@ -215,6 +226,18 @@ export async function executeFault(runId, { arm, trialId }) {
     return info;
   });
 
+  // Contamination evidence: identity of every non-target fault domain, taken
+  // before the mutation. A post-fault id/StartedAt change on any bystander
+  // marks the trial FAULT_DOMAIN_CONTAMINATED (not a pure single-domain arm).
+  const bystanders = BYSTANDER_SERVICES.filter((s) => s !== target);
+  if (bystanders.length > 0) {
+    await step("bystanders_pre", async () => {
+      receipt.bystanders_pre = {};
+      for (const svc of bystanders) receipt.bystanders_pre[svc] = await resolveTarget(runId, svc);
+      return receipt.bystanders_pre;
+    });
+  }
+
   if (plan.action === "stop_start") {
     await step("graceful_stop", async () => {
       const t0 = Date.now();
@@ -245,12 +268,14 @@ export async function executeFault(runId, { arm, trialId }) {
       receipt.kill_output = stdout.trim();
       receipt.kill_ms = Date.now() - t0;
       receipt.kill_at = new Date().toISOString();
+      receipt.fault_command_duration_ms = receipt.kill_ms;
+      receipt.signal = "SIGKILL";
       return receipt.kill_output;
     });
     await step("observe_auto_restart", async () => {
       // restart: unless-stopped SHOULD auto-restart a killed container.
-      // Observe the real behavior; never assume it.
-      const deadline = Date.now() + 30000;
+      // Observe the real behavior for the arm's frozen window; never assume it.
+      const deadline = Date.now() + restartWindowMs;
       let autoRestarted = false;
       let stateAfter = null;
       while (Date.now() < deadline) {
@@ -263,17 +288,39 @@ export async function executeFault(runId, { arm, trialId }) {
         await new Promise((r) => setTimeout(r, 500));
       }
       receipt.auto_restart = autoRestarted;
+      receipt.auto_restart_window_ms = restartWindowMs;
       receipt.state_after_kill_window = stateAfter;
-      if (!autoRestarted) {
+      if (autoRestarted) {
+        const { stdout: inspRaw } = await execFileP("docker", ["inspect", targetInfo.id], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+        const insp = JSON.parse(inspRaw)[0];
+        receipt.restarted_started_at = insp.State.StartedAt;
+        receipt.same_container_id_after_restart = insp.Id === targetInfo.id;
+      } else {
         // Record honestly and bring the service back as part of recovery.
         const t0 = Date.now();
         await dockerExec(["start", targetInfo.id]);
         receipt.manual_start_after_no_autorestart_ms = Date.now() - t0;
+        receipt.manual_start_at = new Date().toISOString();
       }
       return { autoRestarted, stateAfter };
     });
   } else {
     throw new Error(`unsupported action ${plan.action}`);
+  }
+
+  if (bystanders.length > 0) {
+    await step("bystanders_post", async () => {
+      receipt.bystanders_post = {};
+      for (const svc of bystanders) receipt.bystanders_post[svc] = await resolveTarget(runId, svc);
+      receipt.bystanders_unchanged = Object.fromEntries(
+        bystanders.map((svc) => [
+          svc,
+          receipt.bystanders_pre[svc].id === receipt.bystanders_post[svc].id &&
+            receipt.bystanders_pre[svc].startedAt === receipt.bystanders_post[svc].startedAt,
+        ]),
+      );
+      return receipt.bystanders_unchanged;
+    });
   }
 
   receipt.action = plan.action;
