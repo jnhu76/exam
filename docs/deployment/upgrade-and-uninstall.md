@@ -229,29 +229,46 @@ Gate workflow for deployments holding rows:
    done
    ```
 2. **Owner decision.** The deployment owner records the evidence
-   disposition (export-then-drop, or discard). No production DELETE or
+   disposition (preserve-then-drop, or discard). No production DELETE or
    TRUNCATE runs before this disposition is recorded — the migration
    itself never deletes rows (it refuses non-empty tables), so any
    deletion is always a human-executed, owner-authorized step, in this
    workflow.
-3. **Export.** The upgrade checklist's mandatory pre-upgrade backup
-   (runbook §15, `db-backup.sh backup`) already contains all five tables.
-   For a focused artifact, additionally export the table set with the
-   runbook §17 canonical mechanism, table-scoped (`db-backup.sh` is
-   whole-database only):
+3. **Fresh full backup — the authoritative preservation material.** Take
+   a whole-database custom dump NOW, after the step-1 inventory confirmed
+   the rows exist (a dump taken before the feature was ever used does
+   not contain them):
    ```bash
-   $PROD exec -T db pg_dump -U "$PGUSER" -Fc \
-     -t backup_runs -t backup_run_events -t restore_drill_runs \
-     -t retention_runs -t backup_operational_policy \
-     "$PGDB" < /dev/null > exam-backup-evidence-$(date +%F).dump
+   ./scripts/db-backup.sh backup /mnt/nas/exam-evidence-$(date +%F).dump
    ```
-4. **Verify the export.** Restore the dump with the runbook §17.2
-   isolated drill (one-off container, identity assertion, production
-   canary) and check the five tables' row counts against step 1 — extend
-   the drill's canned acceptance queries with the five evidence tables
-   when verifying this export.
+   This same dump satisfies the upgrade checklist's mandatory pre-upgrade
+   backup (runbook §15). Whole-database is deliberately the ONLY export
+   format this gate treats as verifiable preservation evidence: the five
+   tables carry foreign keys to `organizations` (migrations 0031–0033),
+   and PostgreSQL table-scoped dumps (`pg_dump -t`) do not include
+   referenced tables — a five-table-only dump cannot be restored into an
+   empty database (its FK constraints have nothing to bind to), so it
+   cannot be verified by restore and cannot stand alone as evidence. If
+   a table-scoped copy is kept anyway, treat it as a non-authoritative
+   convenience artifact; it is not the preservation record.
+4. **Verify by isolated drill (runbook §17.2).** Run the §17.2 drill
+   against the fresh dump — a full restore rebuilds every table and
+   foreign key of the dumped database, the five evidence tables included
+   — and insert one evidence-specific assertion between the drill's
+   acceptance queries and its teardown: the restored five-table counts
+   must equal the step-1 inventory.
+   ```bash
+   for t in backup_runs backup_run_events restore_drill_runs \
+            retention_runs backup_operational_policy; do
+     docker exec "$DRILL" psql -U postgres -d exam_drill \
+       -v ON_ERROR_STOP=1 -tAc "SELECT '$t =', count(*) FROM $t"
+   done
+   ```
+   The drill's fail-closed contract carries over unchanged: a run that
+   aborts at any step (§17.2) means the preservation material is NOT
+   verified, and step 5 must not run.
 5. **Authorized cleanup.** Only with the disposition recorded and the
-   export verified:
+   backup verified:
    ```bash
    $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 \
      -c 'TRUNCATE backup_run_events, backup_runs, restore_drill_runs, retention_runs, backup_operational_policy' \
@@ -278,10 +295,11 @@ restore path — in the migrated database the tables are gone.
 Record the gate outcome per deployment, in the operator's own records
 (never in this repository): deployment identifier, environment type,
 whether a production database exists, current schema/migration head, the
-five table counts, whether historical evidence is present, whether an
-export was required, export verification result, the data-destruction
-authorization (who, when), and 0045 rollout readiness. Production record
-contents, credentials, and sensitive paths stay out of GitHub.
+five table counts, whether historical evidence is present, the
+preservation backup path, the drill verification result (including the
+five-table count comparison), the data-destruction authorization (who,
+when), and 0045 rollout readiness. Production record contents,
+credentials, and sensitive paths stay out of GitHub.
 
 The DO gate inside 0045 is the LAST line of defense, not a deployment
 approval system: the disposition workflow above is the actual gate, and

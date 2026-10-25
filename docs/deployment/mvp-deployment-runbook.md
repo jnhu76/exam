@@ -1221,9 +1221,21 @@ drill/audit trail in the operator's own documentation:
 
 The drill restores a dump into a throwaway PostgreSQL container that has no
 connection to the production stack, runs database-level acceptance against
-it, then destroys the container. Two scripted negative controls enforce
-the isolation boundary; both must stay in any operator adaptation of this
-procedure:
+it, then destroys the container. The script is **fail-closed**: any
+failing step — container startup, readiness, `pg_restore`, acceptance
+SQL, or a negative control — aborts with a nonzero exit before anything
+can be recorded as verified, and an EXIT trap removes the drill container
+on success and failure paths alike. A drill that cannot fail proves
+nothing: before trusting an operator adaptation of this procedure, run it
+once against a known-bad dump (a truncated or corrupted copy) and confirm
+it refuses to report success.
+
+Isolation is enforced by the boundary itself, not by after-the-fact
+checks: the drill container shares no network, volume, env file, or
+compose project with the production stack, publishes no ports, and every
+command targets it by name through its local socket. Two scripted
+negative controls are tripwires on top of that boundary; both must stay
+in any operator adaptation of this procedure:
 
 1. **In-target identity assertion** — before any `pg_restore`, assert
    `SELECT current_database()` in the drill target equals `exam_drill`.
@@ -1231,16 +1243,27 @@ procedure:
    "simplified" into `docker compose exec db …`), the assertion fails and
    the drill aborts before writing anything.
 2. **Production canary, before and after** — a read-only fingerprint of
-   the production database taken before the drill and re-checked after the
-   drill must be identical. A drill that restored over production would
-   reset it to dump-time values and fail here. On a system taking writes
-   during the drill this check fails conservatively — rerun the canary
-   pair in a quiet window rather than weakening the check.
+   the production database taken before the drill and re-checked after
+   the drill must be identical. This is a **limited detection signal,
+   not a proof that production was untouched** — equal counts do not
+   exclude writes that leave the counted values unchanged; the actual
+   guarantee is the container/connection/storage boundary above. The
+   canary catches gross accidents: a drill that restored over production
+   resets it to dump-time values and fails here. On a system taking
+   writes during the drill this check fails conservatively — rerun the
+   canary pair in a quiet window rather than weakening the check.
 
 ```bash
 DUMP=/mnt/nas/exam-20261025.dump            # the dump under test
 DRILL=exam-drill-$(date +%Y%m%d%H%M%S)      # throwaway container name
 PROD="docker compose --env-file .env.production -f docker-compose.yml"
+
+# --- fail-closed harness: any failing step aborts before a pass can be
+#     recorded, and the drill container is removed on the way out either
+#     way (paste and run the block as a whole, in bash)
+set -Eeuo pipefail
+cleanup() { docker rm -fv "$DRILL" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
 
 # --- negative control 2a: production canary BEFORE the drill (read-only)
 DRILL_PGUSER="$($PROD exec -T db printenv POSTGRES_USER < /dev/null)"
@@ -1265,9 +1288,22 @@ docker run --rm -d --name "$DRILL" \
 # Wait for the SECOND "ready to accept connections" log line: the image's
 # first-boot entrypoint starts a temporary initdb server that also accepts
 # connections before shutting down — a pg_isready loop alone can race that
-# window and fail on the socket gap.
+# window and fail on the socket gap. The wait is bounded and watches the
+# container state: a container that exits during startup (bad image,
+# entrypoint crash) or never becomes ready is an abort, not a hang.
+deadline=$((SECONDS + 120))
 until [ "$(docker logs "$DRILL" 2>&1 | grep -c \
   'database system is ready to accept connections')" -ge 2 ]; do
+  if ! docker inspect -f '{{.State.Running}}' "$DRILL" 2>/dev/null \
+      | grep -q true; then
+    echo "ABORT: drill container exited during startup" >&2
+    docker logs "$DRILL" 2>&1 | tail -5 >&2 || true
+    exit 1
+  fi
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    echo "ABORT: drill container not ready within 120s" >&2
+    exit 1
+  fi
   sleep 1
 done
 docker exec "$DRILL" createdb -U postgres exam_drill
@@ -1279,11 +1315,18 @@ docker exec "$DRILL" createdb -U postgres exam_drill
   exit 1
 }
 
-# --- restore + database-level acceptance
-# (stdin restore mirrors db-backup.sh; parallel restore -j>1 would need
-#  the dump as a real file inside the container)
-docker exec -i "$DRILL" pg_restore -U postgres --no-owner -d exam_drill \
-  < "$DUMP"
+# --- restore (stdin restore mirrors db-backup.sh; parallel restore -j>1
+#     would need the dump as a real file inside the container). A corrupt
+#     or truncated dump fails here and the drill aborts — nonzero exit,
+#     container removed by the trap, nothing recorded as verified.
+if ! docker exec -i "$DRILL" pg_restore -U postgres --no-owner -d exam_drill \
+  < "$DUMP"; then
+  echo "DRILL FAILED: pg_restore rejected the dump (corrupt, truncated, or not a custom-format archive?)" >&2
+  exit 1
+fi
+
+# --- database-level acceptance (ON_ERROR_STOP + set -e: a failing query
+#     aborts the drill instead of printing an empty result)
 docker exec "$DRILL" psql -U postgres -d exam_drill -v ON_ERROR_STOP=1 -tAc \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'"
 docker exec "$DRILL" psql -U postgres -d exam_drill -v ON_ERROR_STOP=1 -tAc \
@@ -1293,8 +1336,9 @@ docker exec "$DRILL" psql -U postgres -d exam_drill -v ON_ERROR_STOP=1 -tAc \
 docker exec "$DRILL" psql -U postgres -d exam_drill -v ON_ERROR_STOP=1 -tAc \
   "SELECT count(*) FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND contype = 'f'"
 
-# --- teardown (also removes the anonymous data volume)
-docker rm -fv "$DRILL"
+# --- teardown (also removes the anonymous data volume; the trap makes it
+#     idempotent on failure paths)
+docker rm -fv "$DRILL" >/dev/null
 
 # --- negative control 2b: production canary AFTER the drill — identical
 canary > /tmp/drill-canary-after.txt
@@ -1305,7 +1349,11 @@ diff /tmp/drill-canary-before.txt /tmp/drill-canary-after.txt || {
 ```
 
 Acceptance is recorded as two separate evidence lines; a pass on one line
-must never be recorded as the other:
+must never be recorded as the other. A drill that aborted at any step —
+container startup, readiness timeout, `pg_restore`, an acceptance query,
+or a negative control — is recorded as **FAILED with the failing step**;
+the abort message and nonzero exit are the failure evidence, and the run
+must not be softened into a partial pass.
 
 - **Database-level acceptance (every drill)**: `pg_restore` exit 0; the
   restored `public` schema contains the table set of the release the dump
