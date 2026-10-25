@@ -3093,6 +3093,48 @@ OWNER_DISPOSITION = 登记 + 门禁修复：turbo.json 将 @exam/web#coverage �
 
 ---
 
+### OBS-2026-10-25-001 — `pnpm verify` API coverage 三用例 5s 超时（PR-B rebase 后门禁；外部宿主饱和：已死会话孤儿 busy-loop）
+
+```text
+OBSERVED_AT = 2026-10-25 10:41–10:58 +08:00（PR-B remove/backup-evidence-subsystem
+  rebase 后 `pnpm verify` 与同代码 `--filter @exam/api coverage` 复跑）
+GIT_SHA = b2d8fdd4（PR-B 分支头；两轮失败与通过轮代码一致）
+BRANCH = remove/backup-evidence-subsystem
+COMMAND = `pnpm verify`；复跑 `TEST_DB_ISOLATION=worker-database
+  API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage`
+EXECUTION_TOPOLOGY = 本地 8 逻辑核 WSL2；turbo 已按 OBS-2026-10-24-001 修复串行
+  api→web coverage（无跨套件叠栈）；宿主 load average ≈17（8 核），由一个已死
+  zcode 会话（sess_dwf-dwfrun-…）孤儿化的 10+ 个 `while :; do :; done` busy-loop
+  shell 各占 ~63% CPU（其宿主脚本自带的 kill 清理因外层测试挂起未执行，进程已
+  reparent 到 /init）
+FAILED_FILE = ① apps/api/src/routes/audit.test.ts ② apps/api/src/routes/auth.test.ts
+  ③ apps/api/src/routes/httpSurfaceAuthority.test.ts（复跑轮 1 失败，victim 漂移）
+FAILED_TEST = ① audit export row-cap 拒绝 ② non-e2e mode enforces the route-level
+  login limiter（与 OBS-2026-08-31-001 同签名 victim）③ spec path is derived from
+  the single UI path authority
+FAILURE_CLASS = testTimeout 5000ms ×3（复跑 ×1，受害面漂移），无断言失配
+AUTHORITATIVE_RUN_RESULT = FAIL（两轮失败结果如实保留；第二轮复跑的 1 失败用例
+  身份因日志管道过滤未保全，记 UNKNOWN）
+RERUN_EVIDENCE = 清理孤儿 busy-loop（kill 孤儿进程树；非本仓库代码变更）后同代码
+  完整 `pnpm verify` EXIT=0（2026-10-25 11:10–11:25）：api 220 files / 2788
+  passed / 11 skipped、Duration 256s（过载轮 586s/409s → 恢复轮 256s，约 2.3×），
+  web 174 files / 2491 passed，build + lint:prod-resolution 通过
+NONDETERMINISM_CONFIRMED = YES（同代码：宿主过载 FAIL ×2 → 宿主恢复后全量 PASS；
+  唯一变量为外部 CPU 负载）
+CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED（CONTROLLED_EXCLUSION：受害文件均不在
+  PR-B diff；操纵变量是外部宿主负载而非 diff；受害面在两轮失败间漂移）
+ROOT_CAUSE_CONFIDENCE = PROVEN（外部宿主饱和：孤儿 busy-loop 进程实测各 ~63% CPU、
+  load 17 → 清理后 → 4；失败仅出现在过载窗口）
+FIRST_CAUSAL_DIVERGENCE = N/A（外部负载，非代码路径）
+CASE_ID = UNASSIGNED（AGGREGATION_BASIS = 签名级：与 OBS-2026-08-31-001 /
+  OBS-2026-10-23-001 同为"宿主负载型 5s 超时"家族；本次根因为明确的可移除外部
+  进程负载，不触发建案）
+OWNER_DISPOSITION = 登记 + 环境处置：清理孤儿进程，不改任何测试/配置/timeout。
+  本机重跑重套件门禁前应先确认 load average 回落到核数以内
+```
+
+---
+
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
 
 ```text
