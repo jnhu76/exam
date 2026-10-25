@@ -736,7 +736,23 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   });
 
   st.post_snapshot = { ref: path.basename(postEv.file), sha256: postEv.sha256, latency_ms: postEv.latencyMs };
-  st.rto = { window_ms: recovery.window_ms, probe: recovery.url, first_ok_at: recovery.first_ok_at };
+  // Two RTO figures: the probe window (probe starts after executeFault
+  // returns, so it can understate) and the true outage window from the
+  // fault's first mutating step (SIGKILL / graceful stop / compose down)
+  // to the first chain-ready response.
+  const faultStepAt = receipt.steps
+    ?.filter((s) => ["sigkill", "graceful_stop", "compose_down"].includes(s.name))
+    .map((s) => s.at)[0];
+  const outageWindowMs =
+    recovery.first_ok_at && faultStepAt ? Date.parse(recovery.first_ok_at) - Date.parse(faultStepAt) : null;
+  st.rto = {
+    window_ms: recovery.window_ms,
+    probe: recovery.url,
+    first_ok_at: recovery.first_ok_at,
+    fault_applied_at: faultStepAt ?? receipt.started_at ?? null,
+    outage_window_ms: outageWindowMs,
+    outage_note: outageWindowMs === null ? null : "SIGKILL/stop -> chain /api/ready first OK (includes any restart-policy observation window)",
+  };
   st.phase = "service_recovered";
   saveState(runId, st);
 
