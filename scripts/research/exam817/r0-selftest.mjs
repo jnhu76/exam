@@ -25,6 +25,13 @@ import {
   sha256Hex,
   validateEnvelope,
 } from "./mailbox.mjs";
+import {
+  BrowserSchemaError,
+  BROWSER_RESULT_SCHEMA_VERSION,
+  browserResultContract,
+  parseBrowserVerified,
+} from "./browser-schema.mjs";
+import { summarizeProbeSamples } from "./probe.mjs";
 import { parsePsqlJsonRows } from "./oracle.mjs";
 
 const args = process.argv.slice(2);
@@ -463,6 +470,230 @@ function winEvent(overrides = {}) {
     { threw, message: threwMessage.slice(0, 120) },
     threw && threwMessage.includes("T19 probe"),
   );
+}
+
+// ── T20–T28 F7: frozen BROWSER_VERIFIED schema v2 (#817 D135 brief §2) ──
+// History: D0 shipped browser_value, the as-built harness visible_value,
+// D2's Windows agent browser_answer — three layouts absorbed by alias
+// chains. v2 is canonical; every legacy layout MUST be rejected.
+{
+  const manifestQuestions = [
+    { question_id: "00000000-0000-0000-0000-0000000000q1", order: 1, type: "fill_blank", expected_gen1: "x", expected_gen2: null },
+    { question_id: "00000000-0000-0000-0000-0000000000q2", order: 2, type: "single_choice", expected_gen1: "A", expected_gen2: null },
+  ];
+  const attemptId = "00000000-0000-0000-0000-00000000000a";
+  const validEvent = {
+    schema_version: SCHEMA_VERSION,
+    run_id: runId,
+    trial_id: trialId,
+    seq: 9,
+    event_id: "evt-browser-v2-001",
+    event: "BROWSER_VERIFIED",
+    timestamp_utc: "2026-10-26T00:00:00.000Z",
+    browser_result_schema_version: BROWSER_RESULT_SCHEMA_VERSION,
+    attempt_id: attemptId,
+    per_question: [
+      { question_id: manifestQuestions[0].question_id, browser_answer: "x", browser_matches_last_ack: true },
+      { question_id: manifestQuestions[1].question_id, browser_answer: "A" },
+    ],
+  };
+
+  // T20: a conforming v2 event parses and maps to the oracle's browser_state.
+  {
+    const parsed = parseBrowserVerified(validEvent, { manifestQuestions, attemptId });
+    record(
+      "T20",
+      "F7: conforming v2 BROWSER_VERIFIED parses to oracle browser_state",
+      { questions: 2, schema: 2 },
+      { questions: Object.keys(parsed.browser_state).length, schema: parsed.schema_version },
+      parsed.schema_version === 2 &&
+        Object.keys(parsed.browser_state).length === 2 &&
+        parsed.browser_state[manifestQuestions[0].question_id].visible_value === "x" &&
+        parsed.browser_state[manifestQuestions[1].question_id].browser_matches_last_ack === null,
+      { contract_schema_version: browserResultContract().schema_version },
+    );
+  }
+  const expectReject = (id, desc, ev, code) => {
+    let threw = null;
+    try {
+      parseBrowserVerified(ev, { manifestQuestions, attemptId });
+    } catch (e) {
+      threw = e;
+    }
+    record(
+      id,
+      desc,
+      { threw: true, code },
+      { threw: threw !== null, code: threw?.code ?? null, message: threw?.message?.slice(0, 140) },
+      threw instanceof BrowserSchemaError && threw.code === code,
+    );
+  };
+
+  // T21: D0 layout (browser_value) rejected.
+  expectReject("T21", "F7: legacy D0 per_question field 'browser_value' rejected", {
+    ...validEvent,
+    per_question: [{ question_id: manifestQuestions[0].question_id, browser_value: "x" }],
+  }, "LEGACY_FIELD");
+
+  // T22: as-built layout (visible_value) rejected.
+  expectReject("T22", "F7: legacy as-built per_question field 'visible_value' rejected", {
+    ...validEvent,
+    per_question: [{ question_id: manifestQuestions[0].question_id, visible_value: "x" }],
+  }, "LEGACY_FIELD");
+
+  // T23: D0 top-level browser_answers[] layout rejected.
+  expectReject("T23", "F7: legacy top-level browser_answers[] layout rejected", {
+    ...validEvent,
+    browser_answers: [{ question_id: manifestQuestions[0].question_id, browser_answer: "x" }],
+  }, "LEGACY_FIELD");
+
+  // T24: attempt mismatch rejected.
+  expectReject("T24", "F7: attempt_id mismatch vs the trial attempt rejected", {
+    ...validEvent,
+    attempt_id: "00000000-0000-0000-0000-0000000000zz",
+  }, "ATTEMPT_MISMATCH");
+
+  // T25: a manifest question missing from per_question rejected.
+  expectReject("T25", "F7: manifest question missing from per_question rejected", {
+    ...validEvent,
+    per_question: [validEvent.per_question[0]],
+  }, "MISSING_QUESTION");
+
+  // T26: non-manifest question rejected.
+  expectReject("T26", "F7: non-manifest question_id rejected", {
+    ...validEvent,
+    per_question: [
+      ...validEvent.per_question,
+      { question_id: "00000000-0000-0000-0000-0000000000qx", browser_answer: "y" },
+    ],
+  }, "UNKNOWN_QUESTION");
+
+  // T27: unknown extra field rejected (no schema drift by accretion).
+  expectReject("T27", "F7: unknown top-level field rejected", {
+    ...validEvent,
+    browser_state_extra: {},
+  }, "UNKNOWN_FIELD");
+
+  // T28: missing or wrong browser_result_schema_version rejected.
+  {
+    const noVersion = { ...validEvent };
+    delete noVersion.browser_result_schema_version;
+    let threwA = null;
+    try {
+      parseBrowserVerified(noVersion, { manifestQuestions, attemptId });
+    } catch (e) {
+      threwA = e;
+    }
+    let threwB = null;
+    try {
+      parseBrowserVerified({ ...validEvent, browser_result_schema_version: 1 }, { manifestQuestions, attemptId });
+    } catch (e) {
+      threwB = e;
+    }
+    record(
+      "T28",
+      "F7: missing/wrong browser_result_schema_version rejected",
+      { missing: "SCHEMA_VERSION_MISSING", wrong: "SCHEMA_VERSION_UNSUPPORTED" },
+      { missing: threwA?.code ?? null, wrong: threwB?.code ?? null },
+      threwA?.code === "SCHEMA_VERSION_MISSING" && threwB?.code === "SCHEMA_VERSION_UNSUPPORTED",
+    );
+  }
+
+  // T29: browser_answer must be a canonical observable value; null is legal
+  // (empty field), plain objects are not.
+  {
+    let nullOk = null;
+    try {
+      parseBrowserVerified(
+        { ...validEvent, per_question: [{ question_id: manifestQuestions[0].question_id, browser_answer: null }, validEvent.per_question[1]] },
+        { manifestQuestions, attemptId },
+      );
+      nullOk = true;
+    } catch {
+      nullOk = false;
+    }
+    let objThrew = null;
+    try {
+      parseBrowserVerified(
+        { ...validEvent, per_question: [{ question_id: manifestQuestions[0].question_id, browser_answer: { nested: true } }] },
+        { manifestQuestions, attemptId },
+      );
+    } catch (e) {
+      objThrew = e;
+    }
+    record(
+      "T29",
+      "F7: browser_answer type gate — null allowed, plain object rejected",
+      { nullAllowed: true, objectCode: "BROWSER_ANSWER_TYPE" },
+      { nullAllowed: nullOk, objectCode: objThrew?.code ?? null },
+      nullOk === true && objThrew?.code === "BROWSER_ANSWER_TYPE",
+    );
+  }
+}
+
+// ── T30–T32 F6: fault-window probe summary (#817 D135 brief §2/§8) ──
+{
+  const mk = (tMs, api, stat, containers) => ({
+    t_ms: tMs,
+    t: new Date(new Date("2026-10-26T00:00:00.000Z").getTime() + tMs).toISOString(),
+    static: stat,
+    api_ready: api,
+    containers: containers ?? { app: "running", db: "running", web: "running" },
+  });
+  const ok = { ok: true, status: 200 };
+  const fail503 = { ok: false, status: 503 };
+
+  // T30: OBSERVED — failure samples bound the outage; the window is between
+  // the first failed sample and the first OK sample; bounded window includes
+  // the last OK before the failure.
+  {
+    const samples = [
+      mk(0, ok, ok),
+      mk(300, ok, ok),
+      mk(600, fail503, ok),
+      mk(900, fail503, ok),
+      mk(1200, ok, ok),
+    ];
+    const s = summarizeProbeSamples(samples, { intervalMs: 300, startedAtIso: samples[0].t, stoppedAtIso: samples[4].t });
+    record(
+      "T30",
+      "F6: observed outage computed from failed/OK samples only",
+      { observed: "OBSERVED", http_ms: 600, bounded_ms: 900 },
+      { observed: s.observed_api_outage, http_ms: s.api.observed_outage_ms, bounded_ms: s.api.bounded_outage_ms },
+      s.observed_api_outage === "OBSERVED" &&
+        s.api.observed_outage_ms === 600 &&
+        s.api.bounded_outage_ms === 900 &&
+        s.api.first_fail_at === samples[2].t &&
+        s.api.first_ok_after_fail_at === samples[4].t,
+    );
+  }
+
+  // T31: no failed sample → NOT_ESTABLISHED (never fabricated).
+  {
+    const samples = [mk(0, ok, ok), mk(300, ok, ok), mk(600, ok, ok)];
+    const s = summarizeProbeSamples(samples, { intervalMs: 300, startedAtIso: samples[0].t, stoppedAtIso: samples[2].t });
+    record(
+      "T31",
+      "F6: no failed sample → NOT_ESTABLISHED, no fabricated window",
+      { observed: "NOT_ESTABLISHED", http_ms: null },
+      { observed: s.observed_api_outage, http_ms: s.api?.observed_outage_ms ?? null, reason: s.not_established_reason },
+      s.observed_api_outage === "NOT_ESTABLISHED" && s.api.observed_outage_ms === undefined,
+    );
+  }
+
+  // T32: D3 shape — /api/ready fails (db down) while nginx static keeps
+  // serving; the two channels summarize independently.
+  {
+    const samples = [mk(0, ok, ok), mk(300, fail503, ok), mk(600, fail503, ok), mk(900, ok, ok)];
+    const s = summarizeProbeSamples(samples, { intervalMs: 300, startedAtIso: samples[0].t, stoppedAtIso: samples[3].t });
+    record(
+      "T32",
+      "F6: static and /api/ready channels summarize independently (D3 shape)",
+      { api: "OBSERVED", static_observed: false },
+      { api: s.observed_api_outage, static_observed: s.static.observed, static_failures: s.static.first_fail_at },
+      s.observed_api_outage === "OBSERVED" && s.static.observed === false,
+    );
+  }
 }
 
 // ── Receipt + events ──────────────────────────────────────────────

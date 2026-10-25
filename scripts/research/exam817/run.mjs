@@ -36,7 +36,9 @@ import {
   snapshotAttempt,
   writePgSnapshotEvidence,
 } from "./oracle.mjs";
-import { executeFault, FAULT_PLAN, probeRecovery, resolveInterruptedFault } from "./fault.mjs";
+import { executeFault, FAULT_PLAN, probeRecovery, resolveInterruptedFault, captureServiceLogs, composeStartService, D3_APP_AUTO_RECOVERY_WINDOW_MS } from "./fault.mjs";
+import { startFaultWindowProbe, summarizeProbeFile } from "./probe.mjs";
+import { BrowserSchemaError, browserResultContract, parseBrowserVerified } from "./browser-schema.mjs";
 
 const execFileP = promisify(execFile);
 
@@ -205,7 +207,11 @@ async function cmdSeed(runId) {
 
 function buildScenario(st) {
   const gen2Questions = st.manifest_questions.filter((q) => q.expected_gen2 !== null).map((q) => q.question_id);
-  const signalForAction = { kill: "SIGKILL", stop_start: "SIGTERM (graceful docker stop)" };
+  const signalForAction = {
+    kill: "SIGKILL",
+    stop_start: "SIGTERM (graceful compose stop, stop_grace_period from the frozen compose file)",
+    down_up: null,
+  };
   return {
     schema_version: SCHEMA_VERSION,
     kind: "exam817/scenario",
@@ -218,11 +224,15 @@ function buildScenario(st) {
     expected_question_count: st.expected_question_count,
     fault: {
       arm: st.arm,
+      action: st.fault_plan.action,
       target: st.fault_plan.target,
       signal: signalForAction[st.fault_plan.action] ?? null,
       trigger: "ALL_EXPECTED_SAVES_ACCEPTED",
       description: st.fault_plan.label,
     },
+    // F7: the frozen BROWSER_VERIFIED contract. Both ends share this exact
+    // shape; the WSL oracle validates strictly and rejects legacy layouts.
+    browser_result_contract: browserResultContract(),
     answer_manifest: {
       marker: st.marker,
       save_order_gen1: st.manifest_questions.map((q) => q.question_id),
@@ -253,8 +263,11 @@ function buildScenario(st) {
       "4. For each observed save request, append a SAVE_ACCEPTED event (accepted + server_version + evidence refs).",
       "5. Re-edit ONLY re_save_order_gen2 questions with expected_gen2 values; append SAVE_ACCEPTED for those too.",
       "6. When every question's LAST save is ACKed, append CHECKPOINT_READY {arm, attempt_id, saves[]}.",
-      "7. After the WSL side emits SERVICE_RECOVERED, reload the SAME candidate page, re-read every answer,",
-      "   and append BROWSER_VERIFIED {attempt_id, browser_answers[]}.",
+      "7. After the WSL side emits SERVICE_RECOVERED, reload the SAME candidate page (re-authenticate with",
+      "   credentials.local.json if the session was dropped and set session_reauth_required=true), re-read",
+      "   every answer, and append BROWSER_VERIFIED exactly per browser_result_contract:",
+      "   browser_result_schema_version=2 + per_question[{question_id, browser_answer}]. Legacy field layouts",
+      "   (browser_value / visible_value / browser_answers) are REJECTED and fail the trial.",
       "Do not write any other files in the run directory except windows.events.jsonl, windows-result.json",
       "and artifacts/windows/*.",
     ],
@@ -420,7 +433,7 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
   let browserDeadline = null;
 
   // Resume: an interrupted fault between INTENT and terminal event resolves
-  // from container evidence — never re-killed blindly.
+  // from the step journal + container evidence — never re-executed blindly.
   if (st.fault_intent_written && !st.fault_terminal) {
     console.log("resuming: FAULT_INTENT present without terminal receipt — resolving from container evidence");
     const res = await resolveInterruptedFault(runId, { arm: st.arm, trialId: st.trial_id });
@@ -430,6 +443,28 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
     if (res.classification === "APPLIED") {
       st.fault_terminal = { kind: "FAULT_APPLIED", receipt: res.receipt ?? null };
       st.phase = "fault_done";
+      saveState(runId, st);
+      await runRecoveryPhase(runId, st, writer, res.receipt ?? { arm: st.arm, interrupted: true });
+      if (st.phase === "incomplete") return;
+    } else if (res.classification === "APPLIED_NOT_RECOVERED") {
+      // The fault demonstrably fired but the target is left stopped. The
+      // operator start is RECOVERY, not a re-fault — the mutating step has
+      // already happened once and is journaled.
+      st.fault_terminal = { kind: "FAULT_APPLIED", receipt: { arm: st.arm, interrupted: true, ...res } };
+      st.phase = "fault_done";
+      saveState(runId, st);
+      writer.append("FAULT_RESOLVED_RECOVERY_PENDING", {
+        run_id: st.run_id,
+        trial_id: st.trial_id,
+        reason: res.reason,
+        container_id: res.container_id ?? null,
+      });
+      console.log(`fault fired but target left stopped — performing operator start (${st.fault_plan.target})`);
+      const startRes = await composeStartService(runId, st.fault_plan.target);
+      st.resume_recovery_action = { service: st.fault_plan.target, action: "compose start", ...startRes };
+      saveState(runId, st);
+      await runRecoveryPhase(runId, st, writer, st.fault_terminal.receipt);
+      if (st.phase === "incomplete") return;
     } else if (res.classification === "NOT_APPLIED") {
       st.fault_terminal = null;
       st.fault_intent_written = false;
@@ -537,27 +572,24 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
           await handleCheckpoint(runId, st, writer, ev, reader);
           if (st.phase === "incomplete") return;
         } else if (ev.event === "BROWSER_VERIFIED") {
-          // Windows layout: per_question[] with browser_value/…_matches_*
-          // fields (as-built); browser_answers[] remains accepted.
-          const perQ = Array.isArray(ev.per_question) ? ev.per_question : ev.browser_answers;
-          requireFields({ ...ev, browser_answers: perQ }, ["attempt_id", "browser_answers"], "BROWSER_VERIFIED");
+          // F7: strict v2 validation. Legacy layouts (D0 browser_value /
+          // as-built visible_value / D0 browser_answers[]) are REJECTED —
+          // no alias chains. A schema violation fails the trial closed.
+          const parsed = parseBrowserVerified(ev, {
+            manifestQuestions: st.manifest_questions ?? [],
+            attemptId: st.attempt_id ?? null,
+          });
           st.browser_verified = {
             at: ev.timestamp_utc,
-            attempt_id: ev.attempt_id,
-            reload_at: ev.reload_at ?? ev.reload_method ?? null,
-            identity_confirmed: ev.identity_confirmed ?? null,
+            attempt_id: parsed.attempt_id,
+            schema_version: parsed.schema_version,
+            reload_at: parsed.reload_at,
+            identity_confirmed: parsed.identity_confirmed,
+            session_reauth_required: parsed.session_reauth_required,
             evidence_ref: ev.evidence_ref ?? `event:${ev.event_id}`,
-            browser_answers: perQ,
+            raw_event_id: ev.event_id,
           };
-          st.browser_state = {};
-          for (const b of perQ) {
-            st.browser_state[b.question_id] = {
-              // Windows layouts seen so far: browser_value (D0), browser_answer (D2).
-              visible_value: b.browser_value ?? b.visible_value ?? b.browser_answer ?? null,
-              answer_digest: b.answer_digest ?? null,
-              evidence_ref: b.evidence_ref ?? st.browser_verified.evidence_ref,
-            };
-          }
+          st.browser_state = parsed.browser_state;
           st.phase = "verdict_phase";
           saveState(runId, st);
           await writeVerdict(runId, st, writer, {});
@@ -572,20 +604,21 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
           console.log(`  [unhandled] ${ev.event} (logged, no action)`);
         }
       } catch (e) {
-        console.error(`  [dispatch-error] ${ev.event}: ${e.message}`);
+        const code = e.code ? ` [${e.code}]` : "";
+        console.error(`  [dispatch-error] ${ev.event}${code}: ${e.message}`);
         writer.append("PROTOCOL_REJECTED", {
           run_id: st.run_id,
           trial_id: st.trial_id,
           file: WINDOWS_EVENTS,
           event_id: ev.event_id,
-          reason: `dispatch error on ${ev.event}: ${e.message}`,
+          reason: `dispatch error on ${ev.event}${code}: ${e.message}`,
         });
         // Structural errors on checkpoint/browser events are trial-fatal
         // (fail closed); nothing was executed, so the trial ends UNKNOWN —
         // except SAVE_ACCEPTED which never reaches this path anymore.
         st.phase = "incomplete";
         saveState(runId, st);
-        await writeVerdict(runId, st, writer, { verdict: "UNKNOWN", reason: `dispatch error on ${ev.event}: ${e.message}` });
+        await writeVerdict(runId, st, writer, { verdict: "UNKNOWN", reason: `dispatch error on ${ev.event}${code}: ${e.message}` });
         return;
       }
     }
@@ -679,6 +712,7 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   });
   console.log(`pre-fault snapshot taken (${preEv.latencyMs.toFixed(0)}ms)`);
   st.pre_snapshot = { ref: path.basename(preEv.file), sha256: preEv.sha256, latency_ms: preEv.latencyMs };
+  st.pre_snapshot_row_status = pre.row.status;
 
   // 3b. Pre-fault consistency gate (§5): PostgreSQL must already hold every
   // ACKed answer BEFORE any fault. A divergence here is a harness/protocol
@@ -728,8 +762,22 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   st.phase = "fault_phase";
   saveState(runId, st);
 
+  // 4b. F6: continuous fault-window probe — started BEFORE the fault action
+  // and stopped only after recovery, so the outage is actually observed
+  // (the D2 F6 finding: probes started after the fault cannot see it).
+  // Samples stream to evidence as JSONL; the summary is recomputable.
+  const probe = await startFaultWindowProbe({
+    runId: st.run_id,
+    origin: st.origin,
+    evidenceDir: runPaths(runId).evidenceDir,
+    trialId: st.trial_id,
+  });
+  st.probe_started_at = probe.startedAt;
+  saveState(runId, st);
+
   // 5. Execute the fault (identity-gated inside). D2 freezes a 5s
-  // auto-restart observation window (experiment condition, not an SLA).
+  // auto-restart observation window; D1/D3/D5 freeze their dwell windows
+  // (experiment conditions, not SLAs).
   let receipt;
   try {
     receipt = await executeFault(runId, {
@@ -739,6 +787,8 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
     });
     st.fault_terminal = { kind: "FAULT_APPLIED", receipt };
   } catch (e) {
+    await probe.stop().catch(() => {});
+    st.probe_stopped_at = new Date().toISOString();
     st.fault_terminal = { kind: "FAULT_FAILED", reason: e.message };
     saveState(runId, st);
     writer.append("FAULT_FAILED", { run_id: st.run_id, trial_id: st.trial_id, arm: st.arm, reason: e.message });
@@ -758,47 +808,70 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   saveState(runId, st);
   console.log(`fault applied: ${st.arm} (${st.fault_plan.label})`);
 
-  // 5b. Static-page probe: nginx (web) must keep serving the SPA while the
-  // app is down/restarting. Recorded with the app's state AT PROBE TIME so
-  // the "during outage" claim is never overstated.
-  st.static_page_probe = null;
-  if (st.fault_plan.target === "app") {
-    try {
-      const t0 = Date.now();
-      const res = await fetch(`${st.origin}/`, { signal: AbortSignal.timeout(5000) });
-      const body = await res.text();
-      const { stdout: appState } = await execFileP(
-        "docker",
-        ["inspect", "-f", "{{.State.Status}}", receipt.container_id],
-        { encoding: "utf8" },
-      );
-      st.static_page_probe = {
-        at: new Date(t0).toISOString(),
-        status: res.status,
-        html: body.slice(0, 80).includes("<!doctype html") || body.slice(0, 80).includes("<html"),
-        content_type: res.headers.get("content-type"),
-        app_state_at_probe: appState.trim(),
-        ms: Date.now() - t0,
-      };
-      console.log(`static page probe: ${res.status} (app ${appState.trim()} at probe time)`);
-    } catch (e) {
-      st.static_page_probe = { at: new Date().toISOString(), error: e.message.slice(0, 200) };
-    }
-  }
+  await runRecoveryPhase(runId, st, writer, receipt, probe);
+}
 
-  // 6. Recovery: probe until the full chain answers again.
+/**
+ * Recovery + post-fault evidence phase, shared by the normal checkpoint path
+ * and the interrupted-fault resume path (one truth for recovery). Runs from
+ * FAULT_APPLIED to SERVICE_RECOVERED: continuous-probe teardown, per-arm
+ * recovery, D3 auto-reconnect observation, post snapshot, lifecycle guard,
+ * API leg, RTO metrics, evidence files. `probe` is the live probe handle on
+ * the normal path, null on the resume path (the loop died with the old
+ * process; its persisted JSONL is the observation record).
+ */
+async function runRecoveryPhase(runId, st, writer, receipt, probe = null) {
+  const ev = { attempt_id: st.attempt_id };
+
+  // 6. Recovery. D3 first observes whether the APP reconnects on its own
+  // once db is back — a predetermined 60s window (experiment condition, not
+  // an SLA). Only after that window may the operator restart app, classified
+  // OPERATOR_RECOVERY_REQUIRED; restarting earlier would mask the very
+  // behavior this arm studies.
+  let operatorRecovery = null;
+  const recoveryTimeoutMs = st.arm === "D3" ? D3_APP_AUTO_RECOVERY_WINDOW_MS : 300000;
   const faultEndedAt = new Date().toISOString();
-  const recovery = await probeRecovery(runId, { timeoutMs: 300000 });
+  let recovery = await probeRecovery(runId, { timeoutMs: recoveryTimeoutMs });
+  if (!recovery.recovered && st.arm === "D3") {
+    operatorRecovery = {
+      required: true,
+      classification: "OPERATOR_RECOVERY_REQUIRED",
+      reason: `app did not reconnect within the observed ${D3_APP_AUTO_RECOVERY_WINDOW_MS}ms after db start`,
+      observed_window_ms: D3_APP_AUTO_RECOVERY_WINDOW_MS,
+    };
+    const t0 = Date.now();
+    const { stdout } = await execFileP(
+      "docker",
+      ["compose", "--env-file", runPaths(runId).envFile, "-f", "/home/hoo/Source/exam-817-harness/docker-compose.yml", "-p", `exam817-${st.run_id}`, "restart", "app"],
+      { encoding: "utf8", timeout: 120000, maxBuffer: 8 * 1024 * 1024 },
+    );
+    operatorRecovery.action = "docker compose -p exam817-" + st.run_id + " restart app";
+    operatorRecovery.action_at = new Date().toISOString();
+    operatorRecovery.action_ms = Date.now() - t0;
+    operatorRecovery.action_output = stdout.slice(-300);
+    recovery = await probeRecovery(runId, { timeoutMs: 300000 });
+  }
   if (!recovery.recovered) {
     st.phase = "incomplete";
     saveState(runId, st);
-    await writeVerdict(runId, st, writer, { verdict: "RECOVERY_TIMEOUT", reason: "service did not recover within 300s" });
+    await writeVerdict(runId, st, writer, { verdict: "RECOVERY_TIMEOUT", reason: `service did not recover within ${recoveryTimeoutMs}ms${operatorRecovery ? " (operator recovery also failed)" : " (operator recovery: n/a for this arm)"}` });
     return;
   }
-  console.log(`service recovered in ${recovery.window_ms}ms`);
+  console.log(`service recovered in ${recovery.window_ms}ms${operatorRecovery ? " after OPERATOR_RECOVERY_REQUIRED restart" : ""}`);
 
-  // 7. POST snapshot + PG settings + WAL recovery logs.
-  const post = await snapshotAttempt(runId, ev.attempt_id);
+  // Stop the F6 probe (after recovery, per brief) and summarize.
+  const probeStop = probe
+    ? await probe.stop()
+    : { stopped_at: new Date().toISOString(), note: "probe process no longer alive (resume path); JSONL samples up to the interruption are the observation record", ticks: null };
+  st.probe_stopped_at = probeStop.stopped_at;
+  const probeSummary = summarizeProbeFile(path.join(runPaths(runId).evidenceDir, `probe-${st.trial_id}.jsonl`), {
+    startedAtIso: st.probe_started_at,
+    stoppedAtIso: probeStop.stopped_at,
+  });
+  st.fault_window_probe = probeSummary ? { ...probeSummary, stop: probeStop } : { error: "probe summary unavailable", stop: probeStop };
+
+  // 7. POST snapshot + PG settings + WAL recovery logs (db arms only).
+  const post = await snapshotAttempt(runId, st.attempt_id);
   if (!post?.row) {
     st.phase = "incomplete";
     saveState(runId, st);
@@ -808,12 +881,12 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   const postEv = await writePgSnapshotEvidence(runId, st.trial_id, "post", post);
   // 7b. Lifecycle guard (§8): the attempt must still exist in its original
   // status — no unexpected submit/void/disrupted transition from the fault.
-  if (pre.row.status !== post.row.status) {
+  if (st.pre_snapshot_row_status && st.pre_snapshot_row_status !== post.row.status) {
     st.phase = "incomplete";
     saveState(runId, st);
     await writeVerdict(runId, st, writer, {
       verdict: "UNKNOWN",
-      reason: `attempt lifecycle anomaly: status changed ${pre.row.status} → ${post.row.status} across the fault`,
+      reason: `attempt lifecycle anomaly: status changed ${st.pre_snapshot_row_status} → ${post.row.status} across the fault`,
     });
     return;
   }
@@ -831,53 +904,117 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   }
 
   const wal = st.arm.startsWith("D3") || st.arm.startsWith("D4") ? await captureWalRecoveryLog(runId, faultEndedAt) : { log: "", note: "not a db arm" };
-  const pgSettings = await capturePgSettings(runId);
+  const pgSettings = st.arm.startsWith("D5") ? { note: "captured pre-fault in deployment evidence; db identity re-proven by the post snapshot" } : await capturePgSettings(runId);
+  // Service logs across the fault window (graceful shutdown lines for D1,
+  // pool errors for D3, boot/migration lines for D5's fresh containers).
+  const logService = st.fault_plan.target ?? "app";
+  const serviceLogs = {};
+  for (const svc of st.arm === "D3" ? ["db", "app"] : [logService]) {
+    try {
+      const cap = await captureServiceLogs(runId, svc, receipt.started_at ?? st.probe_started_at ?? null);
+      serviceLogs[svc] = saveLogEvidence(runId, st.trial_id, svc, cap);
+    } catch (e) {
+      serviceLogs[svc] = { error: e.message.slice(0, 200) };
+    }
+  }
   const recoveryRef = `pg-recovery-${st.trial_id}.json`;
   atomicWriteJson(path.join(runPaths(runId).evidenceDir, recoveryRef), {
     arm: st.arm,
     fault_receipt: receipt,
     recovery,
+    operator_recovery: operatorRecovery,
     wal_recovery_log: wal,
     pg_settings: pgSettings,
     post_snapshot_ref: path.basename(postEv.file),
     api_snapshot_ref: st.api_snapshot?.ref ?? null,
     api_snapshot_error: st.api_snapshot_error ?? null,
-    static_page_probe: st.static_page_probe,
+    probe_summary_ref: `probe-summary-${st.trial_id}.json`,
+    service_logs: serviceLogs,
   });
 
+  // 7d. D5 identity: re-capture deployment evidence post-up and compare
+  // PGDATA mount source + image lineage against the pre-fault capture.
+  let d5Identity = null;
+  if (st.arm === "D5") {
+    const preIdPath = path.join(runPaths(runId).evidenceDir, "deployment-identity.json");
+    if (fs.existsSync(preIdPath)) fs.copyFileSync(preIdPath, path.join(runPaths(runId).evidenceDir, "deployment-identity-pre.json"));
+    const postEv2 = await captureDeploymentEvidence(runId);
+    const pre = st.deployment_evidence;
+    d5Identity = {
+      pgdata_mount_source_pre: pre?.pgdata_mount?.source ?? null,
+      pgdata_mount_source_post: postEv2.pgdata_mount?.source ?? null,
+      pgdata_mount_source_same: pre?.pgdata_mount?.source != null && pre.pgdata_mount.source === postEv2.pgdata_mount?.source,
+      image_ids_pre: Object.fromEntries(Object.entries(pre?.images ?? {}).map(([svc, i]) => [svc, i.image_id])),
+      image_ids_post: Object.fromEntries(Object.entries(postEv2.images ?? {}).map(([svc, i]) => [svc, i.image_id])),
+      image_ids_same: Object.fromEntries(
+        Object.keys(postEv2.images ?? {}).map((svc) => [svc, pre?.images?.[svc]?.image_id != null && pre.images[svc].image_id === postEv2.images[svc].image_id]),
+      ),
+      container_ids_changed: receipt.container_ids_changed ?? null,
+      filesystem_post: postEv2.filesystem,
+      note: "container ID change across down/up is the expected fact; data continuity is judged by PGDATA mount, image lineage, and the oracle's attempt-row comparison",
+    };
+    st.d5_identity = d5Identity;
+  }
+  atomicWriteJson(path.join(runPaths(runId).evidenceDir, `probe-summary-${st.trial_id}.json`), st.fault_window_probe);
+
   st.post_snapshot = { ref: path.basename(postEv.file), sha256: postEv.sha256, latency_ms: postEv.latencyMs };
-  // Two RTO figures: the probe window (probe starts after executeFault
-  // returns, so it can understate) and the true outage window from the
-  // fault's first mutating step (SIGKILL / graceful stop / compose down)
-  // to the first chain-ready response.
-  // First mutating step's timestamp. The receipt carries it directly
-  // (kill_at/stop_at/down_at are written by the fault step itself);
-  // receipt.steps is journal state, not part of the returned receipt —
-  // the steps lookup is a legacy fallback only.
-  const faultStepAt =
-    receipt.kill_at ??
-    receipt.stop_at ??
-    receipt.down_at ??
-    receipt.steps?.filter((s) => ["sigkill", "graceful_stop", "compose_down"].includes(s.name)).map((s) => s.at)[0] ??
-    null;
+  st.post_snapshot_row_status = post.row.status;
+  // ── RTO metrics (§8): each figure names its start/stop events and its
+  // measurement method. No figure is inferred from Docker state alone.
+  const faultStepAt = receipt.kill_at ?? receipt.stop_at ?? receipt.down_at ?? null;
+  const recoveryActionAt = receipt.manual_start_at ?? receipt.start_at ?? receipt.up_at ?? null;
   const outageWindowMs =
     recovery.first_ok_at && faultStepAt ? Date.parse(recovery.first_ok_at) - Date.parse(faultStepAt) : null;
-  const probeSawFailure = (recovery.probes ?? []).some((p) => p.error || (p.status && p.status >= 500));
   st.rto = {
-    window_ms: recovery.window_ms,
-    probe: recovery.url,
-    first_ok_at: recovery.first_ok_at,
-    fault_applied_at: faultStepAt ?? receipt.started_at ?? null,
+    // How long the fault COMMAND itself took (kill/stop/down).
+    fault_command_duration_ms: receipt.fault_command_duration_ms ?? null,
+    // F6: what the continuous probe actually SAW on the /api/ready channel.
+    observed_api_outage: probeSummary?.observed_api_outage ?? "NOT_ESTABLISHED",
+    observed_http_outage_ms: probeSummary?.api?.observed_outage_ms ?? null,
+    observed_outage_note:
+      probeSummary?.observed_api_outage === "OBSERVED"
+        ? `first failed sample ${probeSummary.api.first_fail_at} → first OK sample ${probeSummary.api.first_ok_after_fail_at} (sampling resolution ${probeSummary.interval_ms}ms; the true outage began at most one interval earlier)`
+        : "no failed /api/ready sample captured — outage window NOT established (never fabricated)",
+    bounded_outage_ms: probeSummary?.api?.bounded_outage_ms ?? null,
+    // Receipt-timestamp window: fault action → first chain-ready response
+    // (includes any dwell/restart-policy window).
     outage_window_ms: outageWindowMs,
-    outage_note: outageWindowMs === null ? null : "SIGKILL/stop -> chain /api/ready first OK (includes any restart-policy observation window)",
-    fault_command_duration_ms: receipt.fault_command_duration_ms ?? receipt.stop_ms ?? null,
-    app_restart_mode: receipt.auto_restart === undefined ? null : receipt.auto_restart ? "restart_policy" : "operator_manual_start",
-    app_restart_started_at: receipt.restarted_started_at ?? receipt.manual_start_at ?? null,
-    auto_restart_window_ms: receipt.auto_restart_window_ms ?? null,
+    outage_window_note:
+      st.arm === "D2"
+        ? "SIGKILL → chain /api/ready first OK (includes the 5s auto-restart observation window when no policy restart happened)"
+        : st.arm === "D5"
+          ? "compose down → chain /api/ready first OK (includes the observation dwell)"
+          : "graceful stop → chain /api/ready first OK (includes the observation dwell)",
+    fault_applied_at: faultStepAt ?? receipt.started_at ?? null,
+    // Operator wait: fault action → the recovery action (start/up). Arms
+    // whose service self-recovered have no operator wait.
     operator_wait_ms:
-      receipt.manual_start_at && receipt.kill_at ? Date.parse(receipt.manual_start_at) - Date.parse(receipt.kill_at) : null,
-    app_unavailable_observed: probeSawFailure,
-    app_unavailable_note: probeSawFailure ? null : "recovery probe started after the fault step and saw no failure — outage window measured from kill timestamp, not from a failed probe",
+      recoveryActionAt && faultStepAt ? Date.parse(recoveryActionAt) - Date.parse(faultStepAt) : null,
+    // Recovery action → first OK.
+    service_recovery_ms: recovery.window_ms,
+    probe_resolution_ms: probeSummary?.interval_ms ?? null,
+    // D2 semantics: did the restart policy fire, or did the operator act?
+    app_restart_mode:
+      receipt.auto_restart === undefined
+        ? st.arm === "D1"
+          ? "operator_start_after_graceful_stop"
+          : null
+        : receipt.auto_restart
+          ? "restart_policy"
+          : "operator_manual_start",
+    app_restart_started_at: receipt.restarted_started_at ?? receipt.manual_start_at ?? receipt.start_at ?? null,
+    auto_restart_window_ms: receipt.auto_restart_window_ms ?? null,
+    // D3: did the app reconnect by itself after db came back?
+    app_recovery_mode: st.arm === "D3" ? (operatorRecovery ? "OPERATOR_RECOVERY_REQUIRED (operator restart)" : "auto_reconnect_observed") : null,
+    operator_recovery: operatorRecovery,
+    // D1: SIGTERM handling must finish inside stop_grace_period.
+    graceful_stop_escalated: receipt.graceful_stop_escalated ?? null,
+    post_stop_exit_code: receipt.post_stop_exit_code ?? null,
+    // D5: container identity expectations.
+    container_ids_changed: receipt.container_ids_changed ?? null,
+    pgdata_mount_source_same: receipt.pgdata_mount_source_same ?? (d5Identity ? d5Identity.pgdata_mount_source_same : null),
+    // F6 replaces the old single late static probe.
+    static_page_observed: probeSummary?.static?.observed ?? null,
     bystanders_unchanged: receipt.bystanders_unchanged ?? null,
   };
   st.phase = "service_recovered";
@@ -889,13 +1026,27 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
     arm: st.arm,
     rto_window_ms: recovery.window_ms,
     outage_window_ms: outageWindowMs,
+    observed_api_outage: st.rto.observed_api_outage,
+    observed_http_outage_ms: st.rto.observed_http_outage_ms,
     probe: recovery.url,
     app_restart_mode: st.rto.app_restart_mode,
+    app_recovery_mode: st.rto.app_recovery_mode,
+    graceful_stop_escalated: st.rto.graceful_stop_escalated,
+    operator_recovery_required: operatorRecovery ? true : false,
     pg_recovery_evidence_ref: `../evidence/${recoveryRef}`,
+    probe_evidence_ref: `../evidence/probe-${st.trial_id}.jsonl`,
     api_snapshot_ref: st.api_snapshot?.ref ?? null,
-    note: st.arm === "D0" ? "no-fault arm: baseline reload checkpoint" : "service chain healthy; browser reload may proceed",
+    note: "service chain healthy; browser reload may proceed",
   });
   console.log("SERVICE_RECOVERED emitted; waiting for BROWSER_VERIFIED");
+}
+
+/** Persist a service-log capture as run evidence (graceful-shutdown lines,
+ *  pool errors, boot/migration output). */
+function saveLogEvidence(runId, trialId, service, capture) {
+  const file = path.join(runPaths(runId).evidenceDir, `service-logs-${trialId}-${service}.json`);
+  fs.writeFileSync(file, JSON.stringify({ captured_at: new Date().toISOString(), ...capture }, null, 2));
+  return { ref: path.basename(file), lines: capture.lineCount ?? null };
 }
 
 /**
@@ -993,6 +1144,12 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
     } else if ((browserCounts.NOT_RUN ?? 0) > 0 || (browserCounts.UNKNOWN ?? 0) > 0) {
       finalVerdict = "UNKNOWN";
       finalReason = `browser leg incomplete for ${browserCounts.NOT_RUN ?? 0}/${browserCounts.UNKNOWN ?? 0} question(s)`;
+    } else if (st.rto?.graceful_stop_escalated === true) {
+      // D1 discipline (#817 D135 brief §6): a stop that ended in SIGKILL is
+      // never reported as a pure graceful-stop success, even when every
+      // answer reconciled.
+      finalVerdict = "GRACEFUL_STOP_ESCALATED";
+      finalReason = `stop escalated to SIGKILL (exit ${st.rto.post_stop_exit_code}) after stop_grace_period — data reconciled, but this is not a graceful-shutdown result`;
     } else finalVerdict = "COMPLETE";
   }
 
@@ -1024,7 +1181,9 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
     })),
     per_question: perQuestion,
     rto: st.rto ?? null,
-    static_page_probe: st.static_page_probe ?? null,
+    fault_window_probe: st.fault_window_probe ?? null,
+    d5_identity: st.d5_identity ?? null,
+    resume_recovery_action: st.resume_recovery_action ?? null,
     pre_consistency: st.pre_consistency ?? null,
     fault: st.fault_terminal ?? null,
     fault_resolved: st.fault_resolved ?? null,
@@ -1086,19 +1245,8 @@ async function cmdVerdict(runId) {
       saveState(runId, st);
     }
   }
-  // Re-derive browser_state from the raw per-question array: the persisted
-  // state may hold a browser_state built by an older field mapping.
-  if (Array.isArray(st.browser_verified?.browser_answers)) {
-    st.browser_state = {};
-    for (const b of st.browser_verified.browser_answers) {
-      st.browser_state[b.question_id] = {
-        visible_value: b.browser_value ?? b.visible_value ?? b.browser_answer ?? null,
-        answer_digest: b.answer_digest ?? null,
-        evidence_ref: b.evidence_ref ?? st.browser_verified.evidence_ref,
-      };
-    }
-    saveState(runId, st);
-  }
+  // F7: no alias-chain re-derivation. browser_state comes exclusively from
+  // the strict v2 parse at BROWSER_VERIFIED dispatch time.
   const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
   await writeVerdict(runId, st, writer, {});
 }
