@@ -4,14 +4,16 @@
 
 * Status: **ACCEPTED; superseded in part by
   [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)** (2026-10-24 —
-  **prospective**: the Backup-Evidence and Recovery/Restore-Evidence window
-  content, and the backups/restore-readiness/ops-policy realization of the
-  window, lose their authority under ADR-023 and are removed by its PR-B
-  (routes) / PR-C (tables); **until PR-B lands, the live runtime still
-  implements all of those surfaces**. The window contract itself — the D2
+  recorded as **prospective** on acceptance: the Backup-Evidence and
+  Recovery/Restore-Evidence window content, and the
+  backups/restore-readiness/ops-policy realization of the window, lose
+  their authority under ADR-023 and are removed by its PR-B (routes) /
+  PR-C (tables); "until PR-B lands, the live runtime still implements all
+  of those surfaces" held until 2026-10-25, when PR-B #815 and PR-C #816
+  merged. The window contract itself — the D2
   invariants, the D3 taxonomy, the D4 redaction boundary, the D6 host
   boundary, and the D7 per-source ADR requirement — remains in force;
-  post-PR-B the window is realized by health/diagnostics). Original
+  the window is realized by health/diagnostics). Original
   acceptance: 2026-08-14 — P7 final program closeout,
   [`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
   proposed 2026-08-13 with ADR-017 rev 4, accepted after the runtime boundary

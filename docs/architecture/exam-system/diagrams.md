@@ -11,12 +11,13 @@ Confirmed delivery-state drift families (P5-N1 notification labels) corrected
 and re-verified against current master. Earlier sections retain their
 point-in-time snapshot at cac6b85c (P5-0 / PR #210 baseline).
 
-ADR-023 target-state qualifier (2026-10-24):
-The §1 System Context Maintainer persona/relation render the accepted
-ADR-023 target (health / diagnostics only — ADR-017 rev 5 capability
-authority), not a runtime-verified snapshot; the live pre-PR-B preset holds
-five read capabilities until PR-B lands. All other content retains the
-commit baselines above.
+ADR-023 target-state qualifier (2026-10-24; converged 2026-10-25):
+The §1 System Context Maintainer persona/relation render the ADR-023
+target (health / diagnostics only — ADR-017 rev 5 capability authority).
+This was recorded as "not yet a runtime-verified snapshot" while the
+pre-PR-B preset still held five read capabilities; with PR-B #815 and
+PR-C #816 merged, the two-capability set is the live runtime. All other
+content retains the commit baselines above.
 ```
 
 ---
@@ -52,17 +53,19 @@ C4Context
 
 > [ADR-023](../../adr/ADR-023-remove-backup-evidence-subsystem.md)
 > (2026-10-24) removes the backup-evidence surface from the Maintainer
-> window in its PR-B (routes) / PR-C (tables). The Maintainer persona and
-> relation above render the **ADR-023 target set** — health / diagnostics
-> only; no business mutation, no Host-infrastructure authority. The live
-> runtime until PR-B lands is the **historical as-built / pre-PR-B** preset
-> of [ADR-017 rev 4](../../adr/ADR-017-operational-authority-maintainer-boundary.md):
-> five read capabilities, three of which observe the backup-evidence
-> surfaces being removed. **ADR-017 §Revision 5 is the capability
+> window in its PR-B (routes, merged as #815) / PR-C (tables, merged as
+> #816). The Maintainer persona and relation above render the **ADR-023
+> target set** — health / diagnostics only; no business mutation, no
+> Host-infrastructure authority — which, with both PRs merged, is the live
+> runtime (the pre-PR-B historical as-built preset of
+> [ADR-017 rev 4](../../adr/ADR-017-operational-authority-maintainer-boundary.md)
+> — five read capabilities, three of which observed the removed
+> backup-evidence surfaces — no longer exists).
+> **ADR-017 §Revision 5 is the capability
 > authority**; this diagram renders that decision, not a second RBAC
 > source.
 
-**Evidence**: 7 built-in role presets total — 6 assignable human roles (Admin, Teacher, Proctor, Grader, Candidate, Maintainer; Maintainer added by P7-E2A — read-only Operational Observer; ADR-017) + 1 synthetic non-assignable System actor (not rendered as a person; deadline auto-submit / heartbeat scan / reconcile). Maintainer target set (ADR-017 rev 5 via ADR-023) is exactly 2 read capabilities — `system.health.view`, `system.diagnostics.view` — 0 business permissions, 0 writes, no Host-infrastructure authority *(until PR-B lands, the live preset still implements the rev-4 set of 5 `*.view` capabilities — historical as-built / pre-PR-B; see the ADR-023 note above)* — the relation is **observation only: no business mutation, no infrastructure execution**. Admin ∩ Maintainer = ∅ is enforced server-side (D14). SMTP is the only external system dependency (async via the in-process email outbox loop).
+**Evidence**: 7 built-in role presets total — 6 assignable human roles (Admin, Teacher, Proctor, Grader, Candidate, Maintainer; Maintainer added by P7-E2A — read-only Operational Observer; ADR-017) + 1 synthetic non-assignable System actor (not rendered as a person; deadline auto-submit / heartbeat scan / reconcile). Maintainer set (ADR-017 rev 5 via ADR-023, live since PR-B #815) is exactly 2 read capabilities — `system.health.view`, `system.diagnostics.view` — 0 business permissions, 0 writes, no Host-infrastructure authority — the relation is **observation only: no business mutation, no infrastructure execution**. Admin ∩ Maintainer = ∅ is enforced server-side (D14). SMTP is the only external system dependency (async via the in-process email outbox loop).
 **Known limitations**: Teacher/Proctor/Grader are Phase 3 roles (capability infrastructure exists; product role UI is incomplete). Teacher course-scope is NOT enforced — see P7-RBAC F-04. Email delivery is the only async external dependency. No CDN, no cloud services, no external APIs.
 
 ---

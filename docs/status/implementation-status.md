@@ -286,21 +286,24 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
 - **Operational Control Plane (P7-E) is COMPLETE — on master** (merged via
   PR #282, 2026-08-12; E2A/E2B/E2C/E3 implemented; see
   [`docs/archive/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md`](../archive/audits/P7-E-OPERATIONAL-CONTROL-PLANE-CLOSEOUT.md)).
-  **Disposition update (2026-10-24):**
+  **Disposition update (2026-10-24, converged 2026-10-25):**
   [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) **declines
   and orders the removal of the backup-evidence subsystem** — the E2B
   ledger/read routes/evidence CLI, the E2C backup-posture and
   restore-readiness views, and the E3 operational-policy intent mechanism
   (ADR-023 amends ADR-017 to rev 5 and supersedes ADR-018 in part for this
-  scope). **As of this note the runtime still implements all of it** (routes
-  `GET /system/backups`, `GET /system/restore-readiness`,
-  `GET /system/retention-readiness`, `GET/PUT /system/ops-policy`; the five
-  `backup_runs` / `backup_run_events` / `backup_operational_policy` /
-  `restore_drill_runs` / `retention_runs` tables; the Maintainer's five view
-  capabilities; `backup-evidence.ts`): removal lands in **PR-B** (product
-  code) and **PR-C** (a new forward-only DROP migration — the applied
-  migrations 0031–0034 and the journal stay untouched). The E2B/E2C/E3
-  descriptions below are the pre-removal as-built record.
+  scope). **The removal is complete on master**: PR-A #814 (`91dc6ad6`,
+  ADR), PR-B #815 (`bdc59b3c`, product code: routes, DTOs, the four
+  permission keys, the evidence CLI, the Operations-page sections) and
+  PR-C #816 (`cc318dd5`, the forward-only DROP migration `0045` with the
+  evidence-preservation DO gate) are all merged. The applied migrations
+  0031–0034 and the journal stay untouched. The Maintainer preset is
+  re-baselined to exactly `system.health.view` +
+  `system.diagnostics.view`; host backup/restore via
+  `scripts/db-backup.sh` is retained unchanged, and the surviving operator
+  obligations (recurring scratch-restore drills, the ADR-023 §2.7 upgrade
+  gate) live in the deployment runbook. The E2B/E2C/E3 descriptions below
+  are the pre-removal as-built record.
   The post-P7-E RBAC role-reality remediation (PR #284, 2026-08-13) further
   corrected the Admin authority + Maintainer observability boundary; ADR-017
   rev 4 + ADR-018 were accepted by the P7 final program closeout. See the
@@ -333,7 +336,8 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   - **E2A — Operational RBAC Boundary**: Maintainer is the **sixth** assignable
     human role (the **seventh** role preset counting the synthetic,
     non-assignable System — ADR-017 D2), preset holds ONLY `system.health.view` +
-    `system.diagnostics.view` (+ E2B/E3 read views), zero business
+    `system.diagnostics.view` (the three E2B/E3 read views it held between
+    P7-E and the ADR-023 PR-B removal are gone), zero business
     permissions. **Admin ↔ Maintainer mutual exclusion (D14)** enforced
     server-side transactionally under the org advisory lock on every
     assignment path (create/activate/promote/replace/seed), with write-skew

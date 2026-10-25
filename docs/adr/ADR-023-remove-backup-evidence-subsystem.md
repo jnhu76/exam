@@ -10,6 +10,11 @@
   docs-only change (PR-A); product code removal is PR-B and schema removal is
   PR-C, and neither may start ahead of its gate. Until PR-B lands, the runtime
   still implements the subsystem this ADR removes.
+  *(2026-10-25: all three PRs are merged — PR-A #814 `91dc6ad6`, PR-B #815
+  `bdc59b3c`, PR-C #816 `cc318dd5` — and the backup-evidence subsystem is
+  removed from the current product. The Transition contract below is the
+  historical execution plan, kept as written; the runbook §17.2 drill and the
+  §2.7 upgrade gate carry the surviving operator obligations.)*
 * Date: 2026-10-24
 * Decision owners: project owner (owner gate disposition on #739)
 * Supersedes:

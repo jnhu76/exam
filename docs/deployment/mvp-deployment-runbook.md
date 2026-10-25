@@ -1216,6 +1216,10 @@ drill/audit trail in the operator's own documentation:
 - **Evidence honesty**: historical backup/restore evidence must not be
   rendered greener than reality; absence of a recent verified drill is
   reported as such in operator documentation, not silently elided.
+- **Scope of this program**: only the PostgreSQL database path is documented
+  (§17). Attachments, deployment settings files, and release/version
+  metadata have no deployment-side backup documentation — a known host-side
+  gap, outside product scope, for the operator's own profile record.
 
 ### 17.2 Restore drill — isolated one-off container
 
@@ -1224,11 +1228,17 @@ connection to the production stack, runs database-level acceptance against
 it, then destroys the container. The script is **fail-closed**: any
 failing step — container startup, readiness, `pg_restore`, acceptance
 SQL, or a negative control — aborts with a nonzero exit before anything
-can be recorded as verified, and an EXIT trap removes the drill container
-on success and failure paths alike. A drill that cannot fail proves
+can be recorded as verified. Cleanup is **ownership-scoped**: a run may
+remove only the container that this exact run successfully created. The
+EXIT trap deletes by container ID (from a run-private cidfile written by
+Docker itself at creation) and only after verifying that ID still names
+this run's container — a name collision with a preexisting container
+makes `docker run` fail before anything is registered as created, so the
+preexisting container is never touched. A drill that cannot fail proves
 nothing: before trusting an operator adaptation of this procedure, run it
 once against a known-bad dump (a truncated or corrupted copy) and confirm
-it refuses to report success.
+it refuses to report success, and once against a name collision and
+confirm the preexisting container survives.
 
 Isolation is enforced by the boundary itself, not by after-the-fact
 checks: the drill container shares no network, volume, env file, or
@@ -1255,15 +1265,49 @@ in any operator adaptation of this procedure:
 
 ```bash
 DUMP=/mnt/nas/exam-20261025.dump            # the dump under test
-DRILL=exam-drill-$(date +%Y%m%d%H%M%S)      # throwaway container name
 PROD="docker compose --env-file .env.production -f docker-compose.yml"
 
 # --- fail-closed harness: any failing step aborts before a pass can be
-#     recorded, and the drill container is removed on the way out either
-#     way (paste and run the block as a whole, in bash)
+#     recorded, and ONLY resources this exact run created are removed on
+#     the way out (paste and run the block as a whole, in bash)
 set -Eeuo pipefail
-cleanup() { docker rm -fv "$DRILL" >/dev/null 2>&1 || true; }
+
+# Run identity: seconds-resolution names collide (two drills in one
+# second, or a leftover container from a killed run); add the PID and a
+# random nonce so this run's name is effectively unique.
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$-$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
+DRILL="exam-drill-$RUN_ID"                  # throwaway container name
+RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/exam-drill.XXXXXX")"  # this run's private dir
+CIDFILE="$RUN_DIR/container.cid"            # Docker writes the ID on creation
+
+# OWNERSHIP cleanup: delete by container ID, only what this run created,
+# only if that ID still names this run's container. The cidfile IS the
+# ownership registration: it lives in a directory freshly mktemp'd for
+# this run (so it can never be another run's stale file) and Docker writes
+# it only when THIS `docker run` created a container — including the window
+# where the container exists but `docker run` has not returned yet. No
+# cidfile (e.g. a name-collision failure, where creation never happened)
+# means nothing is removed, so a same-named preexisting container is never
+# a deletion target.
+cleanup() {
+  if [ -s "$CIDFILE" ]; then
+    CID="$(cat "$CIDFILE")"
+    NAME_NOW="$(docker inspect -f '{{.Name}}' "$CID" 2>/dev/null || true)"
+    if [ -z "$NAME_NOW" ]; then
+      : # already gone (an --rm container that exited was reaped) — nothing to do
+    elif [ "$NAME_NOW" = "/$DRILL" ]; then
+      docker rm -fv "$CID" >/dev/null 2>&1 || true
+    else
+      echo "REFUSE: container $CID is not this run's ($DRILL) — NOT removing" >&2
+    fi
+  fi
+  rm -rf "$RUN_DIR"
+}
 trap cleanup EXIT
+# Make SIGINT/SIGTERM run the EXIT trap (instead of killing the shell
+# outright and leaking the drill container).
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # --- negative control 2a: production canary BEFORE the drill (read-only)
 DRILL_PGUSER="$($PROD exec -T db printenv POSTGRES_USER < /dev/null)"
@@ -1276,14 +1320,18 @@ canary() {
   $PROD exec -T db psql -U "$DRILL_PGUSER" -d "$DRILL_PGDB" -tAc \
     "SELECT max(id) FROM audit_logs"
 }
-canary > /tmp/drill-canary-before.txt
+canary > "$RUN_DIR/canary-before.txt"
 
 # --- start the isolated one-off container (no shared network, volume,
 #     env file, or compose project with the production stack; the image
 #     refuses to boot without POSTGRES_PASSWORD — throwaway value, the
 #     container publishes no ports and all drill commands run via its
-#     local socket)
-docker run --rm -d --name "$DRILL" \
+#     local socket). --cidfile has Docker itself record the container ID:
+#     once `docker run` has created the container, the ID is on disk even
+#     if the shell is interrupted before it regains control — so cleanup
+#     (keyed on the cidfile, not on shell bookkeeping) still owns the
+#     container.
+docker run --rm -d --name "$DRILL" --cidfile "$CIDFILE" \
   -e POSTGRES_PASSWORD=drill-disposable postgres:18.4-bookworm
 # Wait for the SECOND "ready to accept connections" log line: the image's
 # first-boot entrypoint starts a temporary initdb server that also accepts
@@ -1337,13 +1385,16 @@ docker exec "$DRILL" psql -U postgres -d exam_drill -v ON_ERROR_STOP=1 -tAc \
 docker exec "$DRILL" psql -U postgres -d exam_drill -v ON_ERROR_STOP=1 -tAc \
   "SELECT count(*) FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND contype = 'f'"
 
-# --- teardown (also removes the anonymous data volume; the trap makes it
-#     idempotent on failure paths)
-docker rm -fv "$DRILL" >/dev/null
+# (The §2.7 ADR-023 upgrade gate inserts its evidence-preservation
+#  manifest capture + compare here, before the run ends.)
+
+# --- teardown is the EXIT trap: the single ownership-checked removal
+#     path above also removes the anonymous data volume and is idempotent
+#     on failure paths — there is deliberately no second, by-name `docker rm`.
 
 # --- negative control 2b: production canary AFTER the drill — identical
-canary > /tmp/drill-canary-after.txt
-diff /tmp/drill-canary-before.txt /tmp/drill-canary-after.txt || {
+canary > "$RUN_DIR/canary-after.txt"
+diff "$RUN_DIR/canary-before.txt" "$RUN_DIR/canary-after.txt" || {
   echo "ABORT: production canary changed — the drill touched production"
   exit 1
 }

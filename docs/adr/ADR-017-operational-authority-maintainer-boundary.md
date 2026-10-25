@@ -5,9 +5,11 @@
 * Status: **ACCEPTED through revision 5** (rev 5, 2026-10-24, via
   [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) — the backup-evidence
   scopes of rev 4 are superseded/amended; see **§Revision 5** below. The
-  rev-5 Maintainer capability re-baseline is **prospective**: the live
-  runtime still implements the rev-4 five-capability Maintainer preset until
-  ADR-023's PR-B lands). Earlier: **ACCEPTED through revision 4**
+  rev-5 Maintainer capability re-baseline was recorded as **prospective** on
+  acceptance ("the live runtime still implements the rev-4 five-capability
+  Maintainer preset until ADR-023's PR-B lands"); 2026-10-25: PR-B #815 is
+  merged, so the rev-5 two-capability preset is the live runtime). Earlier:
+  **ACCEPTED through revision 4**
   (2026-08-14 — P7 final program
   closeout, [`docs/archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md`](../archive/audits/P7-FINAL-PROGRAM-CLOSEOUT.md);
   the runtime implements the rev-4 model — verified in that closeout).
@@ -48,8 +50,10 @@
 * Superseded by: none
 * Amended by: [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)
   (2026-10-24) — supersedes the backup-evidence scopes listed in
-  **§Revision 5**; the capability re-baseline is prospective until
-  ADR-023's PR-B. All other rev-4 decisions remain in force.
+  **§Revision 5**; the capability re-baseline was prospective until
+  ADR-023's PR-B, which merged 2026-10-25 (#815) — the rev-5
+  two-capability preset is the live runtime. All other rev-4 decisions
+  remain in force.
 * Related decisions:
   * ADR-001 — Post-MVP Decision (P7)
   * ADR-010 — Scoped RBAC Architecture (**amended by this ADR** — role
@@ -136,8 +140,9 @@ happens **outside** the Exam boundary (Host Operator — see R4-3).
 
 > Rev 5 (2026-10-24): backup/recovery evidence is no longer a window content
 > source by decision of [ADR-023](ADR-023-remove-backup-evidence-subsystem.md)
-> — the backup-evidence subsystem is removed in that ADR's PR-B/PR-C (the
-> live window still presents it until PR-B). The window
+> — the backup-evidence subsystem is removed in that ADR's PR-B/PR-C (both
+> merged 2026-10-25: #815 / #816; the live window presents health/diagnostics
+> only). The window
 > principle above is unchanged.
 
 ### R4-2. Corrected role model
@@ -265,9 +270,10 @@ permission count = 0, write permission count = 0.
 > Rev 5 (2026-10-24): the frozen set is re-baselined by
 > [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) to exactly two read
 > capabilities (`system.health.view`, `system.diagnostics.view`). The
-> re-baseline is **prospective**: the live implementation still carries the
-> five capabilities above until ADR-023's PR-B removes the three
-> backup-related views.
+> re-baseline was recorded as **prospective** ("the live implementation
+> still carries the five capabilities above until ADR-023's PR-B removes
+> the three backup-related views"); 2026-10-25: PR-B #815 merged, and the
+> two-capability set is the live implementation.
 
 ### R4-6. What revision 4 does NOT change
 
@@ -585,11 +591,12 @@ SMTP channel). **It is gated by the dedicated `system.email.test`
 (`SystemEmailTest`) capability** (`apps/api/src/routes/email.ts`), granted to
 the **Admin preset only** — it is NOT part of the Maintainer preset, and
 `system.diagnostics.view` never authorizes it. The invariant is enforced in
-the current runtime; the Maintainer receives the five read capabilities
-(`R4-5` *(rev 5: re-baselined to two — `system.health.view` +
+the current runtime; the Maintainer receives the two read capabilities
+(`R4-5` *(rev 5: re-baselined from five to two — `system.health.view` +
 `system.diagnostics.view` — by
-[ADR-023](ADR-023-remove-backup-evidence-subsystem.md), prospectively until
-its PR-B; see §Revision 5)*) and zero side-effect capabilities.
+[ADR-023](ADR-023-remove-backup-evidence-subsystem.md), effective since its
+PR-B #815 merged 2026-10-25; see §Revision 5)*)
+and zero side-effect capabilities.
 
 > History: revisions 1–3 of this ADR recorded the pre-E2A state, where the
 > route was gated by `system.diagnostics.view` (safe only because Admin alone

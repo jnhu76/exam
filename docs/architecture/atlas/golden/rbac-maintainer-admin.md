@@ -5,14 +5,18 @@
 > facts, and by requiring `RolePreset ≠ effective actor authorization` to be
 > structural rather than editorial.
 >
-> **Base revision:** `6ad22c79` on `remove/backup-evidence-subsystem` (PR-B
-> #815) — the backup-evidence subsystem removal commit rebased on master
-> `91dc6ad6` (PR-A #814 merged, ADR-023 accepted). Prior bases: the
+> **Base revision:** master `cc318dd5` (ADR-023 removal complete: PR-A #814
+> `91dc6ad6`, PR-B #815 `bdc59b3c`, PR-C #816 `cc318dd5` all merged). The
+> runtime pins re-verified by content at this base: the Maintainer exact-set
+> assertion (`packages/authz/src/maintainerPreset.test.ts:21-28`) and the
+> `Role` catalog block (`packages/authz/src/catalog.ts:213-221`). Prior
+> bases: `6ad22c79` on `remove/backup-evidence-subsystem` (PR-B #815, the
+> removal commit rebased on master `91dc6ad6` with PR-A merged), the
 > pre-rebase re-derivation at `2064953e` with the removal applied uncommitted,
 > and the original slice base `cbe33db1a7f241ba85aadbf21c4f6dea01133f03`
 > (predates the removal). Line-number anchors were re-verified by content at
-> the base revision; the doc-convergence commits stacked after it do not touch
-> the route/registry/permission surfaces this slice counts.
+> each base revision; the doc-convergence commits stacked after them do not
+> touch the route/registry/permission surfaces this slice counts.
 
 ```text
 REQUIRED: RolePreset ≠ effective actor authorization

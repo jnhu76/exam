@@ -428,12 +428,11 @@ duties.)
 - Redis queue/cache/coordination workloads declare persistence and eviction policy.
 - a clean-host restore drill meets the declared deployment profile.
   *(Retained as a Host/operator obligation.
-  [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) removes the
-  product-side RPO/RTO record (code in PR-B, tables in PR-C) — until then
-  the declared profile still lives in that product-side record; deployment
-  documentation stating the profile does not exist today. Recording the
-  retained drill obligation and the deployment profile in deployment
-  documentation is assigned to PR-C by ADR-023's Transition contract.)*
+  [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) removed the
+  product-side RPO/RTO record (PR-B #815 code, PR-C #816 tables); the
+  retained drill obligation and the deployment-profile record drills are
+  measured against now live in deployment documentation — runbook §17.1 —
+  per ADR-023's Transition contract.)*
 - startup reconciliation repairs or reports supported incomplete states.
 - Admin can inspect and safely change supported non-secret settings with audit and rollback.
 - minimal/standard/controlled/strict profiles resolve to one validated policy schema.

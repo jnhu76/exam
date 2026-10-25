@@ -215,9 +215,18 @@ cannot silently lose backup evidence by upgrading. Deployments that never
 used the feature (all five tables empty) pass the gate and need nothing
 from this section.
 
-Gate workflow for deployments holding rows:
+Gate workflow for deployments holding rows. INVARIANT — source stability:
+from step 3 until the TRUNCATE in step 9 completes, the application stays
+stopped; every manifest and the backup are captured inside that quiesced
+window, and any write that reaches the five tables inside the window
+invalidates the manifests and blocks cleanup. Count parity between the
+source and restored manifests is a NECESSARY condition, not a content-level
+proof: it proves the dump is current w.r.t. the five tables (a valid but
+stale dump fails the comparison), while the whole-database restore itself
+remains the preservation mechanism. This workflow operates on the
+PRE-0045 database — it must not require the new release to be running.
 
-1. **Inventory (read-only).**
+1. **Inventory (read-only reconnaissance, for the owner decision).**
    ```bash
    PROD="docker compose --env-file .env.production -f docker-compose.yml"
    PGUSER="$($PROD exec -T db printenv POSTGRES_USER < /dev/null)"
@@ -228,18 +237,44 @@ Gate workflow for deployments holding rows:
        "SELECT '$t =', count(*) FROM $t"
    done
    ```
+   These counts are reconnaissance only — the authoritative counts are
+   the source manifest captured in step 5, inside the quiesced window.
 2. **Owner decision.** The deployment owner records the evidence
    disposition (preserve-then-drop, or discard). No production DELETE or
    TRUNCATE runs before this disposition is recorded — the migration
    itself never deletes rows (it refuses non-empty tables), so any
    deletion is always a human-executed, owner-authorized step, in this
    workflow.
-3. **Fresh full backup — the authoritative preservation material.** Take
-   a whole-database custom dump NOW, after the step-1 inventory confirmed
-   the rows exist (a dump taken before the feature was ever used does
-   not contain them):
+3. **Quiesce the evidence writers — Source Stability Gate, part 1.** The
+   app is the only writer to the five tables. Stop it, then prove nothing
+   else holds a client session on the database — as an executable
+   assertion, not an eyeball check (background processes cannot write user
+   rows; every client that can — the app, cron jobs, pooled connections,
+   foreign tools — appears as a `client backend`):
    ```bash
-   ./scripts/db-backup.sh backup /mnt/nas/exam-evidence-$(date +%F).dump
+   $PROD stop app
+   WRITERS="$($PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 -tAc \
+     "SELECT count(*) FROM pg_stat_activity
+      WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()")"
+   [ "$WRITERS" = "0" ] || {
+     $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -c \
+       "SELECT pid, usename, application_name, client_addr FROM pg_stat_activity
+        WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()"
+     echo "ABORT: $WRITERS client backend(s) still connected — SOURCE_STABILITY = UNKNOWN" >&2
+     exit 1
+   }
+   ```
+   A nonzero answer means an unidentified writer is connected:
+   `SOURCE_STABILITY = UNKNOWN`, and every later step is BLOCKED until it
+   is resolved (identify and stop the client, then re-run this check).
+   Do NOT proceed on the theory that "it is probably read-only".
+4. **Fresh full backup — the authoritative preservation material.** Take
+   a whole-database custom dump NOW, inside the quiesced window (a dump
+   taken before the feature was ever used does not contain the rows):
+   ```bash
+   DUMP=/mnt/nas/exam-evidence-$(date +%F).dump
+   ./scripts/db-backup.sh backup "$DUMP"
+   DUMP_SHA256="sha256:$(sha256sum "$DUMP" | cut -d' ' -f1)"
    ```
    This same dump satisfies the upgrade checklist's mandatory pre-upgrade
    backup (runbook §15). Whole-database is deliberately the ONLY export
@@ -251,34 +286,130 @@ Gate workflow for deployments holding rows:
    cannot be verified by restore and cannot stand alone as evidence. If
    a table-scoped copy is kept anyway, treat it as a non-authoritative
    convenience artifact; it is not the preservation record.
-4. **Verify by isolated drill (runbook §17.2).** Run the §17.2 drill
-   against the fresh dump — a full restore rebuilds every table and
-   foreign key of the dumped database, the five evidence tables included
-   — and insert one evidence-specific assertion between the drill's
-   acceptance queries and its teardown: the restored five-table counts
-   must equal the step-1 inventory.
+5. **Capture the SOURCE_MANIFEST** — the authoritative expected counts,
+   recorded after the dump (equivalent to at-dump-time counts only
+   because the writers are quiesced):
    ```bash
-   for t in backup_runs backup_run_events restore_drill_runs \
-            retention_runs backup_operational_policy; do
-     docker exec "$DRILL" psql -U postgres -d exam_drill \
-       -v ON_ERROR_STOP=1 -tAc "SELECT '$t =', count(*) FROM $t"
-   done
+   ./scripts/verify-evidence-preservation.sh capture \
+     --label "source:$PGDB" \
+     --database-source "production db (compose project exam-prod)" \
+     --dump-checksum "$DUMP_SHA256" \
+     --expect-database "$PGDB" \
+     --output evidence-source.manifest \
+     -- $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 -tAc
    ```
-   The drill's fail-closed contract carries over unchanged: a run that
+   The validator aborts nonzero (and writes no manifest) on a missing
+   table, connection failure, a non-integer count, or a capture aimed at
+   the wrong database.
+6. **Verify by isolated drill (runbook §17.2) — executable comparison.**
+   First assert the dump file under test IS the checksum-recorded
+   artifact from step 4 (the checksum binds the manifests to one
+   artifact; restore a different file and that binding is a fiction):
+   ```bash
+   [ "sha256:$(sha256sum "$DUMP" | cut -d' ' -f1)" = "$DUMP_SHA256" ] || {
+     echo "ABORT: $DUMP is not the dump recorded in step 4" >&2; exit 1; }
+   ```
+   Then run the §17.2 drill with `DUMP` pointing at this dump. Between
+   the drill's acceptance queries and the end of the block (its teardown
+   is the ownership-checked EXIT trap), capture the RESTORED_MANIFEST
+   from the drill container and run the comparison:
+   ```bash
+   ./scripts/verify-evidence-preservation.sh capture \
+     --label "restored:exam_drill" \
+     --database-source "drill container $DRILL" \
+     --dump-checksum "$DUMP_SHA256" \
+     --expect-database exam_drill \
+     --output evidence-restored.manifest \
+     -- docker exec "$DRILL" psql -U postgres -d exam_drill -v ON_ERROR_STOP=1 -tAc
+   ./scripts/verify-evidence-preservation.sh compare \
+     evidence-source.manifest evidence-restored.manifest
+   ```
+   `compare` prints `PRESERVATION_COUNT_PARITY=PASS` and exits 0 only
+   when every one of the five counts matches and both manifests record
+   the same dump checksum (an unrecorded checksum fails closed — the
+   gate never decides on counts alone); any mismatch (a valid but STALE
+   dump that restores cleanly yet misses recent evidence rows fails
+   exactly here), missing table, or malformed manifest names the exact
+   table/reason, exits nonzero, and prints `CLEANUP=BLOCKED`. The
+   drill's fail-closed contract carries over unchanged: a run that
    aborts at any step (§17.2) means the preservation material is NOT
-   verified, and step 5 must not run.
-5. **Authorized cleanup.** Only with the disposition recorded and the
-   backup verified:
+   verified, and step 9 must not run. Printing counts and comparing them
+   by eye is not verification.
+7. **Source Stability Gate, part 2 — re-check before cleanup.** Re-run
+   the step-3 writer assertion (still zero client backends) and
+   re-capture + re-compare the source manifest; anything but an exact
+   PASS means an unknown writer acted inside the window:
    ```bash
-   $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 \
-     -c 'TRUNCATE backup_run_events, backup_runs, restore_drill_runs, retention_runs, backup_operational_policy' \
-     < /dev/null
+   ./scripts/verify-evidence-preservation.sh capture \
+     --label "source-recheck:$PGDB" \
+     --database-source "production db (compose project exam-prod)" \
+     --dump-checksum "$DUMP_SHA256" \
+     --expect-database "$PGDB" \
+     --output evidence-source-recheck.manifest \
+     -- $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 -tAc
+   ./scripts/verify-evidence-preservation.sh compare \
+     evidence-source.manifest evidence-source-recheck.manifest
    ```
-6. **Recheck empty.** Re-run step 1 — all five counts must be `0`.
-7. **Apply 0045.** `docker compose --env-file .env.production up -d` with
+   Two equal counts alone never prove "no writes happened" — the writer
+   isolation from step 3 is the control; this re-check is the tripwire
+   that detects a broken one.
+8. **STOP if anything failed.** If any step from 3 through 7 aborted or
+   returned anything but PASS: `PRESERVATION_GATE = FAIL`,
+   `AUTHORIZED_CLEANUP = BLOCKED`. Keep the dump, the manifests, and the
+   untouched source database; restart the app (`$PROD up -d` with the old
+   release) and re-run the workflow from step 3 with a fresh dump. Never
+   resolve a failed gate by weakening the comparison.
+9. **Authorized cleanup — locked, re-asserted, atomic.** Only with the
+   disposition recorded, the drill comparison PASSED, and the stability
+   re-check PASSED. The final stability check and the TRUNCATE run as ONE
+   transaction: the five tables are locked `ACCESS EXCLUSIVE`, the counts
+   are re-asserted against the VERIFIED source manifest (read back from
+   `evidence-source.manifest`, so the numbers cannot drift from what was
+   compared), and any mismatch rolls everything back with nothing
+   truncated — closing the gap between a re-check and a separate cleanup
+   command, where a last-instant write would be silently truncated. The
+   SQL is piped via `printf` (not a heredoc) so the block pastes safely
+   with this section's indentation, and the manifest values are
+   re-validated as pure integers before they are interpolated into the
+   SQL:
+   ```bash
+   declare -A EXPECTED
+   while IFS='=' read -r k v; do
+     case "$k" in
+       backup_runs|backup_run_events|restore_drill_runs|retention_runs|backup_operational_policy)
+         case "$v" in
+           '' | *[!0-9]*)
+             echo "ABORT: manifest value for $k is not an integer — manifest was not produced by the validator" >&2
+             exit 1 ;;
+         esac
+         EXPECTED[$k]="$v" ;;
+     esac
+   done < evidence-source.manifest
+   printf '%s\n' \
+     "BEGIN;" \
+     "LOCK TABLE backup_run_events, backup_runs, restore_drill_runs, retention_runs, backup_operational_policy IN ACCESS EXCLUSIVE MODE;" \
+     "DO \$do\$" \
+     "BEGIN" \
+     "  IF (SELECT count(*) FROM backup_runs) <> ${EXPECTED[backup_runs]} THEN RAISE EXCEPTION 'source stability violated: backup_runs changed since the verified manifest'; END IF;" \
+     "  IF (SELECT count(*) FROM backup_run_events) <> ${EXPECTED[backup_run_events]} THEN RAISE EXCEPTION 'source stability violated: backup_run_events changed since the verified manifest'; END IF;" \
+     "  IF (SELECT count(*) FROM restore_drill_runs) <> ${EXPECTED[restore_drill_runs]} THEN RAISE EXCEPTION 'source stability violated: restore_drill_runs changed since the verified manifest'; END IF;" \
+     "  IF (SELECT count(*) FROM retention_runs) <> ${EXPECTED[retention_runs]} THEN RAISE EXCEPTION 'source stability violated: retention_runs changed since the verified manifest'; END IF;" \
+     "  IF (SELECT count(*) FROM backup_operational_policy) <> ${EXPECTED[backup_operational_policy]} THEN RAISE EXCEPTION 'source stability violated: backup_operational_policy changed since the verified manifest'; END IF;" \
+     "END" \
+     "\$do\$;" \
+     "TRUNCATE backup_run_events, backup_runs, restore_drill_runs, retention_runs, backup_operational_policy;" \
+     "COMMIT;" \
+     | $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1
+   ```
+   A failed assertion aborts with `ON_ERROR_STOP` before the TRUNCATE
+   statement executes, and the open transaction rolls back regardless;
+   only a clean run through `COMMIT` reports success. A non-integer
+   manifest value (a hand-edited manifest) aborts before any SQL is sent.
+10. **Recheck empty.** Re-run step 1 — all five counts must be `0`.
+11. **Apply 0045.** `docker compose --env-file .env.production up -d` with
    the new release: the entrypoint migrates, the gate passes, the journal
-   records 0045, the tables are dropped.
-8. **Post-verify.** §2.6 checklist plus:
+   records 0045, the tables are dropped, the app restarts.
+12. **Post-verify.** §2.6 checklist plus:
    ```bash
    $PROD exec -T db psql -U "$PGUSER" -d "$PGDB" -tAc \
      "SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND tablename IN
@@ -286,18 +417,20 @@ Gate workflow for deployments holding rows:
    # expected: 0
    ```
 
-Declining the upgrade (keeping the evidence in place): redeploy the
-previous release. The aborted 0045 recorded no journal entry, so the
-database is still at the pre-0045 schema and runs unchanged under the old
-image. After step 7 has succeeded, rollback is only the §2.5
+Declining the upgrade (keeping the evidence in place): restart the app
+with the previous release. The aborted 0045 recorded no journal entry, so
+the database is still at the pre-0045 schema and runs unchanged under the
+old image. After step 11 has succeeded, rollback is only the §2.5
 restore path — in the migrated database the tables are gone.
 
 Record the gate outcome per deployment, in the operator's own records
 (never in this repository): deployment identifier, environment type,
 whether a production database exists, current schema/migration head, the
 five table counts, whether historical evidence is present, the
-preservation backup path, the drill verification result (including the
-five-table count comparison), the data-destruction authorization (who,
+preservation backup path and checksum, the source/restored manifests and
+the `PRESERVATION_COUNT_PARITY` verdict (the comparison is executed by
+`scripts/verify-evidence-preservation.sh`, never by eye), the
+source-stability gate results, the data-destruction authorization (who,
 when), and 0045 rollout readiness. Production record contents,
 credentials, and sensitive paths stay out of GitHub.
 

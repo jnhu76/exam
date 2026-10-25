@@ -27,7 +27,7 @@ has one authority:
 | Engineering and verification policy | [`docs/standards/`](standards/) and executable repository gates |
 | Current implementation state | [`docs/status/`](status/) plus as-built code/test evidence |
 | Phase boundaries | [`docs/roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) |
-| Current backlog sequencing / disposition | Specifically authorized **OPEN** GitHub Issue selected for that work; currently [#739](https://github.com/jnhu76/exam/issues/739) (backup-evidence subsystem removal: PR-A docs → PR-B code → PR-C schema, per [ADR-023](adr/ADR-023-remove-backup-evidence-subsystem.md)); no universal successor to #584 |
+| Current backlog sequencing / disposition | Specifically authorized **OPEN** GitHub Issue selected for that work; currently [#739](https://github.com/jnhu76/exam/issues/739) (backup-evidence subsystem removal per [ADR-023](adr/ADR-023-remove-backup-evidence-subsystem.md) — PR-A #814 / PR-B #815 / PR-C #816 all merged; the issue stays open only for the final §2.7/§17.2 operational-safety closeout); no universal successor to #584 |
 | Current task scope / acceptance / non-goals | That same OPEN Issue plus any explicitly adopted parent ordering |
 | Historical evidence | [`docs/archive/`](archive/), Git, closed Issues, and merged PRs |
 
