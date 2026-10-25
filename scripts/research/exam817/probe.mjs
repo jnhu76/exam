@@ -33,7 +33,10 @@ const HTTP_TIMEOUT_MS = 2500;
 // waiter has its own (shorter) timeout, so this only bounds a stuck loop.
 const MAX_PROBE_DURATION_MS = 900000;
 
-const PS_FORMAT = "{{.ID}}\\t{{index .Labels \"com.docker.compose.service\"}}\\t{{.State}}";
+// F10: docker ps exposes .Labels as a comma-joined string (not a map), so
+// `index .Labels "…"` fails the whole template. Parse the label string in
+// JS instead.
+const PS_FORMAT = "{{.ID}}\\t{{.Labels}}\\t{{.State}}";
 
 async function httpChannel(url) {
   const t0 = Date.now();
@@ -56,8 +59,12 @@ async function containerChannel(project) {
     );
     const states = {};
     for (const line of stdout.split("\n").filter(Boolean)) {
-      const [, service, state] = line.split("\t");
-      if (service) states[service] = state;
+      const [, labels, state] = line.split("\t");
+      const svc = (labels ?? "")
+        .split(",")
+        .find((l) => l.startsWith("com.docker.compose.service="))
+        ?.slice("com.docker.compose.service=".length);
+      if (svc) states[svc] = state;
     }
     return states;
   } catch (e) {
