@@ -106,6 +106,26 @@ export async function resolveTarget(runId, service) {
 }
 
 /**
+ * Bystander identity for a non-target fault domain. A service that is not
+ * deployed in this run (e.g. redis lives behind the opt-in `redis` compose
+ * profile — its #585 production role) cannot be contaminated; record that
+ * fact instead of failing the fault.
+ */
+async function resolveBystander(runId, svc) {
+  try {
+    return { deployed: true, ...(await resolveTarget(runId, svc)) };
+  } catch (e) {
+    return { deployed: false, note: e.message.slice(0, 160) };
+  }
+}
+
+function bystanderUnchanged(pre, post) {
+  if (!pre.deployed && !post.deployed) return true; // not part of the run either time
+  if (pre.deployed !== post.deployed) return false; // appeared/vanished across the fault
+  return pre.id === post.id && pre.startedAt === post.startedAt;
+}
+
+/**
  * Execute one fault. Returns a receipt. Throws only on unexpected harness
  * errors; the receipt itself records command success/failure honestly.
  */
@@ -233,7 +253,7 @@ export async function executeFault(runId, { arm, trialId, autoRestartWindowMs } 
   if (bystanders.length > 0) {
     await step("bystanders_pre", async () => {
       receipt.bystanders_pre = {};
-      for (const svc of bystanders) receipt.bystanders_pre[svc] = await resolveTarget(runId, svc);
+      for (const svc of bystanders) receipt.bystanders_pre[svc] = await resolveBystander(runId, svc);
       return receipt.bystanders_pre;
     });
   }
@@ -311,12 +331,11 @@ export async function executeFault(runId, { arm, trialId, autoRestartWindowMs } 
   if (bystanders.length > 0) {
     await step("bystanders_post", async () => {
       receipt.bystanders_post = {};
-      for (const svc of bystanders) receipt.bystanders_post[svc] = await resolveTarget(runId, svc);
+      for (const svc of bystanders) receipt.bystanders_post[svc] = await resolveBystander(runId, svc);
       receipt.bystanders_unchanged = Object.fromEntries(
         bystanders.map((svc) => [
           svc,
-          receipt.bystanders_pre[svc].id === receipt.bystanders_post[svc].id &&
-            receipt.bystanders_pre[svc].startedAt === receipt.bystanders_post[svc].startedAt,
+          bystanderUnchanged(receipt.bystanders_pre[svc], receipt.bystanders_post[svc]),
         ]),
       );
       return receipt.bystanders_unchanged;
