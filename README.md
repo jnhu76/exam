@@ -57,8 +57,7 @@ inbox notifications.
   account activation/deactivation
 - **Role-based access** — Admin, Teacher, Candidate, Proctor, Grader,
   Maintainer with scoped permissions
-- **Operational controls** — diagnostics, backup evidence ledger,
-  restore readiness, structured audit log
+- **Operational controls** — diagnostics, structured audit log
 - **Email delivery** — in-process outbox loop with retry, lock recovery,
   and optional SMTP
 - **Docker deployment** — prebuilt images, single-command startup,
