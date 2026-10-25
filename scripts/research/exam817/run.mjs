@@ -405,8 +405,11 @@ function requireFields(obj, fields, what) {
 
 async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {}) {
   const st = loadState(runId);
-  if (!["scenario_published"].includes(st.phase)) {
-    throw new Error(`wait requires phase=scenario_published (got ${st.phase})`);
+  // scenario_published: normal entry. service_recovered: post-fault resume —
+  // the fault is already terminal (handleCheckpoint's fault_terminal guard
+  // prevents re-execution); the loop just waits for BROWSER_VERIFIED again.
+  if (!["scenario_published", "service_recovered"].includes(st.phase)) {
+    throw new Error(`wait requires phase=scenario_published|service_recovered (got ${st.phase})`);
   }
   const mdir = mailboxDir(runId);
   const winEventsPath = path.join(mdir, WINDOWS_EVENTS);
