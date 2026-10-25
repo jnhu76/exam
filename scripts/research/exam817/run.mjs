@@ -846,9 +846,16 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   // returns, so it can understate) and the true outage window from the
   // fault's first mutating step (SIGKILL / graceful stop / compose down)
   // to the first chain-ready response.
-  const faultStepAt = receipt.steps
-    ?.filter((s) => ["sigkill", "graceful_stop", "compose_down"].includes(s.name))
-    .map((s) => s.at)[0];
+  // First mutating step's timestamp. The receipt carries it directly
+  // (kill_at/stop_at/down_at are written by the fault step itself);
+  // receipt.steps is journal state, not part of the returned receipt —
+  // the steps lookup is a legacy fallback only.
+  const faultStepAt =
+    receipt.kill_at ??
+    receipt.stop_at ??
+    receipt.down_at ??
+    receipt.steps?.filter((s) => ["sigkill", "graceful_stop", "compose_down"].includes(s.name)).map((s) => s.at)[0] ??
+    null;
   const outageWindowMs =
     recovery.first_ok_at && faultStepAt ? Date.parse(recovery.first_ok_at) - Date.parse(faultStepAt) : null;
   const probeSawFailure = (recovery.probes ?? []).some((p) => p.error || (p.status && p.status >= 500));
