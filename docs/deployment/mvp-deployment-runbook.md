@@ -1296,8 +1296,9 @@ until [ "$(docker logs "$DRILL" 2>&1 | grep -c \
   'database system is ready to accept connections')" -ge 2 ]; do
   if ! docker inspect -f '{{.State.Running}}' "$DRILL" 2>/dev/null \
       | grep -q true; then
-    echo "ABORT: drill container exited during startup" >&2
-    docker logs "$DRILL" 2>&1 | tail -5 >&2 || true
+    # --rm has already reaped the exited container, so its logs are gone;
+    # to diagnose a startup crash, rerun `docker run` without --rm.
+    echo "ABORT: drill container exited during startup (logs not kept by --rm)" >&2
     exit 1
   fi
   if [ "$SECONDS" -ge "$deadline" ]; then
