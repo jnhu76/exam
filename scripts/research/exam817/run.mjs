@@ -284,6 +284,114 @@ async function cmdPublish(runId) {
 
 // ── wait loop / trial state machine ───────────────────────────────
 
+// ── Windows event field resolution ────────────────────────────────
+
+/**
+ * Windows events carry business fields inside `payload` (envelope stays
+ * flat). Merge for uniform lookup: envelope keys win, payload fills the
+ * rest. The original payload object is preserved as ev.payload.
+ */
+function normalizeWindowsEvent(record) {
+  const payload = record.payload && typeof record.payload === "object" && !Array.isArray(record.payload) ? record.payload : {};
+  return { ...payload, ...record, payload };
+}
+
+/** Convert a Windows-side artifact path (C:\…) to its WSL /mnt/c path. */
+function artifactPath(winPath) {
+  if (typeof winPath !== "string" || winPath.length === 0) return null;
+  const m = winPath.match(/^([A-Za-z]):\\(.*)$/);
+  if (!m) return fs.existsSync(winPath) ? winPath : null;
+  return `/mnt/${m[1].toLowerCase()}/${m[2].replaceAll("\\", "/")}`;
+}
+
+/**
+ * Independently verify an ACK: read the referenced response artifact,
+ * check its sha256, and require accepted===true + a serverVersion.
+ * When a request artifact is referenced, also verify and load the ACKed
+ * answer VALUE (the durability oracle compares PG against the ACKed
+ * content, not the manifest).
+ * Returns {ok, serverVersion, evidence_ref, answer_value?, answer_digest?}.
+ */
+function verifyAckArtifact(payload) {
+  const ra = payload?.response_artifact;
+  if (!ra || typeof ra.path !== "string") return { ok: false, reason: "no response_artifact reference" };
+  const p = artifactPath(ra.path);
+  if (!p || !fs.existsSync(p)) return { ok: false, reason: `response artifact missing: ${ra.path}` };
+  const bytes = fs.readFileSync(p);
+  const sha = sha256Hex(bytes);
+  if (ra.sha256 && sha !== ra.sha256) {
+    return { ok: false, reason: `response artifact sha256 mismatch (expected ${ra.sha256}, got ${sha})` };
+  }
+  let body;
+  try {
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch (e) {
+    return { ok: false, reason: `response artifact not valid JSON: ${e.message}` };
+  }
+  if (body.accepted !== true || typeof body.serverVersion !== "number") {
+    return { ok: false, reason: `artifact is not an ACK (accepted=${JSON.stringify(body.accepted)}, serverVersion=${JSON.stringify(body.serverVersion)})` };
+  }
+  const out = {
+    ok: true,
+    serverVersion: body.serverVersion,
+    evidence_ref: `${path.basename(p)}#sha256:${sha}`,
+    savedAt: body.savedAt ?? null,
+  };
+  // Resolve the request artifact to recover the ACKed answer VALUE.
+  // Candidate order: the event's explicit reference, then derivations from
+  // the response artifact name (resp-X-s2.json → req-X-s2.json → req-X.json;
+  // Windows' naming correction renamed resp files but not all req files).
+  // Values beat event-side answer_digest fields, which have been observed
+  // to carry stale generations (Windows-side correction F2).
+  // A candidate is valid only if its questionId matches and, when it has a
+  // baseVersion, the baseVersion→serverVersion chain is consistent
+  // (baseVersion === serverVersion - 1 for the accepted version).
+  const candidates = [];
+  const qa = payload?.request_artifact;
+  if (qa && typeof qa.path === "string") candidates.push({ path: artifactPath(qa.path), sha: qa.sha256 });
+  if (typeof p === "string" && path.basename(p).startsWith("resp-")) {
+    const base = path.basename(p).replace(/^resp-/, "req-");
+    candidates.push({ path: path.join(path.dirname(p), base), sha: undefined });
+    const stripped = base.replace(/-s\d+\.json$/, ".json");
+    if (stripped !== base) candidates.push({ path: path.join(path.dirname(p), stripped), sha: undefined });
+  }
+  let best = null; // {value, quality, ref}
+  for (const cand of candidates) {
+    if (!cand.path || !fs.existsSync(cand.path)) continue;
+    const qbytes = fs.readFileSync(cand.path);
+    const qsha = sha256Hex(qbytes);
+    if (cand.sha && qsha !== cand.sha) continue;
+    let req;
+    try {
+      req = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(qbytes));
+    } catch {
+      continue;
+    }
+    if ("answer" in req) {
+      if (payload?.question_id && req.questionId !== payload.question_id) continue; // cross-question guard
+      const chainOk = typeof req.baseVersion === "number" && req.baseVersion === body.serverVersion - 1;
+      const quality = chainOk ? 2 : 1;
+      if (!best || quality > best.quality) {
+        best = {
+          value: req.answer,
+          quality,
+          ref: `${path.basename(cand.path)}+${path.basename(p)}#sha256:${qsha}/${sha}`,
+        };
+      }
+      if (quality === 2) break; // chain-consistent value cannot be beaten
+    }
+  }
+  if (best) {
+    out.answer_value = best.value;
+    out.evidence_ref = best.ref;
+    delete out.answer_digest;
+  }
+  if (out.answer_value === undefined && typeof payload?.answer_digest === "string") {
+    out.answer_digest = payload.answer_digest;
+  }
+  return out;
+}
+
 function requireFields(obj, fields, what) {
   const missing = fields.filter((f) => obj[f] === undefined || obj[f] === null);
   if (missing.length > 0) throw new Error(`${what} missing fields: ${missing.join(",")}`);
@@ -359,10 +467,10 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
     }
 
     for (const rec of records) {
-      const key = dedupKey(WINDOWS_EVENTS, rec.value);
+      const key = dedupKey(WINDOWS_EVENTS, rec);
       if (st.dispatched.has(key)) continue;
       st.dispatched.add(key);
-      const ev = rec.value;
+      const ev = normalizeWindowsEvent(rec.value);
 
       if (ev.run_id !== st.run_id || ev.trial_id !== st.trial_id) {
         console.log(`  [ignored] ${ev.event} for ${ev.run_id}/${ev.trial_id} (not this run)`);
@@ -372,50 +480,83 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
 
       try {
         if (ev.event === "SAVE_ACCEPTED") {
-          requireFields(ev, ["attempt_id", "question_id", "generation", "server_version", "evidence_ref"], "SAVE_ACCEPTED");
-          if (ev.accepted !== true) {
-            console.log(`  [save] question ${ev.question_id} NOT accepted (${JSON.stringify(ev.reason ?? "")})`);
-            st.rejected_saves = st.rejected_saves ?? {};
-            st.rejected_saves[ev.question_id] = { generation: ev.generation, reason: ev.reason ?? "unknown" };
+          // A save without independently verified ACK evidence is recorded
+          // as rejected and never counted — but it does NOT abort the trial;
+          // CHECKPOINT validation still refuses an incomplete checkpoint.
+          const attemptId = ev.attempt_id;
+          const qid = ev.question_id;
+          if (!attemptId || !qid) {
+            writer.append("PROTOCOL_REJECTED", {
+              run_id: st.run_id, trial_id: st.trial_id, file: WINDOWS_EVENTS,
+              event_id: ev.event_id, reason: "SAVE_ACCEPTED without attempt_id/question_id",
+            });
+            console.log(`  [save-rejected] missing ids (seq ${ev.seq})`);
             saveState(runId, st);
             continue;
           }
-          st.attempt_id = ev.attempt_id;
-          st.ack_state[ev.question_id] = {
-            generation: ev.generation,
-            serverVersion: ev.server_version,
-            evidence_ref: ev.evidence_ref,
+          let ack;
+          if (ev.accepted === true && Number.isSafeInteger(ev.server_version)) {
+            ack = { ok: true, serverVersion: ev.server_version, evidence_ref: ev.evidence_ref ?? `event:${ev.event_id}` };
+          } else {
+            ack = verifyAckArtifact(ev.payload);
+          }
+          if (!ack.ok) {
+            st.rejected_saves = st.rejected_saves ?? {};
+            st.rejected_saves[qid] = { generation: ev.generation ?? null, reason: ack.reason };
+            saveState(runId, st);
+            writer.append("PROTOCOL_REJECTED", {
+              run_id: st.run_id, trial_id: st.trial_id, file: WINDOWS_EVENTS,
+              event_id: ev.event_id, question_id: qid, reason: `SAVE_ACCEPTED unverified: ${ack.reason}`,
+            });
+            console.log(`  [save-rejected] q=${qid.slice(0, 8)}: ${ack.reason}`);
+            continue;
+          }
+          st.attempt_id = attemptId;
+          st.ack_state[qid] = {
+            generation: ev.generation ?? null,
+            serverVersion: ack.serverVersion,
+            evidence_ref: ack.evidence_ref,
+            answer_value: ack.answer_value, // may be undefined → digest path
+            answer_digest: ack.answer_digest, // may be undefined
             at: ev.timestamp_utc,
           };
           saveState(runId, st);
-          console.log(`  [save] q=${ev.question_id.slice(0, 8)} gen=${ev.generation} v=${ev.server_version} ACKED`);
+          console.log(`  [save] q=${qid.slice(0, 8)} gen=${ev.generation} v=${ack.serverVersion} ACKED (artifact-verified)`);
         } else if (ev.event === "CHECKPOINT_READY") {
-          requireFields(ev, ["arm", "attempt_id", "saves", "evidence_ref"], "CHECKPOINT_READY");
+          requireFields(ev, ["arm", "attempt_id", "saves"], "CHECKPOINT_READY");
           await handleCheckpoint(runId, st, writer, ev, reader);
           if (st.phase === "incomplete") return;
         } else if (ev.event === "BROWSER_VERIFIED") {
-          requireFields(ev, ["attempt_id", "browser_answers", "evidence_ref"], "BROWSER_VERIFIED");
+          // Windows layout: per_question[] with browser_value/…_matches_*
+          // fields (as-built); browser_answers[] remains accepted.
+          const perQ = Array.isArray(ev.per_question) ? ev.per_question : ev.browser_answers;
+          requireFields({ ...ev, browser_answers: perQ }, ["attempt_id", "browser_answers"], "BROWSER_VERIFIED");
           st.browser_verified = {
             at: ev.timestamp_utc,
             attempt_id: ev.attempt_id,
-            reload_at: ev.reload_at ?? null,
-            evidence_ref: ev.evidence_ref,
-            browser_answers: ev.browser_answers,
+            reload_at: ev.reload_at ?? ev.reload_method ?? null,
+            identity_confirmed: ev.identity_confirmed ?? null,
+            evidence_ref: ev.evidence_ref ?? `event:${ev.event_id}`,
+            browser_answers: perQ,
           };
           st.browser_state = {};
-          for (const b of ev.browser_answers) {
-            st.browser_state[b.question_id] = { visible_value: b.visible_value, evidence_ref: ev.evidence_ref };
+          for (const b of perQ) {
+            st.browser_state[b.question_id] = {
+              visible_value: b.browser_value !== undefined ? b.browser_value : (b.visible_value !== undefined ? b.visible_value : null),
+              answer_digest: b.answer_digest ?? null,
+              evidence_ref: b.evidence_ref ?? st.browser_verified.evidence_ref,
+            };
           }
           st.phase = "verdict_phase";
           saveState(runId, st);
           await writeVerdict(runId, st, writer, {});
           return;
         } else if (ev.event === "WINDOW_ERROR") {
-          console.log(`  [window-error] ${JSON.stringify(ev).slice(0, 300)}`);
+          console.log(`  [window-error] ${JSON.stringify(ev.payload).slice(0, 300)}`);
           st.window_error = ev;
           saveState(runId, st);
         } else if (ev.event === "HELLO") {
-          console.log(`  [hello] windows agent: ${JSON.stringify(ev.agent ?? {})}`.slice(0, 200));
+          console.log(`  [hello] windows agent: ${JSON.stringify(ev.agent ?? ev.payload ?? {})}`.slice(0, 200));
         } else {
           console.log(`  [unhandled] ${ev.event} (logged, no action)`);
         }
@@ -428,6 +569,9 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
           event_id: ev.event_id,
           reason: `dispatch error on ${ev.event}: ${e.message}`,
         });
+        // Structural errors on checkpoint/browser events are trial-fatal
+        // (fail closed); nothing was executed, so the trial ends UNKNOWN —
+        // except SAVE_ACCEPTED which never reaches this path anymore.
         st.phase = "incomplete";
         saveState(runId, st);
         await writeVerdict(runId, st, writer, { verdict: "UNKNOWN", reason: `dispatch error on ${ev.event}: ${e.message}` });
@@ -451,6 +595,13 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
 }
 
 async function handleCheckpoint(runId, st, writer, ev, reader) {
+  // Replay-safety: a fault for this trial has already been applied and
+  // receipted (harness restarted after SERVICE_RECOVERED). Never re-execute;
+  // recovery has already been emitted — just wait for the browser again.
+  if (st.fault_terminal) {
+    console.log(`  [checkpoint] fault_terminal already present (${st.fault_terminal.kind}) — skipping re-execution`);
+    return;
+  }
   // 1. Validate the checkpoint against the frozen plan.
   if (ev.arm !== st.arm) throw new Error(`CHECKPOINT_READY arm ${ev.arm} != frozen arm ${st.arm}`);
   const acked = new Set(Object.keys(st.ack_state));
@@ -460,15 +611,31 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
   if (missing.length > 0) {
     throw new Error(`CHECKPOINT_READY lacks ACKed saves for ${missing.length} questions: ${missing.slice(0, 3).join(",")}`);
   }
-  // Fold the checkpoint's save receipts into ack state (authoritative last write).
+  // Fold the checkpoint's save receipts into ack state (authoritative last
+  // write). Each entry may carry flat fields or artifact references — the
+  // same artifact verification applies; unverified entries do NOT count.
   for (const s of ev.saves ?? []) {
-    if (s.accepted === true && s.server_version !== undefined) {
-      st.ack_state[s.question_id] = {
-        generation: s.generation ?? st.ack_state[s.question_id]?.generation ?? 1,
-        serverVersion: s.server_version,
-        evidence_ref: s.evidence_ref ?? ev.evidence_ref,
+    const se = normalizeWindowsEvent(typeof s === "object" && s !== null ? s : {});
+    const qid = se.question_id;
+    if (!qid) continue;
+    let ack;
+    if (se.accepted === true && Number.isSafeInteger(se.server_version)) {
+      ack = { ok: true, serverVersion: se.server_version, evidence_ref: se.evidence_ref ?? `event:${ev.event_id}` };
+    } else {
+      ack = verifyAckArtifact(se.payload);
+    }
+    if (ack.ok) {
+      st.ack_state[qid] = {
+        generation: se.generation ?? st.ack_state[qid]?.generation ?? null,
+        serverVersion: ack.serverVersion,
+        evidence_ref: ack.evidence_ref,
+        answer_value: ack.answer_value,
+        answer_digest: ack.answer_digest,
         at: ev.timestamp_utc,
       };
+    } else {
+      st.rejected_saves = st.rejected_saves ?? {};
+      st.rejected_saves[qid] = { generation: se.generation ?? null, reason: `checkpoint save unverified: ${ack.reason}` };
     }
   }
   st.attempt_id = ev.attempt_id;
@@ -599,6 +766,7 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
       : null;
   const counts = {};
   for (const q of perQuestion ?? []) counts[q.classification] = (counts[q.classification] ?? 0) + 1;
+  const deviations = (perQuestion ?? []).filter((q) => q.scenario_deviation);
 
   const mutation = oracleMutationRedTest();
   const finalVerdict = verdict ?? (counts.ACK_LOST > 0 ? "LOSS_OBSERVED" : "COMPLETE");
@@ -615,6 +783,14 @@ async function writeVerdict(runId, st, writer, { verdict, reason }) {
     attempt_id: st.attempt_id,
     exam_id: st.exam_id,
     counts,
+    scenario_deviations: deviations.map((d) => ({
+      question_id: d.question_id,
+      order: d.order,
+      type: d.type,
+      manifest_expected: d.manifest_expected_value,
+      acked_value: d.acked_value,
+      note: "ACKed content differs from the scenario manifest (authoring reality, not answer loss)",
+    })),
     per_question: perQuestion,
     rto: st.rto ?? null,
     fault: st.fault_terminal ?? null,

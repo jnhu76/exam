@@ -63,13 +63,14 @@ export async function snapshotAttempt(runId, attemptId) {
   if (safeId !== attemptId || attemptId.length === 0) {
     throw new Error(`refusing non-uuid attempt id: ${attemptId}`);
   }
+  // Single SELECT = single implicit transaction (statement snapshot).
+  // No explicit BEGIN/COMMIT: psql -At echoes their "BEGIN"/"COMMIT" tags
+  // into stdout, which is not JSON.
   const sql =
-    `BEGIN READ ONLY; ` +
     `SELECT row_to_json(t) FROM (SELECT id, exam_id, status, deadline_at, started_at, submitted_at, ` +
-    `answers, submitted_answers, updated_at FROM exam_attempts WHERE id = '${safeId}') t; ` +
-    `COMMIT;`;
+    `answers, submitted_answers, updated_at FROM exam_attempts WHERE id = '${safeId}') t;`;
   const { stdout, latencyMs } = await pgQuery(runId, sql);
-  const line = stdout.trim().split("\n").filter(Boolean)[0];
+  const line = stdout.trim().split("\n").filter((l) => l.startsWith("{"))[0];
   if (!line) return null;
   return { row: JSON.parse(line), latencyMs, captured_at: new Date().toISOString() };
 }
@@ -134,10 +135,16 @@ function valuesEqual(expected, actual, type) {
 /**
  * Per-question classification of one trial.
  *
+ * The durability comparison is ACK-vs-PG (A−P): the expected value is the
+ * content of the LAST verified ACK (request artifact value, or its digest),
+ * not the scenario manifest — manifest deviations (e.g. CRLF normalized to
+ * LF by a real textarea) are scenario authoring facts, reported separately
+ * as scenario_deviation, never as answer loss.
+ *
  * @param manifestQuestions manifest entries {question_id, type, expected_gen1, expected_gen2, order}
  * @param attemptRow        row_to_json of exam_attempts (answers jsonb array)
- * @param ackState          per question {serverVersion, generation, evidence_ref} from ACKed saves
- * @param browserState      per question {visible_value, ui_version?} from BROWSER_VERIFIED (optional)
+ * @param ackState          per question {serverVersion, generation, evidence_ref, answer_value?, answer_digest?}
+ * @param browserState      per question {visible_value?, answer_digest?} from BROWSER_VERIFIED (optional)
  */
 export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, browserState }) {
   const answers = Array.isArray(attemptRow?.answers) ? attemptRow.answers : [];
@@ -154,24 +161,55 @@ export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, b
     const expectedValue = expectedGeneration === 2 ? q.expected_gen2 : q.expected_gen1;
     const pgRec = latestByQuestion.get(q.question_id) ?? null;
 
+    // ACK-vs-PG content match: value comparison when the ACKed value is
+    // available; digest comparison (sha256 of JSON-serialized value — the
+    // Windows harness digest formula, verified against known vectors)
+    // otherwise; null when neither is available (no verifiable content).
+    let pgMatch = null;
+    if (ack && pgRec) {
+      if (ack.answer_value !== undefined && ack.answer_value !== null) {
+        pgMatch = valuesEqual(ack.answer_value, pgRec.answer, q.type);
+      } else if (ack.answer_digest) {
+        pgMatch = sha256Hex(stableStringify(pgRec.answer)) === ack.answer_digest;
+      }
+    }
+
     let classification;
     if (!ack) {
       classification = ackState === null ? "NOT_RUN" : "UNACKNOWLEDGED_UNKNOWN";
     } else if (!pgRec) {
       classification = "ACK_LOST";
-    } else if (valuesEqual(expectedValue, pgRec.answer, q.type)) {
+    } else if (pgMatch === true) {
       classification = "ACK_MATCHED";
-    } else {
+    } else if (pgMatch === false) {
       classification = "ACK_LOST";
+    } else {
+      classification = "UNACKNOWLEDGED_UNKNOWN";
     }
+
+    // Scenario-level deviation: the ACKed content differs from what the
+    // manifest told the browser to enter. Recorded, not counted as loss.
+    const scenarioDeviation =
+      ack?.answer_value !== undefined && ack?.answer_value !== null
+        ? !valuesEqual(expectedValue, ack.answer_value, q.type)
+        : false;
 
     let browserClassification = null;
     if (browserState) {
       const b = browserState[q.question_id] ?? null;
       if (!b) browserClassification = "NOT_RUN";
       else if (classification !== "ACK_MATCHED") browserClassification = "UNKNOWN"; // PG itself failed; browser result secondary
-      else if (valuesEqual(expectedValue, b.visible_value, q.type)) browserClassification = "ACK_MATCHED";
-      else browserClassification = "BROWSER_MISMATCH";
+      else {
+        // Value comparison when the browser reported the visible value;
+        // digest comparison when only a digest was reported.
+        let match = null;
+        if (b.visible_value !== null && b.visible_value !== undefined) {
+          match = valuesEqual(ack?.answer_value ?? expectedValue, b.visible_value, q.type);
+        } else if (b.answer_digest) {
+          match = sha256Hex(stableStringify(ack?.answer_value ?? expectedValue)) === b.answer_digest;
+        }
+        browserClassification = match === null ? "NOT_RUN" : match ? "ACK_MATCHED" : "BROWSER_MISMATCH";
+      }
     }
 
     return {
@@ -179,8 +217,9 @@ export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, b
       order: q.order,
       type: q.type,
       expected_generation: expectedGeneration,
-      expected_value: expectedValue,
+      manifest_expected_value: expectedValue,
       expected_server_version: ack?.serverVersion ?? null,
+      acked_value: ack?.answer_value ?? null,
       pg_value: pgRec?.answer ?? null,
       pg_version: pgRec?.version ?? null,
       pg_saved_at: pgRec?.savedAt ?? null,
@@ -188,6 +227,7 @@ export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, b
         ? { generation: ack.generation, server_version: ack.serverVersion, evidence_ref: ack.evidence_ref }
         : null,
       classification,
+      scenario_deviation: scenarioDeviation,
       browser_classification: browserClassification,
       browser_value: browserState?.[q.question_id]?.visible_value ?? null,
     };
@@ -223,7 +263,7 @@ export function oracleMutationRedTest() {
     ],
   };
   const ackState = {
-    "00000000-0000-0000-0000-0000000000q1": { generation: 1, serverVersion: 1, evidence_ref: "synthetic" },
+    "00000000-0000-0000-0000-0000000000q1": { generation: 1, serverVersion: 1, evidence_ref: "synthetic", answer_value: "e817-x::t1|q7|g1|primary" },
   };
   const result = classifyPerQuestion({ manifestQuestions, attemptRow, ackState });
   const red = result.length === 1 && result[0].classification === "ACK_LOST";
