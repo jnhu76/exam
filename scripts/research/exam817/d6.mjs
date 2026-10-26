@@ -351,6 +351,25 @@ export function measureRpo({ dumpReceipt, ackStatePost }) {
   };
 }
 
+/**
+ * The post-dump ACK set is ONLY the gen2 questions — phase C re-edits
+ * exactly re_save_order_gen2. Folding the whole ack_state (D6-01 defect)
+ * made every gen1-only question look "post-dump" and its own pre-dump
+ * version trip the leak check (DUMP_WINDOW_VIOLATED on 6/6 gen1-only).
+ */
+export function postDumpAckSubset(ackState, manifestQuestions) {
+  const gen2 = new Set(
+    (manifestQuestions ?? [])
+      .filter((q) => q.expected_gen2 !== null && q.expected_gen2 !== undefined)
+      .map((q) => q.question_id),
+  );
+  const out = {};
+  for (const [qid, ack] of Object.entries(ackState ?? {})) {
+    if (gen2.has(qid)) out[qid] = ack;
+  }
+  return out;
+}
+
 // ── Scratch teardown ──────────────────────────────────────────────
 
 export async function scratchDown(runId, { deleteData = false } = {}) {

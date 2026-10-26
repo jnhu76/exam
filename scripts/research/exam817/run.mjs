@@ -53,6 +53,7 @@ import {
   pgRestoreScratch,
   compareD6,
   measureRpo,
+  postDumpAckSubset,
 } from "./d6.mjs";
 import { compareSubmittedAnswers, valuesEqual } from "./oracle.mjs";
 import { faultStatePath } from "./fault.mjs";
@@ -1431,6 +1432,28 @@ function loadSnapshotRow(runId, snapshotFile) {
  */
 async function cmdVerdict(runId) {
   const st = loadState(runId);
+  // D6 replays the comparison from the persisted scratch receipt (the
+  // restored row is sha256-stamped evidence; no stack rebuild, no re-dump).
+  if (st.arm === "D6") {
+    if (!st.dump_receipt || !st.ack_state_pre_dump) {
+      throw new Error("D6 verdict replay requires the dump receipt and pre-dump ACK state");
+    }
+    const postAck = postDumpAckSubset(st.ack_state, st.manifest_questions);
+    st.ack_state_post_dump = postAck;
+    const snapPath = path.join(runPaths(runId).evidenceDir, `d6-scratch-snapshot-${st.trial_id}.json`);
+    const snap = readPublishedJson(snapPath);
+    if (!snap || !snap.integrity) throw new Error(`D6 scratch snapshot evidence missing: ${path.basename(snapPath)}`);
+    const perQuestion = compareD6({
+      manifestQuestions: st.manifest_questions,
+      scratchRow: snap.row ?? null,
+      ackStatePre: st.ack_state_pre_dump,
+      ackStatePost: postAck,
+    });
+    const rpo = measureRpo({ dumpReceipt: st.dump_receipt, ackStatePost: postAck });
+    const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
+    await writeD6Verdict(runId, st, writer, { perQuestion, rpo, integrity: snap.integrity });
+    return;
+  }
   // D7 has no fault-phase snapshots; its republish path re-observes PG and
   // the API live and rebuilds treatment windows from the raw receipts.
   if (st.arm === "D7") {
@@ -1910,7 +1933,7 @@ async function handleD6PostDump(runId, st, writer, ev) {
   if (missing.length > 0) {
     throw new Error(`POST_DUMP_CHECKPOINT lacks ACKed gen2 saves for ${missing.length} question(s)`);
   }
-  st.ack_state_post_dump = JSON.parse(JSON.stringify(st.ack_state));
+  st.ack_state_post_dump = postDumpAckSubset(st.ack_state, st.manifest_questions);
 
   // Source DB must now demonstrably hold the post-dump answers.
   const { snap: sourceSnap, ref: sourceRef, sha256: sourceSha } = await taggedSnapshot(runId, st, writer, "post_dump_source");

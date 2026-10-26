@@ -36,7 +36,7 @@ import { pgdataSurvivalShell } from "./fault.mjs";
 import { classifyPerQuestion, compareSubmittedAnswers, oracleMutationRedTest, valuesEqual } from "./oracle.mjs";
 import { parsePsqlJsonRows } from "./oracle.mjs";
 import { classifyD7Treatment, normalizeTreatmentWindows, summarizeD7, D7_DEBOUNCE_MS } from "./d7.mjs";
-import { compareD6, measureRpo, scratchProjectName, scratchPaths } from "./d6.mjs";
+import { compareD6, measureRpo, postDumpAckSubset, scratchProjectName, scratchPaths } from "./d6.mjs";
 import { FAULT_PLAN } from "./fault.mjs";
 
 const args = process.argv.slice(2);
@@ -1019,6 +1019,28 @@ function winEvent(overrides = {}) {
     { good: true, bad: false, malformed: false },
     { good: accepts(good), bad: accepts(bad), malformed: accepts(malformed) },
     accepts(good) && !accepts(bad) && !accepts(malformed),
+  );
+}
+
+// ── T48 D6-01 fold regression: post-dump ACK set = gen2 subset only ──
+{
+  const manifest = [
+    { question_id: "g1a", order: 1, type: "fill_blank", expected_gen1: "x", expected_gen2: null },
+    { question_id: "g1b", order: 2, type: "fill_blank", expected_gen1: "y", expected_gen2: null },
+    { question_id: "g2a", order: 3, type: "single_choice", expected_gen1: "A", expected_gen2: "C" },
+  ];
+  const ackState = {
+    g1a: { serverVersion: 1 },
+    g1b: { serverVersion: 3 }, // multi-save in phase A still folds by latest
+    g2a: { serverVersion: 2 },
+  };
+  const sub = postDumpAckSubset(ackState, manifest);
+  record(
+    "T48",
+    "D6-01 regression: postDumpAckSubset carries exactly the gen2 questions (whole-state fold made gen1-only rows look post-dump)",
+    { keys: ["g2a"], size: 1 },
+    { keys: Object.keys(sub), size: Object.keys(sub).length },
+    Object.keys(sub).length === 1 && sub.g2a?.serverVersion === 2,
   );
 }
 
