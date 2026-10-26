@@ -1,14 +1,9 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import {
-  collectViolations,
-  isConsoleOutput,
-} from "../../../scripts/check-code-quality.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * Regression gate for #821 G1/G4 — `scripts/check-code-quality.mjs`.
@@ -29,17 +24,35 @@ import {
  * The CLI proofs spawn the REAL script. Root-resolution and scope proofs copy
  * it into a throwaway fixture repository, because the production rule is
  * "resolve from my own location": the copy exercises exactly that behaviour
- * without writing into this repository. The unit proof imports the same
- * exported scan implementation — no second scanner.
+ * without writing into this repository. The unit proof loads the same exported
+ * scan implementation dynamically — no second scanner.
  *
  * Placement: apps/web is the DB-free app suite (apps/api's Vitest globalSetup
  * requires PostgreSQL), and repo-level structural tests already live here
  * (workspaceSourceResolution.test.ts, vite-env-file-admission.test.ts).
  */
 
+/**
+ * Shape of the scanner module's exported test seam. Loaded dynamically (see
+ * below) because apps/web's production `tsc -b` includes test files while the
+ * Docker builder copies only `scripts/clean-dist.mjs` from `scripts/` — a
+ * static cross-root import would break the production image build (TS2307).
+ */
+interface CodeQualityScan {
+  readonly isConsoleOutput: (line: string) => boolean;
+  readonly collectViolations: (repoRoot?: string) => Promise<string[]>;
+}
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..", "..", "..");
 const SCANNER = join(REPO_ROOT, "scripts", "check-code-quality.mjs");
+
+let scan: CodeQualityScan;
+beforeAll(async () => {
+  scan = (await import(
+    /* @vite-ignore */ pathToFileURL(SCANNER).href
+  )) as CodeQualityScan;
+});
 
 /**
  * The console ban is a line regex, so it also matches string literals (that is
@@ -204,16 +217,18 @@ describe("G4: generated Playwright output is not judged as source", () => {
 
 describe("shared scan implementation", () => {
   it("detects only log/error console calls", () => {
-    expect(isConsoleOutput(consoleCall("log", '"x"'))).toBe(true);
-    expect(isConsoleOutput(consoleCall("error", '"x"'))).toBe(true);
-    expect(isConsoleOutput(`${CONSOLE}.log(JSON.stringify({})) `)).toBe(true);
-    expect(isConsoleOutput('logger.info("x")')).toBe(false);
-    expect(isConsoleOutput("consoleLogger.warn(...)")).toBe(false);
+    expect(scan.isConsoleOutput(consoleCall("log", '"x"'))).toBe(true);
+    expect(scan.isConsoleOutput(consoleCall("error", '"x"'))).toBe(true);
+    expect(scan.isConsoleOutput(`${CONSOLE}.log(JSON.stringify({})) `)).toBe(
+      true,
+    );
+    expect(scan.isConsoleOutput('logger.info("x")')).toBe(false);
+    expect(scan.isConsoleOutput("consoleLogger.warn(...)")).toBe(false);
   });
 
   it("collects violations from a mkdtemp repository (both scan roots)", async () => {
     const repoRoot = await makeFixtureRepository();
-    expect(await collectViolations(repoRoot)).toEqual([]);
+    expect(await scan.collectViolations(repoRoot)).toEqual([]);
 
     await writeRepoFile(
       repoRoot,
@@ -226,7 +241,7 @@ describe("shared scan implementation", () => {
       consoleCall("error", '"probe"'),
     );
 
-    const violations = await collectViolations(repoRoot);
+    const violations = await scan.collectViolations(repoRoot);
     expect(violations).toHaveLength(2);
     expect(violations).toEqual(
       expect.arrayContaining([
