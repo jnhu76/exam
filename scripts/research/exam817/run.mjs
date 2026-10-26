@@ -2350,9 +2350,9 @@ async function writeD8Verdict(runId, st, writer, parsed) {
       facets,
       submitted_check: st.submitted_check ?? null,
       browser: {
-        identity_confirmed: parsed.identity_confirmed ?? null,
-        session_reauth_required: parsed.session_reauth_required ?? null,
-        reload_at: parsed.reload_at ?? null,
+        identity_confirmed: parsed?.identity_confirmed ?? null,
+        session_reauth_required: parsed?.session_reauth_required ?? null,
+        reload_at: parsed?.reload_at ?? null,
       },
       pre_full: st.pre_full_snapshot ?? null,
       post_full: st.post_full_snapshot ?? null,
