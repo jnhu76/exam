@@ -67,8 +67,8 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 | 产品不变量与领域模型 | `docs/SPEC.md` |
 | 当前实现架构 | `docs/architecture/` 与生产代码 |
 | 阶段边界 | `docs/roadmap/phase-roadmap.md` |
-| 当前施工顺序与 disposition | `docs/README.md` 中的 active roadmap tracker 指针 |
-| 当前任务的 scope / acceptance / non-goals | 被当前 roadmap 指定的 OPEN Issue |
+| 当前施工顺序与 disposition | 被明确授权的 OPEN Issue（入口与指针见 `docs/README.md`） |
+| 当前任务的 scope / acceptance / non-goals | 同一被授权 OPEN Issue，加任何显式采纳的 parent ordering（见 `docs/README.md`） |
 | 当前实现状态 | `docs/status/implementation-status.md` 与 as-built evidence |
 | 测试、环境变量和数据库生命周期 | `docs/standards/testing.md` |
 | 代码质量和依赖边界 | `docs/standards/code-quality.md` |

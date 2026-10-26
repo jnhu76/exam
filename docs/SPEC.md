@@ -35,7 +35,7 @@ Phase 1 核心路径的角色是 Admin + Candidate；Phase 3 的协作角色（T
 >
 > 上述原则是系统**长期不变契约**。但需要明确当前接线深度：
 >
-> - "答卷可恢复"已**产品化**：答案持久化、超时 `disrupted` 自动标记（心跳扫描器在 API 启动时默认注册运行，30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），以及候选人在线自助恢复入口（`TakeExamPage` REC-I3 restore 流程，ADR-012）。恢复通过组合命令 `restoreInterruptedAttempt` 执行；旧 `restoreAttempt` 后端路由已退役，生产代码中不再存在（结构测试禁止重新引入）。
+> - "答卷可恢复"已**产品化**：答案持久化、超时 `disrupted` 自动标记（心跳扫描器在 API 启动时默认注册运行，30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），以及候选人在线自助恢复入口（`TakeExamPage` REC-I3 restore 流程，ADR-012）。恢复通过组合命令 `restoreInterruptedAttempt` 执行（候选人恢复端点 `POST /attempts/:attemptId/restore` 仍在线并调用该命令）；旧 `restoreAttempt` 函数/命令已从生产代码移除，结构测试禁止重新引入该 legacy 函数（该守护针对函数定义，不针对路由路径）。
 > - 恢复工作台、incident 投影等其余恢复能力的当前实现状态统一见 [`docs/status/implementation-status.md`](status/implementation-status.md)，本文不维护第二份状态叙述。
 
 ---

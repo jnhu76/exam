@@ -111,7 +111,8 @@
 | -------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
 | `console.log` / `console.error`                                                                    | (B) 部分文本检查  | `pnpm lint`（`scripts/check-code-quality.mjs`）只扫描 apps+packages 的这两类调用；不覆盖其他 console 形态 |
 | 分 package 的 `console.warn/error` 等级与结构化日志要求                                            | (C) 评审规则      | code review；日志契约见 §10                                                                               |
-| `no-explicit-any` / 禁止 `as any`                                                                  | (D) 未实现        | 无 ESLint 执行；`apps/web` 只有 no-op stub；`any` 清理属评审（§3、§16）                                   |
+| `no-explicit-any`（ESLint 规则）                                                                   | (D) 未实现        | 无 ESLint 执行；`apps/web` 只有 no-op stub                                                                |
+| 禁止 `as any` 与 `any` 清理                                                                        | (C) 评审规则      | 无机器执行器；评审要求见 §3、§16                                                                          |
 | `no-floating-promises`、`consistent-type-imports`、`no-unused-vars`、`switch-exhaustiveness-check` | (D) 未实现        | 无执行点                                                                                                  |
 | `import/no-cycle`、全仓循环依赖检测                                                                | (D) 未实现        | 无执行点；`pnpm lint:arch` 不做循环检测（§6.2）                                                           |
 | `max-lines-per-function: 80`、`complexity: 12`、`max-depth: 4`                                     | (D) 未实现        | 未配置任何执行器。真实的评审规则是：单文件超过 2000 行触发结构审查（`AGENTS.md` §3），不触发机械拆分      |
@@ -188,7 +189,7 @@ pnpm format:check
 `pnpm lint:arch`（`scripts/check-architecture.mjs`）只执行**命名的文本/结构禁令**，每一条针对具体失败模式：
 
 - `packages/domain/src` 是叶子：禁止 import `fastify` / `react` / `drizzle-orm` / 其他 `@exam/*`；
-- `packages/authz/src`：禁止 `fastify` / `react` / `drizzle-orm`，且只允许 `@exam/domain`（禁止其他 `@exam/*` 子路径）；
+- `packages/authz/src`：禁止 `fastify` / `react` / `drizzle-orm`，且禁止 `@exam/db`、`@exam/contracts`、`@exam/auth`、`@exam/exam-engine`、`@exam/import-export` 五者的**子路径** import；这五个包的根导入与其他 `@exam/*` 包的子路径不在文本禁令内（见下方“真实不覆盖”）；
 - `packages/contracts/src`：禁止 `fastify`；
 - `packages/auth/src`：禁止读取 `process.env`；
 - `apps/api/src` 与 `packages/db/src`：禁止直接读取 `process.env.APP_MODE` / `NODE_ENV`（运行时模式只能经 `@exam/db` 的 `parseAppMode` 解析）；
@@ -197,16 +198,16 @@ pnpm format:check
 - `apps/api/src`：禁止上述两种 capability cast；
 - `apps/web/src`：禁止 import `@exam/db`；
 - `apps/api/src/routes`：禁止裸 `db.select|insert|update|delete`、禁止 import `drizzle-orm`、禁止 import `@exam/db/schema`；
-- #794 workspace resolution 契约：manifest 表校验（`config/workspace-resolution.mjs`）、禁止 `@exam/*/src/` 物理路径与跨 package 相对 import、每个 vitest config 必须消费共享 resolution plugin、resolution oracle 存在性（fixture marker、dot-segment grammar probe、fail-closed 分类）、该 gate 覆盖的每个 typecheck 入口（apps/api、apps/web、packages/*）必须有带 `TEST_SOURCE_CONDITION` 的 `tsconfig.typecheck.json`。
+- #794 workspace resolution 契约：manifest 表校验（`config/workspace-resolution.mjs`）、禁止 `@exam/*/src/` 物理路径与跨 package 相对 import、每个 vitest config 必须消费共享 resolution plugin、resolution oracle 存在性（fixture marker、dot-segment grammar probe、fail-closed 分类）、以及该 gate 迭代到的每个声明 typecheck script 的入口（apps/api、apps/web 与 packages/*；未声明 script 的 fixture 包被跳过）必须有带 `TEST_SOURCE_CONDITION` 的 `tsconfig.typecheck.json`。
 
 **真实不覆盖**（不得外推）：没有 package 依赖 allow-list、没有循环依赖检测、没有 manifest ↔ 实际 import 一致性检查。上述禁令是文本形状检查，动态 `import()` / `require()` / `vi.mock()`、别名/解构读取，以及 `@exam/*` 根导入（例如 authz 的子路径禁令不覆盖 `from "@exam/db"`）都可能逃逸。因此“新增这条依赖是否被允许”**不是机器回答的问题**。
 
 ### 6.3 Review-enforced architecture policy
 
-以下方向规则是真实架构策略，但由评审/ADR 执行，不是机器门禁：
+以下方向规则是真实架构策略，但由评审/ADR 执行，不构成完整机器门禁；§6.2 已用文本禁令覆盖的 import 形状不在评审层重复：
 
-- `packages/domain` 是领域叶子，不得依赖 Fastify / React / Drizzle 或其他内部 package（机器只覆盖部分 import 形状）；
-- `packages/contracts`、`packages/exam-engine` 不依赖 Fastify；
+- `packages/domain` 是领域叶子，不得依赖 Fastify / React / Drizzle 或其他内部 package；其静态 `from "..."` 形状由 §6.2 覆盖，评审负责动态 import / 别名等未覆盖形态；
+- `packages/contracts`、`packages/exam-engine` 不依赖 Fastify——该静态形状同为 §6.2 的机器禁令，评审只兜底其余形态；
 - `fastify` 只出现在 `apps/api`；
 - `packages` 不反向依赖 `apps`（例如 `packages/db` → `apps/api`）；
 - `apps/web` 不直接依赖数据库或服务端 package（机器只挡住 `@exam/db` 这一条 import）；
@@ -483,13 +484,13 @@ pnpm audit
 
 ### E2E acceptance
 
-E2E 保持为 blocking CI 门禁；最小路径（candidate happy path、resume attempt、submit flush）、分片拓扑与本地入口以 [`docs/standards/testing.md`](testing.md) §4/§6 和 `.github/workflows/ci.yml` 为准，本地唯一入口是 `pnpm e2e`（`bash scripts/e2e/run.sh`）。失败诊断产物见 §10 的 E2E artifacts。
+E2E 保持为 blocking CI 门禁；验收范围要求三条最小路径：candidate happy path、resume attempt、submit flush（本文件声明的验收要求）。E2E 的机制、分片拓扑与本地入口以 [`docs/standards/testing.md`](testing.md) §4/§6 和 `.github/workflows/ci.yml` 为准，本地唯一入口是 `pnpm e2e`（`bash scripts/e2e/run.sh`）。失败诊断产物见 §10 的 E2E artifacts。
 
 ### API Route 测试（apps/api）
 
 API route 测试使用**真实 PostgreSQL**，不是内存数据库：默认按测试文件 schema 隔离，canonical 证据 lane 使用 worker-database 隔离。命令、隔离模式、环境变量与数据库生命周期以 [`testing.md` §5.2](testing.md#52-api-integration-tests) 和 [`testing.md` §2.8](testing.md#28-test-database-lifecycle-ownership) 为唯一权威，本节不复制。
 
-不变量：应用运行时经 `apps/api/src/plugins/db.ts` 注册 `fastify.db` 装饰器；route handler 通过 `fastify.db` 访问数据库，不自行创建连接。测试应用通过 `apps/api/src/routes/testHelpers.ts` 的 `buildTestApp()` 构建，每个上下文独立创建、零共享状态（`testHelpers.ts` 与 seed/verify 脚本是 `createDatabase()` 的受控例外）。
+不变量：应用运行时经 `apps/api/src/plugins/db.ts` 注册 `fastify.db` 装饰器；route handler 通过 `fastify.db` 访问数据库，不自行创建连接。测试应用通过 `apps/api/src/routes/testHelpers.ts` 的 `buildTestApp()` 构建，每个上下文独立创建、零共享状态；`createDatabase()` 的直接调用点是运行时 owner `plugins/db.ts`、测试 harness `testHelpers.ts`、seed/verify 脚本、email worker 与 `scripts/*` 运维脚本，route handler 不在其中。
 
 ---
 
