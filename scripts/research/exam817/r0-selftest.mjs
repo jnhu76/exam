@@ -33,8 +33,11 @@ import {
 } from "./browser-schema.mjs";
 import { summarizeProbeSamples } from "./probe.mjs";
 import { pgdataSurvivalShell } from "./fault.mjs";
-import { classifyPerQuestion } from "./oracle.mjs";
+import { classifyPerQuestion, compareSubmittedAnswers, oracleMutationRedTest, valuesEqual } from "./oracle.mjs";
 import { parsePsqlJsonRows } from "./oracle.mjs";
+import { classifyD7Treatment, summarizeD7, D7_DEBOUNCE_MS } from "./d7.mjs";
+import { compareD6, measureRpo, scratchProjectName, scratchPaths } from "./d6.mjs";
+import { FAULT_PLAN } from "./fault.mjs";
 
 const args = process.argv.slice(2);
 if (args.length < 2) {
@@ -754,6 +757,207 @@ function winEvent(overrides = {}) {
     { browser: "NOT_RUN", api: "NOT_RUN", pg: "ACK_MATCHED" },
     { browser: r[0].browser_classification, api: r[0].api_classification, pg: r[0].classification },
     r[0].browser_classification === "NOT_RUN" && r[0].api_classification === "NOT_RUN" && r[0].classification === "ACK_MATCHED",
+  );
+}
+
+// ── T35 R3 arm registry ───────────────────────────────────────────
+{
+  const ok =
+    FAULT_PLAN.D6?.action === "none" &&
+    FAULT_PLAN.D7?.action === "none" &&
+    FAULT_PLAN.D8A?.action === "kill" && FAULT_PLAN.D8A?.target === "app" &&
+    FAULT_PLAN.D8B?.action === "kill" && FAULT_PLAN.D8B?.target === "db" &&
+    D7_DEBOUNCE_MS === 1500 &&
+    scratchProjectName("e817-d6-x").startsWith("exam817-e817-d6-x") &&
+    scratchPaths("e817-d6-x").root.includes("/scratch");
+  record(
+    "T35",
+    "R3: fault registry carries D6/D7/D8A/D8B; D7 debounce constant 1500; scratch paths isolated",
+    { d6: "none", d7: "none", d8a: "kill:app", d8b: "kill:db", debounce: 1500 },
+    {
+      d6: FAULT_PLAN.D6?.action, d7: FAULT_PLAN.D7?.action,
+      d8a: `${FAULT_PLAN.D8A?.action}:${FAULT_PLAN.D8A?.target}`,
+      d8b: `${FAULT_PLAN.D8B?.action}:${FAULT_PLAN.D8B?.target}`,
+      debounce: D7_DEBOUNCE_MS,
+    },
+    ok,
+  );
+}
+
+// ── T36–T42 D7 treatment classifier ───────────────────────────────
+{
+  const mk = (qid) => ({ question_id: qid, order: 1, type: "fill_blank", nominal_reload_delay_ms: 300, expected_value: "m|t|q|g1" });
+  const win = (over = {}) => ({
+    input_confirmed: true,
+    dom_value_before_reload: "m|t|q|g1",
+    last_input_at: "2026-10-26T00:00:00.000Z",
+    reload_initiated_at: "2026-10-26T00:00:00.300Z",
+    save_requests: [],
+    save_responses: [],
+    post_reload_value: null,
+    ...over,
+  });
+  const pgAbsent = { present: false, version: null, value_matches_treatment: null };
+  const t = (windows, pg, over = {}) => classifyD7Treatment({ treatment: mk("q"), windows, pg, ...over });
+
+  // T36: clean in-window loss.
+  const r36 = t(win(), pgAbsent);
+  // T37: request sent but no captured response → SENT_BUT_UNKNOWN, PG decides.
+  const r37 = t(win({ save_requests: [{ question_id: "q", at: "2026-10-26T00:00:00.250Z", request_id: "r1" }] }), pgAbsent);
+  // T38: S+A+P inside window (mis-executed treatment / very fast save) → SAVED_ACKED.
+  const r38 = t(
+    win({
+      save_requests: [{ question_id: "q", at: "2026-10-26T00:00:00.250Z", request_id: "r1" }],
+      save_responses: [{ question_id: "q", at: "2026-10-26T00:00:00.280Z", acked: true }],
+    }),
+    { present: true, version: 1, value_matches_treatment: true },
+  );
+  // T39: unmeasurable timing → UNCONTROLLED (never a loss claim).
+  const r39 = t(win({ reload_initiated_at: null }), pgAbsent);
+  // T40: P present with NO observed request → UNKNOWN (anomaly, fail closed).
+  const r40 = t(win(), { present: true, version: 1, value_matches_treatment: true });
+  // T41: input not proven (DOM read-back mismatch) → UNKNOWN.
+  const r41 = t(win({ dom_value_before_reload: "something-else" }), pgAbsent);
+  // T42: boundary control — reload AFTER the debounce with S+A+P → SAVED_ACKED;
+  //      and a silent post-debounce window → DEBOUNCE_NOT_FIRED finding.
+  const r42a = t(
+    win({
+      reload_initiated_at: "2026-10-26T00:00:02.500Z",
+      save_requests: [{ question_id: "q", at: "2026-10-26T00:00:01.600Z", request_id: "r1" }],
+      save_responses: [{ question_id: "q", at: "2026-10-26T00:00:01.650Z", acked: true }],
+    }),
+    { present: true, version: 1, value_matches_treatment: true },
+  );
+  const r42b = t(win({ reload_initiated_at: "2026-10-26T00:00:02.500Z" }), pgAbsent);
+
+  const pass =
+    r36.classification === "LOCAL_UNSENT_LOST" &&
+    r37.classification === "SENT_BUT_UNKNOWN" && r37.pg_outcome === "ABSENT" &&
+    r38.classification === "SAVED_ACKED" &&
+    r39.classification === "UNCONTROLLED" &&
+    r40.classification === "UNKNOWN" &&
+    r41.classification === "UNKNOWN" &&
+    r42a.classification === "SAVED_ACKED" &&
+    r42b.classification === "DEBOUNCE_NOT_FIRED";
+  record(
+    "T36",
+    "D7 classifier: all eight E/S/A/P combinations land on the frozen vocabulary",
+    { clean: "LOCAL_UNSENT_LOST", sent: "SENT_BUT_UNKNOWN", acked: "SAVED_ACKED", notime: "UNCONTROLLED", leak: "UNKNOWN", noinput: "UNKNOWN", boundary: "SAVED_ACKED", silent: "DEBOUNCE_NOT_FIRED" },
+    {
+      clean: r36.classification, sent: r37.classification, acked: r38.classification,
+      notime: r39.classification, leak: r40.classification, noinput: r41.classification,
+      boundary: r42a.classification, silent: r42b.classification,
+    },
+    pass,
+  );
+}
+
+// ── T43 D7 trial summary ──────────────────────────────────────────
+{
+  const ok = { question_id: "00000000-0000-0000-0000-00000000000c", classification: "ACK_MATCHED" };
+  const lost = (qid) => ({ question_id: qid, classification: "LOCAL_UNSENT_LOST" });
+  const saved = (qid) => ({ question_id: qid, classification: "SAVED_ACKED" });
+  const sum = summarizeD7({ controlResults: [ok, ok], treatmentResults: [lost("t1"), lost("t2"), saved("t3"), saved("t4")] });
+  const brokenControl = summarizeD7({ controlResults: [ok, { ...ok, classification: "ACK_LOST" }], treatmentResults: [lost("t1")] });
+  const inconclusive = summarizeD7({ controlResults: [ok, ok], treatmentResults: [lost("t1"), { question_id: "t2", classification: "UNCONTROLLED" }] });
+  record(
+    "T43",
+    "D7 summarize: LOCAL_UNSENT_LOST headline only with clean controls and no inconclusive treatments",
+    { good: "LOCAL_UNSENT_LOST", ctrl: "UNKNOWN", inc: "UNKNOWN" },
+    { good: sum.verdict, ctrl: brokenControl.verdict, inc: inconclusive.verdict },
+    sum.verdict === "LOCAL_UNSENT_LOST" && brokenControl.verdict === "UNKNOWN" && inconclusive.verdict === "UNKNOWN",
+  );
+}
+
+// ── T44–T45 D6 restore comparator ─────────────────────────────────
+{
+  const mkManifest = (qid, type = "fill_blank") => ({ question_id: qid, order: 1, type, expected_gen1: "pre", expected_gen2: null });
+  const pre = (v) => ({ serverVersion: 1, answer_value: v, evidence_ref: "synthetic" });
+  const post = (v) => ({ serverVersion: 2, answer_value: v, evidence_ref: "synthetic" });
+  const row = (answers) => ({ id: "a", answers });
+
+  // T44: faithful old snapshot — pre retained, post missing.
+  const r44 = compareD6({
+    manifestQuestions: [mkManifest("q1"), mkManifest("q2")],
+    scratchRow: row([
+      { questionId: "q1", answer: "pre", version: 1, savedAt: "x" },
+      { questionId: "q2", answer: "pre", version: 1, savedAt: "x" },
+    ]),
+    ackStatePre: { q1: pre("pre"), q2: pre("pre") },
+    ackStatePost: { q2: post("post") },
+  });
+  const t44ok = r44[0].classification === "PRE_DUMP_RETAINED" && r44[1].classification === "POST_DUMP_MISSING";
+
+  // T45a: restore lost even the pre-dump answer → RESTORE_INTEGRITY_FAILURE.
+  const r45a = compareD6({
+    manifestQuestions: [mkManifest("q1"), mkManifest("q2")],
+    scratchRow: row([{ questionId: "q2", answer: "pre", version: 1, savedAt: "x" }]),
+    ackStatePre: { q1: pre("pre"), q2: pre("pre") },
+    ackStatePost: { q2: post("post") },
+  });
+  // T45b: restored DB somehow holds the post-dump value → DUMP_WINDOW_VIOLATED.
+  const r45b = compareD6({
+    manifestQuestions: [mkManifest("q1"), mkManifest("q2")],
+    scratchRow: row([
+      { questionId: "q1", answer: "pre", version: 1, savedAt: "x" },
+      { questionId: "q2", answer: "post", version: 2, savedAt: "x" },
+    ]),
+    ackStatePre: { q1: pre("pre"), q2: pre("pre") },
+    ackStatePost: { q2: post("post") },
+  });
+  const rpo = measureRpo({
+    dumpReceipt: { completed_at: "2026-10-26T00:00:00.000Z" },
+    ackStatePost: { q2: { serverVersion: 2, at: "2026-10-26T00:01:30.000Z" } },
+  });
+  record(
+    "T45",
+    "D6 comparator: integrity failure and dump-window violation are distinct classifications; RPO window measured",
+    { a: "RESTORE_INTEGRITY_FAILURE", b: "DUMP_WINDOW_VIOLATED", rpo_ms: 90000, lost: 1 },
+    { a: r45a[0].classification, b: r45b[1].classification, rpo_ms: rpo.per_answer[0].rpo_ms, lost: rpo.lost_answer_count },
+    r45a[0].classification === "RESTORE_INTEGRITY_FAILURE" && r45b[1].classification === "DUMP_WINDOW_VIOLATED" &&
+      rpo.per_answer[0].rpo_ms === 90000 && rpo.lost_answer_count === 1,
+  );
+  record(
+    "T44",
+    "D6 comparator: faithful old snapshot → PRE_DUMP_RETAINED + POST_DUMP_MISSING (the RPO fact)",
+    { pre: "PRE_DUMP_RETAINED", post: "POST_DUMP_MISSING" },
+    { pre: r44[0].classification, post: r44[1].classification },
+    t44ok,
+  );
+}
+
+// ── T46 D8 submitted-answers gate ─────────────────────────────────
+{
+  const manifest = [
+    { question_id: "q1", order: 1, type: "fill_blank", expected_gen1: "a", expected_gen2: null },
+    { question_id: "q2", order: 2, type: "single_choice", expected_gen1: "B", expected_gen2: null },
+  ];
+  const answers = [
+    { questionId: "q1", answer: "a", version: 1, savedAt: "x" },
+    { questionId: "q2", answer: "B", version: 1, savedAt: "x" },
+  ];
+  const good = compareSubmittedAnswers({ answers, submitted: { schemaVersion: 1, answers: [{ questionId: "q1", value: "a" }, { questionId: "q2", value: "B" }] }, manifestQuestions: manifest });
+  const bad = compareSubmittedAnswers({ answers, submitted: { schemaVersion: 1, answers: [{ questionId: "q1", value: "WRONG" }, { questionId: "q2", value: "B" }] }, manifestQuestions: manifest });
+  const malformed = compareSubmittedAnswers({ answers, submitted: { schemaVersion: 1, answers: [{ q: "q1", v: "a" }] }, manifestQuestions: manifest });
+  const accepts = (r) => r.comparable && r.mismatches.length === 0;
+  record(
+    "T46",
+    "D8 submitted-answers gate: shape-aware value comparison; mismatch fails via mismatches[], malformed via comparable=false",
+    { good: true, bad: false, malformed: false },
+    { good: accepts(good), bad: accepts(bad), malformed: accepts(malformed) },
+    accepts(good) && !accepts(bad) && !accepts(malformed),
+  );
+}
+
+// ── T47 R3 oracle mutation cross-checks stay intact ───────────────
+{
+  const mu = oracleMutationRedTest();
+  record(
+    "T47",
+    "R3: oracle mutation RED/GREEN unchanged after valuesEqual export",
+    { red: true, green: true },
+    { red: mu.red, green: mu.green },
+    mu.red === true && mu.green === true,
   );
 }
 

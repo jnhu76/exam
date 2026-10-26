@@ -24,6 +24,13 @@ export const FAULT_PLAN = {
   D3: { label: "db graceful stop + start", action: "stop_start", target: "db" },
   D4: { label: "db SIGKILL (WAL crash recovery)", action: "kill", target: "db" },
   D5: { label: "compose down/up, same PGDATA", action: "down_up", target: null },
+  // R3 arms (#817 second phase). D6/D7 never reach executeFault — their
+  // orchestration is a phase machine in run.mjs (dump/restore, debounce
+  // window); the plans exist so init/scenario share one arm registry.
+  D6: { label: "pg_dump + scratch restore (RPO measurement)", action: "none", target: null },
+  D7: { label: "1500ms debounce draft-loss window (no container fault)", action: "none", target: null },
+  D8A: { label: "post-submit app SIGKILL", action: "kill", target: "app" },
+  D8B: { label: "post-submit db SIGKILL (WAL durability of the submit transaction)", action: "kill", target: "db" },
 };
 
 // Experiment condition, not an SLA: how long observe_auto_restart waits for
@@ -31,7 +38,7 @@ export const FAULT_PLAN = {
 // operator. D2 freezes 5s (#817 D2 brief); D4 keeps its historical 30s for
 // comparability with #819. Kill arms only — a manually stopped container is
 // never policy-restarted.
-const AUTO_RESTART_WINDOW_MS = { D1: 30000, D2: 5000, D3: 30000, D4: 30000 };
+const AUTO_RESTART_WINDOW_MS = { D1: 30000, D2: 5000, D3: 30000, D4: 30000, D8A: 5000, D8B: 30000 };
 
 // Experiment condition, not an SLA: how long the faulted state is observed
 // via the F6 continuous probe before the operator recovery action. The

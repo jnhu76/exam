@@ -34,11 +34,27 @@ import {
   parsePsqlJsonRows,
   pgQuery,
   snapshotAttempt,
+  snapshotAttemptFull,
   writePgSnapshotEvidence,
+  writePgSnapshotEvidenceFull,
 } from "./oracle.mjs";
 import { executeFault, FAULT_PLAN, probeRecovery, resolveInterruptedFault, captureServiceLogs, composeStartService, containerDetails, resolveTarget, D3_APP_AUTO_RECOVERY_WINDOW_MS } from "./fault.mjs";
 import { startFaultWindowProbe, summarizeProbeFile } from "./probe.mjs";
 import { BrowserSchemaError, browserResultContract, parseBrowserVerified } from "./browser-schema.mjs";
+import { classifyD7Treatment, summarizeD7, D7_DEBOUNCE_MS } from "./d7.mjs";
+import {
+  scratchPreflight,
+  writeScratchEnv,
+  scratchUp,
+  scratchQuery,
+  scratchDown,
+  scratchProjectName,
+  pgDumpSource,
+  pgRestoreScratch,
+  compareD6,
+  measureRpo,
+} from "./d6.mjs";
+import { compareSubmittedAnswers, valuesEqual } from "./oracle.mjs";
 import { faultStatePath } from "./fault.mjs";
 
 const execFileP = promisify(execFile);
@@ -83,7 +99,7 @@ function cmdInit(argv) {
   const armIdx = argv.indexOf("--arm");
   const arm = armIdx >= 0 ? argv[armIdx + 1] : null;
   if (!arm || !FAULT_PLAN[arm]) {
-    console.error("usage: run.mjs init --arm D0|D1|D2|D3|D4|D5 [--run-id <id>]");
+    console.error("usage: run.mjs init --arm D0|D1|D2|D3|D4|D5|D6|D7|D8A|D8B [--run-id <id>]");
     process.exit(2);
   }
   const idIdx = argv.indexOf("--run-id");
@@ -206,6 +222,40 @@ async function cmdSeed(runId) {
   console.log(`exam ${seed.examId} ready; ${seed.manifestQuestions.length} questions in manifest`);
 }
 
+/**
+ * D7 designation table: which manifest questions are controls (answered
+ * normally with ACK), which are debounce treatments (typed then reloaded
+ * before the 1500ms flush), and which stay untouched. Treatment delays
+ * deliberately straddle the debounce boundary: 300/800/1300ms expect loss,
+ * 2500ms (>1500) is the boundary control whose save MUST fire and ACK —
+ * proving the trigger itself does not break saves.
+ */
+export function d7Designation(st) {
+  const byOrder = new Map(st.manifest_questions.map((q) => [q.order, q]));
+  const q = (order) => {
+    const m = byOrder.get(order);
+    if (!m) throw new Error(`manifest missing question order ${order}`);
+    return m;
+  };
+  return {
+    debounce_ms: D7_DEBOUNCE_MS,
+    control_ids: [q(3).question_id, q(7).question_id],
+    treatments: [
+      [8, 300],
+      [1, 800],
+      [2, 1300],
+      [5, 2500],
+    ].map(([order, delay]) => ({
+      question_id: q(order).question_id,
+      order,
+      type: q(order).type,
+      nominal_reload_delay_ms: delay,
+      expected_value: q(order).expected_gen1,
+    })),
+    untouched_ids: [4, 6, 9, 10].map((o) => q(o).question_id),
+  };
+}
+
 function buildScenario(st) {
   const gen2Questions = st.manifest_questions.filter((q) => q.expected_gen2 !== null).map((q) => q.question_id);
   const signalForAction = {
@@ -257,27 +307,112 @@ function buildScenario(st) {
       debounce_note: "TakeExamPage flushes edits after a 1500ms in-memory debounce; wait for the SAVE_ACCEPTED per question before the next phase",
       windows_events_file: WINDOWS_EVENTS,
     },
-    windows_instructions: [
-      "1. Read credentials.local.json (local-only) and log in as the candidate in Chrome.",
-      "2. Open the exam and start the attempt through the real UI.",
-      "3. Fill EVERY question with answer_manifest.questions[*].expected_gen1, in save_order_gen1 order.",
-      "4. For each observed save request, append a SAVE_ACCEPTED event (accepted + server_version + evidence refs).",
-      "5. Re-edit ONLY re_save_order_gen2 questions with expected_gen2 values; append SAVE_ACCEPTED for those too.",
-      "6. When every question's LAST save is ACKed, append CHECKPOINT_READY {arm, attempt_id, saves[]}.",
-      "7. After the WSL side emits SERVICE_RECOVERED, reload the SAME candidate page (re-authenticate with",
-      "   credentials.local.json if the session was dropped and set session_reauth_required=true), re-read",
-      "   every answer, and append BROWSER_VERIFIED exactly per browser_result_contract:",
-      "   browser_result_schema_version=2 + per_question[{question_id, browser_answer}]. Legacy field layouts",
-      "   (browser_value / visible_value / browser_answers) are REJECTED and fail the trial.",
-      "Do not write any other files in the run directory except windows.events.jsonl, windows-result.json",
-      "and artifacts/windows/*.",
-    ],
+    ...(st.arm === "D7"
+      ? {
+          fault: { arm: "D7", action: "none", target: null, signal: null, trigger: "TREATMENT_GO", description: "no container fault — this arm exercises the client-side 1500ms debounce window" },
+          d7: st.d7,
+          d7_protocol: {
+            control: "answer control_ids normally via real UI, wait for each ACK (SAVE_ACCEPTED), then append CONTROL_ACKED {attempt_id, saves[]}. WSL verifies PostgreSQL and emits TREATMENT_GO.",
+            treatment: [
+              "navigate to the question; enter expected_value via real UI input",
+              "read back the DOM value (Runtime.evaluate on the input element) → dom_value_before_reload; record last_input_at (Date.now) right after",
+              "record reload_initiated_at (Date.now), then trigger the reload with a ONE-SHOT CDP timer: setTimeout(() => location.reload(), nominal_reload_delay_ms). Never reload by any other means; never edit React state; never call the save API directly",
+              "after the page finishes loading (same attempt page), read the question's DOM value again → dom_value_after_reload",
+              "collect CDP network entries for POST /api/attempts/*/answers/* observed between input and reload → save_requests[] / save_responses[] (with artifact refs for any captured body)",
+              "append TREATMENT_STEP {question_id, nominal_reload_delay_ms, last_input_at, reload_initiated_at, measured_reload_delta_ms, dom_value_before_reload, dom_value_after_reload, save_requests, save_responses, artifact_refs}",
+              "WSL answers each step with PG_TSTEP_OBSERVED before you proceed to the next treatment",
+            ],
+            boundary_control: "the 2500ms treatment fires AFTER the 1500ms debounce; its save is expected to ACK and survive (its ACK must also be appended as SAVE_ACCEPTED)",
+            final_receipt: "after the LAST treatment, append BROWSER_VERIFIED (browser_result_contract) covering ALL manifest questions — browser_answer null when a field is empty",
+          },
+        }
+      : st.arm === "D6"
+        ? {
+            fault: { arm: "D6", action: "none", target: null, signal: null, trigger: "PRE_DUMP_CHECKPOINT", description: "no container fault — pg_dump of the source DB after phase A, restore into an isolated scratch PostgreSQL" },
+            d6: {
+              phase_a: "answer EVERY question with expected_gen1 (save_order_gen1), wait for each ACK (SAVE_ACCEPTED), then append PRE_DUMP_CHECKPOINT {arm:'D6', attempt_id, saves[]}",
+              phase_b: "WSL verifies PG 10/10, runs pg_dump -Fc, appends DUMP_CREATED — WAIT for it in wsl.events.jsonl before phase C",
+              phase_c: "re-edit ONLY re_save_order_gen2 questions with expected_gen2, SAVE_ACCEPTED each, then append POST_DUMP_CHECKPOINT {attempt_id, saves[]}",
+              phase_d: "WSL restores the OLD dump into an isolated scratch PostgreSQL and measures the recovery-point loss; no browser action needed",
+            },
+          }
+        : st.arm === "D8A" || st.arm === "D8B"
+          ? {
+              d8: {
+                submit_flow: [
+                  "answer EVERY question with expected_gen1 (save_order_gen1), wait for each ACK (SAVE_ACCEPTED)",
+                  "submit through the REAL UI (submit dialog → confirm); capture the submit request and response artifacts",
+                  "wait until the page reaches its terminal (submitted) state",
+                  "append SUBMIT_CHECKPOINT {arm, attempt_id, saves[], submit:{at, request_artifact, response_artifact, terminal_ui_confirmed}}",
+                  "WSL then verifies the terminal state in PostgreSQL and applies the container fault",
+                  "after SERVICE_RECOVERED: reload the page, confirm the terminal state persists and cannot be re-answered, then append BROWSER_VERIFIED (browser_result_contract, all manifest questions; browser_answer null where the terminal page shows no value)",
+                ],
+                fault_after: st.arm === "D8A" ? "app container SIGKILL" : "db container SIGKILL (WAL durability of the submit transaction)",
+              },
+            }
+          : {}),
+    windows_instructions:
+      st.arm === "D7"
+        ? [
+            "1. Read credentials.local.json (local-only) and log in as the candidate in Chrome; start the attempt via the real UI.",
+            "2. Keep CDP Network capture on for the WHOLE trial; save request/response bodies under artifacts/windows/.",
+            "3. CONTROL: answer d7.control_ids with their expected_gen1 values via real UI; wait for each ACK and append SAVE_ACCEPTED;",
+            "   then append CONTROL_ACKED {arm:'D7', attempt_id, saves[]}.",
+            "4. WAIT for TREATMENT_GO in wsl.events.jsonl (it lists the treatment questions, nominal reload delays and expected values).",
+            "5. For EACH treatment in d7.treatments order, follow d7_protocol.treatment exactly (real UI input → DOM read-back →",
+            "   one-shot CDP reload timer → post-reload DOM read → network log → TREATMENT_STEP). One TREATMENT_STEP per question;",
+            "   wait for the WSL PG_TSTEP_OBSERVED reply before the next treatment.",
+            "6. The 2500ms treatment fires after the debounce: if its save ACKs, also append SAVE_ACCEPTED for it.",
+            "7. After the LAST TREATMENT_STEP reply, append BROWSER_VERIFIED per browser_result_contract covering ALL manifest",
+            "   questions (browser_answer null when a field is empty). Legacy layouts are REJECTED and fail the trial.",
+            "Do not write any other files in the run directory except windows.events.jsonl, windows-result.json and artifacts/windows/*.",
+          ]
+        : st.arm === "D6"
+          ? [
+              "1. Read credentials.local.json (local-only) and log in as the candidate in Chrome; start the attempt via the real UI.",
+              "2. PHASE A: fill EVERY question with expected_gen1 (save_order_gen1); wait for each ACK; append SAVE_ACCEPTED per question;",
+              "   then append PRE_DUMP_CHECKPOINT {arm:'D6', attempt_id, saves[]}.",
+              "3. WAIT for DUMP_CREATED in wsl.events.jsonl (dump sha256 + completed_at) before touching any question again.",
+              "4. PHASE C: re-edit ONLY re_save_order_gen2 questions with expected_gen2; wait for each ACK; append SAVE_ACCEPTED;",
+              "   then append POST_DUMP_CHECKPOINT {arm:'D6', attempt_id, saves[]}.",
+              "5. Done — WSL restores the OLD dump into an isolated scratch PostgreSQL and measures the RPO loss. No browser reload needed.",
+              "Do not write any other files in the run directory except windows.events.jsonl, windows-result.json and artifacts/windows/*.",
+            ]
+            : st.arm === "D8A" || st.arm === "D8B"
+              ? [
+                  "1. Read credentials.local.json (local-only) and log in as the candidate in Chrome; start the attempt via the real UI.",
+                  "2. Fill EVERY question with expected_gen1 (save_order_gen1); wait for each ACK; append SAVE_ACCEPTED per question.",
+                  "3. Submit through the REAL UI (submit dialog → confirm); capture the submit request and response under artifacts/windows/.",
+                  "4. Wait until the page reaches its terminal (submitted) state, then append SUBMIT_CHECKPOINT {arm, attempt_id, saves[],",
+                  "   submit:{at, request_artifact, response_artifact, terminal_ui_confirmed:true}}.",
+                  "5. WSL verifies the terminal state in PostgreSQL, then applies the container fault and recovers; it emits SERVICE_RECOVERED.",
+                  "6. After SERVICE_RECOVERED: reload the SAME page (re-authenticate if dropped, set session_reauth_required=true), confirm the",
+                  "   terminal state persists and the attempt cannot be re-answered, then append BROWSER_VERIFIED per browser_result_contract",
+                  "   (ALL manifest questions; browser_answer null where the terminal page shows no value).",
+                  "Do not write any other files in the run directory except windows.events.jsonl, windows-result.json and artifacts/windows/*.",
+                ]
+                : [
+                    "1. Read credentials.local.json (local-only) and log in as the candidate in Chrome.",
+                    "2. Open the exam and start the attempt through the real UI.",
+                    "3. Fill EVERY question with answer_manifest.questions[*].expected_gen1, in save_order_gen1 order.",
+                    "4. For each observed save request, append a SAVE_ACCEPTED event (accepted + server_version + evidence refs).",
+                    "5. Re-edit ONLY re_save_order_gen2 questions with expected_gen2 values; append SAVE_ACCEPTED for those too.",
+                    "6. When every question's LAST save is ACKed, append CHECKPOINT_READY {arm, attempt_id, saves[]}.",
+                    "7. After the WSL side emits SERVICE_RECOVERED, reload the SAME candidate page (re-authenticate with",
+                    "   credentials.local.json if the session was dropped and set session_reauth_required=true), re-read",
+                    "   every answer, and append BROWSER_VERIFIED exactly per browser_result_contract:",
+                    "   browser_result_schema_version=2 + per_question[{question_id, browser_answer}]. Legacy field layouts",
+                    "   (browser_value / visible_value / browser_answers) are REJECTED and fail the trial.",
+                    "Do not write any other files in the run directory except windows.events.jsonl, windows-result.json",
+                    "and artifacts/windows/*.",
+                  ],
   };
 }
 
 async function cmdPublish(runId) {
   const st = loadState(runId);
   if (st.phase !== "seeded") throw new Error(`publish requires phase=seeded (got ${st.phase})`);
+  if (st.arm === "D7") st.d7 = d7Designation(st);
   const scenario = buildScenario(st);
   const scenarioPath = path.join(mailboxDir(runId), "scenario.json");
   atomicWriteJson(scenarioPath, scenario);
@@ -422,8 +557,9 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
   // scenario_published: normal entry. service_recovered: post-fault resume —
   // the fault is already terminal (handleCheckpoint's fault_terminal guard
   // prevents re-execution); the loop just waits for BROWSER_VERIFIED again.
-  if (!["scenario_published", "service_recovered"].includes(st.phase)) {
-    throw new Error(`wait requires phase=scenario_published|service_recovered (got ${st.phase})`);
+  const resumablePhases = ["scenario_published", "service_recovered", "control_verified", "dump_created", "treatments_done"];
+  if (!resumablePhases.includes(st.phase)) {
+    throw new Error(`wait requires one of [${resumablePhases.join("|")}] (got ${st.phase})`);
   }
   const mdir = mailboxDir(runId);
   const winEventsPath = path.join(mdir, WINDOWS_EVENTS);
@@ -593,12 +729,28 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
           st.browser_state = parsed.browser_state;
           st.phase = "verdict_phase";
           saveState(runId, st);
-          await writeVerdict(runId, st, writer, {});
+          if (st.arm === "D7") await writeD7Verdict(runId, st, writer);
+          else if (st.arm === "D8A" || st.arm === "D8B") await writeD8Verdict(runId, st, writer, parsed);
+          else await writeVerdict(runId, st, writer, {});
           return;
         } else if (ev.event === "WINDOW_ERROR") {
           console.log(`  [window-error] ${JSON.stringify(ev.payload).slice(0, 300)}`);
           st.window_error = ev;
           saveState(runId, st);
+        } else if (ev.event === "CONTROL_ACKED") {
+          await handleD7Control(runId, st, writer, ev);
+          if (st.phase === "incomplete") return;
+        } else if (ev.event === "TREATMENT_STEP") {
+          await handleD7TreatmentStep(runId, st, writer, ev);
+        } else if (ev.event === "PRE_DUMP_CHECKPOINT") {
+          await handleD6PreDump(runId, st, writer, ev);
+          if (st.phase === "incomplete") return;
+        } else if (ev.event === "POST_DUMP_CHECKPOINT") {
+          await handleD6PostDump(runId, st, writer, ev);
+          if (st.phase === "incomplete") return;
+        } else if (ev.event === "SUBMIT_CHECKPOINT") {
+          await handleD8Submit(runId, st, writer, ev);
+          if (st.phase === "incomplete") return;
         } else if (ev.event === "HELLO") {
           console.log(`  [hello] windows agent: ${JSON.stringify(ev.agent ?? ev.payload ?? {})}`.slice(0, 200));
         } else {
@@ -624,8 +776,10 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
       }
     }
 
-    // Browser-verified watchdog: SERVICE_RECOVERED sent but no browser result.
-    if (st.phase === "service_recovered" && !st.browser_verified) {
+    // Browser-verified watchdog: SERVICE_RECOVERED sent (or, for D7, the last
+    // TREATMENT_STEP observed) but no browser result.
+    const awaitingBrowser = st.phase === "service_recovered" || st.phase === "treatments_done";
+    if (awaitingBrowser && !st.browser_verified) {
       if (browserDeadline === null) browserDeadline = Date.now() + browserTimeoutSec * 1000;
       if (Date.now() > browserDeadline) {
         st.phase = "incomplete";
@@ -639,26 +793,14 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
   }
 }
 
-async function handleCheckpoint(runId, st, writer, ev, reader) {
-  // Replay-safety: a fault for this trial has already been applied and
-  // receipted (harness restarted after SERVICE_RECOVERED). Never re-execute;
-  // recovery has already been emitted — just wait for the browser again.
-  if (st.fault_terminal) {
-    console.log(`  [checkpoint] fault_terminal already present (${st.fault_terminal.kind}) — skipping re-execution`);
-    return;
-  }
-  // 1. Validate the checkpoint against the frozen plan.
-  if (ev.arm !== st.arm) throw new Error(`CHECKPOINT_READY arm ${ev.arm} != frozen arm ${st.arm}`);
-  const acked = new Set(Object.keys(st.ack_state));
-  const saves = new Set((ev.saves ?? []).map((s) => s.question_id));
-  const expected = new Set(st.manifest_questions.map((q) => q.question_id));
-  const missing = [...expected].filter((q) => !acked.has(q) && !saves.has(q));
-  if (missing.length > 0) {
-    throw new Error(`CHECKPOINT_READY lacks ACKed saves for ${missing.length} questions: ${missing.slice(0, 3).join(",")}`);
-  }
-  // Fold the checkpoint's save receipts into ack state (authoritative last
-  // write). Each entry may carry flat fields or artifact references — the
-  // same artifact verification applies; unverified entries do NOT count.
+/**
+ * Fold a checkpoint-style event's save receipts into ack state (authoritative
+ * last write). Each entry may carry flat fields or artifact references — the
+ * same artifact verification applies; unverified entries do NOT count.
+ * Shared by CHECKPOINT_READY (D0–D5), PRE_DUMP_CHECKPOINT/POST_DUMP_CHECKPOINT
+ * (D6), CONTROL_ACKED/TREATMENT_STEP (D7) and SUBMIT_CHECKPOINT (D8).
+ */
+function foldCheckpointSaves(st, ev) {
   for (const s of ev.saves ?? []) {
     const se = normalizeWindowsEvent(typeof s === "object" && s !== null ? s : {});
     const qid = se.question_id;
@@ -683,20 +825,62 @@ async function handleCheckpoint(runId, st, writer, ev, reader) {
       st.rejected_saves[qid] = { generation: se.generation ?? null, reason: `checkpoint save unverified: ${ack.reason}` };
     }
   }
-  st.attempt_id = ev.attempt_id;
+}
 
-  // 2. Cross-check attempt identity in PG (exactly one in_progress attempt
-  // for this exam — maxAttempts=1, single candidate).
+/** Exactly one in_progress attempt for this run's exam, matching the event. */
+async function requireSingleActiveAttempt(runId, st, attemptId) {
   const sql =
     `SELECT row_to_json(t) FROM (SELECT id, status FROM exam_attempts WHERE exam_id = '${st.exam_id}') t;`;
   const { stdout } = await pgQuery(runId, sql);
   const attempts = parsePsqlJsonRows(stdout, { what: "checkpoint attempt identity" }).rows;
   const active = attempts.filter((a) => a.status === "in_progress");
-  if (active.length !== 1 || active[0].id !== ev.attempt_id) {
+  if (active.length !== 1 || active[0].id !== attemptId) {
     throw new Error(
-      `attempt identity mismatch: checkpoint says ${ev.attempt_id}, PG has ${active.length} in_progress attempt(s) for exam ${st.exam_id}: ${active.map((a) => a.id).join(",")}`,
+      `attempt identity mismatch: event says ${attemptId}, PG has ${active.length} in_progress attempt(s) for exam ${st.exam_id}: ${attempts.map((a) => a.id).join(",")}`,
     );
   }
+}
+
+/** Snapshot the attempt, persist phase-tagged evidence, return the row. */
+async function taggedSnapshot(runId, st, writer, phase, row_ = undefined) {
+  const snap = row_ !== undefined ? row_ : await snapshotAttempt(runId, st.attempt_id);
+  if (!snap?.row) throw new Error(`${phase} snapshot: attempt row not found`);
+  const ev2 = await writePgSnapshotEvidence(runId, st.trial_id, phase, snap);
+  writer.append("PG_SNAPSHOT_TAKEN", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    phase,
+    attempt_id: st.attempt_id,
+    evidence_ref: path.basename(ev2.file),
+    sha256: ev2.sha256,
+    query_latency_ms: ev2.latencyMs,
+  });
+  return { snap, ref: path.basename(ev2.file), sha256: ev2.sha256 };
+}
+
+async function handleCheckpoint(runId, st, writer, ev, reader) {
+  // Replay-safety: a fault for this trial has already been applied and
+  // receipted (harness restarted after SERVICE_RECOVERED). Never re-execute;
+  // recovery has already been emitted — just wait for the browser again.
+  if (st.fault_terminal) {
+    console.log(`  [checkpoint] fault_terminal already present (${st.fault_terminal.kind}) — skipping re-execution`);
+    return;
+  }
+  // 1. Validate the checkpoint against the frozen plan.
+  if (ev.arm !== st.arm) throw new Error(`CHECKPOINT_READY arm ${ev.arm} != frozen arm ${st.arm}`);
+  const acked = new Set(Object.keys(st.ack_state));
+  const saves = new Set((ev.saves ?? []).map((s) => s.question_id));
+  const expected = new Set(st.manifest_questions.map((q) => q.question_id));
+  const missing = [...expected].filter((q) => !acked.has(q) && !saves.has(q));
+  if (missing.length > 0) {
+    throw new Error(`CHECKPOINT_READY lacks ACKed saves for ${missing.length} questions: ${missing.slice(0, 3).join(",")}`);
+  }
+  foldCheckpointSaves(st, ev);
+  st.attempt_id = ev.attempt_id;
+
+  // 2. Cross-check attempt identity in PG (exactly one in_progress attempt
+  // for this exam — maxAttempts=1, single candidate).
+  await requireSingleActiveAttempt(runId, st, ev.attempt_id);
 
   // 3. PRE-fault authoritative snapshot (read-only; latency recorded).
   const pre = await snapshotAttempt(runId, ev.attempt_id);
@@ -1425,6 +1609,682 @@ async function cmdResumeRecovery(runId) {
   await runRecoveryPhase(runId, st, writer, receipt, probe);
 }
 
+// ── R3 arms: D7 (debounce), D6 (dump/restore RPO), D8 (post-submit kill) ──
+
+async function failTrial(runId, st, writer, verdict, reason) {
+  st.phase = "incomplete";
+  saveState(runId, st);
+  await writeVerdict(runId, st, writer, { verdict, reason });
+}
+
+/**
+ * D7 gate: control questions ACKed and PG-verified, no treatment answer in
+ * PG yet. Only then may Windows start the treatment phase (TREATMENT_GO).
+ */
+async function handleD7Control(runId, st, writer, ev) {
+  if (st.arm !== "D7") throw new Error(`CONTROL_ACKED is a D7 event (arm ${st.arm})`);
+  if (st.phase !== "scenario_published") throw new Error(`CONTROL_ACKED requires phase=scenario_published (got ${st.phase})`);
+  if (ev.arm !== "D7") throw new Error(`CONTROL_ACKED arm ${ev.arm} != frozen arm D7`);
+  foldCheckpointSaves(st, ev);
+  st.attempt_id = ev.attempt_id;
+  await requireSingleActiveAttempt(runId, st, ev.attempt_id);
+
+  const controlIds = st.d7.control_ids;
+  const missing = controlIds.filter((q) => !st.ack_state[q]);
+  if (missing.length > 0) {
+    throw new Error(`CONTROL_ACKED lacks verified ACKs for control question(s): ${missing.map((q) => q.slice(0, 8)).join(",")}`);
+  }
+
+  const { snap, ref, sha256 } = await taggedSnapshot(runId, st, writer, "pre_treatment");
+  st.pre_treatment_snapshot = { ref, sha256, latency_ms: snap.latencyMs };
+
+  const controlManifest = st.manifest_questions.filter((q) => controlIds.includes(q.question_id));
+  const controlAck = Object.fromEntries(controlIds.map((q) => [q, st.ack_state[q]]));
+  const classified = classifyPerQuestion({ manifestQuestions: controlManifest, attemptRow: snap.row, ackState: controlAck });
+  const bad = classified.filter((q) => q.classification !== "ACK_MATCHED");
+  if (bad.length > 0) {
+    writer.append("CHECKPOINT_REJECTED", {
+      run_id: st.run_id, trial_id: st.trial_id, attempt_id: st.attempt_id,
+      problems: bad.map((q) => ({ question_id: q.question_id, classification: q.classification })),
+      reason: "control answers not ACK_MATCHED in PG before the treatment phase — fail closed",
+    });
+    await failTrial(runId, st, writer, "UNKNOWN", `control baseline broken: ${bad.map((q) => `${q.question_id.slice(0, 8)}:${q.classification}`).join(",")}`);
+    return;
+  }
+
+  // Baseline absence: no treatment answer may exist in PG before the phase.
+  const leaked = st.d7.treatments.filter((t) => (snap.row.answers ?? []).some((a) => a.questionId === t.question_id));
+  if (leaked.length > 0) {
+    await failTrial(runId, st, writer, "UNKNOWN", `treatment answer(s) already present in PG before the treatment phase: ${leaked.map((t) => t.question_id.slice(0, 8)).join(",")}`);
+    return;
+  }
+
+  st.phase = "control_verified";
+  saveState(runId, st);
+  writer.append("TREATMENT_GO", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    treatments: st.d7.treatments,
+    control_classifications: Object.fromEntries(classified.map((q) => [q.question_id, q.classification])),
+    protocol_note: "follow scenario.d7_protocol exactly; one TREATMENT_STEP per treatment, wait for PG_TSTEP_OBSERVED between steps",
+  });
+  console.log("control baseline verified — TREATMENT_GO emitted");
+}
+
+/** D7: one treatment executed (input → reload → post-reload read). */
+async function handleD7TreatmentStep(runId, st, writer, ev) {
+  if (st.arm !== "D7") throw new Error(`TREATMENT_STEP is a D7 event (arm ${st.arm})`);
+  if (!["control_verified", "treatments_in_progress"].includes(st.phase)) {
+    throw new Error(`TREATMENT_STEP requires phase=control_verified|treatments_in_progress (got ${st.phase})`);
+  }
+  const t = (st.d7?.treatments ?? []).find((x) => x.question_id === ev.question_id);
+  if (!t) throw new Error(`TREATMENT_STEP for non-treatment question ${String(ev.question_id ?? "").slice(0, 8)}`);
+  st.d7_steps = st.d7_steps ?? {};
+  if (st.d7_steps[t.question_id]) throw new Error(`duplicate TREATMENT_STEP for ${t.question_id.slice(0, 8)}`);
+  if (ev.attempt_id && ev.attempt_id !== st.attempt_id) throw new Error("attempt mismatch in TREATMENT_STEP");
+
+  // An ACK captured during the treatment (boundary control) folds in like a
+  // SAVE_ACCEPTED — same artifact verification.
+  foldCheckpointSaves(st, ev);
+
+  // WSL-authoritative PG observation right after the reload.
+  const snap = await snapshotAttempt(runId, st.attempt_id);
+  if (!snap?.row) throw new Error("treatment PG observation: attempt row missing");
+  const recs = (snap.row.answers ?? []).filter((a) => a.questionId === t.question_id);
+  const latest = recs.length ? recs.reduce((a, b) => (Number(b.version) > Number(a.version) ? b : a)) : null;
+  const pg = {
+    present: latest !== null,
+    version: latest?.version ?? null,
+    value_matches_treatment: latest ? valuesEqual(t.expected_value, latest.answer, t.type) : null,
+    answer: latest?.answer ?? null,
+  };
+  const windows = {
+    input_confirmed: ev.input_confirmed,
+    dom_value_before_reload: ev.dom_value_before_reload,
+    last_input_at: ev.last_input_at,
+    reload_initiated_at: ev.reload_initiated_at,
+    save_requests: Array.isArray(ev.save_requests) ? ev.save_requests : [],
+    save_responses: Array.isArray(ev.save_responses) ? ev.save_responses : [],
+    post_reload_value: ev.dom_value_after_reload ?? null,
+  };
+  const classified = classifyD7Treatment({ treatment: t, windows, pg });
+  st.d7_steps[t.question_id] = { windows, pg, classification: classified, observed_at: snap.captured_at };
+  saveState(runId, st);
+  writer.append("PG_TSTEP_OBSERVED", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    question_id: t.question_id,
+    pg_present: pg.present,
+    pg_version: pg.version,
+    classification: classified.classification,
+    measured_reload_delta_ms: classified.measured_reload_delta_ms,
+  });
+  console.log(`  [tstep] ${t.question_id.slice(0, 8)}: ${classified.classification} (delta ${classified.measured_reload_delta_ms}ms, pg=${pg.present ? `v${pg.version}` : "absent"})`);
+  st.phase = Object.keys(st.d7_steps).length >= st.d7.treatments.length ? "treatments_done" : "treatments_in_progress";
+  saveState(runId, st);
+}
+
+async function writeD7Verdict(runId, st, writer) {
+  let apiState = null;
+  try {
+    const apiLeg = await captureApiTakeSnapshot(runId, st);
+    apiState = apiLeg.apiState;
+    st.api_snapshot = { ref: path.basename(apiLeg.file), sha256: apiLeg.sha256, attempt_status: apiLeg.attemptStatus };
+  } catch (e) {
+    st.api_snapshot_error = e.message.slice(0, 300);
+  }
+  const final = await taggedSnapshot(runId, st, writer, "final");
+  st.final_snapshot = { ref: final.ref, sha256: final.sha256 };
+
+  const controlIds = st.d7.control_ids;
+  const controlManifest = st.manifest_questions.filter((q) => controlIds.includes(q.question_id));
+  const controlAck = Object.fromEntries(controlIds.map((q) => [q, st.ack_state[q]]));
+  const controlClassified = classifyPerQuestion({
+    manifestQuestions: controlManifest,
+    attemptRow: final.snap.row,
+    ackState: controlAck,
+    browserState: st.browser_state,
+    apiState,
+  });
+
+  // Treatments re-classified against the FINAL authoritative PG state.
+  const treatmentResults = st.d7.treatments.map((t) => {
+    const recs = (final.snap.row.answers ?? []).filter((a) => a.questionId === t.question_id);
+    const latest = recs.length ? recs.reduce((a, b) => (Number(b.version) > Number(a.version) ? b : a)) : null;
+    const pgFinal = {
+      present: latest !== null,
+      version: latest?.version ?? null,
+      value_matches_treatment: latest ? valuesEqual(t.expected_value, latest.answer, t.type) : null,
+    };
+    return classifyD7Treatment({ treatment: t, windows: st.d7_steps?.[t.question_id]?.windows ?? null, pg: pgFinal });
+  });
+
+  const summary = summarizeD7({
+    controlResults: controlClassified,
+    treatmentResults,
+    apiLegAvailable: apiState !== null,
+    browserLegAvailable: !!st.browser_verified,
+  });
+
+  // Boundary control (delay ≥ debounce): expected SAVED_ACKED. A
+  // DEBOUNCE_NOT_FIRED there is a product finding, recorded beside the
+  // headline without inflating it into a draft-loss claim.
+  const boundaryIdx = st.d7.treatments.findIndex((t) => t.nominal_reload_delay_ms >= D7_DEBOUNCE_MS);
+  const boundary = boundaryIdx >= 0 ? { treatment: st.d7.treatments[boundaryIdx], result: treatmentResults[boundaryIdx] } : null;
+
+  const mutation = oracleMutationRedTest();
+  const controlCounts = {};
+  for (const q of controlClassified) controlCounts[q.classification] = (controlCounts[q.classification] ?? 0) + 1;
+  const verdictBody = {
+    schema_version: SCHEMA_VERSION,
+    kind: "exam817/verdict",
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    arm: "D7",
+    source_sha: BASE_SHA,
+    verdict: summary.verdict,
+    reason: summary.reason,
+    verdict_semantics:
+      "LOCAL_UNSENT_LOST = a typed draft whose reload demonstrably preceded the 1500ms debounce left no save request, no ACK, no PG row, and an empty field after reload — a client unsent-draft fact, never counted as ACK_LOST. SENT_BUT_UNKNOWN = request left before the reload; PG decides. Controls must be clean for any treatment result to count.",
+    attempt_id: st.attempt_id,
+    exam_id: st.exam_id,
+    counts: { ...controlCounts, ...summary.counts },
+    d7: {
+      summary,
+      controls: controlClassified,
+      treatments: treatmentResults,
+      boundary_control: boundary,
+      steps: st.d7_steps ?? {},
+      debounce_ms: D7_DEBOUNCE_MS,
+      designation: st.d7,
+    },
+    browser_counts: summary.counts,
+    oracle_mutation_test: { red: mutation.red, green: mutation.green, detail: mutation.detail },
+    evidence_refs: {
+      pre_treatment_snapshot: st.pre_treatment_snapshot ?? null,
+      final_snapshot: st.final_snapshot ?? null,
+      api_snapshot: st.api_snapshot ?? null,
+      api_snapshot_error: st.api_snapshot_error ?? null,
+      browser: st.browser_verified?.evidence_ref ?? null,
+    },
+    generated_at: new Date().toISOString(),
+  };
+  atomicWriteJson(path.join(mailboxDir(runId), "verdict.json"), verdictBody);
+  writer.append("VERDICT_PUBLISHED", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    verdict: summary.verdict,
+    counts: verdictBody.counts,
+    d7_counts: summary.counts,
+    verdict_ref: "verdict.json",
+    oracle_mutation_test: { red: mutation.red, green: mutation.green },
+  });
+  console.log(`verdict: ${summary.verdict} controls=${JSON.stringify(controlCounts)} treatments=${JSON.stringify(summary.counts)}`);
+}
+
+/** D6 phase A gate + pg_dump. */
+async function handleD6PreDump(runId, st, writer, ev) {
+  if (st.arm !== "D6") throw new Error(`PRE_DUMP_CHECKPOINT is a D6 event (arm ${st.arm})`);
+  if (st.phase !== "scenario_published") throw new Error(`PRE_DUMP_CHECKPOINT requires phase=scenario_published (got ${st.phase})`);
+  if (ev.arm !== "D6") throw new Error(`PRE_DUMP_CHECKPOINT arm ${ev.arm} != frozen arm D6`);
+  foldCheckpointSaves(st, ev);
+  st.attempt_id = ev.attempt_id;
+  await requireSingleActiveAttempt(runId, st, ev.attempt_id);
+  const expected = st.manifest_questions.map((q) => q.question_id);
+  const missing = expected.filter((q) => !st.ack_state[q]);
+  if (missing.length > 0) {
+    throw new Error(`PRE_DUMP_CHECKPOINT lacks ACKed saves for ${missing.length} question(s): ${missing.slice(0, 3).map((q) => q.slice(0, 8)).join(",")}`);
+  }
+  const { snap, ref, sha256 } = await taggedSnapshot(runId, st, writer, "pre_dump");
+  st.pre_dump_snapshot = { ref, sha256, latency_ms: snap.latencyMs };
+  const classified = classifyPerQuestion({ manifestQuestions: st.manifest_questions, attemptRow: snap.row, ackState: st.ack_state });
+  const bad = classified.filter((q) => q.classification !== "ACK_MATCHED");
+  if (bad.length > 0) {
+    writer.append("CHECKPOINT_REJECTED", {
+      run_id: st.run_id, trial_id: st.trial_id, attempt_id: st.attempt_id,
+      problems: bad.map((q) => ({ question_id: q.question_id, classification: q.classification })),
+      reason: "pre-dump PG state does not match the verified ACKs — dump NOT taken (fail closed)",
+    });
+    await failTrial(runId, st, writer, "UNKNOWN", `pre-dump PG mismatch: ${bad.map((q) => `${q.question_id.slice(0, 8)}:${q.classification}`).join(",")}`);
+    return;
+  }
+  st.ack_state_pre_dump = JSON.parse(JSON.stringify(st.ack_state));
+  const dump = await pgDumpSource(runId, { trialId: st.trial_id });
+  st.dump_receipt = dump;
+  st.phase = "dump_created";
+  saveState(runId, st);
+  writer.append("DUMP_CREATED", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    dump_sha256: dump.sha256,
+    bytes: dump.bytes,
+    duration_ms: dump.duration_ms,
+    started_at: dump.started_at,
+    completed_at: dump.completed_at,
+    pg_dump_version: dump.pg_dump_version,
+    db_container_id: dump.db_container_id,
+    note: "phase C may start: re-edit re_save_order_gen2 questions, then POST_DUMP_CHECKPOINT",
+  });
+  console.log(`DUMP_CREATED ${dump.sha256.slice(0, 12)} (${dump.bytes}B, ${dump.duration_ms}ms)`);
+}
+
+/** D6 phase C gate + scratch restore + RPO comparison. */
+async function handleD6PostDump(runId, st, writer, ev) {
+  if (st.arm !== "D6") throw new Error(`POST_DUMP_CHECKPOINT is a D6 event (arm ${st.arm})`);
+  if (st.phase !== "dump_created") throw new Error(`POST_DUMP_CHECKPOINT requires phase=dump_created (got ${st.phase})`);
+  foldCheckpointSaves(st, ev);
+  const gen2Ids = st.manifest_questions.filter((q) => q.expected_gen2 !== null).map((q) => q.question_id);
+  const missing = gen2Ids.filter((q) => !st.ack_state[q]);
+  if (missing.length > 0) {
+    throw new Error(`POST_DUMP_CHECKPOINT lacks ACKed gen2 saves for ${missing.length} question(s)`);
+  }
+  st.ack_state_post_dump = JSON.parse(JSON.stringify(st.ack_state));
+
+  // Source DB must now demonstrably hold the post-dump answers.
+  const { snap: sourceSnap, ref: sourceRef, sha256: sourceSha } = await taggedSnapshot(runId, st, writer, "post_dump_source");
+  st.post_dump_source_snapshot = { ref: sourceRef, sha256: sourceSha };
+  const sourceClassified = classifyPerQuestion({ manifestQuestions: st.manifest_questions, attemptRow: sourceSnap.row, ackState: st.ack_state });
+  const bad = sourceClassified.filter((q) => q.classification !== "ACK_MATCHED");
+  if (bad.length > 0) {
+    writer.append("CHECKPOINT_REJECTED", {
+      run_id: st.run_id, trial_id: st.trial_id, attempt_id: st.attempt_id,
+      problems: bad.map((q) => ({ question_id: q.question_id, classification: q.classification })),
+      reason: "source PG does not hold the post-dump ACKs — RPO comparison would be meaningless (fail closed)",
+    });
+    await failTrial(runId, st, writer, "UNKNOWN", `post-dump source mismatch: ${bad.map((q) => `${q.question_id.slice(0, 8)}:${q.classification}`).join(",")}`);
+    return;
+  }
+
+  st.scratch = {};
+  try {
+    const pf = await scratchPreflight(runId);
+    if (!pf.ok) throw new Error(`scratch preflight failed: ${pf.problems.join("; ")}`);
+    writeScratchEnv(runId, { port: pf.port, subnet: pf.subnet });
+    st.scratch = { project: pf.project, port: pf.port, subnet: pf.subnet };
+    saveState(runId, st);
+    await scratchUp(runId);
+    st.scratch.up_at = new Date().toISOString();
+    saveState(runId, st);
+    const restore = await pgRestoreScratch(runId, st.dump_receipt, { trialId: st.trial_id });
+    st.scratch.restore = { exit: restore.exit, duration_ms: restore.duration_ms };
+    saveState(runId, st);
+
+    const { stdout } = await scratchQuery(
+      runId,
+      `SELECT row_to_json(t) FROM (SELECT id, exam_id, status, started_at, submitted_at, answers, jsonb_array_length(answers) AS n_answers FROM exam_attempts WHERE id = '${st.attempt_id}') t;`,
+    );
+    const { rows } = parsePsqlJsonRows(stdout, { what: "scratch attempt snapshot" });
+    const scratchRow = rows[0] ?? null;
+    const { stdout: cntOut } = await scratchQuery(runId, `SELECT count(*)::int FROM exam_attempts WHERE exam_id = '${st.exam_id}';`);
+    const integrity = {
+      attempt_present: !!scratchRow,
+      exam_id_matches: scratchRow?.exam_id === st.exam_id,
+      n_answers: scratchRow?.n_answers ?? null,
+      n_answers_expected: st.manifest_questions.length,
+      answers_complete: scratchRow?.n_answers === st.manifest_questions.length,
+      attempt_rows_for_exam: Number(cntOut.trim()),
+    };
+    st.scratch.integrity = integrity;
+    st.scratch.scratch_row_sha256 = scratchRow ? sha256Hex(JSON.stringify(scratchRow)) : null;
+    atomicWriteJson(path.join(runPaths(runId).evidenceDir, `d6-scratch-snapshot-${st.trial_id}.json`), {
+      captured_at: new Date().toISOString(),
+      project: st.scratch.project,
+      integrity,
+      row: scratchRow,
+    });
+
+    const perQuestion = compareD6({
+      manifestQuestions: st.manifest_questions,
+      scratchRow,
+      ackStatePre: st.ack_state_pre_dump,
+      ackStatePost: st.ack_state_post_dump,
+    });
+    const rpo = measureRpo({ dumpReceipt: st.dump_receipt, ackStatePost: st.ack_state_post_dump });
+    await writeD6Verdict(runId, st, writer, { perQuestion, rpo, integrity });
+  } catch (e) {
+    await failTrial(runId, st, writer, "UNKNOWN", `D6 scratch phase failed: ${e.message.slice(0, 300)}`);
+  } finally {
+    try {
+      st.scratch_cleanup = await scratchDown(runId, {});
+      saveState(runId, st);
+    } catch (e) {
+      console.error(`scratch cleanup failed (final cleanup will retry): ${e.message}`);
+    }
+  }
+}
+
+async function writeD6Verdict(runId, st, writer, { perQuestion, rpo, integrity }) {
+  const counts = {};
+  for (const q of perQuestion) counts[q.classification] = (counts[q.classification] ?? 0) + 1;
+  const integrityOk =
+    integrity.attempt_present &&
+    integrity.exam_id_matches &&
+    integrity.answers_complete &&
+    integrity.attempt_rows_for_exam === 1;
+  let verdict;
+  let reason;
+  if (!integrityOk) {
+    verdict = "RESTORE_INTEGRITY_FAILURE";
+    reason = `restored DB failed structural integrity: ${JSON.stringify(integrity)}`;
+  } else if ((counts.RESTORE_INTEGRITY_FAILURE ?? 0) > 0) {
+    verdict = "RESTORE_INTEGRITY_FAILURE";
+    reason = `${counts.RESTORE_INTEGRITY_FAILURE} pre-dump answer(s) missing/divergent in the restored DB`;
+  } else if ((counts.DUMP_WINDOW_VIOLATED ?? 0) > 0) {
+    verdict = "DUMP_WINDOW_VIOLATED";
+    reason = `${counts.DUMP_WINDOW_VIOLATED} restored answer(s) carry post-dump content — the dump cannot have been taken before phase C`;
+  } else if ((counts.PRE_DUMP_RETAINED ?? 0) === st.manifest_questions.length && (counts.POST_DUMP_MISSING ?? 0) > 0) {
+    verdict = "DUMP_RPO_LOSS";
+    reason = `all ${counts.PRE_DUMP_RETAINED} pre-dump answers retained; ${rpo.lost_answer_count} post-dump ACKed answer(s) absent from the restored snapshot — measured RPO gap ${rpo.rpo_min_ms}..${rpo.rpo_max_ms}ms after dump completion (expected recovery-point loss, NOT a durability failure)`;
+  } else {
+    verdict = "UNKNOWN";
+    reason = `unexpected comparison distribution: ${JSON.stringify(counts)}`;
+  }
+  const mutation = oracleMutationRedTest();
+  const verdictBody = {
+    schema_version: SCHEMA_VERSION,
+    kind: "exam817/verdict",
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    arm: "D6",
+    source_sha: BASE_SHA,
+    verdict,
+    reason,
+    verdict_semantics:
+      "DUMP_RPO_LOSS = the old snapshot restored faithfully (PRE_DUMP_RETAINED) but post-dump ACKed answers are absent (POST_DUMP_MISSING) — the measured recovery-point gap of a backup taken at dump time. RESTORE_INTEGRITY_FAILURE = the restore lost even pre-dump data. DUMP_WINDOW_VIOLATED = restored content newer than the dump.",
+    attempt_id: st.attempt_id,
+    exam_id: st.exam_id,
+    counts,
+    d6: {
+      dump: st.dump_receipt ?? null,
+      scratch: st.scratch ?? null,
+      rpo,
+      per_question: perQuestion,
+      source_post_dump: st.post_dump_source_snapshot ?? null,
+    },
+    oracle_mutation_test: { red: mutation.red, green: mutation.green, detail: mutation.detail },
+    evidence_refs: {
+      pre_dump_snapshot: st.pre_dump_snapshot ?? null,
+      post_dump_source_snapshot: st.post_dump_source_snapshot ?? null,
+      dump_receipt: `d6-dump-receipt-${st.trial_id}.json`,
+      restore_receipt: `d6-restore-receipt-${st.trial_id}.json`,
+      scratch_snapshot: `d6-scratch-snapshot-${st.trial_id}.json`,
+    },
+    generated_at: new Date().toISOString(),
+  };
+  atomicWriteJson(path.join(mailboxDir(runId), "verdict.json"), verdictBody);
+  writer.append("VERDICT_PUBLISHED", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    verdict,
+    counts,
+    verdict_ref: "verdict.json",
+    oracle_mutation_test: { red: mutation.red, green: mutation.green },
+  });
+  st.phase = "complete";
+  saveState(runId, st);
+  console.log(`verdict: ${verdict} ${JSON.stringify(counts)}`);
+}
+
+/** D8 gate: submit terminal in PG + submitted_answers frozen + ACKs reconciled, THEN fault. */
+async function handleD8Submit(runId, st, writer, ev) {
+  if (st.arm !== "D8A" && st.arm !== "D8B") throw new Error(`SUBMIT_CHECKPOINT is a D8 event (arm ${st.arm})`);
+  if (st.phase !== "scenario_published") throw new Error(`SUBMIT_CHECKPOINT requires phase=scenario_published (got ${st.phase})`);
+  if (ev.arm !== st.arm) throw new Error(`SUBMIT_CHECKPOINT arm ${ev.arm} != frozen arm ${st.arm}`);
+  foldCheckpointSaves(st, ev);
+  st.attempt_id = ev.attempt_id;
+  const expected = st.manifest_questions.map((q) => q.question_id);
+  const missing = expected.filter((q) => !st.ack_state[q]);
+  if (missing.length > 0) {
+    throw new Error(`SUBMIT_CHECKPOINT lacks ACKed saves for ${missing.length} question(s): ${missing.slice(0, 3).map((q) => q.slice(0, 8)).join(",")}`);
+  }
+
+  const preFull = await snapshotAttemptFull(runId, st.attempt_id);
+  if (!preFull?.row) throw new Error("pre-fault full snapshot: attempt row not found");
+  const preFullEv = await writePgSnapshotEvidenceFull(runId, st.trial_id, "pre", preFull);
+  st.pre_full_snapshot = { ref: path.basename(preFullEv.file), sha256: preFullEv.sha256 };
+  writer.append("PG_SNAPSHOT_TAKEN", {
+    run_id: st.run_id, trial_id: st.trial_id, phase: "pre_full",
+    attempt_id: st.attempt_id, evidence_ref: path.basename(preFullEv.file), sha256: preFullEv.sha256,
+  });
+
+  const row = preFull.row;
+  if (row.status === "in_progress") {
+    writer.append("CHECKPOINT_REJECTED", {
+      run_id: st.run_id, trial_id: st.trial_id, attempt_id: st.attempt_id,
+      reason: "submit not terminal (status in_progress) — SIGKILL would test an in-flight submit, not a preserved terminal state",
+    });
+    await failTrial(runId, st, writer, "UNKNOWN", "submit not confirmed terminal in PG — D8 fault NOT fired");
+    return;
+  }
+  if (!["submitted", "graded"].includes(row.status)) {
+    await failTrial(runId, st, writer, "UNKNOWN", `unexpected post-submit status ${row.status} (expected submitted|graded) — D8 fault NOT fired`);
+    return;
+  }
+  const sa = row.submitted_answers;
+  if (!sa || sa.schemaVersion !== 1 || !Array.isArray(sa.answers) || sa.answers.length === 0) {
+    await failTrial(runId, st, writer, "UNKNOWN", `submitted_answers missing or malformed (${JSON.stringify(sa)?.slice(0, 120)}) — D8 fault NOT fired`);
+    return;
+  }
+  const submittedCheck = compareSubmittedAnswers({ answers: row.answers, submitted: sa, manifestQuestions: st.manifest_questions });
+  st.submitted_check = submittedCheck;
+  if (!submittedCheck.comparable || submittedCheck.mismatches.length > 0) {
+    await failTrial(runId, st, writer, "UNKNOWN", `submitted_answers do not match answers (${submittedCheck.mismatches.length} mismatch(es)) — D8 fault NOT fired`);
+    return;
+  }
+
+  const { snap, ref, sha256 } = await taggedSnapshot(runId, st, writer, "pre");
+  st.pre_snapshot = { ref, sha256, latency_ms: snap.latencyMs };
+  st.pre_snapshot_row_status = snap.row.status;
+  const classified = classifyPerQuestion({ manifestQuestions: st.manifest_questions, attemptRow: snap.row, ackState: st.ack_state });
+  const bad = classified.filter((q) => q.classification !== "ACK_MATCHED");
+  if (bad.length > 0) {
+    writer.append("CHECKPOINT_REJECTED", {
+      run_id: st.run_id, trial_id: st.trial_id, attempt_id: st.attempt_id,
+      problems: bad.map((q) => ({ question_id: q.question_id, classification: q.classification })),
+      reason: "pre-fault PG answers do not match the verified ACKs — fault NOT fired (fail closed)",
+    });
+    await failTrial(runId, st, writer, "UNKNOWN", `pre-fault PG mismatch: ${bad.map((q) => `${q.question_id.slice(0, 8)}:${q.classification}`).join(",")}`);
+    return;
+  }
+  st.pre_consistency = {
+    classifications: Object.fromEntries(classified.map((q) => [q.question_id, q.classification])),
+    submitted_check_ok: true,
+  };
+
+  writer.append("FAULT_INTENT", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    arm: st.arm,
+    checkpoint_event_id: ev.event_id,
+    checkpoint_seq: ev.seq,
+    attempt_id: st.attempt_id,
+    planned_action: st.fault_plan.action,
+    planned_target: st.fault_plan.target,
+    terminal_status: row.status,
+    pre_consistency: st.pre_consistency,
+  });
+  st.fault_intent_written = true;
+  st.phase = "fault_phase";
+  saveState(runId, st);
+
+  const probe = await startFaultWindowProbe({
+    runId: st.run_id,
+    origin: st.origin,
+    evidenceDir: runPaths(runId).evidenceDir,
+    trialId: st.trial_id,
+  });
+  st.probe_started_at = probe.startedAt;
+  saveState(runId, st);
+
+  let receipt;
+  try {
+    receipt = await executeFault(runId, { arm: st.arm, trialId: st.trial_id });
+    st.fault_terminal = { kind: "FAULT_APPLIED", receipt };
+  } catch (e) {
+    await probe.stop().catch(() => {});
+    st.probe_stopped_at = new Date().toISOString();
+    st.fault_terminal = { kind: "FAULT_FAILED", reason: e.message };
+    saveState(runId, st);
+    writer.append("FAULT_FAILED", { run_id: st.run_id, trial_id: st.trial_id, arm: st.arm, reason: e.message });
+    await failTrial(runId, st, writer, "UNKNOWN", `fault failed: ${e.message}`);
+    return;
+  }
+  writer.append("FAULT_APPLIED", { run_id: st.run_id, trial_id: st.trial_id, arm: st.arm, receipt });
+  st.phase = "fault_done";
+  saveState(runId, st);
+  console.log(`fault applied: ${st.arm} (${st.fault_plan.label})`);
+  await runRecoveryPhase(runId, st, writer, receipt, probe);
+}
+
+function loadFullRow(runId, snapshotFile) {
+  if (!snapshotFile) return null;
+  const p = path.join(runPaths(runId).evidenceDir, snapshotFile);
+  if (!fs.existsSync(p)) return null;
+  return JSON.parse(fs.readFileSync(p, "utf8")).row;
+}
+
+/** D8 verdict: terminal-state facets over the full row, plus the generic
+ *  ACK→PG→API durability legs. The browser leg confirms the terminal UI
+ *  (identity + no re-answer), NOT per-question values — the submitted page
+ *  legitimately may not display them. */
+async function writeD8Verdict(runId, st, writer, parsed) {
+  let apiState = null;
+  try {
+    const apiLeg = await captureApiTakeSnapshot(runId, st);
+    apiState = apiLeg.apiState;
+    st.api_snapshot = { ref: path.basename(apiLeg.file), sha256: apiLeg.sha256, attempt_status: apiLeg.attemptStatus };
+    st.api_attempt_status = apiLeg.attemptStatus;
+  } catch (e) {
+    st.api_snapshot_error = e.message.slice(0, 300);
+  }
+  const postFull = await snapshotAttemptFull(runId, st.attempt_id);
+  const postFullEv = await writePgSnapshotEvidenceFull(runId, st.trial_id, "post", postFull);
+  st.post_full_snapshot = { ref: path.basename(postFullEv.file), sha256: postFullEv.sha256 };
+  const { snap: postSnap, ref, sha256 } = await taggedSnapshot(runId, st, writer, "post");
+  st.post_snapshot = { ref, sha256, latency_ms: postSnap.latencyMs };
+  st.post_snapshot_row_status = postSnap.row.status;
+
+  const perQuestion = classifyPerQuestion({
+    manifestQuestions: st.manifest_questions,
+    attemptRow: postSnap.row,
+    ackState: st.ack_state,
+    apiState,
+    browserState: null,
+  });
+  const counts = {};
+  for (const q of perQuestion) counts[q.classification] = (counts[q.classification] ?? 0) + 1;
+  const apiCounts = {};
+  for (const q of perQuestion) {
+    if (q.api_classification) apiCounts[q.api_classification] = (apiCounts[q.api_classification] ?? 0) + 1;
+  }
+
+  const pre = loadFullRow(runId, st.pre_full_snapshot?.ref);
+  const post = postFull.row;
+  const jsonSha = (v) => sha256Hex(JSON.stringify(v ?? null));
+  const { stdout: cntOut } = await pgQuery(runId, `SELECT count(*)::int FROM exam_attempts WHERE exam_id = '${st.exam_id}';`);
+  const attemptCount = Number(cntOut.trim());
+  const facets = {
+    terminal_preserved: !!pre && !!post && pre.status === post.status && ["submitted", "graded"].includes(post.status ?? ""),
+    terminal_status: post?.status ?? null,
+    pre_status: pre?.status ?? null,
+    submitted_at_unchanged: !!pre && !!post && pre.submitted_at != null && pre.submitted_at === post.submitted_at,
+    submission_reason_unchanged: !!pre && !!post && jsonSha(pre.submission_reason) === jsonSha(post.submission_reason),
+    submitted_answers_matched: !!pre && !!post && jsonSha(pre.submitted_answers) === jsonSha(post.submitted_answers),
+    grading_state_consistent: !!pre && !!post && jsonSha(pre.grading_status ?? null) === jsonSha(post.grading_status ?? null),
+    duplicate_submission: attemptCount === 1,
+    attempt_rows_for_exam: attemptCount,
+    illegal_reopen: !!pre && !!post && (pre.status !== post.status || (st.api_attempt_status != null && st.api_attempt_status !== post.status)),
+  };
+
+  const contaminated = (st.fault_terminal?.receipt?.bystanders_unchanged ?? null) !== null &&
+    Object.values(st.fault_terminal.receipt.bystanders_unchanged).some((v) => v === false);
+  const mutation = oracleMutationRedTest();
+  let verdict;
+  let reason;
+  if (contaminated) {
+    verdict = "FAULT_DOMAIN_CONTAMINATED";
+    reason = "a non-target fault domain changed identity across the kill";
+  } else if (!facets.terminal_preserved || facets.illegal_reopen) {
+    verdict = "DATA_MISMATCH";
+    reason = `terminal state not preserved: ${JSON.stringify({ terminal_preserved: facets.terminal_preserved, illegal_reopen: facets.illegal_reopen, pre: facets.pre_status, post: facets.terminal_status })}`;
+  } else if (!facets.submitted_answers_matched || !facets.submitted_at_unchanged || (counts.ACK_LOST ?? 0) + (counts.UNACKNOWLEDGED_UNKNOWN ?? 0) > 0) {
+    verdict = "DATA_MISMATCH";
+    reason = `submitted data changed across the fault (submitted_answers_matched=${facets.submitted_answers_matched}, counts=${JSON.stringify(counts)})`;
+  } else if (!facets.duplicate_submission) {
+    verdict = "DATA_MISMATCH";
+    reason = `${attemptCount} attempt row(s) exist for the exam — duplicate submission observed`;
+  } else if ((apiCounts.API_MISMATCH ?? 0) > 0) {
+    verdict = "DATA_MISMATCH";
+    reason = "API serving leg diverges from the frozen submitted answers";
+  } else if (st.api_snapshot_error || (apiCounts.NOT_RUN ?? 0) + (apiCounts.UNKNOWN ?? 0) > 0) {
+    verdict = "UNKNOWN";
+    reason = `API leg incomplete (error=${st.api_snapshot_error ?? "none"}) — COMPLETE unavailable`;
+  } else if (!st.browser_verified) {
+    verdict = "UNKNOWN";
+    reason = "browser leg never received (no BROWSER_VERIFIED event)";
+  } else if (parsed.identity_confirmed === false) {
+    verdict = "UNKNOWN";
+    reason = "browser could not confirm candidate identity on the reloaded terminal page";
+  } else {
+    verdict = "TERMINAL_PRESERVED";
+    reason = `submit transaction survived the ${st.arm === "D8A" ? "app SIGKILL" : "db SIGKILL (WAL recovery)"}: status ${facets.terminal_status}, submitted_answers byte-identical, ${attemptCount} attempt row, ACK→PG→API reconciled, terminal UI confirmed`;
+  }
+
+  const verdictBody = {
+    schema_version: SCHEMA_VERSION,
+    kind: "exam817/verdict",
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    arm: st.arm,
+    source_sha: BASE_SHA,
+    verdict,
+    reason,
+    verdict_semantics:
+      "TERMINAL_PRESERVED = post-submit terminal state (status, submitted_at, submitted_answers, grading fields) byte-identical across the fault with exactly one attempt row, ACK→PG→API agreement and a confirmed terminal UI. Facets ILLEGAL_REOPEN / DUPLICATE_SUBMISSION map to DATA_MISMATCH.",
+    attempt_id: st.attempt_id,
+    exam_id: st.exam_id,
+    counts,
+    api_counts: apiCounts,
+    d8: {
+      facets,
+      submitted_check: st.submitted_check ?? null,
+      browser: {
+        identity_confirmed: parsed.identity_confirmed ?? null,
+        session_reauth_required: parsed.session_reauth_required ?? null,
+        reload_at: parsed.reload_at ?? null,
+      },
+      pre_full: st.pre_full_snapshot ?? null,
+      post_full: st.post_full_snapshot ?? null,
+    },
+    fault: st.fault_terminal ?? null,
+    rto: st.rto ?? null,
+    fault_window_probe: st.fault_window_probe ?? null,
+    pre_consistency: st.pre_consistency ?? null,
+    oracle_mutation_test: { red: mutation.red, green: mutation.green, detail: mutation.detail },
+    evidence_refs: {
+      pre_snapshot: st.pre_snapshot ?? null,
+      post_snapshot: st.post_snapshot ?? null,
+      pre_full_snapshot: st.pre_full_snapshot ?? null,
+      post_full_snapshot: st.post_full_snapshot ?? null,
+      api_snapshot: st.api_snapshot ?? null,
+      browser: st.browser_verified?.evidence_ref ?? null,
+    },
+    generated_at: new Date().toISOString(),
+  };
+  atomicWriteJson(path.join(mailboxDir(runId), "verdict.json"), verdictBody);
+  writer.append("VERDICT_PUBLISHED", {
+    run_id: st.run_id,
+    trial_id: st.trial_id,
+    verdict,
+    counts,
+    api_counts: apiCounts,
+    d8_facets: facets,
+    verdict_ref: "verdict.json",
+    oracle_mutation_test: { red: mutation.red, green: mutation.green },
+  });
+  console.log(`verdict: ${verdict} ${JSON.stringify(counts)} api=${JSON.stringify(apiCounts)}`);
+}
+
 // ── cleanup / report ──────────────────────────────────────────────
 
 async function cmdCleanup(runId, { deleteData = false } = {}) {
@@ -1479,6 +2339,12 @@ async function cmdCleanup(runId, { deleteData = false } = {}) {
     data_root_deleted: dataDeleted,
     data_root: deleteData ? p.dataRoot : "retained",
   };
+  // D6 scratch restore stack: independent compose project with its own
+  // PGDATA — torn down and receipted alongside the source stack.
+  if (fs.existsSync(path.join(p.root, "scratch", "deploy", "env.production"))) {
+    const { scratchDown } = await import("./d6.mjs");
+    receipt.scratch = await scratchDown(runId, { deleteData });
+  }
   atomicWriteJson(path.join(p.evidenceDir, "cleanup-receipt.json"), receipt);
   console.log(JSON.stringify(receipt, null, 2));
 }

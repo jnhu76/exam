@@ -118,6 +118,43 @@ export async function snapshotAttempt(runId, attemptId) {
   return { row: rows[0] ?? null, latencyMs, captured_at: new Date().toISOString(), psql_tags: psqlTags };
 }
 
+/**
+ * Full-row snapshot (SELECT *) — D8 needs submitted_answers, submitted_at,
+ * submission_reason and grading fields that the narrow snapshotAttempt does
+ * not select. Same sidecar/single-statement snapshot semantics.
+ */
+export async function snapshotAttemptFull(runId, attemptId) {
+  const safeId = attemptId.replace(/[^0-9a-fA-F-]/g, "");
+  if (safeId !== attemptId || attemptId.length === 0) {
+    throw new Error(`refusing non-uuid attempt id: ${attemptId}`);
+  }
+  const sql = `SELECT row_to_json(t) FROM (SELECT * FROM exam_attempts WHERE id = '${safeId}') t;`;
+  const { stdout, latencyMs } = await pgQuery(runId, sql);
+  const { rows, psqlTags } = parsePsqlJsonRows(stdout, { what: "snapshotAttemptFull" });
+  if (rows.length > 1) {
+    throw new Error(`snapshotAttemptFull: expected 0..1 row, got ${rows.length}`);
+  }
+  return { row: rows[0] ?? null, latencyMs, captured_at: new Date().toISOString(), psql_tags: psqlTags };
+}
+
+export function writePgSnapshotEvidenceFull(runId, trialId, phase, snapshot) {
+  const p = runPaths(runId);
+  const file = path.join(p.evidenceDir, `pg-snapshot-full-${trialId}-${phase}.json`);
+  const body = {
+    schema_version: "exam817/1",
+    kind: "exam817/pg-snapshot-full",
+    run_id: runId,
+    trial_id: trialId,
+    phase,
+    captured_at: snapshot.captured_at,
+    query_latency_ms: snapshot.latencyMs,
+    sha256_at_capture: sha256Hex(JSON.stringify(snapshot.row ?? {})),
+    row: snapshot.row ?? null,
+  };
+  atomicWriteJson(file, body);
+  return { file, sha256: body.sha256_at_capture, latencyMs: snapshot.latencyMs };
+}
+
 export async function capturePgSettings(runId) {
   const { stdout, latencyMs } = await pgQuery(
     runId,
@@ -167,9 +204,11 @@ function stableStringify(v) {
 
 /**
  * Compare an unordered set of chosen option ids (multiple_choice) order-
- * insensitively; everything else compares exact.
+ * insensitively; everything else compares exact. Shared by the durability
+ * oracle (D0-D5), the D6 restore comparator and the D8 submitted-answers
+ * check so answer-equality semantics stay identical everywhere.
  */
-function valuesEqual(expected, actual, type) {
+export function valuesEqual(expected, actual, type) {
   if (type === "multiple_choice" && Array.isArray(expected) && Array.isArray(actual)) {
     const a = [...expected].map(String).sort();
     const b = [...actual].map(String).sort();
@@ -305,6 +344,42 @@ export function classifyPerQuestion({ manifestQuestions, attemptRow, ackState, b
       api_version: apiState?.[q.question_id]?.version ?? null,
     };
   });
+}
+
+/**
+ * D8 submitted-answers gate: the frozen submitted_answers snapshot must
+ * carry every answered question's value (shape per SubmittedAnswersSnapshot:
+ * {schemaVersion:1, answers:[{questionId, value}]}). Shape-aware — an
+ * unrecognized record shape fails closed (comparable=false), never guesses.
+ */
+export function compareSubmittedAnswers({ answers, submitted, manifestQuestions }) {
+  const submittedByQ = new Map();
+  let shapeOk = true;
+  for (const rec of submitted?.answers ?? []) {
+    if (rec && typeof rec === "object" && typeof rec.questionId === "string" && "value" in rec) {
+      submittedByQ.set(rec.questionId, rec.value);
+    } else shapeOk = false;
+  }
+  const typeByQ = new Map(manifestQuestions.map((q) => [q.question_id, q.type]));
+  const mismatches = [];
+  const perQuestion = [];
+  for (const rec of answers ?? []) {
+    if (!submittedByQ.has(rec.questionId)) {
+      mismatches.push({ question_id: rec.questionId, reason: "missing from submitted_answers" });
+      continue;
+    }
+    const match = valuesEqual(submittedByQ.get(rec.questionId), rec.answer, typeByQ.get(rec.questionId) ?? null);
+    perQuestion.push({ question_id: rec.questionId, match });
+    if (!match) mismatches.push({ question_id: rec.questionId, reason: "value mismatch" });
+  }
+  const extra = [...submittedByQ.keys()].filter((q) => !(answers ?? []).some((a) => a.questionId === q));
+  return {
+    comparable: shapeOk && extra.length === 0,
+    per_question: perQuestion,
+    mismatches,
+    extra_in_submitted: extra,
+    note: shapeOk ? undefined : "unrecognized submitted_answers record shape",
+  };
 }
 
 /**
