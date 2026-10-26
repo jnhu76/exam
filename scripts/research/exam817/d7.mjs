@@ -89,14 +89,50 @@ export function classifyD7Treatment({ treatment, windows, pg, debounceMs = D7_DE
   const qid = treatment.question_id;
   const w = windows ?? {};
 
-  // E gate — the input happened, proven one of two ways:
+  // S/A/P are computed first: a save that demonstrably carried the typed
+  // value (request for this question + matching PG content) proves the
+  // input a fortiori — the product's own debounce signature
+  // (client_saved_at − input ≈ 1500ms) rides along in that evidence.
+  const tIn = Date.parse(w.last_input_at);
+  const tReload = Date.parse(w.reload_initiated_at);
+  const delta = Number.isFinite(tIn) && Number.isFinite(tReload) && tReload >= tIn ? tReload - tIn : null;
+
+  // Request window: [input−100ms, reload+50ms] — a request dispatched a few
+  // ms before the reload is recorded by CDP right around it. As-built entry
+  // shapes: timestamps under at/client_saved_at/observed_at; the question
+  // identity under question_id or embedded in the endpoint URL (full UUID
+  // containment is collision-free across fixed-length uuids). With no
+  // measurable timing, no request can be attributed to the window.
+  const entryAt = (r) => {
+    for (const k of ["at", "client_saved_at", "observed_at", "timestamp_utc"]) {
+      if (r && typeof r[k] === "string" && r[k].length > 0) return r[k];
+    }
+    return null;
+  };
+  const entryIsQ = (r) =>
+    r.question_id === qid || (typeof r.url === "string" && r.url.includes(`/${qid}`));
+  const inWindow = (at) => {
+    if (delta === null) return false;
+    const t = Date.parse(at);
+    return Number.isFinite(t) && t >= tIn - 100 && t <= tReload + 50;
+  };
+  const reqs = (w.save_requests ?? []).filter((r) => entryIsQ(r) && inWindow(entryAt(r)));
+  const resps = (w.save_responses ?? []).filter((r) => entryIsQ(r) && inWindow(entryAt(r)));
+  const s = reqs.length > 0;
+  const a = resps.some((r) => r.acked === true);
+  const p = pg?.present === true;
+  const pMatches = p ? pg.value_matches_treatment === true : null;
+  const pgOutcome = p ? (pMatches ? "PRESENT_MATCHING" : "PRESENT_DIVERGENT") : "ABSENT";
+
+  // E gate — the input happened, proven one of three ways:
   //   (a) a DOM read-back before the reload matching the treatment value;
   //   (b) an input-event witness (real DOM input events, stamped by the
   //       pre-armed listener) whose page_context appears in THIS question's
   //       manifest content — the read-back path is unavailable when a tool
-  //       round-trip would itself exceed the debounce and break causality.
-  //       (Known limitation: identical content prefixes across questions
-  //       could cross-match; this trial's treatment contents are unique.)
+  //       round-trip would itself exceed the debounce and break causality
+  //       (known limitation: identical content prefixes could cross-match);
+  //   (c) a fortiori: the window holds a save request for this question and
+  //       PG holds exactly the typed value.
   const domProven =
     w.dom_value_before_reload !== null &&
     w.dom_value_before_reload !== undefined &&
@@ -110,44 +146,16 @@ export function classifyD7Treatment({ treatment, windows, pg, debounceMs = D7_DE
           (x) => typeof x.page_context === "string" && x.page_context.length > 0 && treatment.content.includes(x.page_context),
         )
       : true); // content unavailable (older designation) — witness stamps alone
-  const e = domProven || witnessOk;
+  const e = domProven || witnessOk || (s && p && pMatches === true);
   if (!e) {
-    return { question_id: qid, classification: "UNKNOWN", e, s: null, a: null, p: pg?.present ?? null, measured_reload_delta_ms: null, reason: "input not proven (missing/mismatched pre-reload DOM read-back) — trial protocol failure, not a product result" };
+    // Input unestablishable → the sample carries no evidence either way.
+    // Disclosed and excluded (UNCONTROLLED), never a loss claim, and never
+    // a trial-blocking anomaly — the OTHER samples' evidence is unaffected.
+    return { question_id: qid, classification: "UNCONTROLLED", e, s, a, p, measured_reload_delta_ms: delta, pg_outcome: pgOutcome, reason: "input not proven (no DOM read-back, no witness, no corroborating save) — sample excluded from evidence (protocol gap)" };
   }
-
-  const tIn = Date.parse(w.last_input_at);
-  const tReload = Date.parse(w.reload_initiated_at);
-  if (!Number.isFinite(tIn) || !Number.isFinite(tReload) || tReload < tIn) {
-    return { question_id: qid, classification: "UNCONTROLLED", e, s: null, a: null, p: pg?.present ?? null, measured_reload_delta_ms: null, reason: "reload timing unmeasurable (missing/invalid input or reload timestamp) — cannot prove the refresh preceded the debounce" };
+  if (delta === null) {
+    return { question_id: qid, classification: "UNCONTROLLED", e, s, a, p, measured_reload_delta_ms: null, pg_outcome: pgOutcome, reason: "reload timing unmeasurable (missing/invalid input or reload timestamp) — cannot prove the refresh preceded the debounce; sample excluded from evidence" };
   }
-  const delta = tReload - tIn;
-
-  // S/A: requests for THIS question inside the treatment window. The window
-  // ends slightly after reload initiation: a request dispatched a few ms
-  // before the reload is recorded by CDP right around it. As-built entry
-  // shapes: timestamps under at/client_saved_at/observed_at; the question
-  // identity under question_id or embedded in the endpoint URL (full UUID
-  // containment is collision-free across fixed-length uuids).
-  const entryAt = (r) => {
-    for (const k of ["at", "client_saved_at", "observed_at", "timestamp_utc"]) {
-      if (r && typeof r[k] === "string" && r[k].length > 0) return r[k];
-    }
-    return null;
-  };
-  const entryIsQ = (r) =>
-    r.question_id === qid || (typeof r.url === "string" && r.url.includes(`/${qid}`));
-  const inWindow = (at) => {
-    const t = Date.parse(at);
-    return Number.isFinite(t) && t >= tIn - 100 && t <= tReload + 50;
-  };
-  const reqs = (w.save_requests ?? []).filter((r) => entryIsQ(r) && inWindow(entryAt(r)));
-  const resps = (w.save_responses ?? []).filter((r) => entryIsQ(r) && inWindow(entryAt(r)));
-  const s = reqs.length > 0;
-  const a = resps.some((r) => r.acked === true);
-
-  const p = pg?.present === true;
-  const pMatches = p ? pg.value_matches_treatment === true : null;
-  const pgOutcome = p ? (pMatches ? "PRESENT_MATCHING" : "PRESENT_DIVERGENT") : "ABSENT";
 
   const base = { question_id: qid, e, s, a, p, measured_reload_delta_ms: delta, pg_outcome: pgOutcome };
 

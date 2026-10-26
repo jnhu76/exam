@@ -840,6 +840,18 @@ function winEvent(overrides = {}) {
     }),
     { present: true, version: 1, value_matches_treatment: true },
   );
+  // D7-02 T4' regression: no witness, no DOM read-back — input proven a
+  // fortiori by the window's save + matching PG content (debounce signature).
+  const r42d = t(
+    win({
+      dom_value_before_reload: null,
+      reload_initiated_at: "2026-10-26T00:00:02.501Z",
+      save_requests: [{ url: "http://x/api/attempts/a/answers/q", client_saved_at: "2026-10-26T00:00:01.504Z" }],
+      save_responses: [],
+      post_reload_value: "m|t|q|g1",
+    }),
+    { present: true, version: 1, value_matches_treatment: true },
+  );
   // T1-of-D7-01 regression: the real event layout (approx input derivation,
   // epoch-ms reload stamps, no input_confirmed, empty responses) must classify
   // SENT_BUT_UNKNOWN with the PG outcome — never UNKNOWN-by-parser-gap.
@@ -888,18 +900,19 @@ function winEvent(overrides = {}) {
     r38.classification === "SAVED_ACKED" &&
     r39.classification === "UNCONTROLLED" &&
     r40.classification === "UNKNOWN" &&
-    r41.classification === "UNKNOWN" &&
+    r41.classification === "UNCONTROLLED" &&
     r42a.classification === "SAVED_ACKED" &&
     r42b.classification === "DEBOUNCE_NOT_FIRED" &&
     rT1.classification === "SENT_BUT_UNKNOWN" && rT1.pg_outcome === "PRESENT_MATCHING" &&
     rT1.measured_reload_delta_ms >= 1500 && rT1epoch === 1792975495335 &&
     rT2.classification === "LOCAL_UNSENT_LOST" && rT2.measured_reload_delta_ms === 810 &&
     rT2wrongCtx.classification === "UNKNOWN" && // witness page_context not in this question's content → E fails
-    r42c.classification === "SENT_BUT_UNKNOWN" && r42c.pg_outcome === "PRESENT_MATCHING";
+    r42c.classification === "SENT_BUT_UNKNOWN" && r42c.pg_outcome === "PRESENT_MATCHING" &&
+    r42d.classification === "SENT_BUT_UNKNOWN" && r42d.e === true;
   record(
     "T36",
     "D7 classifier: E/S/A/P combinations land on the frozen vocabulary; the D7-01 T1 real layout (approx input + epoch reload stamps) replays to SENT_BUT_UNKNOWN/PERSISTED",
-    { clean: "LOCAL_UNSENT_LOST", sent: "SENT_BUT_UNKNOWN", acked: "SAVED_ACKED", notime: "UNCONTROLLED", leak: "UNKNOWN", noinput: "UNKNOWN", boundary: "SAVED_ACKED", silent: "DEBOUNCE_NOT_FIRED", t1: "SENT_BUT_UNKNOWN:PRESENT_MATCHING" },
+    { clean: "LOCAL_UNSENT_LOST", sent: "SENT_BUT_UNKNOWN", acked: "SAVED_ACKED", notime: "UNCONTROLLED", leak: "UNKNOWN", noinput: "UNCONTROLLED", boundary: "SAVED_ACKED", silent: "DEBOUNCE_NOT_FIRED", t1: "SENT_BUT_UNKNOWN:PRESENT_MATCHING" },
     {
       clean: r36.classification, sent: r37.classification, acked: r38.classification,
       notime: r39.classification, leak: r40.classification, noinput: r41.classification,
