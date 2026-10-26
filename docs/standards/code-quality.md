@@ -204,10 +204,10 @@ pnpm format:check
 
 ### 6.3 Review-enforced architecture policy
 
-以下方向规则是真实架构策略，但由评审/ADR 执行，不构成完整机器门禁；§6.2 已用文本禁令覆盖的 import 形状不在评审层重复：
+以下方向规则是真实架构策略。其中 §6.2 已覆盖的静态 import 形状在此只作确认，评审/ADR 负责其余形态：
 
-- `packages/domain` 是领域叶子，不得依赖 Fastify / React / Drizzle 或其他内部 package；其静态 `from "..."` 形状由 §6.2 覆盖，评审负责动态 import / 别名等未覆盖形态；
-- `packages/contracts`、`packages/exam-engine` 不依赖 Fastify——该静态形状同为 §6.2 的机器禁令，评审只兜底其余形态；
+- `packages/domain` 是领域叶子，不得依赖 Fastify / React / Drizzle 或其他内部 package；静态 `from "..."` 形状见 §6.2，评审负责动态 import / 别名等未覆盖形态；
+- `packages/contracts`、`packages/exam-engine` 不依赖 Fastify；静态形状同见 §6.2，评审只兜底其余形态；
 - `fastify` 只出现在 `apps/api`；
 - `packages` 不反向依赖 `apps`（例如 `packages/db` → `apps/api`）；
 - `apps/web` 不直接依赖数据库或服务端 package（机器只挡住 `@exam/db` 这一条 import）；
@@ -490,7 +490,7 @@ E2E 保持为 blocking CI 门禁；验收范围要求三条最小路径：candid
 
 API route 测试使用**真实 PostgreSQL**，不是内存数据库：默认按测试文件 schema 隔离，canonical 证据 lane 使用 worker-database 隔离。命令、隔离模式、环境变量与数据库生命周期以 [`testing.md` §5.2](testing.md#52-api-integration-tests) 和 [`testing.md` §2.8](testing.md#28-test-database-lifecycle-ownership) 为唯一权威，本节不复制。
 
-不变量：应用运行时经 `apps/api/src/plugins/db.ts` 注册 `fastify.db` 装饰器；route handler 通过 `fastify.db` 访问数据库，不自行创建连接。测试应用通过 `apps/api/src/routes/testHelpers.ts` 的 `buildTestApp()` 构建，每个上下文独立创建、零共享状态；`createDatabase()` 的直接调用点是运行时 owner `plugins/db.ts`、测试 harness `testHelpers.ts`、seed/verify 脚本、email worker 与 `scripts/*` 运维脚本，route handler 不在其中。
+不变量：应用运行时经 `apps/api/src/plugins/db.ts` 注册 `fastify.db` 装饰器；route handler 通过 `fastify.db` 访问数据库，不自行创建连接。测试应用通过 `apps/api/src/routes/testHelpers.ts` 的 `buildTestApp()` 构建，每个上下文独立创建、零共享状态；在 `apps/api` 内，`createDatabase()` 的直接调用点是运行时 owner `plugins/db.ts`、测试 harness `testHelpers.ts`、seed/verify 脚本、email worker 与 `scripts/*` 运维脚本，route handler 不在其中；`packages/db` 的测试基础设施另有直接调用。
 
 ---
 
