@@ -24,7 +24,7 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 
 开始任务时先判断当前处于哪一种模式：
 
-- **调查/审计**：只读取、复现、测量和报告，不修改文件；
+- **调查/审计**：只读取、复现、测量和报告，不修改仓库受控文件、不产生持久性副作用；一次性产物（`/tmp` 或 gitignored scratch 中的见证文件、测试库的隔离写入）不属修改，但不得落入受控工作树；
 - **设计**：提出边界、备选方案、风险和验证方法，不实施；
 - **施工**：只有得到明确修改授权后才进入；`/tdd` 可以作为施工授权；
 - **评审**：检查现有 diff、证据和风险，不擅自替作者继续扩展功能。
@@ -37,7 +37,7 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 4. 如果存在会实质改变产品或架构的多个合理方案，先等待人类确认；
 5. 对根因未知的问题先建立可重复证据，不猜测后直接改代码。
 
-未经明确要求，禁止 commit、push、merge、rebase、force-push、切换他人分支或执行破坏性 Git 操作。不得使用 `git reset --hard`、`git clean` 或整仓恢复来处理不属于当前任务的文件。
+未经明确要求，禁止 commit、push、merge、rebase、force-push、切换他人分支或执行破坏性 Git 操作；其中 merge 与 force-push 属第 7 节人工门禁，明确要求仅为必要条件，执行前必须当场获得人类确认（由人类亲自执行，或人类当场明确委托并留痕）。不得使用 `git reset --hard`、`git clean` 或整仓恢复来处理不属于当前任务的文件。
 
 ## 3. 长期修改原则
 
@@ -63,15 +63,16 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 | 信息 | 权威来源 |
 | --- | --- |
 | 特定架构决策 | Accepted ADR |
+| 跨边界 Exam 语义（冻结条款） | `docs/architecture/exam-semantic-boundaries.md`（EXSEM-001..020，ADR-021 采纳；改冻结条款须显式 superseding decision，见该文 §6） |
 | 对外行为和数据格式 | `docs/contracts/`、OpenAPI 和契约测试 |
 | 产品不变量与领域模型 | `docs/SPEC.md` |
 | 当前实现架构 | `docs/architecture/` 与生产代码 |
 | 阶段边界 | `docs/roadmap/phase-roadmap.md` |
-| 当前施工顺序与 disposition | 被明确授权的 OPEN Issue（入口与指针见 `docs/README.md`） |
+| 当前施工顺序与 disposition | 被明确授权的 OPEN Issue（授权政策见 `docs/README.md`：授权 Issue 本身即合同，该索引不维护 live OPEN-Issue tracker） |
 | 当前任务的 scope / acceptance / non-goals | 同一被授权 OPEN Issue，加任何显式采纳的 parent ordering（见 `docs/README.md`） |
 | 当前实现状态 | `docs/status/implementation-status.md` 与 as-built evidence |
 | 测试、环境变量和数据库生命周期 | `docs/standards/testing.md` |
-| 代码质量和依赖边界 | `docs/standards/code-quality.md` |
+| 代码质量和依赖边界 | `docs/standards/code-quality.md`（§6 为 as-built 权威）；跨包模块解析见 `docs/architecture/workspace-module-resolution.md` |
 | 前端视觉系统 | `docs/architecture/frontend.md`、`docs/standards/ui-system.md` |
 | 实际命令与 CI 接线 | `package.json` scripts、`.github/workflows/` |
 | 修改历史 | Git、已关闭 Issue、已合并 PR 与 `docs/archive/` |
@@ -95,12 +96,13 @@ OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前�
 | 任务类型 | 施工前必须阅读 |
 | --- | --- |
 | 产品范围、角色、领域语义 | `docs/SPEC.md`、`docs/roadmap/phase-roadmap.md`、当前状态文档 |
-| 状态机、答题、恢复、批改 | `docs/architecture/exam-runtime.md`、相关 Accepted ADR/契约 |
+| 状态机、答题、恢复、批改 | `docs/architecture/exam-runtime.md`、`docs/architecture/exam-semantic-boundaries.md`（EXSEM 冻结语义与 supersession）、相关 Accepted ADR/契约 |
 | 权限、角色、scope | `docs/architecture/authorization.md`、相关 Accepted ADR |
 | 数据库、测试隔离、CI、flake | `docs/standards/testing.md`、`docs/standards/test-flakes.md` |
 | 前端结构和视觉修改 | `docs/architecture/frontend.md`、`docs/standards/ui-system.md`、`docs/ui/visual-foundation.md`、`DESIGN.md` |
+| 富文本与内容文档语义 | `docs/architecture/rich-content-semantic-contract.md`（ADR-019 采纳） |
 | 产品文案与 i18n | `docs/standards/i18n-copy-policy.md`、部署设置与 locale 的权威实现 |
-| 部署、备份、升级 | `docs/deployment/` 中对应 runbook/contract |
+| 部署、备份、升级 | `docs/deployment/` 与 `docs/operations/` 中对应 runbook/contract；部署 payload 契约见 `docs/architecture/deploy-payload.md` |
 | 形式化模型 | `formal/AGENTS.md`、`formal/README.md` 和相应模型说明 |
 | Docker、pnpm、Node、框架升级 | 本地配置与锁文件；行为仍不确定时再查对应版本的官方文档 |
 
@@ -121,7 +123,7 @@ OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前�
 
 数据库生命周期的唯一完整契约是 [`docs/standards/testing.md` §2](docs/standards/testing.md#2-environment-variable-contract)，尤其是 §2.8。代理不得在本文件中维护另一套环境变量或数据库创建/清理流程。
 
-执行迁移、seed、truncate、drop、reset 或 E2E 清理前必须：
+代理主动执行迁移、seed、truncate、drop、reset 或 E2E 清理前必须（`pnpm test`、`pnpm e2e`、`pnpm db:up` 等仓库语义命令内部的 ensure/migrate/truncate 生命周期由 `docs/standards/testing.md` §2.8 所有权与 fail-closed 保护约束）：
 
 1. 确认命令的生命周期所有者和允许目标；
 2. 解析并查询进程实际连接的数据库，不能只根据 `.env` 文件名猜测；
@@ -147,7 +149,7 @@ OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前�
 
 - 对行为已经明确的功能或 Bug，在修改生产代码前先建立可失败的契约测试、最小复现或其他独立验证信号。禁止先把实现定型，再按照实现结构补一组只能证明“代码按自己写法运行”的单元测试。
 - Bug 修复后新增 regression test 是允许且必要的；它必须独立复现真实失败，而不是从修复后的实现反推一个必然通过的测试。
-- 选择最接近被证明契约的最低充分测试层级：纯领域不变量优先领域测试；repository / transaction / SQL 语义使用真实 PostgreSQL；API 契约使用 API/integration 测试；跨前后端、授权、恢复、提交、浏览器状态等用户流程优先真实 E2E。
+- 选择最接近被证明契约的最低充分测试层级：纯领域不变量优先领域测试；repository / transaction / SQL 语义使用真实 PostgreSQL；API 契约使用 API/integration 测试；跨前后端、授权、恢复、提交、浏览器状态等用户流程优先真实 E2E（E2E 的保留门槛与套件组成权威见 `docs/standards/testing.md` §4.0）。
 - 不要求所有行为都通过 E2E 证明。难以通过浏览器稳定控制的状态机边界、并发、时间、错误注入和数据库不变量，应使用更直接、确定性的测试工具。
 - 对 merge-bearing 的复杂 E2E 或视觉行为，最终验证应留下可重复检查的证据。按任务需要保存 Playwright trace、截图、录像、请求/响应记录、数据库终态或其他 CI artifact，并记录建立初始状态和重放验证所需的命令。
 - 浏览器可见的 UI 声明必须有浏览器级证据。仅有组件测试、DOM snapshot 或 CSS 静态检查，不足以证明最终布局、overflow、字体、交互或响应式行为正确。
@@ -163,15 +165,15 @@ OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前�
 命令以根 `package.json` 为唯一来源。常用入口包括：
 
 ```bash
-pnpm format:check
+pnpm format:check          # prettier --check .（.prettierignore 忽略 *.md，文档一致性靠 review）
 pnpm lint
 pnpm lint:eslint
 pnpm lint:arch
 pnpm typecheck
 pnpm test
 pnpm verify:static
-pnpm verify
-bash scripts/e2e/run.sh   # 即 pnpm e2e（唯一 E2E 入口）
+pnpm verify                # verify:static + coverage（真实 PostgreSQL）+ build + lint:prod-resolution；不含 E2E 与 Docker
+bash scripts/e2e/run.sh    # 即 pnpm e2e（唯一 E2E 入口）
 ```
 
 不得把未执行的门禁报告为 PASS；工具不可用或测试不适用时，明确记录 `SKIPPED` 和原因。
@@ -183,13 +185,13 @@ REPOSITORY OWNS PROCEDURE
 AGENT EXECUTES PROCEDURE
 ```
 
-例行操作优先使用仓库拥有的语义命令（`pnpm db:up`、`pnpm e2e`、`pnpm verify` 等），不在会话中重建等价的低层命令序列；底层脚本与拓扑保持隐藏。禁止发明平行的 Compose 栈、数据库生命周期命令、E2E 拓扑、验证流水线或清理程序。宿主机端口重映射是配置值（如 `EXAM_PORT` / `DB_HOST_PORT` / `REDIS_HOST_PORT`），不是拓扑变体；Compose 拓扑的唯一权威是 `docker-compose.yml`（生产）与 `docker-compose.dev.yml`（本地依赖），E2E 是 host-native 的（#626）。
+例行操作优先使用仓库拥有的语义命令（`pnpm db:up`、`pnpm e2e`、`pnpm verify` 等），不在会话中重建等价的低层命令序列；底层脚本与拓扑保持隐藏。禁止发明平行的 Compose 栈、数据库生命周期命令、E2E 拓扑、验证流水线或清理程序。宿主机端口重映射是配置值（如 `EXAM_PORT` / `DB_HOST_PORT` / `REDIS_HOST_PORT`），不是拓扑变体；Compose 拓扑的唯一权威是 `docker-compose.yml`（生产）与 `docker-compose.dev.yml`（本地依赖），E2E 是 host-native 的（#626）。命令存在于 `package.json` 不等于资源操作已获授权：一个操作是否可以执行，由第 2 节模式、本节操作分类与第 6 节安全前置共同决定，三者须同时满足。
 
 在第 2 节四种模式语义下的操作分类：
 
-- **例行可逆**（调查授权即可执行）：`git status/diff`、读取 Issue/PR/文档、代码检索、`docker compose config`、`pnpm format:check`、`pnpm lint:*`、`pnpm typecheck`、`pnpm test`、`pnpm verify:static`、CI 查询、一次性本地见证、非破坏性 Docker 检查。
+- **例行可逆**（调查授权即可执行）：`git status/diff`、读取 Issue/PR/文档、代码检索、`docker compose config`、`pnpm format:check`、`pnpm lint:*`、`pnpm typecheck`、`pnpm test`、`pnpm verify:static`、CI 查询、一次性本地见证、非破坏性 Docker 检查。仓库语义命令 `pnpm verify`、`pnpm e2e`、`pnpm db:up` 亦属例行可逆，其内部触达的数据库与 E2E 生命周期由 `docs/standards/testing.md` §2.8 所有权契约与 fail-closed 保护约束。
 - **施工类**（需要施工授权）：修改代码/测试/文档、commit、push、PR 创建与更新（git 写操作仍受第 2 节更严格的“明确要求”约束）。
-- **人工门禁**（必须停下）：merge、release、force-push、不安全或破坏性数据操作、无对应权威地更改产品/架构契约、接受实质性新架构决策。
+- **人工门禁**（必须停下）：merge、release、force-push、不安全或破坏性数据操作、无对应权威地更改产品/架构契约、接受实质性新架构决策。明确的任务指令只是必要条件，代理执行前必须当场获得人类确认（由人类亲自执行，或人类当场明确委托并留痕）。三类清单非穷尽：未列出的真实资源操作按最保守类处理，先停下确认。“不安全或破坏性数据操作”的目标与授权边界按第 6 节四步前置与 `docs/standards/testing.md` §2.8 所有权判定；`pnpm db:down` 与 `pnpm db:reset` 含 `down -v` 卷删除，属破坏性数据操作。
 
 ## 8. 前端任务路由
 
@@ -200,7 +202,7 @@ AGENT EXECUTES PROCEDURE
 3. `apps/web/src/typography/`、`apps/web/src/surface/` 和语义 token；
 4. `docs/standards/ui-system.md` 的组件职责和 Tailwind 边界。
 
-存在同一语义角色的组件时必须扩展其权威实现，不得局部复制第二套。业务页面可以使用 Tailwind 负责布局和响应式结构，但受治理的排版、surface、elevation 和 domain status 必须经过相应 recipe、component 或 mapping。不得手写 Radix/shadcn 已负责的 focus trap、Dialog、Select、Popover 等复杂交互 primitive。
+存在同一语义角色的组件时必须扩展其权威实现，不得局部复制第二套。业务页面可以使用 Tailwind 负责布局和响应式结构，但受治理的排版、surface、elevation 和 domain status 必须经过相应 recipe、component 或 mapping；受治理域的完整清单（含派生 guard）以 `docs/standards/ui-system.md` 为准。不得手写 Radix/shadcn 已负责的 focus trap、Dialog、Select、Popover 等复杂交互 primitive。
 
 前端可见权限只改善 UX；后端授权始终是安全权威。
 
@@ -211,7 +213,7 @@ AGENT EXECUTES PROCEDURE
 禁止：
 
 - 复述显然控制流、类型或变量名的注释；
-- Issue、PR、Job、Phase、修复记录和版本迁移等历史型生产注释；
+- 以叙述施工过程为内容的历史型生产注释（何时改、哪次修复、哪阶段遗留）。规范性出处引用（ADR、EXSEM、冻结该行为的 Issue/PR 编号）附着于下方五类断言时不属于历史型注释，其命名边界以 `docs/standards/code-quality.md` §17.1 为准；
 - 用长注释弥补职责混乱、命名不清或无法测试的结构。
 
 应当保留：
@@ -250,4 +252,4 @@ AGENT EXECUTES PROCEDURE
 - 最终 diff 是否只包含授权范围内的修改；
 - 工作树中的既有文件是否完整保留。
 
-非平凡任务的完成报告必须基于实际证据；具体字段以 [`docs/standards/code-quality.md` §17](docs/standards/code-quality.md#17-ai-coding-rules) 的“每个 Job 完成后必须输出”为唯一清单。不得用“应该通过”“看起来正确”或“CI 会检查”代替证据。
+每个 Job（被授权的任务单元，包括非平凡任务）的完成报告必须基于实际证据；具体字段以 [`docs/standards/code-quality.md` §17](docs/standards/code-quality.md#17-ai-coding-rules) 的“每个 Job 完成后必须输出”为唯一清单。不得用“应该通过”“看起来正确”或“CI 会检查”代替证据。
