@@ -906,7 +906,7 @@ function winEvent(overrides = {}) {
     rT1.classification === "SENT_BUT_UNKNOWN" && rT1.pg_outcome === "PRESENT_MATCHING" &&
     rT1.measured_reload_delta_ms >= 1500 && rT1epoch === 1792975495335 &&
     rT2.classification === "LOCAL_UNSENT_LOST" && rT2.measured_reload_delta_ms === 810 &&
-    rT2wrongCtx.classification === "UNKNOWN" && // witness page_context not in this question's content → E fails
+    rT2wrongCtx.classification === "UNCONTROLLED" && // witness ctx not in this question + no corroborating save → E fails, sample excluded
     r42c.classification === "SENT_BUT_UNKNOWN" && r42c.pg_outcome === "PRESENT_MATCHING" &&
     r42d.classification === "SENT_BUT_UNKNOWN" && r42d.e === true;
   record(
