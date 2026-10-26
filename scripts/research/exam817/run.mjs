@@ -1431,6 +1431,13 @@ function loadSnapshotRow(runId, snapshotFile) {
  */
 async function cmdVerdict(runId) {
   const st = loadState(runId);
+  // D7 has no fault-phase snapshots; its republish path re-observes PG and
+  // the API live and rebuilds treatment windows from the raw receipts.
+  if (st.arm === "D7") {
+    const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
+    await writeD7Verdict(runId, st, writer);
+    return;
+  }
   if (!st.pre_snapshot || !st.post_snapshot) {
     throw new Error(`verdict requires both snapshots (pre=${!!st.pre_snapshot} post=${!!st.post_snapshot})`);
   }
