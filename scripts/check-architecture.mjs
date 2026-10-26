@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import {
+  RUNTIME_DEPENDENCY_BOUNDARIES,
+  forbiddenImportPattern,
+  forbiddenRuntimeDependencies,
+} from "../config/architecture-policy.mjs";
 
 const violations = [];
 
@@ -35,16 +40,18 @@ await forbid("packages/domain/src", [
 ]);
 // authz is the RBAC leaf package (ADR-010-scoped-rbac-architecture.md): no
 // fastify/React/Drizzle, and it may only reach @exam/domain, so the permission
-// vocabulary stays portable. The enforced importer set is the forbid() list
-// below.
+// vocabulary stays portable. The forbidden @exam/* set is the canonical table
+// in config/architecture-policy.mjs (the manifest deny-list and this source
+// scan derive from the same authority); the pattern anchors import positions,
+// so root and subpath spellings are both caught.
 await forbid("packages/authz/src", [
   [
     /from ["'](?:fastify|react|drizzle-orm)/,
     "authz must stay a leaf package (no fastify/React/Drizzle)",
   ],
   [
-    /from ["']@exam\/(?:db|contracts|auth|exam-engine|import-export)\//,
-    "authz may only depend on @exam/domain",
+    forbiddenImportPattern("@exam/authz"),
+    "authz may only depend on @exam/domain (AUTHZ_RUNTIME_BOUNDARY)",
   ],
 ]);
 await forbid("packages/contracts/src", [
@@ -129,7 +136,10 @@ await forbid("apps/api/src", [
   ],
 ]);
 await forbid("apps/web/src", [
-  [/from ["']@exam\/db/, "web cannot import the database package"],
+  [
+    forbiddenImportPattern("@exam/web"),
+    "web must not depend on server-side packages (WEB_RUNTIME_BOUNDARY)",
+  ],
 ]);
 await forbid("apps/api/src/routes", [
   [
@@ -163,6 +173,51 @@ try {
   violations.push(
     `workspace manifests: ${err instanceof Error ? err.message : String(err)}`,
   );
+}
+
+// Layer 1b (#824): the declared-but-forbidden dependency vector. A forbidden
+// edge enters through a manifest edit, and once declared it executed green at
+// every layer (P1 cases C1c′/C2b), so the check runs on the real workspace
+// manifests — before any import spelling matters. The deny-lists live in
+// config/architecture-policy.mjs; only `dependencies` is the product graph
+// (test-scope devDependencies stay outside per the #824 D2 disposition).
+// Fail-closed: an importer manifest that is missing, unreadable or renamed
+// away is a violation, never a silent skip — the boundary must be checkable.
+for (const boundary of RUNTIME_DEPENDENCY_BOUNDARIES) {
+  const shortName = boundary.importer.slice("@exam/".length);
+  const manifestPath = ["packages", "apps"]
+    .map((root) => join(root, shortName, "package.json"))
+    .find(existsSync);
+  if (!manifestPath) {
+    violations.push(
+      `${boundary.importer}: no manifest at packages/${shortName}/ or apps/${shortName}/ — the ${boundary.rule} boundary must stay checkable`,
+    );
+    continue;
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (err) {
+    violations.push(
+      `${manifestPath}: cannot read or parse manifest — ${
+        err instanceof Error ? err.message : String(err)
+      } (${boundary.rule} must stay checkable)`,
+    );
+    continue;
+  }
+  if (manifest.name !== boundary.importer) {
+    violations.push(
+      `${manifestPath}: declares name ${JSON.stringify(
+        manifest.name ?? null,
+      )} but the ${boundary.rule} policy names importer "${boundary.importer}" — the boundary must not silently target a renamed package`,
+    );
+    continue;
+  }
+  for (const finding of forbiddenRuntimeDependencies(manifest)) {
+    violations.push(
+      `${manifestPath}: ${finding.rule} — importer ${finding.importer} declares forbidden runtime dependency "${finding.dependency}" in "${finding.field}"; ${finding.rationale}`,
+    );
+  }
 }
 
 async function allCodeFiles(path, extensions) {

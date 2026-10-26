@@ -189,18 +189,19 @@ pnpm format:check
 `pnpm lint:arch`（`scripts/check-architecture.mjs`）只执行**命名的文本/结构禁令**，每一条针对具体失败模式：
 
 - `packages/domain/src` 是叶子：禁止 import `fastify` / `react` / `drizzle-orm` / 其他 `@exam/*`；
-- `packages/authz/src`：禁止 `fastify` / `react` / `drizzle-orm`，且禁止 `@exam/db`、`@exam/contracts`、`@exam/auth`、`@exam/exam-engine`、`@exam/import-export` 五者的**子路径** import；这五个包的根导入与其他 `@exam/*` 包的子路径不在文本禁令内（见下方“真实不覆盖”）；
+- `packages/authz/src`：禁止 `fastify` / `react` / `drizzle-orm`，且禁止 `@exam/db`、`@exam/contracts`、`@exam/auth`、`@exam/exam-engine`、`@exam/import-export` 五者的 import（#824：根导入与子路径都覆盖，锚定 `from` / `import` / `import()` / `require()` 位置）；
 - `packages/contracts/src`：禁止 `fastify`；
 - `packages/auth/src`：禁止读取 `process.env`；
 - `apps/api/src` 与 `packages/db/src`：禁止直接读取 `process.env.APP_MODE` / `NODE_ENV`（运行时模式只能经 `@exam/db` 的 `parseAppMode` 解析）；
 - `packages/db/src`：禁止引入或调用 `dotenv`（env 文件 admission 归入口点）；
 - `packages/exam-engine/src`：禁止 `fastify`；禁止 `as LockedEnrollmentAttemptIdentity` / `as ReconciledAttemptMutationContext` 伪造 capability；
 - `apps/api/src`：禁止上述两种 capability cast；
-- `apps/web/src`：禁止 import `@exam/db`；
+- `apps/web/src`：禁止 import `@exam/db`、`@exam/auth`、`@exam/exam-engine`、`@exam/import-export`、`@exam/api` 五个服务端 package（#824 Owner D1 批准的命名集合；锚定位置同上）；
+- **运行时依赖声明 deny-list（#824，权威表 `config/architecture-policy.mjs`）**：`@exam/authz` 的 `dependencies` 不得声明 ADR-010 禁止的五个 package，`@exam/web` 的 `dependencies` 不得声明上述服务端五集合；检查读取真实 workspace manifests，且 importer manifest 缺失、不可读或改名时 fail-closed。只有 `dependencies` 被视为产品依赖图——`devDependencies`（如 db → auth 测试见证、`@exam/source-fixture`）是测试期约定，不在本检查内（#824 D2）。authz/web 的上述源码 import 禁令与 manifest deny-list 派生自同一份策略表，不是两份独立列表；
 - `apps/api/src/routes`：禁止裸 `db.select|insert|update|delete`、禁止 import `drizzle-orm`、禁止 import `@exam/db/schema`；
 - #794 workspace resolution 契约：manifest 表校验（`config/workspace-resolution.mjs`）、禁止 `@exam/*/src/` 物理路径与跨 package 相对 import、每个 vitest config 必须消费共享 resolution plugin、resolution oracle 存在性（fixture marker、dot-segment grammar probe、fail-closed 分类）、以及该 gate 迭代到的每个声明 typecheck script 的入口（apps/api、apps/web 与 packages/*；未声明 script 的 fixture 包被跳过）必须有带 `TEST_SOURCE_CONDITION` 的 `tsconfig.typecheck.json`。
 
-**真实不覆盖**（不得外推）：没有 package 依赖 allow-list、没有循环依赖检测、没有 manifest ↔ 实际 import 一致性检查。上述禁令是文本形状检查，动态 `import()` / `require()` / `vi.mock()`、别名/解构读取，以及 `@exam/*` 根导入（例如 authz 的子路径禁令不覆盖 `from "@exam/db"`）都可能逃逸。因此“新增这条依赖是否被允许”**不是机器回答的问题**。
+**真实不覆盖**（不得外推）：没有 package 依赖 allow-list（#824 是两条命名 deny-list，不是全局裁决）、没有循环依赖检测、没有 manifest ↔ 实际 import 一致性检查。manifest/task 级环会被 turbo 在构造任务图时顺带拒绝（"Cyclic dependency detected"）——这是 build DAG 的副作用，不是 `lint:arch` 或任何源码级循环检测；源码 import 环没有机器门禁。未声明依赖的 import 在 CI 中只会被 TypeScript/pnpm 隔离链接（TS2307）附带拒绝，不是策略检查。对 domain/contracts/exam-engine 等其他 package，文本禁令仍是 `from`-锚定形状，动态 `import()` / `require()` / 别名/解构读取可能逃逸；对 authz/web，源码扫描覆盖 import 位置的根/子路径拼写，但计算出的 specifier、别名或间接加载不在覆盖内；扫描是纯文本、不感知注释/字符串——注释或模板字符串中出现的 import 形状文本（如文档代码示例）也会被匹配并报违规，与既有 from-锚定禁令同一姿态，仅无引号 specifier 的纯文字提及被忽略。`optionalDependencies` / `peerDependencies` 当前在仓库中不存在，也没有机器检查。因此“新增这条依赖是否被允许”**不是机器回答的问题**——对已命名的两个 importer，机器只回答“是否声明了被禁止的 package”。
 
 ### 6.3 Review-enforced architecture policy
 
@@ -210,7 +211,7 @@ pnpm format:check
 - `packages/contracts`、`packages/exam-engine` 不依赖 Fastify；静态形状同见 §6.2，评审只兜底其余形态；
 - `fastify` 只出现在 `apps/api`；
 - `packages` 不反向依赖 `apps`（例如 `packages/db` → `apps/api`）；
-- `apps/web` 不直接依赖数据库或服务端 package（机器只挡住 `@exam/db` 这一条 import）；
+- `apps/web` 不直接依赖数据库或服务端 package（机器门禁见 §6.2：服务端五集合的 manifest 声明与 import 位置拼写；其余形态仍属评审）；
 - 业务数据访问经 repository 并显式接收 `RequestContext`，route 不写复杂业务逻辑；
 - 领域类型来自 `@exam/domain`，API 输入/输出 DTO 来自 `@exam/contracts`。
 
