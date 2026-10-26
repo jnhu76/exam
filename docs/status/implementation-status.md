@@ -40,7 +40,9 @@ B2 decision — the #292 admission runtime it would build on exists).
   all transitions via command functions.
 - ✅ Disrupted attempt recovery (backend: heartbeat scanner writes `disrupted`
   on timeout; restore via the composed `restoreInterruptedAttempt` command —
-  the legacy `restoreAttempt` route is no longer used in production; REC-I3 Web
+  the candidate restore endpoint `POST /attempts/:attemptId/restore` is live
+  and calls that command; the legacy `restoreAttempt` function/command is
+  removed from production code and guarded by a structural test; REC-I3 Web
   direct-entry restore flow). REC-I4-I1 implements the ADR-013 Domain and
   PostgreSQL persistence foundation, including strict policy/snapshot defaults,
   durable interruption identity, append-only event/adjustment ledgers,
@@ -393,8 +395,10 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   default, explicit bounded caps, operator attribution, episode identity,
   append-only adjustment ledger). REC-I4-I2 (Engine Policy Seam) delivers
   runtime compliance: restore goes through the composed
-  `restoreInterruptedAttempt` command (the legacy `restoreAttempt` route is no
-  longer used in production), and the heartbeat scanner, deadline scanner, and
+  `restoreInterruptedAttempt` command (the legacy `restoreAttempt`
+  function/command is no longer used in production; the candidate restore
+  endpoint `POST /attempts/:attemptId/restore` remains live), and the heartbeat
+  scanner, deadline scanner, and
   candidate/admin submit paths all thread a `SubmitInterruptionResolution` so
   every `disrupted → submitted` terminalization appends a `terminalized` event
   with a context-specific reason code. REC-I4-I3A (Contract & Authoring
