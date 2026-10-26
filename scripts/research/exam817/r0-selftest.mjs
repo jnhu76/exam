@@ -33,7 +33,7 @@ import {
 } from "./browser-schema.mjs";
 import { summarizeProbeSamples } from "./probe.mjs";
 import { pgdataSurvivalShell } from "./fault.mjs";
-import { classifyPerQuestion, compareSubmittedAnswers, oracleMutationRedTest, valuesEqual } from "./oracle.mjs";
+import { classifyPerQuestion, compareSubmittedAnswers, d8ReplayEvidence, oracleMutationRedTest, valuesEqual } from "./oracle.mjs";
 import { parsePsqlJsonRows } from "./oracle.mjs";
 import { classifyD7Treatment, normalizeTreatmentWindows, summarizeD7, D7_DEBOUNCE_MS } from "./d7.mjs";
 import { compareD6, measureRpo, postDumpAckSubset, scratchProjectName, scratchPaths } from "./d6.mjs";
@@ -757,6 +757,122 @@ function winEvent(overrides = {}) {
     { browser: "NOT_RUN", api: "NOT_RUN", pg: "ACK_MATCHED" },
     { browser: r[0].browser_classification, api: r[0].api_classification, pg: r[0].classification },
     r[0].browser_classification === "NOT_RUN" && r[0].api_classification === "NOT_RUN" && r[0].classification === "ACK_MATCHED",
+  );
+}
+
+// ── T49 §10 replay: D8 evidence replay from persisted files ───────
+// After cleanup --delete-data live re-observation is impossible; the
+// replay must rebuild the verdict inputs from sha-verified evidence and
+// refuse any tampered row or a journal without a live d8_facets verdict.
+{
+  const dir = fs.mkdtempSync("/tmp/e817-r0-t49-");
+  const row = {
+    id: "00000000-0000-0000-0000-00000000000a",
+    status: "submitted",
+    submitted_at: "2026-10-26T04:30:07.880Z",
+    submitted_answers: { schemaVersion: 1, answers: [{ questionId: "q1", value: "x" }] },
+    submission_reason: "manual",
+    grading_status: null,
+  };
+  const rowSha = sha256Hex(JSON.stringify(row));
+  const snapDoc = (kind, phase) => ({
+    schema_version: "exam817/1",
+    kind,
+    run_id: "r1",
+    trial_id: "t1",
+    phase,
+    captured_at: "2026-10-26T05:00:00.000Z",
+    query_latency_ms: 1,
+    sha256_at_capture: rowSha,
+    row,
+  });
+  fs.writeFileSync(path.join(dir, "pg-snapshot-full-t1-pre.json"), JSON.stringify(snapDoc("exam817/pg-snapshot-full", "pre")));
+  fs.writeFileSync(path.join(dir, "pg-snapshot-full-t1-post.json"), JSON.stringify(snapDoc("exam817/pg-snapshot-full", "post")));
+  fs.writeFileSync(path.join(dir, "pg-snapshot-t1-post.json"), JSON.stringify(snapDoc("exam817/pg-snapshot", "post")));
+  fs.writeFileSync(
+    path.join(dir, "api-snapshot-t1.json"),
+    JSON.stringify({
+      schema_version: "exam817/1",
+      kind: "exam817/api-take-snapshot",
+      run_id: "r1",
+      trial_id: "t1",
+      attempt_id: row.id,
+      captured_at: "2026-10-26T05:01:00.000Z",
+      attempt_status: "submitted",
+      server_revision: 1,
+      snapshot: {},
+      api_state: { q1: { value: "x", version: null, source: "submitted" } },
+    }),
+  );
+  const journalPath = path.join(dir, "wsl.events.jsonl");
+  fs.writeFileSync(
+    journalPath,
+    [
+      JSON.stringify({ event: "VERDICT_PUBLISHED", trial_id: "t1", verdict: "INCOMPLETE" }),
+      JSON.stringify({
+        event: "VERDICT_PUBLISHED",
+        trial_id: "t1",
+        verdict: "UNKNOWN",
+        d8_facets: {
+          terminal_preserved: true,
+          submitted_at_unchanged: true,
+          submission_reason_unchanged: true,
+          submitted_answers_matched: true,
+          grading_state_consistent: true,
+          illegal_reopen: false,
+          attempt_rows_for_exam: 1,
+        },
+      }),
+    ].join("\n") + "\n",
+  );
+  const st = {
+    run_id: "r1",
+    trial_id: "t1",
+    attempt_id: row.id,
+    pre_full_snapshot: { ref: "pg-snapshot-full-t1-pre.json", sha256: rowSha },
+    post_snapshot: { ref: "pg-snapshot-t1-post.json", sha256: rowSha },
+    api_snapshot: { ref: "api-snapshot-t1.json", sha256: "earlier-capture-bytes-sha" },
+  };
+  const replay = () => d8ReplayEvidence({ evidenceDir: dir, journalPath, st });
+  let happy = null;
+  let tamperThrew = false;
+  let noFacetThrew = false;
+  try {
+    happy = replay();
+    // Tamper: post full row edited without updating sha256_at_capture.
+    fs.writeFileSync(
+      path.join(dir, "pg-snapshot-full-t1-post.json"),
+      JSON.stringify({ ...snapDoc("exam817/pg-snapshot-full", "post"), row: { ...row, status: "graded" } }),
+    );
+    try {
+      replay();
+    } catch {
+      tamperThrew = true;
+    }
+    // Journal without any d8_facets verdict: nothing live to replay against.
+    fs.writeFileSync(path.join(dir, "pg-snapshot-full-t1-post.json"), JSON.stringify(snapDoc("exam817/pg-snapshot-full", "post")));
+    fs.writeFileSync(journalPath, JSON.stringify({ event: "VERDICT_PUBLISHED", trial_id: "t1", verdict: "INCOMPLETE" }) + "\n");
+    try {
+      replay();
+    } catch {
+      noFacetThrew = true;
+    }
+  } catch (e) {
+    console.log("T49 unexpected throw:", e.message);
+  }
+  record(
+    "T49",
+    "§10: D8 evidence replay rebuilds from sha-verified files, refuses tampered rows and a facet-less journal",
+    { attemptCount: 1, postRowStatus: "submitted", apiValue: "x", tamperThrew: true, noFacetThrew: true },
+    {
+      attemptCount: happy?.attemptCount ?? null,
+      postRowStatus: happy?.postRow?.status ?? null,
+      apiValue: happy?.apiState?.q1?.value ?? null,
+      tamperThrew,
+      noFacetThrew,
+    },
+    !!happy && happy.attemptCount === 1 && happy.postRow.status === "submitted" && happy.apiState.q1.value === "x" && tamperThrew && noFacetThrew,
+    { dir },
   );
 }
 

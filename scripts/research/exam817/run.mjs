@@ -30,6 +30,7 @@ import {
   capturePgSettings,
   captureWalRecoveryLog,
   classifyPerQuestion,
+  d8ReplayEvidence,
   oracleMutationRedTest,
   parsePsqlJsonRows,
   pgQuery,
@@ -1430,7 +1431,7 @@ function loadSnapshotRow(runId, snapshotFile) {
  * evidence parsing improved after a fail-closed verdict, or to bake the F5
  * RTO correction into the verdict body from the persisted fault receipt.
  */
-async function cmdVerdict(runId) {
+async function cmdVerdict(runId, { replayEvidence = false } = {}) {
   const st = loadState(runId);
   // D6 replays the comparison from the persisted scratch receipt (the
   // restored row is sha256-stamped evidence; no stack rebuild, no re-dump).
@@ -1497,7 +1498,7 @@ async function cmdVerdict(runId) {
       }
     }
     const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
-    await writeD8Verdict(runId, st, writer, parsed);
+    await writeD8Verdict(runId, st, writer, parsed, { replayEvidence });
     return;
   }
   // D7 has no fault-phase snapshots; its republish path re-observes PG and
@@ -2248,20 +2249,46 @@ function loadFullRow(runId, snapshotFile) {
  *  ACK→PG→API durability legs. The browser leg confirms the terminal UI
  *  (identity + no re-answer), NOT per-question values — the submitted page
  *  legitimately may not display them. */
-async function writeD8Verdict(runId, st, writer, parsed) {
+async function writeD8Verdict(runId, st, writer, parsed, { replayEvidence = false } = {}) {
   let apiState = null;
-  try {
-    const apiLeg = await captureApiTakeSnapshot(runId, st);
-    apiState = apiLeg.apiState;
-    st.api_snapshot = { ref: path.basename(apiLeg.file), sha256: apiLeg.sha256, attempt_status: apiLeg.attemptStatus };
-    st.api_attempt_status = apiLeg.attemptStatus;
-  } catch (e) {
-    st.api_snapshot_error = e.message.slice(0, 300);
+  let postFull = null;
+  let attemptCount = null;
+  let replay = null;
+  if (replayEvidence) {
+    // §10 replay clause: the stack is gone (cleanup --delete-data), so the
+    // verdict inputs are rebuilt from the sha-verified evidence files and
+    // cross-checked below against the journaled live verdict. Any gap throws
+    // before a verdict can be written.
+    replay = d8ReplayEvidence({
+      evidenceDir: runPaths(runId).evidenceDir,
+      journalPath: path.join(mailboxDir(runId), "wsl.events.jsonl"),
+      st,
+    });
+    apiState = replay.apiState;
+    postFull = { row: replay.postRow };
+    attemptCount = replay.attemptCount;
+    st.post_full_snapshot = replay.postFullRef;
+    if (st.api_attempt_status == null) st.api_attempt_status = replay.apiAttemptStatus;
+    saveState(runId, st);
+  } else {
+    try {
+      const apiLeg = await captureApiTakeSnapshot(runId, st);
+      apiState = apiLeg.apiState;
+      st.api_snapshot = { ref: path.basename(apiLeg.file), sha256: apiLeg.sha256, attempt_status: apiLeg.attemptStatus };
+      st.api_attempt_status = apiLeg.attemptStatus;
+    } catch (e) {
+      st.api_snapshot_error = e.message.slice(0, 300);
+    }
+    postFull = await snapshotAttemptFull(runId, st.attempt_id);
+    const postFullEv = await writePgSnapshotEvidenceFull(runId, st.trial_id, "post", postFull);
+    st.post_full_snapshot = { ref: path.basename(postFullEv.file), sha256: postFullEv.sha256 };
+    const { stdout: cntOut } = await pgQuery(runId, `SELECT count(*)::int FROM exam_attempts WHERE exam_id = '${st.exam_id}';`);
+    attemptCount = Number(cntOut.trim());
   }
-  const postFull = await snapshotAttemptFull(runId, st.attempt_id);
-  const postFullEv = await writePgSnapshotEvidenceFull(runId, st.trial_id, "post", postFull);
-  st.post_full_snapshot = { ref: path.basename(postFullEv.file), sha256: postFullEv.sha256 };
-  const { snap: postSnap, ref, sha256 } = await taggedSnapshot(runId, st, writer, "post");
+  const tagged = replay
+    ? { snap: replay.postSnap, ref: st.post_snapshot.ref, sha256: st.post_snapshot.sha256 }
+    : await taggedSnapshot(runId, st, writer, "post");
+  const { snap: postSnap, ref, sha256 } = tagged;
   st.post_snapshot = { ref, sha256, latency_ms: postSnap.latencyMs };
   st.post_snapshot_row_status = postSnap.row.status;
 
@@ -2282,8 +2309,6 @@ async function writeD8Verdict(runId, st, writer, parsed) {
   const pre = loadFullRow(runId, st.pre_full_snapshot?.ref);
   const post = postFull.row;
   const jsonSha = (v) => sha256Hex(JSON.stringify(v ?? null));
-  const { stdout: cntOut } = await pgQuery(runId, `SELECT count(*)::int FROM exam_attempts WHERE exam_id = '${st.exam_id}';`);
-  const attemptCount = Number(cntOut.trim());
   const facets = {
     terminal_preserved: !!pre && !!post && pre.status === post.status && ["submitted", "graded"].includes(post.status ?? ""),
     terminal_status: post?.status ?? null,
@@ -2296,6 +2321,25 @@ async function writeD8Verdict(runId, st, writer, parsed) {
     attempt_rows_for_exam: attemptCount,
     illegal_reopen: !!pre && !!post && (pre.status !== post.status || (st.api_attempt_status != null && st.api_attempt_status !== post.status)),
   };
+
+  if (replay) {
+    // The journaled facets were computed from live PG/API before cleanup;
+    // the replayed rows must reproduce them exactly or the evidence chain
+    // is broken and no verdict may be written.
+    for (const k of [
+      "terminal_preserved",
+      "submitted_at_unchanged",
+      "submission_reason_unchanged",
+      "submitted_answers_matched",
+      "grading_state_consistent",
+      "illegal_reopen",
+      "attempt_rows_for_exam",
+    ]) {
+      if (facets[k] !== replay.liveFacets[k]) {
+        throw new Error(`D8 evidence replay: facet ${k} recomputed (${facets[k]}) != journaled live observation (${replay.liveFacets[k]}) — fail closed`);
+      }
+    }
+  }
 
   const contaminated = (st.fault_terminal?.receipt?.bystanders_unchanged ?? null) !== null &&
     Object.values(st.fault_terminal.receipt.bystanders_unchanged).some((v) => v === false);
@@ -2357,6 +2401,7 @@ async function writeD8Verdict(runId, st, writer, parsed) {
       pre_full: st.pre_full_snapshot ?? null,
       post_full: st.post_full_snapshot ?? null,
     },
+    evidence_replay: replay ? replay.source : null,
     fault: st.fault_terminal ?? null,
     rto: st.rto ?? null,
     fault_window_probe: st.fault_window_probe ?? null,
@@ -2450,6 +2495,17 @@ async function cmdCleanup(runId, { deleteData = false } = {}) {
   console.log(JSON.stringify(receipt, null, 2));
 }
 
+/** Append a WSL_NOTE event to the run's own journal — the sanctioned
+ *  mailbox channel for status updates to the Windows agent (append-only;
+ *  corrections happen as new events, never rewrites). */
+async function cmdNote(runId, text) {
+  if (!text || text.trim().length === 0) throw new Error("note requires text");
+  const st = loadState(runId);
+  const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
+  writer.append("WSL_NOTE", { run_id: st.run_id, trial_id: st.trial_id, phase: st.phase, note: text });
+  console.log(`WSL_NOTE appended (phase=${st.phase})`);
+}
+
 function cmdStatus(runId) {
   const st = loadState(runId);
   const { run_id, trial_id, arm, phase, origin, exam_id, attempt_id } = st;
@@ -2512,7 +2568,7 @@ const getOpt = (name, dflt) => {
       await cmdPublish(runId);
       break;
     case "verdict":
-      await cmdVerdict(runId);
+      await cmdVerdict(runId, { replayEvidence: argv.includes("--replay-evidence") });
       break;
     case "wait":
       await cmdWait(runId, {
@@ -2522,6 +2578,9 @@ const getOpt = (name, dflt) => {
       break;
     case "resume-recovery":
       await cmdResumeRecovery(runId);
+      break;
+    case "note":
+      await cmdNote(runId, argv.slice(2).join(" "));
       break;
     case "status":
       cmdStatus(runId);
@@ -2533,7 +2592,7 @@ const getOpt = (name, dflt) => {
       cmdReport(runId);
       break;
     default:
-      console.error(`usage: run.mjs <init|deploy|seed|publish|wait|resume-recovery|status|cleanup|report> <run_id> [options]`);
+      console.error(`usage: run.mjs <init|deploy|seed|publish|wait|resume-recovery|verdict [--replay-evidence]|note|status|cleanup|report> <run_id> [options]`);
       process.exit(2);
   }
 })().catch((e) => {

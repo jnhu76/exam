@@ -444,3 +444,98 @@ export async function writePgSnapshotEvidence(runId, trialId, phase, snapshot) {
   atomicWriteJson(file, body);
   return { file, sha256: body.sha256_at_capture, latencyMs: snapshot.latencyMs };
 }
+
+/**
+ * D8 evidence replay (§10): rebuild the verdict inputs from the evidence
+ * files captured while the stack lived, for the one case where live
+ * re-observation is impossible — the stack was torn down (cleanup
+ * --delete-data) and a late BROWSER_VERIFIED arrived after the wait window
+ * closed. Every input is fail-closed: a missing file, a row-hash mismatch
+ * against the capture-time hash or the journaled capture hash, a foreign
+ * run/trial/attempt, or a journal without a live d8_facets verdict throws.
+ * The api snapshot is accepted on internal identity only (run/trial/
+ * attempt/shape): the republish-time re-observation overwrites the file in
+ * place, so its bytes legitimately differ from the state-recorded capture;
+ * the semantic content is attested by the journal's live counts, which the
+ * caller cross-checks.
+ */
+export function d8ReplayEvidence({ evidenceDir, journalPath, st }) {
+  const fail = (what) => {
+    throw new Error(`D8 evidence replay: ${what} — fail closed`);
+  };
+  if (!st?.attempt_id) fail("state has no attempt_id");
+  if (!st?.pre_full_snapshot?.ref || !st?.pre_full_snapshot?.sha256) fail("state has no pre full snapshot ref/sha");
+  if (!st?.post_snapshot?.ref || !st?.post_snapshot?.sha256) fail("state has no post tagged snapshot ref/sha");
+  const rowSha = (doc) => sha256Hex(JSON.stringify(doc.row ?? {}));
+  const readDoc = (file, what) => {
+    if (!fs.existsSync(file)) fail(`${what} missing (${path.basename(file)})`);
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  };
+  const identity = (doc, what, phase) => {
+    if (doc.run_id !== st.run_id || doc.trial_id !== st.trial_id) fail(`${what} belongs to another run/trial`);
+    if (phase && doc.phase !== phase) fail(`${what} phase is ${doc.phase ?? "none"}, expected ${phase}`);
+  };
+
+  const preFull = readDoc(path.join(evidenceDir, st.pre_full_snapshot.ref), "pre full snapshot");
+  identity(preFull, "pre full snapshot", "pre");
+  if (rowSha(preFull) !== preFull.sha256_at_capture) fail("pre full snapshot row hash mismatch (sha256_at_capture)");
+  if (rowSha(preFull) !== st.pre_full_snapshot.sha256) fail("pre full snapshot row hash does not match the journaled capture hash");
+  if (preFull.row?.id !== st.attempt_id) fail("pre full snapshot row is not the trial attempt");
+
+  const postFullFile = `pg-snapshot-full-${st.trial_id}-post.json`;
+  const postFull = readDoc(path.join(evidenceDir, postFullFile), "post full snapshot");
+  identity(postFull, "post full snapshot", "post");
+  if (rowSha(postFull) !== postFull.sha256_at_capture) fail("post full snapshot row hash mismatch (sha256_at_capture)");
+  if (postFull.row?.id !== st.attempt_id) fail("post full snapshot row is not the trial attempt");
+
+  const postTagged = readDoc(path.join(evidenceDir, st.post_snapshot.ref), "post tagged snapshot");
+  identity(postTagged, "post tagged snapshot", "post");
+  if (rowSha(postTagged) !== st.post_snapshot.sha256) fail("post tagged snapshot row hash does not match the journaled capture hash");
+
+  // Attempt count and the live-observed facets come from the append-only
+  // journal: the last VERDICT_PUBLISHED carrying d8_facets was computed from
+  // live PG/API while the stack was still up.
+  if (!fs.existsSync(journalPath)) fail("wsl journal missing");
+  let live = null;
+  for (const line of fs.readFileSync(journalPath, "utf8").split("\n").filter(Boolean)) {
+    let rec = null;
+    try {
+      rec = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (rec?.event === "VERDICT_PUBLISHED" && rec.trial_id === st.trial_id && rec.d8_facets) live = rec.d8_facets;
+  }
+  if (!live) fail("journal has no VERDICT_PUBLISHED with d8_facets (no live verdict to replay against)");
+  if (!Number.isInteger(live.attempt_rows_for_exam)) fail("journaled d8_facets lack attempt_rows_for_exam");
+
+  const apiFile = st.api_snapshot?.ref
+    ? path.join(evidenceDir, st.api_snapshot.ref)
+    : path.join(evidenceDir, `api-snapshot-${st.trial_id}.json`);
+  const api = readDoc(apiFile, "api snapshot");
+  if (api.run_id !== st.run_id || api.trial_id !== st.trial_id || api.attempt_id !== st.attempt_id) {
+    fail("api snapshot belongs to another run/trial/attempt");
+  }
+  if (!api.api_state || typeof api.api_state !== "object" || Object.keys(api.api_state).length === 0) {
+    fail("api snapshot has no api_state");
+  }
+
+  return {
+    apiState: api.api_state,
+    apiAttemptStatus: api.attempt_status ?? null,
+    postRow: postFull.row,
+    postSnap: { row: postTagged.row, latencyMs: postTagged.query_latency_ms ?? null },
+    attemptCount: live.attempt_rows_for_exam,
+    liveFacets: live,
+    postFullRef: { ref: postFullFile, sha256: postFull.sha256_at_capture, replayed: true },
+    source: {
+      mode: "persisted_evidence_post_cleanup",
+      pre_full: st.pre_full_snapshot.ref,
+      post_full: postFullFile,
+      post_tagged: st.post_snapshot.ref,
+      api: path.basename(apiFile),
+      api_captured_at: api.captured_at ?? null,
+      attempt_count_and_live_facets_from: "journal VERDICT_PUBLISHED d8_facets (captured live before cleanup)",
+    },
+  };
+}
