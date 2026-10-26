@@ -63,7 +63,7 @@ function findBoundary(importer) {
  * Manifest-level audit: which of a manifest's PRODUCT dependency
  * declarations (`dependencies` only) hit its boundary's deny-list.
  * Manifests of importers without a boundary, and every devDependency /
- * optionalDependency / peerDependencies field, are out of scope and return
+ * optionalDependencies / peerDependencies field, are out of scope and return
  * no findings — a test-only edge is not a production dependency violation.
  * Returns one finding per forbidden declared package, carrying the fields a
  * diagnostic must answer: importer, dependency, field, rule, rationale.
