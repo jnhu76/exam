@@ -124,13 +124,24 @@ export function classifyD7Treatment({ treatment, windows, pg, debounceMs = D7_DE
 
   // S/A: requests for THIS question inside the treatment window. The window
   // ends slightly after reload initiation: a request dispatched a few ms
-  // before the reload is recorded by CDP right around it.
+  // before the reload is recorded by CDP right around it. As-built entry
+  // shapes: timestamps under at/client_saved_at/observed_at; the question
+  // identity under question_id or embedded in the endpoint URL (full UUID
+  // containment is collision-free across fixed-length uuids).
+  const entryAt = (r) => {
+    for (const k of ["at", "client_saved_at", "observed_at", "timestamp_utc"]) {
+      if (r && typeof r[k] === "string" && r[k].length > 0) return r[k];
+    }
+    return null;
+  };
+  const entryIsQ = (r) =>
+    r.question_id === qid || (typeof r.url === "string" && r.url.includes(`/${qid}`));
   const inWindow = (at) => {
     const t = Date.parse(at);
     return Number.isFinite(t) && t >= tIn - 100 && t <= tReload + 50;
   };
-  const reqs = (w.save_requests ?? []).filter((r) => r.question_id === qid && inWindow(r.at));
-  const resps = (w.save_responses ?? []).filter((r) => r.question_id === qid && inWindow(r.at));
+  const reqs = (w.save_requests ?? []).filter((r) => entryIsQ(r) && inWindow(entryAt(r)));
+  const resps = (w.save_responses ?? []).filter((r) => entryIsQ(r) && inWindow(entryAt(r)));
   const s = reqs.length > 0;
   const a = resps.some((r) => r.acked === true);
 

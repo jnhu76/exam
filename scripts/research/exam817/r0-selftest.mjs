@@ -829,6 +829,17 @@ function winEvent(overrides = {}) {
     { present: true, version: 1, value_matches_treatment: true },
   );
   const r42b = t(win({ reload_initiated_at: "2026-10-26T00:00:02.500Z" }), pgAbsent);
+  // T4-of-D7-01 regression: boundary control with the URL-carried qid +
+  // client_saved_at entry shape → SENT_BUT_UNKNOWN/PERSISTED.
+  const r42c = t(
+    win({
+      reload_initiated_at: "2026-10-26T00:00:02.508Z",
+      save_requests: [{ url: "http://x/api/attempts/a/answers/q", client_saved_at: "2026-10-26T00:00:01.505Z" }],
+      save_responses: [],
+      post_reload_value: "m|t|q|g1",
+    }),
+    { present: true, version: 1, value_matches_treatment: true },
+  );
   // T1-of-D7-01 regression: the real event layout (approx input derivation,
   // epoch-ms reload stamps, no input_confirmed, empty responses) must classify
   // SENT_BUT_UNKNOWN with the PG outcome — never UNKNOWN-by-parser-gap.
@@ -837,7 +848,7 @@ function winEvent(overrides = {}) {
     dom_value_before_reload: "m|t|q|g1",
     dom_value_after_reload: "m|t|q|g1",
     reload_fired_at_epoch_ms: 1792975495335,
-    save_requests: [{ question_id: "q", at: "2026-10-26T00:44:36.000Z", request_id: "r66" }],
+    save_requests: [{ url: "http://x/api/attempts/a/answers/q", client_saved_at: "2026-10-26T00:44:36.000Z", network_reqid: "66" }],
     save_responses: [],
   };
   const wNorm = normalizeTreatmentWindows(rawT1);
@@ -883,7 +894,8 @@ function winEvent(overrides = {}) {
     rT1.classification === "SENT_BUT_UNKNOWN" && rT1.pg_outcome === "PRESENT_MATCHING" &&
     rT1.measured_reload_delta_ms >= 1500 && rT1epoch === 1792975495335 &&
     rT2.classification === "LOCAL_UNSENT_LOST" && rT2.measured_reload_delta_ms === 810 &&
-    rT2wrongCtx.classification === "UNKNOWN"; // witness page_context not in this question's content → E fails
+    rT2wrongCtx.classification === "UNKNOWN" && // witness page_context not in this question's content → E fails
+    r42c.classification === "SENT_BUT_UNKNOWN" && r42c.pg_outcome === "PRESENT_MATCHING";
   record(
     "T36",
     "D7 classifier: E/S/A/P combinations land on the frozen vocabulary; the D7-01 T1 real layout (approx input + epoch reload stamps) replays to SENT_BUT_UNKNOWN/PERSISTED",
