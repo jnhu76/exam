@@ -847,6 +847,29 @@ function winEvent(overrides = {}) {
     pg: { present: true, version: 1, value_matches_treatment: true },
   });
   const rT1epoch = Date.parse(wNorm.reload_initiated_at);
+  // T2-of-D7-01 regression: witness-based E (no DOM read-back — a round-trip
+  // would break causality). page_context must appear in the treatment content.
+  const rawT2 = {
+    dom_value_before_reload: null,
+    input_event_witness: [{ tag: "INPUT", input_type: "radio", at: 1792975756267, page_context: "#817-TF-1" }],
+    last_input_at_epoch_ms: 1792975756267,
+    reload_fired_at_epoch_ms: 1792975757077,
+    save_requests: [],
+    save_responses: [],
+    dom_value_after_reload: null,
+    save_request_absence_evidence: "no POST in window",
+  };
+  const wT2 = normalizeTreatmentWindows(rawT2);
+  const rT2 = classifyD7Treatment({
+    treatment: { ...mk("q"), content: "#817-TF-1：容器化部署的 PostgreSQL 数据库在容器被强杀后，通过 WAL 日志可以恢复已提交事务。（正确答“对”）" },
+    windows: wT2,
+    pg: pgAbsent,
+  });
+  const rT2wrongCtx = classifyD7Treatment({
+    treatment: { ...mk("q"), content: "#817-SC-2：完全不同的题目内容" },
+    windows: wT2,
+    pg: pgAbsent,
+  });
 
   const pass =
     r36.classification === "LOCAL_UNSENT_LOST" &&
@@ -858,7 +881,9 @@ function winEvent(overrides = {}) {
     r42a.classification === "SAVED_ACKED" &&
     r42b.classification === "DEBOUNCE_NOT_FIRED" &&
     rT1.classification === "SENT_BUT_UNKNOWN" && rT1.pg_outcome === "PRESENT_MATCHING" &&
-    rT1.measured_reload_delta_ms >= 1500 && rT1epoch === 1792975495335;
+    rT1.measured_reload_delta_ms >= 1500 && rT1epoch === 1792975495335 &&
+    rT2.classification === "LOCAL_UNSENT_LOST" && rT2.measured_reload_delta_ms === 810 &&
+    rT2wrongCtx.classification === "UNKNOWN"; // witness page_context not in this question's content → E fails
   record(
     "T36",
     "D7 classifier: E/S/A/P combinations land on the frozen vocabulary; the D7-01 T1 real layout (approx input + epoch reload stamps) replays to SENT_BUT_UNKNOWN/PERSISTED",

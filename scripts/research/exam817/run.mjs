@@ -249,6 +249,7 @@ export function d7Designation(st) {
       question_id: q(order).question_id,
       order,
       type: q(order).type,
+      content: q(order).content,
       nominal_reload_delay_ms: delay,
       expected_value: q(order).expected_gen1,
     })),
@@ -1699,7 +1700,7 @@ async function handleD7TreatmentStep(runId, st, writer, ev) {
     answer: latest?.answer ?? null,
   };
   const windows = normalizeTreatmentWindows(ev);
-  const classified = classifyD7Treatment({ treatment: t, windows, pg });
+  const classified = classifyD7Treatment({ treatment: treatmentWithContent(st, t), windows, pg });
   st.d7_steps[t.question_id] = { windows, pg, classification: classified, observed_at: snap.captured_at };
   saveState(runId, st);
   writer.append("PG_TSTEP_OBSERVED", {
@@ -1714,6 +1715,13 @@ async function handleD7TreatmentStep(runId, st, writer, ev) {
   console.log(`  [tstep] ${t.question_id.slice(0, 8)}: ${classified.classification} (delta ${classified.measured_reload_delta_ms}ms, pg=${pg.present ? `v${pg.version}` : "absent"})`);
   st.phase = Object.keys(st.d7_steps).length >= st.d7.treatments.length ? "treatments_done" : "treatments_in_progress";
   saveState(runId, st);
+}
+
+/** The designation table may predate the content cross-check — supply the
+ *  manifest content for the witness page_context validation. */
+function treatmentWithContent(st, t) {
+  const m = (st.manifest_questions ?? []).find((q) => q.question_id === t.question_id);
+  return m?.content ? { ...t, content: m.content } : t;
 }
 
 /**
@@ -1773,7 +1781,7 @@ async function writeD7Verdict(runId, st, writer) {
       version: latest?.version ?? null,
       value_matches_treatment: latest ? valuesEqual(t.expected_value, latest.answer, t.type) : null,
     };
-    return classifyD7Treatment({ treatment: t, windows: loadTreatmentWindowsRaw(runId, st, t.question_id) ?? st.d7_steps?.[t.question_id]?.windows ?? null, pg: pgFinal });
+    return classifyD7Treatment({ treatment: treatmentWithContent(st, t), windows: loadTreatmentWindowsRaw(runId, st, t.question_id) ?? st.d7_steps?.[t.question_id]?.windows ?? null, pg: pgFinal });
   });
 
   const summary = summarizeD7({

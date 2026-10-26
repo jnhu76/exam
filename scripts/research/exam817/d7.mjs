@@ -28,7 +28,13 @@ export const D7_DEBOUNCE_MS = 1500; // as-built product constant at the frozen S
  * (navigation start is the moment the debounce must have lost the race
  * against; it is the conservative choice for in-window claims).
  */
-const INPUT_AT_KEYS = ["last_input_at", "actual_last_input_at_utc_approx", "input_last_at_utc"];
+const INPUT_AT_KEYS = [
+  "last_input_at_epoch_ms",
+  "last_input_at_utc",
+  "last_input_at",
+  "actual_last_input_at_utc_approx",
+  "input_last_at_utc",
+];
 const RELOAD_AT_KEYS = [
   "reload_fired_at_epoch_ms",
   "reload_fired_at_utc",
@@ -49,13 +55,21 @@ export function normalizeTreatmentWindows(ev = {}) {
     return null;
   };
   const witness = ev.timing_witness && typeof ev.timing_witness === "object" ? ev.timing_witness : {};
+  const witnessEvents = Array.isArray(ev.input_event_witness) ? ev.input_event_witness : null;
+  // The input moment prefers the witness's own LAST event stamp when the
+  // flat fields are absent — the listener stamps every real input event.
+  const witnessLastAt = witnessEvents && witnessEvents.length > 0
+    ? witnessEvents[witnessEvents.length - 1]?.at
+    : null;
   return {
     input_confirmed: ev.input_confirmed ?? null,
     dom_value_before_reload: ev.dom_value_before_reload ?? null,
-    last_input_at: pick(INPUT_AT_KEYS) ?? witness.last_input_at ?? null,
+    input_event_witness: witnessEvents,
+    last_input_at: pick(INPUT_AT_KEYS) ?? witness.last_input_at ?? (witnessLastAt != null ? new Date(witnessLastAt).toISOString() : null),
     reload_initiated_at: pick(RELOAD_AT_KEYS) ?? witness.reload_at ?? null,
     save_requests: Array.isArray(ev.save_requests) ? ev.save_requests : [],
     save_responses: Array.isArray(ev.save_responses) ? ev.save_responses : [],
+    save_request_absence_evidence: ev.save_request_absence_evidence ?? null,
     post_reload_value: ev.dom_value_after_reload ?? null,
     timing_note: ev.last_input_derivation ?? null,
   };
@@ -75,13 +89,28 @@ export function classifyD7Treatment({ treatment, windows, pg, debounceMs = D7_DE
   const qid = treatment.question_id;
   const w = windows ?? {};
 
-  // E gate: the DOM must have shown the treatment value before the reload.
-  // The read-back itself is the input evidence — the optional
-  // input_confirmed attestation is recorded but not required.
-  const e =
+  // E gate — the input happened, proven one of two ways:
+  //   (a) a DOM read-back before the reload matching the treatment value;
+  //   (b) an input-event witness (real DOM input events, stamped by the
+  //       pre-armed listener) whose page_context appears in THIS question's
+  //       manifest content — the read-back path is unavailable when a tool
+  //       round-trip would itself exceed the debounce and break causality.
+  //       (Known limitation: identical content prefixes across questions
+  //       could cross-match; this trial's treatment contents are unique.)
+  const domProven =
     w.dom_value_before_reload !== null &&
     w.dom_value_before_reload !== undefined &&
     JSON.stringify(w.dom_value_before_reload) === JSON.stringify(treatment.expected_value);
+  const witnessOk =
+    Array.isArray(w.input_event_witness) &&
+    w.input_event_witness.length > 0 &&
+    w.input_event_witness.every((x) => Number.isFinite(x?.at)) &&
+    (treatment.content
+      ? w.input_event_witness.some(
+          (x) => typeof x.page_context === "string" && x.page_context.length > 0 && treatment.content.includes(x.page_context),
+        )
+      : true); // content unavailable (older designation) — witness stamps alone
+  const e = domProven || witnessOk;
   if (!e) {
     return { question_id: qid, classification: "UNKNOWN", e, s: null, a: null, p: pg?.present ?? null, measured_reload_delta_ms: null, reason: "input not proven (missing/mismatched pre-reload DOM read-back) — trial protocol failure, not a product result" };
   }
