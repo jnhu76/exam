@@ -41,7 +41,7 @@ import {
 import { executeFault, FAULT_PLAN, probeRecovery, resolveInterruptedFault, captureServiceLogs, composeStartService, containerDetails, resolveTarget, D3_APP_AUTO_RECOVERY_WINDOW_MS } from "./fault.mjs";
 import { startFaultWindowProbe, summarizeProbeFile } from "./probe.mjs";
 import { BrowserSchemaError, browserResultContract, parseBrowserVerified } from "./browser-schema.mjs";
-import { classifyD7Treatment, summarizeD7, D7_DEBOUNCE_MS } from "./d7.mjs";
+import { classifyD7Treatment, normalizeTreatmentWindows, summarizeD7, D7_DEBOUNCE_MS } from "./d7.mjs";
 import {
   scratchPreflight,
   writeScratchEnv,
@@ -1698,15 +1698,7 @@ async function handleD7TreatmentStep(runId, st, writer, ev) {
     value_matches_treatment: latest ? valuesEqual(t.expected_value, latest.answer, t.type) : null,
     answer: latest?.answer ?? null,
   };
-  const windows = {
-    input_confirmed: ev.input_confirmed,
-    dom_value_before_reload: ev.dom_value_before_reload,
-    last_input_at: ev.last_input_at,
-    reload_initiated_at: ev.reload_initiated_at,
-    save_requests: Array.isArray(ev.save_requests) ? ev.save_requests : [],
-    save_responses: Array.isArray(ev.save_responses) ? ev.save_responses : [],
-    post_reload_value: ev.dom_value_after_reload ?? null,
-  };
+  const windows = normalizeTreatmentWindows(ev);
   const classified = classifyD7Treatment({ treatment: t, windows, pg });
   st.d7_steps[t.question_id] = { windows, pg, classification: classified, observed_at: snap.captured_at };
   saveState(runId, st);
@@ -1722,6 +1714,31 @@ async function handleD7TreatmentStep(runId, st, writer, ev) {
   console.log(`  [tstep] ${t.question_id.slice(0, 8)}: ${classified.classification} (delta ${classified.measured_reload_delta_ms}ms, pg=${pg.present ? `v${pg.version}` : "absent"})`);
   st.phase = Object.keys(st.d7_steps).length >= st.d7.treatments.length ? "treatments_done" : "treatments_in_progress";
   saveState(runId, st);
+}
+
+/**
+ * Rebuild a treatment step's Windows evidence from the raw TREATMENT_STEP
+ * receipt in windows.events.jsonl (D7-01 §10 clause: a deterministic
+ * parser-gate fix replays from saved raw receipts; the live-folded copy is
+ * only a fallback). Returns null when the receipt is absent.
+ */
+function loadTreatmentWindowsRaw(runId, st, questionId) {
+  const eventsPath = path.join(mailboxDir(runId), WINDOWS_EVENTS);
+  if (!fs.existsSync(eventsPath)) return null;
+  let found = null;
+  for (const line of fs.readFileSync(eventsPath, "utf8").split("\n").filter(Boolean)) {
+    let rec = null;
+    try {
+      rec = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (rec?.event !== "TREATMENT_STEP" || rec.run_id !== st.run_id || rec.trial_id !== st.trial_id) continue;
+    const ev = normalizeWindowsEvent(rec);
+    if (ev.question_id !== questionId) continue;
+    found = ev; // keep the LAST receipt for this question
+  }
+  return found ? normalizeTreatmentWindows(found) : null;
 }
 
 async function writeD7Verdict(runId, st, writer) {
@@ -1756,7 +1773,7 @@ async function writeD7Verdict(runId, st, writer) {
       version: latest?.version ?? null,
       value_matches_treatment: latest ? valuesEqual(t.expected_value, latest.answer, t.type) : null,
     };
-    return classifyD7Treatment({ treatment: t, windows: st.d7_steps?.[t.question_id]?.windows ?? null, pg: pgFinal });
+    return classifyD7Treatment({ treatment: t, windows: loadTreatmentWindowsRaw(runId, st, t.question_id) ?? st.d7_steps?.[t.question_id]?.windows ?? null, pg: pgFinal });
   });
 
   const summary = summarizeD7({

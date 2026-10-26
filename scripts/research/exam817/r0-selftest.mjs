@@ -35,7 +35,7 @@ import { summarizeProbeSamples } from "./probe.mjs";
 import { pgdataSurvivalShell } from "./fault.mjs";
 import { classifyPerQuestion, compareSubmittedAnswers, oracleMutationRedTest, valuesEqual } from "./oracle.mjs";
 import { parsePsqlJsonRows } from "./oracle.mjs";
-import { classifyD7Treatment, summarizeD7, D7_DEBOUNCE_MS } from "./d7.mjs";
+import { classifyD7Treatment, normalizeTreatmentWindows, summarizeD7, D7_DEBOUNCE_MS } from "./d7.mjs";
 import { compareD6, measureRpo, scratchProjectName, scratchPaths } from "./d6.mjs";
 import { FAULT_PLAN } from "./fault.mjs";
 
@@ -829,6 +829,24 @@ function winEvent(overrides = {}) {
     { present: true, version: 1, value_matches_treatment: true },
   );
   const r42b = t(win({ reload_initiated_at: "2026-10-26T00:00:02.500Z" }), pgAbsent);
+  // T1-of-D7-01 regression: the real event layout (approx input derivation,
+  // epoch-ms reload stamps, no input_confirmed, empty responses) must classify
+  // SENT_BUT_UNKNOWN with the PG outcome — never UNKNOWN-by-parser-gap.
+  const rawT1 = {
+    actual_last_input_at_utc_approx: "2026-10-26T00:44:35.856Z",
+    dom_value_before_reload: "m|t|q|g1",
+    dom_value_after_reload: "m|t|q|g1",
+    reload_fired_at_epoch_ms: 1792975495335,
+    save_requests: [{ question_id: "q", at: "2026-10-26T00:44:36.000Z", request_id: "r66" }],
+    save_responses: [],
+  };
+  const wNorm = normalizeTreatmentWindows(rawT1);
+  const rT1 = classifyD7Treatment({
+    treatment: mk("q"),
+    windows: wNorm,
+    pg: { present: true, version: 1, value_matches_treatment: true },
+  });
+  const rT1epoch = Date.parse(wNorm.reload_initiated_at);
 
   const pass =
     r36.classification === "LOCAL_UNSENT_LOST" &&
@@ -838,15 +856,18 @@ function winEvent(overrides = {}) {
     r40.classification === "UNKNOWN" &&
     r41.classification === "UNKNOWN" &&
     r42a.classification === "SAVED_ACKED" &&
-    r42b.classification === "DEBOUNCE_NOT_FIRED";
+    r42b.classification === "DEBOUNCE_NOT_FIRED" &&
+    rT1.classification === "SENT_BUT_UNKNOWN" && rT1.pg_outcome === "PRESENT_MATCHING" &&
+    rT1.measured_reload_delta_ms >= 1500 && rT1epoch === 1792975495335;
   record(
     "T36",
-    "D7 classifier: all eight E/S/A/P combinations land on the frozen vocabulary",
-    { clean: "LOCAL_UNSENT_LOST", sent: "SENT_BUT_UNKNOWN", acked: "SAVED_ACKED", notime: "UNCONTROLLED", leak: "UNKNOWN", noinput: "UNKNOWN", boundary: "SAVED_ACKED", silent: "DEBOUNCE_NOT_FIRED" },
+    "D7 classifier: E/S/A/P combinations land on the frozen vocabulary; the D7-01 T1 real layout (approx input + epoch reload stamps) replays to SENT_BUT_UNKNOWN/PERSISTED",
+    { clean: "LOCAL_UNSENT_LOST", sent: "SENT_BUT_UNKNOWN", acked: "SAVED_ACKED", notime: "UNCONTROLLED", leak: "UNKNOWN", noinput: "UNKNOWN", boundary: "SAVED_ACKED", silent: "DEBOUNCE_NOT_FIRED", t1: "SENT_BUT_UNKNOWN:PRESENT_MATCHING" },
     {
       clean: r36.classification, sent: r37.classification, acked: r38.classification,
       notime: r39.classification, leak: r40.classification, noinput: r41.classification,
       boundary: r42a.classification, silent: r42b.classification,
+      t1: `${rT1.classification}:${rT1.pg_outcome}`,
     },
     pass,
   );
@@ -859,13 +880,15 @@ function winEvent(overrides = {}) {
   const saved = (qid) => ({ question_id: qid, classification: "SAVED_ACKED" });
   const sum = summarizeD7({ controlResults: [ok, ok], treatmentResults: [lost("t1"), lost("t2"), saved("t3"), saved("t4")] });
   const brokenControl = summarizeD7({ controlResults: [ok, { ...ok, classification: "ACK_LOST" }], treatmentResults: [lost("t1")] });
-  const inconclusive = summarizeD7({ controlResults: [ok, ok], treatmentResults: [lost("t1"), { question_id: "t2", classification: "UNCONTROLLED" }] });
+  const withUncontrolled = summarizeD7({ controlResults: [ok, ok], treatmentResults: [lost("t1"), { question_id: "t2", classification: "UNCONTROLLED" }] });
+  const withAnomaly = summarizeD7({ controlResults: [ok, ok], treatmentResults: [lost("t1"), { question_id: "t2", classification: "UNKNOWN" }] });
   record(
     "T43",
-    "D7 summarize: LOCAL_UNSENT_LOST headline only with clean controls and no inconclusive treatments",
-    { good: "LOCAL_UNSENT_LOST", ctrl: "UNKNOWN", inc: "UNKNOWN" },
-    { good: sum.verdict, ctrl: brokenControl.verdict, inc: inconclusive.verdict },
-    sum.verdict === "LOCAL_UNSENT_LOST" && brokenControl.verdict === "UNKNOWN" && inconclusive.verdict === "UNKNOWN",
+    "D7 summarize: UNCONTROLLED samples are excluded evidence (non-blocking); UNKNOWN anomalies block; broken controls block",
+    { good: "LOCAL_UNSENT_LOST", unctrl: "LOCAL_UNSENT_LOST", anomaly: "UNKNOWN", ctrl: "UNKNOWN" },
+    { good: sum.verdict, unctrl: withUncontrolled.verdict, anomaly: withAnomaly.verdict, ctrl: brokenControl.verdict },
+    sum.verdict === "LOCAL_UNSENT_LOST" && withUncontrolled.verdict === "LOCAL_UNSENT_LOST" &&
+      withAnomaly.verdict === "UNKNOWN" && brokenControl.verdict === "UNKNOWN",
   );
 }
 
