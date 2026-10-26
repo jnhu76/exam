@@ -27,7 +27,7 @@ has one authority:
 | Engineering and verification policy | [`docs/standards/`](standards/) and executable repository gates |
 | Current implementation state | [`docs/status/`](status/) plus as-built code/test evidence |
 | Phase boundaries | [`docs/roadmap/phase-roadmap.md`](roadmap/phase-roadmap.md) |
-| Current backlog sequencing / disposition | Specifically authorized **OPEN** GitHub Issue selected for that work; currently [#739](https://github.com/jnhu76/exam/issues/739) (backup-evidence subsystem removal per [ADR-023](adr/ADR-023-remove-backup-evidence-subsystem.md) — PR-A #814 / PR-B #815 / PR-C #816 all merged; the issue stays open only for the final §2.7/§17.2 operational-safety closeout); no universal successor to #584 |
+| Current backlog sequencing / disposition | Specifically authorized **OPEN** GitHub Issue selected for that work. [#739](https://github.com/jnhu76/exam/issues/739) and [#812](https://github.com/jnhu76/exam/issues/812) are **closed** (completed 2026-10-25; PRs #814/#815/#816/#818 merged), so neither designates the current queue, and there is no universal successor to #584. This index does not maintain a live OPEN-Issue tracker: the authorized Issue itself is the contract. |
 | Current task scope / acceptance / non-goals | That same OPEN Issue plus any explicitly adopted parent ordering |
 | Historical evidence | [`docs/archive/`](archive/), Git, closed Issues, and merged PRs |
 
@@ -152,7 +152,7 @@ Key recovery authority:
 | --- | --- |
 | [`standards/code-quality.md`](standards/code-quality.md) | Quality rules, gates, dependency graph, AI coding rules |
 | [`standards/testing.md`](standards/testing.md) | Testing & CI contract, environment variables, DB lifecycle |
-| [`standards/i18n-copy-policy.md`](standards/i18n-copy-policy.md) | i18n hardcoded-copy gate + copy taxonomy (browser / wire compat / server-rendered / diagnostics / data-format); semantics live in `contracts/api-contract.md` |
+| [`standards/i18n-copy-policy.md`](standards/i18n-copy-policy.md) | i18n copy policy — **review-enforced** hardcoded-copy rules and copy taxonomy (browser / wire compat / server-rendered / diagnostics / data-format); the machine guard was removed by #634 (see the policy's directive model); semantics live in `contracts/api-contract.md` |
 | [`standards/test-flakes.md`](standards/test-flakes.md) | Test flake registry |
 | [`standards/ui-system.md`](standards/ui-system.md) | Design tokens, recipes, component authority, accessibility, visual lint |
 | [`ui/visual-foundation.md`](ui/visual-foundation.md) | Visual Foundation authority map (issue #601): where each visual fact is governed, frozen non-table decisions, Agent-facing MUST rules, Phase-F table boundary |

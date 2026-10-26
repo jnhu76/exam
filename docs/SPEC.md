@@ -35,8 +35,8 @@ Phase 1 核心路径的角色是 Admin + Candidate；Phase 3 的协作角色（T
 >
 > 上述原则是系统**长期不变契约**。但需要明确当前接线深度：
 >
-> - "答卷可恢复"已**产品化**：答案持久化、`disrupted` 自动标记、`restoreAttempt` 后端路由、以及候考人端**自助恢复入口**（`TakeExamPage` REC-I3 restore 流程，ADR-012）均已就绪。心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）在 API 启动时**默认注册并运行**（30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），会真实把超时的 `in_progress` attempt 写为 `disrupted`。
-> - Admin 侧恢复工作台（J5 Recovery Center：事件队列、事件详情、attempt/exam 恢复上下文与操作面板）已交付（2026-08-08，见 `docs/archive/roadmap/recovery-operations-jobs.md`）。Proctor 恢复工作台（J6，#303：`/admin/proctor/recovery`）与系统级 incident 的自动生成（#304，ADR-014 §8 Gate A）也已交付；当前投影语义见 `docs/contracts/admin-recovery-center.md` §13.1。**尚未产品化**的是心跳调参与超时阈值的生产评估。
+> - "答卷可恢复"已**产品化**：答案持久化、超时 `disrupted` 自动标记（心跳扫描器在 API 启动时默认注册运行，30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），以及候选人在线自助恢复入口（`TakeExamPage` REC-I3 restore 流程，ADR-012）。恢复通过组合命令 `restoreInterruptedAttempt` 执行；旧 `restoreAttempt` 后端路由已退役，生产代码中不再存在（结构测试禁止重新引入）。
+> - 恢复工作台、incident 投影等其余恢复能力的当前实现状态统一见 [`docs/status/implementation-status.md`](status/implementation-status.md)，本文不维护第二份状态叙述。
 
 ---
 
@@ -108,7 +108,7 @@ ExamAttempt (答题记录)
 - **Teacher**：已交付的 scoped role（#286）——permission + course scope，能力限定于所分配课程。
 - **Proctor**：已交付的 scoped role（ADR-015 / M11）——permission + exam scope，运行在所分配考试的监考工作流上。
 - **Grader**：已交付的 scoped role（#296）——permission + exam scope。ContentManager / ResultViewer 仍是设计概念，未作为产品角色交付。
-- **Maintainer**：已交付的只读运维观察角色（ADR-017 rev4，P7-E2A）——零业务权限、零写权限，与 Admin 互斥（D14）。
+- **Maintainer**：已交付的只读运维观察角色（ADR-017 revision 5，P7-E2A）——零业务权限、零写权限，与 Admin 互斥（D14）。
 - **SuperAdmin**：Phase 4 optional multiTenant/platformization；不 seed、不登录、不展示。
 
 ### 2.2 ExamAttempt 模型（核心）
@@ -267,7 +267,7 @@ remainingSeconds = deadlineAt - serverNow
 
 ### 2.4.1 Collaboration Roles（Phase 3，已交付）
 
-Phase 3 引入基于 permission + scope 的协作角色。已交付并强制：Teacher（course scope，#286）、Proctor（exam scope，ADR-015）、Grader（exam scope，#296）、Maintainer（只读观察，ADR-017 rev4）。权限目录、角色预设与 scope 语义的可执行权威是 `packages/authz/`（代码常量）与 `docs/architecture/authorization.md`；本节只描述语义模型，不复制权限矩阵。
+Phase 3 引入基于 permission + scope 的协作角色。已交付并强制：Teacher（course scope，#286）、Proctor（exam scope，ADR-015）、Grader（exam scope，#296）、Maintainer（只读观察，ADR-017 revision 5）。权限目录、角色预设与 scope 语义的可执行权威是 `packages/authz/`（代码常量）与 `docs/architecture/authorization.md`；本节只描述语义模型，不复制权限矩阵。
 
 - Teacher-like roles（已交付，course scope）
 - Proctor（已交付，exam scope）
@@ -931,69 +931,20 @@ Future；下面的 AI 辅助部分仍然属 Future。
 
 ### 5.2 项目结构
 
-```
-exam/
-├── apps/
-│   ├── web/                # React + Vite + Tailwind + shadcn/ui
-│   │   └── src/
-│   │       ├── components/ui/    # shadcn 组件（自动生成，勿手改）
-│   │       ├── components/shared/ # 共享业务组件
-│   │       ├── pages/            # 路由级组件
-│   │       ├── lib/              # 工具函数、API client
-│   │       └── hooks/            # 共享 React hooks
-│   ├── api/                # Fastify API server
-│   │   └── src/
-│   │       ├── routes/           # 路由处理器（一个文件一个领域）
-│   │       ├── plugins/          # Fastify 插件（auth、CORS、security）
-│   │       └── server.ts         # Fastify 入口
-│   └── desktop/            # Electron shell [Deferred]
-│
-├── packages/
-│   ├── domain/             # 领域模型、状态机、策略，不依赖 Fastify
-│   │   └── src/
-│   │       ├── types.ts          # 领域类型（唯一数据源）
-│   │       ├── examStateMachine.ts
-│   │       ├── gradingEngine.ts
-│   │       └── retakePolicy.ts
-│   ├── contracts/          # API schema、DTO、Zod schema
-│   │   └── src/
-│   │       ├── auth.ts
-│   │       ├── exam.ts
-│   │       └── question.ts
-│   ├── db/                 # Drizzle schema、migration、repository
-│   │   └── src/
-│   │       ├── schema.ts
-│   │       ├── migrations/
-│   │       └── repository/       # 每个实体一个 repo，必须接收 ctx
-│   ├── auth/               # session、RBAC
-│   │   └── src/
-│   │       ├── session.ts
-│   │       └── rbac.ts
-│   ├── exam-engine/        # 计时、答题保存、交卷、批改
-│   │   └── src/
-│   │       ├── timer.ts
-│   │       ├── answerProtocol.ts
-│   │       └── grading.ts
-│   ├── import-export/      # CSV/Excel/PDF 导入导出
-│   └── ui/                 # Web/Electron 共用 UI 组件
-│
-├── docs/
-│   ├── SPEC.md             # 本文档
-│   ├── jobs/               # Phase 实施计划
-│   └── ...
-│
-├── package.json
-├── pnpm-workspace.yaml
-└── turbo.json
-```
+当前 workspace 目录结构与模块解析契约不在本文维护快照（易漂移）；权威来源是仓库本身与各 `package.json` / `pnpm-workspace.yaml`，以及：
 
-**依赖规则**：
+- 模块解析 / exports 契约：[`docs/architecture/workspace-module-resolution.md`](architecture/workspace-module-resolution.md)；
+- 当前实现架构总览：[`docs/architecture/`](architecture/) 与生产代码。
 
-- `domain` 不能依赖 `fastify`
-- `contracts` 不能依赖 `fastify`
-- `exam-engine` 不能依赖 `fastify`
-- `db` repository 必须通过 ctx 访问，不允许裸 SQL
-- `fastify` 只能出现在 `apps/api`
+SPEC 只保留真正属于产品/领域边界的结构约束：
+
+- `packages/domain` 是领域叶子：不依赖 Fastify、React、Drizzle 或其他内部 package。
+- `packages/contracts` 与 `packages/exam-engine` 不依赖 Fastify。
+- `packages/db` 的 repository 必须通过 `RequestContext` 访问，不允许裸 SQL 绕过 repository。
+- `fastify` 只出现在 `apps/api`。
+- `apps/web` 不直接依赖数据库或服务端 package。
+
+as-built 依赖关系与机器强制的边界禁令见 [`docs/standards/code-quality.md` §6](standards/code-quality.md#6-architecture-boundaries)；本文不复制依赖图。
 
 ### 5.3 自适应降级（历史设计草案——未实现）
 

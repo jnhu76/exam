@@ -1,49 +1,62 @@
 # Code Quality Gate
 
-> Phase 1 代码质量规范。所有 Job 必须通过这些门禁才能算完成。
+> 代码质量与边界执行契约。本文按“真实执行层”描述每条规则；只有标注为可执行仓库门禁（A）的条目才是 Job 的完成条件。
 
 ---
 
 ## 1. Quality Goals
 
-Phase 1 代码质量目标：
+代码质量目标。本文用四类标签标注每条规则的**真实执行层**，不把目标当成已执行门禁：
 
-1. 类型安全 — strict TypeScript，无 any
-2. 代码风格统一 — Prettier + ESLint
-3. 架构边界清晰 — 依赖方向正确，无循环依赖
-4. 没有裸 db 查询绕过 repository
-5. 没有 route 直接写复杂业务逻辑
-6. 没有重复定义核心 DTO
-7. 没有跳过测试
-8. 没有临时 mock 混进正式代码
-9. 没有 console.log 乱飞
-10. AI 生成代码必须可 review、可验证、可回滚
-11. 产品文案配置驱动 — 不把具体学校、课程、考试场景写死进生产代码
+- **(A) 可执行仓库门禁** — 由 `package.json` 脚本或 CI 实际执行，失败即 RED。
+- **(B) 部分静态/文本检查** — 有脚本执行，但只覆盖声明的有限形状，不能外推为完整保证。
+- **(C) 人工评审规则** — 由 code review / ADR 把关，没有机器执行点。
+- **(D) 未实现的治理目标** — 目前没有任何执行点，不得表述为已生效。
+
+目标：
+
+1. 类型安全 — strict TypeScript（A：`pnpm typecheck`，选项见 §3）；禁止 `any` 是评审规则（C），没有全仓执行器（D）。
+2. 代码风格统一 — Prettier（A：`pnpm format:check`）；ESLint 仅覆盖 `apps/web` 视觉规则（A，见 §4），不是全仓 lint。
+3. 架构边界清晰 — `pnpm lint:arch` 执行命名的边界禁令（B，见 §6.2）；“依赖方向正确 / 无循环依赖”目前没有机器检查（D）。
+4. 没有裸 db 查询绕过 repository — route 层有文本禁令（B，见 §6.2/§7），repository 语义由评审把关（C）。
+5. 没有 route 直接写复杂业务逻辑（C）
+6. 没有重复定义核心 DTO（C）
+7. 没有跳过测试（C）
+8. 没有临时 mock 混进正式代码（C）
+9. 没有 console.log 乱飞 — `pnpm lint` 只做 `console.log` / `console.error` 文本扫描（B，见 §4）。
+10. AI 生成代码必须可 review、可验证、可回滚（C）
+11. 产品文案配置驱动 — i18n copy policy 是评审规则（C）；机器 guard 已由 #634 移除（见 `docs/standards/i18n-copy-policy.md`）。
 
 ---
 
 ## 2. Tooling
 
-| Tool                       | Purpose                    |
-| -------------------------- | -------------------------- |
-| Prettier                   | Formatter                  |
-| ESLint + typescript-eslint | Lint                       |
-| TypeScript strict mode     | Type safety                |
-| Vitest                     | Unit/integration test      |
-| Vitest coverage v8         | Coverage                   |
-| Playwright                 | E2E/smoke test             |
-| Husky                     | Git hooks                  |
-| turbo                      | Monorepo runner            |
-| dependency-cruiser         | Architecture boundary lint |
-| check-db-config.mjs        | DB/test config consistency lint |
-| config-contract.mjs        | Semantic-settings topology binding gate |
-| pnpm                       | Package manager            |
+工具接线的唯一权威是根 `package.json` scripts 与 `.github/workflows/*`；下表回答“每个执行点实际做什么”，不复制脚本快照：
+
+| Tool / script                                                                 | 实际作用                                                                                                     |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Prettier（`pnpm format:check`）                                               | 格式化检查（仓库使用 Prettier 默认配置）                                                                     |
+| `pnpm lint`（`scripts/check-code-quality.mjs`）                               | 对 apps+packages 做 `console.log` / `console.error` 文本扫描                                                 |
+| `pnpm lint:arch`（`scripts/check-architecture.mjs`）                          | 命名的边界禁令 + #794 workspace resolution 契约（清单见 §6.2）                                               |
+| `pnpm lint:eslint`（仅 `apps/web`）                                           | `exam-ui/*` 视觉规则（业务 9 条、layout 8 条）+ 不执行任何检查的兼容 no-op stub（见 §4）                     |
+| `pnpm lint:db-config`（`scripts/check-db-config.mjs`）                        | DB URL 单源、测试运行时模式、hook 超时预算等回归守护                                                         |
+| `pnpm lint:db-journal`（`scripts/db/check-postgres-migration-journal.mjs`）   | Drizzle migration journal 结构、单调性与文件一致性                                                           |
+| `pnpm lint:env-contract`（`scripts/repository-contract/config-contract.mjs`） | settings 语义模型 ↔ 各拓扑（compose/CI/WSL）绑定关系                                                         |
+| `pnpm lint:env-surface`（`scripts/check-env-surface.mjs`）                    | env 文件物理表面、根文件 allowlist 与 reader allowlist                                                       |
+| `pnpm lint:prod-resolution`（`scripts/check-production-resolution.mjs`）      | 生产 artifact 解析 oracle（在 `pnpm verify` 内运行）                                                         |
+| `pnpm lint:deploy-payload`（`scripts/check-deploy-payload.mjs`）              | 部署 payload 内容 oracle（CI 以 payload 目录参数调用）                                                       |
+| `pnpm typecheck`（turbo → `tsc`）                                             | 各 workspace strict typecheck（见 §3）                                                                       |
+| Vitest / `@vitest/coverage-v8`                                                | 单元 / 集成测试与覆盖率（`pnpm test`、`pnpm coverage`）                                                      |
+| Playwright（`pnpm e2e`、`pnpm smoke`）                                        | 浏览器 E2E / 冒烟                                                                                            |
+| Husky + lint-staged + commitlint                                              | Git hooks（见 §14）                                                                                          |
+| turbo                                                                         | monorepo task runner                                                                                         |
+| pnpm                                                                          | package manager                                                                                              |
 
 ---
 
 ## 3. TypeScript Strict Mode
 
-`tsconfig.base.json` 必须包含：
+`tsconfig.base.json` 启用以下严格性选项（该文件还包含其他编译选项）；`pnpm typecheck` 经 turbo 对每个 workspace 的 `typecheck` script 执行 TypeScript（可执行仓库门禁，A）：
 
 ```json
 {
@@ -59,13 +72,15 @@ Phase 1 代码质量目标：
 }
 ```
 
-### 禁止
+事实说明：`apps/e2e` 只有 `tsconfig.json`、没有 `tsconfig.typecheck.json`，其 `typecheck` 按 `exports` 的 `types` 条件解析到生产 dist typings——这是设计选择（见 workspace 模块解析契约），不是缺失配置。
 
-- 随意使用 `any`
-- 用 `as any` 绕过类型
-- 用 `unknown` 后不做 schema 校验
-- route body 不校验直接使用
-- API response 没有类型
+### 禁止（评审规则）
+
+- 随意使用 `any` — 无全仓执行器（D）；`apps/web` 的 `@typescript-eslint/no-explicit-any` 是 no-op stub（§4）
+- 用 `as any` 绕过类型（C）
+- 用 `unknown` 后不做 schema 校验（C）
+- route body 不校验直接使用（C）
+- API response 没有类型（C）
 
 ### 允许例外
 
@@ -76,45 +91,32 @@ Phase 1 代码质量目标：
 
 ## 4. ESLint Rules
 
-必须启用：
+### 实际执行的 ESLint（仅 `apps/web` 视觉规则）
 
-```
-@typescript-eslint/no-explicit-any          — 禁止 any
-@typescript-eslint/no-floating-promises     — 禁止未 await 的 Promise
-@typescript-eslint/consistent-type-imports  — 统一 type import
-@typescript-eslint/no-unused-vars           — 清理未使用变量
-@typescript-eslint/switch-exhaustiveness-check — switch 穷尽检查
-import/no-cycle                             — 禁止循环依赖
-no-console                                  — 禁止 console.log
-```
+仓库唯一的 ESLint 配置是 `apps/web/eslint.config.ts`，由 `pnpm lint:eslint`（`pnpm --filter @exam/web lint:eslint`）执行。它只包含本地 `exam-ui/*` 视觉权威规则，不是通用 linter：
 
-### no-console 分级
+- 业务/功能源码 9 条：`prefer-inline-error-banner`、`no-business-shadow`、`no-arbitrary-typography`、`no-arbitrary-inline-typography`、`no-typography-authority-conflict`、`no-heavy-font-weight`、`no-recipe-recomposition`、`no-dialog-spatial-override`、`no-arbitrary-filter-width`；
+- `components/layout` 子集 8 条（不含 `no-business-shadow`：topbar/sidebar 拥有有意的 sticky elevation）；
+- `src/components/ui/**`（生成的 shadcn primitive）、`src/lint/**` 与测试文件不参与 lint。
 
-| Package              | console.log         | console.warn/error |
-| -------------------- | ------------------- | ------------------ |
-| apps/api             | 禁止，必须用 logger | 必须用 logger      |
-| apps/web             | 禁止（生产构建）    | 开发期允许         |
-| packages/domain      | 禁止                | 禁止               |
-| packages/exam-engine | 禁止                | 禁止               |
-| packages/db          | 禁止                | 必须用 logger      |
-| packages/auth        | 禁止                | 必须用 logger      |
+兼容层（保留，不是遗漏）：配置为历史源码里既有的 `eslint-disable` 指令注册了 `react-hooks/exhaustive-deps` 与 `@typescript-eslint/no-explicit-any` 的 **no-op 规则**——它们不执行任何检查，只让旧指令可解析；单独删除会让 `pnpm lint:eslint` 失败。用途见 `apps/web/eslint.config.ts` 头注释。
 
-### 复杂度限制
+`apps/api`、`apps/e2e`、`packages/*` 没有 ESLint 配置，`pnpm lint:eslint` 不会检查它们。
 
-```
-max-lines-per-function: 80
-complexity: 12
-max-depth: 4
-```
+### 声明的规则与真实执行层
 
-例外（不适用复杂度限制）：
+以下规则没有对应的机器执行（除注明外），不得写成“必须通过的门禁”：
 
-- Schema 定义文件
-- Migration 文件
-- 测试数据 fixture
-- UI table columns 配置
+| 规则                                                                                               | 分类              | 真实执行点                                                                                                |
+| -------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `console.log` / `console.error`                                                                    | (B) 部分文本检查  | `pnpm lint`（`scripts/check-code-quality.mjs`）只扫描 apps+packages 的这两类调用；不覆盖其他 console 形态 |
+| 分 package 的 `console.warn/error` 等级与结构化日志要求                                            | (C) 评审规则      | code review；日志契约见 §10                                                                               |
+| `no-explicit-any` / 禁止 `as any`                                                                  | (D) 未实现        | 无 ESLint 执行；`apps/web` 只有 no-op stub；`any` 清理属评审（§3、§16）                                   |
+| `no-floating-promises`、`consistent-type-imports`、`no-unused-vars`、`switch-exhaustiveness-check` | (D) 未实现        | 无执行点                                                                                                  |
+| `import/no-cycle`、全仓循环依赖检测                                                                | (D) 未实现        | 无执行点；`pnpm lint:arch` 不做循环检测（§6.2）                                                           |
+| `max-lines-per-function: 80`、`complexity: 12`、`max-depth: 4`                                     | (D) 未实现        | 未配置任何执行器。真实的评审规则是：单文件超过 2000 行触发结构审查（`AGENTS.md` §3），不触发机械拆分      |
 
-如果函数超过限制，应拆成：command / policy / validator / mapper / repository method。
+需要新增执行点时按正常变更流程立项，并同步更新本节；不在文档里虚构门禁。
 
 ---
 
@@ -151,7 +153,7 @@ University / campus / student
 
 ## 5. Prettier
 
-配置 `prettier.config.*`，CI 中检查：
+仓库不维护 Prettier 配置文件（使用 Prettier 默认风格）；CI 与 `verify:static` 通过以下命令检查：
 
 ```bash
 pnpm format:check
@@ -161,46 +163,59 @@ pnpm format:check
 
 ## 6. Architecture Boundaries
 
-### 允许依赖
+### 6.1 Current declared dependencies（as-built 证据，非批准）
 
-```
-apps/api            → packages/contracts / domain / db / auth / exam-engine
-apps/web            → packages/contracts / domain
-packages/db         → packages/domain
-packages/auth       → packages/domain / db
-packages/exam-engine → packages/domain / db
-packages/contracts  → packages/domain
-packages/domain     → no internal package dependency
-```
+以下 workspace 运行时边来自各 workspace `package.json` 的 `dependencies`（基线 `1bd8602`）：
 
-### 禁止依赖
-
-```
-packages/domain       → Fastify / React / Drizzle
-packages/contracts    → Fastify
-packages/exam-engine  → Fastify
-packages/db           → apps/api
-apps/web              → packages/db / database schema directly
+```text
+@exam/api            → @exam/auth @exam/authz @exam/contracts @exam/db @exam/domain @exam/exam-engine @exam/import-export
+@exam/web            → @exam/authz @exam/contracts @exam/domain
+@exam/auth           → @exam/contracts @exam/domain
+@exam/authz          → @exam/domain
+@exam/contracts      → @exam/domain
+@exam/db             → @exam/domain
+@exam/exam-engine    → @exam/authz @exam/contracts @exam/domain
+@exam/import-export  → (no internal dependency)
+@exam/domain         → (leaf)
 ```
 
-### Architecture Lint
+仅 `devDependencies` 的 workspace 边（不是运行时依赖）：`@exam/e2e` → `@exam/contracts` / `@exam/domain`、`@exam/db` → `@exam/auth`（测试见证 session/token）、`@exam/source-fixture` → `@exam/source-fixture-dep`，以及 `apps/api`、`apps/web` 与除 fixture 包外的每个 `packages/*` → `@exam/source-fixture`（Vitest 解析 oracle fixture）。
 
-使用 dependency-cruiser 检查：
+声明不等于实际使用：例如 `@exam/auth` 声明了 `@exam/contracts`，但基线提交的非测试源码中未观察到对应 import。此表只记录 manifest 声明，不证明每条边在运行期被使用，也不构成“允许新增依赖”的白名单。
 
-```bash
-pnpm lint:arch
-```
+### 6.2 Existing machine-enforced boundary bans
 
-检查项：
+`pnpm lint:arch`（`scripts/check-architecture.mjs`）只执行**命名的文本/结构禁令**，每一条针对具体失败模式：
 
-1. domain 不依赖 Fastify
-2. contracts 不依赖 Fastify
-3. web 不直接依赖 db
-4. 没有循环依赖
-5. packages 之间依赖方向正确
-6. attemptId-rooted dual-lock transactions mint the EA
-   capability via `lockEnrollmentAndAttempt` — no `as LockedEnrollmentAttemptIdentity`
-   cast, no exported brand/affinity symbol, no exported capability type guard
+- `packages/domain/src` 是叶子：禁止 import `fastify` / `react` / `drizzle-orm` / 其他 `@exam/*`；
+- `packages/authz/src`：禁止 `fastify` / `react` / `drizzle-orm`，且只允许 `@exam/domain`（禁止其他 `@exam/*` 子路径）；
+- `packages/contracts/src`：禁止 `fastify`；
+- `packages/auth/src`：禁止读取 `process.env`；
+- `apps/api/src` 与 `packages/db/src`：禁止直接读取 `process.env.APP_MODE` / `NODE_ENV`（运行时模式只能经 `@exam/db` 的 `parseAppMode` 解析）；
+- `packages/db/src`：禁止引入或调用 `dotenv`（env 文件 admission 归入口点）；
+- `packages/exam-engine/src`：禁止 `fastify`；禁止 `as LockedEnrollmentAttemptIdentity` / `as ReconciledAttemptMutationContext` 伪造 capability；
+- `apps/api/src`：禁止上述两种 capability cast；
+- `apps/web/src`：禁止 import `@exam/db`；
+- `apps/api/src/routes`：禁止裸 `db.select|insert|update|delete`、禁止 import `drizzle-orm`、禁止 import `@exam/db/schema`；
+- #794 workspace resolution 契约：manifest 表校验（`config/workspace-resolution.mjs`）、禁止 `@exam/*/src/` 物理路径与跨 package 相对 import、每个 vitest config 必须消费共享 resolution plugin、resolution oracle 存在性（fixture marker、dot-segment grammar probe、fail-closed 分类）、该 gate 覆盖的每个 typecheck 入口（apps/api、apps/web、packages/*）必须有带 `TEST_SOURCE_CONDITION` 的 `tsconfig.typecheck.json`。
+
+**真实不覆盖**（不得外推）：没有 package 依赖 allow-list、没有循环依赖检测、没有 manifest ↔ 实际 import 一致性检查。上述禁令是文本形状检查，动态 `import()` / `require()` / `vi.mock()`、别名/解构读取，以及 `@exam/*` 根导入（例如 authz 的子路径禁令不覆盖 `from "@exam/db"`）都可能逃逸。因此“新增这条依赖是否被允许”**不是机器回答的问题**。
+
+### 6.3 Review-enforced architecture policy
+
+以下方向规则是真实架构策略，但由评审/ADR 执行，不是机器门禁：
+
+- `packages/domain` 是领域叶子，不得依赖 Fastify / React / Drizzle 或其他内部 package（机器只覆盖部分 import 形状）；
+- `packages/contracts`、`packages/exam-engine` 不依赖 Fastify；
+- `fastify` 只出现在 `apps/api`；
+- `packages` 不反向依赖 `apps`（例如 `packages/db` → `apps/api`）；
+- `apps/web` 不直接依赖数据库或服务端 package（机器只挡住 `@exam/db` 这一条 import）；
+- 业务数据访问经 repository 并显式接收 `RequestContext`，route 不写复杂业务逻辑；
+- 领域类型来自 `@exam/domain`，API 输入/输出 DTO 来自 `@exam/contracts`。
+
+### 6.4 新增跨 package 依赖
+
+新增跨 package 依赖是设计变更，须走正常评审/ADR 权威；§6.1 的 as-built 表不是预批准。
 
 ### Enrollment ↔ Attempt Lock Order
 
@@ -218,11 +233,13 @@ lock-acquiring operation and is protected by the current-transaction EA
 protocol (removing the explicit Enrollment `FOR UPDATE` does NOT remove the
 Enrollment lock dependency).
 
-The 7 attemptId-rooted AE production entry points (submitAndGradeAttempt,
-candidate take/save/restore, admin force-submit, deadline autoSubmitAndGrade,
-manual gradeQuestion route) each mint via the seam and thread the SAME repo
-pair + capability from mint to terminal consumer. `startOrRestoreAttempt`
-keeps its natural Enrollment→Attempt order as the explicit EA exception.
+The 8 attemptId-rooted AE production entry points recorded by `AE_ENTRY_POINTS`
+in `apps/api/src/runtime/lock-order.structural.test.ts` (submitAndGradeAttempt,
+candidate take/save/restore, admin force-submit, admin time-grant, deadline
+autoSubmitAndGrade, manual gradeQuestion route) each mint via the seam and
+thread the SAME repo pair + capability from mint to terminal consumer.
+`startOrRestoreAttempt` keeps its natural Enrollment→Attempt order as the
+explicit EA exception.
 
 **Runtime repo-affinity assertion is the correctness boundary.** Static
 lint rules (`pnpm lint:arch` + the structural test
@@ -393,41 +410,26 @@ attemptId, questionId, serverVersion, save result, durationMs
 
 ### E2E artifacts
 
-Phase 1 acceptance requires E2E artifacts for diagnosis:
+E2E 失败诊断的实际产物由 `.github/workflows/ci.yml` 的 e2e job 与 `apps/e2e/playwright.config.ts` 决定（本节不复制 CI 快照）：
 
-```txt
-server.log, screenshot, video, Playwright trace
-```
+- Playwright 默认 `trace: "off"`、`video: "off"`、`screenshot: "only-on-failure"`；trace 仅在 `E2E_TRACE=1` 时启用（`retain-on-failure`），CI 只在 production-transport regression job 设置该变量；
+- e2e job 失败时上传 `e2e-failure-diagnostics-*`：`server.log`（含 tail）、失败用例的 `error-context.md` 与 `*.png`，retention 1 天；成功时删除本地 blob report zip，blob report 与 trace 均不上传。
 
-E2E server logs should preserve `requestId` so a failed browser step can be matched to API logs.
+E2E 服务端日志应保留 `requestId`，便于把失败的浏览器步骤对应到 API 日志。
 
 ---
 
 ## 11. Environment Variable Validation
 
-使用 Zod 校验环境变量，启动时 fail fast。
+环境变量契约（名称、默认值、优先级、set-but-empty 语义、env 文件表面与数据库生命周期）的唯一权威是 [`docs/standards/testing.md` §2](testing.md#2-environment-variable-contract)，测试数据库生命周期见 §2.8；本文不维护第二份清单。
 
-Phase 1 runtime config 必须校验：
+实现入口（代码即权威）：
 
-```txt
-APP_MODE
-DATABASE_URL
-TEST_DATABASE_URL
-JWT_SECRET
-CORS_ORIGIN
-RATE_LIMIT_DISABLED
-DEFAULT_TENANT_SLUG
-DEPLOYMENT_MODE
-```
-
-规则：
-
-- `DEPLOYMENT_MODE` 只能为 `singleTenant` 或未设置。
-- `DEPLOYMENT_MODE=multiTenant` 当前必须 fail fast。
-- `DEFAULT_TENANT_SLUG` 仅作为 internal default organization 兼容配置，不代表 organizationSlug login。
-- `JWT_SECRET` 生产环境必须显式设置且不能使用默认弱值。
-
-可在 `apps/api/src/config.ts` 或独立 `packages/config` 中实现。
+- 语义设置模型与默认值：`apps/api/src/config/settings.ts`；
+- 运行时 facade 与跨字段策略、启动 fail fast：`apps/api/src/config/runtimeConfig.ts`；
+- env 文件 admission 与支持集合：`config/envFilePolicy.ts` + `apps/api/src/config/loadRootEnv.ts`；
+- DB URL 解析：`packages/db/src/databaseUrl.ts`；
+- 机器校验：`pnpm lint:env-contract`（settings 模型 ↔ 各拓扑绑定）与 `pnpm lint:env-surface`（env 文件表面）。
 
 ---
 
@@ -481,90 +483,23 @@ pnpm audit
 
 ### E2E acceptance
 
-E2E may be disabled temporarily only during transition, but Phase 1 acceptance requires re-enable as blocking CI.
-
-Minimal E2E paths:
-
-1. candidate happy path
-2. resume attempt
-3. submit flush
-
-Artifacts must include `server.log`, screenshot, video, and Playwright trace where available.
+E2E 保持为 blocking CI 门禁；最小路径（candidate happy path、resume attempt、submit flush）、分片拓扑与本地入口以 [`docs/standards/testing.md`](testing.md) §4/§6 和 `.github/workflows/ci.yml` 为准，本地唯一入口是 `pnpm e2e`（`bash scripts/e2e/run.sh`）。失败诊断产物见 §10 的 E2E artifacts。
 
 ### API Route 测试（apps/api）
 
-所有 API route 测试使用 **PostgreSQL 临时数据库** 来确保测试隔离。
+API route 测试使用**真实 PostgreSQL**，不是内存数据库：默认按测试文件 schema 隔离，canonical 证据 lane 使用 worker-database 隔离。命令、隔离模式、环境变量与数据库生命周期以 [`testing.md` §5.2](testing.md#52-api-integration-tests) 和 [`testing.md` §2.8](testing.md#28-test-database-lifecycle-ownership) 为唯一权威，本节不复制。
 
-**架构：**
-
-- `apps/api/src/plugins/db.ts` — 注册 `fastify.db` 装饰器，使用 `createDatabase()`
-- `apps/api/src/routes/testHelpers.ts` — 提供 `buildTestApp()` 函数，注入测试数据库
-- Route handlers 通过 `fastify.db` 访问数据库，永不直接调用 `createDatabase()`
-
-**测试模式：**
-
-```typescript
-import { buildTestApp } from "./testHelpers.js";
-import myRoutes from "./myRoutes.js";
-
-describe("my routes", () => {
-  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
-
-  beforeAll(async () => {
-    ctx = await buildTestApp(myRoutes);
-  });
-
-  afterAll(async () => {
-    await ctx.app.close();
-  });
-
-  it("returns data", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/my-endpoint",
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(200);
-  });
-});
-```
-
-**规则：**
-
-1. Route handlers 绝不直接调用 `createDatabase()` — 必须通过 `fastify.db` 装饰器
-2. 每个 `buildTestApp()` 调用创建独立的数据库实例，测试之间零共享状态
-
-**验证：**
-
-```bash
-pnpm --filter api test        # API route tests (in-memory)
-pnpm --filter @exam/db test   # DB repository tests (in-memory)
-```
+不变量：应用运行时经 `apps/api/src/plugins/db.ts` 注册 `fastify.db` 装饰器；route handler 通过 `fastify.db` 访问数据库，不自行创建连接。测试应用通过 `apps/api/src/routes/testHelpers.ts` 的 `buildTestApp()` 构建，每个上下文独立创建、零共享状态（`testHelpers.ts` 与 seed/verify 脚本是 `createDatabase()` 的受控例外）。
 
 ---
 
 ## 14. Pre-commit / Pre-push Hooks
 
-使用 Husky（`.husky/` 目录，`package.json` 的 `prepare` 脚本自动安装）。实际钩子内容以 `.husky/` 为准；下表是当前配置：
+Husky 钩子的唯一权威是 `.husky/` 目录（`package.json` 的 `prepare` 脚本安装）。本节只记录钩子职责，不复制命令快照——以钩子文件为准：
 
-### pre-commit (`.husky/pre-commit`)
-
-```bash
-pnpm exec lint-staged   # Prettier --write on staged files
-pnpm lint:arch          # architecture boundary lint
-```
-
-### pre-push (`.husky/pre-push`)
-
-```bash
-pnpm typecheck
-```
-
-### commit-msg (`.husky/commit-msg`)
-
-```bash
-pnpm exec commitlint --edit "$1"   # Conventional Commits 校验
-```
+- `pre-commit`：`lint-staged`（对 staged 文件跑 Prettier）+ `pnpm lint:arch`；
+- `pre-push`：`pnpm typecheck` + `pnpm --filter @exam/api api:openapi:check`（OpenAPI drift 检查）；
+- `commit-msg`：commitlint（Conventional Commits）。
 
 ---
 
@@ -642,8 +577,8 @@ CI job 拓扑、命令与 env 接线的唯一权威是 `.github/workflows/ci.yml
 
 ### 按 Job 类型额外运行
 
-| Job 类型       | 额外命令                                                       |
-| -------------- | -------------------------------------------------------------- |
-| 涉及数据库     | `pnpm db:generate && pnpm db:migrate && pnpm test:integration` |
-| 涉及 UI 主流程 | `pnpm test:e2e`                                                |
-| Phase 1 完成   | `pnpm smoke`                                                   |
+| Job 类型             | 额外命令                                                       |
+| -------------------- | -------------------------------------------------------------- |
+| 涉及数据库           | `pnpm db:generate && pnpm db:migrate && pnpm test:integration` |
+| 涉及 E2E / UI 主流程 | `pnpm e2e`                                                     |
+| Phase 1 完成         | `pnpm smoke`                                                   |
