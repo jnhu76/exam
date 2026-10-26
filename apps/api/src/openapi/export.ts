@@ -23,14 +23,14 @@ async function main() {
   if (isCheckMode) {
     if (!existsSync(OUTPUT_PATH)) {
       process.stderr.write(
-        `openapi.json not found at ${OUTPUT_PATH}. Run 'pnpm api:openapi' first.\n`,
+        `openapi.json not found at ${OUTPUT_PATH}. Generate it with 'pnpm --filter @exam/api exec tsx src/openapi/export.ts' first.\n`,
       );
       process.exit(1);
     }
     const existing = readFileSync(OUTPUT_PATH, "utf-8").replace(/\r\n/g, "\n");
     if (existing !== json.replace(/\r\n/g, "\n")) {
       process.stderr.write(
-        "openapi.json is out of date. Run 'pnpm api:openapi' and commit the result.\n",
+        "openapi.json is out of date. Regenerate with 'pnpm --filter @exam/api exec tsx src/openapi/export.ts' and commit the result.\n",
       );
       process.exit(1);
     }
