@@ -557,7 +557,7 @@ async function cmdWait(runId, { timeoutSec = 7200, browserTimeoutSec = 900 } = {
   // scenario_published: normal entry. service_recovered: post-fault resume —
   // the fault is already terminal (handleCheckpoint's fault_terminal guard
   // prevents re-execution); the loop just waits for BROWSER_VERIFIED again.
-  const resumablePhases = ["scenario_published", "service_recovered", "control_verified", "dump_created", "treatments_done"];
+  const resumablePhases = ["scenario_published", "service_recovered", "control_verified", "treatments_in_progress", "dump_created", "treatments_done"];
   if (!resumablePhases.includes(st.phase)) {
     throw new Error(`wait requires one of [${resumablePhases.join("|")}] (got ${st.phase})`);
   }
