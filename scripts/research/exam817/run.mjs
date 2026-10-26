@@ -1454,6 +1454,52 @@ async function cmdVerdict(runId) {
     await writeD6Verdict(runId, st, writer, { perQuestion, rpo, integrity: snap.integrity });
     return;
   }
+  // D8 republish: rebuild the facets from the persisted full-row snapshots,
+  // re-observe PG/API live, and adopt any BROWSER_VERIFIED raw receipt that
+  // arrived after the wait window closed (F12 replay pattern). Absent
+  // browser evidence keeps the verdict fail-closed (UNKNOWN), but the body
+  // carries the complete terminal-state facts.
+  if (st.arm === "D8A" || st.arm === "D8B") {
+    let parsed = null;
+    if (st.attempt_id) {
+      const eventsPath = path.join(mailboxDir(runId), WINDOWS_EVENTS);
+      if (fs.existsSync(eventsPath)) {
+        for (const line of fs.readFileSync(eventsPath, "utf8").split("\n").filter(Boolean)) {
+          let rec = null;
+          try {
+            rec = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (rec?.event !== "BROWSER_VERIFIED" || rec.run_id !== st.run_id || rec.trial_id !== st.trial_id) continue;
+          try {
+            parsed = parseBrowserVerified(normalizeWindowsEvent(rec), {
+              manifestQuestions: st.manifest_questions ?? [],
+              attemptId: st.attempt_id,
+            });
+            st.browser_verified = {
+              at: normalizeWindowsEvent(rec).timestamp_utc,
+              attempt_id: parsed.attempt_id,
+              schema_version: parsed.schema_version,
+              reload_at: parsed.reload_at,
+              identity_confirmed: parsed.identity_confirmed,
+              session_reauth_required: parsed.session_reauth_required,
+              evidence_ref: `event:${rec.event_id}`,
+              raw_event_id: rec.event_id,
+              replayed_after_window_close: true,
+            };
+            st.browser_state = parsed.browser_state;
+            saveState(runId, st);
+          } catch {
+            parsed = null;
+          }
+        }
+      }
+    }
+    const writer = new EventWriter(path.join(mailboxDir(runId), "wsl.events.jsonl"), path.join(runPaths(runId).evidenceDir, "wsl-seq.json"));
+    await writeD8Verdict(runId, st, writer, parsed);
+    return;
+  }
   // D7 has no fault-phase snapshots; its republish path re-observes PG and
   // the API live and rebuilds treatment windows from the raw receipts.
   if (st.arm === "D7") {
@@ -2276,8 +2322,8 @@ async function writeD8Verdict(runId, st, writer, parsed) {
     reason = `API leg incomplete (error=${st.api_snapshot_error ?? "none"}) — COMPLETE unavailable`;
   } else if (!st.browser_verified) {
     verdict = "UNKNOWN";
-    reason = "browser leg never received (no BROWSER_VERIFIED event)";
-  } else if (parsed.identity_confirmed === false) {
+    reason = "browser leg never received (no BROWSER_VERIFIED event) — server-side terminal integrity is proven by the facets above, but COMPLETE requires the confirmed terminal UI";
+  } else if (parsed?.identity_confirmed === false) {
     verdict = "UNKNOWN";
     reason = "browser could not confirm candidate identity on the reloaded terminal page";
   } else {
