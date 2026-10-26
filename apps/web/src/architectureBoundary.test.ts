@@ -368,6 +368,27 @@ describe("source early-warning pattern characterization (M7)", () => {
     }
     expect(web.test(`import { client } from "@exam/api-client";`)).toBe(false);
   });
+
+  // Characterization of the documented false-positive boundary (#824
+  // delta review P2-1): the scan is textual, NOT comment/string aware.
+  // Comment or template-literal text that itself carries an import shape
+  // matches — the same posture as the pre-existing from-anchored guards.
+  // This is deliberate bounded coverage, not a bug to fix with an AST
+  // parser here; declared edges are caught by the manifest audit regardless.
+  it("is textual: comments and strings carrying an import shape do match", () => {
+    const authz = policy.forbiddenImportPattern("@exam/authz");
+    expect(
+      authz.test(`// import "@exam/db"; — a documented code example`),
+    ).toBe(true);
+    // A single-quoted string embedding a double-quoted specifier keeps the
+    // real quote characters in the source text, so the scan matches it.
+    expect(
+      authz.test(`const hint = 'write import "@exam/db" carefully';`),
+    ).toBe(true);
+    expect(authz.test('const hint = `like import "@exam/db" here`;')).toBe(
+      true,
+    );
+  });
 });
 
 /**
@@ -447,14 +468,17 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
 
   afterAll(async () => {
     if (worktree) {
-      spawnSync("git", ["worktree", "remove", "--force", worktree], {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-      });
-      spawnSync("git", ["worktree", "prune"], {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-      });
+      // OWNERSHIP: remove ONLY the worktree this suite created. No global
+      // `git worktree prune` — it would sweep stale registrations belonging
+      // to other worktrees and sessions out of the shared repository. A
+      // failed removal is surfaced here, not swallowed; the rm backstop
+      // below still deletes this suite's own mkdtemp directory.
+      const removal = spawnSync(
+        "git",
+        ["worktree", "remove", "--force", worktree],
+        { cwd: REPO_ROOT, encoding: "utf8" },
+      );
+      expect(removal.status, removal.stderr ?? "").toBe(0);
     }
     await rm(worktreeRoot, { recursive: true, force: true });
   });

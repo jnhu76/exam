@@ -98,10 +98,14 @@ function escapeRegExp(text) {
  *
  * Deliberately NOT claimed coverage (see code-quality §6.2): computed
  * specifiers, aliases, arbitrary indirect module loading or full AST
- * analysis; a specifier quoted outside an import position (comments,
- * unrelated strings) is not matched either. Undeclared imports that evade
- * this scan still fail CI typecheck (TS2307), and DECLARED forbidden
- * imports fail the manifest audit above regardless of spelling.
+ * analysis. The scan is textual and NOT comment/string aware: comment or
+ * template-literal text that itself carries an import shape (e.g. a code
+ * example in a comment) matches and reports a violation — the same
+ * posture as the pre-existing from-anchored guards; only a bare prose
+ * mention with no quoted specifier at an import position is ignored.
+ * Undeclared imports that evade this scan still fail CI typecheck
+ * (TS2307), and DECLARED forbidden imports fail the manifest audit above
+ * regardless of spelling.
  */
 export function forbiddenImportPattern(importer) {
   const boundary = findBoundary(importer);
