@@ -2027,7 +2027,7 @@ async function writeD6Verdict(runId, st, writer, { perQuestion, rpo, integrity }
   } else if ((counts.DUMP_WINDOW_VIOLATED ?? 0) > 0) {
     verdict = "DUMP_WINDOW_VIOLATED";
     reason = `${counts.DUMP_WINDOW_VIOLATED} restored answer(s) carry post-dump content — the dump cannot have been taken before phase C`;
-  } else if ((counts.PRE_DUMP_RETAINED ?? 0) === st.manifest_questions.length && (counts.POST_DUMP_MISSING ?? 0) > 0) {
+  } else if ((counts.PRE_DUMP_RETAINED ?? 0) + (counts.POST_DUMP_MISSING ?? 0) === st.manifest_questions.length && (counts.POST_DUMP_MISSING ?? 0) > 0) {
     verdict = "DUMP_RPO_LOSS";
     reason = `all ${counts.PRE_DUMP_RETAINED} pre-dump answers retained; ${rpo.lost_answer_count} post-dump ACKed answer(s) absent from the restored snapshot — measured RPO gap ${rpo.rpo_min_ms}..${rpo.rpo_max_ms}ms after dump completion (expected recovery-point loss, NOT a durability failure)`;
   } else {
