@@ -8,7 +8,11 @@
 - **LAN/on-premise**, single-tenant, single-instance
 - One deployment = one institution (`organizationId` is the internal data
   boundary)
-- No cloud dependencies; the platform must remain offline-capable
+- No cloud dependencies; the platform runs without internet access
+  ("offline-capable" refers to the LAN deployment having no external
+  service dependencies — it does **not** mean an offline exam client:
+  candidates need a live connection to the server, and unsent in-browser
+  edits can be lost on refresh)
 - Multi-instance deployment is **not** supported (in-process scanners
   assume a single API owner)
 

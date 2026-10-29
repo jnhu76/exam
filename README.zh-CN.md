@@ -32,20 +32,21 @@
 Exam 是一个面向 LAN / on-premise（本地部署）的单租户考试与测评平台。
 一个机构部署一个实例，考生通过局域网参加考试。产品运行时不依赖云端服务、外部 API 或遥测服务。
 
-系统支持开卷测验和严格监考考试，提供客观题自动评分、主观题人工评分，以及结果发布与站内通知。
+系统支持开卷测验和在监考员（Proctor）监督下进行的考试，提供客观题自动评分、主观题人工评分，以及结果发布与站内通知。
+这里的"监督"指基于角色的监考指派、考试监控、异常（incident）处置与考试恢复的人工管理——不包含锁定浏览器、设备绑定、以 IP 证明身份或 AI / 摄像头监考，这些均未实现（见 [Standard 能力说明](docs/product/standard-supported-capabilities.zh-CN.md)）。
 
 ## 🧩 核心能力
 
 - **考试生命周期** — 草稿、发布、开放、关闭、归档、取消
 - **计时模式** — 时间窗口、截止时间、不限时
-- **答案保存协议** — 带版本号、幂等与冲突检测的答案持久化，并包含客户端离线兜底
+- **答案保存协议** — 带版本号、幂等、冲突检测的服务端答案持久化，考试页面打开期间自动重试。尚未发送到服务器的编辑（约 1.5 秒自动保存防抖窗口内）仅存在于内存中，刷新浏览器可能丢失；产品没有持久化离线草稿，也没有离线考试模式（[保存语义](docs/product/standard-supported-capabilities.zh-CN.md#5-答案保存语义)）
 - **自动评分** — 单选、多选、判断、填空
 - **人工评分** — 主观文本题与基于评分量规（rubric）的评分
 - **结果发布** — 即时发布、评分完成后发布或人工发布；支持站内通知和可选邮件投递
 - **考生恢复** — 基于心跳检测异常中断的考试作答、考生自助恢复、管理员恢复中心
 - **身份生命周期** — 员工邀请、邮件密码重置、账号启用 / 停用
 - **基于角色的访问控制** — Admin、Teacher、Candidate、Proctor、Grader、Maintainer，并支持作用域权限
-- **运维控制面** — 诊断、备份证据台账、恢复就绪状态、结构化审计日志
+- **运维控制面** — 健康检查 / 诊断视图、结构化审计日志。备份与恢复由部署方（Host Operator）通过 `scripts/db-backup.sh` 负责；产品不内置备份计划、备份证据台账或自动恢复控制面
 - **邮件投递** — 进程内 outbox 处理循环、重试、锁恢复和可选 SMTP
 - **Docker 部署** — 预构建镜像、单命令启动、可选 Redis
 
@@ -124,7 +125,7 @@ pnpm dev             # API :3000，Web :5173
 | Phase 1 — Minimal Deliverable | ✅ 已完成 | Admin + Candidate 可靠考试闭环 |
 | Phase 2 — Exam Operation | ✅ MVP 子集已完成 | 生命周期、恢复、评分、诊断 |
 | Phase 3 — Collaboration / Permissions | ✅ Generic Runtime 已完成 | 授权基础设施与 scoped roles 已具备；[#584](https://github.com/jnhu76/exam/issues/584) 已在有限范围收束，部分性能指标仍未验证。High-Assurance [#293](https://github.com/jnhu76/exam/issues/293) 尚未启动；施工范围由选定的开放 Issue 持有。 |
-| P7 — System Readiness | ✅ 已完成 | Hardening、备份 / DR、运维控制、RBAC remediation |
+| P7 — System Readiness | ✅ 已完成 | Hardening、运维备份 / 恢复工具（产品内备份证据面后续由 [ADR-023](docs/adr/ADR-023-remove-backup-evidence-subsystem.md) 移除；备份 / 恢复仍由 Host Operator 负责）、运维控制、RBAC remediation |
 | Phase 4 — Platformization | ⏳ 未开始 | 多租户、API Key、Webhook 等暂缓 |
 
 详细阶段摘要见 [`docs/roadmap/current.md`](docs/roadmap/current.md)，当前实现事实见
