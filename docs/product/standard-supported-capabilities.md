@@ -29,9 +29,9 @@ this document stops applying.
   `5d005a58`, 2026-10-23, 12 commits earlier). The two are not the same
   product-guarantee version: the tag predates the ADR-023
   backup-evidence removal and the Maintainer permission re-baseline
-  that master carries (removal PRs `91dc6ad6`/`bdc59b3c`/`cc318dd5` are
-  all post-tag). Statements are not automatically true of older builds
-  or of the published `v0.0.10` release.
+  that master carries (removal commits `91dc6ad6`/`bdc59b3c`/`cc318dd5`
+  are all post-tag). Statements are not automatically true of older
+  builds or of the published `v0.0.10` release.
 - **Evidence topology.** Deployment facts describe the bundled
   single-node Docker Compose production topology (`docker-compose.yml`,
   project `exam-prod`). Reliability facts cite the #817 fault-injection
