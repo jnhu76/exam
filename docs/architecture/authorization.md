@@ -140,14 +140,15 @@ resource gates remain the security authority.
 > are built-in assignable roles (preset-bundled, route-gated), and **P7-E2A
 > (ADR-017) added Maintainer** — the sixth assignable human role (the seventh
 > built-in preset counting the synthetic, non-assignable System actor) — a
-> **read-only Operational Observer** (target permission set after
-> [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md): the
-> `system.health.view` + `system.diagnostics.view` views; until that
-> removal's PR-B lands, the live preset additionally holds the
-> backup/restore-readiness/ops-policy views; zero business permissions; zero
-> write permissions). Admin ∩ Maintainer = ∅ is enforced server-side (D14).
-> **ADR-017 revision 4 (ACCEPTED, 2026-08-14)** narrows the Maintainer to an observer (not
-> a controller) and **ADR-018 (ACCEPTED)** defines the read-only Observability
+> **read-only Operational Observer** holding exactly two read capabilities,
+> `system.health.view` + `system.diagnostics.view` (re-baselined by
+> [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) rev 5; the
+> former backup / restore-readiness / ops-policy views were removed with the
+> backup-evidence subsystem in PR-B #815), zero business permissions, zero
+> write permissions. Admin ∩ Maintainer = ∅ is enforced server-side (D14).
+> **ADR-017 revision 4 (ACCEPTED, 2026-08-14)** narrows the Maintainer to an
+> observer (not a controller), and **ADR-018 (ACCEPTED, as amended in scope by
+> ADR-023)** defines the read-only Observability
 > Window contract. Admin remains the Exam business owner (考试管理员) and never
 > holds infrastructure execution authority; the Host Operator (not Exam RBAC)
 > performs real infrastructure maintenance.

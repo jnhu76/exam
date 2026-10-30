@@ -35,16 +35,24 @@ and grading exams. An institution deploys one instance; candidates take
 exams on the local network. There are no cloud dependencies, no external
 APIs, and no telemetry.
 
-The system supports open-book quizzes and strict proctored exams with
+The system supports open-book quizzes and proctor-supervised exams with
 objective auto-grading, manual grading, and result publishing with
-inbox notifications.
+inbox notifications. Supervision here means role-scoped proctor
+assignments, exam monitoring, incident handling, and attempt recovery
+with human oversight — not lockdown browsers, device binding, IP-based
+identity proof, or AI/camera proctoring, none of which are implemented
+(see [Standard capabilities](docs/product/standard-supported-capabilities.md)).
 
 ## 🧩 Core Features
 
 - **Exam lifecycle** — draft, publish, open, close, archive, cancel
 - **Timing modes** — timed window, deadline, untimed
 - **Answer save protocol** — versioned, idempotent, conflict-detecting
-  answer persistence with client offline fallback
+  server-side answer persistence with automatic retry while the exam
+  page is open. Edits not yet sent to the server (inside the ~1.5 s
+  autosave debounce) live in memory only and can be lost on refresh;
+  there is no durable offline draft and no offline exam mode
+  ([save semantics](docs/product/standard-supported-capabilities.md#5-answer-save-semantics))
 - **Auto-grading** — single choice, multiple choice, true/false, fill
   blank
 - **Manual grading** — subjective text responses with rubric-based
@@ -57,7 +65,10 @@ inbox notifications.
   account activation/deactivation
 - **Role-based access** — Admin, Teacher, Candidate, Proctor, Grader,
   Maintainer with scoped permissions
-- **Operational controls** — diagnostics, structured audit log
+- **Operational controls** — health/diagnostics views, structured audit
+  log. Backup and restore are operator-owned (`scripts/db-backup.sh`);
+  the product ships no backup scheduler, evidence ledger, or
+  automated recovery control plane
 - **Email delivery** — in-process outbox loop with retry, lock recovery,
   and optional SMTP
 - **Docker deployment** — prebuilt images, single-command startup,
@@ -112,6 +123,8 @@ The canonical documentation index is
 | Document | Purpose |
 | --- | --- |
 | [INSTALL.md](INSTALL.md) | First installation — zero to running |
+| [First exam guide](docs/guides/first-exam.md) | Admin walkthrough — install to published results (English glosses over the zh-CN UI) |
+| [Standard capabilities](docs/product/standard-supported-capabilities.md) | What Standard supports today — save semantics, recovery/fault domains, explicit non-guarantees (version-bound) |
 | [`docs/deployment/`](docs/deployment/) | Production deployment, topology, runbooks |
 | [`docs/operations/`](docs/operations/) | Backup, upgrade, diagnostics, email |
 | [`docs/development/`](docs/development/) | Local setup, testing, E2E, commands |
@@ -143,7 +156,7 @@ Historical material — plans, audits, and phase history — lives under
 | Phase 1 — Minimal Deliverable | ✅ Complete | Admin + Candidate reliable exam loop |
 | Phase 2 — Exam Operation | ✅ Complete — MVP subset | Lifecycle, recovery, grading, diagnostics |
 | Phase 3 — Collaboration / Permissions | ✅ Generic Runtime complete | Authorization infra + scoped roles built; [#584](https://github.com/jnhu76/exam/issues/584) is closed with unproven residuals. High-Assurance [#293](https://github.com/jnhu76/exam/issues/293) is not started; selected OPEN Issues govern active work. |
-| P7 — System Readiness | ✅ Complete | Hardening, backup/DR, operational control, RBAC remediation |
+| P7 — System Readiness | ✅ Complete | Hardening, operator backup/restore tooling (product backup-evidence surfaces later removed by [ADR-023](docs/adr/ADR-023-remove-backup-evidence-subsystem.md); backup/restore remains Host-operator-owned), operational control, RBAC remediation |
 | Phase 4 — Platformization | ⏳ Not started | Multi-tenant, API keys, webhooks — deferred |
 
 See [`docs/roadmap/current.md`](docs/roadmap/current.md) for the detailed phase

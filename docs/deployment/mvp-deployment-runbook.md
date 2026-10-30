@@ -34,7 +34,11 @@ Hardware:  single host (LAN/on-premise). Single-instance operation.
 OS:        Linux (Docker host). Windows/macOS via Docker Desktop acceptable
            for evaluation only.
 Software:  Docker Engine ≥ 25.x, Docker Compose v2.
-Network:   internal LAN only. The platform must remain offline-capable.
+Network:   internal LAN only. The platform has no external service
+           dependencies and runs without internet access ("offline-capable"
+           describes the LAN deployment, not an offline exam client —
+           candidates need a live connection to the server; unsent
+           in-browser edits can be lost on refresh).
            Public ingress is the `web` service — one nginx serving the
            static SPA and routing /api/** to the API (#585): host EXAM_PORT
            (default 80). The app does not terminate TLS; HTTPS is a
