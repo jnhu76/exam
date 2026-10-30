@@ -143,10 +143,12 @@ The site keeps one font strategy for both locales, chosen for the lowest
 sustainable maintenance cost (`docs-site/.vitepress/theme/typography.css`):
 
 - **Latin: the Inter variable font bundled with VitePress** (self-hosted
-  unicode-range WOFF2 subsets, `font-display: swap`). Measured first-view
-  transfer is ~68 KB roman + ~75 KB italic for the latin subsets; no additional
-  Latin font is packaged. The font is distributed by VitePress under the SIL
-  Open Font License 1.1, so upgrades arrive with VitePress upgrades.
+  unicode-range WOFF2 subsets, `font-display: swap`). A cold first view
+  fetches ~68 KB on the wire (roman latin subset); the italic subset
+  (~75 KB on disk) is only fetched by pages that contain italic Latin runs.
+  No additional Latin font is packaged. The font is licensed SIL Open Font
+  License 1.1 upstream and is distributed inside the VitePress package, so
+  upgrades arrive with VitePress upgrades.
 - **CJK: platform system fonts.** The family chain lists the platform CJK
   names (`PingFang SC`, `Hiragino Sans GB`, `Microsoft YaHei`,
   `Noto Sans CJK SC`, `Source Han Sans SC/CN`) **before** the generic
