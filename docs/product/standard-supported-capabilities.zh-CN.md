@@ -8,16 +8,21 @@
 > 属 [implementation-status.md](../status/implementation-status.md)。若本页与
 > 规范权威出现分歧，以规范权威为准，分歧按缺陷收敛处理——不得据此重新解释。
 
-**适用版本：** release `v0.0.10` 与 master `511e6e60`（2026-10-27）。以下事实
-均针对该代码树核对；更新的提交可能已改变行为。文档失效条件见 §1。
+**适用版本：** master `511e6e60`（2026-10-27）——`v0.0.10` 发布**之后**的
+开发版本。以下事实均针对该代码树核对；本投影**不**宣称所有内容适用于已
+发布的 `v0.0.10`。文档失效条件见 §1。
 
 ---
 
 ## 1. 适用性（Applicability）
 
-- **版本绑定。** 本投影描述 release tag `v0.0.10` 与 master 提交
-  `511e6e60dd332f376f15ea0326f95fcefddaeb84`（2026-10-27）。对更早或更新的
-  构建不自动成立。
+- **版本绑定。** 本投影描述 master 提交
+  `511e6e60dd332f376f15ea0326f95fcefddaeb84`（2026-10-27）——`v0.0.10`
+  release tag（commit `5d005a58`，2026-10-23，早 12 个提交）**之后**的开发
+  版本。二者不是同一个产品保证版本：tag 早于 master 上的 ADR-023 备份
+  证据子系统移除与 Maintainer 权限重定基（移除提交
+  `91dc6ad6`/`bdc59b3c`/`cc318dd5` 均在 tag 之后）。对更早的构建或已发布
+  的 `v0.0.10` release，以下陈述不自动成立。
 - **证据拓扑。** 部署事实描述随附的单机 Docker Compose 生产拓扑
   （`docker-compose.yml`，project `exam-prod`）。可靠性事实引用 #817
   故障注入实验，其实验环境与该拓扑同构（web + app + db，PGDATA 宿主机
@@ -30,8 +35,8 @@
   Phase 1）。"Minimal" preset 是已采纳的设计，不是可选运行时。
 - **语言。** 产品 Web UI 仅有简体中文（zh-CN），没有英文界面，也没有语言
   切换器。
-- **文档何时失效。** 出现以下任一情况时本页视为过期：新 release tag 取代
-  `v0.0.10` 且行为发生变化；[ADR-022](../adr/ADR-022-product-capability-composition.md)
+- **文档何时失效。** 出现以下任一情况时本页视为过期：更新的 master 状态
+  或 release tag 取代 `511e6e60` 且行为发生变化；[ADR-022](../adr/ADR-022-product-capability-composition.md)
   Phase 2–4 落地（写入门禁、Minimal 运行时、持久化部署配置）；
   [#293](https://github.com/jnhu76/exam/issues/293) Controlled/Strict 落地；
   R4 可靠性决策（[#813](https://github.com/jnhu76/exam/issues/813)、
@@ -182,7 +187,7 @@ Chrome/CDP，逐答案 value/version oracle，探索性样本量，
 | 恢复较旧的 `pg_dump` 快照（D6） | 恢复出的数据库在**dump 时点**内部自洽，并静默缺失 dump 之后服务器已 ACK 的全部答案（两次试验均缺失 4 条 post-dump ACKed 更新）。这是恢复点回滚，不是 PG 崩溃持久性缺陷。 | HISTORICAL_MEASURED（2 次试验） |
 | 未发送的浏览器编辑 + 刷新（D7） | 四次防抖前切断全部丢失未发送编辑；请求 / ACK 均未到达服务器。属本地 pre-ACK 丢失，不是服务器缺陷。 | HISTORICAL_MEASURED（4/4） |
 | 终态提交被 app/db 崩溃打断（D8） | 在受测崩溃域内，提交 / 终态与评分完整性保留；证据带明确的重放来源限制，不得推广到旧快照恢复。 | HISTORICAL_MEASURED（有保留） |
-| 主机 / 存储销毁、断电、磁盘损坏 | **未测试。** 此时恢复完全取决于部署方的备份节奏与异地副本；RPO 等于最后一个可验证备份点，而产品不管理也不度量它。 | NOT_VERIFIED |
+| 主机 / 存储销毁、断电、磁盘损坏 | **未测试。** 此时恢复完全取决于部署方的备份节奏与异地副本。上限是最后一个可用的**恢复点**（部署方最近一次可验证的备份）；潜在数据丢失窗口由故障时刻与该恢复点之间的时间决定。当前没有已采纳的生产 RPO 保证，产品也不管理、不度量它。 | NOT_VERIFIED |
 
 产品侧确实存在的恢复功能：基于心跳的异常 attempt 检测、考生自助恢复冻结
 的 attempt 快照、Admin/Proctor 恢复中心、operator 时间补偿——均为服务端
@@ -235,21 +240,21 @@ Chrome/CDP，逐答案 value/version oracle，探索性样本量，
 
 | 能力 / 保证 | 状态 | 前提 | 适用版本 | 证据类型 | 规范来源 | 限制 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 5 种题型 + rubric | SUPPORTED | — | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | domain `enums.ts`、发布不变量、#678 审计 | CSV 导入仅 Plain |
-| 富内容（题干 / 选项 / 答案，公式 / 表格 / 代码） | SUPPORTED | Rich V1 语法 | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-019](../adr/ADR-019-content-document-model.md)、rich-content 语义契约 | 非 Rich 渲染走纯文本投影 |
-| 考试生命周期 + 发布冻结 | SUPPORTED | — | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | [exam-runtime.md](../architecture/exam-runtime.md)、[ADR-008](../adr/ADR-008-submit-answer-freeze.md) | 已发布考试仅可改时间安排 |
-| 版本化 / 幂等 / 冲突检测答案保存 | SUPPORTED | 页面存活（客户端） | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | answer 协议；[ADR-012](../adr/ADR-012-candidate-recovery-contract.md) | 约 1.5 s 防抖；刷新丢失未发送编辑（D7） |
-| UI"已保存"= 服务器 ACK 语义 | SUPPORTED | — | v0.0.10 / 511e6e60 | SOURCE_INSPECTED | `SaveIndicator.tsx`、`TakeExamPage.tsx` | 不存在独立的"已本地保存"UI 状态 |
-| ACKed 答案在 app/PG 重启（PGDATA 完整）、刷新后保留 | SUPPORTED（受测范围） | 随附 Compose 拓扑；bind mount 完整 | v0.0.10 / 511e6e60 | HISTORICAL_MEASURED（#817 D0–D4） | [#817](https://github.com/jnhu76/exam/issues/817) | 探索性样本量；无断电 / 磁盘 / 主机丢失覆盖；D5 部分 UNKNOWN |
-| 人工评分工作集 + rubric 评分 | SUPPORTED | 存在 text_response | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | grading kernel；#678 审计 | 逐题评分提交不可撤销 |
-| 成绩公布模式 | SUPPORTED | — | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | `resultPublicationMode` 权威 | 发布时冻结；per-exam policy，不是能力开关 |
-| 考生中断恢复、恢复中心 | SUPPORTED | — | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-012/013/014](../adr/)、recovery contract | 仅服务端权威；无本地草稿捞回 |
-| 准入队列（`requireQueue`） | SUPPORTED（policy） | 仅 API 开关 | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | admission runtime #292 | 无 UI 开关；关闭后排空（drain）是 Phase 4 义务 |
-| 单机 Compose 部署、HTTP LAN | SUPPORTED | Docker 主机、LAN | v0.0.10 / 511e6e60 | SOURCE_INSPECTED + runbook §11 冒烟 | [部署说明](../deployment/README.md) | HTTPS = 部署方模板；无 ACME |
-| 部署方备份 / 恢复（`db-backup.sh`） | SUPPORTED（host 路径） | 由部署方执行 | v0.0.10 / 511e6e60 | SOURCE_INSPECTED + HISTORICAL_MEASURED（#812 G0 DB 路径恢复） | runbook §17、[ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) | 仅数据库路径演练；无应用启动验收、无产品 RPO/RTO |
-| 旧快照恢复完整性 | PARTIAL | — | v0.0.10 / 511e6e60 | HISTORICAL_MEASURED（#817 D6） | [#817](https://github.com/jnhu76/exam/issues/817)、[#828](https://github.com/jnhu76/exam/issues/828) | 旧备份恢复会丢失之后的 ACKed 答案；回滚处置未决 |
-| TLS / HTTPS 入口 | PARTIAL | 部署方证书 + nginx 覆盖 | v0.0.10 / 511e6e60 | SOURCE_INSPECTED | 部署说明 "Network / TLS" | 无证书自动化；模板须逐镜像应用 |
-| `timed_sync` 计时模式 | DEFERRED | B2 产品决策 | v0.0.10 / 511e6e60 | NOT_VERIFIED | [timed-sync-semantics.md](../contracts/timed-sync-semantics.md) | 契约已冻结，未启用 |
+| 5 种题型 + rubric | SUPPORTED | — | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | domain `enums.ts`、发布不变量、#678 审计 | CSV 导入仅 Plain |
+| 富内容（题干 / 选项 / 答案，公式 / 表格 / 代码） | SUPPORTED | Rich V1 语法 | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-019](../adr/ADR-019-content-document-model.md)、rich-content 语义契约 | 非 Rich 渲染走纯文本投影 |
+| 考试生命周期 + 发布冻结 | SUPPORTED | — | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | [exam-runtime.md](../architecture/exam-runtime.md)、[ADR-008](../adr/ADR-008-submit-answer-freeze.md) | 已发布考试仅可改时间安排 |
+| 版本化 / 幂等 / 冲突检测答案保存 | SUPPORTED | 页面存活（客户端） | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | answer 协议；[ADR-012](../adr/ADR-012-candidate-recovery-contract.md) | 约 1.5 s 防抖；刷新丢失未发送编辑（D7） |
+| UI"已保存"= 服务器 ACK 语义 | SUPPORTED | — | 511e6e60（post-v0.0.10） | SOURCE_INSPECTED | `SaveIndicator.tsx`、`TakeExamPage.tsx` | 不存在独立的"已本地保存"UI 状态 |
+| ACKed 答案在 app/PG 重启（PGDATA 完整）、刷新后保留 | SUPPORTED（受测范围） | 随附 Compose 拓扑；bind mount 完整 | 511e6e60（post-v0.0.10） | HISTORICAL_MEASURED（#817 D0–D4） | [#817](https://github.com/jnhu76/exam/issues/817) | 探索性样本量；无断电 / 磁盘 / 主机丢失覆盖；D5 部分 UNKNOWN |
+| 人工评分工作集 + rubric 评分 | SUPPORTED | 存在 text_response | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | grading kernel；#678 审计 | 逐题评分提交不可撤销 |
+| 成绩公布模式 | SUPPORTED | — | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | `resultPublicationMode` 权威 | 发布时冻结；per-exam policy，不是能力开关 |
+| 考生中断恢复、恢复中心 | SUPPORTED | — | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-012/013/014](../adr/)、recovery contract | 仅服务端权威；无本地草稿捞回 |
+| 准入队列（`requireQueue`） | SUPPORTED（policy） | 仅 API 开关 | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | admission runtime #292 | 无 UI 开关；关闭后排空（drain）是 Phase 4 义务 |
+| 单机 Compose 部署、HTTP LAN | SUPPORTED | Docker 主机、LAN | 511e6e60（post-v0.0.10） | SOURCE_INSPECTED + runbook §11 冒烟 | [部署说明](../deployment/README.md) | HTTPS = 部署方模板；无 ACME |
+| 部署方备份 / 恢复（`db-backup.sh`） | SUPPORTED（host 路径） | 由部署方执行 | 511e6e60（post-v0.0.10） | SOURCE_INSPECTED + HISTORICAL_MEASURED（#812 G0 DB 路径恢复） | runbook §17、[ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) | 仅数据库路径演练；无应用启动验收、无产品 RPO/RTO |
+| 旧快照恢复完整性 | PARTIAL | — | 511e6e60（post-v0.0.10） | HISTORICAL_MEASURED（#817 D6） | [#817](https://github.com/jnhu76/exam/issues/817)、[#828](https://github.com/jnhu76/exam/issues/828) | 旧备份恢复会丢失之后的 ACKed 答案；回滚处置未决 |
+| TLS / HTTPS 入口 | PARTIAL | 部署方证书 + nginx 覆盖 | 511e6e60（post-v0.0.10） | SOURCE_INSPECTED | 部署说明 "Network / TLS" | 无证书自动化；模板须逐镜像应用 |
+| `timed_sync` 计时模式 | DEFERRED | B2 产品决策 | 511e6e60（post-v0.0.10） | NOT_VERIFIED | [timed-sync-semantics.md](../contracts/timed-sync-semantics.md) | 契约已冻结，未启用 |
 | 持久化本地答案草稿 / 离线客户端 | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-012](../adr/ADR-012-candidate-recovery-contract.md)（目标）、[ADR-016](../adr/ADR-016-future-offline-resilient-client-data-and-recovery-model.md)（延期）、#827（研究） | 研究 / 决策阶段 |
 | Minimal / 子集组合、逐项能力开关 | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 2–4、#678 | 设计已采纳，未实现 |
 | Controlled/Strict 高保障（设备绑定、锁定浏览器、持续监控） | NOT_SUPPORTED | — | — | NOT_VERIFIED | [#293](https://github.com/jnhu76/exam/issues/293) | umbrella tracker；#315/#316/#317 未启动 |

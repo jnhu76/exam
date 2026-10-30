@@ -2,7 +2,9 @@
 
 > Audience: an operator/admin running Exam for the first time on an existing
 > Standard deployment. Every route, button, and label below is taken from the
-> shipped product at master `511e6e60` (release `v0.0.10`).
+> shipped product at master `511e6e60` — a development version **after** the
+> `v0.0.10` release (the walkthrough is verified against that tree, not the
+> published release tag).
 >
 > **The web UI is Simplified Chinese only.** This guide quotes the Chinese
 > labels you will actually see, with English glosses. A paired Simplified

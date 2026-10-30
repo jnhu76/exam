@@ -13,17 +13,25 @@
 > governs and the disagreement is a defect to reconcile — not a license to
 > reinterpret.
 
-**Applicable version:** release `v0.0.10` and master `511e6e60`
-(2026-10-27). Facts below are re-checked against that tree; later commits may
-have changed behavior. See §1 for when this document stops applying.
+**Applicable version:** master `511e6e60` (2026-10-27) — a development
+version **after** the `v0.0.10` release. Facts below are re-checked
+against that tree; this projection does **not** claim that every
+statement holds for the published `v0.0.10` release. See §1 for when
+this document stops applying.
 
 ---
 
 ## 1. Applicability
 
-- **Version binding.** This projection describes release tag `v0.0.10`
-  and master commit `511e6e60dd332f376f15ea0326f95fcefddaeb84`
-  (2026-10-27). It is not automatically true of older or newer builds.
+- **Version binding.** This projection describes master commit
+  `511e6e60dd332f376f15ea0326f95fcefddaeb84` (2026-10-27) — a
+  development version **after** the `v0.0.10` release tag (commit
+  `5d005a58`, 2026-10-23, 12 commits earlier). The two are not the same
+  product-guarantee version: the tag predates the ADR-023
+  backup-evidence removal and the Maintainer permission re-baseline
+  that master carries (removal PRs `91dc6ad6`/`bdc59b3c`/`cc318dd5` are
+  all post-tag). Statements are not automatically true of older builds
+  or of the published `v0.0.10` release.
 - **Evidence topology.** Deployment facts describe the bundled
   single-node Docker Compose production topology (`docker-compose.yml`,
   project `exam-prod`). Reliability facts cite the #817 fault-injection
@@ -40,8 +48,8 @@ have changed behavior. See §1 for when this document stops applying.
 - **Language.** The shipped web UI is Simplified Chinese (zh-CN) only.
   There is no English UI locale and no language switcher.
 - **When this document stops applying.** Treat it as stale when any of
-  these happen: a new release tag supersedes `v0.0.10` with behavior
-  changes; [ADR-022](../adr/ADR-022-product-capability-composition.md)
+  these happen: a newer master state or release tag supersedes
+  `511e6e60` with behavior changes; [ADR-022](../adr/ADR-022-product-capability-composition.md)
   Phase 2–4 land (write guards, Minimal runtime, persisted deployment
   configuration); the [#293](https://github.com/jnhu76/exam/issues/293)
   Controlled/Strict profiles land; the R4 reliability decisions
@@ -226,7 +234,7 @@ host loss, malicious storage).
 | Restore of an older `pg_dump` snapshot (D6) | The restored database is internally consistent **as of the dump** and silently misses every ACKed answer accepted after the dump point (both trials omitted 4 post-dump ACKed updates). This is recovery-point rollback, not a PG crash-durability defect. | HISTORICAL_MEASURED (2 trials) |
 | Unsent browser edit + refresh (D7) | All four pre-debounce cuts lost the unsent edit; no request/ACK had reached the server. Local pre-ACK loss, not a server defect. | HISTORICAL_MEASURED (4/4) |
 | Terminal submit interrupted by app/db crash (D8) | Submitted/terminal state and grading integrity preserved in the tested crash domains; evidence carries an explicit replay provenance limitation and must not be generalized to stale-snapshot restore. | HISTORICAL_MEASURED (qualified) |
-| Host/storage destruction, power loss, disk corruption | **NOT TESTED.** Recovery then depends entirely on the operator's backup cadence and off-host copies; RPO equals the last verifiable backup, which the product does not manage or measure. | NOT_VERIFIED |
+| Host/storage destruction, power loss, disk corruption | **NOT TESTED.** Recovery then depends entirely on the operator's backup cadence and off-host copies. The ceiling is the last available **recovery point** (the operator's most recent verifiable backup); the potential data-loss window is the time between that recovery point and the moment of failure. No production RPO guarantee has been adopted, and the product neither manages nor measures one. | NOT_VERIFIED |
 
 Product-side recovery features that do exist: heartbeat-based disrupted
 attempt detection, candidate self-service restore of the frozen attempt
@@ -291,21 +299,21 @@ commit.
 
 | Capability / Guarantee | Status | Preconditions | Applicable version | Evidence type | Normative source | Limitations |
 | --- | --- | --- | --- | --- | --- | --- |
-| 5 question types + rubric | SUPPORTED | — | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | domain `enums.ts`, publish invariants, #678 audit | CSV import is Plain-only |
-| Rich content (prompt/options/answers, math/table/code) | SUPPORTED | Rich V1 grammar | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-019](../adr/ADR-019-content-document-model.md), rich-content semantic contract | plain projection fallback for non-rich rendering |
-| Exam lifecycle + publish freeze | SUPPORTED | — | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | [exam-runtime.md](../architecture/exam-runtime.md), [ADR-008](../adr/ADR-008-submit-answer-freeze.md) | published exams: schedule-only edits |
-| Versioned/idempotent/conflict-detecting answer save | SUPPORTED | page alive (client) | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | answer protocol; [ADR-012](../adr/ADR-012-candidate-recovery-contract.md) | ~1.5 s debounce; unsent edits lost on refresh (D7) |
-| UI "saved" = server ACK semantics | SUPPORTED | — | v0.0.10 / 511e6e60 | SOURCE_INSPECTED | `SaveIndicator.tsx`, `TakeExamPage.tsx` | no separate "saved locally" UI state exists |
-| ACKed answers survive app/PG restart (intact PGDATA), refresh | SUPPORTED (scoped) | bundled Compose topology; bind mount intact | v0.0.10 / 511e6e60 | HISTORICAL_MEASURED (#817 D0–D4) | [#817](https://github.com/jnhu76/exam/issues/817) | exploratory n; no power/disk/host-loss coverage; D5 partially UNKNOWN |
-| Manual grading workset + rubric grading | SUPPORTED | text_response present | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | grading kernel; #678 audit | per-question grading submit is irreversible |
-| Result publication modes | SUPPORTED | — | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | `resultPublicationMode` authority | frozen at publish; per-exam policy, not a capability toggle |
-| Candidate disrupted-attempt recovery, Recovery Center | SUPPORTED | — | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-012/013/014](../adr/), recovery contract | server-authoritative only; no local-draft salvage |
-| Admission queue (`requireQueue`) | SUPPORTED (policy) | API-only toggle | v0.0.10 / 511e6e60 | TEST_ASSERTED + SOURCE_INSPECTED | admission runtime #292 | no UI switch; drain-on-disable is a Phase 4 duty |
-| Single-node Compose deployment, HTTP LAN | SUPPORTED | Docker host, LAN | v0.0.10 / 511e6e60 | SOURCE_INSPECTED + runbook §11 smoke | [deployment README](../deployment/README.md) | HTTPS = operator template; no ACME |
-| Operator backup/restore (`db-backup.sh`) | SUPPORTED (host path) | operator runs it | v0.0.10 / 511e6e60 | SOURCE_INSPECTED + HISTORICAL_MEASURED (#812 G0 DB-path restore) | runbook §17, [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) | DB-path drill only; no app-boot acceptance, no product RPO/RTO |
-| Old-snapshot restore completeness | PARTIAL | — | v0.0.10 / 511e6e60 | HISTORICAL_MEASURED (#817 D6) | [#817](https://github.com/jnhu76/exam/issues/817), [#828](https://github.com/jnhu76/exam/issues/828) | post-dump ACKed answers are lost on restore; rollback policy undecided |
-| TLS/HTTPS ingress | PARTIAL | operator cert + nginx override | v0.0.10 / 511e6e60 | SOURCE_INSPECTED | deployment README "Network / TLS" | no certificate automation; template must be applied per image |
-| Admission `timed_sync` timing mode | DEFERRED | B2 product decision | v0.0.10 / 511e6e60 | NOT_VERIFIED | [timed-sync-semantics.md](../contracts/timed-sync-semantics.md) | frozen contract, not activated |
+| 5 question types + rubric | SUPPORTED | — | 511e6e60 (post-v0.0.10) | TEST_ASSERTED + SOURCE_INSPECTED | domain `enums.ts`, publish invariants, #678 audit | CSV import is Plain-only |
+| Rich content (prompt/options/answers, math/table/code) | SUPPORTED | Rich V1 grammar | 511e6e60 (post-v0.0.10) | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-019](../adr/ADR-019-content-document-model.md), rich-content semantic contract | plain projection fallback for non-rich rendering |
+| Exam lifecycle + publish freeze | SUPPORTED | — | 511e6e60 (post-v0.0.10) | TEST_ASSERTED + SOURCE_INSPECTED | [exam-runtime.md](../architecture/exam-runtime.md), [ADR-008](../adr/ADR-008-submit-answer-freeze.md) | published exams: schedule-only edits |
+| Versioned/idempotent/conflict-detecting answer save | SUPPORTED | page alive (client) | 511e6e60 (post-v0.0.10) | TEST_ASSERTED + SOURCE_INSPECTED | answer protocol; [ADR-012](../adr/ADR-012-candidate-recovery-contract.md) | ~1.5 s debounce; unsent edits lost on refresh (D7) |
+| UI "saved" = server ACK semantics | SUPPORTED | — | 511e6e60 (post-v0.0.10) | SOURCE_INSPECTED | `SaveIndicator.tsx`, `TakeExamPage.tsx` | no separate "saved locally" UI state exists |
+| ACKed answers survive app/PG restart (intact PGDATA), refresh | SUPPORTED (scoped) | bundled Compose topology; bind mount intact | 511e6e60 (post-v0.0.10) | HISTORICAL_MEASURED (#817 D0–D4) | [#817](https://github.com/jnhu76/exam/issues/817) | exploratory n; no power/disk/host-loss coverage; D5 partially UNKNOWN |
+| Manual grading workset + rubric grading | SUPPORTED | text_response present | 511e6e60 (post-v0.0.10) | TEST_ASSERTED + SOURCE_INSPECTED | grading kernel; #678 audit | per-question grading submit is irreversible |
+| Result publication modes | SUPPORTED | — | 511e6e60 (post-v0.0.10) | TEST_ASSERTED + SOURCE_INSPECTED | `resultPublicationMode` authority | frozen at publish; per-exam policy, not a capability toggle |
+| Candidate disrupted-attempt recovery, Recovery Center | SUPPORTED | — | 511e6e60 (post-v0.0.10) | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-012/013/014](../adr/), recovery contract | server-authoritative only; no local-draft salvage |
+| Admission queue (`requireQueue`) | SUPPORTED (policy) | API-only toggle | 511e6e60 (post-v0.0.10) | TEST_ASSERTED + SOURCE_INSPECTED | admission runtime #292 | no UI switch; drain-on-disable is a Phase 4 duty |
+| Single-node Compose deployment, HTTP LAN | SUPPORTED | Docker host, LAN | 511e6e60 (post-v0.0.10) | SOURCE_INSPECTED + runbook §11 smoke | [deployment README](../deployment/README.md) | HTTPS = operator template; no ACME |
+| Operator backup/restore (`db-backup.sh`) | SUPPORTED (host path) | operator runs it | 511e6e60 (post-v0.0.10) | SOURCE_INSPECTED + HISTORICAL_MEASURED (#812 G0 DB-path restore) | runbook §17, [ADR-023](../adr/ADR-023-remove-backup-evidence-subsystem.md) | DB-path drill only; no app-boot acceptance, no product RPO/RTO |
+| Old-snapshot restore completeness | PARTIAL | — | 511e6e60 (post-v0.0.10) | HISTORICAL_MEASURED (#817 D6) | [#817](https://github.com/jnhu76/exam/issues/817), [#828](https://github.com/jnhu76/exam/issues/828) | post-dump ACKed answers are lost on restore; rollback policy undecided |
+| TLS/HTTPS ingress | PARTIAL | operator cert + nginx override | 511e6e60 (post-v0.0.10) | SOURCE_INSPECTED | deployment README "Network / TLS" | no certificate automation; template must be applied per image |
+| Admission `timed_sync` timing mode | DEFERRED | B2 product decision | 511e6e60 (post-v0.0.10) | NOT_VERIFIED | [timed-sync-semantics.md](../contracts/timed-sync-semantics.md) | frozen contract, not activated |
 | Durable local answer draft / offline client | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-012](../adr/ADR-012-candidate-recovery-contract.md) (target), [ADR-016](../adr/ADR-016-future-offline-resilient-client-data-and-recovery-model.md) (deferred), #827 (research) | research/decision stage |
 | Minimal / subset composition, per-capability toggles | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 2–4, #678 | design accepted, not implemented |
 | Controlled/Strict high-assurance (device binding, lockdown, continuous monitoring) | NOT_SUPPORTED | — | — | NOT_VERIFIED | [#293](https://github.com/jnhu76/exam/issues/293) | umbrella tracker; #315/#316/#317 not started |

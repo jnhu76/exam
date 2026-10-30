@@ -171,7 +171,7 @@ disagree with a normative source, the normative source governs.
 
 | Document | Purpose |
 | --- | --- |
-| [`product/standard-supported-capabilities.md`](product/standard-supported-capabilities.md) (+ [zh-CN](product/standard-supported-capabilities.zh-CN.md)) | Standard supported capabilities & guarantees — deployment, save semantics, recovery/fault domains, explicit non-guarantees, support & evidence matrix (bound to `v0.0.10` / `511e6e60`) |
+| [`product/standard-supported-capabilities.md`](product/standard-supported-capabilities.md) (+ [zh-CN](product/standard-supported-capabilities.zh-CN.md)) | Standard supported capabilities & guarantees — deployment, save semantics, recovery/fault domains, explicit non-guarantees, support & evidence matrix (bound to master `511e6e60`, post-`v0.0.10` development version) |
 | [`guides/first-exam.md`](guides/first-exam.md) (+ [zh-CN](guides/first-exam.zh-CN.md)) | Admin first-exam walkthrough on the shipped (zh-CN) UI: install → first admin → first exam → grading → results → interruption handling |
 
 ### Formal executable models
