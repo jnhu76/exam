@@ -1,0 +1,204 @@
+:root {
+  /* SSR fallback; SnapshotBanner.vue replaces it with the measured height. */
+  --vp-layout-top-height: 45px;
+  --vp-font-family-base:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+}
+
+/* Development-snapshot banner: mandatory on every page, above the nav bar. */
+.exam-snapshot {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: var(--vp-z-index-nav, 30);
+  background: #fff7e6;
+  border-bottom: 1px solid #e6c777;
+  color: #4a3a10;
+  font-size: 13px;
+}
+
+.exam-snapshot__inner {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 8px 24px;
+}
+
+.exam-snapshot__badge {
+  flex: none;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.exam-snapshot p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.exam-snapshot a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.exam-snapshot code {
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.exam-snapshot a:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+html.dark .exam-snapshot {
+  background: #3a2d0a;
+  border-bottom-color: #6b5410;
+  color: #f3e2b0;
+}
+
+/* On narrow screens the banner scrolls away with the page: the navbar is not
+   fixed below 960px, so the VitePress layout-top offset must be zero there or
+   the content receives a double gap. The banner is still at the top of every
+   page, not buried in the content. */
+@media (max-width: 959px) {
+  :root {
+    --vp-layout-top-height: 0px !important;
+  }
+
+  .exam-snapshot {
+    position: relative;
+  }
+}
+
+/* Breadcrumb equivalent for the current location. */
+.exam-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--vp-c-text-3);
+}
+
+.exam-breadcrumb a {
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+}
+
+.exam-breadcrumb a:hover {
+  color: var(--vp-c-brand-1);
+}
+
+.exam-breadcrumb a:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.exam-breadcrumb__sep {
+  color: var(--vp-c-divider);
+}
+
+/* Documentation status labels. These are presentation only: they render the
+   literal status tokens already present in the canonical projection. */
+.exam-status {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--status-border);
+  border-radius: 999px;
+  background: var(--status-bg);
+  color: var(--status-color);
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.exam-status--supported {
+  --status-color: #0b6b3a;
+  --status-bg: #e6f6ec;
+  --status-border: #9fd6b4;
+}
+
+.exam-status--partial {
+  --status-color: #8a5a00;
+  --status-bg: #fff4d6;
+  --status-border: #f0cf80;
+}
+
+.exam-status--deferred {
+  --status-color: #1f5f8b;
+  --status-bg: #e5f2fb;
+  --status-border: #a5cde8;
+}
+
+.exam-status--not-supported {
+  --status-color: #9b1c1c;
+  --status-bg: #fdeaea;
+  --status-border: #efb0b0;
+}
+
+.exam-status--not-verified {
+  --status-color: #5b4b8a;
+  --status-bg: #f0ecfb;
+  --status-border: #c3b7e6;
+}
+
+html.dark .exam-status--supported {
+  --status-color: #8fe3b0;
+  --status-bg: rgba(63, 185, 110, 0.16);
+  --status-border: rgba(63, 185, 110, 0.5);
+}
+
+html.dark .exam-status--partial {
+  --status-color: #f2cf7a;
+  --status-bg: rgba(215, 165, 45, 0.16);
+  --status-border: rgba(215, 165, 45, 0.5);
+}
+
+html.dark .exam-status--deferred {
+  --status-color: #9ecdf0;
+  --status-bg: rgba(80, 160, 215, 0.16);
+  --status-border: rgba(80, 160, 215, 0.5);
+}
+
+html.dark .exam-status--not-supported {
+  --status-color: #f0a3a3;
+  --status-bg: rgba(215, 80, 80, 0.16);
+  --status-border: rgba(215, 80, 80, 0.5);
+}
+
+html.dark .exam-status--not-verified {
+  --status-color: #c8bdf0;
+  --status-bg: rgba(140, 120, 215, 0.16);
+  --status-border: rgba(140, 120, 215, 0.5);
+}
+
+/* Support and evidence tables are wide by nature: keep them readable and
+   horizontally scrollable rather than shrinking the text. */
+.vp-doc table {
+  max-width: 100%;
+  font-size: 0.9rem;
+}
+
+.vp-doc th,
+.vp-doc td {
+  vertical-align: top;
+}

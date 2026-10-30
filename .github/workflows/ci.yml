@@ -36,6 +36,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
+          # The docs build verifies every pinned permalink with `git cat-file`.
+          # Both pins (product evidence 511e6e60, docs commit 41aa147c) are
+          # within the recent master history; depth 20 keeps that bounded.
+          fetch-depth: 20
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -61,6 +65,11 @@ jobs:
 
       - name: Static checks
         run: pnpm verify:static
+
+      - name: Docs build (bounded VitePress pilot, #751)
+        # Repo-only pilot: projection + build + link/route/search-scope checks.
+        # No database, Docker, deployment, or publication is involved.
+        run: pnpm docs:build
 
   verify-build:
     name: Build
