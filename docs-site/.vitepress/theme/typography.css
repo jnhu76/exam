@@ -97,32 +97,17 @@
   max-width: var(--exam-doc-measure);
 }
 
-/* Support and evidence tables: tabular digits align numeric columns, and the
-   edge fades appear exactly when a side overflows (the "covers" scroll away
-   with the content, the "shadows" stay fixed), giving a low-noise horizontal
-   scroll affordance without any script. VitePress makes .vp-doc table the
-   scroll container (display: block; overflow-x: auto). */
+/* Support and evidence tables: tabular digits align numeric columns; wide
+   tables scroll inside their own container (VitePress makes .vp-doc table
+   the scroll container: display: block; overflow-x: auto) under the native
+   scrollbar. A CSS-only edge-fade affordance was evaluated and deliberately
+   dropped: the default theme paints every row opaque, which occludes any
+   fade painted on the table, and background-attachment layer tricks proved
+   unreliable in shipping Chrome. */
 .vp-doc table {
   max-width: 100%;
   font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
-  background-image:
-    linear-gradient(to right, var(--vp-c-bg), transparent),
-    linear-gradient(to left, var(--vp-c-bg), transparent),
-    linear-gradient(to right, rgb(0 0 0 / 0.16), transparent),
-    linear-gradient(to left, rgb(0 0 0 / 0.16), transparent);
-  background-repeat: no-repeat;
-  background-position:
-    left center,
-    right center,
-    left center,
-    right center;
-  background-size:
-    24px 100%,
-    24px 100%,
-    12px 100%,
-    12px 100%;
-  background-attachment: local, local, scroll, scroll;
 }
 
 .vp-doc th,

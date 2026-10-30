@@ -168,9 +168,8 @@ plain `:root` override, which would silently revert punctuation to Latin
 metrics.
 
 Reading rhythm tokens: text line-height 1.8 (prose, lists, quotes), heading
-line-height 1.3, reading measure 760 px for the with-aside doc column,
-tabular digits in tables, and a CSS-only edge-fade scroll affordance on wide
-tables.
+line-height 1.3, reading measure 760 px for the with-aside doc column, and
+tabular digits in tables.
 
 ## Version binding and the two pinned commits
 
@@ -249,6 +248,11 @@ pilot provides no deployment target.
 - `docs-site/content/` is generated and gitignored; reviewers must run
   `pnpm docs:build` to inspect the exact compiled output.
 - `pnpm docs:dev` does not watch canonical `docs/` files (see above).
+- Wide evidence tables scroll horizontally inside their own container under
+  the native scrollbar. A decorative scroll affordance (edge fade or pinned
+  first column) was evaluated and deliberately dropped: the default theme
+  paints every row opaque, occluding any fade painted on the table, and
+  `background-attachment` layer tricks proved unreliable in shipping Chrome.
 - VitePress's minimal 404 page does not render the `layout-top` banner; it carries
   the product-SHA meta tag and `noindex` instead. The banner is required on all
   16 published content routes.
