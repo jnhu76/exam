@@ -16,6 +16,10 @@
 - Multi-instance deployment is **not** supported (in-process scanners
   assume a single API owner)
 
+The version-bound list of what the Standard product supports — and
+explicitly does not guarantee — is
+[Standard capabilities](../product/standard-supported-capabilities.md).
+
 ## Production Topology (#585)
 
 ```text

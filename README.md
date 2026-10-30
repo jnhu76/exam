@@ -123,6 +123,8 @@ The canonical documentation index is
 | Document | Purpose |
 | --- | --- |
 | [INSTALL.md](INSTALL.md) | First installation — zero to running |
+| [First exam guide](docs/guides/first-exam.md) | Admin walkthrough — install to published results (English glosses over the zh-CN UI) |
+| [Standard capabilities](docs/product/standard-supported-capabilities.md) | What Standard supports today — save semantics, recovery/fault domains, explicit non-guarantees (version-bound) |
 | [`docs/deployment/`](docs/deployment/) | Production deployment, topology, runbooks |
 | [`docs/operations/`](docs/operations/) | Backup, upgrade, diagnostics, email |
 | [`docs/development/`](docs/development/) | Local setup, testing, E2E, commands |

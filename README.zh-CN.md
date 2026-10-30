@@ -95,6 +95,8 @@ pnpm dev             # API :3000，Web :5173
 | 文档 | 用途 |
 | --- | --- |
 | [INSTALL.zh-CN.md](INSTALL.zh-CN.md) | 首次安装：从零到可运行 |
+| [首场考试操作指南](docs/guides/first-exam.zh-CN.md) | 管理员实操：从安装到发布成绩 |
+| [Standard 能力说明](docs/product/standard-supported-capabilities.zh-CN.md) | Standard 当前支持什么——保存语义、恢复与故障域、明确不保证项（版本绑定） |
 | [`docs/deployment/`](docs/deployment/) | 生产部署、拓扑与运行手册（runbook） |
 | [`docs/operations/`](docs/operations/) | 备份、升级、诊断、邮件 |
 | [`docs/development/README.zh-CN.md`](docs/development/README.zh-CN.md) | 本地开发、测试、E2E 与常用命令 |
