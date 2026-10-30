@@ -221,8 +221,8 @@ host loss, malicious storage).
 | --- | --- | --- |
 | Browser refresh (D0) after server ACK | ACKed answers restored exactly from server snapshot; UI ⇄ SQL parity | HISTORICAL_MEASURED (per-answer oracle) |
 | App container stop / SIGKILL (D1/D2) | ACKed answers preserved in PostgreSQL; unsent in-debounce edits and in-flight-unknown requests stay distinct | HISTORICAL_MEASURED |
-| PostgreSQL restart / SIGKILL with intact PGDATA (D3/D4) | WAL crash recovery; ACKed answers preserved exactly (40/40 across first-stage arms) | HISTORICAL_MEASURED |
-| Container reconstruction (`compose down`/`up` on same bind mount) (D5) | One trial returned UNKNOWN (evidence-replay limitation). **D5 must not be folded into a blanket crash-recovery PASS.** | HISTORICAL_MEASURED with UNKNOWN residue |
+| PostgreSQL restart / SIGKILL with intact PGDATA (D3/D4) | WAL crash recovery; ACKed answers preserved exactly (D3: 2 trials; D4: 3 trials — 40/40 ACKed answers across the first-stage D0+D4 arms reported by #819) | HISTORICAL_MEASURED |
+| Container reconstruction (`compose down`/`up` on same bind mount) (D5) | One trial returned UNKNOWN — its browser recovery/reload leg was NOT_RUN. **D5 must not be folded into a blanket crash-recovery PASS.** | HISTORICAL_MEASURED with UNKNOWN residue |
 | Restore of an older `pg_dump` snapshot (D6) | The restored database is internally consistent **as of the dump** and silently misses every ACKed answer accepted after the dump point (both trials omitted 4 post-dump ACKed updates). This is recovery-point rollback, not a PG crash-durability defect. | HISTORICAL_MEASURED (2 trials) |
 | Unsent browser edit + refresh (D7) | All four pre-debounce cuts lost the unsent edit; no request/ACK had reached the server. Local pre-ACK loss, not a server defect. | HISTORICAL_MEASURED (4/4) |
 | Terminal submit interrupted by app/db crash (D8) | Submitted/terminal state and grading integrity preserved in the tested crash domains; evidence carries an explicit replay provenance limitation and must not be generalized to stale-snapshot restore. | HISTORICAL_MEASURED (qualified) |

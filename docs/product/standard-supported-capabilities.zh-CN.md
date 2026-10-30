@@ -177,8 +177,8 @@ Chrome/CDP，逐答案 value/version oracle，探索性样本量，
 | --- | --- | --- |
 | 浏览器刷新（D0，服务器 ACK 后） | ACKed 答案从服务器快照精确恢复；UI ⇄ SQL 对账一致 | HISTORICAL_MEASURED（逐答案 oracle） |
 | App 容器停止 / SIGKILL（D1/D2） | ACKed 答案在 PostgreSQL 中保留；防抖内未发送编辑与在途未知请求保持区分 | HISTORICAL_MEASURED |
-| PostgreSQL 重启 / SIGKILL 且 PGDATA 完整（D3/D4） | WAL 崩溃恢复；ACKed 答案精确保留（第一阶段各臂 40/40） | HISTORICAL_MEASURED |
-| 容器重建（同一 bind mount 上 `compose down`/`up`）（D5） | 一次试验结果为 UNKNOWN（证据重放限制）。**D5 不得并入笼统的崩溃恢复 PASS。** | HISTORICAL_MEASURED，含 UNKNOWN 残留 |
+| PostgreSQL 重启 / SIGKILL 且 PGDATA 完整（D3/D4） | WAL 崩溃恢复；ACKed 答案精确保留（D3：2 次试验；D4：3 次试验——#819 报告的第一阶段 D0+D4 各臂共 40/40） | HISTORICAL_MEASURED |
+| 容器重建（同一 bind mount 上 `compose down`/`up`）（D5） | 一次试验结果为 UNKNOWN——其浏览器恢复 / 重新加载环节为 NOT_RUN。**D5 不得并入笼统的崩溃恢复 PASS。** | HISTORICAL_MEASURED，含 UNKNOWN 残留 |
 | 恢复较旧的 `pg_dump` 快照（D6） | 恢复出的数据库在**dump 时点**内部自洽，并静默缺失 dump 之后服务器已 ACK 的全部答案（两次试验均缺失 4 条 post-dump ACKed 更新）。这是恢复点回滚，不是 PG 崩溃持久性缺陷。 | HISTORICAL_MEASURED（2 次试验） |
 | 未发送的浏览器编辑 + 刷新（D7） | 四次防抖前切断全部丢失未发送编辑；请求 / ACK 均未到达服务器。属本地 pre-ACK 丢失，不是服务器缺陷。 | HISTORICAL_MEASURED（4/4） |
 | 终态提交被 app/db 崩溃打断（D8） | 在受测崩溃域内，提交 / 终态与评分完整性保留；证据带明确的重放来源限制，不得推广到旧快照恢复。 | HISTORICAL_MEASURED（有保留） |

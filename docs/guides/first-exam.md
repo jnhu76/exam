@@ -125,9 +125,10 @@ Open the exam detail `/admin/exams/:id` and click **发布考试** (Publish).
 > **Irreversibility:** publishing freezes the questions (content, options,
 > answers, rubric) into a snapshot. Later question-bank edits do **not**
 > affect this exam. Publishing itself is a single click without a
-> confirmation dialog; while still 仅已发布 (published, not yet open) you can
-> **撤回发布** (unpublish) back to draft. Later lifecycle actions — 关闭
-> (close), 取消 (cancel), 归档 (archive) — do ask for confirmation.
+> confirmation dialog; while published (已发布, not yet open) you can
+> **撤回发布** (unpublish) back to draft — that action asks for confirmation.
+> Later lifecycle actions — 关闭 (close), 取消 (cancel), 归档 (archive) —
+> also ask for confirmation.
 
 ## 8. Enroll candidates
 
