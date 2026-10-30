@@ -137,6 +137,39 @@ built HTML, including heading fragments. It also verifies:
 - every search-index document belongs to the expected route set;
 - the Chinese search index contains CJK terms (bigram tokenization is active).
 
+## Typography
+
+The site keeps one font strategy for both locales, chosen for the lowest
+sustainable maintenance cost (`docs-site/.vitepress/theme/typography.css`):
+
+- **Latin: the Inter variable font bundled with VitePress** (self-hosted
+  unicode-range WOFF2 subsets, `font-display: swap`). Measured first-view
+  transfer is ~68 KB roman + ~75 KB italic for the latin subsets; no additional
+  Latin font is packaged. The font is distributed by VitePress under the SIL
+  Open Font License 1.1, so upgrades arrive with VitePress upgrades.
+- **CJK: platform system fonts.** The family chain lists the platform CJK
+  names (`PingFang SC`, `Hiragino Sans GB`, `Microsoft YaHei`,
+  `Noto Sans CJK SC`, `Source Han Sans SC/CN`) **before** the generic
+  `sans-serif`; otherwise a Linux fontconfig default (e.g. WenQuanYi) wins.
+  Self-hosting Noto Sans SC / Source Han Sans was evaluated and rejected: the
+  full WOFF2 kit is ~17 MB, sliced serving needs a ~100-file distribution
+  pipeline, and no font build system or CDN is allowed for this repo-only LAN
+  site.
+- **Code: system monospace** (`ui-monospace` → Cascadia Mono/Consolas/Menlo…)
+  with a CJK mono name before the generic, so Chinese comments inside code
+  blocks get a monospaced CJK face where available.
+
+On `zh` pages the default theme's local-only `Punctuation SC` font handles CJK
+punctuation (full-width quotes, dashes, ellipsis); the theme's `:root` font
+override must therefore keep the `:root:where(:lang(zh))` pattern instead of a
+plain `:root` override, which would silently revert punctuation to Latin
+metrics.
+
+Reading rhythm tokens: text line-height 1.8 (prose, lists, quotes), heading
+line-height 1.3, reading measure 760 px for the with-aside doc column,
+tabular digits in tables, and a CSS-only edge-fade scroll affordance on wide
+tables.
+
 ## Version binding and the two pinned commits
 
 The pilot distinguishes two facts that must never be conflated:
@@ -199,7 +232,8 @@ pilot provides no deployment target.
 
 - One root devDependency (VitePress 1.6.4) and a lockfile change.
 - Two small Node scripts: the projection/allowlist and the post-build checker.
-- A theme extension of three small Vue components plus ~180 lines of CSS.
+- A theme extension of three small Vue components plus two stylesheets
+  (component chrome, and the typography system documented above).
 - No duplicated product facts to maintain: product text is regenerated from the
   canonical files; site pages are navigation only.
 - Recurring work: rebuild after canonical edits and inspect the generated files
@@ -213,8 +247,6 @@ pilot provides no deployment target.
 - `docs-site/content/` is generated and gitignored; reviewers must run
   `pnpm docs:build` to inspect the exact compiled output.
 - `pnpm docs:dev` does not watch canonical `docs/` files (see above).
-- Wide evidence tables scroll horizontally inside their own container; a visual
-  scroll affordance (edge fade or pinned first column) is a possible follow-up.
 - VitePress's minimal 404 page does not render the `layout-top` banner; it carries
   the product-SHA meta tag and `noindex` instead. The banner is required on all
   16 published content routes.
