@@ -35,6 +35,9 @@
     "test:e2e": "turbo test:e2e",
     "e2e": "bash scripts/e2e/run.sh",
     "smoke": "turbo smoke",
+    "docs:dev": "node docs-site/scripts/project-content.mjs && vitepress dev docs-site",
+    "docs:build": "node docs-site/scripts/project-content.mjs && vitepress build docs-site && node docs-site/scripts/check-site.mjs",
+    "docs:preview": "vitepress preview docs-site",
     "verify": "pnpm verify:static && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build && pnpm lint:prod-resolution",
     "lint:prod-resolution": "node scripts/check-production-resolution.mjs",
     "lint:deploy-payload": "node scripts/check-deploy-payload.mjs",
@@ -64,7 +67,8 @@
     "lint-staged": "^17.0.7",
     "prettier": "^3.5.3",
     "turbo": "^2.5.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitepress": "1.6.4"
   },
   "packageManager": "pnpm@11.1.2"
 }

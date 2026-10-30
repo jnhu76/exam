@@ -40,3 +40,9 @@ mutation-campaign-results/
 gui-test-screenshots/
 apps/e2e/test-results-patrol/
 .zcodeignore
+
+# #751 P2 documentation pilot: generated VitePress source, cache, and build
+# output. The committed sources are docs-site/pages/, .vitepress/, scripts/.
+docs-site/content/
+docs-site/.vitepress/cache/
+docs-site/.vitepress/dist/

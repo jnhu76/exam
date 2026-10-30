@@ -174,6 +174,17 @@ disagree with a normative source, the normative source governs.
 | [`product/standard-supported-capabilities.md`](product/standard-supported-capabilities.md) (+ [zh-CN](product/standard-supported-capabilities.zh-CN.md)) | Standard supported capabilities & guarantees — deployment, save semantics, recovery/fault domains, explicit non-guarantees, support & evidence matrix (bound to master `511e6e60`, post-`v0.0.10` development version) |
 | [`guides/first-exam.md`](guides/first-exam.md) (+ [zh-CN](guides/first-exam.zh-CN.md)) | Admin first-exam walkthrough on the shipped (zh-CN) UI: install → first admin → first exam → grading → results → interruption handling |
 
+### Documentation site pilot (#751 P2 — repo-only, not published)
+
+[`../docs-site/README.md`](../docs-site/README.md) defines a bounded VitePress
+pilot that renders an allowlisted projection of the product pages above. It is
+**not** a second authority and is **not** published: no GitHub Pages, Wiki,
+hosting, domain, or telemetry is configured. The projection allowlist, source →
+route map, link rules, and build/verification commands live in that README.
+Everything else under `docs/` (`archive/**`, `research/**`, ADRs, contracts,
+architecture, standards, status, deployment, operations) is deliberately not
+compiled into the site and appears there only as pinned GitHub links.
+
 ### Formal executable models
 
 | Path | Purpose |
