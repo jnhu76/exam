@@ -1465,6 +1465,70 @@ describe("recovery incident queue repository", () => {
         );
     }
   });
+
+  // #837: users.name is NOT NULL and both candidate_profiles.user_id and
+  // exam_proctor_assignments.proctor_user_id are FKs, so a LEFT JOIN can only
+  // yield a null displayName when the user row is gone — tenant-graph
+  // corruption. The queue must fail closed, never render an empty-name stub.
+  // Each test builds its own fixture: deleting a user row is destructive and
+  // must not couple the tests to each other or to test order.
+  it("fails closed when a candidate's user row is gone (FK corruption)", async () => {
+    const fixture = await createFixture(db, "corrupt-cand");
+    const repo = createRecoveryRepo(db);
+    await insertIncident(db, fixture, {
+      examId: fixture.examId,
+      attemptId: fixture.attemptId,
+      candidateId: fixture.candidateId,
+      type: "network_interruption",
+      severity: "major",
+      status: "open",
+      createdAt: new Date("2026-02-01T12:00:00.000Z"),
+    });
+
+    // Simulate the corruption state: drop the FK-protected user row by
+    // disabling FK triggers session-wide, then restore. The isolated schema
+    // is dedicated to this run, so the session-level switch cannot leak into
+    // other tests once restored.
+    await db.execute(sql`SET session_replication_role = replica`);
+    try {
+      await db.execute(
+        sql`DELETE FROM users WHERE id = ${fixture.candidateUserId}`,
+      );
+    } finally {
+      await db.execute(sql`SET session_replication_role = DEFAULT`);
+    }
+
+    await expect(
+      repo.listIncidentQueue(fixture.ctx, { limit: 20 }),
+    ).rejects.toThrow(/RECOVERY_QUEUE_CANDIDATE_BROKEN/);
+  });
+
+  it("fails closed when an active proctor's user row is gone (FK corruption)", async () => {
+    const fixture = await createFixture(db, "corrupt-proct");
+    const repo = createRecoveryRepo(db);
+    await insertIncident(db, fixture, {
+      examId: fixture.examId,
+      attemptId: fixture.attemptId,
+      candidateId: fixture.candidateId,
+      type: "network_interruption",
+      severity: "major",
+      status: "open",
+      createdAt: new Date("2026-02-02T12:00:00.000Z"),
+    });
+
+    await db.execute(sql`SET session_replication_role = replica`);
+    try {
+      await db.execute(
+        sql`DELETE FROM users WHERE id = ${fixture.proctorUserId}`,
+      );
+    } finally {
+      await db.execute(sql`SET session_replication_role = DEFAULT`);
+    }
+
+    await expect(
+      repo.listIncidentQueue(fixture.ctx, { limit: 20 }),
+    ).rejects.toThrow(/RECOVERY_QUEUE_PROCTOR_BROKEN/);
+  });
 });
 
 // ── J5-I1A2 — Recovery Incident Aggregate Detail (contract §6.3) ──

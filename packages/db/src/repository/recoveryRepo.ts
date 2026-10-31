@@ -2436,8 +2436,19 @@ async function enrichPage(
             ),
           )
       : [];
+  // INVARIANT: users.name is NOT NULL and candidate_profiles.user_id is a FK,
+  // so a null displayName here means the user row is gone — tenant-graph
+  // corruption. Fail closed (same contract as the anchor checks below), never
+  // an empty-name stub.
   const candidateById = new Map(
-    candRows.map((c) => [c.id, { displayName: c.displayName ?? "" }]),
+    candRows.map((c) => {
+      if (c.displayName === null) {
+        throw new AuthzUnavailableError(
+          `RECOVERY_QUEUE_CANDIDATE_BROKEN: candidate ${c.id} user link unresolved`,
+        );
+      }
+      return [c.id, { displayName: c.displayName }];
+    }),
   );
 
   // 4b. Fail closed on unresolvable/inconsistent anchors. A non-null anchor or
@@ -2501,8 +2512,16 @@ async function enrichPage(
     .orderBy(asc(users.name), asc(examProctorAssignments.proctorUserId));
   const proctorsByExam = new Map<string, IncidentQueueProctorSummary[]>();
   for (const p of proctorRows) {
+    // Same fail-closed contract as candidateById: a null proctor name means
+    // the FK-protected user row is gone — corruption, never an empty-name
+    // stub.
+    if (p.displayName === null) {
+      throw new AuthzUnavailableError(
+        `RECOVERY_QUEUE_PROCTOR_BROKEN: exam ${p.examId} proctor ${p.userId}`,
+      );
+    }
     const list = proctorsByExam.get(p.examId) ?? [];
-    list.push({ userId: p.userId, displayName: p.displayName ?? "" });
+    list.push({ userId: p.userId, displayName: p.displayName });
     proctorsByExam.set(p.examId, list);
   }
 

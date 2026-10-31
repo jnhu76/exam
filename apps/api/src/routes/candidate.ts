@@ -23,6 +23,7 @@ import {
   CandidateIdentityConflictError,
   UserAlreadyExistsError,
   ValidationError,
+  AuthzUnavailableError,
 } from "@exam/domain";
 import {
   ensureTargetOrg,
@@ -243,12 +244,21 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const itemsWithUsers = await Promise.all(
         items.map(async (c) => {
           const user = await userRepo.findById(ctx, c.userId);
+          // INVARIANT: candidate_profiles.user_id is a tenant FK and the user
+          // repo is org-scoped, so a null user here is tenant-graph
+          // corruption. Fail closed — never fabricate an empty identity
+          // (same contract as the recovery queue's RECOVERY_QUEUE_CANDIDATE_BROKEN).
+          if (!user) {
+            throw new AuthzUnavailableError(
+              `CANDIDATE_USER_BROKEN: profile ${c.id} user ${c.userId}`,
+            );
+          }
           return {
             ...c,
-            name: user?.name ?? "",
-            username: user?.username ?? "",
-            isActive: user?.isActive ?? false,
-            email: user?.email ?? null,
+            name: user.name,
+            username: user.username,
+            isActive: user.isActive,
+            email: user.email,
             createdAt: c.createdAt.toISOString(),
             updatedAt: c.updatedAt.toISOString(),
           };
@@ -494,12 +504,19 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           metadata: { changedFields },
         });
       }
+      // Same fail-closed contract as the list route: an unresolvable user
+      // link is tenant-graph corruption, never an empty identity.
+      if (!user) {
+        throw new AuthzUnavailableError(
+          `CANDIDATE_USER_BROKEN: profile ${updated.id} user ${updated.userId}`,
+        );
+      }
       return {
         ...updated,
-        name: user?.name ?? "",
-        username: user?.username ?? "",
-        isActive: user?.isActive ?? false,
-        email: user?.email ?? null,
+        name: user.name,
+        username: user.username,
+        isActive: user.isActive,
+        email: user.email,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
       };
