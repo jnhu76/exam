@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
@@ -163,6 +163,9 @@ describe("SystemDiagnosticsPage", () => {
     expect(
       document.querySelectorAll('[data-diagnostic-role="kpi"]'),
     ).toHaveLength(3);
+    // Health present: the header badge and all three KPI status lines derive
+    // from real readings (cpu 10 / memory 20 / db 5ms are all "ok").
+    expect(screen.getAllByText("正常")).toHaveLength(4);
   });
 
   // Characterization (UI-MIGRATE-N-W4B): the diagnostic info/metric cards are
@@ -319,6 +322,19 @@ describe("SystemDiagnosticsPage", () => {
     expect(await screen.findByText("系统监控")).toBeInTheDocument();
     expect(screen.getByText("服务器信息")).toBeInTheDocument();
     expect(screen.getByText("1.0.0")).toBeInTheDocument();
+    // #836: missing health must render "—" — never a fabricated 0% / 0ms
+    // reading, and never a fabricated "正常" (ok) status, on the KPI cards or
+    // the page header. Rendering 0 would disguise "no data" as "healthy idle".
+    const kpis = [
+      ...document.querySelectorAll<HTMLElement>('[data-diagnostic-role="kpi"]'),
+    ];
+    expect(kpis).toHaveLength(3);
+    for (const kpi of kpis) {
+      expect(within(kpi).getByText("—")).toBeInTheDocument();
+      expect(within(kpi).queryByText("0")).not.toBeInTheDocument();
+      expect(within(kpi).queryByText("正常")).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText("正常")).not.toBeInTheDocument();
   });
 
   it("renders page when diag fails but health succeeds (no white screen)", async () => {

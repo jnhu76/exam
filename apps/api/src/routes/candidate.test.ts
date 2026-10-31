@@ -256,6 +256,66 @@ describe("candidate routes", () => {
     await cleanupOrganizationTestData(ctx.db, foreignOrgId);
   });
 
+  // #837: a candidate profile whose user link cannot be resolved through the
+  // org-scoped user repo is tenant-graph corruption (cross-org user link —
+  // candidate_profiles.user_id FK is satisfied, the org scope is not). The
+  // routes must fail closed with AUTHZ_UNAVAILABLE, never render an
+  // empty-name / fake-inactive identity or silently no-op the update.
+  it("fails closed (503) when a candidate's user link is unresolvable", async () => {
+    const now = new Date();
+    const foreignOrgId = crypto.randomUUID();
+    const foreignUserId = crypto.randomUUID();
+    await ctx.db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Broken Link Foreign Org",
+      displayName: "Broken Link Foreign Org",
+      slug: `broken-link-${foreignOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.users).values({
+      id: foreignUserId,
+      organizationId: foreignOrgId,
+      username: `broken-link-user-${foreignUserId}`,
+      passwordHash: "hash",
+      name: "Foreign User",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const brokenProfileId = crypto.randomUUID();
+    await ctx.db.insert(schema.candidateProfiles).values({
+      id: brokenProfileId,
+      organizationId,
+      userId: foreignUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidates",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(listRes.statusCode).toBe(503);
+    expect(listRes.json()).toMatchObject({
+      error: { code: "AUTHZ_UNAVAILABLE", requestId: expect.any(String) },
+    });
+
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/candidates/${brokenProfileId}`,
+      payload: { name: "Renamed" },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(patchRes.statusCode).toBe(503);
+    expect(patchRes.json()).toMatchObject({
+      error: { code: "AUTHZ_UNAVAILABLE" },
+    });
+  });
+
   it("allows Teacher to read the candidate list used by enrollment", async () => {
     const res = await ctx.app.inject({
       method: "GET",
