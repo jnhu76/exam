@@ -1,5 +1,5 @@
 import type { RequestContext } from "@exam/domain";
-import { and, eq, gte } from "drizzle-orm";
+import { and, count, eq, gte, inArray } from "drizzle-orm";
 import type { Database } from "../types.js";
 import { schema } from "../schema/pg.js";
 
@@ -94,8 +94,8 @@ export function createSystemStatsRepo(db: Database) {
     },
 
     /**
-     * Returns the 10 most recent exams for the tenant, with `participantCount`
-     * set to 0 (placeholder — enrollment count not yet computed).
+     * Returns the 10 most recent exams for the tenant, each with the number
+     * of enrolled candidates.
      */
     async getRecentExams(ctx: RequestContext): Promise<RecentExam[]> {
       const orgId = getOrgId(ctx);
@@ -109,7 +109,41 @@ export function createSystemStatsRepo(db: Database) {
         .from(schema.exams)
         .where(eq(schema.exams.organizationId, orgId))
         .limit(10);
-      return rows.map((exam) => ({ ...exam, participantCount: 0 }));
+
+      // INVARIANT: `participantCount` must stay the SAME FACT as the exam
+      // management list's `participantCount` (apps/api/src/routes/exam.ts
+      // `getExamParticipants` → participants.length): the number of
+      // exam_enrollments rows for the exam in this tenant, with NO status
+      // filter (assigned/started/completed/blocked all count). This batch
+      // GROUP BY over the same table avoids a per-exam N+1 — do not
+      // introduce a third counting rule for this user-visible concept.
+      const countMap = new Map(
+        rows.length
+          ? (
+              await db
+                .select({
+                  examId: schema.examEnrollments.examId,
+                  total: count(),
+                })
+                .from(schema.examEnrollments)
+                .where(
+                  and(
+                    eq(schema.examEnrollments.organizationId, orgId),
+                    inArray(
+                      schema.examEnrollments.examId,
+                      rows.map((exam) => exam.id),
+                    ),
+                  ),
+                )
+                .groupBy(schema.examEnrollments.examId)
+            ).map((row) => [row.examId, row.total])
+          : [],
+      );
+
+      return rows.map((exam) => ({
+        ...exam,
+        participantCount: countMap.get(exam.id) ?? 0,
+      }));
     },
 
     /**
