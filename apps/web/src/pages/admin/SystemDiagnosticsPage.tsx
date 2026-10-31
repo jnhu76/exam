@@ -204,9 +204,12 @@ export function SystemDiagnosticsPage() {
     );
   }
 
-  const overallStatus: HealthStatus = health?.status ?? "ok";
-  const statusView = getStatusMeta(overallStatus);
-  const StatusIcon = statusView.icon;
+  // #836: health may be missing (failed load while diagnostics succeeded).
+  // Render "—" instead of fabricating an "ok" status — "no data" must never
+  // masquerade as "healthy".
+  const overallStatus: HealthStatus | null = health ? health.status : null;
+  const statusView =
+    overallStatus === null ? null : getStatusMeta(overallStatus);
 
   return (
     <PageContainer role="admin-wide" className="flex flex-col gap-6">
@@ -226,15 +229,21 @@ export function SystemDiagnosticsPage() {
               })}
             </span>
           )}
-          <span
-            className={cn(
-              "flex items-center gap-1 text-sm text-foreground",
-              getToneTextColor(statusView.tone),
-            )}
-          >
-            <AppIcon icon={StatusIcon} size="badge" />
-            {t(statusLabelKey(statusView.labelKey))}
-          </span>
+          {statusView === null ? (
+            <span className="type-numeric text-sm text-muted-foreground">
+              —
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "flex items-center gap-1 text-sm text-foreground",
+                getToneTextColor(statusView.tone),
+              )}
+            >
+              <AppIcon icon={statusView.icon} size="badge" />
+              {t(statusLabelKey(statusView.labelKey))}
+            </span>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -254,23 +263,23 @@ export function SystemDiagnosticsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard
           title={t("diagnostics.metrics.cpuUsage")}
-          value={health?.cpu ?? 0}
+          value={health?.cpu}
           unit="%"
-          status={getStatusLevel(health?.cpu ?? 0)}
+          status={health ? getStatusLevel(health.cpu) : undefined}
           icon={<AppIcon icon={Activity} size="metric" />}
         />
         <MetricCard
           title={t("diagnostics.metrics.memoryUsage")}
-          value={health?.memory ?? 0}
+          value={health?.memory}
           unit="%"
-          status={getStatusLevel(health?.memory ?? 0)}
+          status={health ? getStatusLevel(health.memory) : undefined}
           icon={<AppIcon icon={MemoryStick} size="metric" />}
         />
         <MetricCard
           title={t("diagnostics.metrics.dbResponseTime")}
-          value={health?.dbResponseMs ?? 0}
+          value={health?.dbResponseMs}
           unit="ms"
-          status={getDbStatusLevel(health?.dbResponseMs ?? 0)}
+          status={health ? getDbStatusLevel(health.dbResponseMs) : undefined}
           icon={<AppIcon icon={Database} size="metric" />}
         />
       </div>
@@ -473,31 +482,34 @@ function MetricCard({
   icon,
 }: {
   title: string;
-  value: number;
+  /** Metric reading; undefined (no data) renders "—" without a status line. */
+  value: number | undefined;
   unit: string;
-  status: HealthStatus;
+  /** Derived health level; defined exactly when `value` is defined. */
+  status: HealthStatus | undefined;
   icon: React.ReactNode;
 }) {
   const { t } = useTranslation();
-  const meta = getStatusMeta(status);
-  const MetricIcon = meta.icon;
+  const meta = status === undefined ? null : getStatusMeta(status);
   return (
     <div data-diagnostic-role="kpi">
       <StatsCard
         label={title}
-        value={value}
-        suffix={unit}
+        value={value === undefined ? "—" : value}
+        suffix={value === undefined ? undefined : unit}
         icon={icon}
         supporting={
-          <p
-            className={cn(
-              "type-metadata flex items-center gap-1",
-              getToneTextColor(meta.tone),
-            )}
-          >
-            <AppIcon icon={MetricIcon} size="badge" />
-            {t(statusLabelKey(meta.labelKey))}
-          </p>
+          meta ? (
+            <p
+              className={cn(
+                "type-metadata flex items-center gap-1",
+                getToneTextColor(meta.tone),
+              )}
+            >
+              <AppIcon icon={meta.icon} size="badge" />
+              {t(statusLabelKey(meta.labelKey))}
+            </p>
+          ) : undefined
         }
       />
     </div>
