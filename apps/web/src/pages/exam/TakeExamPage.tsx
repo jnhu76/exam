@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import {
   ChevronLeft,
   ChevronRight,
+  CircleDashed,
+  CircleHelp,
   Flag,
   Lock,
   RotateCcw,
@@ -18,6 +20,7 @@ import {
   TriangleAlert,
   WifiOff,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { routes } from "@/lib/routes";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { Separator } from "@/components/ui/separator";
@@ -310,6 +313,47 @@ function RestoreFailedSurface({
         </Button>
       </div>
     </div>
+  );
+}
+
+type SubmitFactTone = "info" | "caution" | "destructive";
+
+/**
+ * One fact row of the submit-confirmation dialog (S3.4 / R1-F9). A non-zero
+ * count renders as the soft-feedback toned pill (icon + full fact text — the
+ * color triple never carries the signal alone); a zero count stays a quiet
+ * secondary line. The tone triple is owned by feedback/recipes.css; this
+ * component owns only the row geometry.
+ */
+function SubmitFactRow({
+  testId,
+  count,
+  label,
+  tone,
+  icon,
+}: {
+  testId: string;
+  count: number;
+  label: string;
+  tone: SubmitFactTone;
+  icon: LucideIcon;
+}) {
+  if (count === 0) {
+    return (
+      <p data-testid={testId} className="type-secondary">
+        {label}
+      </p>
+    );
+  }
+  return (
+    <p
+      data-testid={testId}
+      data-feedback-tone={tone}
+      className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm font-medium"
+    >
+      <AppIcon icon={icon} size="inline" />
+      {label}
+    </p>
   );
 }
 
@@ -1626,23 +1670,35 @@ export function TakeExamPage() {
           <div className="flex flex-col gap-2 text-sm">
             {isFlushing && <p>{t("candidateRuntime.submitDialog.flushing")}</p>}
             {flushResult && (
-              <>
-                <p>
-                  {t("candidateRuntime.submitDialog.unansweredLabel", {
+              <div className="flex flex-col items-start gap-1.5">
+                <SubmitFactRow
+                  testId="submit-fact-unanswered"
+                  count={unansweredCount}
+                  label={t("candidateRuntime.submitDialog.unansweredLabel", {
                     count: unansweredCount,
                   })}
-                </p>
-                <p>
-                  {t("candidateRuntime.submitDialog.unsavedLabel", {
+                  tone="info"
+                  icon={CircleHelp}
+                />
+                <SubmitFactRow
+                  testId="submit-fact-unsaved"
+                  count={unsavedCount}
+                  label={t("candidateRuntime.submitDialog.unsavedLabel", {
                     count: unsavedCount,
                   })}
-                </p>
-                <p>
-                  {t("candidateRuntime.submitDialog.saveFailedLabel", {
+                  tone="caution"
+                  icon={CircleDashed}
+                />
+                <SubmitFactRow
+                  testId="submit-fact-save-failed"
+                  count={failedSaveCount}
+                  label={t("candidateRuntime.submitDialog.saveFailedLabel", {
                     count: failedSaveCount,
                   })}
-                </p>
-              </>
+                  tone="destructive"
+                  icon={TriangleAlert}
+                />
+              </div>
             )}
             {failedSaveCount > 0 && (
               <p className="text-destructive">

@@ -641,6 +641,190 @@ describe("TakeExamPage behaviors over the snapshot read path", () => {
     expect(screen.getByRole("button", { name: "交卷" })).toBeInTheDocument();
   });
 });
+describe("submit dialog fact weighting (S3.4)", () => {
+  function fillBlank(id: string) {
+    return {
+      id,
+      type: "fill_blank" as const,
+      prompt: `填空 ${id}`,
+      promptDocument: null,
+      answerMode: "plain" as const,
+      options: [],
+      inputMode: "single_line" as const,
+      maxScore: 10,
+      answerValue: null,
+      answerSource: "none" as const,
+    };
+  }
+
+  function factRow(testId: string) {
+    return screen.getByTestId(testId);
+  }
+
+  function ackSaves() {
+    return apiPost.mock.calls.filter(
+      ([p]) => typeof p === "string" && p.includes("/answers/"),
+    );
+  }
+
+  async function openSubmitDialog() {
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("take-submit-btn"));
+    await screen.findByRole("dialog");
+  }
+
+  it("weakens all three facts when every count is zero and keeps confirm enabled", async () => {
+    installTakeRoute(buildSnapshot({ questions: [fillBlank("q1")] }));
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return { accepted: true, serverVersion: 1, savedAt: NOW };
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    renderPage();
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "x");
+    // Wait for the ACK so the flush result reports all-zero counts.
+    await waitFor(
+      () => {
+        expect(ackSaves()).toHaveLength(1);
+      },
+      { timeout: 4000 },
+    );
+
+    await openSubmitDialog();
+    await waitFor(() => {
+      expect(factRow("submit-fact-unanswered")).toBeInTheDocument();
+    });
+
+    // All three facts remain (S3.4: 三个事实全保留) — as quiet rows.
+    for (const testId of [
+      "submit-fact-unanswered",
+      "submit-fact-unsaved",
+      "submit-fact-save-failed",
+    ]) {
+      const row = factRow(testId);
+      expect(row).not.toHaveAttribute("data-feedback-tone");
+      expect(row.className).toContain("type-secondary");
+    }
+    // Zero risk → the confirm gate stays the plain enabled confirm.
+    expect(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "确认交卷",
+      }),
+    ).toBeEnabled();
+    expect(
+      within(screen.getByRole("dialog")).queryByRole("button", {
+        name: "仍然提交",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks a non-zero unanswered count with the info tone and an icon while zeros stay quiet", async () => {
+    installTakeRoute(
+      buildSnapshot({ questions: [fillBlank("q1"), fillBlank("q2")] }),
+    );
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return { accepted: true, serverVersion: 1, savedAt: NOW };
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    renderPage();
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "x");
+    await waitFor(
+      () => {
+        expect(ackSaves()).toHaveLength(1);
+      },
+      { timeout: 4000 },
+    );
+
+    await openSubmitDialog();
+    await waitFor(() => {
+      expect(factRow("submit-fact-unanswered")).toBeInTheDocument();
+    });
+
+    const unanswered = factRow("submit-fact-unanswered");
+    expect(unanswered).toHaveAttribute("data-feedback-tone", "info");
+    // Not color alone: the toned row carries an icon and the full fact text.
+    expect(unanswered.querySelector("svg")).not.toBeNull();
+    expect(unanswered).toHaveTextContent("未答题：1 题未作答");
+    for (const testId of ["submit-fact-unsaved", "submit-fact-save-failed"]) {
+      expect(factRow(testId)).not.toHaveAttribute("data-feedback-tone");
+    }
+    // An unanswered question is a decision fact, not a save failure — the
+    // confirm gate must stay enabled (S3.4: 不得放宽交卷门控).
+    expect(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "确认交卷",
+      }),
+    ).toBeEnabled();
+  });
+
+  it("marks the save-failed count with the destructive tone and keeps the override gate intact", async () => {
+    installTakeRoute(buildSnapshot({ questions: [fillBlank("q1")] }));
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        throw new Error("offline");
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    renderPage();
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "x");
+    await waitFor(
+      () => {
+        expect(screen.getByText("保存失败")).toBeInTheDocument();
+      },
+      { timeout: 4000 },
+    );
+
+    await openSubmitDialog();
+    // The dialog flush retries the failed save, which fails again offline.
+    await waitFor(() => {
+      expect(factRow("submit-fact-save-failed")).toBeInTheDocument();
+    });
+
+    const saveFailed = factRow("submit-fact-save-failed");
+    expect(saveFailed).toHaveAttribute("data-feedback-tone", "destructive");
+    expect(saveFailed.querySelector("svg")).not.toBeNull();
+    expect(saveFailed).toHaveTextContent("保存失败：1 题");
+    // The unsaved count includes the failed question → caution tone.
+    expect(factRow("submit-fact-unsaved")).toHaveAttribute(
+      "data-feedback-tone",
+      "caution",
+    );
+    // Zero counts stay quiet.
+    expect(factRow("submit-fact-unanswered")).not.toHaveAttribute(
+      "data-feedback-tone",
+    );
+    // The necessary warning text is retained (S3.4: 不得删除必要警告).
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        "部分答案保存失败，请继续答题后重新保存或确认仍然提交。",
+      ),
+    ).toBeInTheDocument();
+    // Non-zero failed saves gate the plain confirm and offer the override.
+    expect(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "确认交卷",
+      }),
+    ).toBeDisabled();
+    expect(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "仍然提交",
+      }),
+    ).toBeEnabled();
+  });
+});
+
 describe("submit-freeze UI proof", () => {
   it("save execution seam reads derived canSave, keeps the control disabled, and skips the API call when the snapshot is non-editable", async () => {
     // Requirement: "view.canSave === false => save endpoint is not called",
