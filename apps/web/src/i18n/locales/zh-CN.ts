@@ -2501,9 +2501,13 @@ const zhCN = {
         reconciledStateChanged: "阅卷状态已发生变化，已加载最新结果。",
         /** Failure-of-failure: both POST and the reconciliation GET failed. */
         submitUnknown: "无法确认评分是否已提交，请刷新页面核对。",
+        /** The click-time queue probe itself failed. */
+        nextPendingFailed: "查找下一份失败，请重试",
       },
       actions: {
         backToQueue: "返回队列",
+        nextPending: "下一份待阅卷",
+        findingNext: "查找中...",
       },
       question: {
         maxScore: "满分: {{score}}",
@@ -2519,6 +2523,7 @@ const zhCN = {
         submittedLabel: "已提交评分",
         gradedLabel: "已评分: {{score}} 分",
         gradedBy: "评分人: {{grader}}",
+        gradedByUnavailable: "评分人账号已删除或不可见",
         gradedAt: "评分时间: {{time}}",
       },
       confirm: {
@@ -2544,6 +2549,7 @@ const zhCN = {
       toast: {
         fullyGraded: "评分已完成",
         saved: "评分已保存",
+        noMorePending: "队列中暂无其他待阅卷",
       },
     },
     /** EnrollmentPicker (exam enrollment candidate picker) copy. */

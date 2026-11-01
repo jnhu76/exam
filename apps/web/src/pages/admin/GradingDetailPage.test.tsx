@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
-import { GradingDetailPage } from "./GradingDetailPage";
+import { GradingDetailPage, GradingDetailPageRoute } from "./GradingDetailPage";
 import { parseScoreInput, validateScore } from "./GradingDetailPage";
 import { permissionsForRole } from "@exam/authz";
 
@@ -75,6 +75,7 @@ const mockDetailData = {
         score: 4,
         comment: "基本正确",
         gradedBy: "admin-1",
+        gradedByName: "李评分",
         gradedAt: "2025-01-15T12:00:00Z",
       },
     },
@@ -114,7 +115,7 @@ function renderPage(attemptId = "att-1") {
           <Routes>
             <Route
               path="/admin/grading-queue/:id"
-              element={<GradingDetailPage />}
+              element={<GradingDetailPageRoute />}
             />
           </Routes>
         </BrandProvider>
@@ -185,6 +186,7 @@ describe("GradingDetailPage", () => {
             score: 0,
             comment: "",
             gradedBy: "admin-1",
+            gradedByName: "李评分",
             gradedAt: "2025-01-15T12:00:00Z",
           },
         },
@@ -464,6 +466,7 @@ describe("GradingDetailPage — one-time submission UX", () => {
             score: 8,
             comment: "",
             gradedBy: "admin-1",
+            gradedByName: "李评分",
             gradedAt: "2025-01-15T12:00:00Z",
           },
         },
@@ -496,7 +499,8 @@ describe("GradingDetailPage — one-time submission UX", () => {
           entry: {
             score: 7,
             comment: "不错的回答",
-            gradedBy: "admin-1",
+            gradedBy: "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            gradedByName: "王评分",
             gradedAt: "2025-01-15T12:00:00Z",
           },
         },
@@ -520,14 +524,213 @@ describe("GradingDetailPage — one-time submission UX", () => {
     expect(
       screen.getByTestId("grading-submitted-comment-q-done"),
     ).toHaveTextContent("不错的回答");
-    // gradedBy is shown as-is (actor id), not a fabricated name.
+    // The server-resolved display name is shown; the raw actor id is NOT
+    // surfaced while the name is resolvable.
     expect(
       screen.getByTestId("grading-submitted-grader-q-done"),
-    ).toHaveTextContent("admin-1");
+    ).toHaveTextContent("评分人: 王评分");
+    expect(
+      screen.getByTestId("grading-submitted-grader-q-done"),
+    ).not.toHaveTextContent("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
     // gradedAt is rendered via the project date formatter.
     expect(
       screen.getByTestId("grading-submitted-time-q-done"),
     ).toBeInTheDocument();
+  });
+
+  it("offers the next pending attempt once the attempt is fully graded and navigates via the authoritative queue", async () => {
+    getMock
+      .mockResolvedValueOnce({
+        ...mockDetailData,
+        gradingStatus: "fully_graded",
+        questions: [
+          {
+            questionId: "q-done",
+            type: "text_response",
+            content: "已完成题",
+            maxScore: 10,
+            candidateAnswer: "作答",
+            entry: {
+              score: 8,
+              comment: "",
+              gradedBy: "admin-1",
+              gradedByName: "李评分",
+              gradedAt: "2025-01-15T12:00:00Z",
+            },
+          },
+        ],
+      })
+      // The click-time probe consumes the authoritative queue endpoint.
+      .mockResolvedValueOnce({
+        items: [{ attemptId: "att-next" }, { attemptId: "att-1" }],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce(mockDetailData); // next attempt's detail load
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const nextBtn = screen.getByRole("button", { name: "下一份待阅卷" });
+    await userEvent.click(nextBtn);
+
+    // The navigation target is resolved by the server's own queue projection,
+    // never by a client-side queue mirror.
+    await vi.waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith(
+        "/api/admin/grading-queue?page=1&pageSize=20",
+      );
+    });
+    // Navigating remounts the page for the next attempt id.
+    await vi.waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith(
+        "/api/admin/attempts/att-next/grading-details",
+      );
+    });
+  });
+
+  it("does not offer next-pending while the attempt still has pending questions", async () => {
+    // Draft-safety invariant: a partially graded attempt still holds the
+    // operator's (possibly unsaved) draft input — no skip-away action.
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(
+      screen.queryByRole("button", { name: "下一份待阅卷" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not carry the previous attempt's score into the next attempt after in-place navigation", async () => {
+    // The next-pending action navigates within the SAME route, so the page
+    // component would stay mounted and per-question local state (scores keyed
+    // by questionId) would leak into the next attempt when both attempts share
+    // a question id. The route wrapper must remount the page per attempt.
+    getMock
+      .mockResolvedValueOnce({
+        ...mockDetailData,
+        gradingStatus: "fully_graded",
+        questions: [
+          {
+            questionId: "q-shared",
+            type: "text_response",
+            content: "已完成题",
+            maxScore: 10,
+            candidateAnswer: "作答",
+            entry: {
+              score: 8,
+              comment: "",
+              gradedBy: "admin-1",
+              gradedByName: "李评分",
+              gradedAt: "2025-01-15T12:00:00Z",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [{ attemptId: "att-2" }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce({
+        ...mockDetailData,
+        gradingStatus: "pending_manual",
+        questions: [
+          {
+            questionId: "q-shared",
+            type: "text_response",
+            content: "同一道题，仍是待评分",
+            maxScore: 10,
+            candidateAnswer: "作答",
+            entry: null,
+          },
+        ],
+      });
+    renderPage("att-1");
+    await screen.findByText(/期末考试 — 张三/);
+    // The committed score is displayed on the first attempt.
+    expect(screen.getByTestId("grading-score-input-q-shared")).toHaveValue(8);
+
+    await userEvent.click(screen.getByRole("button", { name: "下一份待阅卷" }));
+    await screen.findByText("同一道题，仍是待评分");
+
+    // The next attempt's pending input must be EMPTY — never pre-filled with
+    // the previous attempt's committed/draft score.
+    expect(screen.getByTestId("grading-score-input-q-shared")).toHaveValue(
+      null,
+    );
+  });
+
+  it("shows a no-more-pending toast instead of navigating when the queue is empty", async () => {
+    const { toast } = await import("sonner");
+    getMock
+      .mockResolvedValueOnce({
+        ...mockDetailData,
+        gradingStatus: "fully_graded",
+        questions: [
+          {
+            questionId: "q-done",
+            type: "text_response",
+            content: "已完成题",
+            maxScore: 10,
+            candidateAnswer: "作答",
+            entry: {
+              score: 8,
+              comment: "",
+              gradedBy: "admin-1",
+              gradedByName: "李评分",
+              gradedAt: "2025-01-15T12:00:00Z",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ items: [], total: 0, page: 1, pageSize: 20 });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await userEvent.click(screen.getByRole("button", { name: "下一份待阅卷" }));
+
+    await vi.waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith("队列中暂无其他待阅卷");
+    });
+    // No navigation happened: the only detail GET is the initial load.
+    expect(
+      getMock.mock.calls.filter(([url]) =>
+        String(url).includes("/grading-details"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("shows the explicit fallback and the audit id when the grader name is unresolvable", async () => {
+    getMock.mockResolvedValue({
+      ...mockDetailData,
+      questions: [
+        {
+          questionId: "q-gone",
+          type: "text_response",
+          content: "评分人已删除题",
+          maxScore: 10,
+          candidateAnswer: "作答",
+          entry: {
+            score: 7,
+            comment: "",
+            gradedBy: "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            gradedByName: null,
+            gradedAt: "2025-01-15T12:00:00Z",
+          },
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    // Explicit fallback copy — never an empty-name stub, never a fabricated
+    // name. The historical actor id stays visible as the audit identity.
+    expect(
+      screen.getByTestId("grading-submitted-grader-q-gone"),
+    ).toHaveTextContent("评分人账号已删除或不可见");
+    expect(
+      screen.getByTestId("grading-submitted-grader-id-q-gone"),
+    ).toHaveTextContent("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
   });
 
   it("opens a confirmation dialog showing score, max, and irrevocability before posting", async () => {
@@ -599,6 +802,7 @@ describe("GradingDetailPage — one-time submission UX", () => {
             score: 8,
             comment: "",
             gradedBy: "server-grader",
+            gradedByName: "王评分",
             gradedAt: "2025-02-01T09:30:00Z",
           },
         },
@@ -614,11 +818,11 @@ describe("GradingDetailPage — one-time submission UX", () => {
     await user.type(firstInput, "8");
     await confirmSubmitFirstQuestion(user);
 
-    // The refreshed server entry is now shown (server grader id + read-only).
+    // The refreshed server entry is now shown (server grader name + read-only).
     await vi.waitFor(() => {
       expect(
         screen.getByTestId("grading-submitted-grader-q1"),
-      ).toHaveTextContent("server-grader");
+      ).toHaveTextContent("评分人: 王评分");
     });
     expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
     expect(
@@ -673,6 +877,7 @@ describe("GradingDetailPage — one-time submission UX", () => {
             score: 8,
             comment: "好",
             gradedBy: "admin-1",
+            gradedByName: "李评分",
             gradedAt: "2025-01-15T12:00:00Z",
           },
         },
@@ -761,6 +966,7 @@ describe("GradingDetailPage — ambiguous-result reconciliation", () => {
             score: 8,
             comment: "",
             gradedBy: "server-grader",
+            gradedByName: "李评分",
             gradedAt: "2025-02-01T09:30:00Z",
           },
         },
@@ -837,6 +1043,7 @@ describe("GradingDetailPage — ambiguous-result reconciliation", () => {
             score: 8,
             comment: "",
             gradedBy: "other-grader",
+            gradedByName: "李评分",
             gradedAt: "2025-02-01T09:30:00Z",
           },
         },

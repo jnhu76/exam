@@ -136,6 +136,9 @@ interface GradingEntry {
   score: number;
   comment: string;
   gradedBy: string;
+  /** Server-resolved grader display name; null when the user row is
+   * unresolvable (deleted or inaccessible) — never fabricated client-side. */
+  gradedByName: string | null;
   gradedAt: string;
 }
 
@@ -173,6 +176,12 @@ interface GradeQuestionResponse {
   fullyGraded: boolean;
 }
 
+/** Narrow projection of GET /admin/grading-queue used only to ask the
+ * authoritative queue what to work on next; no queue state is kept here. */
+interface NextPendingProbe {
+  items: Array<{ attemptId: string }>;
+}
+
 export function GradingDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
@@ -198,6 +207,7 @@ export function GradingDetailPage() {
     score: number;
     maxScore: number;
   } | null>(null);
+  const [findingNext, setFindingNext] = useState(false);
 
   /**
    * Re-fetches the authoritative grading-details and replaces local state from
@@ -415,6 +425,32 @@ export function GradingDetailPage() {
     [id, comments, t, refreshFromServer, reconcileAfterPostError],
   );
 
+  /**
+   * Continues the grading session: asks the authoritative queue endpoint what
+   * the FIFO-first pending attempt is RIGHT NOW and navigates to it. Click-time
+   * probe only — this page never keeps queue state (the queue endpoint stays
+   * the single truth), and the server-side grader scope/filters are untouched.
+   */
+  const goNextPending = useCallback(async () => {
+    if (!id || findingNext) return;
+    setFindingNext(true);
+    try {
+      const queue = await api.get<NextPendingProbe>(
+        "/api/admin/grading-queue?page=1&pageSize=20",
+      );
+      const next = queue.items.find((item) => item.attemptId !== id);
+      if (next) {
+        navigate(`/admin/grading-queue/${next.attemptId}`);
+      } else {
+        toast.info(t("admin.gradingDetail.toast.noMorePending"));
+      }
+    } catch {
+      toast.error(t("admin.gradingDetail.errors.nextPendingFailed"));
+    } finally {
+      setFindingNext(false);
+    }
+  }, [id, findingNext, navigate, t]);
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadDetail} />;
   if (!data)
@@ -433,13 +469,28 @@ export function GradingDetailPage() {
         title={t("admin.gradingDetail.title")}
         description={`${data.examTitle} — ${data.candidateName}`}
         actions={
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/admin/grading-queue")}
-          >
-            <AppIcon icon={ArrowLeft} size="inline" className="mr-2" />
-            {t("admin.gradingDetail.actions.backToQueue")}
-          </Button>
+          <>
+            {/* Rendered only once the attempt is fully graded: there are no
+                pending questions left, so no operator draft can be abandoned,
+                and the attempt can no longer appear in the queue. */}
+            {isFullyGraded ? (
+              <Button
+                onClick={() => void goNextPending()}
+                disabled={findingNext}
+              >
+                {findingNext
+                  ? t("admin.gradingDetail.actions.findingNext")
+                  : t("admin.gradingDetail.actions.nextPending")}
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/admin/grading-queue")}
+            >
+              <AppIcon icon={ArrowLeft} size="inline" className="mr-2" />
+              {t("admin.gradingDetail.actions.backToQueue")}
+            </Button>
+          </>
         }
         status={<StatusBadge status={data.gradingStatus} />}
       />
@@ -607,12 +658,24 @@ export function GradingDetailPage() {
                       {q.entry.comment}
                     </div>
                   ) : null}
-                  {/* gradedBy may currently be only an actor id; show the value
-                      the server committed without fabricating a display name. */}
+                  {/* The server-resolved display name is the primary identity;
+                      when it is unresolvable the explicit fallback plus the raw
+                      actor id keep the entry auditable. No name is fabricated
+                      client-side. */}
                   <div data-testid={`grading-submitted-grader-${q.questionId}`}>
-                    {t("admin.gradingDetail.question.gradedBy", {
-                      grader: q.entry?.gradedBy ?? "",
-                    })}
+                    {q.entry?.gradedByName
+                      ? t("admin.gradingDetail.question.gradedBy", {
+                          grader: q.entry.gradedByName,
+                        })
+                      : t("admin.gradingDetail.question.gradedByUnavailable")}
+                    {!q.entry?.gradedByName && q.entry?.gradedBy ? (
+                      <div
+                        data-testid={`grading-submitted-grader-id-${q.questionId}`}
+                        className="type-metadata"
+                      >
+                        {q.entry.gradedBy}
+                      </div>
+                    ) : null}
                   </div>
                   {q.entry?.gradedAt ? (
                     <div data-testid={`grading-submitted-time-${q.questionId}`}>
@@ -698,4 +761,16 @@ export function GradingDetailPage() {
       </AlertDialog>
     </PageContainer>
   );
+}
+
+/**
+ * Route element for /admin/grading-queue/:id. INVARIANT: the attempt detail
+ * page owns attempt-scoped local state (draft scores/comments keyed by
+ * questionId, confirm dialog, reconciliation state); two attempts can share
+ * question ids, so an in-place :id change — next-pending navigation, browser
+ * back/forward — must remount the page instead of reusing that state.
+ */
+export function GradingDetailPageRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <GradingDetailPage key={id ?? ""} />;
 }

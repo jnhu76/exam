@@ -128,7 +128,7 @@ export const ROUTE_PAGE_ROLES: readonly RoutePageRole[] = [
   },
   {
     route: "/admin/grading-queue/:id",
-    page: "GradingDetailPage",
+    page: "GradingDetailPageRoute",
     role: "admin-standard",
   },
   {

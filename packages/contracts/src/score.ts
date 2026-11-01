@@ -133,6 +133,13 @@ export const GradingDetailsQuestionSchema = z.object({
       score: z.number(),
       comment: z.string(),
       gradedBy: z.string().uuid(),
+      /**
+       * Server-resolved grader display name. INVARIANT: resolved inside the
+       * request's organization only; null means the grader user row is not
+       * resolvable at read time (deleted or inaccessible) — the audit id in
+       * `gradedBy` stays authoritative and the name is never fabricated.
+       */
+      gradedByName: z.string().nullable(),
       gradedAt: z.string().datetime(),
     })
     .nullable(),

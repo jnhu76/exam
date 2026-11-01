@@ -1613,10 +1613,52 @@ describe("grading detail contracts", () => {
         score: 8,
         comment: "回答基本完整",
         gradedBy: "00000000-0000-4000-8000-000000000001",
+        gradedByName: "李评分",
         gradedAt: "2026-01-15T12:00:00.000Z",
       },
     });
     expect(result.success).toBe(true);
+  });
+
+  it("GradingDetailsQuestionSchema requires gradedByName on a scored entry and allows explicit null (unresolvable grader)", () => {
+    const resolved = GradingDetailsQuestionSchema.safeParse({
+      ...validQuestion,
+      entry: {
+        score: 8,
+        comment: "回答基本完整",
+        gradedBy: "00000000-0000-4000-8000-000000000001",
+        gradedByName: "李评分",
+        gradedAt: "2026-01-15T12:00:00.000Z",
+      },
+    });
+    expect(resolved.success).toBe(true);
+
+    // Grader row not resolvable at read time (deleted/inaccessible): explicit
+    // null on the wire — the audit id stays, the name is never fabricated.
+    const unresolved = GradingDetailsQuestionSchema.safeParse({
+      ...validQuestion,
+      entry: {
+        score: 8,
+        comment: "",
+        gradedBy: "00000000-0000-4000-8000-000000000001",
+        gradedByName: null,
+        gradedAt: "2026-01-15T12:00:00.000Z",
+      },
+    });
+    expect(unresolved.success).toBe(true);
+
+    // A scored entry without the name projection (pre-displayName producer)
+    // violates the response contract.
+    const legacy = GradingDetailsQuestionSchema.safeParse({
+      ...validQuestion,
+      entry: {
+        score: 8,
+        comment: "",
+        gradedBy: "00000000-0000-4000-8000-000000000001",
+        gradedAt: "2026-01-15T12:00:00.000Z",
+      },
+    });
+    expect(legacy.success).toBe(false);
   });
 
   it("GradingDetailsQuestionSchema rejects missing required fields", () => {
@@ -1643,6 +1685,7 @@ describe("grading detail contracts", () => {
         score: 8,
         comment: "回答基本完整",
         gradedBy: "00000000-0000-4000-8000-000000000001",
+        gradedByName: "李评分",
         gradedAt: "not-a-datetime",
       },
     });
