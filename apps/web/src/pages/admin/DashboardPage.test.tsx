@@ -122,7 +122,12 @@ describe("DashboardPage", () => {
       expect(screen.getByText("3")).toBeInTheDocument();
       expect(screen.getByText("考生总数")).toBeInTheDocument();
       expect(screen.getByText("45")).toBeInTheDocument();
-      expect(screen.getByText("今日考试")).toBeInTheDocument();
+      // R0-F7: the value is today's started-attempt count (人次, retakes
+      // included) — the repo counts examAttempts rows with startedAt >=
+      // startOfDay — so the label must state the 人次 unit instead of an
+      // exam count (「今日考试」).
+      expect(screen.getByText("今日开考人次")).toBeInTheDocument();
+      expect(screen.queryByText("今日考试")).not.toBeInTheDocument();
       expect(screen.getByText("2")).toBeInTheDocument();
     });
   });

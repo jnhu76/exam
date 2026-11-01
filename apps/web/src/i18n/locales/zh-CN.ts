@@ -2430,7 +2430,10 @@ const zhCN = {
         totalQuestions: "题目总数",
         activeExams: "考试进行中",
         totalCandidates: "考生总数",
-        todayExams: "今日考试",
+        /* R0-F7: the value is the started-attempt count (retakes included;
+           systemStatsRepo counts examAttempts rows since local startOfDay),
+           so the label states the 人次 unit, not an exam count. */
+        todayExams: "今日开考人次",
       },
       todo: {
         sectionTitle: "需要处理",
