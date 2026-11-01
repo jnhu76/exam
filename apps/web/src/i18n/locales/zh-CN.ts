@@ -606,7 +606,10 @@ const zhCN = {
       untimed: "不限时",
     },
     save: {
-      idle: "等待保存",
+      // idle = 本会话无待保存修改，页面展示的内容即服务器状态（R0-F3/R1-F7：
+      // 旧文案「等待保存」把稳态读作未保存）。任何未 ACK 的编辑都会把 chip
+      // 推回 saving/error，因此 idle 宣称「已保存」不违反服务器 ACK 语义。
+      idle: "已保存",
       saving: "保存中...",
       saved: "已保存",
       error: "保存失败",

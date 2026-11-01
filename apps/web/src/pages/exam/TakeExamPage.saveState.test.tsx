@@ -15,17 +15,18 @@ import type { CandidateTakeSnapshot } from "@exam/contracts";
 import { permissionsForRole } from "@exam/authz";
 
 /**
- * S3.1 characterization — the save-state chip (SaveIndicator) mapping over
- * every setSaveState write path in TakeExamPage:
+ * Save-state chip (SaveIndicator) mapping over every setSaveState write path
+ * in TakeExamPage:
  *   P1 initial idle / P2 route reset / P3 edit → saving / P4 canSave=false
- *   skip → idle / P5 ACK → saved / P6 stale reconcile → saved /
+ *   skip → error / P5 ACK → saved / P6 stale reconcile → saved /
  *   P7 server rejection → error / P8 network failure → error.
  *
- * These tests pin the AS-BUILT state→copy mapping (zh-CN: 等待保存 / 保存中... /
- * 已保存 / 保存失败) before the idle-copy remediation, so the remapping cannot
- * silently break the authoritative capability "UI 已保存 = 服务器 ACK 语义"
- * (docs/product/standard-supported-capabilities.zh-CN.md §8): an edit that was
- * never acknowledged must never render 已保存.
+ * Established by S3.1 characterization and carried through the S3.2 idle
+ * remediation. The idle copy is 已保存 (idle = no pending edit and the
+ * displayed content is the server state — every unacknowledged edit keeps
+ * the chip in saving/error), so the authoritative capability "UI 已保存 =
+ * 服务器 ACK 语义" (docs/product/standard-supported-capabilities.zh-CN.md §8)
+ * holds: an edit that was never acknowledged must never render 已保存.
  */
 
 const NOW = "2026-07-04T10:00:00.000Z";
@@ -223,8 +224,9 @@ describe("save-state chip mapping (real timers)", () => {
 
     renderPage();
 
-    // P1: before any edit the chip renders the idle copy.
-    expect(await screen.findByText("等待保存")).toBeInTheDocument();
+    // P1: before any edit the chip renders the idle copy — the steady state
+    // reads as synced (nothing pending), not as an outstanding save.
+    expect(await screen.findByText("已保存")).toBeInTheDocument();
 
     const input = await screen.findByLabelText("第1空答案");
     const user = userEvent.setup();
@@ -431,7 +433,7 @@ describe("save-state chip mapping (real timers)", () => {
 });
 
 describe("save-state chip mapping (fake timers — skip path)", () => {
-  it("a pending edit whose attempt turns non-saveable before the debounce fires is skipped: no POST, chip back to idle, never 已保存 (P4)", async () => {
+  it("a pending edit whose attempt turns non-saveable before the debounce fires is skipped: no POST, chip reads 保存失败, never 已保存 (P4)", async () => {
     const getTakeCalls = installTakeRoute([
       buildSnapshot({}, [choiceQuestion("q1")]),
       // The authoritative re-read returns the frozen submitted snapshot.
@@ -481,13 +483,13 @@ describe("save-state chip mapping (fake timers — skip path)", () => {
 
     // T=31.2s: the debounce fires, the execution-time canSave guard skips the
     // save — no POST is issued, the queue records the question failed, and
-    // the chip returns to the idle copy. The unacknowledged edit NEVER
-    // renders 已保存 (UNACKNOWLEDGED != SAVED).
+    // the chip maps the skip to the error copy: a skipped (unacknowledged)
+    // edit must claim neither 已保存 nor 已同步 (UNACKNOWLEDGED != SAVED).
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_000);
     });
     expect(answersPostCalls()).toHaveLength(0);
-    expect(screen.getByText("等待保存")).toBeInTheDocument();
+    expect(screen.getByText("保存失败")).toBeInTheDocument();
     expect(screen.queryByText("已保存")).not.toBeInTheDocument();
     expect(screen.queryByText("保存中...")).not.toBeInTheDocument();
     // The server truth won: the frozen snapshot locked the page.

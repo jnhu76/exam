@@ -758,10 +758,12 @@ export function TakeExamPage() {
       // during the debounce window) decides whether to save. This is the
       // authoritative seam — disabled controls alone are NOT sufficient.
       if (!viewRef.current?.canSave) {
-        // Nothing was sent — the answer stays UNACKNOWLEDGED. Resolve the
-        // chip (never leave 保存中 stuck), and reject so the save queue
-        // records the question failed instead of silently marking it saved.
-        setSaveState("idle");
+        // Nothing was sent — the answer stays UNACKNOWLEDGED. Map the skip
+        // to the error chip (never 保存中 stuck, never the synced idle
+        // claim — a skipped edit is a save that did not happen) and reject
+        // so the save queue records the question failed instead of silently
+        // marking it saved.
+        setSaveState("error");
         setTransientState((s) => transientReducer(s, { type: "RESET" }));
         throw new Error("save skipped: attempt not saveable");
       }
