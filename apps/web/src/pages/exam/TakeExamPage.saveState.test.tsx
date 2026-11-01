@@ -274,6 +274,21 @@ describe("save-state chip mapping (real timers)", () => {
       screen.queryByTestId("save-rejection-alert"),
     ).not.toBeInTheDocument();
 
+    // S3.3 division of labor: the connection banner explains the CONNECTION
+    // state (and the don't-close warning); it no longer promises save
+    // recovery. The answer-save state, the auto-retry mention, and the manual
+    // retry action live in the save-retry banner.
+    expect(
+      screen.getByText("网络连接已中断，正在自动重试；请不要关闭页面。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/连接恢复后继续保存/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("网络恢复后会自动重试；也可以立即手动重试。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "重试保存" }),
+    ).toBeInTheDocument();
+
     // Connection restored: the online listener retries through the EXISTING
     // save orchestration (#677 F6) and the ACK flips the chip to saved.
     apiPost.mockImplementation(async (path: string) => {

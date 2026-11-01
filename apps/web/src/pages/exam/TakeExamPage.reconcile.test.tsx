@@ -270,7 +270,7 @@ describe("terminal-signal reconciliation", () => {
     // The generic disconnect banner must NOT appear for a terminal signal.
     expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("系统会在连接恢复后继续保存，请不要关闭页面"),
+      screen.queryByText("网络连接已中断，正在自动重试；请不要关闭页面。"),
     ).not.toBeInTheDocument();
 
     // Second heartbeat period: already locked → terminal 409 is a no-op,
@@ -300,8 +300,10 @@ describe("terminal-signal reconciliation", () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(screen.getByText("连接异常")).toBeInTheDocument();
+    // The connection banner explains the CONNECTION state only (S3.3: the
+    // answer-save state and its actions live in the save-retry banner).
     expect(
-      screen.getByText("系统会在连接恢复后继续保存，请不要关闭页面"),
+      screen.getByText("网络连接已中断，正在自动重试；请不要关闭页面。"),
     ).toBeInTheDocument();
     // A transport failure is NOT an authority signal — no re-read.
     expect(takeCalls).toBe(1);
