@@ -2217,6 +2217,7 @@ const zhCN = {
       forceSubmit: {
         title: "确认强制交卷",
         description: "确定要强制提交考生「{{name}}」的答卷吗？此操作不可撤销。",
+        confirm: "确认强制交卷",
         reason: "管理员强制交卷",
         done: "已强制交卷",
         indeterminate: "强制交卷提交状态未确认，可重试（将复用同一命令）。",
@@ -2429,7 +2430,10 @@ const zhCN = {
         totalQuestions: "题目总数",
         activeExams: "考试进行中",
         totalCandidates: "考生总数",
-        todayExams: "今日考试",
+        /* R0-F7: the value is the started-attempt count (retakes included;
+           systemStatsRepo counts examAttempts rows since local startOfDay),
+           so the label states the 人次 unit, not an exam count. */
+        todayExams: "今日开考人次",
       },
       todo: {
         sectionTitle: "需要处理",

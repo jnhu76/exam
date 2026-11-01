@@ -986,13 +986,14 @@ describe("ProctorDashboardPage", () => {
     async function openForceSubmitDialog() {
       const trigger = await screen.findByRole("button", { name: "强制交卷" });
       fireEvent.click(trigger);
-      // The dialog content renders after the click.
-      await screen.findByText("确认强制交卷");
+      // The dialog content renders after the click. The title and (per R1-F10)
+      // the confirm button share the same text, so query the heading role.
+      await screen.findByRole("heading", { name: "确认强制交卷" });
     }
 
     async function confirmForceSubmit() {
-      // The confirm button label differs by state: "确认" on a fresh action,
-      // "重试强制交卷" when an indeterminate command is being retried.
+      // The confirm button label differs by state: "确认强制交卷" on a fresh
+      // action, "重试强制交卷" when an indeterminate command is being retried.
       const confirmBtn = await screen.findByRole("button", {
         name: /确认|重试强制交卷/,
       });
@@ -1010,6 +1011,22 @@ describe("ProctorDashboardPage", () => {
     async function pendingBanner() {
       return screen.findByTestId("pending-force-submit-banner");
     }
+
+    it("labels the fresh force-submit confirm button with the exact action (R1-F10)", async () => {
+      apiGet.mockResolvedValue({
+        candidates: [makeCandidate()],
+        total: 1,
+      });
+      renderPage();
+      await openForceSubmitDialog();
+
+      // The destructive confirm button must state the exact action so the
+      // irreversible consequence survives even if the operator only reads the
+      // button row. A generic "确认" is the failure mode this pins against.
+      expect(
+        screen.getByRole("button", { name: "确认强制交卷" }),
+      ).toBeInTheDocument();
+    });
 
     it("reuses the SAME operationId + reason on retry after an indeterminate (network) failure", async () => {
       apiGet.mockResolvedValue({
@@ -1313,7 +1330,7 @@ describe("ProctorDashboardPage", () => {
       });
       expect(forceSubmitButtons).toHaveLength(1); // only B's card has one
       fireEvent.click(forceSubmitButtons[0]!);
-      await screen.findByText("确认强制交卷");
+      await screen.findByRole("heading", { name: "确认强制交卷" });
       await screen.findAllByText(
         "存在未确认的强制交卷命令，请先解决后再操作。",
       );
@@ -1588,7 +1605,7 @@ describe("ProctorDashboardPage", () => {
       });
       expect(forceSubmitButtons).toHaveLength(1); // only B's card has one
       fireEvent.click(forceSubmitButtons[0]!);
-      await screen.findByText("确认强制交卷");
+      await screen.findByRole("heading", { name: "确认强制交卷" });
       await screen.findAllByText(
         "存在未确认的强制交卷命令，请先解决后再操作。",
       );
@@ -1825,7 +1842,7 @@ describe("ProctorDashboardPage", () => {
       });
       expect(forceSubmitButtons).toHaveLength(1); // only B's card has one
       fireEvent.click(forceSubmitButtons[0]!);
-      await screen.findByText("确认强制交卷");
+      await screen.findByRole("heading", { name: "确认强制交卷" });
       await screen.findAllByText(
         "存在未确认的强制交卷命令，请先解决后再操作。",
       );

@@ -1827,7 +1827,7 @@ export function ProctorDashboardPage() {
               {forceSubmitState.phase === "indeterminate" &&
               forceSubmitBlockedReason === null
                 ? t("admin.proctorDashboard.forceSubmit.retry")
-                : t("common.confirm")}
+                : t("admin.proctorDashboard.forceSubmit.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
