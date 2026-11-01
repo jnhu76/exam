@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
@@ -157,8 +157,21 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+/** Hands the router's navigate() to the test (route-change scenario). */
+function NavigateProbe({
+  register,
+}: {
+  register: (nav: (to: string) => void) => void;
+}) {
+  register(useNavigate());
+  return null;
+}
+
 function renderPage() {
-  return render(
+  const navigateRef: { current: ((to: string) => void) | null } = {
+    current: null,
+  };
+  const utils = render(
     <MemoryRouter initialEntries={["/exam/exam-1/take/att-1"]}>
       <AuthProvider
         initialUser={{
@@ -171,6 +184,7 @@ function renderPage() {
         }}
       >
         <BrandProvider>
+          <NavigateProbe register={(n) => (navigateRef.current = n)} />
           <Routes>
             <Route
               path="/exam/:examId/take/:attemptId"
@@ -181,6 +195,15 @@ function renderPage() {
       </AuthProvider>
     </MemoryRouter>,
   );
+  return {
+    ...utils,
+    navigate: (to: string) => {
+      if (!navigateRef.current) {
+        throw new Error("navigate not registered (probe did not mount)");
+      }
+      navigateRef.current(to);
+    },
+  };
 }
 
 function installTakeRoute(sequence: CandidateTakeSnapshot[]) {
@@ -444,6 +467,51 @@ describe("save-state chip mapping (real timers)", () => {
       { timeout: 4000 },
     );
     expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
+  });
+
+  it("route reset maps the chip back to idle for the new attempt — the old attempt's un-ACKed saving state must not leak (P2)", async () => {
+    // P2 (render-time reset at the route change) is what clears saveState
+    // when the SAME component instance switches attempts: without it, the
+    // old attempt's un-ACKed 保存中... would persist onto the new attempt's
+    // page (applySnapshot never writes saveState). Two attempts, real timers.
+    const snap1 = buildSnapshot({ attemptId: "att-1" }, [
+      fillBlankQuestion("q1"),
+    ]);
+    const snap2 = buildSnapshot({ attemptId: "att-2" }, [
+      fillBlankQuestion("q2"),
+    ]);
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        if (path.includes("att-1")) return snap1;
+        if (path.includes("att-2")) return snap2;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    apiPost.mockResolvedValue({ ok: true, serverNow: NOW });
+
+    const { navigate } = renderPage();
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "x");
+
+    // att-1 is inside its un-ACK window: the chip reads 保存中...
+    expect(screen.getByText("保存中...")).toBeInTheDocument();
+
+    // Switch attempts while the edit is still unacknowledged.
+    act(() => {
+      navigate("/exam/exam-1/take/att-2");
+    });
+    // att-2's own question is rendered.
+    await screen.findByText("填空 q2");
+
+    // P2: the new attempt starts from the idle claim (its displayed content
+    // IS the att-2 server state); the stale 保存中... must be gone.
+    expect(screen.getByText("已保存")).toBeInTheDocument();
+    expect(screen.queryByText("保存中...")).not.toBeInTheDocument();
+    // The save never fired against either attempt: the pending timer was
+    // cancelled by the scope change, so no answers POST exists at all.
+    expect(answersPostCalls()).toHaveLength(0);
   });
 });
 
