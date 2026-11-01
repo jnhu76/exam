@@ -444,9 +444,9 @@ describe("StatsCard", () => {
 });
 
 describe("SaveIndicator", () => {
-  it("renders idle state", () => {
+  it("renders idle state as the calm synced steady state (nothing pending)", () => {
     render(<SaveIndicator state="idle" />);
-    expect(screen.getByText("等待保存")).toBeInTheDocument();
+    expect(screen.getByText("已保存")).toBeInTheDocument();
   });
 
   it("renders saving state", () => {

@@ -1,10 +1,5 @@
 import { useTranslation } from "react-i18next";
-import {
-  CircleCheck,
-  CircleDashed,
-  LoaderCircle,
-  TriangleAlert,
-} from "lucide-react";
+import { CircleCheck, LoaderCircle, TriangleAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 
@@ -23,6 +18,10 @@ const stateKeyMap: Record<SaveState, string> = {
  * Feedback tone per save state. The soft color triple (bg/border/text) is
  * owned by the semantic feedback layer (feedback/recipes.css,
  * data-feedback-tone); this component owns only the chip geometry.
+ *
+ * idle and saved share the same claim ("the server has everything shown")
+ * and icon; idle is the QUIET steady state (neutral tone), saved the brief
+ * positive acknowledgment right after an ACK.
  */
 const stateToneMap: Record<SaveState, string> = {
   idle: "neutral",
@@ -33,7 +32,7 @@ const stateToneMap: Record<SaveState, string> = {
 
 /** Icon mapping for each save state. */
 const stateIconMap: Record<SaveState, LucideIcon> = {
-  idle: CircleDashed,
+  idle: CircleCheck,
   saving: LoaderCircle,
   saved: CircleCheck,
   error: TriangleAlert,
