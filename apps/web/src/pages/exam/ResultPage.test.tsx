@@ -38,6 +38,43 @@ vi.mock("@/lib/api", () => ({
 
 const getMock = vi.mocked(api.get);
 
+// jsdom reports 0 for every box metric; the answer disclosure reads
+// scrollHeight/clientHeight to decide whether content overflows the clamp
+// budget, so tests stub the metrics the real browser reports on the element
+// prototype (restored after each use).
+let originalMetrics: {
+  scrollHeight?: PropertyDescriptor;
+  clientHeight?: PropertyDescriptor;
+};
+
+function stubElementMetrics(metrics: {
+  scrollHeight: number;
+  clientHeight: number;
+}) {
+  const proto = Element.prototype;
+  originalMetrics = {
+    scrollHeight: Object.getOwnPropertyDescriptor(proto, "scrollHeight"),
+    clientHeight: Object.getOwnPropertyDescriptor(proto, "clientHeight"),
+  };
+  Object.defineProperty(proto, "scrollHeight", {
+    configurable: true,
+    get: () => metrics.scrollHeight,
+  });
+  Object.defineProperty(proto, "clientHeight", {
+    configurable: true,
+    get: () => metrics.clientHeight,
+  });
+}
+
+function restoreElementMetrics() {
+  const proto = Element.prototype;
+  for (const key of ["scrollHeight", "clientHeight"] as const) {
+    const desc = originalMetrics?.[key];
+    if (desc) Object.defineProperty(proto, key, desc);
+    else delete (proto as unknown as Record<string, unknown>)[key];
+  }
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/exam/attempt-1/result"]}>
@@ -277,8 +314,9 @@ describe("ResultPage", () => {
     );
   });
 
-  it("truncates long fill blank answers with the full value in title", async () => {
-    const longAnswer = "这是一个需要在悬停时查看完整内容的较长填空答案";
+  it("clamps a long fill blank answer behind a keyboard-operable disclosure (R1-F2)", async () => {
+    const longAnswer =
+      "这是一个远超三行预览高度的较长填空答案，收起时只应看到截断预览，展开后必须完整可读，悬停提示不得是唯一全文入口。";
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "graded",
@@ -303,13 +341,117 @@ describe("ResultPage", () => {
       ],
     });
 
-    renderPage();
+    stubElementMetrics({ scrollHeight: 120, clientHeight: 66 });
+    try {
+      renderPage();
 
-    // The candidate DTO carries only the candidate answer (there is no
-    // correct-answer column), so exactly one truncated answer remains.
-    const truncatedAnswers = await screen.findAllByTitle(longAnswer);
-    expect(truncatedAnswers).toHaveLength(1);
-    expect(truncatedAnswers[0]).toHaveClass("data-table-overflow-truncate");
+      // The full value stays in the DOM (selectable, announced) — only the
+      // presentation is clamped; a hover tooltip is not the full-text entry.
+      expect(await screen.findByText(longAnswer)).toBeInTheDocument();
+
+      // The disclosure is a real button with an expanded state.
+      const toggle = screen.getByRole("button", { name: "展开全文" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+      await userEvent.click(toggle);
+      expect(screen.getByRole("button", { name: "收起" })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+
+      // Keyboard operable: Enter on the focused toggle collapses again.
+      await userEvent.keyboard("{Enter}");
+      expect(screen.getByRole("button", { name: "展开全文" })).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+    } finally {
+      restoreElementMetrics();
+    }
+  });
+
+  it("clamps a long text_response answer below its metadata line (R1-F2)", async () => {
+    const essay =
+      "印象最深的是密码加盐哈希存储，因为培训前系统把口令直接哈希入库，加盐能让相同口令得到不同摘要，配合慢哈希可以显著提高离线破解成本。";
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "能力测验",
+      passingScore: 6,
+      totalScore: 10,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "简答题",
+          order: 0,
+          candidateAnswer: essay,
+          manualGraded: true,
+          score: 8,
+          maxScore: 10,
+          correct: false,
+        },
+      ],
+    });
+
+    stubElementMetrics({ scrollHeight: 220, clientHeight: 66 });
+    try {
+      renderPage();
+
+      // Full essay text stays in the DOM behind the clamped presentation.
+      expect(await screen.findByText(essay)).toBeInTheDocument();
+      // The metadata (verdict icon + manual marker) renders as its own line;
+      // the answer text is no longer squeezed beside it.
+      expect(screen.getByLabelText("回答错误")).toBeInTheDocument();
+      expect(screen.getByText("主观题")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "展开全文" })).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+    } finally {
+      restoreElementMetrics();
+    }
+  });
+
+  it("renders no disclosure toggle when the answer fits the clamp budget", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "能力测验",
+      passingScore: 6,
+      totalScore: 10,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "填写答案",
+          order: 0,
+          candidateAnswer: "短答案",
+          manualGraded: false,
+          score: 10,
+          maxScore: 10,
+          correct: true,
+        },
+      ],
+    });
+
+    stubElementMetrics({ scrollHeight: 44, clientHeight: 66 });
+    try {
+      renderPage();
+
+      expect(await screen.findByText("短答案")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /展开全文|收起/ }),
+      ).not.toBeInTheDocument();
+    } finally {
+      restoreElementMetrics();
+    }
   });
 
   it("renders every legal question type through the shared localized dictionary (no raw enum leak)", async () => {

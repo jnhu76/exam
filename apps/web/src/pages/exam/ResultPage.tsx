@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { LucideIcon } from "lucide-react";
 import {
+  ChevronDown,
+  ChevronUp,
   CircleCheck,
   CircleX,
   Clock,
@@ -16,6 +25,7 @@ import {
 } from "@exam/contracts";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
+import { useVerticalOverflowObservation } from "@/hooks/useVerticalOverflowObservation";
 import { api } from "@/lib/api";
 import { getTypeLabel } from "@/lib/constants";
 import { routes } from "@/lib/routes";
@@ -27,7 +37,6 @@ import {
   DataTableCell,
   DataTableSurface,
   DataTableHead,
-  DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
@@ -150,7 +159,8 @@ function hiddenResultPresentation(
 }
 
 /**
- * Renders an answer value as text, with optional truncation for long fill-blank answers. Rich documents render through the static content renderer.
+ * Renders an answer value as text. Rich documents render through the static
+ * content renderer.
  *
  * The frozen `answerMode` is the render authority: a payload that merely looks
  * like a ContentDocumentV1 envelope on a non-rich (or corrupt) answer keeps the
@@ -159,12 +169,10 @@ function hiddenResultPresentation(
 function AnswerText({
   answer,
   answerMode,
-  truncate,
   t,
 }: {
   answer: unknown;
   answerMode?: string | null;
-  truncate?: boolean;
   t: (key: string) => string;
 }) {
   const richDocument = resolveRichAnswerDocument(answer, answerMode);
@@ -182,13 +190,67 @@ function AnswerText({
       </span>
     );
   }
-  const text = formatAnswer(answer, t);
-  if (truncate) {
-    // Fill-blank answers are long prose: single-line truncate with the full
-    // value accessible via the contract presenter (title + keyboard focus).
-    return <DataTableOverflowText mode="truncate" value={text} />;
-  }
-  return <span>{text}</span>;
+  return <span>{formatAnswer(answer, t)}</span>;
+}
+
+/**
+ * Collapsed-preview disclosure for long cell prose (R1-F2): the answer renders
+ * at its full column width, visually clamped to a three-line preview; a
+ * keyboard-operable toggle reveals the whole value in place. The full text
+ * stays in the DOM (selectable, announced) in both states — a hover tooltip
+ * is never the full-text entry. Expansion grows the row vertically only, so
+ * the governed column widths and the page layout are untouched.
+ */
+function AnswerDisclosure({
+  children,
+  expandLabel,
+  collapseLabel,
+}: {
+  children: ReactNode;
+  expandLabel: string;
+  collapseLabel: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const contentId = useId();
+  // Facts-only measurement owner: overflowing compares the full content
+  // height (scrollHeight) against the clamp budget (clientHeight) while the
+  // container is clamped.
+  const observation = useVerticalOverflowObservation(contentRef);
+  // Latched while expanded: an unclamped container reports no overflow, but
+  // the toggle must stay to allow collapsing again. A collapse re-measures.
+  const expandable = expanded || observation.overflowing;
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <div
+        ref={contentRef}
+        id={contentId}
+        // 3-line preview at the governed cell leading (3 × 1.375rem).
+        className={expanded ? undefined : "max-h-[4.125rem] overflow-hidden"}
+      >
+        {children}
+      </div>
+      {expandable && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 gap-1 px-1 text-xs"
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <AppIcon
+            icon={expanded ? ChevronUp : ChevronDown}
+            decorative
+            size="inline"
+          />
+          {expanded ? collapseLabel : expandLabel}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 /** Displays the scored result of a single exam attempt, including per-question breakdown or a pending-status message. */
@@ -306,6 +368,45 @@ export function ResultPage() {
                   // server-side) travels with the candidate answer: it marks
                   // the human-graded provenance and is never silently dropped.
                   const isManual = question.manualGraded === true;
+                  // Long-form content classes (essay and prose answers, rich
+                  // documents) render below their metadata line through the
+                  // disclosure; objective answers are short by construction
+                  // and stay inline.
+                  const isLongForm =
+                    question.type === "text_response" ||
+                    question.type === "fill_blank";
+                  const verdictIcon = question.correct ? (
+                    <AppIcon
+                      icon={CircleCheck}
+                      decorative={false}
+                      label={t("candidateResult.aria.correct")}
+                      size="inline"
+                      className="text-success shrink-0"
+                    />
+                  ) : (
+                    <AppIcon
+                      icon={CircleX}
+                      decorative={false}
+                      label={t("candidateResult.aria.incorrect")}
+                      size="inline"
+                      className="text-muted-foreground shrink-0"
+                    />
+                  );
+                  const manualMarker = isManual ? (
+                    <span
+                      className="type-secondary shrink-0"
+                      data-testid={`result-question-manual-${question.questionId}`}
+                    >
+                      {t("candidateResult.answer.manual")}
+                    </span>
+                  ) : null;
+                  const answer = (
+                    <AnswerText
+                      answer={question.candidateAnswer}
+                      answerMode={question.answerMode}
+                      t={t as (key: string) => string}
+                    />
+                  );
                   return (
                     <TableRow key={question.questionId}>
                       <DataTableCell role="number">
@@ -324,39 +425,28 @@ export function ResultPage() {
                         {getTypeLabel(question.type, t) ?? question.type}
                       </DataTableCell>
                       <DataTableCell role="secondary-text">
-                        <div className="flex items-center gap-2">
-                          {question.correct ? (
-                            <AppIcon
-                              icon={CircleCheck}
-                              decorative={false}
-                              label={t("candidateResult.aria.correct")}
-                              size="inline"
-                              className="text-success"
-                            />
-                          ) : (
-                            <AppIcon
-                              icon={CircleX}
-                              decorative={false}
-                              label={t("candidateResult.aria.incorrect")}
-                              size="inline"
-                              className="text-muted-foreground"
-                            />
-                          )}
-                          {isManual && (
-                            <span
-                              className="type-secondary shrink-0"
-                              data-testid={`result-question-manual-${question.questionId}`}
+                        {isLongForm ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              {verdictIcon}
+                              {manualMarker}
+                            </div>
+                            <AnswerDisclosure
+                              expandLabel={t("candidateResult.answer.expand")}
+                              collapseLabel={t(
+                                "candidateResult.answer.collapse",
+                              )}
                             >
-                              {t("candidateResult.answer.manual")}
-                            </span>
-                          )}
-                          <AnswerText
-                            answer={question.candidateAnswer}
-                            answerMode={question.answerMode}
-                            truncate={question.type === "fill_blank"}
-                            t={t as (key: string) => string}
-                          />
-                        </div>
+                              {answer}
+                            </AnswerDisclosure>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            {verdictIcon}
+                            {manualMarker}
+                            {answer}
+                          </div>
+                        )}
                       </DataTableCell>
                       <DataTableCell role="score">
                         {question.score}/{question.maxScore}

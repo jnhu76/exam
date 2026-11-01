@@ -752,6 +752,8 @@ const zhCN = {
       correct: "正确",
       incorrect: "错误",
       manual: "主观题",
+      expand: "展开全文",
+      collapse: "收起",
     },
     aria: {
       correct: "回答正确",
