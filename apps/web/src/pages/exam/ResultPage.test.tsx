@@ -92,7 +92,7 @@ describe("ResultPage", () => {
 
     expect(await screen.findByText("10")).toBeInTheDocument();
     expect(screen.getByText("已通过")).toBeInTheDocument();
-    expect(screen.getAllByText("单选题")).toHaveLength(2);
+    expect(screen.getAllByText("单选")).toHaveLength(2);
     expect(screen.getByLabelText("回答正确")).toBeInTheDocument();
     expect(screen.getByLabelText("回答错误")).toBeInTheDocument();
   });
@@ -311,6 +311,86 @@ describe("ResultPage", () => {
     const truncatedAnswers = await screen.findAllByTitle(longAnswer);
     expect(truncatedAnswers).toHaveLength(1);
     expect(truncatedAnswers[0]).toHaveClass("data-table-overflow-truncate");
+  });
+
+  it("renders every legal question type through the shared localized dictionary (no raw enum leak)", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "题型词典回归",
+      passingScore: 5,
+      totalScore: 5,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "single_choice",
+          content: "单选题干",
+          order: 0,
+          candidateAnswer: "a",
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q2",
+          type: "multiple_choice",
+          content: "多选题干",
+          order: 1,
+          candidateAnswer: ["a", "b"],
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q3",
+          type: "fill_blank",
+          content: "填空题干",
+          order: 2,
+          candidateAnswer: "答案",
+          manualGraded: false,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q4",
+          type: "true_false",
+          content: "判断题干",
+          order: 3,
+          candidateAnswer: true,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q5",
+          type: "text_response",
+          content: "文本题干",
+          order: 4,
+          candidateAnswer: "考生作答内容",
+          manualGraded: true,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByTestId("result-total-score");
+    // Raw enum values must not surface as UI text (R1-F3).
+    expect(screen.queryByText("text_response")).not.toBeInTheDocument();
+    // The shared questionType dictionary covers every legal QuestionType with
+    // localized copy — the type column must never fall back to the raw key.
+    expect(screen.getByText("单选")).toBeInTheDocument();
+    expect(screen.getByText("多选")).toBeInTheDocument();
+    expect(screen.getByText("填空")).toBeInTheDocument();
+    expect(screen.getByText("判断")).toBeInTheDocument();
+    expect(screen.getByText("文本作答")).toBeInTheDocument();
   });
 
   it("navigates back to the exam list", async () => {

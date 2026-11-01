@@ -747,12 +747,6 @@ const zhCN = {
       correctAnswer: "正确答案",
       score: "得分",
     },
-    questionTypes: {
-      single_choice: "单选题",
-      multiple_choice: "多选题",
-      true_false: "判断题",
-      fill_blank: "填空题",
-    },
     answer: {
       unanswered: "未作答",
       correct: "正确",

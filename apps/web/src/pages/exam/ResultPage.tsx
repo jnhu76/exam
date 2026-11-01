@@ -17,6 +17,7 @@ import {
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
 import { api } from "@/lib/api";
+import { getTypeLabel } from "@/lib/constants";
 import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,13 +49,6 @@ function formatAnswer(answer: unknown, t: (key: string) => string): string {
       .join("、");
   }
   return String(answer);
-}
-
-/** Maps a question type key to its i18n display label. */
-function formatQuestionType(type: string, t: (key: string) => string): string {
-  const key = `candidateResult.questionTypes.${type}`;
-  const label = t(key);
-  return label === key ? type : label;
 }
 
 /** The hidden response variant of the candidate attempt-result contract. */
@@ -325,10 +319,10 @@ export function ResultPage() {
                         />
                       </DataTableCell>
                       <DataTableCell role="type">
-                        {formatQuestionType(
-                          question.type,
-                          t as (key: string) => string,
-                        )}
+                        {/* Shared questionType dictionary (lib/constants) is
+                            the single label authority for every legal type;
+                            the raw-key fallback only covers contract drift. */}
+                        {getTypeLabel(question.type, t) ?? question.type}
                       </DataTableCell>
                       <DataTableCell role="secondary-text">
                         <div className="flex items-center gap-2">
