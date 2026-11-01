@@ -1,15 +1,18 @@
 /**
  * UI-TABLE-MOBILE-1 structural guards (issue 457, eligibility extended by
- * #601 Phase F).
+ * #601 Phase F and by the WS2 result-sheet decision: detail-comparison may
+ * declare a per-question mobile representation).
  *
- * Pins the mobile card representation at the SOURCE level:
- *   - the mobile slot serves management-list and log-diagnostic archetypes;
- *     detail-comparison keeps horizontal scroll below lg (negative proofs),
- *     and the shell itself fails loud on the illegal combination. The #457
- *     management-list-only freeze is superseded by Phase F evidence: the two
- *     log-diagnostic queue pages had shipped hand-rolled md-breakpoint card
- *     lists — the authority converged onto them instead of preserving the
- *     page-local second implementation;
+ * Pins the mobile representation at the SOURCE level:
+ *   - the mobile slot serves management-list, log-diagnostic and
+ *     detail-comparison archetypes; embedded-picker stays scroll-bound
+ *     (negative proof), and the shell itself fails loud on the illegal
+ *     combination. The #457 management-list-only freeze was superseded by
+ *     Phase F evidence; the detail-comparison exclusion was superseded when
+ *     the candidate result sheet proved that pruning/scrolling cannot serve
+ *     per-question answer/score review on phones (WS2 S2.4) — a
+ *     detail-comparison page declares a per-question stacked view, not the
+ *     derived card list;
  *   - the adopted management-list pages render BOTH representations from one
  *     DataViewColumnDef column array — the derived MobileRecordList consumes
  *     the same `columns` variable the desktop table does (no page-local
@@ -60,7 +63,7 @@ const adoptedPages = [
 
 /**
  * Archetypes without a declared mobile slot: scroll stays (attempt detail /
- * audit / import logs / the exam result sheet keep their column context).
+ * audit / import logs keep their column context).
  */
 const scrollOnlyConsumers = [
   {
@@ -69,7 +72,6 @@ const scrollOnlyConsumers = [
   },
   { file: "../../pages/admin/AuditLogPage", archetype: "log-diagnostic" },
   { file: "../../pages/admin/ImportLogsPage", archetype: "log-diagnostic" },
-  { file: "../../pages/exam/ResultPage", archetype: "detail-comparison" },
 ] as const;
 
 describe("mobile card representation structural guards (issue 457)", () => {
@@ -86,6 +88,11 @@ describe("mobile card representation structural guards (issue 457)", () => {
     {
       archetype: "detail-comparison" as const,
       hasMobile: true,
+      expected: true,
+    },
+    {
+      archetype: "detail-comparison" as const,
+      hasMobile: false,
       expected: false,
     },
     { archetype: "embedded-picker" as const, hasMobile: true, expected: false },
@@ -98,7 +105,7 @@ describe("mobile card representation structural guards (issue 457)", () => {
     },
   );
 
-  it.each(["detail-comparison"] as const)(
+  it.each(["embedded-picker"] as const)(
     "the shell fails loud when the mobile slot meets archetype %s (DEV/test)",
     (archetype) => {
       expect(() =>
@@ -107,7 +114,7 @@ describe("mobile card representation structural guards (issue 457)", () => {
             <table />
           </DataTableShell>,
         ),
-      ).toThrow(/management-list\/log-diagnostic mechanism/);
+      ).toThrow(/ineligible archetype/);
     },
   );
 
@@ -141,6 +148,17 @@ describe("mobile card representation structural guards (issue 457)", () => {
       expect(source).toMatch(/rows=\{/);
     },
   );
+
+  it("ResultPage declares the per-question mobile representation from one data source (WS2 S2.4)", () => {
+    const source = read("../../pages/exam/ResultPage.tsx");
+    expect(source).toMatch(/archetype="detail-comparison"/);
+    // The detail-comparison mobile form is a per-question stacked view fed by
+    // the SAME business data the desktop table body maps — not the derived
+    // management-list card list.
+    expect(source).toMatch(/\bmobile=\{/);
+    expect(source).toMatch(/questions=\{result\.questionResults\}/);
+    expect(source).not.toContain("MobileRecordList");
+  });
 
   it("converges the QuestionPage workbench mobile region onto the derived list", () => {
     const source = read("../../pages/admin/QuestionPage.tsx");

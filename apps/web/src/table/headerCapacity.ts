@@ -102,7 +102,6 @@ export const ROLE_HEADER_KEYS: Record<DataTableColumnRole, readonly string[]> =
       "admin.attemptDetail.result.columns.candidateAnswer",
       "admin.attemptDetail.result.columns.standardAnswer",
       "candidateResult.table.yourAnswer",
-      "candidateResult.table.correctAnswer",
       "admin.scoreList.columns.candidateInfo",
       "admin.recoveryQueue.columns.linked",
       "admin.recoveryQueue.columns.proctors",

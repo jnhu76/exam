@@ -93,9 +93,12 @@ The admin shell is a **three-state** layout using the `lg` / `xl` boundaries:
   the 56px rail.
 
 No document-level horizontal overflow; wide tables scroll locally.
-Management-list tables switch between the desktop table and a mobile card list
-at `lg` (CSS-only, both representations derived from one column declaration);
-other table archetypes keep local scroll at every width. The candidate
+Table archetypes with an explicit mobile slot switch representation at `lg`
+(CSS-only, both representations from one data source): management-list derives
+the shared card list from one column declaration, a detail-comparison result
+sheet may declare a per-question stacked view over the same business data
+(see ui-system.md §Table archetypes), and every other archetype keeps local
+scroll at every width. The candidate
 exam runtime shares tokens, primitives, status, icons, and clarity but stays
 task-focused.
 

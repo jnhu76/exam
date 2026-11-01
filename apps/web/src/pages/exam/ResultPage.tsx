@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { LucideIcon } from "lucide-react";
 import {
+  ChevronDown,
+  ChevronUp,
   CircleCheck,
   CircleX,
   Clock,
@@ -16,7 +25,9 @@ import {
 } from "@exam/contracts";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
+import { useVerticalOverflowObservation } from "@/hooks/useVerticalOverflowObservation";
 import { api } from "@/lib/api";
+import { getTypeLabel } from "@/lib/constants";
 import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +37,6 @@ import {
   DataTableCell,
   DataTableSurface,
   DataTableHead,
-  DataTableOverflowText,
 } from "@/components/shared/DataTableContract";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
@@ -48,13 +58,6 @@ function formatAnswer(answer: unknown, t: (key: string) => string): string {
       .join("、");
   }
   return String(answer);
-}
-
-/** Maps a question type key to its i18n display label. */
-function formatQuestionType(type: string, t: (key: string) => string): string {
-  const key = `candidateResult.questionTypes.${type}`;
-  const label = t(key);
-  return label === key ? type : label;
 }
 
 /** The hidden response variant of the candidate attempt-result contract. */
@@ -156,7 +159,8 @@ function hiddenResultPresentation(
 }
 
 /**
- * Renders an answer value as text, with optional truncation for long fill-blank answers. Rich documents render through the static content renderer.
+ * Renders an answer value as text. Rich documents render through the static
+ * content renderer.
  *
  * The frozen `answerMode` is the render authority: a payload that merely looks
  * like a ContentDocumentV1 envelope on a non-rich (or corrupt) answer keeps the
@@ -165,12 +169,10 @@ function hiddenResultPresentation(
 function AnswerText({
   answer,
   answerMode,
-  truncate,
   t,
 }: {
   answer: unknown;
   answerMode?: string | null;
-  truncate?: boolean;
   t: (key: string) => string;
 }) {
   const richDocument = resolveRichAnswerDocument(answer, answerMode);
@@ -188,13 +190,200 @@ function AnswerText({
       </span>
     );
   }
-  const text = formatAnswer(answer, t);
-  if (truncate) {
-    // Fill-blank answers are long prose: single-line truncate with the full
-    // value accessible via the contract presenter (title + keyboard focus).
-    return <DataTableOverflowText mode="truncate" value={text} />;
-  }
-  return <span>{text}</span>;
+  return <span>{formatAnswer(answer, t)}</span>;
+}
+
+/**
+ * Collapsed-preview disclosure for long cell prose (R1-F2): the answer renders
+ * at its full column width, visually clamped to a three-line preview; a
+ * keyboard-operable toggle reveals the whole value in place. The full text
+ * stays in the DOM (selectable, announced) in both states — a hover tooltip
+ * is never the full-text entry. Expansion grows the row vertically only, so
+ * the governed column widths and the page layout are untouched.
+ */
+function AnswerDisclosure({
+  children,
+  expandLabel,
+  collapseLabel,
+}: {
+  children: ReactNode;
+  expandLabel: string;
+  collapseLabel: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const contentId = useId();
+  // Facts-only measurement owner: overflowing compares the full content
+  // height (scrollHeight) against the clamp budget (clientHeight) while the
+  // container is clamped.
+  const observation = useVerticalOverflowObservation(contentRef);
+  // Latched while expanded: an unclamped container reports no overflow, but
+  // the toggle must stay to allow collapsing again. A collapse re-measures.
+  const expandable = expanded || observation.overflowing;
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <div
+        ref={contentRef}
+        id={contentId}
+        // 3-line preview at the governed cell leading (3 × 1.375rem).
+        className={expanded ? undefined : "max-h-[4.125rem] overflow-hidden"}
+      >
+        {children}
+      </div>
+      {expandable && (
+        // size=sm is the smallest authorized Button geometry (h-9, DESIGN.md
+        // "Standard desktop control: 36px") — no page-local height override.
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <AppIcon
+            icon={expanded ? ChevronUp : ChevronDown}
+            decorative
+            size="inline"
+          />
+          {expanded ? collapseLabel : expandLabel}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** The visible response variant's per-question rows (the hidden variant carries none). */
+type VisibleQuestionResults = Extract<
+  CandidateAttemptResultResponse,
+  { showResultImmediately: true }
+>["questionResults"];
+
+/**
+ * The per-question presentation pieces shared by BOTH representations of the
+ * result detail (WS2 S2.4): the desktop table row cells and the mobile
+ * per-question block render the same verdict icon, manual marker and answer
+ * payload — one business-data source, one answer presentation.
+ */
+function questionPresentation(
+  question: VisibleQuestionResults[number],
+  t: (key: string) => string,
+) {
+  const isManual = question.manualGraded === true;
+  // Long-form content classes (essay and prose answers, rich documents)
+  // render below their metadata line through the disclosure; objective
+  // answers are short by construction and stay inline.
+  const isLongForm =
+    question.type === "text_response" || question.type === "fill_blank";
+  const verdict = question.correct ? (
+    <AppIcon
+      icon={CircleCheck}
+      decorative={false}
+      label={t("candidateResult.aria.correct")}
+      size="inline"
+      className="text-success shrink-0"
+    />
+  ) : (
+    <AppIcon
+      icon={CircleX}
+      decorative={false}
+      label={t("candidateResult.aria.incorrect")}
+      size="inline"
+      className="text-muted-foreground shrink-0"
+    />
+  );
+  const manualMarker = isManual ? (
+    <span
+      className="type-secondary shrink-0"
+      data-testid={`result-question-manual-${question.questionId}`}
+    >
+      {t("candidateResult.answer.manual")}
+    </span>
+  ) : null;
+  const answer = (
+    <AnswerText
+      answer={question.candidateAnswer}
+      answerMode={question.answerMode}
+      t={t}
+    />
+  );
+  return { isLongForm, verdict, manualMarker, answer };
+}
+
+/**
+ * Mobile per-question representation of the result detail (Plan B, R0-F2):
+ * the SAME questionResults array the desktop table maps, restated as one
+ * semantically grouped block per question (number + score header, content,
+ * type + verdict + manual marker, your answer). Rendered by the shell's
+ * CSS viewport switch below lg; the hidden desktop table is display:none in
+ * that range, so screen readers never see a duplicate view.
+ */
+function CandidateQuestionBlocks({
+  questions,
+  expandLabel,
+  collapseLabel,
+}: {
+  questions: VisibleQuestionResults;
+  expandLabel: string;
+  collapseLabel: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <ol data-testid="result-mobile-questions" className="flex flex-col gap-3">
+      {questions.map((question) => {
+        const { isLongForm, verdict, manualMarker, answer } =
+          questionPresentation(question, t as (key: string) => string);
+        return (
+          <li
+            key={question.questionId}
+            className="rounded-md border border-border-divider bg-surface p-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="type-secondary">
+                {t("candidateResult.mobile.question", {
+                  number: question.order + 1,
+                })}
+              </span>
+              <span className="font-medium">
+                {question.score}/{question.maxScore}
+              </span>
+            </div>
+            <div className="mt-2">
+              <ContentRenderer
+                content={question.content}
+                document={question.contentDocument}
+              />
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="type-secondary">
+                {getTypeLabel(question.type, t) ?? question.type}
+              </span>
+              {verdict}
+              {manualMarker}
+            </div>
+            <div className="mt-1 min-w-0">
+              <span className="type-secondary">
+                {t("candidateResult.table.yourAnswer")}
+              </span>
+              <div className="mt-1">
+                {isLongForm ? (
+                  <AnswerDisclosure
+                    expandLabel={expandLabel}
+                    collapseLabel={collapseLabel}
+                  >
+                    {answer}
+                  </AnswerDisclosure>
+                ) : (
+                  <div className="flex items-center gap-2">{answer}</div>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 /** Displays the scored result of a single exam attempt, including per-question breakdown or a pending-status message. */
@@ -273,6 +462,14 @@ export function ResultPage() {
           <DataTableShell
             archetype="detail-comparison"
             title={t("candidateResult.detail.title")}
+            description={t("candidateResult.detail.answerNote")}
+            mobile={
+              <CandidateQuestionBlocks
+                questions={result.questionResults}
+                expandLabel={t("candidateResult.answer.expand")}
+                collapseLabel={t("candidateResult.answer.collapse")}
+              />
+            }
           >
             <DataTableSurface
               columns={[
@@ -280,7 +477,6 @@ export function ResultPage() {
                 { role: "long-text", key: "question" },
                 { role: "type" },
                 { role: "secondary-text", key: "candidate-answer" },
-                { role: "secondary-text", key: "correct-answer" },
                 { role: "score" },
               ]}
             >
@@ -298,9 +494,6 @@ export function ResultPage() {
                   <DataTableHead role="secondary-text">
                     {t("candidateResult.table.yourAnswer")}
                   </DataTableHead>
-                  <DataTableHead role="secondary-text">
-                    {t("candidateResult.table.correctAnswer")}
-                  </DataTableHead>
                   <DataTableHead role="score">
                     {t("candidateResult.table.score")}
                   </DataTableHead>
@@ -309,10 +502,16 @@ export function ResultPage() {
               <TableBody>
                 {result.questionResults.map((question) => {
                   // Candidate result contract (EXSEM-017): the DTO never
-                  // carries standardAnswer. Objective questions always render
-                  // the hidden marker; manual questions render the manual
-                  // marker (manualGraded is computed server-side).
-                  const isManual = question.manualGraded === true;
+                  // carries standardAnswer, so the detail table has no
+                  // correct-answer column — the shell states that reference
+                  // answers are not published. manualGraded (computed
+                  // server-side) travels with the candidate answer: it marks
+                  // the human-graded provenance and is never silently dropped.
+                  const { isLongForm, verdict, manualMarker, answer } =
+                    questionPresentation(
+                      question,
+                      t as (key: string) => string,
+                    );
                   return (
                     <TableRow key={question.questionId}>
                       <DataTableCell role="number">
@@ -325,54 +524,33 @@ export function ResultPage() {
                         />
                       </DataTableCell>
                       <DataTableCell role="type">
-                        {formatQuestionType(
-                          question.type,
-                          t as (key: string) => string,
-                        )}
+                        {/* Shared questionType dictionary (lib/constants) is
+                            the single label authority for every legal type;
+                            the raw-key fallback only covers contract drift. */}
+                        {getTypeLabel(question.type, t) ?? question.type}
                       </DataTableCell>
                       <DataTableCell role="secondary-text">
-                        <div className="flex items-center gap-2">
-                          {question.correct ? (
-                            <AppIcon
-                              icon={CircleCheck}
-                              decorative={false}
-                              label={t("candidateResult.aria.correct")}
-                              size="inline"
-                              className="text-success"
-                            />
-                          ) : (
-                            <AppIcon
-                              icon={CircleX}
-                              decorative={false}
-                              label={t("candidateResult.aria.incorrect")}
-                              size="inline"
-                              className="text-muted-foreground"
-                            />
-                          )}
-                          <AnswerText
-                            answer={question.candidateAnswer}
-                            answerMode={question.answerMode}
-                            truncate={question.type === "fill_blank"}
-                            t={t as (key: string) => string}
-                          />
-                        </div>
-                      </DataTableCell>
-                      <DataTableCell
-                        role="secondary-text"
-                        data-testid={
-                          isManual
-                            ? `result-question-manual-${question.questionId}`
-                            : undefined
-                        }
-                      >
-                        {isManual ? (
-                          <span className="type-secondary">
-                            {t("candidateResult.answer.manual")}
-                          </span>
+                        {isLongForm ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              {verdict}
+                              {manualMarker}
+                            </div>
+                            <AnswerDisclosure
+                              expandLabel={t("candidateResult.answer.expand")}
+                              collapseLabel={t(
+                                "candidateResult.answer.collapse",
+                              )}
+                            >
+                              {answer}
+                            </AnswerDisclosure>
+                          </div>
                         ) : (
-                          <span className="type-secondary">
-                            {t("candidateResult.answer.hidden")}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {verdict}
+                            {manualMarker}
+                            {answer}
+                          </div>
                         )}
                       </DataTableCell>
                       <DataTableCell role="score">

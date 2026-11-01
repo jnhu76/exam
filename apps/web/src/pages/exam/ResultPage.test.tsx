@@ -1,9 +1,23 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { ResultPage } from "./ResultPage";
+
+// The shell's viewport switch is CSS-only, so BOTH representations of the
+// result detail are in the DOM in every test run (the real browser shows one
+// and display:none-hides the other). Region-scoped queries target one
+// representation; whole-screen queries prove copy shared by both.
+function representationRegion(kind: "desktop" | "mobile") {
+  const el = document.querySelector(
+    kind === "desktop"
+      ? '[data-slot="responsive-desktop-region"]'
+      : '[data-slot="responsive-mobile-region"]',
+  );
+  if (!el) throw new Error(`responsive ${kind} region not mounted`);
+  return within(el as HTMLElement);
+}
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
@@ -37,6 +51,43 @@ vi.mock("@/lib/api", () => ({
 }));
 
 const getMock = vi.mocked(api.get);
+
+// jsdom reports 0 for every box metric; the answer disclosure reads
+// scrollHeight/clientHeight to decide whether content overflows the clamp
+// budget, so tests stub the metrics the real browser reports on the element
+// prototype (restored after each use).
+let originalMetrics: {
+  scrollHeight?: PropertyDescriptor;
+  clientHeight?: PropertyDescriptor;
+};
+
+function stubElementMetrics(metrics: {
+  scrollHeight: number;
+  clientHeight: number;
+}) {
+  const proto = Element.prototype;
+  originalMetrics = {
+    scrollHeight: Object.getOwnPropertyDescriptor(proto, "scrollHeight"),
+    clientHeight: Object.getOwnPropertyDescriptor(proto, "clientHeight"),
+  };
+  Object.defineProperty(proto, "scrollHeight", {
+    configurable: true,
+    get: () => metrics.scrollHeight,
+  });
+  Object.defineProperty(proto, "clientHeight", {
+    configurable: true,
+    get: () => metrics.clientHeight,
+  });
+}
+
+function restoreElementMetrics() {
+  const proto = Element.prototype;
+  for (const key of ["scrollHeight", "clientHeight"] as const) {
+    const desc = originalMetrics?.[key];
+    if (desc) Object.defineProperty(proto, key, desc);
+    else delete (proto as unknown as Record<string, unknown>)[key];
+  }
+}
 
 function renderPage() {
   return render(
@@ -92,9 +143,11 @@ describe("ResultPage", () => {
 
     expect(await screen.findByText("10")).toBeInTheDocument();
     expect(screen.getByText("已通过")).toBeInTheDocument();
-    expect(screen.getAllByText("单选题")).toHaveLength(2);
-    expect(screen.getByLabelText("回答正确")).toBeInTheDocument();
-    expect(screen.getByLabelText("回答错误")).toBeInTheDocument();
+    // The detail renders twice in the DOM (desktop table + mobile blocks; the
+    // CSS viewport switch shows one) — 2 questions × 2 representations.
+    expect(screen.getAllByText("单选")).toHaveLength(4);
+    expect(screen.getAllByLabelText("回答正确")).toHaveLength(2);
+    expect(screen.getAllByLabelText("回答错误")).toHaveLength(2);
   });
 
   it("shows only the neutral fallback when results are hidden", async () => {
@@ -277,8 +330,9 @@ describe("ResultPage", () => {
     );
   });
 
-  it("truncates long fill blank answers with the full value in title", async () => {
-    const longAnswer = "这是一个需要在悬停时查看完整内容的较长填空答案";
+  it("clamps a long fill blank answer behind a keyboard-operable disclosure (R1-F2)", async () => {
+    const longAnswer =
+      "这是一个远超三行预览高度的较长填空答案，收起时只应看到截断预览，展开后必须完整可读，悬停提示不得是唯一全文入口。";
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "graded",
@@ -303,14 +357,321 @@ describe("ResultPage", () => {
       ],
     });
 
+    stubElementMetrics({ scrollHeight: 120, clientHeight: 66 });
+    try {
+      renderPage();
+
+      // The full value stays in the DOM (selectable, announced) — only the
+      // presentation is clamped; a hover tooltip is not the full-text entry.
+      // Both representations render it (2 = desktop cell + mobile block).
+      expect(await screen.findAllByText(longAnswer)).toHaveLength(2);
+      const desktop = representationRegion("desktop");
+
+      // The disclosure is a real button with an expanded state, rendered at
+      // the smallest authorized Button geometry (h-9; DESIGN.md "Standard
+      // desktop control: 36px") — no page-local height override.
+      const toggle = desktop.getByRole("button", { name: "展开全文" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(toggle).toHaveClass("h-9");
+      expect(toggle).not.toHaveClass("h-6");
+
+      await userEvent.click(toggle);
+      expect(desktop.getByRole("button", { name: "收起" })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+
+      // Keyboard operable: Enter on the focused toggle collapses again.
+      await userEvent.keyboard("{Enter}");
+      expect(desktop.getByRole("button", { name: "展开全文" })).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+    } finally {
+      restoreElementMetrics();
+    }
+  });
+
+  it("clamps a long text_response answer below its metadata line (R1-F2)", async () => {
+    const essay =
+      "印象最深的是密码加盐哈希存储，因为培训前系统把口令直接哈希入库，加盐能让相同口令得到不同摘要，配合慢哈希可以显著提高离线破解成本。";
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "能力测验",
+      passingScore: 6,
+      totalScore: 10,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "简答题",
+          order: 0,
+          candidateAnswer: essay,
+          manualGraded: true,
+          score: 8,
+          maxScore: 10,
+          correct: false,
+        },
+      ],
+    });
+
+    stubElementMetrics({ scrollHeight: 220, clientHeight: 66 });
+    try {
+      renderPage();
+
+      // Full essay text stays in the DOM behind the clamped presentation
+      // (2 = the desktop cell + the mobile block).
+      expect(await screen.findAllByText(essay)).toHaveLength(2);
+      const desktop = representationRegion("desktop");
+      // The metadata (verdict icon + manual marker) renders as its own line;
+      // the answer text is no longer squeezed beside it.
+      expect(desktop.getByLabelText("回答错误")).toBeInTheDocument();
+      expect(desktop.getByText("主观题")).toBeInTheDocument();
+      expect(desktop.getByRole("button", { name: "展开全文" })).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+    } finally {
+      restoreElementMetrics();
+    }
+  });
+
+  it("renders no disclosure toggle when the answer fits the clamp budget", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "能力测验",
+      passingScore: 6,
+      totalScore: 10,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "填写答案",
+          order: 0,
+          candidateAnswer: "短答案",
+          manualGraded: false,
+          score: 10,
+          maxScore: 10,
+          correct: true,
+        },
+      ],
+    });
+
+    stubElementMetrics({ scrollHeight: 44, clientHeight: 66 });
+    try {
+      renderPage();
+
+      // The short answer renders in both representations (2 = desktop +
+      // mobile) and neither mounts a disclosure toggle.
+      expect(await screen.findAllByText("短答案")).toHaveLength(2);
+      expect(
+        screen.queryByRole("button", { name: /展开全文|收起/ }),
+      ).not.toBeInTheDocument();
+    } finally {
+      restoreElementMetrics();
+    }
+  });
+
+  it("renders every legal question type through the shared localized dictionary (no raw enum leak)", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "题型词典回归",
+      passingScore: 5,
+      totalScore: 5,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "single_choice",
+          content: "单选题干",
+          order: 0,
+          candidateAnswer: "a",
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q2",
+          type: "multiple_choice",
+          content: "多选题干",
+          order: 1,
+          candidateAnswer: ["a", "b"],
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q3",
+          type: "fill_blank",
+          content: "填空题干",
+          order: 2,
+          candidateAnswer: "答案",
+          manualGraded: false,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q4",
+          type: "true_false",
+          content: "判断题干",
+          order: 3,
+          candidateAnswer: true,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q5",
+          type: "text_response",
+          content: "文本题干",
+          order: 4,
+          candidateAnswer: "考生作答内容",
+          manualGraded: true,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+      ],
+    });
+
     renderPage();
 
-    // The candidate DTO carries only the candidate answer (the correct-answer
-    // cell renders the hidden marker for objective questions), so exactly one
-    // truncated answer remains.
-    const truncatedAnswers = await screen.findAllByTitle(longAnswer);
-    expect(truncatedAnswers).toHaveLength(1);
-    expect(truncatedAnswers[0]).toHaveClass("data-table-overflow-truncate");
+    await screen.findByTestId("result-total-score");
+    // Raw enum values must not surface as UI text (R1-F3) — in either
+    // representation.
+    expect(screen.queryByText("text_response")).not.toBeInTheDocument();
+    // The shared questionType dictionary covers every legal QuestionType with
+    // localized copy — the type column must never fall back to the raw key.
+    const desktop = representationRegion("desktop");
+    expect(desktop.getByText("单选")).toBeInTheDocument();
+    expect(desktop.getByText("多选")).toBeInTheDocument();
+    expect(desktop.getByText("填空")).toBeInTheDocument();
+    expect(desktop.getByText("判断")).toBeInTheDocument();
+    expect(desktop.getByText("文本作答")).toBeInTheDocument();
+    // The mobile per-question blocks render the same shared dictionary.
+    expect(
+      representationRegion("mobile").getByText("文本作答"),
+    ).toBeInTheDocument();
+  });
+
+  it("removes the empty correct-answer column and keeps the manual marker visible", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "R0-F4 回归",
+      passingScore: 2,
+      totalScore: 2,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "single_choice",
+          content: "客观题干",
+          order: 0,
+          candidateAnswer: "a",
+          manualGraded: false,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q2",
+          type: "text_response",
+          content: "主观题干",
+          order: 1,
+          candidateAnswer: "考生作答",
+          manualGraded: true,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByTestId("result-total-score");
+    // R0-F4: the column promised "正确答案" but the candidate DTO never
+    // carries one (EXSEM-017), so every cell was a visibility placeholder
+    // (— / 主观题). The column is gone entirely.
+    expect(screen.queryByText("正确答案")).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    // The page states why no reference answers are shown.
+    expect(screen.getByText("参考答案不公开")).toBeInTheDocument();
+    // The manualGraded marker survives at its new home (your-answer cell) —
+    // never silently dropped, in BOTH representations (2 = desktop + mobile),
+    // and only the genuinely manual question carries it.
+    expect(screen.getAllByText("主观题")).toHaveLength(2);
+  });
+
+  it("renders the mobile per-question view from the same business data (WS2 S2.4)", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "R0-F2 回归",
+      passingScore: 2,
+      totalScore: 2,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "single_choice",
+          content: "移动端题干一",
+          order: 0,
+          candidateAnswer: "a",
+          manualGraded: false,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q2",
+          type: "text_response",
+          content: "移动端题干二",
+          order: 1,
+          candidateAnswer: "移动端长作答",
+          manualGraded: true,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByTestId("result-total-score");
+    const mobile = representationRegion("mobile");
+    // One semantically grouped block per question: numbered header with the
+    // score (the primary conclusion), content, type, and the answer.
+    expect(mobile.getByTestId("result-mobile-questions").children).toHaveLength(
+      2,
+    );
+    expect(mobile.getByText("第 1 题")).toBeInTheDocument();
+    expect(mobile.getByText("第 2 题")).toBeInTheDocument();
+    expect(mobile.getAllByText("1/1")).toHaveLength(2);
+    expect(mobile.getByText("移动端题干一")).toBeInTheDocument();
+    expect(mobile.getByText("移动端题干二")).toBeInTheDocument();
+    expect(mobile.getByText("移动端长作答")).toBeInTheDocument();
+    // Same verdict + manual semantics as the desktop table.
+    expect(mobile.getAllByLabelText("回答正确")).toHaveLength(2);
+    expect(mobile.getByText("主观题")).toBeInTheDocument();
   });
 
   it("navigates back to the exam list", async () => {
@@ -340,7 +701,7 @@ describe("ResultPage", () => {
     // no rubric field. The page must show score/pass and must NOT open an
     // answer-review section just because the score is visible. manualGraded
     // survives the stripping, so only genuinely manual questions keep the
-    // "主观题" marker while objective answers render as hidden.
+    // "主观题" marker; there is no correct-answer column at all (R0-F4).
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "graded",
@@ -386,12 +747,14 @@ describe("ResultPage", () => {
     );
     expect(screen.getByText("已通过")).toBeInTheDocument();
 
-    // Answer gate closed (DTO carries no standardAnswer): the objective
-    // correct-answer cell renders the hidden placeholder, NOT a real answer
-    // and NOT the manual marker.
-    expect(screen.getAllByText("—")).toHaveLength(1);
-    // The genuinely manual question keeps the manual marker.
-    expect(screen.getByText("主观题")).toBeInTheDocument();
+    // Answer gate closed (DTO carries no standardAnswer): there is no
+    // correct-answer column at all (R0-F4 removal) — the objective question
+    // renders neither a real answer nor a hidden placeholder.
+    expect(screen.queryByText("正确答案")).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    // The genuinely manual question keeps the manual marker (2 = the desktop
+    // cell + the mobile block).
+    expect(screen.getAllByText("主观题")).toHaveLength(2);
     // No rubric is ever rendered by ResultPage (it is not in the DTO contract).
     expect(screen.queryByText(/评分标准|rubric/i)).not.toBeInTheDocument();
   });

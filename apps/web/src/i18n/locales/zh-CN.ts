@@ -738,27 +738,25 @@ const zhCN = {
     },
     detail: {
       title: "答题明细",
+      answerNote: "参考答案不公开",
     },
     table: {
       questionNumber: "题号",
       questionContent: "题目",
       questionType: "题型",
       yourAnswer: "你的答案",
-      correctAnswer: "正确答案",
       score: "得分",
     },
-    questionTypes: {
-      single_choice: "单选题",
-      multiple_choice: "多选题",
-      true_false: "判断题",
-      fill_blank: "填空题",
+    mobile: {
+      question: "第 {{number}} 题",
     },
     answer: {
       unanswered: "未作答",
       correct: "正确",
       incorrect: "错误",
       manual: "主观题",
-      hidden: "—",
+      expand: "展开全文",
+      collapse: "收起",
     },
     aria: {
       correct: "回答正确",

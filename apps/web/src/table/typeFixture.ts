@@ -8,7 +8,7 @@ import { AssignableRoleSchema } from "@exam/contracts";
  * widest legal badge across the bounded enumerated-label families rendered in
  * type-role columns, measured at the real product font. The families are the
  * authority-backed enumerated-label universes — user role labels (including
- * the `unknown` display fallback), question-type labels in both namespaces
+ * the `unknown` display fallback), question-type labels in the namespaces
  * that render them, candidate-field type/required labels, import-log types,
  * and incident severities. This module rebuilds the derivation automatically
  * from those authorities — no copied label list — so a new label in any
@@ -58,7 +58,6 @@ export const TYPE_LABEL_NAMESPACES = [
   "admin.users.roleLabels",
   "questionType",
   "admin.questions.questionTypes",
-  "candidateResult.questionTypes",
   "admin.candidateFields.typeLabels",
   "admin.candidateFields.requiredLabels",
   "admin.importLogs.typeLabels",

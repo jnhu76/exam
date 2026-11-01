@@ -134,25 +134,26 @@ describe("DataWorkbench", () => {
   });
 
   it("T3: fails loud when mobileList meets an ineligible archetype (DEV/test)", () => {
-    // #601 Phase F extended mobile eligibility to log-diagnostic;
-    // detail-comparison stays scroll-only.
+    // #601 Phase F extended mobile eligibility to log-diagnostic; the WS2
+    // result-sheet decision extended it to detail-comparison. embedded-picker
+    // stays scroll-bound.
     expect(() =>
       render(
         <DataWorkbench
-          archetype="detail-comparison"
+          archetype="embedded-picker"
           desktopTable={<table aria-label="桌面表" />}
           mobileList={<div>移动卡片内容</div>}
         />,
       ),
-    ).toThrow(/management-list\/log-diagnostic mechanism/);
+    ).toThrow(/ineligible archetype/);
   });
 
-  it("R1 production fallback: ineligible detail-comparison + mobileList keeps the desktop representation", () => {
+  it("R1 production fallback: ineligible embedded-picker + mobileList keeps the desktop representation", () => {
     vi.stubEnv("DEV", false);
     try {
       render(
         <DataWorkbench
-          archetype="detail-comparison"
+          archetype="embedded-picker"
           desktopTable={<table aria-label="桌面表" />}
           mobileList={<div>移动卡片内容</div>}
         />,
