@@ -253,6 +253,138 @@ function AnswerDisclosure({
   );
 }
 
+/** The visible response variant's per-question rows (the hidden variant carries none). */
+type VisibleQuestionResults = Extract<
+  CandidateAttemptResultResponse,
+  { showResultImmediately: true }
+>["questionResults"];
+
+/**
+ * The per-question presentation pieces shared by BOTH representations of the
+ * result detail (WS2 S2.4): the desktop table row cells and the mobile
+ * per-question block render the same verdict icon, manual marker and answer
+ * payload — one business-data source, one answer presentation.
+ */
+function questionPresentation(
+  question: VisibleQuestionResults[number],
+  t: (key: string) => string,
+) {
+  const isManual = question.manualGraded === true;
+  // Long-form content classes (essay and prose answers, rich documents)
+  // render below their metadata line through the disclosure; objective
+  // answers are short by construction and stay inline.
+  const isLongForm =
+    question.type === "text_response" || question.type === "fill_blank";
+  const verdict = question.correct ? (
+    <AppIcon
+      icon={CircleCheck}
+      decorative={false}
+      label={t("candidateResult.aria.correct")}
+      size="inline"
+      className="text-success shrink-0"
+    />
+  ) : (
+    <AppIcon
+      icon={CircleX}
+      decorative={false}
+      label={t("candidateResult.aria.incorrect")}
+      size="inline"
+      className="text-muted-foreground shrink-0"
+    />
+  );
+  const manualMarker = isManual ? (
+    <span
+      className="type-secondary shrink-0"
+      data-testid={`result-question-manual-${question.questionId}`}
+    >
+      {t("candidateResult.answer.manual")}
+    </span>
+  ) : null;
+  const answer = (
+    <AnswerText
+      answer={question.candidateAnswer}
+      answerMode={question.answerMode}
+      t={t}
+    />
+  );
+  return { isLongForm, verdict, manualMarker, answer };
+}
+
+/**
+ * Mobile per-question representation of the result detail (Plan B, R0-F2):
+ * the SAME questionResults array the desktop table maps, restated as one
+ * semantically grouped block per question (number + score header, content,
+ * type + verdict + manual marker, your answer). Rendered by the shell's
+ * CSS viewport switch below lg; the hidden desktop table is display:none in
+ * that range, so screen readers never see a duplicate view.
+ */
+function CandidateQuestionBlocks({
+  questions,
+  expandLabel,
+  collapseLabel,
+}: {
+  questions: VisibleQuestionResults;
+  expandLabel: string;
+  collapseLabel: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <ol data-testid="result-mobile-questions" className="flex flex-col gap-3">
+      {questions.map((question) => {
+        const { isLongForm, verdict, manualMarker, answer } =
+          questionPresentation(question, t as (key: string) => string);
+        return (
+          <li
+            key={question.questionId}
+            className="rounded-md border border-border-divider bg-surface p-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="type-secondary">
+                {t("candidateResult.mobile.question", {
+                  number: question.order + 1,
+                })}
+              </span>
+              <span className="font-medium">
+                {question.score}/{question.maxScore}
+              </span>
+            </div>
+            <div className="mt-2">
+              <ContentRenderer
+                content={question.content}
+                document={question.contentDocument}
+              />
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="type-secondary">
+                {getTypeLabel(question.type, t) ?? question.type}
+              </span>
+              {verdict}
+              {manualMarker}
+            </div>
+            <div className="mt-1 min-w-0">
+              <span className="type-secondary">
+                {t("candidateResult.table.yourAnswer")}
+              </span>
+              <div className="mt-1">
+                {isLongForm ? (
+                  <AnswerDisclosure
+                    expandLabel={expandLabel}
+                    collapseLabel={collapseLabel}
+                  >
+                    {answer}
+                  </AnswerDisclosure>
+                ) : (
+                  <div className="flex items-center gap-2">{answer}</div>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 /** Displays the scored result of a single exam attempt, including per-question breakdown or a pending-status message. */
 export function ResultPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
@@ -330,6 +462,13 @@ export function ResultPage() {
             archetype="detail-comparison"
             title={t("candidateResult.detail.title")}
             description={t("candidateResult.detail.answerNote")}
+            mobile={
+              <CandidateQuestionBlocks
+                questions={result.questionResults}
+                expandLabel={t("candidateResult.answer.expand")}
+                collapseLabel={t("candidateResult.answer.collapse")}
+              />
+            }
           >
             <DataTableSurface
               columns={[
@@ -367,46 +506,11 @@ export function ResultPage() {
                   // answers are not published. manualGraded (computed
                   // server-side) travels with the candidate answer: it marks
                   // the human-graded provenance and is never silently dropped.
-                  const isManual = question.manualGraded === true;
-                  // Long-form content classes (essay and prose answers, rich
-                  // documents) render below their metadata line through the
-                  // disclosure; objective answers are short by construction
-                  // and stay inline.
-                  const isLongForm =
-                    question.type === "text_response" ||
-                    question.type === "fill_blank";
-                  const verdictIcon = question.correct ? (
-                    <AppIcon
-                      icon={CircleCheck}
-                      decorative={false}
-                      label={t("candidateResult.aria.correct")}
-                      size="inline"
-                      className="text-success shrink-0"
-                    />
-                  ) : (
-                    <AppIcon
-                      icon={CircleX}
-                      decorative={false}
-                      label={t("candidateResult.aria.incorrect")}
-                      size="inline"
-                      className="text-muted-foreground shrink-0"
-                    />
-                  );
-                  const manualMarker = isManual ? (
-                    <span
-                      className="type-secondary shrink-0"
-                      data-testid={`result-question-manual-${question.questionId}`}
-                    >
-                      {t("candidateResult.answer.manual")}
-                    </span>
-                  ) : null;
-                  const answer = (
-                    <AnswerText
-                      answer={question.candidateAnswer}
-                      answerMode={question.answerMode}
-                      t={t as (key: string) => string}
-                    />
-                  );
+                  const { isLongForm, verdict, manualMarker, answer } =
+                    questionPresentation(
+                      question,
+                      t as (key: string) => string,
+                    );
                   return (
                     <TableRow key={question.questionId}>
                       <DataTableCell role="number">
@@ -428,7 +532,7 @@ export function ResultPage() {
                         {isLongForm ? (
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
-                              {verdictIcon}
+                              {verdict}
                               {manualMarker}
                             </div>
                             <AnswerDisclosure
@@ -442,7 +546,7 @@ export function ResultPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            {verdictIcon}
+                            {verdict}
                             {manualMarker}
                             {answer}
                           </div>

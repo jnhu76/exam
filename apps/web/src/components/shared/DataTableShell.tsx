@@ -7,13 +7,18 @@ import {
 import type { TableArchetype } from "@/table/tableTiers";
 
 /**
- * Production-safe mobile eligibility: management-list and log-diagnostic
- * archetypes with an explicit mobile slot participate in the CSS viewport
- * switch. Other archetypes fall back to desktop/scroll at every width.
+ * Production-safe mobile eligibility: management-list, log-diagnostic and
+ * detail-comparison archetypes with an explicit mobile slot participate in
+ * the CSS viewport switch. Other archetypes fall back to desktop/scroll at
+ * every width.
  *
- * log-diagnostic is included because its pages carry mobile card lists; this
- * function is the single decider, so no page may keep a page-local card list
- * as a bypass.
+ * log-diagnostic is included because its pages carry mobile card lists;
+ * detail-comparison is included because a result sheet's per-question
+ * answer/score review cannot survive column pruning or horizontal scroll on
+ * a phone (WS2 S2.4) — its mobile form is a per-question stacked view, not
+ * the derived card list. Eligibility is a permission, not an obligation,
+ * and this function is the single decider, so no page may keep a page-local
+ * card list as a bypass.
  */
 export function isMobileRepresentationAllowed(
   archetype: TableArchetype,
@@ -21,7 +26,9 @@ export function isMobileRepresentationAllowed(
 ): boolean {
   return (
     hasMobile &&
-    (archetype === "management-list" || archetype === "log-diagnostic")
+    (archetype === "management-list" ||
+      archetype === "log-diagnostic" ||
+      archetype === "detail-comparison")
   );
 }
 
@@ -67,10 +74,12 @@ export function DataTableShell({
   toolbar?: ReactNode;
   children: ReactNode;
   /**
-   * Mobile card list for mobile-eligible archetypes (issue 457, extended by Phase
-   * F): a viewport-only (<lg) representation derived from the same column
-   * declarations as the desktop table. The switch is pure CSS (`lg:`) — no JS
-   * breakpoint. detail-comparison keeps horizontal scroll below lg.
+   * Mobile representation for mobile-eligible archetypes (issue 457, extended
+   * by Phase F and the WS2 result-sheet decision): a viewport-only (<lg)
+   * representation — management-list/log-diagnostic derive the shared card
+   * list from the desktop column declarations; detail-comparison declares a
+   * per-question stacked view over the same business data. The switch is pure
+   * CSS (`lg:`) — no JS breakpoint.
    */
   mobile?: ReactNode;
   /** The data-view footer (DataViewFooter) — count/range + navigation. */
@@ -94,7 +103,7 @@ export function DataTableShell({
     !isMobileRepresentationAllowed(archetype, true)
   ) {
     throw new Error(
-      `DataTableShell contract violation: the mobile card slot is a management-list/log-diagnostic mechanism; archetype "${archetype}" keeps horizontal scroll below lg`,
+      `DataTableShell contract violation: the mobile representation slot is not available for the ineligible archetype "${archetype}"; it keeps horizontal scroll below lg`,
     );
   }
 

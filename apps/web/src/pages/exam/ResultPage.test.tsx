@@ -1,9 +1,23 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { ResultPage } from "./ResultPage";
+
+// The shell's viewport switch is CSS-only, so BOTH representations of the
+// result detail are in the DOM in every test run (the real browser shows one
+// and display:none-hides the other). Region-scoped queries target one
+// representation; whole-screen queries prove copy shared by both.
+function representationRegion(kind: "desktop" | "mobile") {
+  const el = document.querySelector(
+    kind === "desktop"
+      ? '[data-slot="responsive-desktop-region"]'
+      : '[data-slot="responsive-mobile-region"]',
+  );
+  if (!el) throw new Error(`responsive ${kind} region not mounted`);
+  return within(el as HTMLElement);
+}
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
@@ -129,9 +143,11 @@ describe("ResultPage", () => {
 
     expect(await screen.findByText("10")).toBeInTheDocument();
     expect(screen.getByText("已通过")).toBeInTheDocument();
-    expect(screen.getAllByText("单选")).toHaveLength(2);
-    expect(screen.getByLabelText("回答正确")).toBeInTheDocument();
-    expect(screen.getByLabelText("回答错误")).toBeInTheDocument();
+    // The detail renders twice in the DOM (desktop table + mobile blocks; the
+    // CSS viewport switch shows one) — 2 questions × 2 representations.
+    expect(screen.getAllByText("单选")).toHaveLength(4);
+    expect(screen.getAllByLabelText("回答正确")).toHaveLength(2);
+    expect(screen.getAllByLabelText("回答错误")).toHaveLength(2);
   });
 
   it("shows only the neutral fallback when results are hidden", async () => {
@@ -347,21 +363,23 @@ describe("ResultPage", () => {
 
       // The full value stays in the DOM (selectable, announced) — only the
       // presentation is clamped; a hover tooltip is not the full-text entry.
-      expect(await screen.findByText(longAnswer)).toBeInTheDocument();
+      // Both representations render it (2 = desktop cell + mobile block).
+      expect(await screen.findAllByText(longAnswer)).toHaveLength(2);
+      const desktop = representationRegion("desktop");
 
       // The disclosure is a real button with an expanded state.
-      const toggle = screen.getByRole("button", { name: "展开全文" });
+      const toggle = desktop.getByRole("button", { name: "展开全文" });
       expect(toggle).toHaveAttribute("aria-expanded", "false");
 
       await userEvent.click(toggle);
-      expect(screen.getByRole("button", { name: "收起" })).toHaveAttribute(
+      expect(desktop.getByRole("button", { name: "收起" })).toHaveAttribute(
         "aria-expanded",
         "true",
       );
 
       // Keyboard operable: Enter on the focused toggle collapses again.
       await userEvent.keyboard("{Enter}");
-      expect(screen.getByRole("button", { name: "展开全文" })).toHaveAttribute(
+      expect(desktop.getByRole("button", { name: "展开全文" })).toHaveAttribute(
         "aria-expanded",
         "false",
       );
@@ -401,13 +419,15 @@ describe("ResultPage", () => {
     try {
       renderPage();
 
-      // Full essay text stays in the DOM behind the clamped presentation.
-      expect(await screen.findByText(essay)).toBeInTheDocument();
+      // Full essay text stays in the DOM behind the clamped presentation
+      // (2 = the desktop cell + the mobile block).
+      expect(await screen.findAllByText(essay)).toHaveLength(2);
+      const desktop = representationRegion("desktop");
       // The metadata (verdict icon + manual marker) renders as its own line;
       // the answer text is no longer squeezed beside it.
-      expect(screen.getByLabelText("回答错误")).toBeInTheDocument();
-      expect(screen.getByText("主观题")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "展开全文" })).toHaveAttribute(
+      expect(desktop.getByLabelText("回答错误")).toBeInTheDocument();
+      expect(desktop.getByText("主观题")).toBeInTheDocument();
+      expect(desktop.getByRole("button", { name: "展开全文" })).toHaveAttribute(
         "aria-expanded",
         "false",
       );
@@ -445,7 +465,9 @@ describe("ResultPage", () => {
     try {
       renderPage();
 
-      expect(await screen.findByText("短答案")).toBeInTheDocument();
+      // The short answer renders in both representations (2 = desktop +
+      // mobile) and neither mounts a disclosure toggle.
+      expect(await screen.findAllByText("短答案")).toHaveLength(2);
       expect(
         screen.queryByRole("button", { name: /展开全文|收起/ }),
       ).not.toBeInTheDocument();
@@ -523,15 +545,21 @@ describe("ResultPage", () => {
     renderPage();
 
     await screen.findByTestId("result-total-score");
-    // Raw enum values must not surface as UI text (R1-F3).
+    // Raw enum values must not surface as UI text (R1-F3) — in either
+    // representation.
     expect(screen.queryByText("text_response")).not.toBeInTheDocument();
     // The shared questionType dictionary covers every legal QuestionType with
     // localized copy — the type column must never fall back to the raw key.
-    expect(screen.getByText("单选")).toBeInTheDocument();
-    expect(screen.getByText("多选")).toBeInTheDocument();
-    expect(screen.getByText("填空")).toBeInTheDocument();
-    expect(screen.getByText("判断")).toBeInTheDocument();
-    expect(screen.getByText("文本作答")).toBeInTheDocument();
+    const desktop = representationRegion("desktop");
+    expect(desktop.getByText("单选")).toBeInTheDocument();
+    expect(desktop.getByText("多选")).toBeInTheDocument();
+    expect(desktop.getByText("填空")).toBeInTheDocument();
+    expect(desktop.getByText("判断")).toBeInTheDocument();
+    expect(desktop.getByText("文本作答")).toBeInTheDocument();
+    // The mobile per-question blocks render the same shared dictionary.
+    expect(
+      representationRegion("mobile").getByText("文本作答"),
+    ).toBeInTheDocument();
   });
 
   it("removes the empty correct-answer column and keeps the manual marker visible", async () => {
@@ -581,8 +609,65 @@ describe("ResultPage", () => {
     // The page states why no reference answers are shown.
     expect(screen.getByText("参考答案不公开")).toBeInTheDocument();
     // The manualGraded marker survives at its new home (your-answer cell) —
-    // never silently dropped, and only the genuinely manual row carries it.
-    expect(screen.getByText("主观题")).toBeInTheDocument();
+    // never silently dropped, in BOTH representations (2 = desktop + mobile),
+    // and only the genuinely manual question carries it.
+    expect(screen.getAllByText("主观题")).toHaveLength(2);
+  });
+
+  it("renders the mobile per-question view from the same business data (WS2 S2.4)", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "R0-F2 回归",
+      passingScore: 2,
+      totalScore: 2,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "single_choice",
+          content: "移动端题干一",
+          order: 0,
+          candidateAnswer: "a",
+          manualGraded: false,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q2",
+          type: "text_response",
+          content: "移动端题干二",
+          order: 1,
+          candidateAnswer: "移动端长作答",
+          manualGraded: true,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByTestId("result-total-score");
+    const mobile = representationRegion("mobile");
+    // One semantically grouped block per question: numbered header with the
+    // score (the primary conclusion), content, type, and the answer.
+    expect(mobile.getByTestId("result-mobile-questions").children).toHaveLength(
+      2,
+    );
+    expect(mobile.getByText("第 1 题")).toBeInTheDocument();
+    expect(mobile.getByText("第 2 题")).toBeInTheDocument();
+    expect(mobile.getAllByText("1/1")).toHaveLength(2);
+    expect(mobile.getByText("移动端题干一")).toBeInTheDocument();
+    expect(mobile.getByText("移动端题干二")).toBeInTheDocument();
+    expect(mobile.getByText("移动端长作答")).toBeInTheDocument();
+    // Same verdict + manual semantics as the desktop table.
+    expect(mobile.getAllByLabelText("回答正确")).toHaveLength(2);
+    expect(mobile.getByText("主观题")).toBeInTheDocument();
   });
 
   it("navigates back to the exam list", async () => {
@@ -663,8 +748,9 @@ describe("ResultPage", () => {
     // renders neither a real answer nor a hidden placeholder.
     expect(screen.queryByText("正确答案")).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
-    // The genuinely manual question keeps the manual marker.
-    expect(screen.getByText("主观题")).toBeInTheDocument();
+    // The genuinely manual question keeps the manual marker (2 = the desktop
+    // cell + the mobile block).
+    expect(screen.getAllByText("主观题")).toHaveLength(2);
     // No rubric is ever rendered by ResultPage (it is not in the DTO contract).
     expect(screen.queryByText(/评分标准|rubric/i)).not.toBeInTheDocument();
   });

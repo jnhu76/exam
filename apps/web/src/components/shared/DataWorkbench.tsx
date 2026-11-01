@@ -66,7 +66,7 @@ export function DataWorkbench({
     !isMobileRepresentationAllowed(archetype, true)
   ) {
     throw new Error(
-      `DataWorkbench contract violation: the mobile card slot is a management-list/log-diagnostic mechanism; archetype "${archetype}" keeps horizontal scroll below lg`,
+      `DataWorkbench contract violation: the mobile representation slot is not available for the ineligible archetype "${archetype}"; it keeps horizontal scroll below lg`,
     );
   }
 

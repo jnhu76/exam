@@ -438,7 +438,7 @@ The page declares one archetype on the shell; the vocabulary is closed:
 | --- | --- | --- | --- |
 | `management-list` | semantic table, container-driven tier negotiation | shared mobile cards (`MobileRecordList`) | below Σ floor → local scroll, otherwise it fits |
 | `log-diagnostic` | table | table by default; a page MAY declare cards | below Σ floor → local scroll, otherwise it fits |
-| `detail-comparison` | table, sticky first context column | **table** (never cards) | below Σ floor → local scroll, otherwise it fits |
+| `detail-comparison` | table, sticky first context column | **table**; a page MAY declare a per-question stacked view over the same business data (candidate result sheet) | below Σ floor → local scroll, otherwise it fits |
 | `embedded-picker` | embedded/dialog authority (no tier attribute) | unchanged | scrolls inside its dialog surface |
 
 Do not add an archetype. The archetype names the semantic table kind only —
@@ -447,23 +447,30 @@ it does NOT own the width intent: whoever composes the surface declares
 `intrinsic` for the question-picker dialog, which renders at its preferred
 width). A "compact tier" is the region's density signal, never a width floor.
 
-Do not add an archetype. The mobile card slot is a `management-list` /
-`log-diagnostic` mechanism — a DEV contract throw guards the shell against an
-illegal combination, and only an eligible archetype with an explicit mobile
-slot participates in the viewport switch (production-safe fallback:
-desktop/scroll at every width). Eligibility is a permission, not an
-obligation: a dense audit log with no faithful card form declares none and
-keeps the scroll (#601 Phase F superseded the #457 management-list-only
-freeze — RecoveryQueuePage and ProctorRecoveryPage had shipped page-local
-card lists and now render through the same shared switch).
+Do not add an archetype. The mobile representation slot is a
+`management-list` / `log-diagnostic` / `detail-comparison` mechanism — a DEV
+contract throw guards the shell against an illegal combination, and only an
+eligible archetype with an explicit mobile slot participates in the viewport
+switch (production-safe fallback: desktop/scroll at every width). Eligibility
+is a permission, not an obligation: a dense audit log with no faithful card
+form declares none and keeps the scroll (#601 Phase F superseded the #457
+management-list-only freeze — RecoveryQueuePage and ProctorRecoveryPage had
+shipped page-local card lists and now render through the same shared switch).
+A `detail-comparison` page declares a per-question stacked view, never the
+derived card list: the candidate result sheet's per-question answer/score
+review cannot survive column pruning or horizontal scroll on a phone (WS2
+S2.4), and both representations map the same business data, so the hidden one
+is display:none to the accessibility tree.
 
 ### Three independent signals
 
 Three signals stay independent; conflating any two is the historical root of
 the mobile-card and tier defects:
 
-- **viewport** → representation (`ResponsiveRepresentation`: < lg cards for
-  management-list, ≥ lg table);
+- **viewport** → representation (`ResponsiveRepresentation`: < lg the
+  declared mobile representation for eligible archetypes — cards for
+  management-list, per-question stacked view for a result sheet's
+  detail-comparison — ≥ lg table);
 - **container width** → column allocation / local scroll. The scroll region
   publishes the measured content box to the allocator
   (`table/columnAllocation.ts`), which resolves explicit whole-px widths from

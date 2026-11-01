@@ -747,6 +747,9 @@ const zhCN = {
       yourAnswer: "你的答案",
       score: "得分",
     },
+    mobile: {
+      question: "第 {{number}} 题",
+    },
     answer: {
       unanswered: "未作答",
       correct: "正确",
