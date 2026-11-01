@@ -2217,6 +2217,7 @@ const zhCN = {
       forceSubmit: {
         title: "确认强制交卷",
         description: "确定要强制提交考生「{{name}}」的答卷吗？此操作不可撤销。",
+        confirm: "确认强制交卷",
         reason: "管理员强制交卷",
         done: "已强制交卷",
         indeterminate: "强制交卷提交状态未确认，可重试（将复用同一命令）。",
