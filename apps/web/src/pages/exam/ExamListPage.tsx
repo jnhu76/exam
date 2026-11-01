@@ -159,11 +159,20 @@ function ExamCard({
           <span>
             {t("examList.meta.questionCount", { count: exam.totalQuestions })}
           </span>
+          {/* Attempts copy keys on the server-projected retake policy — the
+           * authored maxAttempts number is only a real cap under
+           * max_attempts and must never render as one under unlimited. */}
           <span>
-            {t("examList.meta.attempts", {
-              used: exam.attemptsUsed,
-              max: exam.maxAttempts,
-            })}
+            {exam.retakePolicy === "unlimited"
+              ? t("examList.meta.attemptsUnlimited")
+              : exam.retakePolicy === "pass_then_stop"
+                ? t("examList.meta.attemptsUntilPass", {
+                    used: exam.attemptsUsed,
+                  })
+                : t("examList.meta.attempts", {
+                    used: exam.attemptsUsed,
+                    max: exam.maxAttempts,
+                  })}
           </span>
         </div>
         <div className="type-secondary">

@@ -627,6 +627,7 @@ describe("StartExamPage", () => {
       },
       maxAttempts: 5,
       currentAttempts: 2,
+      retakePolicy: "max_attempts",
       availabilityStatus: "available",
       primaryAction: "start",
     });
@@ -634,6 +635,41 @@ describe("StartExamPage", () => {
     renderPage();
 
     expect(await screen.findByText("已考 2/5 次")).toBeInTheDocument();
+  });
+
+  it("shows 不限次数 for unlimited retake policy instead of the authored maxAttempts number (R1-F6)", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Unlimited Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      // Authored sentinel-like number: only meaningful under max_attempts.
+      maxAttempts: 99,
+      currentAttempts: 1,
+      retakePolicy: "unlimited",
+      availabilityStatus: "available",
+      primaryAction: "start",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Unlimited Exam")).toBeInTheDocument();
+    expect(screen.getByText("不限次数")).toBeInTheDocument();
+    expect(screen.queryByText(/99/)).not.toBeInTheDocument();
   });
 
   it("shows view_result action for exhausted attempts", async () => {

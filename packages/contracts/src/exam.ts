@@ -35,7 +35,11 @@ export const AuthoringTimingModeEnum = z.enum([
 ]);
 const QuestionSelectionModeEnum = z.enum(["manual", "random"]);
 export const ScoreStrategyEnum = z.enum(["highest", "latest", "first"]);
-const RetakePolicyEnum = z.enum([
+// Wire vocabulary for exam rows (superset of the authoring enum: the extra
+// literals are retained legacy values that new authoring cannot produce —
+// EXSEM-019). Exported for candidate-facing projections that pass the
+// exam's retake policy through as a display fact.
+export const RetakePolicyEnum = z.enum([
   "unlimited",
   "max_attempts",
   "daily_limit",

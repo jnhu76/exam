@@ -1054,6 +1054,9 @@ describe("CandidateExamDetailResponseSchema timing modes", () => {
       showResultImmediately: true,
     },
     maxAttempts: 2,
+    // Retake policy authority rides with the projection; the copy keys on
+    // it instead of the maxAttempts number.
+    retakePolicy: "max_attempts" as const,
     currentAttempts: 0,
     canStartNewAttempt: true,
     availabilityStatus: "available" as const,
@@ -1094,8 +1097,27 @@ describe("CandidateExamDetailResponseSchema timing modes", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.timingMode).toBe("untimed");
       expect(result.data.durationMinutes).toBeNull();
+      expect(result.data.timingMode).toBe("untimed");
+    }
+  });
+
+  it("carries the retake policy verbatim as the copy authority", () => {
+    for (const retakePolicy of [
+      "unlimited",
+      "max_attempts",
+      "pass_then_stop",
+    ] as const) {
+      const result = CandidateExamDetailResponseSchema.safeParse({
+        ...baseDetail,
+        durationMinutes: 60,
+        timingMode: "timed_window",
+        retakePolicy,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.retakePolicy).toBe(retakePolicy);
+      }
     }
   });
 });

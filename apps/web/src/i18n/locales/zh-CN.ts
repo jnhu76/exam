@@ -500,6 +500,8 @@ const zhCN = {
       passingScore: "及格分: {{score}}/{{total}}",
       questionCount: "题目数: {{count}}",
       attempts: "已考: {{used}}/{{max}}次",
+      attemptsUnlimited: "不限次数",
+      attemptsUntilPass: "已考: {{used}}次 · 通过即止",
     },
     sections: {
       canTake: "可参加的考试",
@@ -3139,6 +3141,8 @@ const zhCN = {
     },
     notice: "开始后倒计时立即启动，中途不可暂停",
     attempts: "已考 {{used}}/{{max}} 次",
+    attemptsUnlimited: "不限次数",
+    attemptsUntilPass: "已考 {{used}} 次 · 通过即止",
     bestScore: "最高成绩: {{score}}/{{total}}",
     bestScorePercent: "({{percent}}%)",
     inline: {

@@ -257,11 +257,20 @@ export function StartExamPage() {
       </div>
 
       <div className="type-secondary flex flex-col gap-1">
+        {/* Attempts copy keys on the server-projected retake policy — the
+         * authored maxAttempts number is only a real cap under
+         * max_attempts and must never render as one under unlimited. */}
         <span>
-          {t("startExam.attempts", {
-            used: exam.currentAttempts,
-            max: exam.maxAttempts,
-          })}
+          {exam.retakePolicy === "unlimited"
+            ? t("startExam.attemptsUnlimited")
+            : exam.retakePolicy === "pass_then_stop"
+              ? t("startExam.attemptsUntilPass", {
+                  used: exam.currentAttempts,
+                })
+              : t("startExam.attempts", {
+                  used: exam.currentAttempts,
+                  max: exam.maxAttempts,
+                })}
         </span>
         {exam.bestScore != null && (
           <span>
