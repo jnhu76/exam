@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -25,6 +26,7 @@ import {
 } from "@exam/contracts";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { ContentDocumentRenderer } from "@/components/shared/content/ContentDocumentRenderer";
+import { ContentScrollFocusContext } from "@/components/shared/content/ContentScrollViewport";
 import { useVerticalOverflowObservation } from "@/hooks/useVerticalOverflowObservation";
 import { api } from "@/lib/api";
 import { getTypeLabel } from "@/lib/constants";
@@ -211,6 +213,10 @@ function AnswerDisclosure({
   collapseLabel: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  // True while the collapsed clamp is deliberately applied to MEASURE. It is
+  // the initial state and is re-armed on every collapse; after the measurement
+  // settles it becomes observation.overflowing.
+  const [measureClamp, setMeasureClamp] = useState(true);
   const contentRef = useRef<HTMLDivElement>(null);
   const contentId = useId();
   // Facts-only measurement owner: overflowing compares the full content
@@ -220,16 +226,56 @@ function AnswerDisclosure({
   // Latched while expanded: an unclamped container reports no overflow, but
   // the toggle must stay to allow collapsing again. A collapse re-measures.
   const expandable = expanded || observation.overflowing;
+  // The clamp is a MEASUREMENT state until the first observation lands
+  // (clientHeight is 0 before layout) and after every collapse. Afterwards it
+  // is applied only when it actually hides content. A rich answer can fit
+  // vertically while a formula, code block or table still overflows
+  // horizontally: that answer has no disclosure toggle, and its local scroll
+  // regions must remain reachable.
+  const measured = observation.clientHeight > 0;
+  const clipped =
+    !expanded && (measureClamp || !measured || observation.overflowing);
+  useLayoutEffect(() => {
+    if (expanded) {
+      setMeasureClamp(false);
+      return;
+    }
+    if (measured) setMeasureClamp(observation.overflowing);
+  }, [expanded, measured, observation.overflowing]);
+
+  function toggleExpanded() {
+    if (expanded) {
+      // Re-apply the clamp for one measurement cycle before deciding whether
+      // the preview actually hides content.
+      setMeasureClamp(true);
+    }
+    setExpanded((value) => !value);
+  }
 
   return (
-    <div className="flex flex-col items-start gap-1">
+    <div className="flex w-full min-w-0 flex-col items-stretch gap-1">
       <div
         ref={contentRef}
         id={contentId}
+        data-answer-disclosure={expanded ? "expanded" : "collapsed"}
+        data-answer-clipped={clipped ? "true" : "false"}
         // 3-line preview at the governed cell leading (3 × 1.375rem).
-        className={expanded ? undefined : "max-h-[4.125rem] overflow-hidden"}
+        // `w-full min-w-0` gives rich content the actual cell width; without
+        // it the fit-content flex item becomes as wide as its widest
+        // formula/code/table and paints over the score column.
+        className={
+          clipped
+            ? "w-full min-w-0 max-h-[4.125rem] overflow-hidden"
+            : "w-full min-w-0"
+        }
       >
-        {children}
+        {/* Only a clipped preview suppresses focus into its nested scroll
+            regions (WCAG 2.4.11); if the content fits vertically, the
+            horizontally overflowing formula/code/table is fully visible and
+            must stay keyboard reachable even without a toggle. */}
+        <ContentScrollFocusContext.Provider value={!clipped}>
+          {children}
+        </ContentScrollFocusContext.Provider>
       </div>
       {expandable && (
         // size=sm is the smallest authorized Button geometry (h-9, DESIGN.md
@@ -238,9 +284,10 @@ function AnswerDisclosure({
           type="button"
           variant="ghost"
           size="sm"
+          className="self-start"
           aria-expanded={expanded}
           aria-controls={contentId}
-          onClick={() => setExpanded((value) => !value)}
+          onClick={toggleExpanded}
         >
           <AppIcon
             icon={expanded ? ChevronUp : ChevronDown}

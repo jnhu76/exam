@@ -12,6 +12,12 @@ import "katex/dist/katex.min.css";
  * `trust: false` is the security boundary: \href, \includegraphics,
  * \htmlClass etc. are disabled, so the output cannot carry links, remote
  * content, or event-handler attributes.
+ *
+ * `output: "htmlAndMathml"` is the accessibility boundary: the visual HTML
+ * projection is `aria-hidden="true"`, so with the previous `"html"` output a
+ * screen reader received no representation of the formula at all. The
+ * sibling MathML tree is the one accessible copy; it is visually hidden by
+ * KaTeX's own stylesheet, so nothing is read twice.
  */
 export function katexRenderToHtml(latex: string, displayMode: boolean): string {
   return katex.renderToString(latex, {
@@ -19,7 +25,7 @@ export function katexRenderToHtml(latex: string, displayMode: boolean): string {
     throwOnError: false,
     trust: false,
     strict: "ignore",
-    output: "html",
+    output: "htmlAndMathml",
     maxSize: 50,
     maxExpand: 1000,
   });

@@ -10,6 +10,7 @@ import type {
   ContentTableRow,
 } from "@exam/domain";
 import { MathRenderer } from "./MathRenderer";
+import { ContentScrollViewport } from "./ContentScrollViewport";
 
 /**
  * Static rich-content renderer (#301 §28).
@@ -42,7 +43,15 @@ function InlineRun({ inline }: { inline: ContentInline }) {
     case "hardBreak":
       return <br />;
     case "inlineMath":
-      return <MathRenderer latex={inline.latex} displayMode={false} />;
+      return (
+        <ContentScrollViewport
+          kind="inline"
+          labelKey="content.scrollRegion.inlineFormula"
+          nowrap
+        >
+          <MathRenderer latex={inline.latex} displayMode={false} />
+        </ContentScrollViewport>
+      );
     default:
       // Unknown inline node (corrupt data only — the write boundary rejects
       // it): render nothing. The block-level fail-safe covers unknown BLOCK
@@ -136,19 +145,31 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
       );
     case "blockMath":
       return (
-        <div className="my-2 overflow-x-auto">
+        <ContentScrollViewport
+          kind="block"
+          labelKey="content.scrollRegion.formula"
+          nowrap
+        >
           <MathRenderer latex={block.latex} displayMode={true} />
-        </div>
+        </ContentScrollViewport>
       );
     case "codeBlock":
       return (
-        <pre className="type-code my-2 rounded-md surface-subtle p-3">
-          <code>{block.text}</code>
-        </pre>
+        <ContentScrollViewport kind="code" labelKey="content.scrollRegion.code">
+          {/* The scroll region is the bare <pre> (the measurement owner's
+              "no border/padding" contract); the code surface and padding live
+              on the inner block so they expand with the scrolled line. */}
+          <code className="block w-max min-w-full rounded-md surface-subtle p-3">
+            {block.text}
+          </code>
+        </ContentScrollViewport>
       );
     case "table":
       return (
-        <div className="my-2 overflow-x-auto">
+        <ContentScrollViewport
+          kind="block"
+          labelKey="content.scrollRegion.table"
+        >
           <table className="w-full border-collapse">
             <tbody>
               {block.content.map((row, index) => (
@@ -156,7 +177,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </ContentScrollViewport>
       );
     default:
       // Controlled fail-safe for invalid persisted data (#301 §28): never a

@@ -52,11 +52,11 @@ export function QuestionPreview({
         {(type === "single_choice" || type === "true_false") && (
           <RadioGroup disabled>
             {options.map((opt) => (
-              <div key={opt.id} className="flex items-center gap-2">
+              <div key={opt.id} className="flex min-w-0 items-center gap-2">
                 <RadioGroupItem value={opt.id} id={`preview-${opt.id}`} />
                 <Label
                   htmlFor={`preview-${opt.id}`}
-                  className="text-sm font-normal"
+                  className="min-w-0 text-sm font-normal"
                 >
                   <ContentRenderer
                     content={opt.content}
@@ -71,11 +71,11 @@ export function QuestionPreview({
         {type === "multiple_choice" && (
           <div className="flex flex-col gap-2">
             {options.map((opt) => (
-              <div key={opt.id} className="flex items-center gap-2">
+              <div key={opt.id} className="flex min-w-0 items-center gap-2">
                 <Checkbox disabled id={`preview-${opt.id}`} />
                 <Label
                   htmlFor={`preview-${opt.id}`}
-                  className="text-sm font-normal"
+                  className="min-w-0 text-sm font-normal"
                 >
                   <ContentRenderer
                     content={opt.content}
