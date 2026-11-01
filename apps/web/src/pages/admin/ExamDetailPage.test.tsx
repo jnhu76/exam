@@ -112,7 +112,10 @@ describe("ExamDetailPage", () => {
       expect(await screen.findByText("期末能力测评")).toBeInTheDocument();
       expect(screen.getByText("状态")).toBeInTheDocument();
       expect(screen.getByText("考试时长")).toBeInTheDocument();
-      expect(screen.getByText("及格分")).toBeInTheDocument();
+      // R0-F5: unified passing-requirement vocabulary, threshold /
+      // full-marks pair with an explicit unit.
+      expect(screen.getByText("及格要求")).toBeInTheDocument();
+      expect(screen.getByText("60/100 分")).toBeInTheDocument();
       expect(screen.getByText("题目数量")).toBeInTheDocument();
     });
 

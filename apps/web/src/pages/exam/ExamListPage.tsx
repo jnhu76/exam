@@ -181,7 +181,11 @@ function ExamCard({
             ? t("examList.meta.noEnd")
             : formatDateTime(exam.windowEndAt)}
         </div>
-        <div className="flex justify-end gap-2">
+        {/* DESIGN.md mobile direct-touch contract: card action buttons are
+            size="sm" (36px desktop standard) and must reach 44px on mobile.
+            Page-local min-height via the PageHeader actions-slot idiom — the
+            Button size vocabulary stays untouched. */}
+        <div className="flex justify-end gap-2 [&_button]:min-h-11 sm:[&_button]:min-h-9">
           {viewableResultAttemptId && (
             <Button
               size="sm"

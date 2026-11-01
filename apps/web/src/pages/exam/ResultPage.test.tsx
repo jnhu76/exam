@@ -143,6 +143,10 @@ describe("ResultPage", () => {
 
     expect(await screen.findByText("10")).toBeInTheDocument();
     expect(screen.getByText("已通过")).toBeInTheDocument();
+    // R0-F5: unified passing-requirement vocabulary. The candidate
+    // result DTO carries no full-marks field, so this surface states the
+    // threshold with the unified name and unit (no new display DTO).
+    expect(screen.getByText("及格要求：6 分")).toBeInTheDocument();
     // The detail renders twice in the DOM (desktop table + mobile blocks; the
     // CSS viewport switch shows one) — 2 questions × 2 representations.
     expect(screen.getAllByText("单选")).toHaveLength(4);
@@ -163,7 +167,9 @@ describe("ResultPage", () => {
     expect(
       await screen.findByTestId("result-status-message"),
     ).toHaveTextContent("暂无法查看成绩，请稍后重试");
-    expect(screen.queryByText("及格线")).not.toBeInTheDocument();
+    // The hidden variant renders no passing-requirement summary at all —
+    // the unified copy must not leak into it either.
+    expect(screen.queryByText("及格要求：6 分")).not.toBeInTheDocument();
   });
 
   it("shows pending_publish message when hiddenReason is pending_publish", async () => {

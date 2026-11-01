@@ -160,6 +160,9 @@ describe("AttemptDetailPage", () => {
     apiGet.mockResolvedValue(mockGradedResult);
     renderPage();
     await screen.findByText("成绩概览");
+    // R0-F5: the metric card carries the unified concept name; this
+    // summary row keeps the shared bare-number metric grammar.
+    expect(screen.getByText("及格要求")).toBeInTheDocument();
     expect(screen.getByText("60")).toBeInTheDocument();
   });
 

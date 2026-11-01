@@ -223,7 +223,7 @@ describe("table and color visual-finish authority", () => {
     // `floor == basis` marks a non-compressible role; `floor < basis` marks a
     // role that already declares a narrower legal representation. `basis` is
     // the larger of the role's value token and its header capacity
-    // (number/duration).
+    // (number/duration/score).
     expect(
       Object.entries(ROLE_GEOMETRY)
         .filter(([role]) => role !== "actions")
@@ -239,7 +239,7 @@ describe("table and color visual-finish authority", () => {
       "date-range:232/232",
       "duration:80/96",
       "number:72/112",
-      "score:80/80",
+      "score:80/96",
       "short-id:120/120",
       "type:116/116",
       "action-label:152/152",

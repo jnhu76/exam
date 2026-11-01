@@ -112,14 +112,13 @@ describe("role geometry", () => {
     // budget, or the actions control budget), so squeezing them would clip a
     // value the product promises whole, or shrink a control below its
     // hit-target budget. Only the header channel may raise their basis
-    // (number, duration).
+    // (number, duration, score).
     const fixedCapacity = (
       [
         "status",
         "type",
         "date",
         "date-range",
-        "score",
         "short-id",
         "action-label",
         "actions",
@@ -160,13 +159,16 @@ describe("role geometry", () => {
     // Measured defect (census E4): /admin/exams @1440 allocated 84px to a
     // `number` column whose 参与人数 header needs 88px, rendering 参与人….
     // The value floor stays at the value token; the header channel raises the
-    // preferred width.
+    // preferred width. `score` joined them when the exam-list header became
+    // 及格要求 (4 glyphs > the 80px token's 3-glyph budget).
     expect(ROLE_GEOMETRY.number.floor).toBe(VALUE_GEOMETRY.number);
     expect(ROLE_GEOMETRY.number.basis).toBeGreaterThan(VALUE_GEOMETRY.number);
     expect(ROLE_GEOMETRY.duration.basis).toBeGreaterThan(
       VALUE_GEOMETRY.duration,
     );
     expect(ROLE_GEOMETRY.duration.floor).toBe(VALUE_GEOMETRY.duration);
+    expect(ROLE_GEOMETRY.score.floor).toBe(VALUE_GEOMETRY.score);
+    expect(ROLE_GEOMETRY.score.basis).toBe(96);
   });
 });
 
@@ -177,8 +179,8 @@ describe("requiredMinWidth / preferredWidth", () => {
   });
 
   it("sums the per-role bases", () => {
-    // 116 + 256 + 144 + 80 + 112 + 160 + 96
-    expect(preferredWidth(QUESTION_ROLES)).toBe(964);
+    // 116 + 256 + 144 + 96 + 112 + 160 + 96
+    expect(preferredWidth(QUESTION_ROLES)).toBe(980);
   });
 
   it("sums repeated roles per occurrence", () => {
@@ -223,7 +225,7 @@ describe("allocateTableColumns — regime B: compressed fit", () => {
     const alloc = allocateTableColumns(QUESTION_ROLES, 800);
     expect(alloc.state).toBe("compressed");
     expect(alloc.tableWidth).toBe(800);
-    const t = (800 - 684) / (964 - 684);
+    const t = (800 - 684) / (980 - 684);
     QUESTION_ROLES.forEach((role, i) => {
       const { floor, basis } = ROLE_GEOMETRY[role];
       const expected = floor + t * (basis - floor);
@@ -254,7 +256,7 @@ describe("allocateTableColumns — regime B: compressed fit", () => {
   });
 
   it("keeps the compressed band inside [floor, basis] at every step", () => {
-    for (let available = 684; available < 964; available += 7) {
+    for (let available = 684; available < 980; available += 7) {
       const alloc = allocateTableColumns(QUESTION_ROLES, available);
       expect(alloc.state).toBe("compressed");
       expectExactSum(QUESTION_ROLES, alloc);
@@ -280,9 +282,9 @@ describe("allocateTableColumns — regime C: preferred", () => {
   });
 
   it("renders the preferred geometry exactly when the container equals Σbasis", () => {
-    const alloc = allocateTableColumns(QUESTION_ROLES, 964);
+    const alloc = allocateTableColumns(QUESTION_ROLES, 980);
     expect(alloc.state).toBe("preferred");
-    expect(alloc.tableWidth).toBe(964);
+    expect(alloc.tableWidth).toBe(980);
     expect(alloc.columnWidths).toEqual(
       QUESTION_ROLES.map((role) => ROLE_GEOMETRY[role].basis),
     );
@@ -352,11 +354,11 @@ describe("widthMode", () => {
     const alloc = allocateTableColumns(QUESTION_ROLES, 1280, {
       widthMode: "intrinsic",
     });
-    expect(alloc.tableWidth).toBe(964);
+    expect(alloc.tableWidth).toBe(980);
     expect(alloc.columnWidths).toEqual(
       QUESTION_ROLES.map((role) => ROLE_GEOMETRY[role].basis),
     );
-    expect(alloc.residual).toBe(964 - alloc.floorWidth);
+    expect(alloc.residual).toBe(980 - alloc.floorWidth);
   });
 
   it("still compresses an intrinsic table below its preferred width", () => {

@@ -718,7 +718,10 @@ export function ExamDetailPage() {
         />
         <StatsCard
           label={t("admin.examDetail.stats.passingScore")}
-          value={`${exam.passingScore}/${exam.totalScore}`}
+          value={t("admin.examDetail.stats.passingScoreValue", {
+            score: exam.passingScore,
+            total: exam.totalScore,
+          })}
         />
         <StatsCard
           label={t("admin.examDetail.stats.questionCount")}

@@ -46,7 +46,8 @@ export function headerGlyphRun(glyphs: number): number {
  * The declared header bound per role: the number of full-width glyphs a
  * governed header label may occupy. The widest production label in the whole
  * vocabulary is `页面不可见` (5 glyphs, the exam-monitoring counters); the next
- * tier is 4 glyphs, which covers eleven of the fifteen roles.
+ * tier is 4 glyphs, which covers ten of the fifteen roles (score joined when
+ * the exam-list header became 及格要求).
  */
 export const MAX_HEADER_GLYPHS: Record<DataTableColumnRole, number> = {
   "primary-text": 4,
@@ -58,7 +59,7 @@ export const MAX_HEADER_GLYPHS: Record<DataTableColumnRole, number> = {
   "date-range": 4,
   duration: 4,
   number: 5,
-  score: 3,
+  score: 4,
   "short-id": 4,
   type: 4,
   "action-label": 2,

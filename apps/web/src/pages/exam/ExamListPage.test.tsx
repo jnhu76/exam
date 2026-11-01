@@ -81,6 +81,23 @@ describe("ExamListPage", () => {
     expect(screen.getByText("开始考试")).toBeInTheDocument();
   });
 
+  // R0-F5: the card meta row states the passing requirement with the
+  // unified concept name and an explicit unit — same fact as the start page,
+  // result page and admin surfaces, one vocabulary.
+  it("renders the unified passing requirement copy in the card meta row", async () => {
+    getMock.mockResolvedValue([makeExam({})]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("及格要求: 60/100 分")).toBeInTheDocument();
+  });
+
   it("renders in_progress exam with resume button", async () => {
     getMock.mockResolvedValue([
       makeExam({

@@ -155,7 +155,14 @@ describe("ExamPage", () => {
     // (row content also renders in the mobile card list).
     const table = await screen.findByRole("table");
     const duration = within(table).getAllByText("60分钟");
-    const score = within(table).getAllByText("60/100");
+    // R0-F5: the score column uses the unified passing-requirement
+    // vocabulary with an explicit unit — threshold/full-marks + 分.
+    expect(
+      within(table)
+        .getAllByText("及格要求")
+        .some((el) => el.tagName === "TH"),
+    ).toBe(true);
+    const score = within(table).getAllByText("60/100 分");
     const deleteButtons = within(table).getAllByRole("button", {
       name: "删除考试",
     });
