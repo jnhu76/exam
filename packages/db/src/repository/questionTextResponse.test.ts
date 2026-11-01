@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { RequestContext } from "@exam/domain";
+import { gradeQuestion, type QuestionSnapshot, type RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
 import { getWorkerScopedTestDb } from "../testDb.js";
 import { schema } from "../schema/pg.js";
@@ -309,4 +309,71 @@ describe("repo round-trip: text_response + submitted_answers", () => {
     expect(fetched?.submittedAnswers).toBeNull();
     expect(fetched?.submissionReason).toBeNull();
   });
+
+  // #845: postgres.js already decodes jsonb. A second JSON.parse on a
+  // decoded JSONB scalar string must not change the authored grading answer.
+  it.each(["42", "0", "true", "false", "null", "1e3", "normal text", "[1,2]", '{"a":1}'])(
+    "preserves JSON-like fill-blank text %j through the real question repository",
+    async (standardAnswer) => {
+      const gradingRule = {
+        multiSelectScoring: "all_correct_full" as const,
+        fillBlankMatchMode: "exact" as const,
+      };
+      const created = await questionRepo.create(ctx, {
+        courseId,
+        type: "fill_blank",
+        content: "Enter the exact text",
+        options: [],
+        standardAnswer,
+        attachments: [],
+        score: 5,
+        difficulty: 1,
+        tags: [],
+        gradingRule,
+      });
+      const reloaded = await questionRepo.findById(ctx, created.id);
+      expect(reloaded?.standardAnswer).toBe(standardAnswer);
+      expect(typeof reloaded?.standardAnswer).toBe("string");
+
+      const snapshot: QuestionSnapshot = {
+        originalQuestionId: created.id,
+        type: "fill_blank",
+        content: "Enter the exact text",
+        contentDocument: null,
+        answerMode: null,
+        attachments: [],
+        options: [],
+        standardAnswer: reloaded?.standardAnswer,
+        score: 5,
+        gradingRule,
+        order: 0,
+        rubric: null,
+      };
+      expect(gradeQuestion(snapshot, standardAnswer).score).toBe(5);
+      expect(gradeQuestion(snapshot, "an intentionally incorrect answer").score).toBe(0);
+    },
+  );
+
+  it("preserves non-scalar JSONB answers while fixing fill-blank strings", async () => {
+    for (const standardAnswer of [true, ["a", "b"], { slot1: "42" }]) {
+      const created = await questionRepo.create(ctx, {
+        courseId,
+        type: "fill_blank",
+        content: "JSON shape round trip",
+        options: [],
+        standardAnswer,
+        attachments: [],
+        score: 5,
+        difficulty: 1,
+        tags: [],
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+      });
+      const reloaded = await questionRepo.findById(ctx, created.id);
+      expect(reloaded?.standardAnswer).toEqual(standardAnswer);
+    }
+  });
+
 });
