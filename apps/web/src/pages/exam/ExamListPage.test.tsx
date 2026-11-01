@@ -155,6 +155,65 @@ describe("ExamListPage", () => {
     );
   });
 
+  it("graded retake card keeps the published result viewable next to the start action", async () => {
+    getMock.mockResolvedValue([
+      makeExam({
+        availabilityStatus: "graded",
+        primaryAction: "start",
+        attemptsUsed: 1,
+        bestScore: 85,
+        bestScorePercent: 85,
+        latestAttemptId: "att-1",
+      }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+          <Route
+            path="/exam/:attemptId/result"
+            element={<div>考试结果页</div>}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("可参加的考试")).toBeInTheDocument();
+    expect(screen.getByTestId("exam-primary-action")).toHaveAttribute(
+      "data-action",
+      "start",
+    );
+    const viewResult = screen.getByTestId("exam-view-result");
+    await userEvent.click(viewResult);
+    expect(await screen.findByText("考试结果页")).toBeInTheDocument();
+  });
+
+  it("graded retake card without a visible result (bestScore absent) renders no result entry", async () => {
+    getMock.mockResolvedValue([
+      makeExam({
+        availabilityStatus: "graded",
+        primaryAction: "start",
+        attemptsUsed: 1,
+        latestAttemptId: "att-1",
+      }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("exam-primary-action")).toHaveAttribute(
+      "data-action",
+      "start",
+    );
+    expect(screen.queryByText("查看成绩")).not.toBeInTheDocument();
+  });
+
   it("renders max_attempts_exhausted in 历史考试 section", async () => {
     getMock.mockResolvedValue([
       makeExam({
