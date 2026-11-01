@@ -1,4 +1,5 @@
 import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
+import { isCandidateRetakeDeferred } from "./candidateResultVisibility.js";
 
 /** The computed availability status of an exam for a specific candidate. */
 export type AvailabilityStatus =
@@ -107,9 +108,26 @@ export function deriveCandidateExamState(
   }
 
   if (attemptsUsed > 0 && enrollment?.finalScore != null) {
+    // INVARIANT: a committed final score is NOT the end of the exam
+    // lifecycle. The start command (startOrRestoreAttempt) admits a new
+    // attempt for a failed candidate while attempts remain under every
+    // retake policy, and for a passed candidate under unlimited/max_attempts.
+    // The only gate that must suppress the start action here is the #324
+    // retake-defer decision (pass_then_stop + hidden result), decided by the
+    // SAME authority the start route consults — otherwise the list/detail
+    // projection and the start command disagree. The lifecycle projection
+    // (projectEnrollmentForLifecycleState) strips finalPassed only; the
+    // deferral decision reads finalAttemptId and the final attempt's
+    // publication state, both preserved by that projection, so evaluating it
+    // here is equivalent to evaluating it on the raw enrollment.
+    const retakeDeferred = isCandidateRetakeDeferred(
+      exam,
+      enrollment,
+      finalAttempt,
+    );
     return {
       availabilityStatus: "graded",
-      primaryAction: "view_result",
+      primaryAction: retakeDeferred ? "view_result" : "start",
     };
   }
 
