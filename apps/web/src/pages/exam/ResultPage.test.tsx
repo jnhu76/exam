@@ -554,6 +554,10 @@ describe("ResultPage", () => {
         "data-answer-clipped",
         "false",
       );
+      // An un-clamped long token must wrap inside the mobile card (#699).
+      expect(
+        viewport!.closest("[data-answer-disclosure]")?.className,
+      ).toContain("break-words");
     } finally {
       restoreViewportMetrics();
       restoreElementMetrics();

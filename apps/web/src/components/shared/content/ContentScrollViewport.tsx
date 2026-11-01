@@ -67,7 +67,8 @@ export type ContentScrollViewportProps = {
  * Chrome's scroll-container focus heuristic would otherwise add every
  * overflowing scroller to the tab order even inside a clipped disclosure, and
  * would do so inconsistently across browsers. Short content therefore adds no
- * interaction burden, and a collapsed preview admits no focus. When focusable,
+ * interaction burden, and a clipped collapsed preview admits no focus. When
+ * focusable,
  * a short `group` label names the content type and the horizontal operation;
  * the label does not repeat the formula, and KaTeX's MathML remains the one
  * accessible copy (its HTML projection is aria-hidden).
@@ -123,6 +124,8 @@ export function ContentScrollViewport({
     // stylesheet/font can still change the measured width. `loadingdone`
     // catches the font that finishes after that insertion; `ready` covers a
     // font set already loading at mount. The guards keep jsdom safe.
+    // Budget: one document-level listener per content block — the
+    // ContentDocumentV1 node limit bounds the count, and there is no polling.
     if (typeof document !== "undefined" && document.fonts) {
       void document.fonts.ready.then(bump).catch(() => undefined);
       document.fonts.addEventListener?.("loadingdone", bumpAfterFonts);
@@ -134,7 +137,9 @@ export function ContentScrollViewport({
       document.fonts?.removeEventListener?.("loadingdone", bumpAfterFonts);
       document.fonts?.removeEventListener?.("loadingerror", bumpAfterFonts);
     };
-  }, []);
+    // `kind` changes replace the span/div/pre element; the observer must
+    // attach to the new node rather than the detached one.
+  }, [kind]);
   const interactive = focusable && observation.overflowing;
 
   // Always supply an explicit tabIndex: for a scroll container, the absence

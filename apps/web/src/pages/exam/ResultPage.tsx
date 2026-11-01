@@ -263,10 +263,13 @@ function AnswerDisclosure({
         // `w-full min-w-0` gives rich content the actual cell width; without
         // it the fit-content flex item becomes as wide as its widest
         // formula/code/table and paints over the score column.
+        // `break-words` is inherited by the plain answer span AND by the rich
+        // document's inline text: an un-clamped preview of a long URL/token
+        // must wrap instead of widening the mobile card and page (#699).
         className={
           clipped
-            ? "w-full min-w-0 max-h-[4.125rem] overflow-hidden"
-            : "w-full min-w-0"
+            ? "w-full min-w-0 break-words max-h-[4.125rem] overflow-hidden"
+            : "w-full min-w-0 break-words"
         }
       >
         {/* Only a clipped preview suppresses focus into its nested scroll

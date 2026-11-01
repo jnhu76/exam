@@ -1,8 +1,11 @@
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import type { ContentBlock, ContentDocumentV1 } from "@exam/domain";
 import { describe, expect, it } from "vitest";
 import { ContentDocumentRenderer } from "./ContentDocumentRenderer";
-import { ContentScrollFocusContext } from "./ContentScrollViewport";
+import {
+  ContentScrollFocusContext,
+  ContentScrollViewport,
+} from "./ContentScrollViewport";
 
 /**
  * The rich-content horizontal overflow contract (#S2.4).
@@ -279,6 +282,86 @@ describe("ContentDocumentRenderer — horizontal overflow contract", () => {
       });
       expect(el).toHaveAttribute("tabindex", "0");
       expect(el).toHaveAttribute("role", "group");
+    } finally {
+      restoreViewportMetrics();
+    }
+  });
+
+  it("re-measures when a web font finishes after the initial layout", async () => {
+    const listeners = new Map<string, () => void>();
+    const descriptor = Object.getOwnPropertyDescriptor(document, "fonts");
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: {
+        ready: Promise.resolve(),
+        addEventListener: (type: string, callback: () => void) => {
+          listeners.set(type, callback);
+        },
+        removeEventListener: (type: string) => {
+          listeners.delete(type);
+        },
+      },
+    });
+    const metrics = { scrollWidth: 180, clientWidth: 200 };
+    stubViewportMetrics(metrics);
+    try {
+      const { container } = render(
+        <ContentDocumentRenderer document={doc([BLOCK_MATH])} />,
+      );
+      const el = viewport(container);
+      await waitFor(() => {
+        expect(el).toHaveAttribute("data-overflowing", "false");
+      });
+      metrics.scrollWidth = 205;
+      act(() => {
+        listeners.get("loadingdone")?.();
+      });
+      await waitFor(() => {
+        expect(el).toHaveAttribute("data-overflowing", "true");
+      });
+      expect(el).toHaveAttribute("tabindex", "0");
+    } finally {
+      restoreViewportMetrics();
+      if (descriptor) Object.defineProperty(document, "fonts", descriptor);
+      else delete (document as unknown as Record<string, unknown>).fonts;
+    }
+  });
+
+  it("re-attaches the mutation observer when the viewport element kind changes", async () => {
+    const metrics = { scrollWidth: 180, clientWidth: 200 };
+    stubViewportMetrics(metrics);
+    try {
+      const { container, rerender } = render(
+        <ContentScrollViewport
+          kind="inline"
+          labelKey="content.scrollRegion.inlineFormula"
+          nowrap
+        >
+          <span>formula</span>
+        </ContentScrollViewport>,
+      );
+      await waitFor(() => {
+        expect(viewport(container)).toHaveAttribute(
+          "data-overflowing",
+          "false",
+        );
+      });
+      rerender(
+        <ContentScrollViewport
+          kind="block"
+          labelKey="content.scrollRegion.formula"
+          nowrap
+        >
+          <span>formula</span>
+        </ContentScrollViewport>,
+      );
+      const next = viewport(container);
+      expect(next.tagName).toBe("DIV");
+      metrics.scrollWidth = 640;
+      next.appendChild(document.createElement("span"));
+      await waitFor(() => {
+        expect(next).toHaveAttribute("data-overflowing", "true");
+      });
     } finally {
       restoreViewportMetrics();
     }

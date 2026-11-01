@@ -31,12 +31,24 @@ import {
  * answer is persisted through the production answer-save protocol, submitted
  * through the candidate UI, and graded through the production grading command.
  * No component-only fixture stands in for the page.
+ *
+ * E2E retention (docs/standards/testing.md §4.0): the geometry assertions are
+ * an explicit, material exception to the "no trivial visual geometry" rule.
+ * The failure they own is content inaccessibility (a formula painted over the
+ * score column, or an un-clamped token widening the mobile page), and the
+ * mechanism is real browser intrinsic sizing / scroll overflow / focus, which
+ * jsdom cannot reproduce. The assertions are relational (viewport inside its
+ * answer cell, page scrollWidth == clientWidth, geometry unchanged by
+ * expansion), not fixed px contracts; the width loop is an operability/reflow
+ * matrix (mobile representation visible, no page scroll), not pixel layout.
  */
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const STAMP = `${Date.now()}`;
 
 const Q2_PROMPT = `S2.4 富文本作答溢出回归 ${STAMP}`;
+const Q3_PROMPT = `S2.4 长 token 作答溢出回归 ${STAMP}`;
+const LONG_TOKEN = `https://example.test/${"a".repeat(300)}`;
 
 const LONG_MATH =
   "\\sum_{i=1}^{n}\\left(\\frac{a_i+b_i}{c_i+d_i}\\right)^2 + " +
@@ -116,10 +128,27 @@ function richDocument() {
   };
 }
 
+/** One unbreakable token: fits vertically pre-fix, so the clamp is removed
+ *  and the mobile card/page used to widen. With break-words it wraps and the
+ *  disclosure clips it; either way the page must not scroll horizontally. */
+function tokenDocument() {
+  return {
+    docVersion: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: LONG_TOKEN }],
+      },
+    ],
+  };
+}
+
 interface Fixture {
   examId: string;
   questionId: string;
   richQuestionId: string;
+  tokenQuestionId: string;
   candidate: SeededCandidate;
   adminToken: string;
 }
@@ -184,7 +213,7 @@ async function assembleExam(
     openAt: new Date(Date.now() - 3_600_000).toISOString(),
     closeAt: new Date(Date.now() + 86_400_000).toISOString(),
     passingScore: 0,
-    totalScore: 15,
+    totalScore: 20,
     questionSelectionMode: "manual",
     questionIds,
     controlFlags: {
@@ -258,6 +287,7 @@ async function saveRichAnswer(
   request: APIRequestContext,
   candidateToken: string,
   qid: string,
+  answer: unknown = richDocument(),
 ): Promise<void> {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const { currentVersion, currentClientSeq } = await takeQuestion(
@@ -272,7 +302,7 @@ async function saveRichAnswer(
         data: {
           attemptId,
           questionId: qid,
-          answer: richDocument(),
+          answer,
           clientSeq: currentClientSeq + 1,
           clientSavedAt: new Date().toISOString(),
           baseVersion: currentVersion,
@@ -438,17 +468,31 @@ test.describe.serial("rich-content overflow contract", () => {
     expect(q2.status(), await q2.text()).toBe(201);
     const { id: richQuestionId } = (await q2.json()) as { id: string };
 
+    const q3 = await adminPost(request, adminToken, "/api/questions", {
+      courseId,
+      type: "text_response",
+      score: 5,
+      difficulty: 1,
+      content: Q3_PROMPT,
+      answerMode: "rich",
+      standardAnswer: null,
+      rubric: `S2.4 长 token 评分标准 ${STAMP}`,
+    });
+    expect(q3.status(), await q3.text()).toBe(201);
+    const { id: tokenQuestionId } = (await q3.json()) as { id: string };
+
     const examId = await assembleExam(
       request,
       adminToken,
       courseId,
       candidate.profileId,
-      [questionId, richQuestionId],
+      [questionId, richQuestionId, tokenQuestionId],
     );
     fixture = {
       examId,
       questionId,
       richQuestionId,
+      tokenQuestionId,
       candidate,
       adminToken,
     };
@@ -518,6 +562,23 @@ test.describe.serial("rich-content overflow contract", () => {
     const editor = section.locator(".ProseMirror");
     await expect(editor).toHaveCount(1);
     await expect(editor.locator("[data-type='block-math']")).toHaveCount(1);
+
+    // Q3: a single long unbreakable token answer; persisted through the same
+    // production save protocol, then restored in the editor before submit.
+    await page.getByRole("button", { name: "下一题" }).click();
+    await expect(section.locator(".ProseMirror")).toHaveCount(1);
+    await saveRichAnswer(
+      request,
+      candidateToken,
+      fixture.tokenQuestionId,
+      tokenDocument(),
+    );
+    await page.reload();
+    await expect(section).toBeVisible();
+    await page.getByRole("button", { name: "下一题" }).click();
+    await page.getByRole("button", { name: "下一题" }).click();
+    await expect(section.locator(".ProseMirror")).toHaveCount(1);
+    await expect(section.locator(".ProseMirror")).toContainText("a".repeat(40));
     await submitExam(page);
     await page.waitForURL(/\/result$/, { timeout: 30_000 });
 
@@ -533,9 +594,20 @@ test.describe.serial("rich-content overflow contract", () => {
       },
     );
     expect(grade.status(), await grade.text()).toBe(200);
+    const tokenGrade = await adminPost(
+      request,
+      fixture.adminToken,
+      `/api/admin/attempts/${attemptId}/grade-question`,
+      {
+        questionId: fixture.tokenQuestionId,
+        score: 5,
+        comment: "S2.4 long-token browser regression",
+      },
+    );
+    expect(tokenGrade.status(), await tokenGrade.text()).toBe(200);
 
     await page.reload();
-    await expect(page.getByTestId("result-total-score")).toHaveText("13");
+    await expect(page.getByTestId("result-total-score")).toHaveText("18");
 
     const row = page.locator("tbody tr").filter({ hasText: Q2_PROMPT }).first();
     await expect(row).toBeVisible();
@@ -691,10 +763,44 @@ test.describe.serial("rich-content overflow contract", () => {
     await page.goto(`${BASE_URL}/exam/${attemptId}/result`, {
       waitUntil: "networkidle",
     });
-    await expect(page.getByTestId("result-total-score")).toHaveText("13");
+    await expect(page.getByTestId("result-total-score")).toHaveText("18");
 
     for (const width of [1440, 1024, 768, 390, 320, 720]) {
       await page.setViewportSize({ width, height: 900 });
+      const mobileVisible = await page
+        .getByTestId("result-mobile-questions")
+        .isVisible();
+      if (width >= 1024) {
+        expect(mobileVisible).toBe(false);
+        const desktopGeometry = await page.evaluate(() => ({
+          docScrollWidth: document.documentElement.scrollWidth,
+          docClientWidth: document.documentElement.clientWidth,
+        }));
+        expect(
+          desktopGeometry.docScrollWidth,
+          `${width}px must not create page-level horizontal scrolling`,
+        ).toBe(desktopGeometry.docClientWidth);
+        continue;
+      }
+      expect(mobileVisible).toBe(true);
+      const block = page
+        .locator('[data-testid="result-mobile-questions"] li')
+        .filter({ hasText: Q2_PROMPT })
+        .first();
+      const tokenBlock = page
+        .locator('[data-testid="result-mobile-questions"] li')
+        .filter({ hasText: Q3_PROMPT })
+        .first();
+      await expect(block).toBeVisible();
+      await expect(tokenBlock).toBeVisible();
+      // Wait for BOTH disclosure measurements before reading final widths:
+      // the clamp/toggle state is set after layout, not on the first render.
+      await expect(
+        block.getByRole("button", { name: /展开全文|收起/ }),
+      ).toHaveCount(1);
+      await expect(
+        tokenBlock.getByRole("button", { name: /展开全文|收起/ }),
+      ).toHaveCount(1);
       const geometry = await page.evaluate(() => ({
         docScrollWidth: document.documentElement.scrollWidth,
         docClientWidth: document.documentElement.clientWidth,
@@ -704,19 +810,6 @@ test.describe.serial("rich-content overflow contract", () => {
         `${width}px must not create page-level horizontal scrolling`,
       ).toBe(geometry.docClientWidth);
 
-      const mobileVisible = await page
-        .getByTestId("result-mobile-questions")
-        .isVisible();
-      if (width >= 1024) {
-        expect(mobileVisible).toBe(false);
-        continue;
-      }
-      expect(mobileVisible).toBe(true);
-      const block = page
-        .locator('[data-testid="result-mobile-questions"] li')
-        .filter({ hasText: Q2_PROMPT })
-        .first();
-      await expect(block).toBeVisible();
       const button = block.getByRole("button", { name: "展开全文" });
       if (await button.count()) await button.click();
       const cardGeometry = await block.evaluate((li) => {
@@ -782,6 +875,33 @@ test.describe.serial("rich-content overflow contract", () => {
       );
     }
     expect(leftBlock).toBe(true);
+
+    // Q3: one long unbreakable token. Before the wrapping fix it fit the
+    // three-line clamp vertically, so the clamp was removed and the mobile
+    // card/page widened. Expanding must wrap the token, never scroll the page.
+    const tokenBlock = page
+      .locator('[data-testid="result-mobile-questions"] li')
+      .filter({ hasText: Q3_PROMPT })
+      .first();
+    await expect(
+      tokenBlock.getByRole("button", { name: /展开全文|收起/ }),
+    ).toHaveCount(1);
+    const tokenToggle = tokenBlock.getByRole("button", { name: "收起" });
+    if (!(await tokenToggle.count())) {
+      await tokenBlock.getByRole("button", { name: "展开全文" }).click();
+    }
+    await expect(
+      tokenBlock.locator("[data-answer-disclosure]").first(),
+    ).toHaveAttribute("data-answer-clipped", "false");
+    await expect(tokenBlock).toContainText("a".repeat(40));
+    const tokenGeometry = await page.evaluate(() => ({
+      docScrollWidth: document.documentElement.scrollWidth,
+      docClientWidth: document.documentElement.clientWidth,
+    }));
+    expect(
+      tokenGeometry.docScrollWidth,
+      "an expanded long token must wrap, not widen the page",
+    ).toBe(tokenGeometry.docClientWidth);
   });
 
   test("admin authoring preview: rich prompt stays inside the preview card and is keyboard operable", async ({
