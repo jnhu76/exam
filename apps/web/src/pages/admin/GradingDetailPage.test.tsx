@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
-import { GradingDetailPage } from "./GradingDetailPage";
+import { GradingDetailPage, GradingDetailPageRoute } from "./GradingDetailPage";
 import { parseScoreInput, validateScore } from "./GradingDetailPage";
 import { permissionsForRole } from "@exam/authz";
 
@@ -115,7 +115,7 @@ function renderPage(attemptId = "att-1") {
           <Routes>
             <Route
               path="/admin/grading-queue/:id"
-              element={<GradingDetailPage />}
+              element={<GradingDetailPageRoute />}
             />
           </Routes>
         </BrandProvider>
@@ -597,6 +597,67 @@ describe("GradingDetailPage — one-time submission UX", () => {
     expect(
       screen.queryByRole("button", { name: "下一份待阅卷" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not carry the previous attempt's score into the next attempt after in-place navigation", async () => {
+    // The next-pending action navigates within the SAME route, so the page
+    // component would stay mounted and per-question local state (scores keyed
+    // by questionId) would leak into the next attempt when both attempts share
+    // a question id. The route wrapper must remount the page per attempt.
+    getMock
+      .mockResolvedValueOnce({
+        ...mockDetailData,
+        gradingStatus: "fully_graded",
+        questions: [
+          {
+            questionId: "q-shared",
+            type: "text_response",
+            content: "已完成题",
+            maxScore: 10,
+            candidateAnswer: "作答",
+            entry: {
+              score: 8,
+              comment: "",
+              gradedBy: "admin-1",
+              gradedByName: "李评分",
+              gradedAt: "2025-01-15T12:00:00Z",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [{ attemptId: "att-2" }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce({
+        ...mockDetailData,
+        gradingStatus: "pending_manual",
+        questions: [
+          {
+            questionId: "q-shared",
+            type: "text_response",
+            content: "同一道题，仍是待评分",
+            maxScore: 10,
+            candidateAnswer: "作答",
+            entry: null,
+          },
+        ],
+      });
+    renderPage("att-1");
+    await screen.findByText(/期末考试 — 张三/);
+    // The committed score is displayed on the first attempt.
+    expect(screen.getByTestId("grading-score-input-q-shared")).toHaveValue(8);
+
+    await userEvent.click(screen.getByRole("button", { name: "下一份待阅卷" }));
+    await screen.findByText("同一道题，仍是待评分");
+
+    // The next attempt's pending input must be EMPTY — never pre-filled with
+    // the previous attempt's committed/draft score.
+    expect(screen.getByTestId("grading-score-input-q-shared")).toHaveValue(
+      null,
+    );
   });
 
   it("shows a no-more-pending toast instead of navigating when the queue is empty", async () => {

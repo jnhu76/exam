@@ -762,3 +762,15 @@ export function GradingDetailPage() {
     </PageContainer>
   );
 }
+
+/**
+ * Route element for /admin/grading-queue/:id. INVARIANT: the attempt detail
+ * page owns attempt-scoped local state (draft scores/comments keyed by
+ * questionId, confirm dialog, reconciliation state); two attempts can share
+ * question ids, so an in-place :id change — next-pending navigation, browser
+ * back/forward — must remount the page instead of reusing that state.
+ */
+export function GradingDetailPageRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <GradingDetailPage key={id ?? ""} />;
+}
