@@ -232,11 +232,12 @@ function AnswerDisclosure({
         {children}
       </div>
       {expandable && (
+        // size=sm is the smallest authorized Button geometry (h-9, DESIGN.md
+        // "Standard desktop control: 36px") — no page-local height override.
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-6 gap-1 px-1 text-xs"
           aria-expanded={expanded}
           aria-controls={contentId}
           onClick={() => setExpanded((value) => !value)}

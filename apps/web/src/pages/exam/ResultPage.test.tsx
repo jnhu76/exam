@@ -367,9 +367,13 @@ describe("ResultPage", () => {
       expect(await screen.findAllByText(longAnswer)).toHaveLength(2);
       const desktop = representationRegion("desktop");
 
-      // The disclosure is a real button with an expanded state.
+      // The disclosure is a real button with an expanded state, rendered at
+      // the smallest authorized Button geometry (h-9; DESIGN.md "Standard
+      // desktop control: 36px") — no page-local height override.
       const toggle = desktop.getByRole("button", { name: "展开全文" });
       expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(toggle).toHaveClass("h-9");
+      expect(toggle).not.toHaveClass("h-6");
 
       await userEvent.click(toggle);
       expect(desktop.getByRole("button", { name: "收起" })).toHaveAttribute(
