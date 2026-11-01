@@ -164,9 +164,9 @@ shows the save indicator with exactly four states:
 
 | Indicator | Meaning |
 | --- | --- |
-| 等待保存 (waiting) | Nothing pending to send right now. |
+| 已保存 (idle) | No unsent edits; what the page shows IS the server state. |
 | 保存中… (saving) | A save request is in flight; outcome not yet known. |
-| 已保存 (saved) | The server accepted this answer (`accepted: true` + version). |
+| 已保存 (saved, green) | The server just accepted this answer (`accepted: true` + version). |
 | 保存失败 (save failed) | Not saved; the client retries automatically while the page is open. |
 
 > **What "已保存" does not mean.** Saves are debounced by ~1.5 s; an edit

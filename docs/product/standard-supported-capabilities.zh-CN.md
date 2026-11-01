@@ -142,23 +142,28 @@ Admin 今天实际可配置的内容（来源：`apps/web` 页面 + API 路由�
 
 考生编辑器将当前答案保存在 React state 中，并以约 1500 ms 防抖保存
 （`apps/web/src/hooks/useSubmitFlush.ts`，`DEBOUNCE_MS = 1500`）。保存指示
-器恰好有四种 UI 状态：idle（等待保存）、saving（保存中）、saved（已保存）、
+器恰好有四种 UI 状态：idle（已保存）、saving（保存中）、saved（已保存）、
 error（保存失败）（`apps/web/src/components/exam/SaveIndicator.tsx`）。
-下表是解释性分类——这些是理解类别，不是五个已实现的独立 UI 状态：
+idle 与 saved 显示同一文案：idle 是静稳态（无待保存修改，页面展示的内容
+即服务器状态），saved 是 ACK 后的短暂正反馈。下表是解释性分类——这些是
+理解类别，不是五个已实现的独立 UI 状态：
 
 | 状态 | 用户可以得出的结论 |
 | --- | --- |
 | 编辑中 / 待发送（防抖窗口内） | 编辑仅存在于浏览器中。**尚未**被服务器接受，刷新或关闭标签页即可能丢失。 |
 | 在途（请求已发送） | 保存请求正在处理。结果未知；仅 HTTP 传输成功不能证明业务层已接受。 |
 | 失败 / 不确定 | 未可靠保存。UI 显示错误；页面存活期间会自动重试。不得宣称"已保存"。 |
-| 服务器 ACK 已接受 | 服务器返回 `accepted: true` 与 `serverVersion`；该答案版本按版本化 / 幂等 / 冲突检测协议持久化。这是 UI 显示"已保存"的唯一条件。 |
+| 服务器 ACK 已接受 | 服务器返回 `accepted: true` 与 `serverVersion`；该答案版本按版本化 / 幂等 / 冲突检测协议持久化。这是指示器进入 saved 态的唯一条件（idle 稳态显示同一文案，见下一条）。 |
 | 已提交 / 终态 | attempt 已冻结：`submitted_answers` 是评分权威；生命周期与评分事实遵循提交冻结与终态权威（[ADR-008](../adr/ADR-008-submit-answer-freeze.md)）。 |
 
 每个概念意味着什么——和不意味着什么：
 
-- **UI"已保存" = 服务器 ACK。** 仅当 API 返回 `accepted: true` +
-  `serverVersion`（或 STALE_VERSION 对账返回了服务器权威答案）后，指示器
-  才切换为"已保存"。
+- **UI"已保存" = 服务器 ACK 或无未 ACK 内容。** 指示器仅在两种条件下显示
+  "已保存"：进入 saved 态（仅当 API 返回 `accepted: true` + `serverVersion`，
+  或 STALE_VERSION 对账返回了服务器权威答案）；idle 静稳态（无待保存修改，
+  页面展示的内容即服务器状态——展示内容来自服务器快照或已 ACK 的保存）。
+  任何未 ACK 的编辑都会把指示器推回 saving；保存被跳过（attempt 不可保存）
+  或失败时显示 error——不存在"未 ACK 却显示已保存"的路径。
 - **HTTP 成功 ≠ 业务接受。** 只有结构化响应作数；客户端跟踪
   `serverVersion` 用于冲突检测，并在 `STALE_VERSION` 时对账。
 - **未发送的编辑可能丢失。** 在防抖窗口内刷新（或请求发出前的任何丢失）
@@ -244,7 +249,7 @@ Chrome/CDP，逐答案 value/version oracle，探索性样本量，
 | 富内容（题干 / 选项 / 答案，公式 / 表格 / 代码） | SUPPORTED | Rich V1 语法 | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-019](../adr/ADR-019-content-document-model.md)、rich-content 语义契约 | 非 Rich 渲染走纯文本投影 |
 | 考试生命周期 + 发布冻结 | SUPPORTED | — | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | [exam-runtime.md](../architecture/exam-runtime.md)、[ADR-008](../adr/ADR-008-submit-answer-freeze.md) | 已发布考试仅可改时间安排 |
 | 版本化 / 幂等 / 冲突检测答案保存 | SUPPORTED | 页面存活（客户端） | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | answer 协议；[ADR-012](../adr/ADR-012-candidate-recovery-contract.md) | 约 1.5 s 防抖；刷新丢失未发送编辑（D7） |
-| UI"已保存"= 服务器 ACK 语义 | SUPPORTED | — | 511e6e60（post-v0.0.10） | SOURCE_INSPECTED | `SaveIndicator.tsx`、`TakeExamPage.tsx` | 不存在独立的"已本地保存"UI 状态 |
+| UI"已保存"= 服务器 ACK 或无未 ACK 内容 | SUPPORTED | — | 511e6e60（post-v0.0.10） | SOURCE_INSPECTED | `SaveIndicator.tsx`、`TakeExamPage.tsx` | 不存在独立的"已本地保存"UI 状态；idle 稳态与 saved 态显示同一文案（idle 以"展示内容即服务器状态"为前提，见 §5） |
 | ACKed 答案在 app/PG 重启（PGDATA 完整）、刷新后保留 | SUPPORTED（受测范围） | 随附 Compose 拓扑；bind mount 完整 | 511e6e60（post-v0.0.10） | HISTORICAL_MEASURED（#817 D0–D4） | [#817](https://github.com/jnhu76/exam/issues/817) | 探索性样本量；无断电 / 磁盘 / 主机丢失覆盖；D5 部分 UNKNOWN |
 | 人工评分工作集 + rubric 评分 | SUPPORTED | 存在 text_response | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | grading kernel；#678 审计 | 逐题评分提交不可撤销 |
 | 成绩公布模式 | SUPPORTED | — | 511e6e60（post-v0.0.10） | TEST_ASSERTED + SOURCE_INSPECTED | `resultPublicationMode` 权威 | 发布时冻结；per-exam policy，不是能力开关 |
