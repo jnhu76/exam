@@ -1559,6 +1559,83 @@ describe("grading queue routes", () => {
   });
 
   // ── gradeQuestion updates the SAME grading entry (id stable) ──
+  it("resolves the grader display name in grading details (org-scoped batch)", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-name")],
+      title: "Grader Name Exam",
+    });
+    await seedGradingEntries(
+      ctx,
+      attemptId,
+      [subjectiveQuestion("q-name")],
+      [],
+    );
+
+    const grade = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q-name", score: 6, comment: "ok" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(grade.statusCode).toBe(200);
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const questions = res.json().questions as Array<{
+      questionId: string;
+      entry: { gradedBy: string; gradedByName: string | null } | null;
+    }>;
+    const entry = questions.find((q) => q.questionId === "q-name")!.entry!;
+    expect(entry.gradedBy).toBe(ctx.admin.id);
+    expect(entry.gradedByName).toBe(ctx.admin.name);
+  });
+
+  it("returns gradedByName null and keeps the audit id when the grader user is unresolvable", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-gone")],
+      title: "Unresolvable Grader Exam",
+    });
+    // graded_by carries no users FK (historical actor id), so a
+    // completed_manual entry whose grader row no longer resolves is
+    // representable; the response must degrade to explicit null, never an
+    // empty-name stub.
+    const missingGraderId = crypto.randomUUID();
+    await ctx.db.insert(schema.attemptGradingEntries).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      attemptId,
+      questionId: "q-gone",
+      gradingMode: "manual",
+      status: "completed_manual",
+      maxScore: 10,
+      earnedScore: 5,
+      candidateAnswer: "answer",
+      standardAnswer: null,
+      correct: null,
+      comment: "",
+      gradedBy: missingGraderId,
+      gradedAt: new Date(),
+    });
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const questions = res.json().questions as Array<{
+      questionId: string;
+      entry: { gradedBy: string; gradedByName: string | null } | null;
+    }>;
+    const entry = questions.find((q) => q.questionId === "q-gone")!.entry!;
+    expect(entry.gradedByName).toBeNull();
+    expect(entry.gradedBy).toBe(missingGraderId);
+  });
+
   it("gradeQuestion updates the SAME grading entry — id stable, status completed_manual", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-same", 10)],

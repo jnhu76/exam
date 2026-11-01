@@ -75,6 +75,7 @@ const mockDetailData = {
         score: 4,
         comment: "基本正确",
         gradedBy: "admin-1",
+        gradedByName: "李评分",
         gradedAt: "2025-01-15T12:00:00Z",
       },
     },
@@ -185,6 +186,7 @@ describe("GradingDetailPage", () => {
             score: 0,
             comment: "",
             gradedBy: "admin-1",
+            gradedByName: "李评分",
             gradedAt: "2025-01-15T12:00:00Z",
           },
         },
@@ -464,6 +466,7 @@ describe("GradingDetailPage — one-time submission UX", () => {
             score: 8,
             comment: "",
             gradedBy: "admin-1",
+            gradedByName: "李评分",
             gradedAt: "2025-01-15T12:00:00Z",
           },
         },
@@ -496,7 +499,8 @@ describe("GradingDetailPage — one-time submission UX", () => {
           entry: {
             score: 7,
             comment: "不错的回答",
-            gradedBy: "admin-1",
+            gradedBy: "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            gradedByName: "王评分",
             gradedAt: "2025-01-15T12:00:00Z",
           },
         },
@@ -520,14 +524,51 @@ describe("GradingDetailPage — one-time submission UX", () => {
     expect(
       screen.getByTestId("grading-submitted-comment-q-done"),
     ).toHaveTextContent("不错的回答");
-    // gradedBy is shown as-is (actor id), not a fabricated name.
+    // The server-resolved display name is shown; the raw actor id is NOT
+    // surfaced while the name is resolvable.
     expect(
       screen.getByTestId("grading-submitted-grader-q-done"),
-    ).toHaveTextContent("admin-1");
+    ).toHaveTextContent("评分人: 王评分");
+    expect(
+      screen.getByTestId("grading-submitted-grader-q-done"),
+    ).not.toHaveTextContent("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
     // gradedAt is rendered via the project date formatter.
     expect(
       screen.getByTestId("grading-submitted-time-q-done"),
     ).toBeInTheDocument();
+  });
+
+  it("shows the explicit fallback and the audit id when the grader name is unresolvable", async () => {
+    getMock.mockResolvedValue({
+      ...mockDetailData,
+      questions: [
+        {
+          questionId: "q-gone",
+          type: "text_response",
+          content: "评分人已删除题",
+          maxScore: 10,
+          candidateAnswer: "作答",
+          entry: {
+            score: 7,
+            comment: "",
+            gradedBy: "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            gradedByName: null,
+            gradedAt: "2025-01-15T12:00:00Z",
+          },
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    // Explicit fallback copy — never an empty-name stub, never a fabricated
+    // name. The historical actor id stays visible as the audit identity.
+    expect(
+      screen.getByTestId("grading-submitted-grader-q-gone"),
+    ).toHaveTextContent("评分人账号已删除或不可见");
+    expect(
+      screen.getByTestId("grading-submitted-grader-id-q-gone"),
+    ).toHaveTextContent("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
   });
 
   it("opens a confirmation dialog showing score, max, and irrevocability before posting", async () => {
@@ -599,6 +640,7 @@ describe("GradingDetailPage — one-time submission UX", () => {
             score: 8,
             comment: "",
             gradedBy: "server-grader",
+            gradedByName: "王评分",
             gradedAt: "2025-02-01T09:30:00Z",
           },
         },
@@ -614,11 +656,11 @@ describe("GradingDetailPage — one-time submission UX", () => {
     await user.type(firstInput, "8");
     await confirmSubmitFirstQuestion(user);
 
-    // The refreshed server entry is now shown (server grader id + read-only).
+    // The refreshed server entry is now shown (server grader name + read-only).
     await vi.waitFor(() => {
       expect(
         screen.getByTestId("grading-submitted-grader-q1"),
-      ).toHaveTextContent("server-grader");
+      ).toHaveTextContent("评分人: 王评分");
     });
     expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
     expect(
@@ -673,6 +715,7 @@ describe("GradingDetailPage — one-time submission UX", () => {
             score: 8,
             comment: "好",
             gradedBy: "admin-1",
+            gradedByName: "李评分",
             gradedAt: "2025-01-15T12:00:00Z",
           },
         },
@@ -761,6 +804,7 @@ describe("GradingDetailPage — ambiguous-result reconciliation", () => {
             score: 8,
             comment: "",
             gradedBy: "server-grader",
+            gradedByName: "李评分",
             gradedAt: "2025-02-01T09:30:00Z",
           },
         },
@@ -837,6 +881,7 @@ describe("GradingDetailPage — ambiguous-result reconciliation", () => {
             score: 8,
             comment: "",
             gradedBy: "other-grader",
+            gradedByName: "李评分",
             gradedAt: "2025-02-01T09:30:00Z",
           },
         },

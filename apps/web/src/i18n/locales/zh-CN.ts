@@ -2519,6 +2519,7 @@ const zhCN = {
         submittedLabel: "已提交评分",
         gradedLabel: "已评分: {{score}} 分",
         gradedBy: "评分人: {{grader}}",
+        gradedByUnavailable: "评分人账号已删除或不可见",
         gradedAt: "评分时间: {{time}}",
       },
       confirm: {

@@ -35234,6 +35234,10 @@
                                 "type": "string",
                                 "format": "uuid"
                               },
+                              "gradedByName": {
+                                "type": "string",
+                                "nullable": true
+                              },
                               "gradedAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -35243,6 +35247,7 @@
                               "score",
                               "comment",
                               "gradedBy",
+                              "gradedByName",
                               "gradedAt"
                             ],
                             "additionalProperties": false,

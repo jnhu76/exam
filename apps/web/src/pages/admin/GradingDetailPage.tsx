@@ -136,6 +136,9 @@ interface GradingEntry {
   score: number;
   comment: string;
   gradedBy: string;
+  /** Server-resolved grader display name; null when the user row is
+   * unresolvable (deleted or inaccessible) — never fabricated client-side. */
+  gradedByName: string | null;
   gradedAt: string;
 }
 
@@ -607,12 +610,24 @@ export function GradingDetailPage() {
                       {q.entry.comment}
                     </div>
                   ) : null}
-                  {/* gradedBy may currently be only an actor id; show the value
-                      the server committed without fabricating a display name. */}
+                  {/* The server-resolved display name is the primary identity;
+                      when it is unresolvable the explicit fallback plus the raw
+                      actor id keep the entry auditable. No name is fabricated
+                      client-side. */}
                   <div data-testid={`grading-submitted-grader-${q.questionId}`}>
-                    {t("admin.gradingDetail.question.gradedBy", {
-                      grader: q.entry?.gradedBy ?? "",
-                    })}
+                    {q.entry?.gradedByName
+                      ? t("admin.gradingDetail.question.gradedBy", {
+                          grader: q.entry.gradedByName,
+                        })
+                      : t("admin.gradingDetail.question.gradedByUnavailable")}
+                    {!q.entry?.gradedByName && q.entry?.gradedBy ? (
+                      <div
+                        data-testid={`grading-submitted-grader-id-${q.questionId}`}
+                        className="type-metadata"
+                      >
+                        {q.entry.gradedBy}
+                      </div>
+                    ) : null}
                   </div>
                   {q.entry?.gradedAt ? (
                     <div data-testid={`grading-submitted-time-${q.questionId}`}>

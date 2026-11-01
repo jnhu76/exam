@@ -16,6 +16,7 @@ import { createAttemptGradingEntryRepo } from "@exam/db/repository/attemptGradin
 import { createEnrollmentRepo } from "@exam/db/repository/enrollmentRepo";
 import { createExamRepo } from "@exam/db/repository/examRepo";
 import { createGradingQueueRepo } from "@exam/db/repository/gradingQueueRepo";
+import { createUserRepo } from "@exam/db/repository/userRepo";
 import { executeInTransaction } from "@exam/db/types";
 import {
   createExamEngineRepos,
@@ -207,6 +208,23 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       // `submittedAnswers`), so we read display data from the entry.
       const entries = await entryRepo.findByAttempt(ctx, attemptId);
       const entryByQuestion = new Map(entries.map((e) => [e.questionId, e]));
+      // Resolve grader display names for THIS attempt's committed entries in
+      // one org-scoped batch query (findByIds is a no-op on empty input), so
+      // the read stays N+1-free for any question count. graded_by carries no
+      // users FK (historical actor id), so an unresolvable row degrades to
+      // gradedByName: null — never an empty-name stub (#837 convention).
+      const graderIds = [
+        ...new Set(
+          entries
+            .filter((e) => e.status === "completed_manual" && e.gradedBy)
+            .map((e) => e.gradedBy as string),
+        ),
+      ];
+      const graderUsers = await createUserRepo(fastify.db).findByIds(
+        ctx,
+        graderIds,
+      );
+      const graderNameById = new Map(graderUsers.map((u) => [u.id, u.name]));
       const questions = attempt.questionSnapshot
         .filter((q) => entryByQuestion.has(q.originalQuestionId))
         .filter(
@@ -235,6 +253,9 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
                     score: entry.earnedScore ?? 0,
                     comment: entry.comment,
                     gradedBy: entry.gradedBy ?? "",
+                    gradedByName: entry.gradedBy
+                      ? (graderNameById.get(entry.gradedBy) ?? null)
+                      : null,
                     gradedAt: (entry.gradedAt ?? new Date(0)).toISOString(),
                   }
                 : null,
