@@ -48,6 +48,7 @@ const STAMP = `${Date.now()}`;
 
 const Q2_PROMPT = `S2.4 富文本作答溢出回归 ${STAMP}`;
 const Q3_PROMPT = `S2.4 长 token 作答溢出回归 ${STAMP}`;
+const Q4_PROMPT = `S2.4 代码纵向适配回归 ${STAMP}`;
 const LONG_TOKEN = `https://example.test/${"a".repeat(300)}`;
 
 const LONG_MATH =
@@ -144,11 +145,22 @@ function tokenDocument() {
   };
 }
 
+/** One short code line: fits the vertical clamp, so there is no toggle, but
+ *  the code viewport still needs a local keyboard stop. */
+function codeOnlyDocument() {
+  return {
+    docVersion: 1,
+    type: "doc",
+    content: [{ type: "codeBlock", language: null, text: LONG_CODE }],
+  };
+}
+
 interface Fixture {
   examId: string;
   questionId: string;
   richQuestionId: string;
   tokenQuestionId: string;
+  codeQuestionId: string;
   candidate: SeededCandidate;
   adminToken: string;
 }
@@ -213,7 +225,7 @@ async function assembleExam(
     openAt: new Date(Date.now() - 3_600_000).toISOString(),
     closeAt: new Date(Date.now() + 86_400_000).toISOString(),
     passingScore: 0,
-    totalScore: 20,
+    totalScore: 25,
     questionSelectionMode: "manual",
     questionIds,
     controlFlags: {
@@ -481,18 +493,32 @@ test.describe.serial("rich-content overflow contract", () => {
     expect(q3.status(), await q3.text()).toBe(201);
     const { id: tokenQuestionId } = (await q3.json()) as { id: string };
 
+    const q4 = await adminPost(request, adminToken, "/api/questions", {
+      courseId,
+      type: "text_response",
+      score: 5,
+      difficulty: 1,
+      content: Q4_PROMPT,
+      answerMode: "rich",
+      standardAnswer: null,
+      rubric: `S2.4 代码评分标准 ${STAMP}`,
+    });
+    expect(q4.status(), await q4.text()).toBe(201);
+    const { id: codeQuestionId } = (await q4.json()) as { id: string };
+
     const examId = await assembleExam(
       request,
       adminToken,
       courseId,
       candidate.profileId,
-      [questionId, richQuestionId, tokenQuestionId],
+      [questionId, richQuestionId, tokenQuestionId, codeQuestionId],
     );
     fixture = {
       examId,
       questionId,
       richQuestionId,
       tokenQuestionId,
+      codeQuestionId,
       candidate,
       adminToken,
     };
@@ -579,6 +605,24 @@ test.describe.serial("rich-content overflow contract", () => {
     await page.getByRole("button", { name: "下一题" }).click();
     await expect(section.locator(".ProseMirror")).toHaveCount(1);
     await expect(section.locator(".ProseMirror")).toContainText("a".repeat(40));
+
+    // Q4: one short code line; fits vertically (no toggle) but overflows
+    // horizontally at 320px. Persist it, restore it in the editor, submit.
+    await page.getByRole("button", { name: "下一题" }).click();
+    await expect(section.locator(".ProseMirror")).toHaveCount(1);
+    await saveRichAnswer(
+      request,
+      candidateToken,
+      fixture.codeQuestionId,
+      codeOnlyDocument(),
+    );
+    await page.reload();
+    await expect(section).toBeVisible();
+    await page.getByRole("button", { name: "下一题" }).click();
+    await page.getByRole("button", { name: "下一题" }).click();
+    await page.getByRole("button", { name: "下一题" }).click();
+    await expect(section.locator(".ProseMirror")).toHaveCount(1);
+    await expect(section.locator(".ProseMirror pre")).toHaveCount(1);
     await submitExam(page);
     await page.waitForURL(/\/result$/, { timeout: 30_000 });
 
@@ -605,9 +649,20 @@ test.describe.serial("rich-content overflow contract", () => {
       },
     );
     expect(tokenGrade.status(), await tokenGrade.text()).toBe(200);
+    const codeGrade = await adminPost(
+      request,
+      fixture.adminToken,
+      `/api/admin/attempts/${attemptId}/grade-question`,
+      {
+        questionId: fixture.codeQuestionId,
+        score: 5,
+        comment: "S2.4 un-clipped code browser regression",
+      },
+    );
+    expect(codeGrade.status(), await codeGrade.text()).toBe(200);
 
     await page.reload();
-    await expect(page.getByTestId("result-total-score")).toHaveText("18");
+    await expect(page.getByTestId("result-total-score")).toHaveText("23");
 
     const row = page.locator("tbody tr").filter({ hasText: Q2_PROMPT }).first();
     await expect(row).toBeVisible();
@@ -763,7 +818,7 @@ test.describe.serial("rich-content overflow contract", () => {
     await page.goto(`${BASE_URL}/exam/${attemptId}/result`, {
       waitUntil: "networkidle",
     });
-    await expect(page.getByTestId("result-total-score")).toHaveText("18");
+    await expect(page.getByTestId("result-total-score")).toHaveText("23");
 
     for (const width of [1440, 1024, 768, 390, 320, 720]) {
       await page.setViewportSize({ width, height: 900 });
@@ -902,6 +957,55 @@ test.describe.serial("rich-content overflow contract", () => {
       tokenGeometry.docScrollWidth,
       "an expanded long token must wrap, not widen the page",
     ).toBe(tokenGeometry.docClientWidth);
+
+    // Q4: one short code line. It fits the vertical clamp, so there is NO
+    // disclosure toggle; the local code viewport must still be the next real
+    // Tab stop and scroll with ArrowRight.
+    const inlineBlock = page
+      .locator('[data-testid="result-mobile-questions"] li')
+      .filter({ hasText: Q4_PROMPT })
+      .first();
+    await expect(inlineBlock).toBeVisible();
+    await expect(
+      inlineBlock.getByRole("button", { name: /展开全文|收起/ }),
+    ).toHaveCount(0);
+    await expect(
+      inlineBlock.locator("[data-answer-disclosure]").first(),
+    ).toHaveAttribute("data-answer-clipped", "false");
+    const inlineCandidate = inlineBlock
+      .locator('[data-slot="content-scroll-viewport"][data-kind="code"]')
+      .first();
+    await expect(inlineCandidate).toHaveAttribute("data-overflowing", "true");
+    await expect(inlineCandidate).toHaveAttribute("tabindex", "0");
+    await page.keyboard.press("Tab");
+    const inlineViewport = page.locator(
+      '[data-slot="content-scroll-viewport"][data-kind="code"]:focus',
+    );
+    await expect(inlineViewport).toBeVisible();
+    await expect(inlineViewport).toHaveAttribute("role", "group");
+    await expect(inlineViewport).toHaveAttribute(
+      "aria-label",
+      "代码块，可横向滚动",
+    );
+    expect(
+      await inlineBlock.evaluate((el) => el.contains(document.activeElement)),
+    ).toBe(true);
+    const inlineMax = await inlineViewport.evaluate(
+      (el) => el.scrollWidth - el.clientWidth,
+    );
+    expect(inlineMax).toBeGreaterThan(0);
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(150);
+    expect(
+      await inlineViewport.evaluate((el) => el.scrollLeft),
+    ).toBeGreaterThan(0);
+    await page.keyboard.press("Shift+Tab");
+    expect(
+      await inlineBlock.evaluate((el) => !el.contains(document.activeElement)),
+    ).toBe(true);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBe(await page.evaluate(() => document.documentElement.clientWidth));
   });
 
   test("admin authoring preview: rich prompt stays inside the preview card and is keyboard operable", async ({
