@@ -497,7 +497,9 @@ const zhCN = {
       noDuration: "不限时",
       deadline: "截止时间制",
       noEnd: "不限时",
-      passingScore: "及格分: {{score}}/{{total}}",
+      // R0-F5: one passing-requirement vocabulary across pages —
+      // threshold/full-marks pair with an explicit unit; compact inline form.
+      passingScore: "及格要求: {{score}}/{{total}} 分",
       questionCount: "题目数: {{count}}",
       attempts: "已考: {{used}}/{{max}}次",
       attemptsUnlimited: "不限次数",
@@ -738,7 +740,10 @@ const zhCN = {
       loadFailed: "加载成绩失败",
     },
     summary: {
-      passingScore: "及格线：{{score}}",
+      // Threshold-only form: the candidate result DTO carries no full-marks
+      // field (minimal projection), so this surface states the requirement
+      // with the unified name and unit but no pair.
+      passingScore: "及格要求：{{score}} 分",
       passed: "已通过",
       failed: "未通过",
     },
@@ -1056,7 +1061,8 @@ const zhCN = {
         duration: "时长",
         questionCount: "题目数",
         participants: "参与人数",
-        passingScore: "及格分",
+        passingScore: "及格要求",
+        passingScoreValue: "{{score}}/{{total}} 分",
         actions: "操作",
       },
       deleteLabel: "删除考试",
@@ -2024,7 +2030,8 @@ const zhCN = {
         durationValue: "{{minutes}}分钟",
         deadlineMode: "截止时间制",
         noDuration: "不限时",
-        passingScore: "及格分",
+        passingScore: "及格要求",
+        passingScoreValue: "{{score}}/{{total}} 分",
         questionCount: "题目数量",
         participantCount: "参与人数",
         completedCount: "已完成",
@@ -2157,7 +2164,7 @@ const zhCN = {
         summaryTitle: "成绩概览",
         totalScore: "总分",
         earnedScore: "得分",
-        passingLine: "及格线",
+        passingLine: "及格要求",
         status: "状态",
         detailTitle: "答题详情",
         columns: {
@@ -3147,7 +3154,10 @@ const zhCN = {
       noDuration: "不限时",
       questionCount: "题目数量",
       questionCountValue: "{{count}}题",
-      passingScore: "及格分数",
+      // Long form: the start page renders label + value in an info list, so
+      // the pair is spaced and the unit explicit (R0-F5).
+      passingScore: "及格要求",
+      passingScoreValue: "{{score}} / {{total}} 分",
     },
     notice: "开始后倒计时立即启动，中途不可暂停",
     attempts: "已考 {{used}}/{{max}} 次",

@@ -284,6 +284,10 @@ describe("StartExamPage", () => {
     expect(await screen.findByText("Math Exam")).toBeInTheDocument();
     expect(screen.getByText("90分钟")).toBeInTheDocument();
     expect(screen.getByText("20题")).toBeInTheDocument();
+    // R0-F5: unified passing-requirement vocabulary with explicit unit,
+    // the same fact the list and result pages state.
+    expect(screen.getByText("及格要求")).toBeInTheDocument();
+    expect(screen.getByText("60 / 100 分")).toBeInTheDocument();
   });
 
   it("never renders tab-switch/copy-paste enforcement warnings, even for a historical row with the flags true (#516)", async () => {

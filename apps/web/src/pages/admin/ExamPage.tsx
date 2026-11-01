@@ -470,7 +470,10 @@ export function ExamPage() {
       meta: { role: "score" },
       header: t("admin.exams.columns.passingScore"),
       cell: ({ row }) =>
-        `${row.original.passingScore}/${row.original.totalScore}`,
+        t("admin.exams.columns.passingScoreValue", {
+          score: row.original.passingScore,
+          total: row.original.totalScore,
+        }),
     },
     {
       id: "actions",

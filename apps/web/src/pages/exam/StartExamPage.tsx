@@ -246,7 +246,10 @@ export function StartExamPage() {
             <span>{t("startExam.info.passingScore")}</span>
           </div>
           <span className="type-body">
-            {exam.passingScore}/{exam.totalScore}
+            {t("startExam.info.passingScoreValue", {
+              score: exam.passingScore,
+              total: exam.totalScore,
+            })}
           </span>
         </div>
       </PageSection>
