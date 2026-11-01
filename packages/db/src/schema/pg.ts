@@ -31,6 +31,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   doublePrecision,
   foreignKey,
   index,
@@ -204,6 +205,32 @@ export const courses = pgTable(
   ],
 );
 
+/**
+ * postgres.js has already decoded JSONB on read. Drizzle's built-in jsonb
+ * mapper JSON.parse's any resulting string a second time, so an authored
+ * fill-blank answer like "42" becomes the number 42 before snapshot freeze
+ * and fails the string-only grading matcher (#845).
+ *
+ * Keep the native JSONB SQL type and JSON.stringify write behavior, but return
+ * the value already decoded by postgres.js without parsing again. This is a
+ * COLUMN-scoped adapter, not a global parser override: raw postgres.js clients
+ * keep their existing JSONB behavior.
+ */
+const postgresJsDecodedJsonb = customType<{
+  data: unknown;
+  driverData: string;
+}>({
+  dataType() {
+    return "jsonb";
+  },
+  toDriver(value) {
+    return JSON.stringify(value);
+  },
+  fromDriver(value) {
+    return value;
+  },
+});
+
 /** Questions table — stores question bank items with options, scoring, and grading rules. */
 export const questions = pgTable(
   "questions",
@@ -238,7 +265,7 @@ export const questions = pgTable(
     // answer can carry null. Grading mode derives from question TYPE
     // (isManualGradedQuestion), NOT from answer nullness — the write boundary
     // rejects null standardAnswer for auto-graded types (protocol §1.4).
-    standardAnswer: jsonb("standard_answer").$type<unknown>(),
+    standardAnswer: postgresJsDecodedJsonb("standard_answer"),
     // Rubric authoring/editing source (dual-layer). text_response
     // requires non-empty at publish; objective questions are null.
     // Copied into QuestionSnapshot.rubric at attempt creation.
