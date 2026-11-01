@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { gradeQuestion, type QuestionSnapshot, type RequestContext } from "@exam/domain";
+import {
+  gradeQuestion,
+  type QuestionSnapshot,
+  type RequestContext,
+} from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
 import { getWorkerScopedTestDb } from "../testDb.js";
 import { schema } from "../schema/pg.js";
@@ -312,7 +316,17 @@ describe("repo round-trip: text_response + submitted_answers", () => {
 
   // #845: postgres.js already decodes jsonb. A second JSON.parse on a
   // decoded JSONB scalar string must not change the authored grading answer.
-  it.each(["42", "0", "true", "false", "null", "1e3", "normal text", "[1,2]", '{"a":1}'])(
+  it.each([
+    "42",
+    "0",
+    "true",
+    "false",
+    "null",
+    "1e3",
+    "normal text",
+    "[1,2]",
+    '{"a":1}',
+  ])(
     "preserves JSON-like fill-blank text %j through the real question repository",
     async (standardAnswer) => {
       const gradingRule = {
@@ -350,11 +364,13 @@ describe("repo round-trip: text_response + submitted_answers", () => {
         rubric: null,
       };
       expect(gradeQuestion(snapshot, standardAnswer).score).toBe(5);
-      expect(gradeQuestion(snapshot, "an intentionally incorrect answer").score).toBe(0);
+      expect(
+        gradeQuestion(snapshot, "an intentionally incorrect answer").score,
+      ).toBe(0);
     },
   );
 
-  it("preserves non-scalar JSONB answers while fixing fill-blank strings", async () => {
+  it("preserves non-scalar JSONB answers", async () => {
     for (const standardAnswer of [true, ["a", "b"], { slot1: "42" }]) {
       const created = await questionRepo.create(ctx, {
         courseId,
@@ -375,5 +391,4 @@ describe("repo round-trip: text_response + submitted_answers", () => {
       expect(reloaded?.standardAnswer).toEqual(standardAnswer);
     }
   });
-
 });
