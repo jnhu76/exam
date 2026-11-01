@@ -21893,6 +21893,16 @@
                         "exclusiveMinimum": true,
                         "minimum": 0
                       },
+                      "retakePolicy": {
+                        "type": "string",
+                        "enum": [
+                          "unlimited",
+                          "max_attempts",
+                          "daily_limit",
+                          "weekly_limit",
+                          "pass_then_stop"
+                        ]
+                      },
                       "latestAttemptId": {
                         "type": "string",
                         "format": "uuid"
@@ -21952,6 +21962,7 @@
                       "totalScore",
                       "attemptsUsed",
                       "maxAttempts",
+                      "retakePolicy",
                       "availabilityStatus",
                       "primaryAction"
                     ],
@@ -22136,6 +22147,16 @@
                       "exclusiveMinimum": true,
                       "minimum": 0
                     },
+                    "retakePolicy": {
+                      "type": "string",
+                      "enum": [
+                        "unlimited",
+                        "max_attempts",
+                        "daily_limit",
+                        "weekly_limit",
+                        "pass_then_stop"
+                      ]
+                    },
                     "currentAttempts": {
                       "type": "integer",
                       "minimum": 0
@@ -22192,6 +22213,7 @@
                     "questionCount",
                     "controlFlags",
                     "maxAttempts",
+                    "retakePolicy",
                     "currentAttempts",
                     "canStartNewAttempt",
                     "availabilityStatus",

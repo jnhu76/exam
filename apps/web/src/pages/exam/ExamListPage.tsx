@@ -62,6 +62,15 @@ function ExamCard({
 }) {
   const { t } = useTranslation();
   const { formatDateTime } = useProductDateTime();
+  // A retake card's primary action is start; the published prior result must
+  // stay viewable from the same card. bestScore is only projected by the API
+  // when the canonical result-visibility authority says the result is
+  // visible, so this entry never exists on hidden results — and the result
+  // page re-applies the same authority server-side.
+  const viewableResultAttemptId =
+    exam.primaryAction === "start" && exam.bestScore != null
+      ? exam.latestAttemptId
+      : undefined;
   const actionLabel = (() => {
     switch (exam.primaryAction) {
       case "start":
@@ -150,11 +159,20 @@ function ExamCard({
           <span>
             {t("examList.meta.questionCount", { count: exam.totalQuestions })}
           </span>
+          {/* Attempts copy keys on the server-projected retake policy — the
+           * authored maxAttempts number is only a real cap under
+           * max_attempts and must never render as one under unlimited. */}
           <span>
-            {t("examList.meta.attempts", {
-              used: exam.attemptsUsed,
-              max: exam.maxAttempts,
-            })}
+            {exam.retakePolicy === "unlimited"
+              ? t("examList.meta.attemptsUnlimited")
+              : exam.retakePolicy === "pass_then_stop"
+                ? t("examList.meta.attemptsUntilPass", {
+                    used: exam.attemptsUsed,
+                  })
+                : t("examList.meta.attempts", {
+                    used: exam.attemptsUsed,
+                    max: exam.maxAttempts,
+                  })}
           </span>
         </div>
         <div className="type-secondary">
@@ -163,7 +181,18 @@ function ExamCard({
             ? t("examList.meta.noEnd")
             : formatDateTime(exam.windowEndAt)}
         </div>
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          {viewableResultAttemptId && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onResult(viewableResultAttemptId)}
+              data-testid="exam-view-result"
+            >
+              <AppIcon icon={Eye} size="badge" className="mr-1" />
+              {t("examList.actions.viewResult")}
+            </Button>
+          )}
           {actionLabel && (
             <Button
               size="sm"

@@ -50,6 +50,7 @@ function makeExam(overrides: Record<string, unknown>) {
     totalQuestions: 5,
     attemptsUsed: 0,
     maxAttempts: 3,
+    retakePolicy: "max_attempts" as const,
     latestAttemptId: undefined as string | undefined,
     latestAttemptStatus: undefined as string | undefined,
     bestScore: undefined as number | undefined,
@@ -153,6 +154,106 @@ describe("ExamListPage", () => {
       "data-action",
       "view_result",
     );
+  });
+
+  it("graded retake card keeps the published result viewable next to the start action", async () => {
+    getMock.mockResolvedValue([
+      makeExam({
+        availabilityStatus: "graded",
+        primaryAction: "start",
+        attemptsUsed: 1,
+        bestScore: 85,
+        bestScorePercent: 85,
+        latestAttemptId: "att-1",
+      }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+          <Route
+            path="/exam/:attemptId/result"
+            element={<div>考试结果页</div>}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("可参加的考试")).toBeInTheDocument();
+    expect(screen.getByTestId("exam-primary-action")).toHaveAttribute(
+      "data-action",
+      "start",
+    );
+    const viewResult = screen.getByTestId("exam-view-result");
+    await userEvent.click(viewResult);
+    expect(await screen.findByText("考试结果页")).toBeInTheDocument();
+  });
+
+  it("graded retake card without a visible result (bestScore absent) renders no result entry", async () => {
+    getMock.mockResolvedValue([
+      makeExam({
+        availabilityStatus: "graded",
+        primaryAction: "start",
+        attemptsUsed: 1,
+        latestAttemptId: "att-1",
+      }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("exam-primary-action")).toHaveAttribute(
+      "data-action",
+      "start",
+    );
+    expect(screen.queryByText("查看成绩")).not.toBeInTheDocument();
+  });
+
+  it("renders the attempts line per the server-projected retake policy (R1-F6)", async () => {
+    getMock.mockResolvedValue([
+      makeExam({
+        examId: "exam-limited",
+        title: "限次考试",
+        retakePolicy: "max_attempts",
+        attemptsUsed: 1,
+        maxAttempts: 2,
+      }),
+      makeExam({
+        examId: "exam-unlimited",
+        title: "不限次考试",
+        retakePolicy: "unlimited",
+        // Authored sentinel-like number: must never render as a cap.
+        attemptsUsed: 1,
+        maxAttempts: 99,
+      }),
+      makeExam({
+        examId: "exam-until-pass",
+        title: "通过即止考试",
+        retakePolicy: "pass_then_stop",
+        attemptsUsed: 2,
+        maxAttempts: 99,
+      }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("限次考试")).toBeInTheDocument();
+    expect(screen.getByText("已考: 1/2次")).toBeInTheDocument();
+    expect(screen.getByText("不限次数")).toBeInTheDocument();
+    expect(screen.getByText("已考: 2次 · 通过即止")).toBeInTheDocument();
+    expect(screen.queryByText(/99/)).not.toBeInTheDocument();
   });
 
   it("renders max_attempts_exhausted in 历史考试 section", async () => {

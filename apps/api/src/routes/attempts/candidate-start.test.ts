@@ -481,16 +481,55 @@ describe("attempt routes", () => {
       expect(rejectRes.json().error.code).toBe("MAX_ATTEMPTS_REACHED");
     });
 
-    it("derives graded/view_result when graded but attempts remain", async () => {
+    it("derives graded/start when graded but attempts remain (retake reachable from the list)", async () => {
       const gradeExamId = await createAndEnrollExam({
         title: "Grade Exam",
         maxAttempts: 3,
       });
-      await startAndSubmit(gradeExamId);
+      await startAndSubmit(gradeExamId); // empty submit auto-grades to failed
       const target = await getSummary(gradeExamId);
       expect(target.availabilityStatus).toBe("graded");
-      expect(target.primaryAction).toBe("view_result");
+      expect(target.primaryAction).toBe("start");
       expect(target.bestScore).toBeDefined();
+
+      // List and detail must agree: detail derives from the same state.
+      const detailRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/exams/${gradeExamId}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(detailRes.statusCode).toBe(200);
+      expect(detailRes.json().primaryAction).toBe("start");
+      expect(detailRes.json().canStartNewAttempt).toBe(true);
+
+      // The start command must actually admit the retake (R1-F1).
+      const retakeRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${gradeExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(retakeRes.statusCode).toBe(201);
+    });
+
+    it("unlimited policy: a graded failure never blocks the next attempt, authored maxAttempts notwithstanding", async () => {
+      const unlimitedExamId = await createAndEnrollExam({
+        title: "Unlimited Exam",
+        retakePolicy: "unlimited",
+        // The authored number is only meaningful for max_attempts; the start
+        // command must not consume it under unlimited.
+        maxAttempts: 1,
+      });
+      await startAndSubmit(unlimitedExamId);
+      const target = await getSummary(unlimitedExamId);
+      expect(target.availabilityStatus).toBe("graded");
+      expect(target.primaryAction).toBe("start");
+
+      const retakeRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${unlimitedExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(retakeRes.statusCode).toBe(201);
     });
 
     it("derives not_started_yet when before window", async () => {

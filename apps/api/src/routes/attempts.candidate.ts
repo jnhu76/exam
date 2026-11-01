@@ -276,6 +276,9 @@ function buildCandidateExamDetail(
     questionCount: exam.questionSnapshot.length,
     controlFlags: exam.controlFlags,
     maxAttempts: exam.maxAttempts,
+    // Retake policy authority for the client's attempts copy — display fact
+    // only; admission stays server-authoritative (startOrRestoreAttempt).
+    retakePolicy: exam.retakePolicy,
     latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
     minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
     currentAttempts,
@@ -416,6 +419,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             totalScore: exam.totalScore,
             attemptsUsed: enrollment.attemptCount,
             maxAttempts: exam.maxAttempts,
+            // Retake policy authority for the client's attempts copy — the
+            // list must not render the authored maxAttempts number as a cap
+            // for unlimited exams (R1-F6 sentinel display).
+            retakePolicy: exam.retakePolicy,
             latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
             minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
             ...(displayAttempt

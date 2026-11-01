@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { passwordField } from "./passwordPolicy.js";
-import { TimingModeEnum } from "./exam.js";
+import { TimingModeEnum, RetakePolicyEnum } from "./exam.js";
 import { optionalEmailField } from "./emailField.js";
 
 // ── Candidate Exam Summary (derived contract) ─────────────────────
@@ -69,6 +69,11 @@ export const CandidateExamSummarySchema = z.object({
   totalScore: z.number(),
   attemptsUsed: z.number().int().min(0),
   maxAttempts: z.number().int().positive(),
+  // Retake policy authority for candidate-facing copy: the attempts line
+  // keys on this field, never on the authored maxAttempts number — under
+  // unlimited that number is not meaningful and must not be rendered as a
+  // cap. Display fact only; retake admission stays server-authoritative.
+  retakePolicy: RetakePolicyEnum,
   latestAttemptId: z.string().uuid().optional(),
   latestAttemptStatus: z
     .enum([

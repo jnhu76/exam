@@ -5,7 +5,7 @@ import { GradingStatusEnum as GradingStatusFromScore } from "./score.js";
 import { InterruptionTimePolicySchema } from "./interruption.js";
 import { AnswerModeEnum, ContentDocumentV1Schema } from "./contentDocument.js";
 import { PERSISTED_RICH_ANSWER_STATES } from "./persistedRichAnswer.js";
-import { TimingModeEnum } from "./exam.js";
+import { TimingModeEnum, RetakePolicyEnum } from "./exam.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
 
@@ -1051,6 +1051,10 @@ export const CandidateExamDetailResponseSchema = z.object({
     showResultImmediately: z.boolean(),
   }),
   maxAttempts: z.number().int().positive(),
+  // Same retake-policy authority as CandidateExamSummarySchema: the start
+  // page keys its attempts copy on this field, never on the authored
+  // maxAttempts number. Display fact only; admission stays server-side.
+  retakePolicy: RetakePolicyEnum,
   currentAttempts: z.number().int().min(0),
   activeAttemptId: z.string().uuid().optional(),
   canStartNewAttempt: z.boolean(),
