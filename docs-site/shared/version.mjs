@@ -12,7 +12,7 @@
  * theme, so it must stay dependency-free.
  */
 export const PRODUCT_SHA = "511e6e60dd332f376f15ea0326f95fcefddaeb84";
-export const DOCS_SHA = "41aa147ce6076bb1f94ceda415a893147f1b1599";
+export const DOCS_SHA = "f82cf8898bf125536915be05de72ed849695cf61";
 
 export const PRODUCT_SHA_SHORT = PRODUCT_SHA.slice(0, 8);
 export const DOCS_SHA_SHORT = DOCS_SHA.slice(0, 8);
