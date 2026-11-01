@@ -538,6 +538,107 @@ describe("GradingDetailPage — one-time submission UX", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers the next pending attempt once the attempt is fully graded and navigates via the authoritative queue", async () => {
+    getMock
+      .mockResolvedValueOnce({
+        ...mockDetailData,
+        gradingStatus: "fully_graded",
+        questions: [
+          {
+            questionId: "q-done",
+            type: "text_response",
+            content: "已完成题",
+            maxScore: 10,
+            candidateAnswer: "作答",
+            entry: {
+              score: 8,
+              comment: "",
+              gradedBy: "admin-1",
+              gradedByName: "李评分",
+              gradedAt: "2025-01-15T12:00:00Z",
+            },
+          },
+        ],
+      })
+      // The click-time probe consumes the authoritative queue endpoint.
+      .mockResolvedValueOnce({
+        items: [{ attemptId: "att-next" }, { attemptId: "att-1" }],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce(mockDetailData); // next attempt's detail load
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const nextBtn = screen.getByRole("button", { name: "下一份待阅卷" });
+    await userEvent.click(nextBtn);
+
+    // The navigation target is resolved by the server's own queue projection,
+    // never by a client-side queue mirror.
+    await vi.waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith(
+        "/api/admin/grading-queue?page=1&pageSize=20",
+      );
+    });
+    // Navigating remounts the page for the next attempt id.
+    await vi.waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith(
+        "/api/admin/attempts/att-next/grading-details",
+      );
+    });
+  });
+
+  it("does not offer next-pending while the attempt still has pending questions", async () => {
+    // Draft-safety invariant: a partially graded attempt still holds the
+    // operator's (possibly unsaved) draft input — no skip-away action.
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(
+      screen.queryByRole("button", { name: "下一份待阅卷" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a no-more-pending toast instead of navigating when the queue is empty", async () => {
+    const { toast } = await import("sonner");
+    getMock
+      .mockResolvedValueOnce({
+        ...mockDetailData,
+        gradingStatus: "fully_graded",
+        questions: [
+          {
+            questionId: "q-done",
+            type: "text_response",
+            content: "已完成题",
+            maxScore: 10,
+            candidateAnswer: "作答",
+            entry: {
+              score: 8,
+              comment: "",
+              gradedBy: "admin-1",
+              gradedByName: "李评分",
+              gradedAt: "2025-01-15T12:00:00Z",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ items: [], total: 0, page: 1, pageSize: 20 });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    await userEvent.click(screen.getByRole("button", { name: "下一份待阅卷" }));
+
+    await vi.waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith("队列中暂无其他待阅卷");
+    });
+    // No navigation happened: the only detail GET is the initial load.
+    expect(
+      getMock.mock.calls.filter(([url]) =>
+        String(url).includes("/grading-details"),
+      ),
+    ).toHaveLength(1);
+  });
+
   it("shows the explicit fallback and the audit id when the grader name is unresolvable", async () => {
     getMock.mockResolvedValue({
       ...mockDetailData,

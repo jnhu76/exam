@@ -176,6 +176,12 @@ interface GradeQuestionResponse {
   fullyGraded: boolean;
 }
 
+/** Narrow projection of GET /admin/grading-queue used only to ask the
+ * authoritative queue what to work on next; no queue state is kept here. */
+interface NextPendingProbe {
+  items: Array<{ attemptId: string }>;
+}
+
 export function GradingDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
@@ -201,6 +207,7 @@ export function GradingDetailPage() {
     score: number;
     maxScore: number;
   } | null>(null);
+  const [findingNext, setFindingNext] = useState(false);
 
   /**
    * Re-fetches the authoritative grading-details and replaces local state from
@@ -418,6 +425,32 @@ export function GradingDetailPage() {
     [id, comments, t, refreshFromServer, reconcileAfterPostError],
   );
 
+  /**
+   * Continues the grading session: asks the authoritative queue endpoint what
+   * the FIFO-first pending attempt is RIGHT NOW and navigates to it. Click-time
+   * probe only — this page never keeps queue state (the queue endpoint stays
+   * the single truth), and the server-side grader scope/filters are untouched.
+   */
+  const goNextPending = useCallback(async () => {
+    if (!id || findingNext) return;
+    setFindingNext(true);
+    try {
+      const queue = await api.get<NextPendingProbe>(
+        "/api/admin/grading-queue?page=1&pageSize=20",
+      );
+      const next = queue.items.find((item) => item.attemptId !== id);
+      if (next) {
+        navigate(`/admin/grading-queue/${next.attemptId}`);
+      } else {
+        toast.info(t("admin.gradingDetail.toast.noMorePending"));
+      }
+    } catch {
+      toast.error(t("admin.gradingDetail.errors.nextPendingFailed"));
+    } finally {
+      setFindingNext(false);
+    }
+  }, [id, findingNext, navigate, t]);
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadDetail} />;
   if (!data)
@@ -436,13 +469,28 @@ export function GradingDetailPage() {
         title={t("admin.gradingDetail.title")}
         description={`${data.examTitle} — ${data.candidateName}`}
         actions={
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/admin/grading-queue")}
-          >
-            <AppIcon icon={ArrowLeft} size="inline" className="mr-2" />
-            {t("admin.gradingDetail.actions.backToQueue")}
-          </Button>
+          <>
+            {/* Rendered only once the attempt is fully graded: there are no
+                pending questions left, so no operator draft can be abandoned,
+                and the attempt can no longer appear in the queue. */}
+            {isFullyGraded ? (
+              <Button
+                onClick={() => void goNextPending()}
+                disabled={findingNext}
+              >
+                {findingNext
+                  ? t("admin.gradingDetail.actions.findingNext")
+                  : t("admin.gradingDetail.actions.nextPending")}
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/admin/grading-queue")}
+            >
+              <AppIcon icon={ArrowLeft} size="inline" className="mr-2" />
+              {t("admin.gradingDetail.actions.backToQueue")}
+            </Button>
+          </>
         }
         status={<StatusBadge status={data.gradingStatus} />}
       />
