@@ -305,9 +305,8 @@ describe("ResultPage", () => {
 
     renderPage();
 
-    // The candidate DTO carries only the candidate answer (the correct-answer
-    // cell renders the hidden marker for objective questions), so exactly one
-    // truncated answer remains.
+    // The candidate DTO carries only the candidate answer (there is no
+    // correct-answer column), so exactly one truncated answer remains.
     const truncatedAnswers = await screen.findAllByTitle(longAnswer);
     expect(truncatedAnswers).toHaveLength(1);
     expect(truncatedAnswers[0]).toHaveClass("data-table-overflow-truncate");
@@ -393,6 +392,57 @@ describe("ResultPage", () => {
     expect(screen.getByText("文本作答")).toBeInTheDocument();
   });
 
+  it("removes the empty correct-answer column and keeps the manual marker visible", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "R0-F4 回归",
+      passingScore: 2,
+      totalScore: 2,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "single_choice",
+          content: "客观题干",
+          order: 0,
+          candidateAnswer: "a",
+          manualGraded: false,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+        {
+          questionId: "q2",
+          type: "text_response",
+          content: "主观题干",
+          order: 1,
+          candidateAnswer: "考生作答",
+          manualGraded: true,
+          score: 1,
+          maxScore: 1,
+          correct: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByTestId("result-total-score");
+    // R0-F4: the column promised "正确答案" but the candidate DTO never
+    // carries one (EXSEM-017), so every cell was a visibility placeholder
+    // (— / 主观题). The column is gone entirely.
+    expect(screen.queryByText("正确答案")).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    // The page states why no reference answers are shown.
+    expect(screen.getByText("参考答案不公开")).toBeInTheDocument();
+    // The manualGraded marker survives at its new home (your-answer cell) —
+    // never silently dropped, and only the genuinely manual row carries it.
+    expect(screen.getByText("主观题")).toBeInTheDocument();
+  });
+
   it("navigates back to the exam list", async () => {
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
@@ -420,7 +470,7 @@ describe("ResultPage", () => {
     // no rubric field. The page must show score/pass and must NOT open an
     // answer-review section just because the score is visible. manualGraded
     // survives the stripping, so only genuinely manual questions keep the
-    // "主观题" marker while objective answers render as hidden.
+    // "主观题" marker; there is no correct-answer column at all (R0-F4).
     getMock.mockResolvedValue({
       attemptId: "attempt-1",
       status: "graded",
@@ -466,10 +516,11 @@ describe("ResultPage", () => {
     );
     expect(screen.getByText("已通过")).toBeInTheDocument();
 
-    // Answer gate closed (DTO carries no standardAnswer): the objective
-    // correct-answer cell renders the hidden placeholder, NOT a real answer
-    // and NOT the manual marker.
-    expect(screen.getAllByText("—")).toHaveLength(1);
+    // Answer gate closed (DTO carries no standardAnswer): there is no
+    // correct-answer column at all (R0-F4 removal) — the objective question
+    // renders neither a real answer nor a hidden placeholder.
+    expect(screen.queryByText("正确答案")).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
     // The genuinely manual question keeps the manual marker.
     expect(screen.getByText("主观题")).toBeInTheDocument();
     // No rubric is ever rendered by ResultPage (it is not in the DTO contract).

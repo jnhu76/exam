@@ -267,6 +267,7 @@ export function ResultPage() {
           <DataTableShell
             archetype="detail-comparison"
             title={t("candidateResult.detail.title")}
+            description={t("candidateResult.detail.answerNote")}
           >
             <DataTableSurface
               columns={[
@@ -274,7 +275,6 @@ export function ResultPage() {
                 { role: "long-text", key: "question" },
                 { role: "type" },
                 { role: "secondary-text", key: "candidate-answer" },
-                { role: "secondary-text", key: "correct-answer" },
                 { role: "score" },
               ]}
             >
@@ -292,9 +292,6 @@ export function ResultPage() {
                   <DataTableHead role="secondary-text">
                     {t("candidateResult.table.yourAnswer")}
                   </DataTableHead>
-                  <DataTableHead role="secondary-text">
-                    {t("candidateResult.table.correctAnswer")}
-                  </DataTableHead>
                   <DataTableHead role="score">
                     {t("candidateResult.table.score")}
                   </DataTableHead>
@@ -303,9 +300,11 @@ export function ResultPage() {
               <TableBody>
                 {result.questionResults.map((question) => {
                   // Candidate result contract (EXSEM-017): the DTO never
-                  // carries standardAnswer. Objective questions always render
-                  // the hidden marker; manual questions render the manual
-                  // marker (manualGraded is computed server-side).
+                  // carries standardAnswer, so the detail table has no
+                  // correct-answer column — the shell states that reference
+                  // answers are not published. manualGraded (computed
+                  // server-side) travels with the candidate answer: it marks
+                  // the human-graded provenance and is never silently dropped.
                   const isManual = question.manualGraded === true;
                   return (
                     <TableRow key={question.questionId}>
@@ -343,6 +342,14 @@ export function ResultPage() {
                               className="text-muted-foreground"
                             />
                           )}
+                          {isManual && (
+                            <span
+                              className="type-secondary shrink-0"
+                              data-testid={`result-question-manual-${question.questionId}`}
+                            >
+                              {t("candidateResult.answer.manual")}
+                            </span>
+                          )}
                           <AnswerText
                             answer={question.candidateAnswer}
                             answerMode={question.answerMode}
@@ -350,24 +357,6 @@ export function ResultPage() {
                             t={t as (key: string) => string}
                           />
                         </div>
-                      </DataTableCell>
-                      <DataTableCell
-                        role="secondary-text"
-                        data-testid={
-                          isManual
-                            ? `result-question-manual-${question.questionId}`
-                            : undefined
-                        }
-                      >
-                        {isManual ? (
-                          <span className="type-secondary">
-                            {t("candidateResult.answer.manual")}
-                          </span>
-                        ) : (
-                          <span className="type-secondary">
-                            {t("candidateResult.answer.hidden")}
-                          </span>
-                        )}
                       </DataTableCell>
                       <DataTableCell role="score">
                         {question.score}/{question.maxScore}
