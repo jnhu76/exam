@@ -56,6 +56,14 @@ export class EmailOutboxService {
         targetId: string;
         metadata: Record<string, unknown>;
       }) => void;
+      /**
+       * Optional structured error logger (Pino-compatible `error(obj, msg)`
+       * shape). #800: a terminal dead-letter transition is otherwise visible
+       * only as a `dead` count inside the `processed > 0` poll summary — an
+       * SMTP outage that dead-letters every notification stays invisible to
+       * anyone not watching the diagnostics page.
+       */
+      logger?: { error: (obj: Record<string, unknown>, msg: string) => void };
     },
   ) {}
 
@@ -124,6 +132,18 @@ export class EmailOutboxService {
           );
           if (dead) {
             result.dead += 1;
+            // #800: one error-level line per dead-letter transition, into the
+            // existing logging contract (no new channel). `lastError` is the
+            // sanitized value above — category/stable-code only, never raw
+            // error content; no recipient address or body content is logged.
+            this.deps.logger?.error(
+              {
+                emailId: row.id,
+                attemptCount: currentAttemptCount,
+                lastError,
+              },
+              "Email delivery failed permanently; outbox row moved to dead-letter",
+            );
             this.deps.auditEmitter?.({
               action: "email.send_failed",
               targetType: "email_outbox",

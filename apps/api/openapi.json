@@ -38312,6 +38312,14 @@
                           "type": "integer",
                           "minimum": 0
                         },
+                        "failedCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "incidentReconciliationFailedCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
                         "startedAt": {
                           "type": "string",
                           "nullable": true
@@ -38338,6 +38346,8 @@
                         "timeout",
                         "lastScanAt",
                         "disruptedCount",
+                        "failedCount",
+                        "incidentReconciliationFailedCount",
                         "startedAt",
                         "lastStartedAt",
                         "lastSettledAt",
@@ -38358,6 +38368,10 @@
                           "nullable": true
                         },
                         "autoSubmitCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "failedCount": {
                           "type": "integer",
                           "minimum": 0
                         },
@@ -38386,6 +38400,7 @@
                         "interval",
                         "lastScanAt",
                         "autoSubmitCount",
+                        "failedCount",
                         "startedAt",
                         "lastStartedAt",
                         "lastSettledAt",

@@ -451,6 +451,11 @@ async function buildOperationalDiagnostics(
       timeout: config.heartbeat.timeoutMs,
       lastScanAt: heartbeatMetrics.lastScanAt?.toISOString() ?? null,
       disruptedCount: heartbeatMetrics.disruptedCount,
+      // #800: per-leg in-memory failure counters (reset on restart, never
+      // persisted) — read-only projection of the metrics the tick maintains.
+      failedCount: heartbeatMetrics.disruptionFailedCount,
+      incidentReconciliationFailedCount:
+        heartbeatMetrics.incidentReconciliationFailedCount,
       // #547 stall facts + the same pure classification the operability
       // monitor alerts on (read-only projection; no second authority).
       startedAt: heartbeatMetrics.startedAt?.toISOString() ?? null,
@@ -467,6 +472,9 @@ async function buildOperationalDiagnostics(
       interval: deadlineScannerMetrics.scanIntervalMs,
       lastScanAt: deadlineScannerMetrics.lastScanAt?.toISOString() ?? null,
       autoSubmitCount: deadlineScannerMetrics.autoSubmitCount,
+      // #800: the counter already accumulates per tick; only the exposure
+      // layer was missing.
+      failedCount: deadlineScannerMetrics.failedCount,
       startedAt: deadlineScannerMetrics.startedAt?.toISOString() ?? null,
       lastStartedAt:
         deadlineScannerMetrics.lastStartedAt?.toISOString() ?? null,
