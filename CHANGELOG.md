@@ -8,6 +8,91 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-11-02
+
+### Added
+
+- Candidate exam list and detail responses project the authored
+  `retakePolicy` (`max_attempts` | `unlimited` | `pass_then_stop`), and
+  attempts copy keys on the real policy — unlimited exams render as
+  不限次数 instead of a sentinel count (#834, PR #839).
+- Grading details resolve the grader's display name (`gradedByName`) and
+  the grading session gains a continue-with-next-pending action (PR #842).
+- Operator tooling for the ADR-023 evidence-preservation gate:
+  `scripts/verify-evidence-preservation.sh` manifest capture/compare with
+  a fail-closed contract and self-test (PR #816).
+- Bounded repo-only VitePress documentation pilot with a CI build check,
+  plus truthful Standard product documentation (PRs #829, #830, #832).
+
+### Changed
+
+- Retake is reachable from the exam list once a final score exists when the
+  retake policy still admits it (failed with attempts remaining, unlimited,
+  or pass-then-stop not yet passed), matching the start command's authority;
+  the published result stays viewable on the card (#834, PR #839).
+- The save indicator's idle chip now means actually-synced, skipped saves
+  surface an error, offline banners separate connection loss from save
+  state, and the submit dialog weights facts by risk (PR #841).
+- Formula rendering emits MathML alongside the visual HTML; the MathML tree
+  is the accessible representation of every formula (PR #848).
+- The dashboard "today" stat is labeled as an attempt count with
+  test-pinned counting semantics (PR #844).
+
+### Fixed
+
+- Fill-blank questions with JSON-like scalar standard answers (`"42"`,
+  `"true"`, `"1e3"`, …) are graded against the authored string instead of a
+  double-parsed value (#845, PR #846).
+- The Admin dashboard reports real enrollment counts in recent exams
+  instead of a hardcoded 0 (#833, PR #835).
+- Missing health telemetry renders an explicit no-data state instead of
+  0%/0ms (#836), and unresolvable user references fail closed instead of
+  rendering empty identities (#837) (PR #838).
+- Candidate result page: shared question-type dictionary, contentless
+  correct-answer column removed, long answers behind a keyboard-operable
+  disclosure, and a mobile per-question view (PR #840).
+- Candidate exam card touch targets reach 44px on mobile and
+  passing-requirement copy is unified across pages (PR #843).
+- Rich content no longer clips at the document level: overflow is local to
+  the content viewport, un-clamped answers stay wrapped, and re-measure is
+  reliable after resize (#847, PR #848).
+- Governance drift repaired: false gate claims and dependency facts
+  corrected (#821, PRs #822, #823).
+
+### Removed
+
+- **Breaking (ADR-023, #739):** the backup-evidence subsystem — API
+  endpoints `GET /system/backups`, `GET /system/restore-readiness`,
+  `GET /system/retention-readiness`, `GET+PUT /system/ops-policy`;
+  permission keys `system.backup.view`, `system.restore_readiness.view`,
+  `system.ops.policy.view`, `system.ops.policy.manage`; the evidence CLI,
+  repositories, contracts, and OperationsPage sections; and the five
+  database tables via forward-only migration `0045` with a pre-drop
+  evidence-preservation gate (PRs #815, #816). The Maintainer preset is
+  re-baselined to exactly `system.health.view` +
+  `system.diagnostics.view`. Backup/DR evidence is a host-operator
+  obligation; health/diagnostics are unchanged.
+
+### Deployment / operations
+
+- Migration `0045` is the only schema change; applied migrations 0031–0034
+  are untouched. Deployments with non-empty backup-evidence tables will
+  intentionally fail to start until the §2.7 preservation workflow
+  (upgrade-and-uninstall.md) is completed; empty-table deployments migrate
+  silently. Pre-upgrade backup remains mandatory.
+- No environment-variable, Docker Compose, or configuration changes.
+
+### Internal / infrastructure
+
+- Forbidden workspace runtime dependencies are machine-enforced from
+  `config/architecture-policy.mjs` (#824, PR #825); agent authority and
+  execution contract consolidated (PR #826).
+- E2E: admin Back oracle made behavior-authoritative (PR #811); four
+  rich-content overflow journeys and ~50 component tests (PR #848); JSONB
+  grading regression through the real repository (PR #846).
+- Flake-evidence records OBS-2026-10-23-001/-002 (PR #809, direct
+  `c5814def`); README badge refresh (PR #810).
+
 ## [0.0.10] - 2026-10-23
 
 ### Added
@@ -647,7 +732,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.10...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.11...HEAD
+[0.0.11]: https://github.com/jnhu76/exam/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/jnhu76/exam/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/jnhu76/exam/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/jnhu76/exam/compare/v0.0.7...v0.0.8
