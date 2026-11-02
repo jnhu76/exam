@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +98,53 @@ function renderPage() {
       </Routes>
     </MemoryRouter>,
   );
+}
+
+// The rich-content viewports decide their tab stop from the same integer
+// facts the browser reports. Stub them only on viewport elements so the table
+// shell's own measurement is unaffected.
+let originalViewportMetrics: {
+  scrollWidth?: PropertyDescriptor;
+  clientWidth?: PropertyDescriptor;
+  offsetWidth?: PropertyDescriptor;
+};
+
+function stubViewportOverflow() {
+  const proto = HTMLElement.prototype;
+  originalViewportMetrics = {
+    scrollWidth: Object.getOwnPropertyDescriptor(proto, "scrollWidth"),
+    clientWidth: Object.getOwnPropertyDescriptor(proto, "clientWidth"),
+    offsetWidth: Object.getOwnPropertyDescriptor(proto, "offsetWidth"),
+  };
+  const isViewport = (el: HTMLElement) =>
+    el.dataset.slot === "content-scroll-viewport";
+  Object.defineProperty(proto, "scrollWidth", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return isViewport(this) ? 640 : 0;
+    },
+  });
+  Object.defineProperty(proto, "clientWidth", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return isViewport(this) ? 200 : 0;
+    },
+  });
+  Object.defineProperty(proto, "offsetWidth", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return isViewport(this) ? 200 : 0;
+    },
+  });
+}
+
+function restoreViewportMetrics() {
+  const proto = HTMLElement.prototype;
+  for (const key of ["scrollWidth", "clientWidth", "offsetWidth"] as const) {
+    const desc = originalViewportMetrics?.[key];
+    if (desc) Object.defineProperty(proto, key, desc);
+    else delete (proto as unknown as Record<string, unknown>)[key];
+  }
 }
 
 describe("ResultPage", () => {
@@ -442,6 +489,147 @@ describe("ResultPage", () => {
         "false",
       );
     } finally {
+      restoreElementMetrics();
+    }
+  });
+
+  it("keeps a horizontally overflowing rich answer reachable when it fits vertically", async () => {
+    const longCode = `const overflowOnly = f(${"value, ".repeat(40)});`;
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "S2.4 水平溢出但纵向适配",
+      passingScore: 6,
+      totalScore: 10,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "一行代码",
+          order: 0,
+          answerMode: "rich",
+          candidateAnswer: {
+            docVersion: 1,
+            type: "doc",
+            content: [{ type: "codeBlock", language: null, text: longCode }],
+          },
+          manualGraded: true,
+          score: 2,
+          maxScore: 10,
+          correct: false,
+        },
+      ],
+    });
+
+    // The answer fits the three-line clamp vertically; only its code line
+    // overflows horizontally. There is no disclosure toggle, so the local
+    // scroll region must remain a keyboard stop on its own.
+    stubElementMetrics({ scrollHeight: 44, clientHeight: 66 });
+    stubViewportOverflow();
+    try {
+      renderPage();
+      await screen.findByTestId("result-total-score");
+      const desktopRegion = document.querySelector<HTMLElement>(
+        '[data-slot="responsive-desktop-region"]',
+      );
+      expect(desktopRegion).not.toBeNull();
+      const desktop = within(desktopRegion!);
+      expect(
+        desktop.queryByRole("button", { name: /展开全文|收起/ }),
+      ).not.toBeInTheDocument();
+      const viewport = desktopRegion!.querySelector<HTMLElement>(
+        '[data-slot="content-scroll-viewport"]',
+      );
+      expect(viewport).not.toBeNull();
+      await waitFor(() => {
+        expect(viewport).toHaveAttribute("data-overflowing", "true");
+      });
+      expect(viewport).toHaveAttribute("tabindex", "0");
+      expect(viewport).toHaveAttribute("role", "group");
+      expect(viewport).toHaveAttribute("aria-label", "代码块，可横向滚动");
+      expect(viewport!.closest("[data-answer-disclosure]")).toHaveAttribute(
+        "data-answer-clipped",
+        "false",
+      );
+      // An un-clamped long token must wrap inside the mobile card (#699).
+      expect(
+        viewport!.closest("[data-answer-disclosure]")?.className,
+      ).toContain("break-words");
+    } finally {
+      restoreViewportMetrics();
+      restoreElementMetrics();
+    }
+  });
+
+  it("keeps a rich answer's scroll region out of the tab order until the disclosure expands", async () => {
+    const longCode = `const veryLongIdentifier = someFunction(${"argument, ".repeat(30)});`;
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "S2.4 富文本可访问性回归",
+      passingScore: 6,
+      totalScore: 10,
+      passed: false,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请说明时延构成",
+          order: 0,
+          answerMode: "rich",
+          candidateAnswer: {
+            docVersion: 1,
+            type: "doc",
+            content: [{ type: "codeBlock", language: null, text: longCode }],
+          },
+          manualGraded: true,
+          score: 2,
+          maxScore: 10,
+          correct: false,
+        },
+      ],
+    });
+
+    stubElementMetrics({ scrollHeight: 240, clientHeight: 66 });
+    stubViewportOverflow();
+    try {
+      renderPage();
+      await screen.findByTestId("result-total-score");
+      const desktopRegion = document.querySelector<HTMLElement>(
+        '[data-slot="responsive-desktop-region"]',
+      );
+      expect(desktopRegion).not.toBeNull();
+      const desktop = within(desktopRegion!);
+      const viewport = desktopRegion!.querySelector<HTMLElement>(
+        '[data-slot="content-scroll-viewport"]',
+      );
+      expect(viewport).not.toBeNull();
+      await waitFor(() => {
+        expect(viewport).toHaveAttribute("data-overflowing", "true");
+      });
+
+      // Collapsed: the preview is clipped, so its scroll region must not be
+      // a tab stop (focus would scroll-jack the clamp and land on content
+      // the user cannot see).
+      expect(viewport).toHaveAttribute("tabindex", "-1");
+      expect(viewport).not.toHaveAttribute("role");
+      expect(viewport).not.toHaveAttribute("aria-label");
+
+      await userEvent.click(desktop.getByRole("button", { name: "展开全文" }));
+      // Expanded: the same region becomes the one keyboard-reachable,
+      // labelled scroll owner.
+      await waitFor(() => {
+        expect(viewport).toHaveAttribute("tabindex", "0");
+      });
+      expect(viewport).toHaveAttribute("role", "group");
+      expect(viewport).toHaveAttribute("aria-label", "代码块，可横向滚动");
+    } finally {
+      restoreViewportMetrics();
       restoreElementMetrics();
     }
   });

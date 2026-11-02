@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { MathRenderer } from "@/components/shared/content/MathRenderer";
+import { ContentScrollViewport } from "@/components/shared/content/ContentScrollViewport";
 import { MathFormulaField } from "./MathFormulaField";
 
 /**
@@ -109,6 +110,12 @@ export function FormulaEditorDialog({
   // What the confirm would persist in this context (raw choice clamped to
   // the downgrade constraint); the preview shows the PERSISTED form.
   const persistedDisplay = display && blockAllowed;
+  const previewViewport = persistedDisplay
+    ? ({ kind: "block", labelKey: "content.scrollRegion.formula" } as const)
+    : ({
+        kind: "inline",
+        labelKey: "content.scrollRegion.inlineFormula",
+      } as const);
   const isEdit = target !== null;
 
   function confirm() {
@@ -229,10 +236,12 @@ export function FormulaEditorDialog({
                   </span>
                   <div className="rounded-md border border-border bg-card px-3 py-2">
                     {latex.trim() ? (
-                      <MathRenderer
-                        latex={latex}
-                        displayMode={persistedDisplay}
-                      />
+                      <ContentScrollViewport {...previewViewport} nowrap>
+                        <MathRenderer
+                          latex={latex}
+                          displayMode={persistedDisplay}
+                        />
+                      </ContentScrollViewport>
                     ) : (
                       <span className="type-secondary">
                         {t("content.formula.previewEmpty")}

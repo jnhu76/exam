@@ -14,14 +14,16 @@ import { MathRenderer } from "./MathRenderer";
  *
  * Characterization is EMPIRICAL against the pinned KaTeX (0.18.4) with the
  * exact production options (`throwOnError: false, trust: false,
- * strict: "ignore", output: "html", maxSize: 50, maxExpand: 1000`) — no
- * remembered defaults. The authority-level invariants under proof:
+ * strict: "ignore", output: "htmlAndMathml", maxSize: 50, maxExpand: 1000`) —
+ * no remembered defaults. The authority-level invariants under proof:
  *
  *   inert      — user latex can never create an active/remote content path
  *   bounded    — expansion and dimensions fail/cap within explicit bounds
  *   preserved  — malformed source stays recoverable/visible; the persisted
  *                latex source is the semantic value, KaTeX output is only a
  *                projection (render errors never replace stored source)
+ *   readable   — the MathML tree is the single accessible copy; the visual
+ *                HTML projection stays aria-hidden (never read twice)
  *
  * The trust-disallowed-command fidelity observation is reproduced here and
  * classified:
@@ -73,6 +75,27 @@ describe("katexRenderToHtml (production options, pinned KaTeX 0.18.4)", () => {
     }
   });
 
+  // M1a — accessibility: exactly one accessible copy of the formula.
+  it("emits MathML as the accessible copy and hides the visual HTML projection", () => {
+    for (const displayMode of [false, true]) {
+      const html = katexRenderToHtml("\\frac{a}{b}", displayMode);
+      const dom = new DOMParser().parseFromString(html, "text/html");
+      const mathml = dom.querySelector(".katex-mathml math");
+      expect(
+        mathml,
+        "MathML must be present for assistive technology",
+      ).not.toBeNull();
+      // The annotation preserves the auditable TeX source inside the
+      // accessible tree instead of losing it to a purely visual rendering.
+      expect(dom.querySelector(".katex-mathml annotation")?.textContent).toBe(
+        "\\frac{a}{b}",
+      );
+      const visual = dom.querySelector(".katex-html");
+      expect(visual?.getAttribute("aria-hidden")).toBe("true");
+      assertInertHtml(html);
+    }
+  });
+
   // M2 — malformed syntax: no crash, source evidence preserved, never empty.
   it("parse-level malformed math preserves the source verbatim in the error projection", () => {
     for (const latex of ["\\frac{1}{2", "{", "\\frac{\\oops"]) {
@@ -115,11 +138,27 @@ describe("katexRenderToHtml (production options, pinned KaTeX 0.18.4)", () => {
     const html = katexRenderToHtml(latex, false);
     const dom = new DOMParser().parseFromString(html, "text/html");
     const text = dom.body.textContent ?? "";
-    // Degraded projection: the command token remains, the remote reference
-    // does not — neither as an element nor as an attribute/value.
+    // Degraded VISUAL projection: the command token remains, the remote
+    // reference does not — neither as an element nor as an attribute/value.
+    // The MathML annotation intentionally preserves the submitted TeX for
+    // assistive technology; it is inert text, so the accessibility copy is
+    // not a remote-content path.
     expect(text).toContain("\\includegraphics");
     expect(dom.querySelector("img")).toBeNull();
-    expect(html).not.toContain("evil.example");
+    expect(dom.querySelector(".katex-html")?.textContent).not.toContain(
+      "evil.example",
+    );
+    // The remote reference may survive only in the inert MathML <annotation>
+    // text. It must never appear in ANY attribute value (style/src/href),
+    // which would turn a future trust regression into a remote-content path
+    // that the text-only check above cannot see.
+    for (const el of Array.from(dom.querySelectorAll("*"))) {
+      for (const attr of Array.from(el.attributes)) {
+        expect(attr.value, `${el.tagName}@${attr.name}`).not.toContain(
+          "evil.example",
+        );
+      }
+    }
     assertInertHtml(html);
   });
 
@@ -156,7 +195,17 @@ describe("katexRenderToHtml (production options, pinned KaTeX 0.18.4)", () => {
 
   it("dimension abuse is capped by maxSize", () => {
     const html = katexRenderToHtml("\\rule{99999em}{99999em}", true);
-    expect(html).not.toContain("99999");
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    // The rendered geometry is capped at maxSize (50em). The MathML
+    // annotation still carries the submitted source verbatim for AT; it is
+    // text, and the visual rule is the bounded projection.
+    expect(dom.querySelector(".katex-html")?.textContent).not.toContain(
+      "99999",
+    );
+    expect(dom.querySelector(".katex-html")?.innerHTML).not.toContain(
+      "99999em",
+    );
+    expect(dom.querySelector(".katex-html")?.innerHTML).toContain("50em");
     expect(html.length).toBeLessThan(2000);
     assertInertHtml(html);
   });
@@ -320,9 +369,17 @@ describe("ContentRenderer → ContentDocumentRenderer → MathRenderer compositi
       expect(container.querySelector(".katex")).not.toBeNull();
       expect(container.querySelector(".katex-error")).not.toBeNull();
     });
-    // The rendered valid math is a projection, not the raw source text…
-    expect(container.textContent).not.toContain("E=mc^2");
-    // …while the malformed block's source evidence stays visible.
+    // The rendered valid math is a VISUAL projection, not raw source text…
+    const visualText = Array.from(container.querySelectorAll(".katex-html"))
+      .map((el) => el.textContent)
+      .join("");
+    expect(visualText).not.toContain("E=mc^2");
+    // …while the MathML annotation preserves the source as the one
+    // accessible copy for assistive technology.
+    expect(
+      container.querySelector(".katex-mathml annotation")?.textContent,
+    ).toBe("E=mc^2");
+    // …and the malformed block's source evidence stays visible.
     expect(container.textContent).toContain("\\frac{1}{2");
   });
 });

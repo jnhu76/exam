@@ -125,6 +125,12 @@ const zhCN = {
     unsafeEditableAnswer: "此作答内容无法安全加载编辑",
     unsafeDocument: "此内容无法安全显示",
     mathLoading: "公式加载中",
+    scrollRegion: {
+      formula: "公式，可横向滚动",
+      inlineFormula: "行内公式，可横向滚动",
+      code: "代码块，可横向滚动",
+      table: "表格，可横向滚动",
+    },
     mode: {
       label: "内容模式",
       optionLabel: "选项 {{id}} 内容模式",
