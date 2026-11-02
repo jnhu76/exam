@@ -57,6 +57,19 @@ function endOfDayISO(date: Date): string {
 }
 
 const INCIDENT_STATUSES = ["open", "investigating", "resolved", "dismissed"];
+/** Closed Incident type vocabulary (same list as the incident-create form);
+ * labels resolve through the shared `admin.recoveryIncident.type.*` owner. */
+const INCIDENT_TYPES = [
+  "network_interruption",
+  "device_failure",
+  "power_failure",
+  "candidate_unable_to_continue",
+  "suspected_misconduct",
+  "operator_error",
+  "system_outage",
+  "environmental_disruption",
+  "other",
+] as const;
 const INCIDENT_SEVERITIES = ["info", "minor", "major", "critical"];
 /** Statuses whose incidents are already handled — they contradict the
  * "unresolved only" predicate (its server-side meaning is
@@ -67,8 +80,11 @@ const NAMESPACE = "admin.recoveryQueue";
 interface QueueFilters {
   status: string;
   severity: string;
+  incidentType: string;
   examId: string;
   candidateId: string;
+  attemptId: string;
+  assignedProctorUserId: string;
   createdFrom: string;
   createdTo: string;
   /** "true" when the unresolved predicate is active (URL param verbatim). */
@@ -153,8 +169,11 @@ export function RecoveryQueuePage() {
     () => ({
       status: params.get("status") ?? "",
       severity: params.get("severity") ?? "",
+      incidentType: params.get("incidentType") ?? "",
       examId: params.get("examId") ?? "",
       candidateId: params.get("candidateId") ?? "",
+      attemptId: params.get("attemptId") ?? "",
+      assignedProctorUserId: params.get("assignedProctorUserId") ?? "",
       createdFrom: params.get("createdFrom") ?? "",
       createdTo: params.get("createdTo") ?? "",
       unresolvedOnly: params.get("unresolvedOnly") === "true" ? "true" : "",
@@ -169,8 +188,12 @@ export function RecoveryQueuePage() {
     if (filters.unresolvedOnly === "true") params.set("unresolvedOnly", "true");
     if (filters.status) params.set("status", filters.status);
     if (filters.severity) params.set("severity", filters.severity);
+    if (filters.incidentType) params.set("incidentType", filters.incidentType);
     if (filters.examId) params.set("examId", filters.examId);
     if (filters.candidateId) params.set("candidateId", filters.candidateId);
+    if (filters.attemptId) params.set("attemptId", filters.attemptId);
+    if (filters.assignedProctorUserId)
+      params.set("assignedProctorUserId", filters.assignedProctorUserId);
     if (filters.createdFrom) params.set("createdFrom", filters.createdFrom);
     if (filters.createdTo) params.set("createdTo", filters.createdTo);
     return params;
@@ -213,6 +236,10 @@ export function RecoveryQueuePage() {
   // the URL parameter it writes, atomically across the filter group.
   const [examIdDraft, setExamIdDraft] = useState(filters.examId);
   const [candidateIdDraft, setCandidateIdDraft] = useState(filters.candidateId);
+  const [attemptIdDraft, setAttemptIdDraft] = useState(filters.attemptId);
+  const [assignedProctorDraft, setAssignedProctorDraft] = useState(
+    filters.assignedProctorUserId,
+  );
 
   // Sync a draft from the URL only while the user has not typed past the last
   // committed value (back/forward, link share). A draft that has moved ahead
@@ -221,6 +248,8 @@ export function RecoveryQueuePage() {
   const lastCommitted = useRef({
     examId: filters.examId,
     candidateId: filters.candidateId,
+    attemptId: filters.attemptId,
+    assignedProctorUserId: filters.assignedProctorUserId,
   });
   useEffect(() => {
     if (examIdDraft === lastCommitted.current.examId) {
@@ -229,11 +258,28 @@ export function RecoveryQueuePage() {
     if (candidateIdDraft === lastCommitted.current.candidateId) {
       setCandidateIdDraft(filters.candidateId);
     }
+    if (attemptIdDraft === lastCommitted.current.attemptId) {
+      setAttemptIdDraft(filters.attemptId);
+    }
+    if (assignedProctorDraft === lastCommitted.current.assignedProctorUserId) {
+      setAssignedProctorDraft(filters.assignedProctorUserId);
+    }
     lastCommitted.current = {
       examId: filters.examId,
       candidateId: filters.candidateId,
+      attemptId: filters.attemptId,
+      assignedProctorUserId: filters.assignedProctorUserId,
     };
-  }, [filters.examId, filters.candidateId, examIdDraft, candidateIdDraft]);
+  }, [
+    filters.examId,
+    filters.candidateId,
+    filters.attemptId,
+    filters.assignedProctorUserId,
+    examIdDraft,
+    candidateIdDraft,
+    attemptIdDraft,
+    assignedProctorDraft,
+  ]);
 
   /**
    * Commits a filter patch to the URL with replace semantics.
@@ -266,6 +312,8 @@ export function RecoveryQueuePage() {
   function clearFilters() {
     setExamIdDraft("");
     setCandidateIdDraft("");
+    setAttemptIdDraft("");
+    setAssignedProctorDraft("");
     const cleared = new URLSearchParams();
     latestParams.current = cleared;
     setSearchParams(cleared, { replace: true });
@@ -516,6 +564,30 @@ export function RecoveryQueuePage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select
+              value={filters.incidentType || "all"}
+              onValueChange={(v) =>
+                commitFilter({ incidentType: v === "all" ? "" : v })
+              }
+            >
+              <ToolbarFilter size="narrow">
+                <SelectTrigger
+                  aria-label={t("admin.recoveryQueue.filters.typeAll")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+              </ToolbarFilter>
+              <SelectContent>
+                <SelectItem value="all">
+                  {t("admin.recoveryQueue.filters.typeAll")}
+                </SelectItem>
+                {INCIDENT_TYPES.map((typeValue) => (
+                  <SelectItem key={typeValue} value={typeValue}>
+                    {t(`admin.recoveryIncident.type.${typeValue}` as never)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <ToolbarFilter size="wide">
               <TextFilterInput
                 aria-label={t("admin.recoveryQueue.filters.examPlaceholder")}
@@ -536,6 +608,32 @@ export function RecoveryQueuePage() {
                 value={candidateIdDraft}
                 onChange={setCandidateIdDraft}
                 onCommit={(candidateId) => commitFilter({ candidateId })}
+              />
+            </ToolbarFilter>
+            <ToolbarFilter size="wide">
+              <TextFilterInput
+                aria-label={t("admin.recoveryQueue.filters.attemptPlaceholder")}
+                placeholder={t(
+                  "admin.recoveryQueue.filters.attemptPlaceholder",
+                )}
+                value={attemptIdDraft}
+                onChange={setAttemptIdDraft}
+                onCommit={(attemptId) => commitFilter({ attemptId })}
+              />
+            </ToolbarFilter>
+            <ToolbarFilter size="wide">
+              <TextFilterInput
+                aria-label={t(
+                  "admin.recoveryQueue.filters.assignedProctorPlaceholder",
+                )}
+                placeholder={t(
+                  "admin.recoveryQueue.filters.assignedProctorPlaceholder",
+                )}
+                value={assignedProctorDraft}
+                onChange={setAssignedProctorDraft}
+                onCommit={(assignedProctorUserId) =>
+                  commitFilter({ assignedProctorUserId })
+                }
               />
             </ToolbarFilter>
             <DatePicker

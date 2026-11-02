@@ -963,6 +963,9 @@ const zhCN = {
       statusLabels: { active: "启用", inactive: "禁用" },
       editLabel: "编辑考生",
       resetPassword: "重置密码",
+      actions: {
+        recoveryIncidents: "恢复事件",
+      },
       enableDisable: "确定要{{action}}考生「{{name}}」吗？",
       dialog: {
         create: "新增考生",
@@ -1270,10 +1273,25 @@ const zhCN = {
         all: "全部目标",
         attempt: "答卷",
         exam: "考试",
+        exam_profile: "策略模板",
         user: "用户",
+        candidate: "考生",
+        candidate_field: "考生字段",
+        candidate_import: "考生导入",
+        staff_invitation: "员工邀请",
+        role_assignment: "角色授予",
         enrollment: "报名",
+        course: "课程",
+        question: "题目",
         organization: "组织",
+        incident: "事件",
+        login: "登录",
+        session: "会话",
+        system: "系统",
+        email_outbox: "发件记录",
       },
+      targetIdPlaceholder: "对象 ID",
+      actorIdPlaceholder: "操作者 ID",
     },
     permissions: {
       title: "权限注册表",
@@ -1752,6 +1770,9 @@ const zhCN = {
         auditLog: "操作",
         frontend: "前端",
       },
+      actions: {
+        recoveryArchive: "恢复档案",
+      },
     },
     questionEdit: {
       newTitle: "新增题目",
@@ -2125,6 +2146,16 @@ const zhCN = {
         actorPrefix: "操作者",
         ipAddress: "IP: {{address}}",
       },
+      telemetry: {
+        title: "遥测时间线",
+        description:
+          "前端遥测与监考审计的合并事件流（参考信息）：保存失败、断线等答题证据在此，不受提交/评分状态影响。",
+        loadFailed: "加载遥测时间线失败",
+        emptyTitle: "暂无遥测事件",
+        emptyDescription: "该尝试的遥测与监考事件将显示在此",
+        sourceClientEvent: "前端遥测",
+        sourceAuditLog: "审计记录",
+      },
       errors: {
         loadFailed: "加载尝试详情失败",
         resultHidden: "该尝试尚未完成评分或结果不可见",
@@ -2139,6 +2170,7 @@ const zhCN = {
         exportJson: "导出JSON",
         back: "返回",
         flagMisconduct: "标记违规",
+        recoveryArchive: "恢复档案",
       },
       /** Timeline-only view for callers without score-read capability. */
       shell: {
@@ -2599,6 +2631,8 @@ const zhCN = {
         unresolvedOnly: "仅未处理",
         examPlaceholder: "考试 ID",
         candidatePlaceholder: "考生 ID",
+        attemptPlaceholder: "答卷 ID",
+        assignedProctorPlaceholder: "监考人员 ID",
         startDate: "开始日期",
         endDate: "结束日期",
         clear: "清除筛选",

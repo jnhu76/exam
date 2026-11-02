@@ -1,9 +1,14 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ExamMonitoringPage } from "./ExamMonitoringPage";
+import { permissionsForRole } from "@exam/authz";
+import type { AssignableRole } from "@exam/contracts";
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
@@ -86,20 +91,42 @@ function makeAttempt(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderPage() {
+function renderPage(
+  actor: { role: AssignableRole; capabilities: string[] } = {
+    role: "Admin",
+    capabilities: [...permissionsForRole("Admin")],
+  },
+) {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/exam-1/proctor/monitor"]}>
-      <Routes>
-        {/* HAZARD: the route param must match the component's
-            useParams<{ id }>() and the real App.tsx route
-            (exams/:id/proctor/monitor). A mismatch (e.g. :examId) leaves
-            useParams().id undefined and the page silently never fetches
-            monitoring data — no error, just an empty surface. */}
-        <Route
-          path="/admin/exams/:id/proctor/monitor"
-          element={<ExamMonitoringPage />}
-        />
-      </Routes>
+      <AuthProvider
+        initialUser={{
+          id: "1",
+          username: "actor",
+          name: "Actor",
+          role: actor.role,
+          organizationId: "org1",
+          capabilities: actor.capabilities,
+        }}
+      >
+        <BrandProvider>
+          <Routes>
+            {/* HAZARD: the route param must match the component's
+                useParams<{ id }>() and the real App.tsx route
+                (exams/:id/proctor/monitor). A mismatch (e.g. :examId) leaves
+                useParams().id undefined and the page silently never fetches
+                monitoring data — no error, just an empty surface. */}
+            <Route
+              path="/admin/exams/:id/proctor/monitor"
+              element={<ExamMonitoringPage />}
+            />
+            <Route
+              path="/admin/recovery/attempts/:attemptId"
+              element={<div data-testid="recovery-attempt-stub" />}
+            />
+          </Routes>
+        </BrandProvider>
+      </AuthProvider>
     </MemoryRouter>,
   );
 }
@@ -208,5 +235,41 @@ describe("ExamMonitoringPage", () => {
     });
 
     expect(getStatusMetaSpy).toHaveBeenCalledWith("in_progress");
+  });
+
+  // ── #800 PR-C A3-F7: recovery-archive deep link ────────────────────
+  // A proctor spotting a suspicious candidate had no way to jump from the
+  // monitoring row into that attempt's Recovery archive — only the timeline
+  // dialog existed. The deep link composes per capability: the recovery
+  // route is Admin-gated (IncidentRecoveryView), so a Proctor's rows simply
+  // do not render the affordance (no dead button).
+
+  it("renders the recovery-archive row action for an Admin and deep-links to the recovery attempt route", async () => {
+    getMock.mockResolvedValue({ items: [makeAttempt()], total: 1 });
+    const user = userEvent.setup();
+    renderPage();
+
+    const action = await screen.findByRole("button", {
+      name: "恢复档案",
+    });
+    await user.click(action);
+
+    expect(
+      await screen.findByTestId("recovery-attempt-stub"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render the recovery-archive action for a caller without IncidentRecoveryView", async () => {
+    getMock.mockResolvedValue({
+      items: [makeAttempt()],
+      total: 1,
+    });
+    renderPage({
+      role: "Proctor",
+      capabilities: [...permissionsForRole("Proctor")],
+    });
+
+    expect(await screen.findByText("张三")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "恢复档案" })).toBeNull();
   });
 });

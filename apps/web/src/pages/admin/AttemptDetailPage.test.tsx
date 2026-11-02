@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -67,6 +68,10 @@ function renderPage(
         <BrandProvider>
           <Routes>
             <Route path="/admin/attempts/:id" element={<AttemptDetailPage />} />
+            <Route
+              path="/admin/recovery/attempts/:attemptId"
+              element={<div data-testid="recovery-attempt-stub" />}
+            />
           </Routes>
         </BrandProvider>
       </AuthProvider>
@@ -530,7 +535,12 @@ describe("AttemptDetailPage", () => {
       if (typeof url === "string" && url.includes("/timeline")) {
         return timeline;
       }
-      // Any non-timeline GET (i.e. the score read) is a contract violation
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        // Same attempt.timeline.view capability as the audit timeline — the
+        // telemetry timeline composes for the timeline-only caller too.
+        return { items: [], total: 0, page: 1, pageSize: 50, totalPages: 0 };
+      }
+      // Any other GET (i.e. the score read) is a contract violation
       // for the timeline-only caller — fail loudly instead of returning data.
       throw new Error(`unexpected privileged request: ${url}`);
     });
@@ -547,12 +557,15 @@ describe("AttemptDetailPage", () => {
     expect(await screen.findByText("开始答题")).toBeInTheDocument();
 
     // The result fetch was never issued — page reachability must not mint a
-    // guaranteed-403 request.
+    // guaranteed-403 request. The two timeline reads it DOES emit (audit +
+    // telemetry) share the attempt.timeline.view capability this caller holds.
     await waitFor(() => {
-      expect(apiGet).toHaveBeenCalledTimes(1);
+      expect(apiGet).toHaveBeenCalledTimes(2);
     });
-    expect(apiGet.mock.calls[0]![0]).toBe(
-      "/api/admin/attempts/attempt-1/timeline",
+    const timelineUrls = apiGet.mock.calls.map((c) => c[0] as string);
+    expect(timelineUrls).toContain("/api/admin/attempts/attempt-1/timeline");
+    expect(timelineUrls).toContain(
+      "/api/admin/attempts/attempt-1/proctor-events?limit=50",
     );
     expect(apiPost).not.toHaveBeenCalled();
 
@@ -617,5 +630,174 @@ describe("AttemptDetailPage", () => {
     expect(
       screen.getByRole("button", { name: "标记违规" }),
     ).toBeInTheDocument();
+  });
+
+  // ── #800 PR-C A3-F1: telemetry timeline section ────────────────────
+  // After submit/grade the monitoring list drops the attempt, but the 30-day
+  // proctor-events telemetry (client_events + audit merge) stays queryable.
+  // The attempt detail page must surface it so a save-failure complaint three
+  // days later is answerable from the UI instead of a hand-rolled API call.
+  // Source provenance stays visible: client rows are ADVISORY telemetry,
+  // audit rows are the authoritative record.
+
+  function mockFullTimeline(result: unknown, telemetry: unknown) {
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return telemetry;
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return result;
+    });
+  }
+
+  // Shapes mirror the server projection (proctorMonitoringService.ts): the
+  // raw client_events.metadata blob never reaches the wire — only the
+  // allowlisted keys do. `answer_autosave_failed` carries the stable
+  // questionId/saveMode/durationMs/errorCode category codes, NOT raw content.
+  const mockTelemetry = {
+    items: [
+      {
+        id: "tel-1",
+        occurredAt: "2026-06-23T08:05:00.000Z",
+        name: "answer_autosave_failed",
+        level: "error",
+        kind: "exam_telemetry",
+        metadata: {
+          questionId: "q1",
+          saveMode: "auto",
+          durationMs: 1500,
+          errorCode: "SAVE_NETWORK_TIMEOUT",
+        },
+        source: "client_event",
+      },
+      {
+        id: "tel-2",
+        occurredAt: "2026-06-23T08:30:00.000Z",
+        name: "force_submit",
+        level: "warn",
+        kind: "proctor",
+        metadata: {},
+        source: "audit_log",
+      },
+    ],
+    total: 2,
+    page: 1,
+    pageSize: 50,
+    totalPages: 1,
+  };
+
+  it("renders the telemetry timeline with save-failure evidence and source-distinct rows", async () => {
+    mockFullTimeline(mockGradedResult, mockTelemetry);
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(await screen.findByText("遥测时间线")).toBeInTheDocument();
+    // Save-failure evidence is visible: the event name + allowlisted stable
+    // codes (category identifiers), even after the attempt is graded.
+    expect(screen.getByText("answer_autosave_failed")).toBeInTheDocument();
+    expect(screen.getByText(/SAVE_NETWORK_TIMEOUT/)).toBeInTheDocument();
+    // Provenance is rendered per row from `source` — advisory client
+    // telemetry vs authoritative audit rows stay distinguishable.
+    expect(screen.getByText("前端遥测")).toBeInTheDocument();
+    expect(screen.getByText("审计记录")).toBeInTheDocument();
+  });
+
+  it("StrictMode double-mount and delayed settle keep the telemetry fetch bounded (no recursive fetch loop)", async () => {
+    mockFullTimeline(mockGradedResult, mockTelemetry);
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={["/admin/attempts/attempt-1"]}>
+          <AuthProvider
+            initialUser={{
+              id: "1",
+              username: "actor",
+              name: "Actor",
+              role: "Admin",
+              organizationId: "org1",
+              capabilities: [...permissionsForRole("Admin")],
+            }}
+          >
+            <BrandProvider>
+              <Routes>
+                <Route
+                  path="/admin/attempts/:id"
+                  element={<AttemptDetailPage />}
+                />
+              </Routes>
+            </BrandProvider>
+          </AuthProvider>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    await screen.findByText("成绩概览");
+    await screen.findByText("遥测时间线");
+
+    const telemetryCalls = () =>
+      apiGet.mock.calls.filter(
+        (c) => typeof c[0] === "string" && c[0].includes("/proctor-events"),
+      ).length;
+    // StrictMode double-invokes the mount effect — one fetch per mount, and
+    // a settled tree must NOT keep issuing more (a fetch-in-render or
+    // dependency loop would grow this without bound).
+    await waitFor(() => expect(telemetryCalls()).toBe(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(telemetryCalls()).toBe(2);
+    // Each event renders exactly once — no duplicated rows from re-entry.
+    expect(screen.getAllByText("answer_autosave_failed").length).toBe(1);
+    expect(screen.getAllByText("force_submit").length).toBe(1);
+  });
+
+  it("telemetry load failure shows its own retryable error without breaking the audit timeline", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        throw new Error("telemetry fail");
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return mockTimelineEvents;
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(await screen.findByText("加载遥测时间线失败")).toBeInTheDocument();
+    // The audit timeline section stays independent and rendered.
+    expect(screen.getByText("答卷时间线")).toBeInTheDocument();
+    expect(screen.getByText("开始答题")).toBeInTheDocument();
+  });
+
+  // ── #800 PR-C A3-F7: recovery-archive deep link ────────────────────
+  // The attempt detail page only offered navigate(-1) — an admin landing on
+  // a graded attempt could not jump into the Recovery archive (full ledger /
+  // interruption episodes / related incidents). The link composes per
+  // capability (IncidentRecoveryView — the recovery route gate), so a
+  // timeline-only Proctor set never sees a dead affordance.
+
+  it("renders the recovery-archive deep link for an Admin and navigates to the recovery attempt route", async () => {
+    mockFullTimeline(mockGradedResult, {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      totalPages: 0,
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    fireEvent.click(screen.getByRole("button", { name: "恢复档案" }));
+    expect(
+      await screen.findByTestId("recovery-attempt-stub"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render the recovery-archive link for a timeline-only capability set", async () => {
+    mockTimelineOnly({ events: [] });
+    renderPage("attempt-1", proctorActor);
+
+    expect(await screen.findByText("答卷时间线")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "恢复档案" })).toBeNull();
   });
 });
