@@ -12,6 +12,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { UsersPage } from "./UsersPage";
+import { ApiError } from "@/lib/api";
 import { Permission, permissionsForRole } from "@exam/authz";
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
@@ -57,6 +58,12 @@ vi.mock("@/lib/api", () => ({
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
+
+vi.mock("@/lib/logger", () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+import { logger } from "@/lib/logger";
 
 const mockUsers = [
   {
@@ -294,6 +301,7 @@ describe("UsersPage", () => {
     apiGet.mockReset();
     apiPost.mockReset();
     apiPatch.mockReset();
+    vi.mocked(logger.warn).mockClear();
     mockApiGet();
     apiPost.mockResolvedValue({ id: "u4" });
     apiPatch.mockResolvedValue({ ok: true });
@@ -404,6 +412,35 @@ describe("UsersPage", () => {
       name: "New User",
       role: "Admin",
     });
+  });
+
+  it("reports user_admin.save_failed with the stable error code on save failure", async () => {
+    const user = userEvent.setup();
+    apiPost.mockRejectedValueOnce(
+      new ApiError(409, "用户名已存在", "USERNAME_TAKEN"),
+    );
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /新增用户/ }));
+    const dialog = await screen.findByRole("dialog");
+    const inputs = getDialogInputs(dialog);
+    await user.type(inputs[0]!, "newuser");
+    await user.type(inputs[1]!, "password123");
+    await user.type(inputs[2]!, "New User");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith("user_admin.save_failed", {
+        errorCode: "USERNAME_TAKEN",
+      });
+    });
+    // The raw server compat text must stay out of the telemetry metadata.
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      "user_admin.save_failed",
+      expect.objectContaining({ message: expect.anything() }),
+    );
   });
 
   it("disables save button while saving", async () => {

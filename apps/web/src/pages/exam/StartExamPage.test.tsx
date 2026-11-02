@@ -12,6 +12,9 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { StartExamPage } from "./StartExamPage";
 import { ApiError } from "@/lib/api";
+import { setBuffer } from "@/lib/logger";
+import type { ClientEventBuffer } from "@/lib/clientEventBuffer";
+import type { ClientEvent } from "@exam/contracts";
 import { permissionsForRole } from "@exam/authz";
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
@@ -57,6 +60,21 @@ vi.mock("sonner", () => ({
 function LocationProbe() {
   const location = useLocation();
   return <span data-testid="current-path">{location.pathname}</span>;
+}
+
+/** Buffer stand-in recording pushed events so tests can assert what would be persisted. */
+class RecordingBuffer {
+  readonly events: ClientEvent[] = [];
+  push(event: ClientEvent): void {
+    this.events.push(event);
+  }
+  dispose(): void {}
+}
+
+function recordingBuffer(): RecordingBuffer {
+  const recording = new RecordingBuffer();
+  setBuffer(recording as unknown as ClientEventBuffer);
+  return recording;
 }
 
 function renderPage() {
@@ -333,6 +351,48 @@ describe("StartExamPage", () => {
     renderPage();
 
     expect(await screen.findByText("加载考试信息失败")).toBeInTheDocument();
+  });
+
+  it("reports exam_detail_load_failed with the ApiError code on load failure", async () => {
+    const recording = recordingBuffer();
+    apiGet.mockRejectedValueOnce(new ApiError(404, "nope", "EXAM_NOT_FOUND"));
+
+    renderPage();
+    expect(await screen.findByText("加载考试信息失败")).toBeInTheDocument();
+
+    const telemetry = recording.events.filter(
+      (e) =>
+        e.kind === "exam_telemetry" && e.name === "exam_detail_load_failed",
+    );
+    expect(telemetry).toHaveLength(1);
+    expect(telemetry[0]!.level).toBe("warn");
+    expect(telemetry[0]!.examId).toBe("exam-1");
+    expect(telemetry[0]!.metadata).toEqual({ errorCode: "EXAM_NOT_FOUND" });
+    // Dual-emit: the warn level also lands in the generic log channel.
+    expect(
+      recording.events.some(
+        (e) => e.kind === "log" && e.name === "exam_detail_load_failed",
+      ),
+    ).toBe(true);
+    setBuffer(null);
+  });
+
+  it("reports exam_detail_load_failed with UNKNOWN for non-ApiError failures", async () => {
+    const recording = recordingBuffer();
+    apiGet.mockRejectedValueOnce(new Error("Network error"));
+
+    renderPage();
+    expect(await screen.findByText("加载考试信息失败")).toBeInTheDocument();
+
+    const telemetry = recording.events.filter(
+      (e) =>
+        e.kind === "exam_telemetry" && e.name === "exam_detail_load_failed",
+    );
+    expect(telemetry).toHaveLength(1);
+    expect(telemetry[0]!.metadata).toEqual({ errorCode: "UNKNOWN" });
+    // Raw exception text must not leak into the persisted metadata.
+    expect(JSON.stringify(telemetry[0])).not.toContain("Network error");
+    setBuffer(null);
   });
 
   it("shows max-attempt message from error code not message text", async () => {

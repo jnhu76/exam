@@ -1,12 +1,42 @@
 import { toast } from "sonner";
 import i18n from "@/i18n";
 import { routes } from "@/lib/routes";
+import { logger } from "@/lib/logger";
+import { createTelemetryRateLimiter } from "@/lib/telemetryRateLimit";
 import type { ErrorResponse } from "@exam/contracts";
 
 /** Base URL for API requests, derived from the VITE_API_BASE_URL env var. */
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 let navigateFn: ((path: string) => void) | null = null;
+
+/**
+ * Module-level limiter: dedup state must persist across requests so a polling
+ * page hammering a dead gateway stays a bounded number of persisted rows
+ * (one warn per path pattern per window).
+ */
+const networkFailureLimiter = createTelemetryRateLimiter();
+
+/** Test-only: clears the network-failure limiter window. */
+export function __resetNetworkFailureLimiterForTest(): void {
+  networkFailureLimiter.reset();
+}
+
+/**
+ * Reduces a request path to a stable route pattern for telemetry: ID-like
+ * segments (UUID or all-digit) collapse to `:id` and the query string is
+ * dropped, so the persisted value identifies the endpoint shape — never a
+ * raw entity id or query content.
+ */
+function toPathPattern(path: string): string {
+  return path
+    .split("?")[0]!
+    .replace(
+      /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+      "/:id",
+    )
+    .replace(/\/\d+/g, "/:id");
+}
 
 /**
  * Anonymous-legal surfaces: the session-restore probe (`/api/auth/me`) 401s
@@ -135,6 +165,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw error;
     }
     toast.error(i18n.t("errors.network"));
+    // Transport-level failures otherwise leave no server trace beyond the
+    // transient toast — record one bounded warn per route pattern (#800).
+    const pathPattern = toPathPattern(path);
+    if (networkFailureLimiter.allow(`api.network_failed|${pathPattern}`)) {
+      logger.warn("api.network_failed", { pathPattern });
+    }
     throw new ApiError(0, "Network request failed");
   }
 }

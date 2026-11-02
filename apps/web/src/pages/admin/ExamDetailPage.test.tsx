@@ -47,6 +47,12 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock("@/lib/logger", () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+import { logger } from "@/lib/logger";
+
 const getMock = vi.mocked(api.get);
 const postMock = vi.mocked(api.post);
 const deleteMock = vi.mocked(api.delete);
@@ -100,6 +106,7 @@ describe("ExamDetailPage", () => {
     getMock.mockReset();
     postMock.mockReset();
     deleteMock.mockReset();
+    vi.mocked(logger.warn).mockClear();
     getMock.mockImplementation((path: string) => {
       if (path.includes("/enrollments")) return Promise.resolve([]);
       return Promise.resolve({ ...mockDraftExam });
@@ -269,6 +276,28 @@ describe("ExamDetailPage", () => {
       expect(
         await screen.findByText("考试已发布，不能重复发布"),
       ).toBeInTheDocument();
+    });
+
+    it("reports exam_admin.publish_failed with the stable error code on failure", async () => {
+      postMock.mockRejectedValue(
+        new ApiError(409, "考试已发布，不能重复发布", "EXAM_ALREADY_PUBLISHED"),
+      );
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByText("发布考试"));
+
+      await waitFor(() => {
+        expect(logger.warn).toHaveBeenCalledWith("exam_admin.publish_failed", {
+          examId: "exam-1",
+          errorCode: "EXAM_ALREADY_PUBLISHED",
+        });
+      });
+      // The toast message (raw server compat text) must stay out of the
+      // telemetry metadata — category/code only.
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        "exam_admin.publish_failed",
+        expect.objectContaining({ message: expect.anything() }),
+      );
     });
 
     it("opens confirmation before archiving a published exam", async () => {

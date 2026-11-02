@@ -59,8 +59,50 @@ describe("sanitizeClientEvent", () => {
       request: { url: "/x", headers: { authorization: "Bearer z" } },
     });
     expect(out.request).toEqual({
-      url: "/x",
+      url: "[redacted]",
       headers: { authorization: "[redacted]" },
+    });
+  });
+
+  it("redacts exception-text carrier keys (message/stack/cause/url)", () => {
+    // Raw exception text can embed answers, tokens, or URL query strings, so
+    // these carriers are denied wherever the substring appears — including
+    // intuitive wrappers like `requestUrl` / `errorMessage`.
+    const out = sanitizeClientEvent({
+      message: "Boom at /x?token=1",
+      stack: "Error: Boom\\n at fn",
+      cause: "root failure",
+      url: "https://host/path?answer=1",
+      errorMessage: "wrapped",
+      requestUrl: "https://h/p",
+    });
+    expect(Object.values(out)).toEqual([
+      "[redacted]",
+      "[redacted]",
+      "[redacted]",
+      "[redacted]",
+      "[redacted]",
+      "[redacted]",
+    ]);
+  });
+
+  it("redacts exact error/err keys but keeps errorCode/errorName stable codes", () => {
+    // `{ error: err }` carries raw exception content and is redacted; the
+    // `errorCode` / `errorName` machine-code channel must keep passing so
+    // failure telemetry stays queryable.
+    const out = sanitizeClientEvent({
+      error: "raw exception text",
+      err: "raw",
+      ERROR: "raw",
+      errorCode: "SUBMIT_ERROR",
+      errorName: "TypeError",
+    });
+    expect(out).toEqual({
+      error: "[redacted]",
+      err: "[redacted]",
+      ERROR: "[redacted]",
+      errorCode: "SUBMIT_ERROR",
+      errorName: "TypeError",
     });
   });
 

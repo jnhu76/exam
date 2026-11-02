@@ -1,16 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, setNavigate } from "./api";
+import {
+  __resetNetworkFailureLimiterForTest,
+  api,
+  ApiError,
+  setNavigate,
+} from "./api";
 
 vi.mock("sonner", () => ({
   toast: { error: vi.fn() },
 }));
 
+vi.mock("@/lib/logger", () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 
 describe("api client", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     setNavigate(() => {});
+    vi.clearAllMocks();
+    __resetNetworkFailureLimiterForTest();
   });
 
   describe("GET requests", () => {
@@ -248,6 +260,92 @@ describe("api client", () => {
         "Network request failed",
       );
       expect(toast.error).toHaveBeenCalledWith("网络连接失败，请稍后重试");
+    });
+
+    it("warns api.network_failed with a masked path pattern on transport failure", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      );
+
+      await expect(
+        api.get("/api/candidate/exams/550e8400-e29b-41d4-a716-446655440000"),
+      ).rejects.toBeInstanceOf(ApiError);
+
+      expect(logger.warn).toHaveBeenCalledWith("api.network_failed", {
+        pathPattern: "/api/candidate/exams/:id",
+      });
+    });
+
+    it("masks all-digit path segments in the pattern", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      );
+
+      await expect(
+        api.get("/api/legacy/items/42/pages"),
+      ).rejects.toBeInstanceOf(ApiError);
+
+      expect(logger.warn).toHaveBeenCalledWith("api.network_failed", {
+        pathPattern: "/api/legacy/items/:id/pages",
+      });
+    });
+
+    it("masks uuid path segments and drops query strings in the pattern", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      );
+
+      await expect(
+        api.get(
+          "/api/attempts/550e8400-e29b-41d4-a716-446655440000/answers?page=2",
+        ),
+      ).rejects.toBeInstanceOf(ApiError);
+
+      expect(logger.warn).toHaveBeenCalledWith("api.network_failed", {
+        pathPattern: "/api/attempts/:id/answers",
+      });
+    });
+
+    it("rate-limits repeated failures for the same path pattern", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      );
+
+      // A polling page hammering a dead gateway must stay a bounded number
+      // of persisted rows.
+      for (let i = 0; i < 7; i++) {
+        await expect(api.get("/api/health")).rejects.toBeInstanceOf(ApiError);
+      }
+      expect(logger.warn).toHaveBeenCalledTimes(5);
+
+      // A different pattern is unaffected by the exhausted key.
+      await expect(api.get("/api/users/9")).rejects.toBeInstanceOf(ApiError);
+      expect(logger.warn).toHaveBeenCalledTimes(6);
+    });
+
+    it("does not warn for aborted requests or non-2xx ApiError responses", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockRejectedValueOnce(new DOMException("aborted", "AbortError"))
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ error: { code: "X" } }), {
+              status: 500,
+            }),
+          ),
+      );
+
+      await expect(
+        api.get("/api/health", { signal: new AbortController().signal }),
+      ).rejects.toThrow();
+      await expect(api.get("/api/health")).rejects.toBeInstanceOf(ApiError);
+
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it("wraps unknown errors as ApiError with status 0", async () => {
