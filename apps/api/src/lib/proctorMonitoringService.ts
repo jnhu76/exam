@@ -127,11 +127,18 @@ function auditActionToEventName(action: string): string | null {
   }
 }
 
+// Correlation keys (#800 PR-B): clientSeq joins a failure row to its
+// answer-save receipt row (composite key includes clientSeq); requestId
+// joins it to the server-side request log / error envelope; status
+// distinguishes a server fault (HTTP >= 500) from a transport failure.
 const SAVE_ERROR_METADATA = [
   "questionId",
   "saveMode",
   "durationMs",
   "errorCode",
+  "clientSeq",
+  "requestId",
+  "status",
 ] as const;
 
 /**

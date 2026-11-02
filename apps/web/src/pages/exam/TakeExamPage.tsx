@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { ContentRenderer } from "@/components/shared/content/ContentRenderer";
 import { toast } from "sonner";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -367,6 +367,17 @@ export function TakeExamPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDisconnected, setIsDisconnected] = useState(false);
+  // #800 PR-B A2-F7: a save failure caused by a SERVER-side fault
+  // (HTTP >= 500) must not read as the candidate's connectivity problem.
+  // isDisconnected keeps its existing "saves cannot persist right now"
+  // semantics (both fault kinds set it; success/heartbeat-restore clears
+  // it); this flag only branches WHICH banner copy renders. A2-F2:
+  // saveFaultRequestId carries the error envelope's requestId so the
+  // server-fault banner can surface the support correlation id.
+  const [saveServerFault, setSaveServerFault] = useState(false);
+  const [saveFaultRequestId, setSaveFaultRequestId] = useState<string | null>(
+    null,
+  );
   const [saveRejection, setSaveRejection] = useState<SaveRejection | null>(
     null,
   );
@@ -507,6 +518,8 @@ export function TakeExamPage() {
     );
     setQuestionStates(states);
     setIsDisconnected(false);
+    setSaveServerFault(false);
+    setSaveFaultRequestId(null);
   }, []);
 
   /**
@@ -686,6 +699,8 @@ export function TakeExamPage() {
     setAutoSubmitFailed(false);
     setDeadlineAutoSubmitting(false);
     setIsDisconnected(false);
+    setSaveServerFault(false);
+    setSaveFaultRequestId(null);
     // Reset attempt-scoped refs. versionsRef / clientSeqsRef will be rebuilt
     // from the new attempt's snapshot by applySnapshot, but clearing them now
     // avoids any window where stale save state could drive a save for the
@@ -813,10 +828,18 @@ export function TakeExamPage() {
       }
 
       const saveStartedAt = Date.now();
-      trackExamEvent("answer_autosave_started", {}, { attemptId, questionId });
       const baseVersion = versionsRef.current.get(questionId) ?? 0;
       const clientSeq = (clientSeqsRef.current.get(questionId) ?? 0) + 1;
       clientSeqsRef.current.set(questionId, clientSeq);
+      // #800 PR-B A2-F5: started/failed events carry clientSeq so a persisted
+      // telemetry row joins to its answer-save receipt row (the receipt's
+      // composite key includes clientSeq) — computed BEFORE the started event
+      // so the started row already carries the join key.
+      trackExamEvent(
+        "answer_autosave_started",
+        { clientSeq },
+        { attemptId, questionId },
+      );
       let rejected = false;
 
       try {
@@ -841,6 +864,8 @@ export function TakeExamPage() {
           versionsRef.current.set(questionId, result.serverVersion);
           setSaveState("saved");
           setIsDisconnected(false);
+          setSaveServerFault(false);
+          setSaveFaultRequestId(null);
           setSaveRejection(null);
           setTransientState((s) =>
             transientReducer(s, { type: "SAVE_SUCCESS" }),
@@ -868,6 +893,8 @@ export function TakeExamPage() {
           });
           setSaveState("saved");
           setIsDisconnected(false);
+          setSaveServerFault(false);
+          setSaveFaultRequestId(null);
           setSaveRejection(null);
           setTransientState((s) =>
             transientReducer(s, { type: "SAVE_SUCCESS" }),
@@ -893,6 +920,7 @@ export function TakeExamPage() {
             saveMode: "autosave",
             durationMs: Date.now() - saveStartedAt,
             errorCode: result.reason,
+            clientSeq,
           },
           { attemptId, questionId, level: "warn" },
         );
@@ -917,13 +945,34 @@ export function TakeExamPage() {
         setSaveState("error");
         setTransientState((s) => transientReducer(s, { type: "SAVE_FAILED" }));
         if (!rejected) {
+          // #800 PR-B A2-F1: an ApiError already carries the wire's machine
+          // facts — record the stable code, HTTP status, and envelope
+          // requestId so the client_events row joins the server's request.log
+          // (errorCode keys are pre-allowed by ADR-012; status/requestId are
+          // projected through the monitoring allowlist). Machine facts only:
+          // the message text and stack never enter metadata (the shared
+          // sanitizer additionally redacts content keys). A transport-level
+          // failure carries no ApiError facts and keeps the NETWORK fallback
+          // without mislabeling.
+          const apiError = err instanceof ApiError ? err : null;
+          const serverFault = apiError !== null && apiError.status >= 500;
           setIsDisconnected(true);
+          // A2-F7: an HTTP >= 500 fault is the SERVER's failure, not the
+          // candidate's connectivity — the banner copy branches on
+          // saveServerFault. Both flags move together everywhere: each new
+          // failure reclassifies, every restore point (save/heartbeat
+          // success, snapshot apply, route change) clears both.
+          setSaveServerFault(serverFault);
+          setSaveFaultRequestId(apiError?.requestId ?? null);
           trackExamEvent(
             "answer_autosave_failed",
             {
               saveMode: "autosave",
               durationMs: Date.now() - saveStartedAt,
-              errorCode: "NETWORK",
+              errorCode: apiError?.code ?? "NETWORK",
+              ...(apiError ? { status: apiError.status } : {}),
+              ...(apiError?.requestId ? { requestId: apiError.requestId } : {}),
+              clientSeq,
             },
             { attemptId, questionId, level: "warn" },
           );
@@ -1084,6 +1133,8 @@ export function TakeExamPage() {
           new Date(result.serverNow).getTime() - Date.now();
       }
       setIsDisconnected(false);
+      setSaveServerFault(false);
+      setSaveFaultRequestId(null);
       if (heartbeatFailureReportedRef.current) {
         trackExamEvent(
           "heartbeat_restored",
@@ -1114,6 +1165,11 @@ export function TakeExamPage() {
         return;
       }
       setIsDisconnected(true);
+      // The heartbeat's live diagnosis supersedes a stale server-fault
+      // classification: the server is unreachable NOW, so the connection
+      // banner is the current truth (#800 PR-B A2-F7).
+      setSaveServerFault(false);
+      setSaveFaultRequestId(null);
       heartbeatFailureRef.current += 1;
       if (
         heartbeatFailureRef.current >= 3 &&
@@ -1461,20 +1517,47 @@ export function TakeExamPage() {
                 );
               })()}
 
-            {isDisconnected && !view.isLocked && (
-              <Alert
-                variant="destructive"
-                className="border-destructive/30 bg-destructive/10"
-              >
-                <AppIcon icon={WifiOff} size="inline" />
-                <AlertTitle>
-                  {t("candidateRuntime.connection.abnormal")}
-                </AlertTitle>
-                <AlertDescription>
-                  {t("candidateRuntime.connection.restoreHint")}
-                </AlertDescription>
-              </Alert>
-            )}
+            {isDisconnected &&
+              !view.isLocked &&
+              (saveServerFault ? (
+                <Alert
+                  variant="destructive"
+                  className="border-destructive/30 bg-destructive/10"
+                  data-testid="server-fault-alert"
+                >
+                  <AppIcon icon={TriangleAlert} size="inline" />
+                  <AlertTitle>
+                    {t("candidateRuntime.connection.serverError")}
+                  </AlertTitle>
+                  <AlertDescription>
+                    {t("candidateRuntime.connection.serverErrorHint")}
+                    {saveFaultRequestId && (
+                      <>
+                        {" "}
+                        <span>
+                          {t(
+                            "candidateRuntime.connection.serverErrorRequestId",
+                            { requestId: saveFaultRequestId },
+                          )}
+                        </span>
+                      </>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Alert
+                  variant="destructive"
+                  className="border-destructive/30 bg-destructive/10"
+                >
+                  <AppIcon icon={WifiOff} size="inline" />
+                  <AlertTitle>
+                    {t("candidateRuntime.connection.abnormal")}
+                  </AlertTitle>
+                  <AlertDescription>
+                    {t("candidateRuntime.connection.restoreHint")}
+                  </AlertDescription>
+                </Alert>
+              ))}
 
             {/* Per-question failure set (#677 F6): driven by the save queue's
                 authoritative failedQuestionIds, NOT the global chip — a later
