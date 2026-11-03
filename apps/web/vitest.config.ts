@@ -47,6 +47,13 @@ export default defineConfig({
     // isolated. If flake reappears, step down to 2 (not 1) and record it in
     // docs/standards/test-flakes.md before going serial again.
     //
+    // Step-down TAKEN on CI (#858): 4 forks on a 2-core runner is a 2x
+    // oversubscription that pushed the timing-sensitive family (editor mount,
+    // 1s waitFor budgets, table-uniqueness queries) past its budgets on 6 of
+    // 7 CI web-coverage lanes; OBS-2026-10-08-003 / OBS-2026-10-24-001 /
+    // #858 are that family. 2 forks = 1:1 with the CI vCPUs; local hosts
+    // keep 4 (recorded in test-flakes.md per the policy above).
+    //
     // INVARIANT: the local 5000ms budget assumes web coverage never stacks
     // with the API coverage lane — turbo.json orders @exam/web#coverage after
     // @exam/api#coverage (same heavy-suite serialization rule as db→api).
@@ -54,7 +61,7 @@ export default defineConfig({
     // saturate the host and push timing-sensitive tests (editor mount, 5s
     // timeouts, post-test prosemirror DOM reads) past their budgets;
     // OBS-2026-10-08-003 and OBS-2026-10-24-001 are that family.
-    maxWorkers: 4,
+    maxWorkers: process.env.CI ? 2 : 4,
     minWorkers: 2,
     server: {
       deps: {

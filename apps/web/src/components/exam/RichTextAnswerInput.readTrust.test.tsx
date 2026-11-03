@@ -3,6 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { ContentDocumentV1 } from "@exam/domain";
 import { RichTextAnswerInput } from "./RichTextAnswerInput";
 
+// #858 / OBS-2026-10-08-003 / OBS-2026-10-24-001: the editor chunk's cold
+// dynamic import (RichContentEditorLazy → the whole Tiptap graph) costs
+// ~0.85–1.1s on an idle host and ~4x that under CI coverage contention —
+// at or beyond the vi.waitFor default budget (1000ms) that every editor
+// wait below inherits. The chunk transport is not the contract under test
+// here (production shows the Suspense fallback while it loads); paying it
+// once at module load (top-level await) moves that cost out of every test
+// body so the waits below measure only the mount itself.
+await import("@/components/shared/content/RichContentEditor");
+
 /**
  * Read-trust regressions (#669).
  *
