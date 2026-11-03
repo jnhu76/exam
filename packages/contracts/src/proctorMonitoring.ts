@@ -106,6 +106,17 @@ export type ProctorAttemptListResponse = z.infer<
  */
 export const ProctorAttemptEventSchema = z.object({
   id: z.string().uuid(),
+  /**
+   * Server-owned receive instant (client_events.receivedAt /
+   * audit_logs.createdAt) — the authority that also drives merge ordering and
+   * pagination. Consumers must display this as the row's primary timestamp.
+   */
+  serverRecordedAt: z.string().datetime(),
+  /**
+   * Source-specific display instant: client-ASSERTED for `client_event` rows
+   * (advisory, never trusted for ordering), the audit row's own time for
+   * `audit_log` rows.
+   */
   occurredAt: z.string().datetime(),
   name: z.string().min(1).max(120),
   level: z.enum(["debug", "info", "warn", "error"]),

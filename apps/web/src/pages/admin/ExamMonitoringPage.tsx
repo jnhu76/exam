@@ -419,7 +419,11 @@ export function ExamMonitoringPage() {
                     className="flex items-start gap-3 rounded-md border p-2 text-xs"
                   >
                     <span className="text-muted-foreground shrink-0 w-16 type-numeric">
-                      {formatTime(ev.occurredAt)}
+                      {/* Time authority (#544): the row time is the
+                          server-owned receive instant. `occurredAt` is
+                          client-ASSERTED for client rows and never decides
+                          ordering, so it is not shown as the row's time. */}
+                      {formatTime(ev.serverRecordedAt)}
                     </span>
                     <EventBadge level={ev.level} kind={ev.kind} />
                     <span>{ev.name}</span>

@@ -205,6 +205,13 @@ interface TelemetrySectionProps {
   isLoading: boolean;
   hasError: boolean;
   onRetry: () => void;
+  /** Last loaded page and the server's pagination metadata (append-on-load). */
+  page: number;
+  totalPages: number;
+  total: number;
+  /** True while a Load-More page fetch is in flight (rows stay visible). */
+  loadingMore: boolean;
+  onLoadMore: () => void;
 }
 
 /**
@@ -214,15 +221,29 @@ interface TelemetrySectionProps {
  * page renders stable category codes only — never raw client blobs. Source
  * provenance is rendered per row: client rows are ADVISORY telemetry, audit
  * rows are the authoritative compliance record (#544).
+ *
+ * Time authority (#544): the timeline is ordered by the server-owned receive
+ * instant, projected per row as `serverRecordedAt` — shown first on every
+ * row. Client rows additionally carry the client-ASSERTED `occurredAt`,
+ * labeled as a claim, never as the ordering instant. Older evidence pages
+ * load via Load-More append; the counts footer always states how much of the
+ * server total is on screen, so a partial view is never mistaken for the
+ * full history.
  */
 function TelemetrySection({
   events,
   isLoading,
   hasError,
   onRetry,
+  page,
+  totalPages,
+  total,
+  loadingMore,
+  onLoadMore,
 }: TelemetrySectionProps) {
   const { t } = useTranslation();
   const { formatDateTime } = useProductDateTime();
+  const hasMore = page < totalPages;
   return (
     <PageSection
       title={t("admin.attemptDetail.telemetry.title")}
@@ -249,8 +270,19 @@ function TelemetrySection({
               className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md border p-2 text-xs"
             >
               <span className="type-metadata shrink-0 whitespace-nowrap">
-                {formatDateTime(event.occurredAt)}
+                <span className="text-muted-foreground">
+                  {t("admin.attemptDetail.telemetry.serverReceivedAt")}
+                </span>{" "}
+                {formatDateTime(event.serverRecordedAt)}
               </span>
+              {event.source === "client_event" && (
+                <span className="type-metadata shrink-0 whitespace-nowrap">
+                  <span className="text-muted-foreground">
+                    {t("admin.attemptDetail.telemetry.clientClaimedAt")}
+                  </span>{" "}
+                  {formatDateTime(event.occurredAt)}
+                </span>
+              )}
               <Badge
                 variant="secondary"
                 className={`shrink-0 ${telemetryLevelClass(event.level)}`}
@@ -267,6 +299,32 @@ function TelemetrySection({
               )}
             </div>
           ))}
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <span className="type-metadata">
+              {t("admin.attemptDetail.telemetry.counts", {
+                shown: events.length,
+                total,
+              })}
+            </span>
+            {hasMore && (
+              <span className="type-metadata text-muted-foreground">
+                {t("admin.attemptDetail.telemetry.partialNotice", {
+                  shown: events.length,
+                })}
+              </span>
+            )}
+            {hasMore && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                onClick={onLoadMore}
+                disabled={loadingMore}
+              >
+                {t("admin.attemptDetail.telemetry.loadMore")}
+              </Button>
+            )}
+          </div>
         </div>
       )}
     </PageSection>
@@ -534,6 +592,13 @@ export function AttemptDetailPage() {
   );
   const [telemetryLoading, setTelemetryLoading] = useState(true);
   const [telemetryError, setTelemetryError] = useState(false);
+  // Pagination state mirrors the server response (page/totalPages/total) so
+  // the section can state exactly how much of the server total is on screen.
+  // `page` advances only on a successful Load-More append.
+  const [telemetryPage, setTelemetryPage] = useState(1);
+  const [telemetryTotalPages, setTelemetryTotalPages] = useState(0);
+  const [telemetryTotal, setTelemetryTotal] = useState(0);
+  const [telemetryLoadingMore, setTelemetryLoadingMore] = useState(false);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [flagSeverity, setFlagSeverity] = useState<"warning" | "serious">(
     "warning",
@@ -657,6 +722,9 @@ export function AttemptDetailPage() {
         `/api/admin/attempts/${id}/proctor-events?limit=50`,
       );
       setTelemetry(data.items);
+      setTelemetryPage(data.page);
+      setTelemetryTotalPages(data.totalPages);
+      setTelemetryTotal(data.total);
     } catch {
       setTelemetryError(true);
     } finally {
@@ -667,6 +735,41 @@ export function AttemptDetailPage() {
   useEffect(() => {
     loadTelemetry();
   }, [loadTelemetry]);
+
+  /**
+   * Load-More: fetches the NEXT page and appends it to the visible rows.
+   * INVARIANT: existing rows stay mounted while the fetch is in flight
+   * (`telemetryLoading` is not toggled — the section keeps rendering the
+   * loaded evidence), and a failed fetch leaves the rows intact. Rows are
+   * deduplicated by event id on append so a timeline that shifted between
+   * page fetches cannot produce duplicate React keys.
+   */
+  const loadMoreTelemetry = useCallback(async () => {
+    if (!id || telemetryLoadingMore) return;
+    const nextPage = telemetryPage + 1;
+    setTelemetryLoadingMore(true);
+    try {
+      const data = await api.get<ProctorAttemptEventListResponse>(
+        `/api/admin/attempts/${id}/proctor-events?limit=50&page=${nextPage}`,
+      );
+      setTelemetry((prev) => {
+        const seen = new Set((prev ?? []).map((event) => event.id));
+        return [
+          ...(prev ?? []),
+          ...data.items.filter((event) => !seen.has(event.id)),
+        ];
+      });
+      setTelemetryPage(data.page);
+      setTelemetryTotalPages(data.totalPages);
+      setTelemetryTotal(data.total);
+    } catch {
+      // Keep the already-visible rows; the fetch failure is surfaced as a
+      // toast, not by replacing the loaded evidence with an error state.
+      toast.error(t("admin.attemptDetail.telemetry.loadMoreFailed"));
+    } finally {
+      setTelemetryLoadingMore(false);
+    }
+  }, [id, telemetryLoadingMore, telemetryPage, t]);
 
   const toggleEvent = useCallback((eventId: string) => {
     setExpandedEventId((prev) => (prev === eventId ? null : eventId));
@@ -749,6 +852,11 @@ export function AttemptDetailPage() {
           isLoading={telemetryLoading}
           hasError={telemetryError}
           onRetry={loadTelemetry}
+          page={telemetryPage}
+          totalPages={telemetryTotalPages}
+          total={telemetryTotal}
+          loadingMore={telemetryLoadingMore}
+          onLoadMore={loadMoreTelemetry}
         />
       </div>
     );
@@ -819,6 +927,11 @@ export function AttemptDetailPage() {
           isLoading={telemetryLoading}
           hasError={telemetryError}
           onRetry={loadTelemetry}
+          page={telemetryPage}
+          totalPages={telemetryTotalPages}
+          total={telemetryTotal}
+          loadingMore={telemetryLoadingMore}
+          onLoadMore={loadMoreTelemetry}
         />
 
         <Dialog open={flagDialogOpen} onOpenChange={setFlagDialog}>
@@ -1055,6 +1168,11 @@ export function AttemptDetailPage() {
         isLoading={telemetryLoading}
         hasError={telemetryError}
         onRetry={loadTelemetry}
+        page={telemetryPage}
+        totalPages={telemetryTotalPages}
+        total={telemetryTotal}
+        loadingMore={telemetryLoadingMore}
+        onLoadMore={loadMoreTelemetry}
       />
     </PageContainer>
   );

@@ -656,10 +656,13 @@ describe("AttemptDetailPage", () => {
   // raw client_events.metadata blob never reaches the wire — only the
   // allowlisted keys do. `answer_autosave_failed` carries the stable
   // questionId/saveMode/durationMs/errorCode category codes, NOT raw content.
+  // `serverRecordedAt` is the server-owned receive instant (ordering
+  // authority); `occurredAt` is the source-specific display instant.
   const mockTelemetry = {
     items: [
       {
         id: "tel-1",
+        serverRecordedAt: "2026-06-23T08:06:00.000Z",
         occurredAt: "2026-06-23T08:05:00.000Z",
         name: "answer_autosave_failed",
         level: "error",
@@ -674,6 +677,7 @@ describe("AttemptDetailPage", () => {
       },
       {
         id: "tel-2",
+        serverRecordedAt: "2026-06-23T08:30:00.000Z",
         occurredAt: "2026-06-23T08:30:00.000Z",
         name: "force_submit",
         level: "warn",
@@ -702,6 +706,144 @@ describe("AttemptDetailPage", () => {
     // telemetry vs authoritative audit rows stay distinguishable.
     expect(screen.getByText("前端遥测")).toBeInTheDocument();
     expect(screen.getByText("审计记录")).toBeInTheDocument();
+  });
+
+  it("shows the server receive instant as the primary row time and only client rows carry the client claim", async () => {
+    mockFullTimeline(mockGradedResult, mockTelemetry);
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    await screen.findByText("遥测时间线");
+
+    // Every row is anchored on the server-owned instant, rendered first.
+    expect(screen.getAllByText("服务端接收")).toHaveLength(2);
+    // The client-ASSERTED occurredAt is extra context for client rows ONLY,
+    // and is labeled as a claim rather than an ordering instant.
+    expect(screen.getAllByText("客户端声明")).toHaveLength(1);
+
+    const clientRow = screen
+      .getByText("answer_autosave_failed")
+      .closest("div")!;
+    const clientText = clientRow.textContent ?? "";
+    expect(clientText).toMatch(/服务端接收.*客户端声明/);
+    // The two instants differ on the client row (08:06 receive vs 08:05
+    // claim in UTC); the row must show both rather than collapsing them.
+    expect(clientText).not.toMatch(/服务端接收(\s*[-—]\s*)?客户端声明/);
+
+    const auditRow = screen.getByText("force_submit").closest("div")!;
+    const auditText = auditRow.textContent ?? "";
+    expect(auditText).toContain("服务端接收");
+    expect(auditText).not.toContain("客户端声明");
+  });
+
+  it("Load More appends the next page, keeps loaded rows, and updates the shown/total footer", async () => {
+    const pageOne = {
+      items: [mockTelemetry.items[0]!],
+      total: 2,
+      page: 1,
+      pageSize: 1,
+      totalPages: 2,
+    };
+    const pageTwo = {
+      items: [
+        {
+          id: "tel-old",
+          serverRecordedAt: "2026-06-23T08:00:00.000Z",
+          occurredAt: "2026-06-23T08:00:00.000Z",
+          name: "answer_saved",
+          level: "info",
+          kind: "exam_telemetry",
+          metadata: {},
+          source: "client_event",
+        },
+      ],
+      total: 2,
+      page: 2,
+      pageSize: 1,
+      totalPages: 2,
+    };
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return url.includes("page=2") ? pageTwo : pageOne;
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(
+      await screen.findByText("answer_autosave_failed"),
+    ).toBeInTheDocument();
+    // Partial view is stated explicitly: 1 of 2 server rows is on screen.
+    expect(screen.getByText("已显示 1 / 2 条事件")).toBeInTheDocument();
+    expect(
+      screen.getByText("仅显示最近 1 条事件，更早证据需加载"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "加载更早事件" }));
+
+    // The older page is appended — the already-loaded row stays mounted.
+    expect(await screen.findByText("answer_saved")).toBeInTheDocument();
+    expect(screen.getByText("answer_autosave_failed")).toBeInTheDocument();
+    // With the final page loaded, the footer reports full coverage and the
+    // Load-More affordance retires.
+    await waitFor(() =>
+      expect(screen.getByText("已显示 2 / 2 条事件")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "加载更早事件" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("仅显示最近 2 条事件，更早证据需加载"),
+    ).not.toBeInTheDocument();
+    // The append fetch targeted the NEXT page explicitly.
+    expect(
+      apiGet.mock.calls.some(
+        (c) =>
+          typeof c[0] === "string" &&
+          c[0].includes("/proctor-events?limit=50&page=2"),
+      ),
+    ).toBe(true);
+  });
+
+  it("a failed Load More keeps the already-loaded rows and offers the retry again", async () => {
+    const pageOne = {
+      items: [mockTelemetry.items[0]!],
+      total: 2,
+      page: 1,
+      pageSize: 1,
+      totalPages: 2,
+    };
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        if (url.includes("page=2")) throw new Error("older page failed");
+        return pageOne;
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(
+      await screen.findByText("answer_autosave_failed"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "加载更早事件" }));
+
+    // The failed fetch does NOT replace loaded evidence with the error state:
+    // the row and the Load-More affordance remain available.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "加载更早事件" }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("answer_autosave_failed")).toBeInTheDocument();
+    expect(screen.queryByText("加载遥测时间线失败")).not.toBeInTheDocument();
   });
 
   it("StrictMode double-mount and delayed settle keep the telemetry fetch bounded (no recursive fetch loop)", async () => {

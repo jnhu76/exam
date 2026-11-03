@@ -2149,12 +2149,18 @@ const zhCN = {
       telemetry: {
         title: "遥测时间线",
         description:
-          "前端遥测与监考审计的合并事件流（参考信息）：保存失败、断线等答题证据在此，不受提交/评分状态影响。",
+          "前端遥测与监考审计的合并事件流（参考信息），按服务端接收时间排序：保存失败、断线等答题证据在此，不受提交/评分状态影响。",
         loadFailed: "加载遥测时间线失败",
         emptyTitle: "暂无遥测事件",
         emptyDescription: "该尝试的遥测与监考事件将显示在此",
         sourceClientEvent: "前端遥测",
         sourceAuditLog: "审计记录",
+        serverReceivedAt: "服务端接收",
+        clientClaimedAt: "客户端声明",
+        loadMore: "加载更早事件",
+        loadMoreFailed: "加载更早事件失败，已显示的事件不受影响",
+        counts: "已显示 {{shown}} / {{total}} 条事件",
+        partialNotice: "仅显示最近 {{shown}} 条事件，更早证据需加载",
       },
       errors: {
         loadFailed: "加载尝试详情失败",
