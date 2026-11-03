@@ -40452,6 +40452,10 @@
                             "type": "string",
                             "format": "uuid"
                           },
+                          "serverRecordedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "occurredAt": {
                             "type": "string",
                             "format": "date-time"
@@ -40509,6 +40513,7 @@
                         },
                         "required": [
                           "id",
+                          "serverRecordedAt",
                           "occurredAt",
                           "name",
                           "level",
