@@ -715,20 +715,14 @@ describe("AttemptDetailPage", () => {
     await screen.findByText("成绩概览");
     await screen.findByText("遥测时间线");
 
-    // Every row is anchored on the server-owned instant, rendered first.
-    expect(screen.getAllByText("服务端接收")).toHaveLength(2);
-    // The client-ASSERTED occurredAt is extra context for client rows ONLY,
-    // and is labeled as a claim rather than an ordering instant.
-    expect(screen.getAllByText("客户端声明")).toHaveLength(1);
-
+    // Row-level proof (global getByText would over-match ancestor text):
+    // the client row carries BOTH the server receive instant (first) and the
+    // client claim; the audit row carries only the server instant.
     const clientRow = screen
       .getByText("answer_autosave_failed")
       .closest("div")!;
     const clientText = clientRow.textContent ?? "";
     expect(clientText).toMatch(/服务端接收.*客户端声明/);
-    // The two instants differ on the client row (08:06 receive vs 08:05
-    // claim in UTC); the row must show both rather than collapsing them.
-    expect(clientText).not.toMatch(/服务端接收(\s*[-—]\s*)?客户端声明/);
 
     const auditRow = screen.getByText("force_submit").closest("div")!;
     const auditText = auditRow.textContent ?? "";

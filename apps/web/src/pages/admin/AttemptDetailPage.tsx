@@ -270,16 +270,12 @@ function TelemetrySection({
               className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md border p-2 text-xs"
             >
               <span className="type-metadata shrink-0 whitespace-nowrap">
-                <span className="text-muted-foreground">
-                  {t("admin.attemptDetail.telemetry.serverReceivedAt")}
-                </span>{" "}
+                {t("admin.attemptDetail.telemetry.serverReceivedAt")}{" "}
                 {formatDateTime(event.serverRecordedAt)}
               </span>
               {event.source === "client_event" && (
                 <span className="type-metadata shrink-0 whitespace-nowrap">
-                  <span className="text-muted-foreground">
-                    {t("admin.attemptDetail.telemetry.clientClaimedAt")}
-                  </span>{" "}
+                  {t("admin.attemptDetail.telemetry.clientClaimedAt")}{" "}
                   {formatDateTime(event.occurredAt)}
                 </span>
               )}
@@ -307,7 +303,7 @@ function TelemetrySection({
               })}
             </span>
             {hasMore && (
-              <span className="type-metadata text-muted-foreground">
+              <span className="type-metadata">
                 {t("admin.attemptDetail.telemetry.partialNotice", {
                   shown: events.length,
                 })}
