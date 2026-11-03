@@ -254,7 +254,7 @@ CLASSIFICATION (non-flake):  NOT_A_FLAKE | MISCLASSIFIED_AS_FLAKE
 | CASE-2026-09-24-MOBILE-RACE | REPAIRED | `getByText(...).first()` 命中 CSS 隐藏 mobile 卡片（4 轮全量 2 过 2 败） | YES | CAUSALLY_PROVEN（双峰观察 + role 断言修复） | PROVEN_UNRELATED（CONTROLLED_EXCLUSION：失败表达式为改动前既有代码，改动自身 diff 将其移除；机制在断言策略而非改动主题） | CAUSALLY_PROVEN | 2026-10-12 | 无 |
 | #98-examTransitions | CLOSED_NOT_REPRODUCED | `examTransitions.test.ts` file-schema 全套 8/14 失败（`waitForAuditCount` 1s 超时） | UNKNOWN（再未复现） | HYPOTHESIS（worker-database 实验期 `public.audit_logs` 瞬时污染） | UNKNOWN | NONE | 2026-10-12 | 无（复发再开） |
 | RUN-LEASE-OP-MODE | OPERATIONAL_CONSTRAINT（NOT_A_FLAKE） | 同 PG 并发两个 worker-database run：后启动方 run-lease 测试立即失败（错误即契约） | NO（给定操作模式必现） | CAUSALLY_PROVEN（契约设计 + 复现实验非对称签名） | 不适用 | 不适用 | 2026-10-12 | 无（串行执行即可） |
-| CASE-2026-11-03-CI-COVERAGE-BUDGETS | INVESTIGATING（修复待合并验证，#858） | CI coverage lane：readTrust R1 `editor not mounted`（vi.waitFor 默认 1000ms vs 冷 chunk 挂载 846ms–4.2s，Web 6/7 lane）；UsersPage 双表 `Found multiple elements`（InvitationsCard 晚挂载唯一性竞争）；QuestionPage C1 折叠链超 1000ms；API audit 导出 5/5（10,001 行契约 fixture > 5s）、auth 限流（11×argon2id+二次 buildTestApp 悬崖两侧）、httpSurface I6（体内冷 import 全路由图计入 5s）；共同放大器 = 4 forks/2 vCPU 超订 | YES | CAUSALLY_PROVEN（F1 探针分布操纵+修复前后；F3 列几何算术；F4/F5/F6 成本核算+悬崖两侧分布） | PROVEN_UNRELATED（受害文件在四 PR 分支均零改动，CONTROLLED_EXCLUSION） | CAUSALLY_PROVEN（机制级：固定预算<固有成本） | 2026-11-03 | fix/858-ci-coverage-flakes：WEB 预加载/定位修复/定点预算 + maxWorkers CI 4→2（既定步降政策）；API 静态提升 + 30s 每测预算；M5-post/H5-post 验证中 |
+| CASE-2026-11-03-CI-COVERAGE-BUDGETS | REPAIRED（#859 已合并 `8deafb46`；2026-11-03 复核） | CI coverage lane：readTrust R1 `editor not mounted`（vi.waitFor 默认 1000ms vs 冷 chunk 挂载 846ms–4.2s，Web 6/7 lane）；UsersPage 双表 `Found multiple elements`（InvitationsCard 晚挂载唯一性竞争）；QuestionPage C1 折叠链超 1000ms；API audit 导出 5/5（10,001 行契约 fixture > 5s）、auth 限流（11×argon2id+二次 buildTestApp 悬崖两侧）、httpSurface I6（体内冷 import 全路由图计入 5s）；共同放大器 = 4 forks/2 vCPU 超订 | YES | CAUSALLY_PROVEN（F1 探针分布操纵+修复前后；F3 列几何算术；F4/F5/F6 成本核算+悬崖两侧分布） | PROVEN_UNRELATED（受害文件在四 PR 分支均零改动，CONTROLLED_EXCLUSION） | CAUSALLY_PROVEN（机制级：固定预算<固有成本） | 2026-11-03（复核：REPAIRED） | 无（禁止把新 occurrence 自动归入本 case；E2E 几何 flake 另立 #878 / OBS-2026-11-03-001） |
 
 未进入任何 case 的独立 occurrence 见 [Unresolved Occurrence Ledger](#unresolved-occurrence-ledger未解决的发生记录账本)。
 
@@ -1052,10 +1052,11 @@ PRESERVED = 三次 occurrence 的 OBSERVED_AT / GIT_SHA / COMMAND / EXECUTION_TO
 #### Status
 
 ```text
-CASE_STATE = INVESTIGATING（修复已实施待合并验证；见 #858）
+CASE_STATE = REPAIRED（PR #859 已合并，merge 8deafb46；见 Verified Repair）
 CASE_CREATED_AT = 2026-11-03
 CASE_LAST_REVIEWED_AT = 2026-11-03
 CASE_LAST_MODIFIED_AT = 2026-11-03
+CASE_REPAIRED_AT = 2026-11-03
 
 NONDETERMINISTIC = YES
 ROOT_CAUSE_CONFIDENCE = CAUSALLY_PROVEN（F1/R1：探针分布操纵 + 修复前后对比闭环；
@@ -1118,6 +1119,19 @@ API：httpSurfaceAuthority 静态提升；audit 导出与 auth 限流 30_000 每
   admissions/publishResults durability 用例同惯例）。
 验证门槛：M5-post（CI=true 全套件 2 核 ×5）+ H5-post（worker-database 4worker 2 核
   ×3）全绿；四个 PR 分支 CI 绿。证据链与图表：#858。
+```
+
+#### Verified Repair（2026-11-03 复核）
+
+```text
+PR = #859（merge 8deafb46，是 master bb04d2aa 的祖先）
+CI_ON_HEAD = 8/8 success（aff999cf，更新头部后）
+POST_MERGE_LOCAL = `pnpm coverage --force`：16/16 tasks、0 cached、8m47s；
+  API 2801 passed / 11 skipped；Web 2623 passed；build + lint:prod-resolution PASS
+CI_CORROBORATION = 更新头部的 #853/#850/#851/#852 均 Web coverage + API coverage success
+REGRESSION_GUARD = maxWorkers CI 4→2 的既定步降已落地并在源码注释与本登记中留痕
+RESIDUAL = `rich-content-overflow` 几何 flake 属另一机制，登记为 OBS-2026-11-03-001 / #878
+CASE_REPAIRED_AT = 2026-11-03
 ```
 
 ---
@@ -3301,6 +3315,58 @@ CURRENT_INTERPRETATION = CASE-2026-11-03-CI-COVERAGE-BUDGETS（固定 5s testTim
   契约性 fixture/安全 KDF/冷 import 固有成本；4 worker/2 vCPU 为放大器）
 CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED
 ```
+
+---
+
+### OBS-2026-11-03-001 — `rich-content-overflow.spec.ts:568` 几何断言在 2-shard E2E 负载下读到 `scrollLeft = 0`（#878）
+
+OBSERVED_AT = 2026-11-03T09:35:02Z（GitHub Actions 权威 run）
+GIT_SHA = 0dda0c23（PR #851 更新头部）
+BRANCH = obs/800-pr-c-investigation-ui
+COMMAND = CI：`pnpm --filter @exam/e2e exec playwright test --shard=1/2`
+
+EXECUTION_TOPOLOGY = GitHub Actions，E2E shard 1/2，2 shard fail-fast；宿主 2 vCPU
+FAILED_FILE = `apps/e2e/e2e/rich-content-overflow.spec.ts`
+FAILED_TEST = `:528` `candidate take → rich answer → graded result: local scroll, keyboard, stable geometry`
+FAILURE_PHASE = 运行时断言（非 setup/teardown）
+FAILURE_CLASS = ORACLE_SYNC（断言依赖固定时间预算，早于浏览器动画落定）
+ERROR = `expect(received).toBeGreaterThan(expected)`
+ASSERTION_FAILURE = `:568 expect(promptScrollAfter).toBeGreaterThan(promptScrollBefore)`；`Expected: > 0`，`Received: 0`
+
+AUTHORITATIVE_RUN_RESULT = FAILURE（run 41611378188 / job 125835646769）；shard 2 被 fail-fast 取消（job 125835646722）
+
+RERUN_EVIDENCE = 同一 PR 更新头部 `cef16c76` 后两个 shard 均 success；合并后 master 本地全量 E2E 再次在 `:568` 失败；隔离 `E2E_WORKERS=1 bash scripts/e2e/run.sh --grep "stable geometry"` 1/1 PASS
+
+DIFF_RELATION = PROVEN_UNRELATED（`gh pr diff 851 --name-only` 不含该 spec；该文件自 #848 `ffa9e745` 起未在四个 obs PR 中改动）
+
+TRACE_AVAILABLE = YES（job artifact 含 `test-failed-1.png` 与 `error-context.md`；本地隔离 run 可重放）
+
+NONDETERMINISM_CONFIRMED = YES（同 spec 在隔离负载通过、在 2-shard 负载失败）
+
+INTERPRETATION_AT_RECORD_TIME = HYPOTHESIS：`:568` 是单次 `ArrowRight` + 固定 `waitForTimeout(150)` 后采样；2-shard 负载下 Chrome 平滑滚动首帧尚未提交，采样到 0。依据：同文件 `:334` 的 `scrollToHorizontalEnd` 注释明确 "Chrome animates arrow-key scrolling"，并用"两次相同采样"判定落定；该 helper 只用于 `:755`/`:1193`，另有 5 处固定 150ms（`:564`/`:921`/`:998`/`:1079`/`:1120`）。
+
+CURRENT_INTERPRETATION = 同上（尚未做负载下复现，故不升级为 PROVEN_ROOT_CAUSE）
+CURRENT_INTERPRETATION_UPDATED_AT = 2026-11-03
+
+CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED（CONTROLLED_EXCLUSION）
+ROOT_CAUSE_CONFIDENCE = HYPOTHESIS（机制方向有源码证据；负载下复现未执行）
+FIRST_CAUSAL_DIVERGENCE = 未执行（待 #878：负载下重复失败或 instrumented 采样序列）
+
+CASE_ID = NONE（未建 case；登记为独立 occurrence）
+AGGREGATION_BASIS = 不聚合（与 CASE-2026-11-03-CI-COVERAGE-BUDGETS 的 coverage 预算族机制不同：这是 E2E oracle 同步，不是 coverage lane 固定预算）
+
+### 已知不是的原因（附证据）
+
+- 不是产品滚动语义回归：隔离单 worker 重跑 PASS；PR #851 diff 未触达该 spec 或 `ContentScrollViewport`。
+- 不是 fail-fast 造成的主失败：shard 2 的 cancelled 是 shard 1 failure 的结果，不是并行根因。
+
+### 当前缓解
+
+无。禁止用调大 timeout / 加 retry / 减少 shard 掩盖。
+
+### 后续动作 / NEXT_DIAGNOSTIC_ACTION
+
+#878：先在 2-shard 负载下取得可重复失败或 instrumented（`scrollLeft` 采样序列）证据，再把 5 处固定等待统一到显式条件等待；完成后登记 case。
 
 ---
 
