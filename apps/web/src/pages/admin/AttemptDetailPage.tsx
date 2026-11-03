@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { plainTextProjection } from "@exam/domain";
@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { can } from "@/lib/capabilities";
 import { downloadFile } from "@/lib/download";
+import { routes } from "@/lib/routes";
 import { createContextSafeUuid } from "@/lib/uuid";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -72,6 +73,8 @@ import type {
   AttemptTimelineEvent,
   AttemptTimelineResponse,
   MisconductFlagDTO,
+  ProctorAttemptEvent,
+  ProctorAttemptEventListResponse,
 } from "@exam/contracts";
 
 /**
@@ -186,6 +189,141 @@ const eventToneClass: Record<EventTone, string> = {
 function getEventMeta(action: string): EventMeta {
   return (
     EVENT_META[action] ?? { labelKey: "", tone: "muted", icon: HelpCircle }
+  );
+}
+
+/** Level tone for one telemetry row badge (semantic tokens only). */
+function telemetryLevelClass(level: ProctorAttemptEvent["level"]): string {
+  if (level === "error") return "bg-destructive/10 text-destructive";
+  if (level === "warn") return "bg-warning/10 text-warning";
+  return "bg-muted text-muted-foreground";
+}
+
+/** Props for the telemetry (proctor-events) timeline section. */
+interface TelemetrySectionProps {
+  events: ProctorAttemptEvent[] | null;
+  isLoading: boolean;
+  hasError: boolean;
+  onRetry: () => void;
+  /** Last loaded page and the server's pagination metadata (append-on-load). */
+  page: number;
+  totalPages: number;
+  total: number;
+  /** True while a Load-More page fetch is in flight (rows stay visible). */
+  loadingMore: boolean;
+  onLoadMore: () => void;
+}
+
+/**
+ * Card showing the merged proctor-events timeline for one attempt
+ * (client_events telemetry + audit rows, newest first). The wire payload is
+ * the server-projected allowlist metadata (proctorMonitoringService), so the
+ * page renders stable category codes only — never raw client blobs. Source
+ * provenance is rendered per row: client rows are ADVISORY telemetry, audit
+ * rows are the authoritative compliance record (#544).
+ *
+ * Time authority (#544): the timeline is ordered by the server-owned receive
+ * instant, projected per row as `serverRecordedAt` — shown first on every
+ * row. Client rows additionally carry the client-ASSERTED `occurredAt`,
+ * labeled as a claim, never as the ordering instant. Older evidence pages
+ * load via Load-More append; the counts footer always states how much of the
+ * server total is on screen, so a partial view is never mistaken for the
+ * full history.
+ */
+function TelemetrySection({
+  events,
+  isLoading,
+  hasError,
+  onRetry,
+  page,
+  totalPages,
+  total,
+  loadingMore,
+  onLoadMore,
+}: TelemetrySectionProps) {
+  const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
+  const hasMore = page < totalPages;
+  return (
+    <PageSection
+      title={t("admin.attemptDetail.telemetry.title")}
+      description={t("admin.attemptDetail.telemetry.description")}
+    >
+      {isLoading ? (
+        <LoadingState />
+      ) : hasError ? (
+        <ErrorState
+          message={t("admin.attemptDetail.telemetry.loadFailed")}
+          onRetry={onRetry}
+        />
+      ) : !events || events.length === 0 ? (
+        <EmptyState
+          icon={<AppIcon icon={Clock} size="state" />}
+          title={t("admin.attemptDetail.telemetry.emptyTitle")}
+          description={t("admin.attemptDetail.telemetry.emptyDescription")}
+        />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {events.map((event) => (
+            <div
+              key={event.id}
+              className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md border p-2 text-xs"
+            >
+              <span className="type-metadata shrink-0 whitespace-nowrap">
+                {t("admin.attemptDetail.telemetry.serverReceivedAt")}{" "}
+                {formatDateTime(event.serverRecordedAt)}
+              </span>
+              {event.source === "client_event" && (
+                <span className="type-metadata shrink-0 whitespace-nowrap">
+                  {t("admin.attemptDetail.telemetry.clientClaimedAt")}{" "}
+                  {formatDateTime(event.occurredAt)}
+                </span>
+              )}
+              <Badge
+                variant="secondary"
+                className={`shrink-0 ${telemetryLevelClass(event.level)}`}
+              >
+                {event.source === "audit_log"
+                  ? t("admin.attemptDetail.telemetry.sourceAuditLog")
+                  : t("admin.attemptDetail.telemetry.sourceClientEvent")}
+              </Badge>
+              <span className="font-medium">{event.name}</span>
+              {event.metadata && Object.keys(event.metadata).length > 0 && (
+                <span className="type-metadata min-w-0 break-all">
+                  {JSON.stringify(event.metadata)}
+                </span>
+              )}
+            </div>
+          ))}
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <span className="type-metadata">
+              {t("admin.attemptDetail.telemetry.counts", {
+                shown: events.length,
+                total,
+              })}
+            </span>
+            {hasMore && (
+              <span className="type-metadata">
+                {t("admin.attemptDetail.telemetry.partialNotice", {
+                  shown: events.length,
+                })}
+              </span>
+            )}
+            {hasMore && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                onClick={onLoadMore}
+                disabled={loadingMore}
+              >
+                {t("admin.attemptDetail.telemetry.loadMore")}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </PageSection>
   );
 }
 
@@ -441,6 +579,29 @@ export function AttemptDetailPage() {
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [timelineError, setTimelineError] = useState(false);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  // Telemetry (proctor-events) fetch: independent of both the result and the
+  // audit timeline so it renders for any attempt status — the monitoring list
+  // drops submitted/graded attempts, but this timeline stays queryable for
+  // the retention window and is where save-failure evidence lives (#800).
+  const [telemetry, setTelemetry] = useState<ProctorAttemptEvent[] | null>(
+    null,
+  );
+  const [telemetryLoading, setTelemetryLoading] = useState(true);
+  const [telemetryError, setTelemetryError] = useState(false);
+  // Pagination state mirrors the server response (page/totalPages/total) so
+  // the section can state exactly how much of the server total is on screen.
+  // `page` advances only on a successful Load-More append.
+  const [telemetryPage, setTelemetryPage] = useState(1);
+  const [telemetryTotalPages, setTelemetryTotalPages] = useState(0);
+  const [telemetryTotal, setTelemetryTotal] = useState(0);
+  const [telemetryLoadingMore, setTelemetryLoadingMore] = useState(false);
+  // Stale-response guard for the telemetry fetch/append: a response issued for
+  // a PREVIOUS attempt must never write rows, pagination metadata, or an error
+  // into the next attempt's section after a route change. The ref records the
+  // attempt id the in-flight request belongs to; a late response whose scope
+  // no longer matches is dropped. (The result/timeline loads are single-shot
+  // and replace their state wholesale, so they do not need this.)
+  const telemetryScopeRef = useRef<string | null>(null);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [flagSeverity, setFlagSeverity] = useState<"warning" | "serious">(
     "warning",
@@ -468,6 +629,23 @@ export function AttemptDetailPage() {
     actor !== null && can(actor, Permission.AttemptExport);
   const canFlagMisconduct =
     actor !== null && can(actor, Permission.AttemptMisconductMark);
+  // Deep link into the Recovery archive (ledger/episodes/related incidents):
+  // composed only for callers who can actually reach the recovery route gate
+  // (IncidentRecoveryView — Admin preset). UX composition only; the backend
+  // remains the security authority (issue 612 pattern).
+  const canOpenRecoveryArchive =
+    actor !== null && can(actor, Permission.IncidentRecoveryView);
+
+  /** Header actions shared by every branch: the recovery-archive deep link
+   * (capability-gated) plus the branch-specific buttons. */
+  const recoveryArchiveButton = canOpenRecoveryArchive && id && (
+    <Button
+      variant="outline"
+      onClick={() => navigate(routes.admin.recoveryAttempt(id))}
+    >
+      {t("admin.attemptDetail.actions.recoveryArchive")}
+    </Button>
+  );
 
   const loadResult = useCallback(async () => {
     // INVARIANT: the result fetch is issued only for callers whose capability
@@ -537,6 +715,75 @@ export function AttemptDetailPage() {
     loadTimeline();
   }, [loadTimeline]);
 
+  const loadTelemetry = useCallback(async () => {
+    if (!id) return;
+    // Claim the scope: any response still in flight for a previous attempt
+    // now fails its scope check below and is dropped.
+    telemetryScopeRef.current = id;
+    setTelemetryLoading(true);
+    setTelemetryError(false);
+    setTelemetry(null);
+    setTelemetryLoadingMore(false);
+    try {
+      const data = await api.get<ProctorAttemptEventListResponse>(
+        `/api/admin/attempts/${id}/proctor-events?limit=50`,
+      );
+      if (telemetryScopeRef.current !== id) return;
+      setTelemetry(data.items);
+      setTelemetryPage(data.page);
+      setTelemetryTotalPages(data.totalPages);
+      setTelemetryTotal(data.total);
+    } catch {
+      if (telemetryScopeRef.current === id) setTelemetryError(true);
+    } finally {
+      if (telemetryScopeRef.current === id) setTelemetryLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadTelemetry();
+  }, [loadTelemetry]);
+
+  /**
+   * Load-More: fetches the NEXT page and appends it to the visible rows.
+   * INVARIANT: existing rows stay mounted while the fetch is in flight
+   * (`telemetryLoading` is not toggled — the section keeps rendering the
+   * loaded evidence), and a failed fetch leaves the rows intact. Rows are
+   * deduplicated by event id on append so a timeline that shifted between
+   * page fetches cannot produce duplicate React keys. A response whose
+   * attempt scope no longer matches is dropped (route change).
+   */
+  const loadMoreTelemetry = useCallback(async () => {
+    if (!id || telemetryLoadingMore) return;
+    const nextPage = telemetryPage + 1;
+    const scope = telemetryScopeRef.current;
+    setTelemetryLoadingMore(true);
+    try {
+      const data = await api.get<ProctorAttemptEventListResponse>(
+        `/api/admin/attempts/${id}/proctor-events?limit=50&page=${nextPage}`,
+      );
+      if (telemetryScopeRef.current !== scope) return;
+      setTelemetry((prev) => {
+        const seen = new Set((prev ?? []).map((event) => event.id));
+        return [
+          ...(prev ?? []),
+          ...data.items.filter((event) => !seen.has(event.id)),
+        ];
+      });
+      setTelemetryPage(data.page);
+      setTelemetryTotalPages(data.totalPages);
+      setTelemetryTotal(data.total);
+    } catch {
+      // Keep the already-visible rows; the fetch failure is surfaced as a
+      // toast, not by replacing the loaded evidence with an error state.
+      if (telemetryScopeRef.current === scope) {
+        toast.error(t("admin.attemptDetail.telemetry.loadMoreFailed"));
+      }
+    } finally {
+      if (telemetryScopeRef.current === scope) setTelemetryLoadingMore(false);
+    }
+  }, [id, telemetryLoadingMore, telemetryPage, t]);
+
   const toggleEvent = useCallback((eventId: string) => {
     setExpandedEventId((prev) => (prev === eventId ? null : eventId));
   }, []);
@@ -597,9 +844,12 @@ export function AttemptDetailPage() {
         <PageHeader
           title={t("admin.attemptDetail.shell.title")}
           actions={
-            <Button variant="outline" onClick={() => void navigate(-1)}>
-              {t("admin.attemptDetail.actions.back")}
-            </Button>
+            <div className="flex gap-2">
+              {recoveryArchiveButton}
+              <Button variant="outline" onClick={() => void navigate(-1)}>
+                {t("admin.attemptDetail.actions.back")}
+              </Button>
+            </div>
           }
         />
         <TimelineSection
@@ -609,6 +859,17 @@ export function AttemptDetailPage() {
           onRetry={loadTimeline}
           expandedEventId={expandedEventId}
           onToggleEvent={toggleEvent}
+        />
+        <TelemetrySection
+          events={telemetry}
+          isLoading={telemetryLoading}
+          hasError={telemetryError}
+          onRetry={loadTelemetry}
+          page={telemetryPage}
+          totalPages={telemetryTotalPages}
+          total={telemetryTotal}
+          loadingMore={telemetryLoadingMore}
+          onLoadMore={loadMoreTelemetry}
         />
       </div>
     );
@@ -634,6 +895,7 @@ export function AttemptDetailPage() {
           )}`}
           actions={
             <div className="flex gap-2">
+              {recoveryArchiveButton}
               <ExportButtons attemptId={id!} canExport={canExportAttempt} />
               <Button variant="outline" onClick={() => void navigate(-1)}>
                 {t("admin.attemptDetail.actions.back")}
@@ -671,6 +933,18 @@ export function AttemptDetailPage() {
           onRetry={loadTimeline}
           expandedEventId={expandedEventId}
           onToggleEvent={toggleEvent}
+        />
+
+        <TelemetrySection
+          events={telemetry}
+          isLoading={telemetryLoading}
+          hasError={telemetryError}
+          onRetry={loadTelemetry}
+          page={telemetryPage}
+          totalPages={telemetryTotalPages}
+          total={telemetryTotal}
+          loadingMore={telemetryLoadingMore}
+          onLoadMore={loadMoreTelemetry}
         />
 
         <Dialog open={flagDialogOpen} onOpenChange={setFlagDialog}>
@@ -769,6 +1043,7 @@ export function AttemptDetailPage() {
         )}`}
         actions={
           <div className="flex gap-2">
+            {recoveryArchiveButton}
             <ExportButtons attemptId={id!} canExport={canExportAttempt} />
             <Button variant="outline" onClick={() => void navigate(-1)}>
               {t("admin.attemptDetail.actions.back")}
@@ -899,6 +1174,18 @@ export function AttemptDetailPage() {
         onRetry={loadTimeline}
         expandedEventId={expandedEventId}
         onToggleEvent={toggleEvent}
+      />
+
+      <TelemetrySection
+        events={telemetry}
+        isLoading={telemetryLoading}
+        hasError={telemetryError}
+        onRetry={loadTelemetry}
+        page={telemetryPage}
+        totalPages={telemetryTotalPages}
+        total={telemetryTotal}
+        loadingMore={telemetryLoadingMore}
+        onLoadMore={loadMoreTelemetry}
       />
     </PageContainer>
   );

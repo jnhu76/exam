@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
+import { Permission } from "@exam/authz";
 import type {
   ProctorAttemptListResponse,
   ProctorAttemptStatus,
@@ -9,6 +10,9 @@ import type {
 } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
+import { can } from "@/lib/capabilities";
+import { routes } from "@/lib/routes";
+import { useAuth } from "@/hooks/useAuth";
 import { getStatusMeta } from "@/lib/statusMeta";
 import { statusLabelKey } from "@/lib/statusMetaUtils";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -42,6 +46,7 @@ import {
   User,
   TriangleAlert,
   Activity,
+  Archive,
   type LucideIcon,
 } from "lucide-react";
 
@@ -81,6 +86,15 @@ export function ExamMonitoringPage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
   const { id: examId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  // Recovery-archive deep link composes only for callers who can actually
+  // reach /admin/recovery/attempts/:id (IncidentRecoveryView — Admin preset);
+  // a Proctor's monitoring rows simply do not render it (issue 612 pattern:
+  // branch on the capability, never a role name). UX truthfulness only; the
+  // backend route gate remains the security authority.
+  const canOpenRecoveryArchive =
+    user !== null && can(user, Permission.IncidentRecoveryView);
   const [attempts, setAttempts] = useState<ProctorAttemptStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -281,12 +295,25 @@ export function ExamMonitoringPage() {
                 icon: History,
                 onSelect: () => setSelectedAttemptId(row.original.attemptId),
               },
+              ...(canOpenRecoveryArchive
+                ? [
+                    {
+                      id: "recovery-archive",
+                      label: t("admin.examMonitoring.actions.recoveryArchive"),
+                      icon: Archive,
+                      onSelect: () =>
+                        navigate(
+                          routes.admin.recoveryAttempt(row.original.attemptId),
+                        ),
+                    },
+                  ]
+                : []),
             ]}
           />
         ),
       },
     ],
-    [t],
+    [t, canOpenRecoveryArchive, navigate],
   );
 
   if (isLoading && attempts.length === 0) {
@@ -392,7 +419,11 @@ export function ExamMonitoringPage() {
                     className="flex items-start gap-3 rounded-md border p-2 text-xs"
                   >
                     <span className="text-muted-foreground shrink-0 w-16 type-numeric">
-                      {formatTime(ev.occurredAt)}
+                      {/* Time authority (#544): the row time is the
+                          server-owned receive instant. `occurredAt` is
+                          client-ASSERTED for client rows and never decides
+                          ordering, so it is not shown as the row's time. */}
+                      {formatTime(ev.serverRecordedAt)}
                     </span>
                     <EventBadge level={ev.level} kind={ev.kind} />
                     <span>{ev.name}</span>

@@ -12,6 +12,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { UsersPage } from "./UsersPage";
+import { ApiError } from "@/lib/api";
 import { Permission, permissionsForRole } from "@exam/authz";
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
@@ -57,6 +58,12 @@ vi.mock("@/lib/api", () => ({
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
+
+vi.mock("@/lib/logger", () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+import { logger } from "@/lib/logger";
 
 const mockUsers = [
   {
@@ -294,6 +301,7 @@ describe("UsersPage", () => {
     apiGet.mockReset();
     apiPost.mockReset();
     apiPatch.mockReset();
+    vi.mocked(logger.warn).mockClear();
     mockApiGet();
     apiPost.mockResolvedValue({ id: "u4" });
     apiPatch.mockResolvedValue({ ok: true });
@@ -302,9 +310,20 @@ describe("UsersPage", () => {
   it("renders user list with Admin role", async () => {
     renderPage();
     // Row content renders twice by design (desktop table + mobile cards);
-    // scope to the desktop table representation.
-    const table = await screen.findByRole("table");
-    expect(within(table).getByText("admin1")).toBeInTheDocument();
+    // scope to the desktop table representation. The table ROLE is not
+    // unique on this page: once users data lands, the InvitationsCard
+    // mounts its own table while its request is still in flight, so
+    // findByRole("table") races that mount and throws "Found multiple
+    // elements" under slow lanes (#858). Key on the users row content that
+    // has a table ancestor instead — deterministic regardless of the
+    // card's timing (and unaffected by the mobile-card duplicate).
+    const table = await waitFor(() => {
+      const row = screen
+        .getAllByText("admin1")
+        .find((node) => node.closest("table"));
+      if (!row) throw new Error("users table row not mounted yet");
+      return row.closest("table")!;
+    });
     expect(within(table).getByText("考试管理员")).toBeInTheDocument();
   });
 
@@ -404,6 +423,35 @@ describe("UsersPage", () => {
       name: "New User",
       role: "Admin",
     });
+  });
+
+  it("reports user_admin.save_failed with the stable error code on save failure", async () => {
+    const user = userEvent.setup();
+    apiPost.mockRejectedValueOnce(
+      new ApiError(409, "用户名已存在", "USERNAME_TAKEN"),
+    );
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /新增用户/ }));
+    const dialog = await screen.findByRole("dialog");
+    const inputs = getDialogInputs(dialog);
+    await user.type(inputs[0]!, "newuser");
+    await user.type(inputs[1]!, "password123");
+    await user.type(inputs[2]!, "New User");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith("user_admin.save_failed", {
+        errorCode: "USERNAME_TAKEN",
+      });
+    });
+    // The raw server compat text must stay out of the telemetry metadata.
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      "user_admin.save_failed",
+      expect.objectContaining({ message: expect.anything() }),
+    );
   });
 
   it("disables save button while saving", async () => {
@@ -1626,8 +1674,16 @@ describe("UsersPage", () => {
         return origImpl(url);
       });
       renderPage();
-      // Page 1 renders without the page-6 target.
-      const table = await screen.findByRole("table");
+      // Page 1 renders without the page-6 target. Key on row content with a
+      // table ancestor rather than the table role — the InvitationsCard
+      // table makes the role non-unique once users data lands (#858).
+      const table = await waitFor(() => {
+        const row = screen
+          .getAllByText("filler-1")
+          .find((node) => node.closest("table"));
+        if (!row) throw new Error("users table row not mounted yet");
+        return row.closest("table")!;
+      });
       expect(within(table).queryByText("teacher1")).not.toBeInTheDocument();
       expect(screen.getByText(/共 103 条/)).toBeInTheDocument();
       for (let i = 0; i < 5; i++) {
@@ -1637,7 +1693,13 @@ describe("UsersPage", () => {
         expect(apiGet).toHaveBeenCalledWith("/api/users?page=6&pageSize=20");
       });
       // The page-6 target renders WITH its assignment affordance.
-      const table6 = await screen.findByRole("table");
+      const table6 = await waitFor(() => {
+        const row = screen
+          .getAllByText("teacher1")
+          .find((node) => node.closest("table"));
+        if (!row) throw new Error("page-6 row not mounted yet");
+        return row.closest("table")!;
+      });
       expect(within(table6).getByText("teacher1")).toBeInTheDocument();
       const menu = await openRowMenu(user);
       expect(

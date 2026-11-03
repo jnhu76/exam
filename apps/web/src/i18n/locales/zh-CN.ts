@@ -649,6 +649,14 @@ const zhCN = {
       // 内存，#817 D7）。答案保存状态、自动重试与手动重试由 saveRetry 横幅
       // 独家承载（R1-F8：两横幅不再重复承诺保存恢复）。
       restoreHint: "网络连接已中断，正在自动重试；请不要关闭页面。",
+      // 服务器侧保存故障（HTTP >= 500）不是考生的网络问题，独立横幅避免
+      // 考生反复按连接自救而延误上报运维（#800 PR-B A2-F7）。
+      serverError: "服务器错误",
+      serverErrorHint:
+        "服务器暂时无法处理保存请求，将在服务恢复后自动重试；请不要关闭页面。",
+      // 错误信封 requestId 是考生/客服可回查的服务端请求关联键（#800 PR-B A2-F2）。
+      serverErrorRequestId:
+        "错误编号：{{requestId}}（如需联系管理员，请提供此编号）",
     },
     deadline: {
       passed: "已到截止时间",
@@ -963,6 +971,9 @@ const zhCN = {
       statusLabels: { active: "启用", inactive: "禁用" },
       editLabel: "编辑考生",
       resetPassword: "重置密码",
+      actions: {
+        recoveryIncidents: "恢复事件",
+      },
       enableDisable: "确定要{{action}}考生「{{name}}」吗？",
       dialog: {
         create: "新增考生",
@@ -1270,10 +1281,25 @@ const zhCN = {
         all: "全部目标",
         attempt: "答卷",
         exam: "考试",
+        exam_profile: "策略模板",
         user: "用户",
+        candidate: "考生",
+        candidate_field: "考生字段",
+        candidate_import: "考生导入",
+        staff_invitation: "员工邀请",
+        role_assignment: "角色授予",
         enrollment: "报名",
+        course: "课程",
+        question: "题目",
         organization: "组织",
+        incident: "事件",
+        login: "登录",
+        session: "会话",
+        system: "系统",
+        email_outbox: "发件记录",
       },
+      targetIdPlaceholder: "对象 ID",
+      actorIdPlaceholder: "操作者 ID",
     },
     permissions: {
       title: "权限注册表",
@@ -1752,6 +1778,9 @@ const zhCN = {
         auditLog: "操作",
         frontend: "前端",
       },
+      actions: {
+        recoveryArchive: "恢复档案",
+      },
     },
     questionEdit: {
       newTitle: "新增题目",
@@ -2125,6 +2154,22 @@ const zhCN = {
         actorPrefix: "操作者",
         ipAddress: "IP: {{address}}",
       },
+      telemetry: {
+        title: "遥测时间线",
+        description:
+          "前端遥测与监考审计的合并事件流（参考信息），按服务端接收时间排序：保存失败、断线等答题证据在此，不受提交/评分状态影响。",
+        loadFailed: "加载遥测时间线失败",
+        emptyTitle: "暂无遥测事件",
+        emptyDescription: "该尝试的遥测与监考事件将显示在此",
+        sourceClientEvent: "前端遥测",
+        sourceAuditLog: "审计记录",
+        serverReceivedAt: "服务端接收",
+        clientClaimedAt: "客户端声明",
+        loadMore: "加载更早事件",
+        loadMoreFailed: "加载更早事件失败，已显示的事件不受影响",
+        counts: "已显示 {{shown}} / {{total}} 条事件",
+        partialNotice: "仅显示最近 {{shown}} 条事件，更早证据需加载",
+      },
       errors: {
         loadFailed: "加载尝试详情失败",
         resultHidden: "该尝试尚未完成评分或结果不可见",
@@ -2139,6 +2184,7 @@ const zhCN = {
         exportJson: "导出JSON",
         back: "返回",
         flagMisconduct: "标记违规",
+        recoveryArchive: "恢复档案",
       },
       /** Timeline-only view for callers without score-read capability. */
       shell: {
@@ -2599,6 +2645,8 @@ const zhCN = {
         unresolvedOnly: "仅未处理",
         examPlaceholder: "考试 ID",
         candidatePlaceholder: "考生 ID",
+        attemptPlaceholder: "答卷 ID",
+        assignedProctorPlaceholder: "监考人员 ID",
         startDate: "开始日期",
         endDate: "结束日期",
         clear: "清除筛选",

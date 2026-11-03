@@ -93,10 +93,16 @@ export class ClientEventBuffer {
   /**
    * Flushes the current buffer to the server. Resolves with the number of
    * events successfully sent. Never rejects.
+   *
+   * `bypassBackoff` is for the page-unload path only: a candidate closing the
+   * tab inside a backoff window would otherwise silently drop the whole
+   * in-memory batch (#800). It does not change the regular retry-backoff
+   * semantics — timer and visibility flushes still honor
+   * {@link flushBlockedUntil}.
    */
-  async flush(): Promise<number> {
+  async flush(options: { bypassBackoff?: boolean } = {}): Promise<number> {
     if (this.flushing) return 0;
-    if (Date.now() < this.flushBlockedUntil) return 0;
+    if (!options.bypassBackoff && Date.now() < this.flushBlockedUntil) return 0;
     if (this.queue.length === 0) return 0;
 
     const batch = this.queue.splice(0, this.batchSize);
@@ -209,7 +215,10 @@ export class ClientEventBuffer {
       }
     };
     this.boundOnPageHide = () => {
-      void this.flush();
+      // Unload is the last chance to persist the in-memory queue: send even
+      // inside a backoff window. Failure just loses the batch — never blocks
+      // the unload.
+      void this.flush({ bypassBackoff: true });
     };
     window.addEventListener("visibilitychange", this.boundOnVisibilityChange);
     window.addEventListener("pagehide", this.boundOnPageHide);

@@ -22,6 +22,7 @@ import {
 } from "@/components/shared/DataTableContract";
 import { DataToolbar, ToolbarFilter } from "@/components/shared/DataToolbar";
 import { DatePicker } from "@/components/shared/DatePicker";
+import { TextFilterInput } from "@/components/shared/TextFilterInput";
 import { TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
@@ -64,13 +65,32 @@ interface AuditLogPageData {
 
 const PAGE_SIZE = 20;
 
+/**
+ * The target-type filter vocabulary: every targetType value the backend
+ * actually writes (single write sites under apps/api), not a UI-chosen
+ * subset. A missing entry hides a whole class of rows from exact filtering
+ * ("which operations touched this course" was unanswerable from the UI).
+ */
 const TARGET_FILTER_KEYS = [
   "all",
   "attempt",
   "exam",
+  "exam_profile",
   "user",
+  "candidate",
+  "candidate_field",
+  "candidate_import",
+  "staff_invitation",
+  "role_assignment",
   "enrollment",
+  "course",
+  "question",
   "organization",
+  "incident",
+  "login",
+  "session",
+  "system",
+  "email_outbox",
 ] as const;
 
 /** ISO datetime for the start (00:00:00.000) of the given date, local time. */
@@ -91,12 +111,18 @@ function endOfDayISO(date: Date): string {
 function buildFilterQuery(filters: {
   action: string;
   target: string;
+  targetId: string;
+  actorId: string;
   from?: Date;
   to?: Date;
 }): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.action !== "all") params.set("action", filters.action);
   if (filters.target !== "all") params.set("targetType", filters.target);
+  // Exact-identifier filters map 1:1 onto the backend's exact-match
+  // targetId/actorId predicates (same AuditLogFiltersSchema as the export).
+  if (filters.targetId) params.set("targetId", filters.targetId);
+  if (filters.actorId) params.set("actorId", filters.actorId);
   // Date bounds: inclusive on the server. `from` is the start-of-day of the
   // picked date; `to` is pushed to end-of-day so the same day is included.
   // The server freezes `to` into the snapshot on the first page.
@@ -147,6 +173,12 @@ export function AuditLogPage() {
   const [targetFilter, setTargetFilter] = useState("all");
   const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
   const [toDate, setToDate] = useState<Date | undefined>(undefined);
+  // Exact-ID filters: draft (live input) + committed (query) split, the same
+  // choreography TextFilterInput owns for every exact-identifier control.
+  const [targetIdInput, setTargetIdInput] = useState("");
+  const [actorIdInput, setActorIdInput] = useState("");
+  const [targetIdFilter, setTargetIdFilter] = useState("");
+  const [actorIdFilter, setActorIdFilter] = useState("");
 
   // Keyset cursor path: `currentCursor` fetched the current page (null = the
   // first page); `pastCursors` is the stack of cursors used to get here, with
@@ -186,6 +218,8 @@ export function AuditLogPage() {
             {
               action: actionFilter,
               target: targetFilter,
+              targetId: targetIdFilter,
+              actorId: actorIdFilter,
               from: fromDate,
               to: toDate,
             },
@@ -199,7 +233,15 @@ export function AuditLogPage() {
         setIsLoading(false);
       }
     },
-    [actionFilter, targetFilter, fromDate, toDate, t],
+    [
+      actionFilter,
+      targetFilter,
+      targetIdFilter,
+      actorIdFilter,
+      fromDate,
+      toDate,
+      t,
+    ],
   );
 
   // Initial load + whenever filters change (resets to the first page).
@@ -230,12 +272,18 @@ export function AuditLogPage() {
   const hasActiveFilter =
     actionFilter !== "all" ||
     targetFilter !== "all" ||
+    targetIdFilter !== "" ||
+    actorIdFilter !== "" ||
     fromDate !== undefined ||
     toDate !== undefined;
 
   const clearFilters = useCallback(() => {
     setActionFilter("all");
     setTargetFilter("all");
+    setTargetIdInput("");
+    setActorIdInput("");
+    setTargetIdFilter("");
+    setActorIdFilter("");
     setFromDate(undefined);
     setToDate(undefined);
   }, []);
@@ -268,6 +316,8 @@ export function AuditLogPage() {
       const params = buildFilterQuery({
         action: actionFilter,
         target: targetFilter,
+        targetId: targetIdFilter,
+        actorId: actorIdFilter,
         from: fromDate,
         to: toDate,
       });
@@ -281,7 +331,17 @@ export function AuditLogPage() {
     } finally {
       setExporting(false);
     }
-  }, [exporting, data, actionFilter, targetFilter, fromDate, toDate, t]);
+  }, [
+    exporting,
+    data,
+    actionFilter,
+    targetFilter,
+    targetIdFilter,
+    actorIdFilter,
+    fromDate,
+    toDate,
+    t,
+  ]);
 
   const items = data?.items ?? [];
   const hasPrev = pastCursors.length > 0;
@@ -337,6 +397,24 @@ export function AuditLogPage() {
                 ))}
               </SelectContent>
             </Select>
+            <ToolbarFilter size="wide">
+              <TextFilterInput
+                aria-label={t("admin.audit.targetIdPlaceholder")}
+                placeholder={t("admin.audit.targetIdPlaceholder")}
+                value={targetIdInput}
+                onChange={setTargetIdInput}
+                onCommit={setTargetIdFilter}
+              />
+            </ToolbarFilter>
+            <ToolbarFilter size="wide">
+              <TextFilterInput
+                aria-label={t("admin.audit.actorIdPlaceholder")}
+                placeholder={t("admin.audit.actorIdPlaceholder")}
+                value={actorIdInput}
+                onChange={setActorIdInput}
+                onCommit={setActorIdFilter}
+              />
+            </ToolbarFilter>
             <DatePicker
               aria-label={t("admin.audit.startDate")}
               placeholder={t("admin.audit.startDate")}

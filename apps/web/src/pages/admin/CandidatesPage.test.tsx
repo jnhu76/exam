@@ -9,7 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { toast } from "sonner";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ApiError } from "@/lib/api";
@@ -89,6 +89,12 @@ const mockCandidates = [
   },
 ];
 
+/** Surfaces the router's current search string for URL-state assertions. */
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-search">{location.search}</div>;
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/admin/candidates"]}>
@@ -105,6 +111,15 @@ function renderPage() {
         <BrandProvider>
           <Routes>
             <Route path="/admin/candidates" element={<CandidatesPage />} />
+            <Route
+              path="/admin/recovery"
+              element={
+                <>
+                  <LocationProbe />
+                  <div data-testid="recovery-queue-stub" />
+                </>
+              }
+            />
           </Routes>
         </BrandProvider>
       </AuthProvider>
@@ -194,6 +209,28 @@ describe("CandidatesPage", () => {
     expect(within(table).getByText("编号")).toBeInTheDocument();
     expect(within(table).getByText("部门")).toBeInTheDocument();
     expect(within(table).getByText("E001")).toBeInTheDocument();
+  });
+
+  // ── #800 PR-C A3-F7: recovery-incident deep link ───────────────────
+  // Customer service had no path from a candidate row to that candidate's
+  // incidents/attempts. The row action deep-links into the recovery queue
+  // pre-filtered by candidateId (an existing server filter), composed only
+  // for callers holding the recovery route capability.
+
+  it("deep-links the candidate row to the recovery queue filtered by candidateId", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const table = await screen.findByRole("table");
+
+    const menu = await openRowMenu(user, 0);
+    await user.click(within(menu).getByRole("menuitem", { name: "恢复事件" }));
+
+    expect(
+      await screen.findByTestId("recovery-queue-stub"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "candidateId=c1",
+    );
   });
 
   it("opens create dialog with dynamic fields", async () => {

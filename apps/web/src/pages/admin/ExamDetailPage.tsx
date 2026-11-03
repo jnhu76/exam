@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { getApiErrorMessage, readApiErrorReason } from "@/lib/apiErrors";
 import { routes } from "@/lib/routes";
 import { resolveListReturnPath } from "@/lib/listReturnNavigation";
+import { logger } from "@/lib/logger";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -114,6 +115,18 @@ function isStaleClosedExtendRejection(error: unknown): boolean {
     error.code === "EXAM_EXTEND_NOT_ALLOWED" &&
     readApiErrorReason(error) === "ALREADY_CLOSED"
   );
+}
+
+/**
+ * Category-only metadata for exam lifecycle command telemetry: the exam id
+ * plus the stable ApiError code. INVARIANT: never carries the raw error
+ * message or any server compatibility text.
+ */
+function examFailureMetadata(err: unknown, examId: string) {
+  return {
+    examId,
+    errorCode: err instanceof ApiError ? err.code : "UNKNOWN",
+  };
 }
 
 export function ExamDetailPage() {
@@ -391,6 +404,7 @@ export function ExamDetailPage() {
       toast.success(t("admin.examDetail.toast.published"));
       await loadExam();
     } catch (err) {
+      logger.warn("exam_admin.publish_failed", examFailureMetadata(err, id));
       const msg = getApiErrorMessage(
         err,
         t,
@@ -410,7 +424,8 @@ export function ExamDetailPage() {
       await api.post(`/api/exams/${id}/close`, {});
       toast.success(t("admin.examDetail.toast.closed"));
       await loadExam();
-    } catch {
+    } catch (err) {
+      logger.warn("exam_admin.close_failed", examFailureMetadata(err, id));
       toast.error(t("admin.examDetail.errors.closeFailed"));
     } finally {
       setClosing(false);
@@ -425,7 +440,8 @@ export function ExamDetailPage() {
       await api.post(`/api/exams/${id}/unpublish`);
       toast.success(t("admin.examDetail.toast.unpublished"));
       await loadExam();
-    } catch {
+    } catch (err) {
+      logger.warn("exam_admin.unpublish_failed", examFailureMetadata(err, id));
       toast.error(t("admin.examDetail.errors.unpublishFailed"));
     } finally {
       setUnpublishing(false);
@@ -441,6 +457,10 @@ export function ExamDetailPage() {
       toast.success(t("admin.examDetail.toast.resultsPublished"));
       await loadExam();
     } catch (err) {
+      logger.warn(
+        "exam_admin.publish_results_failed",
+        examFailureMetadata(err, id),
+      );
       toast.error(
         getApiErrorMessage(
           err,
@@ -480,6 +500,7 @@ export function ExamDetailPage() {
             : t("admin.examDetail.errors.extendStaleClosedRefreshFailed"),
         );
       } else {
+        logger.warn("exam_admin.extend_failed", examFailureMetadata(err, id));
         toast.error(t("admin.examDetail.errors.extendFailed"));
       }
     } finally {
@@ -496,6 +517,7 @@ export function ExamDetailPage() {
       toast.success(t("admin.examDetail.toast.archived"));
       await loadExam();
     } catch (err) {
+      logger.warn("exam_admin.archive_failed", examFailureMetadata(err, id));
       toast.error(
         getApiErrorMessage(err, t, t("admin.examDetail.errors.archiveFailed")),
       );
@@ -513,6 +535,7 @@ export function ExamDetailPage() {
       toast.success(t("admin.examDetail.toast.canceled"));
       await loadExam();
     } catch (err) {
+      logger.warn("exam_admin.cancel_failed", examFailureMetadata(err, id));
       toast.error(
         getApiErrorMessage(err, t, t("admin.examDetail.errors.cancelFailed")),
       );

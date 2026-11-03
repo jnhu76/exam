@@ -6,8 +6,13 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
+import { Permission } from "@exam/authz";
 import { api } from "@/lib/api";
 import { getApiErrorMessage, getApiFieldErrors } from "@/lib/apiErrors";
+import { can } from "@/lib/capabilities";
+import { routes } from "@/lib/routes";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import {
   parseImportCsv,
@@ -40,6 +45,7 @@ import {
   Pencil,
   Plus,
   Search,
+  ShieldAlert,
   Upload,
   Users,
   KeyRound,
@@ -103,6 +109,13 @@ interface Page<T> {
  */
 export function CandidatesPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  // Recovery-incident deep link composes only for callers who can actually
+  // reach /admin/recovery (IncidentRecoveryView — Admin preset); UX
+  // truthfulness only, the backend route gate remains the security authority.
+  const canOpenRecoveryQueue =
+    user !== null && can(user, Permission.IncidentRecoveryView);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [fields, setFields] = useState<Field[]>([]);
   const [page, setPage] = useState(1);
@@ -558,6 +571,22 @@ export function CandidatesPage() {
                 icon: KeyRound,
                 onSelect: () => openReset(candidate),
               },
+              // Deep link into the recovery queue pre-filtered to this
+              // candidate's incidents — the customer-service path from a
+              // candidate row to their attempts (#800 A3-F7).
+              ...(canOpenRecoveryQueue
+                ? [
+                    {
+                      id: "recovery-incidents",
+                      label: t("admin.candidates.actions.recoveryIncidents"),
+                      icon: ShieldAlert,
+                      onSelect: () =>
+                        navigate(
+                          `${routes.admin.recovery}?candidateId=${candidate.id}`,
+                        ),
+                    },
+                  ]
+                : []),
               {
                 id: "toggle-active",
                 label: candidate.isActive

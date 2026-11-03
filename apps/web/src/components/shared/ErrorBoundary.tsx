@@ -3,6 +3,8 @@ import i18n from "@/i18n";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppIcon } from "@/components/shared/AppIcon";
+import { toErrorCategory } from "@/lib/errorCategory";
+import { logger } from "@/lib/logger";
 import {
   Card,
   CardContent,
@@ -44,8 +46,15 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(_error: Error, errorInfo: ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
+    // Category-only server trace: the persisted event carries a bounded
+    // error category ({@link toErrorCategory} — a forged `error.name`
+    // collapses to `OtherError`) plus the route (added by the logger) as
+    // the location identifier. INVARIANT: the raw message / stack /
+    // componentStack stay in the DEV-only details surface below and are
+    // never reported here.
+    logger.error("web.render_error", { errorName: toErrorCategory(error) });
   }
 
   handleReset = () => {

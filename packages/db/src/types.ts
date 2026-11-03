@@ -92,6 +92,27 @@ const RETRYABLE_ERROR_CODES = new Set([
 const MAX_RETRIES = 3;
 
 /**
+ * Minimal pino-compatible warn surface for transaction-retry observability.
+ * Structural only — Fastify's root logger satisfies it, so `packages/db`
+ * never depends on Fastify.
+ */
+export interface TransactionRetryLogger {
+  warn(obj: Record<string, unknown>, msg: string): void;
+}
+
+// Module-scoped so every executeInTransaction call site reports retries
+// without per-call plumbing; the API process wires its Fastify logger once
+// at db-plugin install. Silent by default so scripts and tests stay quiet.
+let transactionRetryLogger: TransactionRetryLogger | null = null;
+
+/** Wires the process-wide retry logger (or `null` to silence). */
+export function setTransactionRetryLogger(
+  logger: TransactionRetryLogger | null,
+): void {
+  transactionRetryLogger = logger;
+}
+
+/**
  * True when the error — or any error in its `cause` chain, because Drizzle
  * wraps the underlying PostgreSQL error — carries the given PostgreSQL
  * error code (e.g. `23505` unique_violation). Uses a `visited` Set to guard
@@ -184,6 +205,20 @@ export async function executeInTransaction<T>(
       if (attempt === MAX_RETRIES || !isRetryableError(err)) {
         throw err;
       }
+      // #800 PR-B: a request's retry attempts were previously invisible —
+      // "retry exhausted" and "unique violation" both collapsed into
+      // 409/500 with nothing to distinguish them. The SQLSTATE comes from
+      // the same cause-chain walk the classification used; retry count,
+      // backoff, isolation, and commit semantics are unchanged.
+      transactionRetryLogger?.warn(
+        {
+          attempt: attempt + 1,
+          sqlstate: [...RETRYABLE_ERROR_CODES].find((code) =>
+            hasPostgresErrorCode(err, code),
+          ),
+        },
+        "transaction retry",
+      );
     }
   }
 

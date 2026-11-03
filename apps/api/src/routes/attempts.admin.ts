@@ -322,11 +322,18 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /admin/attempts/:attemptId/timeline — returns the chronological audit
-   * trail for one attempt (start, save, disrupt, restore, submit, grade, and
-   * admin actions like force-submit/extend/misconduct), oldest-first. Read-only
-   * query over audit_logs filtered by target. 404 if the attempt does not exist
-   * in the caller's organization; Proctor actors additionally need an active
-   * assignment to the attempt's Exam (J4-I1B, proctorAccess = assignment_scoped).
+   * trail for one attempt, oldest-first: exactly the CURRENT audit rows whose
+   * target is this attempt (submit, force-submit, misconduct, time grant,
+   * grading, export). INVARIANT (auditPolicy): attempt.start / saveAnswer /
+   * disrupted / restore / autoSubmit are deprecated + domain_history and never
+   * produce current audit rows — an absent save entry here does NOT mean the
+   * candidate never saved. Save/disruption evidence lives in client_events
+   * telemetry (GET /admin/attempts/:attemptId/proctor-events, surfaced as the
+   * attempt-detail telemetry timeline section), not in this endpoint.
+   * Read-only query over audit_logs filtered by target. 404 if the attempt
+   * does not exist in the caller's organization; Proctor actors additionally
+   * need an active assignment to the attempt's Exam (J4-I1B,
+   * proctorAccess = assignment_scoped).
    */
   fastify.get(
     "/admin/attempts/:attemptId/timeline",

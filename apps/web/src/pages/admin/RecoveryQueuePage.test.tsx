@@ -408,6 +408,97 @@ describe("RecoveryQueuePage", () => {
     expect(lastCall).toContain("candidateId=cand-9");
   });
 
+  // ── #800 PR-C A3-F3: the three backend filters the UI dropped ─────────
+  // RecoveryListQuerySchema accepts attemptId / incidentType /
+  // assignedProctorUserId and executes them as real SQL predicates, but
+  // QueueFilters/buildQuery only carried 7 keys — deep links carrying these
+  // three were silently discarded and "which incidents does this attempt
+  // have" needed line-by-line inspection.
+
+  it("deep link carrying attemptId / incidentType / assignedProctorUserId reaches the API query", async () => {
+    renderPage([
+      "/admin/recovery?attemptId=3f2504e0-4f89-11d3-9a0c-0305e82c3301&incidentType=network_interruption&assignedProctorUserId=proctor-7",
+    ]);
+    await screen.findAllByText("网络恢复考试");
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain(
+      "attemptId=3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    );
+    expect(lastCall).toContain("incidentType=network_interruption");
+    expect(lastCall).toContain("assignedProctorUserId=proctor-7");
+  });
+
+  it("selecting an incident type commits it to the URL and the API query", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findAllByText("网络恢复考试");
+
+    await user.click(screen.getByRole("combobox", { name: "全部类型" }));
+    await user.click(await screen.findByRole("option", { name: "系统故障" }));
+
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "incidentType=system_outage",
+    );
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain("incidentType=system_outage");
+  });
+
+  it("typing an attempt id commits it to the URL and the API query", async () => {
+    vi.useFakeTimers();
+    renderPage();
+    await act(async () => {});
+
+    fireEvent.change(screen.getByPlaceholderText("答卷 ID"), {
+      target: { value: "3f2504e0-4f89-11d3-9a0c-0305e82c3301" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "attemptId=3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    );
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain(
+      "attemptId=3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    );
+  });
+
+  it("typing an assigned-proctor id commits it to the URL and the API query", async () => {
+    vi.useFakeTimers();
+    renderPage();
+    await act(async () => {});
+
+    fireEvent.change(screen.getByPlaceholderText("监考人员 ID"), {
+      target: { value: "proctor-7" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "assignedProctorUserId=proctor-7",
+    );
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain("assignedProctorUserId=proctor-7");
+  });
+
+  it("clear-filters also clears the three new filter inputs", async () => {
+    renderPage([
+      "/admin/recovery?attemptId=3f2504e0-4f89-11d3-9a0c-0305e82c3301&incidentType=system_outage",
+    ]);
+    await screen.findAllByText("网络恢复考试");
+
+    await userEvent.setup().click(screen.getByText("清除筛选"));
+    expect(screen.getByTestId("location-search")).not.toHaveTextContent(
+      "attemptId=",
+    );
+    expect(screen.getByTestId("location-search")).not.toHaveTextContent(
+      "incidentType=",
+    );
+    expect(screen.getByPlaceholderText("答卷 ID")).toHaveValue("");
+  });
+
   it("empty queue + background poll failure keeps EmptyState + inline warning + refresh button", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     getMock.mockResolvedValueOnce({

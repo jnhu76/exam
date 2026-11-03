@@ -254,6 +254,7 @@ CLASSIFICATION (non-flake):  NOT_A_FLAKE | MISCLASSIFIED_AS_FLAKE
 | CASE-2026-09-24-MOBILE-RACE | REPAIRED | `getByText(...).first()` 命中 CSS 隐藏 mobile 卡片（4 轮全量 2 过 2 败） | YES | CAUSALLY_PROVEN（双峰观察 + role 断言修复） | PROVEN_UNRELATED（CONTROLLED_EXCLUSION：失败表达式为改动前既有代码，改动自身 diff 将其移除；机制在断言策略而非改动主题） | CAUSALLY_PROVEN | 2026-10-12 | 无 |
 | #98-examTransitions | CLOSED_NOT_REPRODUCED | `examTransitions.test.ts` file-schema 全套 8/14 失败（`waitForAuditCount` 1s 超时） | UNKNOWN（再未复现） | HYPOTHESIS（worker-database 实验期 `public.audit_logs` 瞬时污染） | UNKNOWN | NONE | 2026-10-12 | 无（复发再开） |
 | RUN-LEASE-OP-MODE | OPERATIONAL_CONSTRAINT（NOT_A_FLAKE） | 同 PG 并发两个 worker-database run：后启动方 run-lease 测试立即失败（错误即契约） | NO（给定操作模式必现） | CAUSALLY_PROVEN（契约设计 + 复现实验非对称签名） | 不适用 | 不适用 | 2026-10-12 | 无（串行执行即可） |
+| CASE-2026-11-03-CI-COVERAGE-BUDGETS | INVESTIGATING（修复待合并验证，#858） | CI coverage lane：readTrust R1 `editor not mounted`（vi.waitFor 默认 1000ms vs 冷 chunk 挂载 846ms–4.2s，Web 6/7 lane）；UsersPage 双表 `Found multiple elements`（InvitationsCard 晚挂载唯一性竞争）；QuestionPage C1 折叠链超 1000ms；API audit 导出 5/5（10,001 行契约 fixture > 5s）、auth 限流（11×argon2id+二次 buildTestApp 悬崖两侧）、httpSurface I6（体内冷 import 全路由图计入 5s）；共同放大器 = 4 forks/2 vCPU 超订 | YES | CAUSALLY_PROVEN（F1 探针分布操纵+修复前后；F3 列几何算术；F4/F5/F6 成本核算+悬崖两侧分布） | PROVEN_UNRELATED（受害文件在四 PR 分支均零改动，CONTROLLED_EXCLUSION） | CAUSALLY_PROVEN（机制级：固定预算<固有成本） | 2026-11-03 | fix/858-ci-coverage-flakes：WEB 预加载/定位修复/定点预算 + maxWorkers CI 4→2（既定步降政策）；API 静态提升 + 30s 每测预算；M5-post/H5-post 验证中 |
 
 未进入任何 case 的独立 occurrence 见 [Unresolved Occurrence Ledger](#unresolved-occurrence-ledger未解决的发生记录账本)。
 
@@ -1042,6 +1043,81 @@ PRESERVED = 三次 occurrence 的 OBSERVED_AT / GIT_SHA / COMMAND / EXECUTION_TO
   FAILED_FILE / FAILED_TEST / FAILURE_PHASE / FAILURE_CLASS / ERROR /
   AUTHORITATIVE_RUN_RESULT / RERUN_EVIDENCE / DIFF_RELATION / INTERPRETATION_AT_RECORD_TIME
   全部逐字保留；本记录只追加 `HISTORICAL_TEST_IDENTITY_STATUS` 字段
+```
+
+---
+
+### CASE-2026-11-03-CI-COVERAGE-BUDGETS — CI coverage lane 固定预算 < 操作固有成本族（readTrust R1 冷 chunk 挂载、UsersPage 双表唯一性、QuestionPage C1 折叠链、audit 导出上限、auth 限流器、httpSurface I6 体内冷 import）
+
+#### Status
+
+```text
+CASE_STATE = INVESTIGATING（修复已实施待合并验证；见 #858）
+CASE_CREATED_AT = 2026-11-03
+CASE_LAST_REVIEWED_AT = 2026-11-03
+CASE_LAST_MODIFIED_AT = 2026-11-03
+
+NONDETERMINISTIC = YES
+ROOT_CAUSE_CONFIDENCE = CAUSALLY_PROVEN（F1/R1：探针分布操纵 + 修复前后对比闭环；
+  F3/UsersPage：DOM+列几何算术证明；F5/httpSurface 与 F4/F6：CI 时长悬崖两侧分布 +
+  本地 2 核复现）— 逐 victim 分级见下
+CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED（CONTROLLED_EXCLUSION：四个 PR 分支均未改动
+  任何受害文件（git log master..<branch> -- <files> 为空）；同一签名在未含这四个 PR 的
+  master CI 历史与本地主干复现）
+AGGREGATION_BASIS = 机制级（同一缺陷类：测试侧固定预算 vi.waitFor 默认 1000ms /
+  testTimeout 默认 5000ms / 唯一性查询假设，遇上被测操作的固有成本分布——冷动态 chunk
+  import、10,001 行契约 fixture、11×argon2id+二次 buildTestApp、体内 await import 全路由
+  图、页面二级表晚挂载；共同放大器 = CI coverage lane 4 forks/2 vCPU 超订（并行比实测
+  3.64–3.68）。非"都超时""都在 coverage"的签名级聚合）
+AGGREGATION_CONFIDENCE = CAUSALLY_PROVEN（F1/F3 单独操纵证明；F4/F5/F6 成本分布在悬崖
+  两侧 + 机制可从源码逐 await 点核算）
+
+NATURAL_FAILURE_CAPTURED = YES（2026-11-02 原始轮 + 2026-11-03 rerun：Web 6/7 lane
+  R1 失败；API audit 导出 5/6、auth 限流 3、httpSurface I6 3——全部 GitHub Actions
+  权威 run，日志留存见 #858）
+COUNTERFACTUAL_EXECUTED = YES（本地探针矩阵 M1–M4：同代码仅操纵负载，冷挂载成本
+  846→4465ms 单调上升、对应 1000ms 预算越界率 1/20→20/20；M5-pre 全套件 2 核仿真
+  R1 5/5 失败 @1066–1274ms）
+```
+
+#### Mechanism（每 victim 裁决）
+
+```text
+F1 readTrust R1：vi.waitFor 默认 1000ms < 冷 lazy 编辑器 chunk（RichContentEditor 全
+  Tiptap 图）import+挂载固有成本——空载即 846–1012ms（20 次中 1 次越界！），coverage
+  ~1000–1090ms，2 核 ~1130ms，饱和 ~4.2s；文件内首个编辑器挂载独担冷成本，后续 warm
+  挂载 94–630ms 从不失败。PROVEN_ROOT_CAUSE（修复=模块加载期预加载 chunk，M5-post
+  验证）。
+F3 UsersPage ×2：users 数据落地后 InvitationsCard 挂自己的表（首表 data-geometry-basis
+  =708 = 邀请表 Σbasis 算术证明），findByRole("table") 唯一性假设与二级表挂载竞争 →
+  "Found multiple elements"。PROVEN_ROOT_CAUSE（修复=按行内容定位表，确定性）。
+F2 QuestionPage C1：两串行 GET+Select 依赖提交链 vs waitFor 默认 1000ms（预算到期时
+  最后一轮断言错误外显）。STRONGLY_SUPPORTED（修复=该点 5000ms 预算）。A12(d) 单次
+  10s 挂起：机制 UNKNOWN，登记观察不盲改。
+CoursePage B03：7 键真实按键+300ms 防抖+五次落定断言 ≈1.5–2s 固有 floor，CI 10s
+  guardrail 在最慢 lane 被越过（W6 @10221ms）。STRONGLY_SUPPORTED（修复=15s 每测预算，
+  同套件既有先例）。
+F4 audit 导出：契约即成本（10,001 插入 + 服务端取回 limit+1 行拒绝），CI 5/5 失败
+  5010–5487ms 非抛硬币。STRONGLY_SUPPORTED→H5 本地复现后闭环（修复=30s 每测预算，
+  仓库 durability 用例既有惯例）。
+F5 httpSurface I6：文件首消费者体内 await import 全应用图（fastify+27 路由+swagger）
+  计入 5s testTimeout；通过 4648/4961ms vs 失败 5084/5131/5516ms 悬崖两侧。修复=静态
+  提升 import（成本移出任何测试预算）。
+F6 auth 限流：二次 buildTestApp（fresh 内存限流器是被测对象）+11×argon2id；通过
+  4853/4972 vs 失败 5027ms。KDF 是安全属性不可缩减 → 30s 每测预算。
+```
+
+#### Fix package（fix/858-ci-coverage-flakes）
+
+```text
+WEB：readTrust 顶层 await 预加载 chunk；UsersPage 两处按行内容定位表；QuestionPage C1
+  5000ms 预算；CoursePage B03 15_000；vitest.config maxWorkers CI 4→2（本文件 web 配置
+  注释中既定步降政策："If flake reappears, step down to 2 (not 1) and record it in
+  docs/standards/test-flakes.md"——本条即该记录）。
+API：httpSurfaceAuthority 静态提升；audit 导出与 auth 限流 30_000 每测预算（与
+  admissions/publishResults durability 用例同惯例）。
+验证门槛：M5-post（CI=true 全套件 2 核 ×5）+ H5-post（worker-database 4worker 2 核
+  ×3）全绿；四个 PR 分支 CI 绿。证据链与图表：#858。
 ```
 
 ---
@@ -2841,6 +2917,14 @@ api/web 叠栈）；机制解释与本次登记一致（跨套件并行饱和，
 最先受害）。缓解从操作约定固化为 turbo 排序（`@exam/web#coverage` dependsOn
 `@exam/api#coverage`）；升级条款未触发（两次复发均在并行 lane，非串行执行）。
 
+2026-11-03 后续：第 3/4/5 次复发（GitHub Actions CI Web coverage，2026-11-02 原始轮 +
+2026-11-03 失败任务 rerun，6/7 lane 失败 @1061–1559ms，唯一通过 lane 恰为最快墙钟
+260.53s——#858）。机制由 HYPOTHESIS 升级 CAUSALLY_PROVEN：本地探针矩阵证明冷 chunk
+import+挂载固有成本 846–1012ms（空载！vi.waitFor 默认 1000ms 预算自始落在成本分布
+之内），coverage/2 核/饱和单调推高越界率至 100%；修复=测试文件模块加载期预加载 chunk
++ CI maxWorkers 步降 4→2。本案登记于 CASE-2026-11-03-CI-COVERAGE-BUDGETS；本条不改写
+上文 2026-10-08/10-24 记录时点的 INTERPRETATION（当时证据确为 HYPOTHESIS 级）。
+
 ---
 
 ### OBS-2026-10-23-001 — `recoveryRepo.test.ts` 单点 5s 超时（v0.0.10 发布审计本地 coverage；宿主 node 版本与 `.nvmrc` 偏差上下文）
@@ -3160,6 +3244,63 @@ AGGREGATION_CONFIDENCE = NONE
   `search_path=${schema},public`，理论上 `public` 污染可泄漏；若未来此类 flake 复发，
   值得调查是否去掉 `public` fallback 或让 worker-DB 模式跨模式切换时 flush `public`。
   这属于 ADR-007 test infra 范畴，非业务逻辑修复。
+
+---
+
+### OBS-2026-11-02-CI-WEB — 四个 obs PR 头的 CI Web coverage lane 多点失败（R1 第 3–5 次复发 + QuestionPage C1 + UsersPage ×2 + CoursePage B03）
+
+```text
+OBSERVED_AT = 2026-11-02 15:0x–15:4x UTC（原始轮）+ 2026-11-03 02:4x（失败任务 rerun）
+GIT_SHA = PR #853 ee92f14c / #850 6b20f96d / #851 3bb56810 / #852 1fe547fb（受害文件
+  在四个分支均与 master 5aa82f58 逐字节一致）
+COMMAND = pnpm --filter @exam/web coverage（GitHub Actions ubuntu-latest 2 vCPU，
+  forks maxWorkers=4/minWorkers=2，v8 coverage，testTimeout CI=10s）
+EXECUTION_TOPOLOGY = 全 web 套件 178–181 文件 / 4 fork / 2 vCPU（并行比实测 3.64–3.68）
+FAILED_FILE/TEST = ① RichTextAnswerInput.readTrust R1 positive control ×6 lane
+  （editor not mounted @1061–1559ms = vi.waitFor 默认 1000ms 到期）② QuestionPage
+  queryState C1 ×3（预算到期时末轮断言错误：元素在、内容空）+ A12(d) ×1（10s
+  testTimeout 挂起，机制 UNKNOWN）③ UsersPage renders/real-pagination ×3/×2
+  （Found multiple elements with role "table"——首表 data-geometry-basis=708）④
+  CoursePage B03 ×1（10s 到期 @10221ms）
+AUTHORITATIVE_RUN_RESULT = FAIL（6/7 Web lane；唯一通过 = PR-D rerun，恰最快墙钟）
+RERUN_EVIDENCE = rerun 未变绿（#853/#850/#851 Web lane 再失败同签名）→ "CI rerun
+  expected green" 被 #858 立案反驳
+DIFF_RELATION = PROVEN_UNRELATED（受害文件零改动 + master 本地多次全绿 + 同签名
+  master 历史先例 OBS-2026-10-08-003/1024-001）
+TRACE_AVAILABLE = YES（11 份 job 日志全量留存；本地 M1–M5 探针/全套件仿真留存 #858）
+NONDETERMINISM_CONFIRMED = YES
+INTERPRETATION_AT_RECORD_TIME / CURRENT_INTERPRETATION = CASE-2026-11-03-CI-COVERAGE-
+  BUDGETS（CAUSALLY_PROVEN：固定预算 < 固有成本分布；含每 victim 分级）
+CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED
+```
+
+---
+
+### OBS-2026-11-02-CI-API — 同批 CI API coverage lane 三签名 5s 超时（audit 导出上限 / auth 登录限流 / httpSurface I6）
+
+```text
+OBSERVED_AT = 2026-11-02 15:0x–15:2x UTC（原始轮：PR #850/#851/#852 API lane）+
+  2026-11-03 02:4x（rerun：#851/#852 API lane；#850/#853 API rerun 通过）
+GIT_SHA = 同上四 PR 头
+COMMAND = TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter
+  @exam/api coverage（postgres:18 + redis:7 服务容器）
+EXECUTION_TOPOLOGY = 224 文件 / 4 fork / 2 vCPU；每 worker 独立槽位库 exam_test_w1..w4
+  （无跨 worker 行锁）；testTimeout 未配置 → 默认 5000ms
+FAILED_FILE/TEST = ① audit.test.ts:841 导出上限拒绝 ×5/6 lane（5010–5487ms——非随机，
+  每次越界）② auth.test.ts:126 登录限流 ×3（5027ms；通过 lane 4853/4972ms——悬崖
+  两侧）③ httpSurfaceAuthority.test.ts:96 I6 ×3（仅原始轮；通过 4648/4961ms vs 失败
+  5084/5131/5516ms——文件首消费者体内 await import 全应用图计入 5s）
+AUTHORITATIVE_RUN_RESULT = FAIL
+RERUN_EVIDENCE = #851/#852 API rerun 同签名再失败（audit+auth）；I6 rerun 0 次失败
+  （分布左移入预算内）
+DIFF_RELATION = PROVEN_UNRELATED（三受害测试均非四 PR 改动文件；BUG-FLAKE-001 两个
+  已修复机制不匹配——本案无 schema 泄漏/槽位错绑，worker-database 隔离完好）
+TRACE_AVAILABLE = YES（job 日志含逐用例时长；本地 H5 2 核 4-worker 复现 lane 留存）
+NONDETERMINISM_CONFIRMED = YES（F5 悬崖两侧；F4 接近必现）
+CURRENT_INTERPRETATION = CASE-2026-11-03-CI-COVERAGE-BUDGETS（固定 5s testTimeout <
+  契约性 fixture/安全 KDF/冷 import 固有成本；4 worker/2 vCPU 为放大器）
+CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED
+```
 
 ---
 
