@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
@@ -844,6 +844,174 @@ describe("AttemptDetailPage", () => {
     );
     expect(screen.getByText("answer_autosave_failed")).toBeInTheDocument();
     expect(screen.queryByText("加载遥测时间线失败")).not.toBeInTheDocument();
+  });
+
+  it("a >50-event history loads the 50-row first page and appends the 51st on Load More", async () => {
+    const makeEvent = (i: number) => ({
+      id: `tel-${i}`,
+      serverRecordedAt: "2026-06-23T08:06:00.000Z",
+      occurredAt: "2026-06-23T08:06:00.000Z",
+      name: i === 50 ? "oldest_event" : "answer_saved",
+      level: "info",
+      kind: "exam_telemetry",
+      metadata: {},
+      source: "client_event",
+    });
+    const firstPage = {
+      items: Array.from({ length: 50 }, (_, i) => makeEvent(i)),
+      total: 51,
+      page: 1,
+      pageSize: 50,
+      totalPages: 2,
+    };
+    const secondPage = {
+      items: [makeEvent(50)],
+      total: 51,
+      page: 2,
+      pageSize: 50,
+      totalPages: 2,
+    };
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return url.includes("page=2") ? secondPage : firstPage;
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    // The default 50-row page is a PARTIAL view of 51 rows: the footer says
+    // exactly that instead of silently presenting 50 as the full history.
+    expect(
+      await screen.findByText("已显示 50 / 51 条事件"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("仅显示最近 50 条事件，更早证据需加载"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "加载更早事件" }));
+
+    // Page 2 supplies the 51st (oldest) event; the first 50 stay mounted.
+    expect(await screen.findByText("oldest_event")).toBeInTheDocument();
+    expect(screen.getAllByText("answer_saved")).toHaveLength(50);
+    await waitFor(() =>
+      expect(screen.getByText("已显示 51 / 51 条事件")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "加载更早事件" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switching to another attempt refetches telemetry from page 1 and drops the previous attempt's rows", async () => {
+    const telemetryFor = (attemptId: string) => ({
+      items: [
+        {
+          id: `tel-${attemptId}`,
+          serverRecordedAt: "2026-06-23T08:06:00.000Z",
+          occurredAt: "2026-06-23T08:06:00.000Z",
+          name: `telemetry_${attemptId}`,
+          level: "info",
+          kind: "exam_telemetry",
+          metadata: {},
+          source: "client_event",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return url.includes("attempt-2")
+          ? telemetryFor("attempt-2")
+          : telemetryFor("attempt-1");
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      if (typeof url === "string" && url.includes("attempt-2")) {
+        return { ...mockGradedResult, attemptId: "attempt-2" };
+      }
+      return mockGradedResult;
+    });
+
+    function SwitchAttempt() {
+      const navigate = useNavigate();
+      return (
+        <button
+          type="button"
+          onClick={() => navigate("/admin/attempts/attempt-2")}
+        >
+          switch-attempt
+        </button>
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={["/admin/attempts/attempt-1"]}>
+        <AuthProvider
+          initialUser={{
+            id: "1",
+            username: "actor",
+            name: "Actor",
+            role: "Admin",
+            organizationId: "org1",
+            capabilities: [...permissionsForRole("Admin")],
+          }}
+        >
+          <BrandProvider>
+            <SwitchAttempt />
+            <Routes>
+              <Route
+                path="/admin/attempts/:id"
+                element={<AttemptDetailPage />}
+              />
+            </Routes>
+          </BrandProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("telemetry_attempt-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "switch-attempt" }));
+
+    expect(await screen.findByText("telemetry_attempt-2")).toBeInTheDocument();
+    expect(screen.queryByText("telemetry_attempt-1")).not.toBeInTheDocument();
+    // The new attempt starts its own paging at page 1: the refetch carries
+    // no page parameter, never the previous attempt's next page.
+    const telemetryCalls = apiGet.mock.calls
+      .map((c) => c[0])
+      .filter(
+        (u): u is string =>
+          typeof u === "string" && u.includes("/proctor-events"),
+      );
+    const lastCall = telemetryCalls[telemetryCalls.length - 1]!;
+    expect(lastCall).toContain(
+      "/api/admin/attempts/attempt-2/proctor-events?limit=50",
+    );
+    expect(lastCall).not.toContain("page=");
+  });
+
+  it("an empty timeline shows the empty state, not a truncated-history footer", async () => {
+    mockFullTimeline(mockGradedResult, {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      totalPages: 0,
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(await screen.findByText("暂无遥测事件")).toBeInTheDocument();
+    expect(screen.queryByText(/^已显示/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "加载更早事件" }),
+    ).not.toBeInTheDocument();
   });
 
   it("StrictMode double-mount and delayed settle keep the telemetry fetch bounded (no recursive fetch loop)", async () => {

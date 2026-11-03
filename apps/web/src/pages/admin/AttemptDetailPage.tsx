@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { plainTextProjection } from "@exam/domain";
@@ -599,6 +599,13 @@ export function AttemptDetailPage() {
   const [telemetryTotalPages, setTelemetryTotalPages] = useState(0);
   const [telemetryTotal, setTelemetryTotal] = useState(0);
   const [telemetryLoadingMore, setTelemetryLoadingMore] = useState(false);
+  // Stale-response guard for the telemetry fetch/append: a response issued for
+  // a PREVIOUS attempt must never write rows, pagination metadata, or an error
+  // into the next attempt's section after a route change. The ref records the
+  // attempt id the in-flight request belongs to; a late response whose scope
+  // no longer matches is dropped. (The result/timeline loads are single-shot
+  // and replace their state wholesale, so they do not need this.)
+  const telemetryScopeRef = useRef<string | null>(null);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [flagSeverity, setFlagSeverity] = useState<"warning" | "serious">(
     "warning",
@@ -714,21 +721,26 @@ export function AttemptDetailPage() {
 
   const loadTelemetry = useCallback(async () => {
     if (!id) return;
+    // Claim the scope: any response still in flight for a previous attempt
+    // now fails its scope check below and is dropped.
+    telemetryScopeRef.current = id;
     setTelemetryLoading(true);
     setTelemetryError(false);
     setTelemetry(null);
+    setTelemetryLoadingMore(false);
     try {
       const data = await api.get<ProctorAttemptEventListResponse>(
         `/api/admin/attempts/${id}/proctor-events?limit=50`,
       );
+      if (telemetryScopeRef.current !== id) return;
       setTelemetry(data.items);
       setTelemetryPage(data.page);
       setTelemetryTotalPages(data.totalPages);
       setTelemetryTotal(data.total);
     } catch {
-      setTelemetryError(true);
+      if (telemetryScopeRef.current === id) setTelemetryError(true);
     } finally {
-      setTelemetryLoading(false);
+      if (telemetryScopeRef.current === id) setTelemetryLoading(false);
     }
   }, [id]);
 
@@ -742,16 +754,19 @@ export function AttemptDetailPage() {
    * (`telemetryLoading` is not toggled — the section keeps rendering the
    * loaded evidence), and a failed fetch leaves the rows intact. Rows are
    * deduplicated by event id on append so a timeline that shifted between
-   * page fetches cannot produce duplicate React keys.
+   * page fetches cannot produce duplicate React keys. A response whose
+   * attempt scope no longer matches is dropped (route change).
    */
   const loadMoreTelemetry = useCallback(async () => {
     if (!id || telemetryLoadingMore) return;
     const nextPage = telemetryPage + 1;
+    const scope = telemetryScopeRef.current;
     setTelemetryLoadingMore(true);
     try {
       const data = await api.get<ProctorAttemptEventListResponse>(
         `/api/admin/attempts/${id}/proctor-events?limit=50&page=${nextPage}`,
       );
+      if (telemetryScopeRef.current !== scope) return;
       setTelemetry((prev) => {
         const seen = new Set((prev ?? []).map((event) => event.id));
         return [
@@ -765,9 +780,11 @@ export function AttemptDetailPage() {
     } catch {
       // Keep the already-visible rows; the fetch failure is surfaced as a
       // toast, not by replacing the loaded evidence with an error state.
-      toast.error(t("admin.attemptDetail.telemetry.loadMoreFailed"));
+      if (telemetryScopeRef.current === scope) {
+        toast.error(t("admin.attemptDetail.telemetry.loadMoreFailed"));
+      }
     } finally {
-      setTelemetryLoadingMore(false);
+      if (telemetryScopeRef.current === scope) setTelemetryLoadingMore(false);
     }
   }, [id, telemetryLoadingMore, telemetryPage, t]);
 
