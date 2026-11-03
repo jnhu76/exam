@@ -11,7 +11,10 @@
 /**
  * Keys whose values must never be persisted. Matched case-insensitively and as
  * substrings so variants like `authToken`, `userPassword`, `answerText` are all
- * caught. Covers credentials, auth material, and exam content.
+ * caught. Covers credentials, auth material, and exam content, plus exception
+ * carriers (`message` / `stack` / `cause` / `url`): raw exception text can
+ * embed answers, tokens, or URL query strings, so any key carrying it is
+ * redacted wherever such a substring appears.
  */
 const DENYLIST_SUBSTRINGS = [
   "password",
@@ -25,7 +28,20 @@ const DENYLIST_SUBSTRINGS = [
   "content",
   "body",
   "questiontext",
+  "message",
+  "stack",
+  "cause",
+  "url",
 ];
+
+/**
+ * Keys matched exactly (case-insensitive) rather than as substrings. The bare
+ * `error` / `err` keys carry raw exception values when used intuitively
+ * (`{ error: err }`), but substring matching would also deny the
+ * `errorCode` / `errorName` stable machine-code channel that failure
+ * telemetry contractually relies on — so only the exact key names are denied.
+ */
+const DENYLIST_EXACT = ["error", "err"];
 
 /** Placeholder substituted for redacted values. */
 const REDACTED = "[redacted]";
@@ -33,10 +49,13 @@ const REDACTED = "[redacted]";
 /** Maximum nesting depth walked when redacting; deeper values are pruned. */
 const MAX_DEPTH = 5;
 
-/** Returns true if a key name matches any denylisted substring. */
+/** Returns true if a key name matches any denylisted substring or exact key. */
 function isDenylisted(key: string): boolean {
   const lower = key.toLowerCase();
-  return DENYLIST_SUBSTRINGS.some((sub) => lower.includes(sub));
+  return (
+    DENYLIST_SUBSTRINGS.some((sub) => lower.includes(sub)) ||
+    DENYLIST_EXACT.includes(lower)
+  );
 }
 
 /**

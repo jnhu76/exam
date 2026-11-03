@@ -129,6 +129,60 @@ describe("ClientEventBuffer", () => {
     expect(buf.size).toBe(2);
   });
 
+  it("pagehide flush bypasses the backoff window (best-effort unload send)", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("u1"));
+    await buf.flush(); // fails → backoff set
+    expect(buf.currentBackoffForTest()).toBeGreaterThan(0);
+
+    // A regular flush during the backoff window is still skipped.
+    buf.push(makeEvent("u2"));
+    await expect(buf.flush()).resolves.toBe(0);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    // The pagehide lifecycle flush sends despite the backoff window — a
+    // candidate closing the tab during backoff must not lose the batch.
+    window.dispatchEvent(new Event("pagehide"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("successful pagehide flush clears the backoff window", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("r1"));
+    await buf.flush();
+    expect(buf.currentBackoffForTest()).toBeGreaterThan(0);
+
+    window.dispatchEvent(new Event("pagehide"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(buf.currentBackoffForTest()).toBe(0);
+    expect(buf.size).toBe(0);
+  });
+
+  it("visibilitychange hidden flush still respects the backoff window", async () => {
+    const send = vi.fn().mockResolvedValue(false);
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("v1"));
+    await buf.flush();
+    expect(send).toHaveBeenCalledTimes(1);
+
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    window.dispatchEvent(new Event("visibilitychange"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Only pagehide bypasses the backoff; a mere tab-hide does not.
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it("grows backoff exponentially across consecutive failures", async () => {
     // Exponential backoff: each consecutive failure roughly doubles the wait.
     // Assert on the COMPUTED backoff (pure function of consecutiveFailures),

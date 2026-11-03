@@ -55,7 +55,14 @@ export function StartExamPage() {
         `/api/candidate/exams/${examId}`,
       );
       setExam(data);
-    } catch {
+    } catch (err) {
+      // Candidate entry-point load failure: the toast/error state is
+      // ephemeral, so record one warn with the stable error code (#800).
+      trackExamEvent(
+        "exam_detail_load_failed",
+        { errorCode: err instanceof ApiError ? err.code : "UNKNOWN" },
+        { examId, level: "warn" },
+      );
       setError(t("startExam.errors.loadFailed"));
     } finally {
       setIsLoading(false);
