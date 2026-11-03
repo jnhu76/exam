@@ -37,9 +37,23 @@ jobs:
         with:
           persist-credentials: false
           # The docs build verifies every pinned permalink with `git cat-file`.
-          # Both pins (product evidence 511e6e60, docs commit 41aa147c) are
-          # within the recent master history; depth 20 keeps that bounded.
+          # Both pins are fetched explicitly in the next step, so this depth
+          # only bounds the ordinary build inputs — it is NOT a pin guard.
           fetch-depth: 20
+
+      - name: Fetch pinned documentation commits
+        # A shallow checkout silently drops a pin as master advances, which
+        # fails docs:build for changes unrelated to the pins. Fetch both pins
+        # by SHA so the check never depends on the shallow boundary. The pins
+        # are read from their single authority (docs-site/shared/version.mjs),
+        # not duplicated here; the repository is public, so the post-checkout
+        # fetch needs no credentials.
+        run: |
+          product_sha="$(sed -n 's/^export const PRODUCT_SHA = "\([0-9a-f]*\)";/\1/p' docs-site/shared/version.mjs)"
+          docs_sha="$(sed -n 's/^export const DOCS_SHA = "\([0-9a-f]*\)";/\1/p' docs-site/shared/version.mjs)"
+          test -n "$product_sha"
+          test -n "$docs_sha"
+          git fetch --no-tags --depth=1 origin "$product_sha" "$docs_sha"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
