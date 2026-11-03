@@ -1,5 +1,6 @@
+import { StrictMode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
@@ -67,6 +68,10 @@ function renderPage(
         <BrandProvider>
           <Routes>
             <Route path="/admin/attempts/:id" element={<AttemptDetailPage />} />
+            <Route
+              path="/admin/recovery/attempts/:attemptId"
+              element={<div data-testid="recovery-attempt-stub" />}
+            />
           </Routes>
         </BrandProvider>
       </AuthProvider>
@@ -530,7 +535,12 @@ describe("AttemptDetailPage", () => {
       if (typeof url === "string" && url.includes("/timeline")) {
         return timeline;
       }
-      // Any non-timeline GET (i.e. the score read) is a contract violation
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        // Same attempt.timeline.view capability as the audit timeline — the
+        // telemetry timeline composes for the timeline-only caller too.
+        return { items: [], total: 0, page: 1, pageSize: 50, totalPages: 0 };
+      }
+      // Any other GET (i.e. the score read) is a contract violation
       // for the timeline-only caller — fail loudly instead of returning data.
       throw new Error(`unexpected privileged request: ${url}`);
     });
@@ -547,12 +557,15 @@ describe("AttemptDetailPage", () => {
     expect(await screen.findByText("开始答题")).toBeInTheDocument();
 
     // The result fetch was never issued — page reachability must not mint a
-    // guaranteed-403 request.
+    // guaranteed-403 request. The two timeline reads it DOES emit (audit +
+    // telemetry) share the attempt.timeline.view capability this caller holds.
     await waitFor(() => {
-      expect(apiGet).toHaveBeenCalledTimes(1);
+      expect(apiGet).toHaveBeenCalledTimes(2);
     });
-    expect(apiGet.mock.calls[0]![0]).toBe(
-      "/api/admin/attempts/attempt-1/timeline",
+    const timelineUrls = apiGet.mock.calls.map((c) => c[0] as string);
+    expect(timelineUrls).toContain("/api/admin/attempts/attempt-1/timeline");
+    expect(timelineUrls).toContain(
+      "/api/admin/attempts/attempt-1/proctor-events?limit=50",
     );
     expect(apiPost).not.toHaveBeenCalled();
 
@@ -617,5 +630,478 @@ describe("AttemptDetailPage", () => {
     expect(
       screen.getByRole("button", { name: "标记违规" }),
     ).toBeInTheDocument();
+  });
+
+  // ── #800 PR-C A3-F1: telemetry timeline section ────────────────────
+  // After submit/grade the monitoring list drops the attempt, but the 30-day
+  // proctor-events telemetry (client_events + audit merge) stays queryable.
+  // The attempt detail page must surface it so a save-failure complaint three
+  // days later is answerable from the UI instead of a hand-rolled API call.
+  // Source provenance stays visible: client rows are ADVISORY telemetry,
+  // audit rows are the authoritative record.
+
+  function mockFullTimeline(result: unknown, telemetry: unknown) {
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return telemetry;
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return result;
+    });
+  }
+
+  // Shapes mirror the server projection (proctorMonitoringService.ts): the
+  // raw client_events.metadata blob never reaches the wire — only the
+  // allowlisted keys do. `answer_autosave_failed` carries the stable
+  // questionId/saveMode/durationMs/errorCode category codes, NOT raw content.
+  // `serverRecordedAt` is the server-owned receive instant (ordering
+  // authority); `occurredAt` is the source-specific display instant.
+  const mockTelemetry = {
+    items: [
+      {
+        id: "tel-1",
+        serverRecordedAt: "2026-06-23T08:06:00.000Z",
+        occurredAt: "2026-06-23T08:05:00.000Z",
+        name: "answer_autosave_failed",
+        level: "error",
+        kind: "exam_telemetry",
+        metadata: {
+          questionId: "q1",
+          saveMode: "auto",
+          durationMs: 1500,
+          errorCode: "SAVE_NETWORK_TIMEOUT",
+        },
+        source: "client_event",
+      },
+      {
+        id: "tel-2",
+        serverRecordedAt: "2026-06-23T08:30:00.000Z",
+        occurredAt: "2026-06-23T08:30:00.000Z",
+        name: "force_submit",
+        level: "warn",
+        kind: "proctor",
+        metadata: {},
+        source: "audit_log",
+      },
+    ],
+    total: 2,
+    page: 1,
+    pageSize: 50,
+    totalPages: 1,
+  };
+
+  it("renders the telemetry timeline with save-failure evidence and source-distinct rows", async () => {
+    mockFullTimeline(mockGradedResult, mockTelemetry);
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(await screen.findByText("遥测时间线")).toBeInTheDocument();
+    // Save-failure evidence is visible: the event name + allowlisted stable
+    // codes (category identifiers), even after the attempt is graded.
+    expect(screen.getByText("answer_autosave_failed")).toBeInTheDocument();
+    expect(screen.getByText(/SAVE_NETWORK_TIMEOUT/)).toBeInTheDocument();
+    // Provenance is rendered per row from `source` — advisory client
+    // telemetry vs authoritative audit rows stay distinguishable.
+    expect(screen.getByText("前端遥测")).toBeInTheDocument();
+    expect(screen.getByText("审计记录")).toBeInTheDocument();
+  });
+
+  it("shows the server receive instant as the primary row time and only client rows carry the client claim", async () => {
+    mockFullTimeline(mockGradedResult, mockTelemetry);
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    await screen.findByText("遥测时间线");
+
+    // Row-level proof (global getByText would over-match ancestor text):
+    // the client row carries BOTH the server receive instant (first) and the
+    // client claim; the audit row carries only the server instant.
+    const clientRow = screen
+      .getByText("answer_autosave_failed")
+      .closest("div")!;
+    const clientText = clientRow.textContent ?? "";
+    expect(clientText).toMatch(/服务端接收.*客户端声明/);
+
+    const auditRow = screen.getByText("force_submit").closest("div")!;
+    const auditText = auditRow.textContent ?? "";
+    expect(auditText).toContain("服务端接收");
+    expect(auditText).not.toContain("客户端声明");
+  });
+
+  it("Load More appends the next page, keeps loaded rows, and updates the shown/total footer", async () => {
+    const pageOne = {
+      items: [mockTelemetry.items[0]!],
+      total: 2,
+      page: 1,
+      pageSize: 1,
+      totalPages: 2,
+    };
+    const pageTwo = {
+      items: [
+        {
+          id: "tel-old",
+          serverRecordedAt: "2026-06-23T08:00:00.000Z",
+          occurredAt: "2026-06-23T08:00:00.000Z",
+          name: "answer_saved",
+          level: "info",
+          kind: "exam_telemetry",
+          metadata: {},
+          source: "client_event",
+        },
+      ],
+      total: 2,
+      page: 2,
+      pageSize: 1,
+      totalPages: 2,
+    };
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return url.includes("page=2") ? pageTwo : pageOne;
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(
+      await screen.findByText("answer_autosave_failed"),
+    ).toBeInTheDocument();
+    // Partial view is stated explicitly: 1 of 2 server rows is on screen.
+    expect(screen.getByText("已显示 1 / 2 条事件")).toBeInTheDocument();
+    expect(
+      screen.getByText("仅显示最近 1 条事件，更早证据需加载"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "加载更早事件" }));
+
+    // The older page is appended — the already-loaded row stays mounted.
+    expect(await screen.findByText("answer_saved")).toBeInTheDocument();
+    expect(screen.getByText("answer_autosave_failed")).toBeInTheDocument();
+    // With the final page loaded, the footer reports full coverage and the
+    // Load-More affordance retires.
+    await waitFor(() =>
+      expect(screen.getByText("已显示 2 / 2 条事件")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "加载更早事件" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("仅显示最近 2 条事件，更早证据需加载"),
+    ).not.toBeInTheDocument();
+    // The append fetch targeted the NEXT page explicitly.
+    expect(
+      apiGet.mock.calls.some(
+        (c) =>
+          typeof c[0] === "string" &&
+          c[0].includes("/proctor-events?limit=50&page=2"),
+      ),
+    ).toBe(true);
+  });
+
+  it("a failed Load More keeps the already-loaded rows and offers the retry again", async () => {
+    const pageOne = {
+      items: [mockTelemetry.items[0]!],
+      total: 2,
+      page: 1,
+      pageSize: 1,
+      totalPages: 2,
+    };
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        if (url.includes("page=2")) throw new Error("older page failed");
+        return pageOne;
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(
+      await screen.findByText("answer_autosave_failed"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "加载更早事件" }));
+
+    // The failed fetch does NOT replace loaded evidence with the error state:
+    // the row and the Load-More affordance remain available.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "加载更早事件" }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("answer_autosave_failed")).toBeInTheDocument();
+    expect(screen.queryByText("加载遥测时间线失败")).not.toBeInTheDocument();
+  });
+
+  it("a >50-event history loads the 50-row first page and appends the 51st on Load More", async () => {
+    const makeEvent = (i: number) => ({
+      id: `tel-${i}`,
+      serverRecordedAt: "2026-06-23T08:06:00.000Z",
+      occurredAt: "2026-06-23T08:06:00.000Z",
+      name: i === 50 ? "oldest_event" : "answer_saved",
+      level: "info",
+      kind: "exam_telemetry",
+      metadata: {},
+      source: "client_event",
+    });
+    const firstPage = {
+      items: Array.from({ length: 50 }, (_, i) => makeEvent(i)),
+      total: 51,
+      page: 1,
+      pageSize: 50,
+      totalPages: 2,
+    };
+    const secondPage = {
+      items: [makeEvent(50)],
+      total: 51,
+      page: 2,
+      pageSize: 50,
+      totalPages: 2,
+    };
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return url.includes("page=2") ? secondPage : firstPage;
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    // The default 50-row page is a PARTIAL view of 51 rows: the footer says
+    // exactly that instead of silently presenting 50 as the full history.
+    expect(
+      await screen.findByText("已显示 50 / 51 条事件"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("仅显示最近 50 条事件，更早证据需加载"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "加载更早事件" }));
+
+    // Page 2 supplies the 51st (oldest) event; the first 50 stay mounted.
+    expect(await screen.findByText("oldest_event")).toBeInTheDocument();
+    expect(screen.getAllByText("answer_saved")).toHaveLength(50);
+    await waitFor(() =>
+      expect(screen.getByText("已显示 51 / 51 条事件")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "加载更早事件" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switching to another attempt refetches telemetry from page 1 and drops the previous attempt's rows", async () => {
+    const telemetryFor = (attemptId: string) => ({
+      items: [
+        {
+          id: `tel-${attemptId}`,
+          serverRecordedAt: "2026-06-23T08:06:00.000Z",
+          occurredAt: "2026-06-23T08:06:00.000Z",
+          name: `telemetry_${attemptId}`,
+          level: "info",
+          kind: "exam_telemetry",
+          metadata: {},
+          source: "client_event",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return url.includes("attempt-2")
+          ? telemetryFor("attempt-2")
+          : telemetryFor("attempt-1");
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return { events: [] };
+      }
+      if (typeof url === "string" && url.includes("attempt-2")) {
+        return { ...mockGradedResult, attemptId: "attempt-2" };
+      }
+      return mockGradedResult;
+    });
+
+    function SwitchAttempt() {
+      const navigate = useNavigate();
+      return (
+        <button
+          type="button"
+          onClick={() => navigate("/admin/attempts/attempt-2")}
+        >
+          switch-attempt
+        </button>
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={["/admin/attempts/attempt-1"]}>
+        <AuthProvider
+          initialUser={{
+            id: "1",
+            username: "actor",
+            name: "Actor",
+            role: "Admin",
+            organizationId: "org1",
+            capabilities: [...permissionsForRole("Admin")],
+          }}
+        >
+          <BrandProvider>
+            <SwitchAttempt />
+            <Routes>
+              <Route
+                path="/admin/attempts/:id"
+                element={<AttemptDetailPage />}
+              />
+            </Routes>
+          </BrandProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("telemetry_attempt-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "switch-attempt" }));
+
+    expect(await screen.findByText("telemetry_attempt-2")).toBeInTheDocument();
+    expect(screen.queryByText("telemetry_attempt-1")).not.toBeInTheDocument();
+    // The new attempt starts its own paging at page 1: the refetch carries
+    // no page parameter, never the previous attempt's next page.
+    const telemetryCalls = apiGet.mock.calls
+      .map((c) => c[0])
+      .filter(
+        (u): u is string =>
+          typeof u === "string" && u.includes("/proctor-events"),
+      );
+    const lastCall = telemetryCalls[telemetryCalls.length - 1]!;
+    expect(lastCall).toContain(
+      "/api/admin/attempts/attempt-2/proctor-events?limit=50",
+    );
+    expect(lastCall).not.toContain("page=");
+  });
+
+  it("an empty timeline shows the empty state, not a truncated-history footer", async () => {
+    mockFullTimeline(mockGradedResult, {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      totalPages: 0,
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(await screen.findByText("暂无遥测事件")).toBeInTheDocument();
+    expect(screen.queryByText(/^已显示/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "加载更早事件" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("StrictMode double-mount and delayed settle keep the telemetry fetch bounded (no recursive fetch loop)", async () => {
+    mockFullTimeline(mockGradedResult, mockTelemetry);
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={["/admin/attempts/attempt-1"]}>
+          <AuthProvider
+            initialUser={{
+              id: "1",
+              username: "actor",
+              name: "Actor",
+              role: "Admin",
+              organizationId: "org1",
+              capabilities: [...permissionsForRole("Admin")],
+            }}
+          >
+            <BrandProvider>
+              <Routes>
+                <Route
+                  path="/admin/attempts/:id"
+                  element={<AttemptDetailPage />}
+                />
+              </Routes>
+            </BrandProvider>
+          </AuthProvider>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    await screen.findByText("成绩概览");
+    await screen.findByText("遥测时间线");
+
+    const telemetryCalls = () =>
+      apiGet.mock.calls.filter(
+        (c) => typeof c[0] === "string" && c[0].includes("/proctor-events"),
+      ).length;
+    // StrictMode double-invokes the mount effect — one fetch per mount, and
+    // a settled tree must NOT keep issuing more (a fetch-in-render or
+    // dependency loop would grow this without bound).
+    await waitFor(() => expect(telemetryCalls()).toBe(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(telemetryCalls()).toBe(2);
+    // Each event renders exactly once — no duplicated rows from re-entry.
+    expect(screen.getAllByText("answer_autosave_failed").length).toBe(1);
+    expect(screen.getAllByText("force_submit").length).toBe(1);
+  });
+
+  it("telemetry load failure shows its own retryable error without breaking the audit timeline", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        throw new Error("telemetry fail");
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return mockTimelineEvents;
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    expect(await screen.findByText("加载遥测时间线失败")).toBeInTheDocument();
+    // The audit timeline section stays independent and rendered.
+    expect(screen.getByText("答卷时间线")).toBeInTheDocument();
+    expect(screen.getByText("开始答题")).toBeInTheDocument();
+  });
+
+  // ── #800 PR-C A3-F7: recovery-archive deep link ────────────────────
+  // The attempt detail page only offered navigate(-1) — an admin landing on
+  // a graded attempt could not jump into the Recovery archive (full ledger /
+  // interruption episodes / related incidents). The link composes per
+  // capability (IncidentRecoveryView — the recovery route gate), so a
+  // timeline-only Proctor set never sees a dead affordance.
+
+  it("renders the recovery-archive deep link for an Admin and navigates to the recovery attempt route", async () => {
+    mockFullTimeline(mockGradedResult, {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      totalPages: 0,
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    fireEvent.click(screen.getByRole("button", { name: "恢复档案" }));
+    expect(
+      await screen.findByTestId("recovery-attempt-stub"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render the recovery-archive link for a timeline-only capability set", async () => {
+    mockTimelineOnly({ events: [] });
+    renderPage("attempt-1", proctorActor);
+
+    expect(await screen.findByText("答卷时间线")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "恢复档案" })).toBeNull();
   });
 });

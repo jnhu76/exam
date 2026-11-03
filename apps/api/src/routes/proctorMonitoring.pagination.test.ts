@@ -159,6 +159,7 @@ describe("proctor timeline pagination (M2 corrective)", () => {
       id: string;
       name: string;
       source: string;
+      serverRecordedAt: string;
       occurredAt: string;
     }>;
     total: number;
@@ -222,8 +223,12 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     expect(page1.items).toHaveLength(2);
     expect(page1.items[0]!.name).toBe("p2_C5");
     expect(page1.items[0]!.source).toBe("client_event");
+    // The client row projects its server RECEIVE instant (not its claim).
+    expect(page1.items[0]!.serverRecordedAt).toBe(minute(50).toISOString());
     expect(page1.items[1]!.name).toBe("grant_time");
     expect(page1.items[1]!.source).toBe("audit_log");
+    // Audit rows project the audit row's own server instant.
+    expect(page1.items[1]!.serverRecordedAt).toBe(minute(40).toISOString());
 
     // limit=2 page=2 → C3, A2
     const page2 = await fetchTimeline(2, 2);
@@ -286,6 +291,11 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     // claim does not reorder the timeline but is still projected on the row.
     const futuro = all.items.find((i) => i.name === "p3_Cfuturo")!;
     expect(futuro.occurredAt).toBe("2099-01-01T00:00:00.000Z");
+    // The ordering/display authority is the server RECEIVE instant, which the
+    // adversarial 2099 claim cannot touch: serverRecordedAt is the seeded
+    // receivedAt while occurredAt stays the claim.
+    expect(futuro.serverRecordedAt).toBe(minute(1).toISOString());
+    expect(futuro.serverRecordedAt).not.toBe(futuro.occurredAt);
   });
 
   // P4: irrelevant audit actions — audit rows with non-timeline actions must

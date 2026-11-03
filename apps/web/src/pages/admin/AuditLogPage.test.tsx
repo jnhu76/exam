@@ -8,6 +8,14 @@ import { BrandProvider } from "@/components/layout/BrandProvider";
 import { AuditLogPage } from "./AuditLogPage";
 import { permissionsForRole } from "@exam/authz";
 
+const { downloadFileMock } = vi.hoisted(() => ({
+  downloadFileMock: vi.fn(),
+}));
+
+vi.mock("@/lib/download", () => ({
+  downloadFile: (...args: unknown[]) => downloadFileMock(...args),
+}));
+
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
     readonly status: number;
@@ -221,6 +229,7 @@ function renderPage() {
 describe("AuditLogPage", () => {
   beforeEach(() => {
     getMock.mockReset();
+    downloadFileMock.mockReset();
     mockApi();
   });
 
@@ -480,5 +489,106 @@ describe("AuditLogPage", () => {
       const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
       expect(lastCall).toContain("action=attempt.timeGrant");
     });
+  });
+
+  // ── #800 PR-C A3-F2: exact-ID filters + complete target vocabulary ──────
+  // The backend filter chain accepts targetId/actorId exactly (audit.ts
+  // buildAuditFilter), but the UI only sent action/targetType/from/to —
+  // "what did admin X do" and "which operations touched this exam" were
+  // impossible from the UI. The target-type dropdown also lacked most of the
+  // target types the backend actually writes (course/login/incident/…).
+
+  it("sends targetId query param when the target-id filter is committed", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("管理员张三");
+
+    const input = screen.getByRole("textbox", { name: "对象 ID" });
+    await user.type(input, "exam-1");
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain("targetId=exam-1");
+    });
+  });
+
+  it("sends actorId query param when the actor-id filter is committed", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("管理员张三");
+
+    const input = screen.getByRole("textbox", { name: "操作者 ID" });
+    await user.type(input, "admin-1");
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain("actorId=admin-1");
+    });
+  });
+
+  it("carries targetId/actorId into the CSV export query", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("管理员张三");
+
+    const input = screen.getByRole("textbox", { name: "对象 ID" });
+    await user.type(input, "exam-1");
+    fireEvent.blur(input);
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain("targetId=exam-1");
+    });
+
+    await user.click(screen.getByRole("button", { name: /导出 CSV/ }));
+    await waitFor(() => expect(downloadFileMock).toHaveBeenCalled());
+    const exportPath = downloadFileMock.mock.calls.at(-1)?.[0] as string;
+    expect(exportPath).toContain("/api/admin/audit-logs/export");
+    expect(exportPath).toContain("targetId=exam-1");
+  });
+
+  it("offers the complete backend target-type vocabulary (e.g. 课程/登录/事件)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("管理员张三");
+
+    await user.click(screen.getByRole("combobox", { name: /全部目标/ }));
+    // Three of the target types the backend writes that the old 6-item list
+    // omitted; each must render with its localized label.
+    expect(
+      await screen.findByRole("option", { name: "课程" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "登录" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "事件" })).toBeInTheDocument();
+
+    // Selecting one sends the exact backend value.
+    await user.click(screen.getByRole("option", { name: "事件" }));
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain("targetType=incident");
+    });
+  });
+
+  it("clear-filters also resets the exact-ID inputs", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("管理员张三");
+
+    const input = screen.getByRole("textbox", { name: "对象 ID" });
+    await user.type(input, "exam-1");
+    fireEvent.blur(input);
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain("targetId=exam-1");
+    });
+
+    fireEvent.click(screen.getByText("清空筛选"));
+
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).not.toContain("targetId=");
+    });
+    expect(screen.getByRole("textbox", { name: "对象 ID" })).toHaveValue("");
   });
 });

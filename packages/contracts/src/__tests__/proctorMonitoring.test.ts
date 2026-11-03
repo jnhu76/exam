@@ -30,6 +30,7 @@ function baseStatus(overrides: Record<string, unknown> = {}) {
 function baseEvent(overrides: Record<string, unknown> = {}) {
   return {
     id: "00000000-0000-4000-8000-00000000000a",
+    serverRecordedAt: "2026-06-25T00:00:01.000Z",
     occurredAt: "2026-06-25T00:00:00.000Z",
     name: "visibility_lost",
     level: "info",
@@ -143,6 +144,29 @@ describe("ProctorAttemptEventSchema", () => {
     expect(
       ProctorAttemptEventSchema.safeParse(baseEvent({ metadata: {} })).success,
     ).toBe(false);
+  });
+
+  it("requires the server-owned receive instant", () => {
+    // `serverRecordedAt` is the ordering/display authority (#544): a row
+    // without it cannot claim a server instant, so the schema rejects it.
+    const { serverRecordedAt: _omitted, ...withoutInstant } = baseEvent({
+      metadata: {},
+      source: "client_event",
+    });
+    expect(ProctorAttemptEventSchema.safeParse(withoutInstant).success).toBe(
+      false,
+    );
+  });
+
+  it("carries the server receive instant and the client claim as distinct fields", () => {
+    const parsed = ProctorAttemptEventSchema.safeParse(
+      baseEvent({ metadata: {}, source: "client_event" }),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.serverRecordedAt).toBe("2026-06-25T00:00:01.000Z");
+    expect(parsed.data.occurredAt).toBe("2026-06-25T00:00:00.000Z");
+    expect(parsed.data.serverRecordedAt).not.toBe(parsed.data.occurredAt);
   });
 });
 

@@ -61,6 +61,7 @@ function toTimelineEventFromClient(
   // Validate the full event shape; override the validated/derived fields below.
   const base = ProctorAttemptEventSchema.safeParse({
     id: r.id,
+    serverRecordedAt: r.receivedAt.toISOString(),
     occurredAt: r.occurredAt.toISOString(),
     name: r.name,
     level: r.level,
@@ -79,6 +80,7 @@ function toTimelineEventFromClient(
     r.kind === "proctor" || r.kind === "log" ? r.kind : "exam_telemetry";
   return {
     id: r.id,
+    serverRecordedAt: r.receivedAt.toISOString(),
     occurredAt: r.occurredAt.toISOString(),
     name: r.name,
     level,
@@ -345,6 +347,9 @@ export async function buildProctorAttemptStatuses(
  * the deterministic tiebreaker. The client-asserted `occurredAt` is displayed
  * but never decides order, pagination membership, or head/tail position — a
  * malicious client cannot relocate its events with `occurredAt` extremes.
+ * The server instant is projected on every row as `serverRecordedAt` so
+ * consumers can display the authoritative time without inferring it;
+ * `occurredAt` stays the source-specific display instant.
  */
 export async function buildProctorAttemptEventTimeline(
   db: Database,
@@ -424,6 +429,7 @@ export async function buildProctorAttemptEventTimeline(
       id: a.auditLog.id,
       event: {
         id: a.auditLog.id,
+        serverRecordedAt: a.auditLog.createdAt.toISOString(),
         occurredAt: a.auditLog.createdAt.toISOString(),
         name,
         level: "warn",
