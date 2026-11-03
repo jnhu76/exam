@@ -127,11 +127,21 @@ function auditActionToEventName(action: string): string | null {
   }
 }
 
+// Correlation keys (#800 PR-B): clientSeq locates the answer-save receipt
+// row keyed (attemptId, questionId, clientSeq) — a CANDIDATE correlation
+// key, not content identity: a reloaded client can reuse a clientSeq for
+// different content, so any same-content claim needs the receipt's
+// answerIdentity digest. requestId joins a row to the server-side request
+// log / error envelope; status distinguishes a server fault (HTTP >= 500)
+// from a transport failure.
 const SAVE_ERROR_METADATA = [
   "questionId",
   "saveMode",
   "durationMs",
   "errorCode",
+  "clientSeq",
+  "requestId",
+  "status",
 ] as const;
 
 /**
