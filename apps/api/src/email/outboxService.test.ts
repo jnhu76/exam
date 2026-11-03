@@ -398,6 +398,112 @@ describe("EmailOutboxService.processDueEmails", () => {
     expect(call.metadata).not.toHaveProperty("bodyHtml");
   });
 
+  // #800 PR-D A4-F4: a terminal dead-letter transition must emit an
+  // error-level structured log line carrying emailId / attemptCount and the
+  // ALREADY-SANITIZED lastError — the log surface inherits the same
+  // category-not-raw-content contract as the persisted lastError, so
+  // credentials and recipient addresses never reach it.
+  it("dead-letter transition emits an error log line with emailId, attemptCount and the sanitized lastError", async () => {
+    const now = new Date("2026-06-01T00:00:00Z");
+    const SECRET = "worker-secret-pw";
+    const row = await seedRow(db, ctx.organizationId, {
+      attemptCount: 2,
+      maxAttempts: 3,
+    });
+    const logged: Array<{ obj: Record<string, unknown>; msg: string }> = [];
+    const leakingSender: EmailSender = {
+      async send() {
+        throw Object.assign(new Error(`auth failed ${SECRET}`), {
+          code: "EAUTH",
+          responseCode: 535,
+        });
+      },
+    };
+    const service = new EmailOutboxService({
+      repo,
+      ctx,
+      sender: leakingSender,
+      retryBaseSeconds: 60,
+      scrubSecrets: [SECRET],
+      logger: {
+        error: (obj, msg) => logged.push({ obj, msg }),
+      },
+    });
+    const result = await service.processDueEmails({
+      now,
+      limit: 10,
+      workerInstanceId: "test-worker-dl-1",
+    });
+    expect(result.dead).toBe(1);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]!.obj.emailId).toBe(row.id);
+    expect(logged[0]!.obj.attemptCount).toBe(3);
+    // Sanitization proof: the log line carries the scrubbed category
+    // (stable SMTP code), never the raw error content or recipient PII.
+    expect(JSON.stringify(logged[0])).not.toContain(SECRET);
+    expect(JSON.stringify(logged[0])).not.toContain(row.recipientEmail);
+    expect(logged[0]!.obj.lastError).toContain("EAUTH");
+    expect(typeof logged[0]!.msg).toBe("string");
+    expect((logged[0]!.msg as string).length).toBeGreaterThan(0);
+  });
+
+  it("retry_wait transition emits no dead-letter error log", async () => {
+    const now = new Date("2026-06-01T00:00:00Z");
+    const row = await seedRow(db, ctx.organizationId, {
+      attemptCount: 0,
+      maxAttempts: 3,
+    });
+    const errorLogger = vi.fn();
+    const service = new EmailOutboxService({
+      repo,
+      ctx,
+      sender: new FakeEmailSender("failure"),
+      retryBaseSeconds: 60,
+      logger: { error: errorLogger },
+    });
+    const result = await service.processDueEmails({
+      now,
+      limit: 10,
+      workerInstanceId: "test-worker-dl-2",
+    });
+    expect(result.retryWait).toBe(1);
+    expect(result.dead).toBe(0);
+    expect(errorLogger).not.toHaveBeenCalled();
+    expect((await repo.findById(ctx, row.id))?.status).toBe("retry_wait");
+  });
+
+  it("dead-letter log is omitted when the ownership fence rejects the dead transition", async () => {
+    const now = new Date("2026-06-01T00:00:00Z");
+    const errorLogger = vi.fn();
+    // The ownership fence is authoritative: a markDead that reports no row
+    // (fenced off — another worker recovered + re-claimed it mid-flight)
+    // means the transition did NOT happen and no dead-letter evidence may
+    // be logged.
+    const fencedRepo: typeof repo = {
+      ...repo,
+      markDead: async () => null,
+    };
+    const service = new EmailOutboxService({
+      repo: fencedRepo,
+      ctx,
+      sender: new FakeEmailSender("failure"),
+      retryBaseSeconds: 60,
+      logger: { error: errorLogger },
+    });
+    await seedRow(db, ctx.organizationId, {
+      attemptCount: 2,
+      maxAttempts: 3,
+    });
+    const result = await service.processDueEmails({
+      now,
+      limit: 10,
+      workerInstanceId: "test-worker-dl-3",
+    });
+    expect(result.ownershipLost).toBe(1);
+    expect(result.dead).toBe(0);
+    expect(errorLogger).not.toHaveBeenCalled();
+  });
+
   it("accepts OrganizationScope context (not just RequestContext)", async () => {
     const now = new Date("2026-06-01T00:00:00Z");
     const row = await seedRow(db, ctx.organizationId, { nextAttemptAt: null });

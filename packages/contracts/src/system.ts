@@ -195,6 +195,13 @@ export const DiagnosticsResponseSchema = z.object({
     timeout: z.number().int().min(0),
     lastScanAt: z.string().nullable(),
     disruptedCount: z.number().int().min(0),
+    // #800: in-memory failure counters since process start (reset on
+    // restart; NOT persisted). `failedCount` counts disruption-leg attempts
+    // whose handler threw; `incidentReconciliationFailedCount` counts
+    // System-incident reconciliation-leg failures (per-episode delivery +
+    // organization discovery).
+    failedCount: z.number().int().min(0),
+    incidentReconciliationFailedCount: z.number().int().min(0),
     // #547 stall facts: lastSettledAt is the stall authority (settled =
     // tick finished, success OR error); stallState is the same pure
     // classification the operability monitor alerts on.
@@ -208,6 +215,9 @@ export const DiagnosticsResponseSchema = z.object({
     interval: z.number().int().min(0),
     lastScanAt: z.string().nullable(),
     autoSubmitCount: z.number().int().min(0),
+    // #800: cumulative auto-submit failures since process start (in-memory,
+    // reset on restart; NOT persisted).
+    failedCount: z.number().int().min(0),
     startedAt: z.string().nullable(),
     lastStartedAt: z.string().nullable(),
     lastSettledAt: z.string().nullable(),

@@ -57,6 +57,13 @@ export const heartbeatMetrics = {
   activeSince: null as Date | null,
   lastScanAt: null as Date | null,
   disruptedCount: 0,
+  // #800: per-leg in-memory failure counters (reset on restart, never
+  // persisted). `disruptionFailedCount` counts attempts whose disruption
+  // handler threw; `incidentReconciliationFailedCount` counts
+  // System-incident reconciliation failures (per-episode delivery +
+  // organization discovery).
+  disruptionFailedCount: 0,
+  incidentReconciliationFailedCount: 0,
   systemIncidentsCreated: 0,
   systemIncidentConflicts: 0,
 };
@@ -318,7 +325,12 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
         );
         heartbeatMetrics.lastScanAt = tickNow;
         heartbeatMetrics.disruptedCount += result.markedCount;
-        if (result.markedCount > 0) {
+        heartbeatMetrics.disruptionFailedCount += result.failedCount;
+        // #800: aggregation-log parity with the deadline scanner
+        // (`submittedCount > 0 || failedCount > 0`) — an all-failure tick
+        // (markedCount === 0, failedCount > 0) must stay greppable, else a
+        // disruption leg failing every cycle leaves no aggregate signal.
+        if (result.markedCount > 0 || result.failedCount > 0) {
           fastify.log.info(
             {
               markedCount: result.markedCount,
@@ -338,7 +350,12 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
         heartbeatMetrics.systemIncidentsCreated += incidentCounts.createdCount;
         heartbeatMetrics.systemIncidentConflicts +=
           incidentCounts.conflictCount;
-        if (incidentCounts.createdCount > 0) {
+        heartbeatMetrics.incidentReconciliationFailedCount +=
+          incidentCounts.failedCount;
+        // #800: same all-failure parity as the disruption leg — a
+        // reconciliation leg failing every cycle with zero creates must stay
+        // greppable.
+        if (incidentCounts.createdCount > 0 || incidentCounts.failedCount > 0) {
           fastify.log.info(
             {
               createdCount: incidentCounts.createdCount,

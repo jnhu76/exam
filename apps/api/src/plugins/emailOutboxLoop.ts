@@ -98,6 +98,11 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
       scrubSecrets: config.email.smtp?.password
         ? [config.email.smtp.password]
         : [],
+      // #800: dead-letter transitions surface as error-level lines on the
+      // same loop logger (Pino via fastify.log).
+      logger: {
+        error: (obj, msg) => log("error", msg, obj),
+      },
     });
 
     log("info", "in-process email outbox loop started", {

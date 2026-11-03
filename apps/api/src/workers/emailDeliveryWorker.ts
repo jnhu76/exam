@@ -224,6 +224,11 @@ export async function main(): Promise<void> {
       scrubSecrets: config.email.smtp?.password
         ? [config.email.smtp.password]
         : [],
+      // #800: dead-letter transitions surface as error-level lines on the
+      // worker's structured stdout log.
+      logger: {
+        error: (obj, msg) => log("error", msg, obj),
+      },
     });
 
     // 5. Main poll loop

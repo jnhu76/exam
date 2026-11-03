@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
+import { Writable } from "node:stream";
+import {
+  organizations,
+  examAttempts,
+  attemptInterruptionEvents,
+} from "@exam/db/schema/pg";
 import heartbeatPlugin, {
   heartbeatMetrics,
   scanForDisruptedAttempts,
@@ -339,5 +345,156 @@ describe("heartbeat plugin — stall-fact bookkeeping", () => {
     // The released cycle settles — recovery input for the classifier.
     expect(heartbeatMetrics.lastSettledAt).not.toBeNull();
     expect(heartbeatMetrics.activeSince).toBeNull();
+  });
+});
+
+// #800 PR-D (A4-F2 + A4-F3): per-leg in-memory failure counters and the
+// aggregation-log contract for all-failure ticks. The fake db routes by
+// drizzle table identity: organization discovery returns one org,
+// listInProgress returns one stale in_progress attempt, every transaction
+// rejects (disruption-leg failure), and the incident leg's first query
+// rejects (reconciliation-leg failure) — so the tick produces
+// markedCount=0/createdCount=0 with failedCount=1 on BOTH legs.
+describe("heartbeat plugin — failure counters and all-failure aggregation log", () => {
+  const ORG = { id: "org-1" };
+  const STALE_ATTEMPT = {
+    id: "att-fail",
+    status: "in_progress",
+    lastActivityAt: new Date("2026-09-17T07:00:00Z"),
+  };
+
+  function buildAllFailingDb(): unknown {
+    return {
+      select: () => ({
+        from: (table: unknown) => {
+          if (table === organizations) return Promise.resolve([ORG]);
+          if (table === examAttempts) {
+            return { where: () => Promise.resolve([STALE_ATTEMPT]) };
+          }
+          throw new Error("unexpected table in heartbeat fake db");
+        },
+      }),
+      transaction: async () => {
+        throw new Error("forced disruption failure");
+      },
+    };
+  }
+
+  function buildApp(db: unknown, lines: string[]) {
+    const clock = { current: new Date("2026-09-17T08:00:00Z") };
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        lines.push(chunk.toString());
+        callback();
+      },
+    });
+    const app = Fastify({ logger: { level: "info", stream } });
+    app.decorate<unknown>("db", db as never);
+    app.decorate("now", () => clock.current);
+    return { app, clock };
+  }
+
+  function resetCounters() {
+    heartbeatMetrics.startedAt = null;
+    heartbeatMetrics.lastStartedAt = null;
+    heartbeatMetrics.lastSettledAt = null;
+    heartbeatMetrics.activeSince = null;
+    heartbeatMetrics.disruptedCount = 0;
+    heartbeatMetrics.disruptionFailedCount = 0;
+    heartbeatMetrics.systemIncidentsCreated = 0;
+    heartbeatMetrics.systemIncidentConflicts = 0;
+    heartbeatMetrics.incidentReconciliationFailedCount = 0;
+  }
+
+  it("accumulates per-leg failure counters and emits aggregation rows for an all-failure tick", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(buildAllFailingDb(), lines);
+    resetCounters();
+    await app.register(heartbeatPlugin);
+    await app.ready();
+
+    try {
+      clock.current = new Date(clock.current.getTime() + 30_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      // A4-F2: each leg accumulates its own in-memory failure counter
+      // (single-instance, reset on restart — never persisted).
+      expect(heartbeatMetrics.disruptedCount).toBe(0);
+      expect(heartbeatMetrics.disruptionFailedCount).toBe(1);
+      expect(heartbeatMetrics.systemIncidentsCreated).toBe(0);
+      expect(heartbeatMetrics.incidentReconciliationFailedCount).toBe(1);
+
+      // A4-F3: a tick with zero successes but failures must still emit the
+      // aggregation info rows — same grep contract as the deadline scanner's
+      // `submittedCount > 0 || failedCount > 0` condition.
+      const parsed = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+      const disruptionRow = parsed.find(
+        (l) => l.msg === "Marked stale exam attempts as disrupted",
+      );
+      expect(disruptionRow).toBeDefined();
+      expect(disruptionRow!.markedCount).toBe(0);
+      expect(disruptionRow!.failedCount).toBe(1);
+
+      const incidentRow = parsed.find(
+        (l) => l.msg === "Created System incidents from heartbeat episodes",
+      );
+      expect(incidentRow).toBeDefined();
+      expect(incidentRow!.createdCount).toBe(0);
+      expect(incidentRow!.failedCount).toBe(1);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a fully successful quiet tick (no marks, no failures) emits no aggregation row", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    // Zero-episode discovery chain: select(...).from(...).innerJoin(...)…
+    // resolves to []; with no episodes the arbiter probe short-circuits, so
+    // BOTH legs finish quiet.
+    const emptyEpisodeChain = {
+      innerJoin: () => emptyEpisodeChain,
+      where: () => emptyEpisodeChain,
+      orderBy: () => Promise.resolve([]),
+    };
+    const quietDb = {
+      select: () => ({
+        from: (table: unknown) => {
+          if (table === organizations) return Promise.resolve([ORG]);
+          if (table === examAttempts) {
+            return { where: () => Promise.resolve([]) };
+          }
+          if (table === attemptInterruptionEvents) return emptyEpisodeChain;
+          throw new Error("unexpected table in heartbeat fake db");
+        },
+      }),
+    };
+    const { app, clock } = buildApp(quietDb, lines);
+    resetCounters();
+    await app.register(heartbeatPlugin);
+    await app.ready();
+
+    try {
+      clock.current = new Date(clock.current.getTime() + 30_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(heartbeatMetrics.disruptionFailedCount).toBe(0);
+      expect(heartbeatMetrics.incidentReconciliationFailedCount).toBe(0);
+
+      const parsed = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+      expect(
+        parsed.find((l) => l.msg === "Marked stale exam attempts as disrupted"),
+      ).toBeUndefined();
+      expect(
+        parsed.find(
+          (l) => l.msg === "Created System incidents from heartbeat episodes",
+        ),
+      ).toBeUndefined();
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
   });
 });

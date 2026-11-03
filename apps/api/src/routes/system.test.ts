@@ -317,6 +317,34 @@ describe("system routes", () => {
       expect(typeof body.config.deadlineScanInterval).toBe("number");
     });
 
+    // #800 PR-D A4-F2: both scanners' failure counters must be exposed on the
+    // diagnostics surface (deadline scanner accumulated failedCount; heartbeat
+    // disruption + incident-reconciliation legs). Counters are in-memory
+    // since process start and reset on restart — the response shape proves
+    // exposure, not persistence.
+    it("exposes failure counters for the deadline scanner and both heartbeat legs", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      expect(typeof body.deadlineScannerStatus.failedCount).toBe("number");
+      expect(body.deadlineScannerStatus.failedCount).toBeGreaterThanOrEqual(0);
+
+      expect(typeof body.heartbeatStatus.failedCount).toBe("number");
+      expect(body.heartbeatStatus.failedCount).toBeGreaterThanOrEqual(0);
+      expect(
+        typeof body.heartbeatStatus.incidentReconciliationFailedCount,
+      ).toBe("number");
+      expect(
+        body.heartbeatStatus.incidentReconciliationFailedCount,
+      ).toBeGreaterThanOrEqual(0);
+    });
+
     it("does not expose secrets in diagnostics response", async () => {
       const res = await ctx.app.inject({
         method: "GET",
