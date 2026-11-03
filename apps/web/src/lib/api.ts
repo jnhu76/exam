@@ -13,7 +13,7 @@ let navigateFn: ((path: string) => void) | null = null;
 /**
  * Module-level limiter: dedup state must persist across requests so a polling
  * page hammering a dead gateway stays a bounded number of persisted rows
- * (one warn per path pattern per window).
+ * (one warn per endpoint category per window).
  */
 const networkFailureLimiter = createTelemetryRateLimiter();
 
@@ -23,19 +23,136 @@ export function __resetNetworkFailureLimiterForTest(): void {
 }
 
 /**
- * Reduces a request path to a stable route pattern for telemetry: ID-like
- * segments (UUID or all-digit) collapse to `:id` and the query string is
- * dropped, so the persisted value identifies the endpoint shape — never a
- * raw entity id or query content.
+ * Static route-segment vocabulary derived from every production `/api/` call
+ * site under apps/web/src. WHY a closed vocabulary: a segment is persisted
+ * in `api.network_failed` metadata only when it matches this codebase's own
+ * static route vocabulary; any other segment (opaque identifier, slug,
+ * token, encoded value) degrades to `:id`, so unknown content can never
+ * reach persisted metadata. The set drifts safe: a missing entry only
+ * coarsens the category, never leaks a raw segment. A vocabulary-sync test
+ * in api.test.ts pins this — a new endpoint without a vocabulary entry
+ * fails that test instead of silently persisting raw segments.
  */
-function toPathPattern(path: string): string {
-  return path
+export const API_STATIC_SEGMENTS = new Set([
+  "accept",
+  "actions",
+  "admin",
+  "answers",
+  "api",
+  "archive",
+  "assignable",
+  "attempts",
+  "audit-log",
+  "audit-logs",
+  "auth",
+  "bootstrap",
+  "branding",
+  "cancel",
+  "candidate",
+  "candidate-fields",
+  "candidates",
+  "client-events",
+  "close",
+  "consume",
+  "course-assignments",
+  "courses",
+  "csv",
+  "dashboard",
+  "detail",
+  "diagnostics",
+  "effective-authority",
+  "enrollments",
+  "exam-assignments",
+  "exam-profiles",
+  "exams",
+  "export",
+  "extend",
+  "force-submit",
+  "grade-question",
+  "grading-details",
+  "grading-queue",
+  "health",
+  "heartbeat",
+  "import",
+  "import-logs",
+  "incidents",
+  "invitations",
+  "launchpad",
+  "login",
+  "logout",
+  "me",
+  "misconduct",
+  "notifications",
+  "password",
+  "password-reset",
+  "permission-registry",
+  "proctor",
+  "proctor-events",
+  "proctors",
+  "profile",
+  "publish",
+  "publish-results",
+  "questions",
+  "queue",
+  "read",
+  "read-all",
+  "recovery",
+  "request",
+  "reset-password",
+  "restore",
+  "result",
+  "revoke",
+  "roles",
+  "scores",
+  "settings",
+  "start",
+  "status",
+  "submit",
+  "system",
+  "tags",
+  "take",
+  "template",
+  "time-grants",
+  "timeline",
+  "unpublish",
+  "unread-count",
+  "users",
+]);
+
+/** Matches a segment that is exactly a UUID (case-insensitive). */
+const UUID_SEGMENT =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Matches a segment that is entirely digits. */
+const DIGIT_SEGMENT = /^\d+$/;
+
+/**
+ * Defensive upper bound: a categorized path is built from vocabulary
+ * segments and `:id` markers, so it is naturally short; the cap only guards
+ * against an absurd input path producing an oversized metadata value.
+ */
+const MAX_CATEGORY_LENGTH = 300;
+
+/**
+ * Reduces a request path to a stable endpoint category for telemetry: the
+ * query string is dropped, and each segment collapses to `:id` unless it is
+ * a UUID, all digits, or a member of {@link API_STATIC_SEGMENTS}. The
+ * persisted value identifies the endpoint shape — never a raw entity id,
+ * token, or query content.
+ */
+function toPathCategory(path: string): string {
+  const categorized = path
     .split("?")[0]!
-    .replace(
-      /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
-      "/:id",
-    )
-    .replace(/\/\d+/g, "/:id");
+    .split("/")
+    .map((segment) => {
+      if (segment === "") return segment;
+      if (UUID_SEGMENT.test(segment) || DIGIT_SEGMENT.test(segment)) {
+        return ":id";
+      }
+      return API_STATIC_SEGMENTS.has(segment) ? segment : ":id";
+    })
+    .join("/");
+  return categorized.slice(0, MAX_CATEGORY_LENGTH);
 }
 
 /**
@@ -166,8 +283,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     toast.error(i18n.t("errors.network"));
     // Transport-level failures otherwise leave no server trace beyond the
-    // transient toast — record one bounded warn per route pattern (#800).
-    const pathPattern = toPathPattern(path);
+    // transient toast — record one bounded warn per endpoint category
+    // (#800). The persisted `pathPattern` is the vocabulary-based category:
+    // any non-static segment has already collapsed to `:id`.
+    const pathPattern = toPathCategory(path);
     if (networkFailureLimiter.allow(`api.network_failed|${pathPattern}`)) {
       logger.warn("api.network_failed", { pathPattern });
     }

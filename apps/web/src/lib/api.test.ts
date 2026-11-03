@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   __resetNetworkFailureLimiterForTest,
+  API_STATIC_SEGMENTS,
   api,
   ApiError,
   setNavigate,
@@ -283,12 +287,74 @@ describe("api client", () => {
         vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
       );
 
+      await expect(api.get("/api/exams/42/publish")).rejects.toBeInstanceOf(
+        ApiError,
+      );
+
+      expect(logger.warn).toHaveBeenCalledWith("api.network_failed", {
+        pathPattern: "/api/exams/:id/publish",
+      });
+    });
+
+    it("keeps vocabulary segments around a masked uuid as today", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      );
+
       await expect(
-        api.get("/api/legacy/items/42/pages"),
+        api.get(
+          "/api/admin/attempts/9f8e7d6c-1a2b-3c4d-5e6f-7a8b9c0d1e2f/proctor-events",
+        ),
       ).rejects.toBeInstanceOf(ApiError);
 
       expect(logger.warn).toHaveBeenCalledWith("api.network_failed", {
-        pathPattern: "/api/legacy/items/:id/pages",
+        pathPattern: "/api/admin/attempts/:id/proctor-events",
+      });
+    });
+
+    it("masks opaque non-vocabulary segments to :id", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      );
+
+      await expect(
+        api.get("/api/attempts/att_9f8e7d6c/heartbeat"),
+      ).rejects.toBeInstanceOf(ApiError);
+
+      expect(logger.warn).toHaveBeenCalledWith("api.network_failed", {
+        pathPattern: "/api/attempts/:id/heartbeat",
+      });
+    });
+
+    it("masks slug-like segments that are not in the vocabulary", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      );
+
+      await expect(
+        api.get("/api/exams/exam-final-2026x/publish"),
+      ).rejects.toBeInstanceOf(ApiError);
+
+      expect(logger.warn).toHaveBeenCalledWith("api.network_failed", {
+        pathPattern: "/api/exams/:id/publish",
+      });
+    });
+
+    it("keeps an all-static path unchanged and drops the query string", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      );
+
+      await expect(
+        api.get("/api/auth/login?ticket=opaque-token"),
+      ).rejects.toBeInstanceOf(ApiError);
+
+      expect(logger.warn).toHaveBeenCalledWith("api.network_failed", {
+        pathPattern: "/api/auth/login",
       });
     });
 
@@ -602,5 +668,66 @@ describe("api client", () => {
         requestId: "req-c3-5",
       });
     });
+  });
+});
+
+/**
+ * Vocabulary sync for `api.network_failed` path categories: the persisted
+ * category may only contain segments from API_STATIC_SEGMENTS, so every
+ * static segment of every production `/api/` literal must be in the set.
+ * A new endpoint without a vocabulary entry fails here instead of silently
+ * persisting raw segments (the runtime itself still degrades unknown
+ * segments to `:id`, so the failure is a vocabulary-maintenance signal,
+ * not a leak).
+ */
+describe("API path-category vocabulary sync", () => {
+  /** String literal (any quote style) that starts with `/api/`. */
+  const API_LITERAL = /(["`'])(\/api\/[^"`']*)\1/g;
+
+  const SRC_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+  /** Collects static segments of `/api/` literals under a source tree. */
+  function collectApiStaticSegments(root: string): Set<string> {
+    const segments = new Set<string>();
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === "__tests__") {
+        continue;
+      }
+      const full = join(root, entry.name);
+      if (entry.isDirectory()) {
+        for (const segment of collectApiStaticSegments(full)) {
+          segments.add(segment);
+        }
+        continue;
+      }
+      if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+      if (/\.test\.|\.stories\./.test(entry.name)) continue;
+      const text = readFileSync(full, "utf8");
+      for (const match of text.matchAll(API_LITERAL)) {
+        const pathPart = match[2]!.split("?")[0]!;
+        for (const segment of pathPart.split("/")) {
+          // Template placeholders are dynamic values, not static vocabulary.
+          if (segment === "" || segment.includes("${")) continue;
+          segments.add(segment);
+        }
+      }
+    }
+    return segments;
+  }
+
+  it("API_STATIC_SEGMENTS contains every static segment of production /api/ literals", () => {
+    const segments = collectApiStaticSegments(SRC_ROOT);
+
+    // Guard against a silently broken scanner: the auth endpoints are real
+    // call sites, so they must be among the extracted segments.
+    expect(segments.has("auth")).toBe(true);
+
+    const missing = [...segments]
+      .filter((segment) => !API_STATIC_SEGMENTS.has(segment))
+      .sort();
+    expect(
+      missing,
+      `segments used by /api/ literals but missing from API_STATIC_SEGMENTS: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 });

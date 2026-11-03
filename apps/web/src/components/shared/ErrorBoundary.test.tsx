@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClientEvent } from "@exam/contracts";
 import type { ClientEventBuffer } from "@/lib/clientEventBuffer";
-import { setBuffer } from "@/lib/logger";
+import { logger, setBuffer } from "@/lib/logger";
 import { ErrorBoundary } from "./ErrorBoundary";
 
 function ThrowingComponent({ shouldThrow }: { shouldThrow: boolean }) {
@@ -57,6 +57,34 @@ describe("ErrorBoundary telemetry", () => {
     expect(event.metadata).toEqual({ errorName: "TypeError" });
     // The persisted event carries the category only — never the raw message.
     expect(JSON.stringify(event)).not.toContain("secret-token-abc");
+  });
+
+  it("collapses a forged error name with canary content to OtherError", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, "error");
+    const canary = `SECRET-CANARY-${Math.random().toString(36).slice(2)}`;
+    function ForgedThrower(): never {
+      const err = new Error(`body with secret-marker-${canary}`);
+      err.name = canary;
+      throw err;
+    }
+
+    render(
+      <ErrorBoundary>
+        <ForgedThrower />
+      </ErrorBoundary>,
+    );
+
+    // The reported category is the whitelist's OtherError — never the
+    // forged name — and neither the name nor the message content survives
+    // into the persisted event.
+    expect(errorSpy).toHaveBeenCalledWith("web.render_error", {
+      errorName: "OtherError",
+    });
+    expect(recording.events).toHaveLength(1);
+    expect(JSON.stringify(recording.events[0])).not.toContain(canary);
+    expect(JSON.stringify(recording.events[0])).not.toContain("secret-marker");
+    vi.restoreAllMocks();
   });
 
   it("records exactly one web.render_error per caught error under StrictMode and remounts", () => {

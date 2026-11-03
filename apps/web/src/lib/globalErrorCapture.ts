@@ -1,3 +1,4 @@
+import { toErrorCategory } from "./errorCategory";
 import { logger } from "./logger";
 import { createTelemetryRateLimiter } from "./telemetryRateLimit";
 
@@ -8,24 +9,14 @@ import { createTelemetryRateLimiter } from "./telemetryRateLimit";
  * (#800) — nothing server-side recorded them.
  *
  * Each occurrence is reported via {@link logger.error} under a stable event
- * name with category-only metadata: the error class name (or a
- * `non-error:<typeof>` tag). The raw message, stack, and any URL content are
- * never included — the logger adds only the route pathname as the location
- * identifier.
+ * name with category-only metadata from {@link toErrorCategory}: a
+ * whitelisted error class name, `OtherError`, or a `non-error:<typeof>` tag.
+ * The raw message, stack, and any URL content are never included — the
+ * logger adds only the route pathname as the location identifier.
  *
  * A per-category fixed-window limiter keeps a rejection storm from flooding
  * the client-event buffer.
  */
-
-/**
- * Builds the stable category identifier for an unknown thrown value.
- * INVARIANT: the return value is a bounded category — never a
- * content-derived string such as the error message or stack.
- */
-function errorCategory(err: unknown): string {
-  if (err instanceof Error) return err.name || "Error";
-  return `non-error:${typeof err}`;
-}
 
 /**
  * Registers the global `error` / `unhandledrejection` handlers.
@@ -35,7 +26,7 @@ export function registerGlobalErrorCapture(): () => void {
   const limiter = createTelemetryRateLimiter();
 
   function report(name: string, err: unknown): void {
-    const errorName = errorCategory(err);
+    const errorName = toErrorCategory(err);
     if (!limiter.allow(`${name}|${errorName}`)) return;
     logger.error(name, { errorName });
   }

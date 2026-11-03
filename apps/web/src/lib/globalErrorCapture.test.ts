@@ -98,6 +98,85 @@ describe("registerGlobalErrorCapture", () => {
     expect(recording.events[5]!.metadata).toEqual({ errorName: "RangeError" });
   });
 
+  it("collapses a forged error name to OtherError without persisting it", () => {
+    cleanup = registerGlobalErrorCapture();
+
+    const canary = `SECRET-CANARY-${Math.random().toString(36).slice(2)}`;
+    const err = new Error(`boom leaking secret-marker-${canary}`);
+    err.name = canary;
+
+    dispatchUnhandledRejection(err);
+
+    expect(recording.events).toHaveLength(1);
+    expect(recording.events[0]!.metadata).toEqual({ errorName: "OtherError" });
+    // Neither the forged name nor the message content reaches the persisted
+    // event — the category whitelist is the only source of errorName.
+    expect(JSON.stringify(recording.events[0])).not.toContain(canary);
+    expect(JSON.stringify(recording.events[0])).not.toContain("secret-marker");
+  });
+
+  it("reports OtherError when reading the forged name getter throws", () => {
+    cleanup = registerGlobalErrorCapture();
+
+    const err = new Error("boom");
+    Object.defineProperty(err, "name", {
+      get() {
+        throw new Error("getter-boom");
+      },
+    });
+
+    dispatchUnhandledRejection(err);
+
+    // The capture must not crash on a hostile getter: exactly one event,
+    // categorized as OtherError.
+    expect(recording.events).toHaveLength(1);
+    expect(recording.events[0]!.metadata).toEqual({ errorName: "OtherError" });
+  });
+
+  it("reports OtherError when the name is not a string", () => {
+    cleanup = registerGlobalErrorCapture();
+
+    const err = new Error("boom");
+    (err as { name: unknown }).name = 42;
+
+    dispatchUnhandledRejection(err);
+
+    expect(recording.events).toHaveLength(1);
+    expect(recording.events[0]!.metadata).toEqual({ errorName: "OtherError" });
+  });
+
+  it("collapses a storm of unique forged names into one limiter key", () => {
+    cleanup = registerGlobalErrorCapture();
+
+    for (let i = 0; i < 100; i++) {
+      const err = new Error("storm");
+      err.name = `ForgedError${i}`;
+      dispatchUnhandledRejection(err);
+    }
+
+    // All 100 unique hostile names share the single OtherError key, so the
+    // per-category cap still applies (at most 5 rows), and the limiter map
+    // cannot grow one entry per forged name.
+    expect(recording.events).toHaveLength(5);
+    expect(
+      recording.events.every((e) => e.metadata?.errorName === "OtherError"),
+    ).toBe(true);
+  });
+
+  it("passes whitelisted standard error names through verbatim", () => {
+    cleanup = registerGlobalErrorCapture();
+
+    dispatchUnhandledRejection(new TypeError("a"));
+    dispatchUnhandledRejection(new SyntaxError("b"));
+    dispatchWindowError(new AggregateError([new Error("c")], "d"));
+
+    expect(recording.events.map((e) => e.metadata?.errorName)).toEqual([
+      "TypeError",
+      "SyntaxError",
+      "AggregateError",
+    ]);
+  });
+
   it("cleanup removes the listeners", () => {
     const stop = registerGlobalErrorCapture();
     stop();
