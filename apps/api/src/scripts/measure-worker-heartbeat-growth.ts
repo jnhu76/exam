@@ -126,7 +126,15 @@ export async function measureWorkerHeartbeatGrowth(options: {
   schema?: string;
 }): Promise<GrowthMeasurement | WorkerHeartbeatsSnapshot> {
   const { sampleSeconds, probeWorkerName, schema } = options;
-  const { sql } = await createDatabase(undefined, schema);
+  // OWNERSHIP: the measurement handle is a SINGLE dedicated connection
+  // (`max: 1` on both branches — the searchPath branch pins it in
+  // createPostgresDatabase, the default branch gets it from `options.max`),
+  // so the session-level SET below provably covers EVERY statement this
+  // tool issues. A default pooled handle would apply the SET to one
+  // arbitrary connection while later statements could run unguarded on
+  // others. No transaction is held across the sampling sleep — each
+  // statement is its own implicit read-only transaction.
+  const { sql } = await createDatabase(undefined, schema, { max: 1 });
   try {
     // Fail-safe: this session must never write, even if a future edit adds
     // a statement by mistake.
