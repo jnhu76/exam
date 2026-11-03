@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { setBuffer } from "@/lib/logger";
+import type { ClientEventBuffer } from "@/lib/clientEventBuffer";
+import type { ClientEvent } from "@exam/contracts";
 import { ExamListPage } from "./ExamListPage";
 
 vi.mock("@/lib/api", () => ({
@@ -37,6 +40,21 @@ vi.mock("@/lib/api", () => ({
 }));
 
 const getMock = vi.mocked(api.get);
+
+/** Buffer stand-in recording pushed events so tests can assert what would be persisted. */
+class RecordingBuffer {
+  readonly events: ClientEvent[] = [];
+  push(event: ClientEvent): void {
+    this.events.push(event);
+  }
+  dispose(): void {}
+}
+
+function recordingBuffer(): RecordingBuffer {
+  const recording = new RecordingBuffer();
+  setBuffer(recording as unknown as ClientEventBuffer);
+  return recording;
+}
 
 function makeExam(overrides: Record<string, unknown>) {
   return {
@@ -403,5 +421,58 @@ describe("ExamListPage", () => {
     );
 
     expect(await screen.findByText("加载考试列表失败")).toBeInTheDocument();
+  });
+
+  it("reports exam_list_load_failed with the ApiError code on load failure", async () => {
+    const recording = recordingBuffer();
+    getMock.mockRejectedValue(
+      new ApiError(0, "Network request failed", "NETWORK"),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("加载考试列表失败")).toBeInTheDocument();
+
+    const telemetry = recording.events.filter(
+      (e) => e.kind === "exam_telemetry" && e.name === "exam_list_load_failed",
+    );
+    expect(telemetry).toHaveLength(1);
+    expect(telemetry[0]!.level).toBe("warn");
+    expect(telemetry[0]!.metadata).toEqual({ errorCode: "NETWORK" });
+    // Dual-emit: the warn level also lands in the generic log channel.
+    expect(
+      recording.events.some(
+        (e) => e.kind === "log" && e.name === "exam_list_load_failed",
+      ),
+    ).toBe(true);
+    setBuffer(null);
+  });
+
+  it("reports exam_list_load_failed with UNKNOWN for non-ApiError failures", async () => {
+    const recording = recordingBuffer();
+    getMock.mockRejectedValue(new Error("Network error"));
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("加载考试列表失败")).toBeInTheDocument();
+
+    const telemetry = recording.events.filter(
+      (e) => e.kind === "exam_telemetry" && e.name === "exam_list_load_failed",
+    );
+    expect(telemetry).toHaveLength(1);
+    expect(telemetry[0]!.metadata).toEqual({ errorCode: "UNKNOWN" });
+    // Raw exception text must not leak into the persisted metadata.
+    expect(JSON.stringify(telemetry[0])).not.toContain("Network error");
+    setBuffer(null);
   });
 });

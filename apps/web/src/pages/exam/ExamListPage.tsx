@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
+import { trackExamEvent } from "@/lib/examTelemetry";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -232,7 +233,14 @@ export function ExamListPage() {
         "/api/candidate/exams",
       );
       setExams(data.filter(Boolean));
-    } catch {
+    } catch (err) {
+      // Candidate entry-point load failure: record one warn with the stable
+      // error code (#800), same pattern as StartExamPage.
+      trackExamEvent(
+        "exam_list_load_failed",
+        { errorCode: err instanceof ApiError ? err.code : "UNKNOWN" },
+        { level: "warn" },
+      );
       setError(t("examList.errors.loadFailed"));
     } finally {
       setIsLoading(false);

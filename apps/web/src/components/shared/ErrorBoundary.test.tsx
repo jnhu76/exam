@@ -1,5 +1,9 @@
+import { StrictMode } from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ClientEvent } from "@exam/contracts";
+import type { ClientEventBuffer } from "@/lib/clientEventBuffer";
+import { logger, setBuffer } from "@/lib/logger";
 import { ErrorBoundary } from "./ErrorBoundary";
 
 function ThrowingComponent({ shouldThrow }: { shouldThrow: boolean }) {
@@ -8,6 +12,113 @@ function ThrowingComponent({ shouldThrow }: { shouldThrow: boolean }) {
   }
   return <div>Child content</div>;
 }
+
+/**
+ * Buffer stand-in recording the events the boundary reports, so tests can
+ * assert exactly what would be persisted for a render crash.
+ */
+class RecordingBuffer {
+  readonly events: ClientEvent[] = [];
+  push(event: ClientEvent): void {
+    this.events.push(event);
+  }
+  dispose(): void {}
+}
+
+let recording: RecordingBuffer;
+
+beforeEach(() => {
+  recording = new RecordingBuffer();
+  setBuffer(recording as unknown as ClientEventBuffer);
+});
+
+afterEach(() => {
+  setBuffer(null);
+});
+
+describe("ErrorBoundary telemetry", () => {
+  it("reports a category-only web.render_error event without raw content", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    function TypeThrower(): never {
+      throw new TypeError("secret-token-abc");
+    }
+
+    render(
+      <ErrorBoundary>
+        <TypeThrower />
+      </ErrorBoundary>,
+    );
+
+    expect(recording.events).toHaveLength(1);
+    const event = recording.events[0]!;
+    expect(event.kind).toBe("log");
+    expect(event.level).toBe("error");
+    expect(event.name).toBe("web.render_error");
+    expect(event.metadata).toEqual({ errorName: "TypeError" });
+    // The persisted event carries the category only — never the raw message.
+    expect(JSON.stringify(event)).not.toContain("secret-token-abc");
+  });
+
+  it("collapses a forged error name with canary content to OtherError", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, "error");
+    const canary = `SECRET-CANARY-${Math.random().toString(36).slice(2)}`;
+    function ForgedThrower(): never {
+      const err = new Error(`body with secret-marker-${canary}`);
+      err.name = canary;
+      throw err;
+    }
+
+    render(
+      <ErrorBoundary>
+        <ForgedThrower />
+      </ErrorBoundary>,
+    );
+
+    // The reported category is the whitelist's OtherError — never the
+    // forged name — and neither the name nor the message content survives
+    // into the persisted event.
+    expect(errorSpy).toHaveBeenCalledWith("web.render_error", {
+      errorName: "OtherError",
+    });
+    expect(recording.events).toHaveLength(1);
+    expect(JSON.stringify(recording.events[0])).not.toContain(canary);
+    expect(JSON.stringify(recording.events[0])).not.toContain("secret-marker");
+    vi.restoreAllMocks();
+  });
+
+  it("records exactly one web.render_error per caught error under StrictMode and remounts", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = render(
+      <StrictMode>
+        <ErrorBoundary>
+          <ThrowingComponent shouldThrow={true} />
+        </ErrorBoundary>
+      </StrictMode>,
+    );
+    unmount();
+    render(
+      <StrictMode>
+        <ErrorBoundary>
+          <ThrowingComponent shouldThrow={true} />
+        </ErrorBoundary>
+      </StrictMode>,
+    );
+
+    // StrictMode double-render and the remount each catch exactly one error:
+    // one event per caught error, no duplicates, no recursive logging.
+    expect(recording.events).toHaveLength(2);
+    expect(recording.events.every((e) => e.name === "web.render_error")).toBe(
+      true,
+    );
+    expect(
+      recording.events.every(
+        (e) => e.level === "error" && e.metadata?.errorName === "Error",
+      ),
+    ).toBe(true);
+  });
+});
 
 describe("ErrorBoundary", () => {
   it("renders children when no error occurs", () => {
