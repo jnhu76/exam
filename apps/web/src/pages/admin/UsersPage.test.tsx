@@ -310,9 +310,20 @@ describe("UsersPage", () => {
   it("renders user list with Admin role", async () => {
     renderPage();
     // Row content renders twice by design (desktop table + mobile cards);
-    // scope to the desktop table representation.
-    const table = await screen.findByRole("table");
-    expect(within(table).getByText("admin1")).toBeInTheDocument();
+    // scope to the desktop table representation. The table ROLE is not
+    // unique on this page: once users data lands, the InvitationsCard
+    // mounts its own table while its request is still in flight, so
+    // findByRole("table") races that mount and throws "Found multiple
+    // elements" under slow lanes (#858). Key on the users row content that
+    // has a table ancestor instead — deterministic regardless of the
+    // card's timing (and unaffected by the mobile-card duplicate).
+    const table = await waitFor(() => {
+      const row = screen
+        .getAllByText("admin1")
+        .find((node) => node.closest("table"));
+      if (!row) throw new Error("users table row not mounted yet");
+      return row.closest("table")!;
+    });
     expect(within(table).getByText("考试管理员")).toBeInTheDocument();
   });
 
@@ -1663,8 +1674,16 @@ describe("UsersPage", () => {
         return origImpl(url);
       });
       renderPage();
-      // Page 1 renders without the page-6 target.
-      const table = await screen.findByRole("table");
+      // Page 1 renders without the page-6 target. Key on row content with a
+      // table ancestor rather than the table role — the InvitationsCard
+      // table makes the role non-unique once users data lands (#858).
+      const table = await waitFor(() => {
+        const row = screen
+          .getAllByText("filler-1")
+          .find((node) => node.closest("table"));
+        if (!row) throw new Error("users table row not mounted yet");
+        return row.closest("table")!;
+      });
       expect(within(table).queryByText("teacher1")).not.toBeInTheDocument();
       expect(screen.getByText(/共 103 条/)).toBeInTheDocument();
       for (let i = 0; i < 5; i++) {
@@ -1674,7 +1693,13 @@ describe("UsersPage", () => {
         expect(apiGet).toHaveBeenCalledWith("/api/users?page=6&pageSize=20");
       });
       // The page-6 target renders WITH its assignment affordance.
-      const table6 = await screen.findByRole("table");
+      const table6 = await waitFor(() => {
+        const row = screen
+          .getAllByText("teacher1")
+          .find((node) => node.closest("table"));
+        if (!row) throw new Error("page-6 row not mounted yet");
+        return row.closest("table")!;
+      });
       expect(within(table6).getByText("teacher1")).toBeInTheDocument();
       const menu = await openRowMenu(user);
       expect(

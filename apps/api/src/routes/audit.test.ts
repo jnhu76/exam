@@ -838,6 +838,12 @@ describe("audit log baseline (S06-lite)", () => {
       });
     });
 
+    // 30s budget (#858): the contract under test IS the volume — 10,001
+    // inserted rows plus the server fetching limit+1 rows to refuse — and
+    // that deterministic fixture cost exceeded the default 5s testTimeout on
+    // all five CI API-coverage lanes (5010–5487ms) under 4-workers-on-2-cores
+    // contention. Same per-test guardrail class as admissions/publishResults
+    // durability tests; the assertions themselves are deterministic.
     it("refuses an export that exceeds the server row cap instead of truncating", async () => {
       await clearAudits();
       // The cap is server-owned (no client `limit` parameter), so this proof
@@ -868,7 +874,7 @@ describe("audit log baseline (S06-lite)", () => {
       expect(response.json().error.details).toMatchObject({
         maxRows: AUDIT_EXPORT_MAX_ROWS,
       });
-    });
+    }, 30_000);
   });
 
   describe("SuperAdmin cross-org metadata", () => {

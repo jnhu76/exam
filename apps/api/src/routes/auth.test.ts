@@ -123,6 +123,15 @@ describe("auth routes", () => {
     expect(body.organizationId).toBe(ctx.org.id);
   });
 
+  // 30s budget (#858): this proof intrinsically builds a SECOND app (a
+  // fresh per-app in-memory limiter store is the thing under test) whose
+  // seed runs argon2id hashes, then issues 11 sequential logins each with
+  // a real argon2id verify. That deterministic cost sat at 4853–4972ms on
+  // passing CI lanes and 5027ms on failing ones — straddling the default
+  // 5s testTimeout under 4-workers-on-2-cores contention. The KDF cost is
+  // a security property, not a fixture to shrink; the budget moves instead
+  // (same guardrail class as the admissions/publishResults durability
+  // tests).
   it("non-e2e mode enforces the route-level login limiter", async () => {
     vi.stubEnv("APP_MODE", "test");
     vi.stubEnv("RATE_LIMIT_MAX", "1000");
@@ -159,7 +168,7 @@ describe("auth routes", () => {
     } finally {
       await limitedCtx.cleanup();
     }
-  });
+  }, 30_000);
 
   it("POST /api/auth/login sets Secure cookie when the canonical origin is https", async () => {
     vi.stubEnv("PUBLIC_WEB_ORIGIN", "https://localhost:3100");
