@@ -26,10 +26,39 @@
  * regression cannot pass while the assertion looks at the wrong reality.
  */
 import { describe, expect, it } from "vitest";
+import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+} from "fastify-type-provider-zod";
 import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import {
+  resetRuntimeConfigForTest,
+  getRuntimeConfig,
+  buildPublicConfig,
+} from "../config/runtimeConfig.js";
+import { registerOpenApiDocs } from "../openapi/registerDocs.js";
+import { registerStaticFrontend } from "../plugins/staticFrontend.js";
+import apiSurfacePlugin from "../routes/apiSurface.js";
+import { decorateApiRouteStubs } from "../openapi/swagger.js";
+import {
+  API_REFERENCE_UI_PATH,
+  API_REFERENCE_SPEC_PATH,
+} from "../openapi/docsPaths.js";
+
+// #858: the docs-identity and namespace tests used to `await import()` this
+// whole composition graph (fastify + zod compilers + apiSurface → every route
+// module → repos + drizzle schema + swagger) INSIDE their test bodies. I6 is
+// the file's first consumer, so it alone paid the cold graph load inside the
+// default 5s testTimeout — 4648–4961ms passing / 5084–5516ms failing on CI's
+// 2-core runners. Static imports pay it once at file load, outside every
+// test budget; runtime config is still reset per-test below, so the lazily
+// cached config semantics the tests pin are unchanged.
 
 // This test file lives at <repo>/apps/api/src/routes/. Deriving both roots
 // from the file's own URL keeps the absolute-path assertions (I8) pointing
@@ -94,19 +123,6 @@ describe("HTTP surface authority — source gates", () => {
 
 describe("HTTP surface authority — docs identity (I6)", () => {
   it("spec path is derived from the single UI path authority; both are real registered routes", async () => {
-    const { resetRuntimeConfigForTest, getRuntimeConfig, buildPublicConfig } =
-      await import("../config/runtimeConfig.js");
-    const { registerOpenApiDocs } = await import("../openapi/registerDocs.js");
-    const { registerStaticFrontend } =
-      await import("../plugins/staticFrontend.js");
-    const apiSurfacePlugin = (await import("../routes/apiSurface.js")).default;
-    const { decorateApiRouteStubs } = await import("../openapi/swagger.js");
-    const { API_REFERENCE_UI_PATH, API_REFERENCE_SPEC_PATH } =
-      await import("../openapi/docsPaths.js");
-    const Fastify = (await import("fastify")).default;
-    const { serializerCompiler, validatorCompiler } =
-      await import("fastify-type-provider-zod");
-
     process.env.API_DOCS_ENABLED = "true";
     process.env.NODE_ENV = "test";
     process.env.APP_MODE = "test";
@@ -137,8 +153,6 @@ describe("HTTP surface authority — docs identity (I6)", () => {
     await registerOpenApiDocs(app);
     await app.register(apiSurfacePlugin, { prefix: "/api" });
     // serve:false static decoration so the composition matches production.
-    const { mkdtemp, writeFile } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
     const publicDir = await mkdtemp(join(tmpdir(), "exam-authority-"));
     await writeFile(join(publicDir, "index.html"), "<html></html>");
     await registerStaticFrontend(app, publicDir);
@@ -167,17 +181,6 @@ describe("HTTP surface authority — docs namespace ownership (I11)", () => {
   async function buildProductionComposition(
     docsEnabled: string,
   ): Promise<{ app: FastifyInstance }> {
-    const { resetRuntimeConfigForTest } =
-      await import("../config/runtimeConfig.js");
-    const { registerOpenApiDocs } = await import("../openapi/registerDocs.js");
-    const { registerStaticFrontend } =
-      await import("../plugins/staticFrontend.js");
-    const apiSurfacePlugin = (await import("../routes/apiSurface.js")).default;
-    const { decorateApiRouteStubs } = await import("../openapi/swagger.js");
-    const Fastify = (await import("fastify")).default;
-    const { serializerCompiler, validatorCompiler } =
-      await import("fastify-type-provider-zod");
-
     process.env.API_DOCS_ENABLED = docsEnabled;
     process.env.NODE_ENV = "test";
     process.env.APP_MODE = "test";
@@ -190,8 +193,6 @@ describe("HTTP surface authority — docs namespace ownership (I11)", () => {
     decorateApiRouteStubs(app);
     await registerOpenApiDocs(app);
     await app.register(apiSurfacePlugin, { prefix: "/api" });
-    const { mkdtemp, writeFile } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
     const publicDir = await mkdtemp(join(tmpdir(), "exam-authority-"));
     await writeFile(
       join(publicDir, "index.html"),
@@ -279,16 +280,6 @@ describe("HTTP surface authority — docs namespace ownership (I11)", () => {
 
 describe("HTTP surface authority — /api route manifest stability (I10)", () => {
   it("the production /api route set matches the checked-in snapshot (update the snapshot on intentional changes)", async () => {
-    const Fastify = (await import("fastify")).default;
-    const { serializerCompiler, validatorCompiler } =
-      await import("fastify-type-provider-zod");
-    const { decorateApiRouteStubs } = await import("../openapi/swagger.js");
-    const apiSurfacePlugin = (await import("../routes/apiSurface.js")).default;
-    const { resetRuntimeConfigForTest } =
-      await import("../config/runtimeConfig.js");
-    const { registerStaticFrontend } =
-      await import("../plugins/staticFrontend.js");
-
     process.env.API_DOCS_ENABLED = "false";
     process.env.NODE_ENV = "test";
     process.env.APP_MODE = "test";
@@ -309,8 +300,6 @@ describe("HTTP surface authority — /api route manifest stability (I10)", () =>
       }
     });
     await app.register(apiSurfacePlugin, { prefix: "/api" });
-    const { mkdtemp, writeFile } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
     const publicDir = await mkdtemp(join(tmpdir(), "exam-authority-"));
     await writeFile(join(publicDir, "index.html"), "<html></html>");
     await registerStaticFrontend(app, publicDir);

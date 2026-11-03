@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
+import { logger } from "@/lib/logger";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
@@ -131,6 +132,17 @@ interface AssignableRoleItem {
   key: AssignableRole;
   label: string;
   purpose: string;
+}
+
+/**
+ * Category-only metadata for user-management command telemetry: the stable
+ * ApiError code. INVARIANT: never carries the raw error message, the server
+ * compatibility text, or any credential value.
+ */
+function userFailureMetadata(err: unknown) {
+  return {
+    errorCode: err instanceof ApiError ? err.code : "UNKNOWN",
+  };
 }
 
 /** Admin page for managing platform users (create, edit, enable/disable). */
@@ -342,6 +354,7 @@ export function UsersPage() {
       setDialogOpen(false);
       await loadUsers();
     } catch (err) {
+      logger.warn("user_admin.save_failed", userFailureMetadata(err));
       toast.error(getApiErrorMessage(err, t, t("admin.common.saveFailed")));
     } finally {
       setSaving(false);
@@ -356,6 +369,7 @@ export function UsersPage() {
       await api.patch(`/api/users/${user.id}`, { isActive: !user.isActive });
       await loadUsers();
     } catch (err) {
+      logger.warn("user_admin.toggle_failed", userFailureMetadata(err));
       toast.error(
         getApiErrorMessage(err, t, t("admin.common.operationFailed")),
       );
@@ -457,6 +471,7 @@ export function UsersPage() {
       setSelectedCourseId("");
       await refreshAssignments(assignmentsUser);
     } catch (err) {
+      logger.warn("user_admin.course_assign_failed", userFailureMetadata(err));
       toast.error(
         getApiErrorMessage(
           err,
@@ -479,6 +494,7 @@ export function UsersPage() {
       );
       await refreshAssignments(assignmentsUser);
     } catch (err) {
+      logger.warn("user_admin.course_revoke_failed", userFailureMetadata(err));
       toast.error(
         getApiErrorMessage(
           err,
@@ -573,6 +589,7 @@ export function UsersPage() {
       setSelectedExamId("");
       await refreshExamAssignments(examAssignmentsUser);
     } catch (err) {
+      logger.warn("user_admin.exam_assign_failed", userFailureMetadata(err));
       toast.error(
         getApiErrorMessage(err, t, t("admin.users.graderExams.assignFailed")),
       );
@@ -591,6 +608,7 @@ export function UsersPage() {
       );
       await refreshExamAssignments(examAssignmentsUser);
     } catch (err) {
+      logger.warn("user_admin.exam_revoke_failed", userFailureMetadata(err));
       toast.error(
         getApiErrorMessage(err, t, t("admin.users.graderExams.revokeFailed")),
       );

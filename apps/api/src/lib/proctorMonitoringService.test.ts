@@ -144,6 +144,39 @@ describe("projectSafeMetadata (per-event allowlist, default-deny)", () => {
     expect(out).toEqual({ durationMs: 50, errorCode: "X" });
   });
 
+  // Correlation keys (#800 PR-B): the save-error allowlist must project the
+  // envelope requestId, the HTTP status, and the save's clientSeq so a
+  // proctor-timeline failure row can be correlated with the answer-save
+  // receipt row (candidate key — clientSeq is not content identity) and
+  // the server-side request log — while non-correlation junk stays dropped.
+  it("projects the correlation keys (clientSeq/requestId/status) for save-failure events", () => {
+    const out = projectSafeMetadata("answer_autosave_failed", {
+      questionId: "q1",
+      saveMode: "autosave",
+      durationMs: 120,
+      errorCode: "SAVE_PERSISTENCE_FAILED",
+      clientSeq: 3,
+      requestId: "req-500-abc",
+      status: 500,
+      // Non-correlation extras stay dropped by the allowlist itself.
+      rawMessage: "internal ooops",
+      stack: "Error: ...",
+      answer: "SECRET",
+    });
+    expect(out).toEqual({
+      questionId: "q1",
+      saveMode: "autosave",
+      durationMs: 120,
+      errorCode: "SAVE_PERSISTENCE_FAILED",
+      clientSeq: 3,
+      requestId: "req-500-abc",
+      status: 500,
+    });
+    expect(out).not.toHaveProperty("rawMessage");
+    expect(out).not.toHaveProperty("stack");
+    expect(out).not.toHaveProperty("answer");
+  });
+
   it("returns empty object for an unknown event name (default-deny)", () => {
     expect(
       projectSafeMetadata("some_new_event", { anything: 1, answer: "x" }),
