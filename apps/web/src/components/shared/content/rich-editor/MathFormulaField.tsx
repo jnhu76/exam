@@ -33,6 +33,13 @@ export interface MathFormulaFieldProps {
   /** Fires on every USER edit with the current latex (never on mount). */
   onInput: (latex: string) => void;
   onEscape: () => void;
+  /**
+   * Viewport band (CSS px) the MathLive virtual keyboard currently occupies,
+   * 0 when hidden. MathLive pins the keyboard to the browser viewport and only
+   * compensates document flow (body padding-bottom), so a fixed-position
+   * modal has to reserve the band itself (#882).
+   */
+  onKeyboardInsetChange?: (inset: number) => void;
   disabled?: boolean;
 }
 
@@ -45,6 +52,7 @@ export function MathFormulaField({
   initialLatex,
   onInput,
   onEscape,
+  onKeyboardInsetChange,
   disabled = false,
 }: MathFormulaFieldProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -52,6 +60,7 @@ export function MathFormulaField({
 
   useEffect(() => {
     let disposed = false;
+    let detachKeyboard: (() => void) | undefined;
     void loadMathlive().then(({ MathfieldElement }) => {
       const container = containerRef.current;
       if (disposed || !container) return;
@@ -79,6 +88,32 @@ export function MathFormulaField({
       field.menuItems = [];
       field.value = initialLatex;
       fieldRef.current = field;
+
+      // OWNERSHIP: the keyboard is a singleton shared by every mathfield in
+      // the document, so its band is observed on the MathLive keyboard object
+      // (its documented event target) and reported for the lifetime of THIS
+      // field only. `virtual-keyboard-toggle` covers show/hide (a hide does
+      // not rewrite the geometry it reports), `geometrychange` covers the
+      // keyboard being resized or its layout swapped while open.
+      const keyboard = window.mathVirtualKeyboard;
+      const reportInset = () => {
+        if (disposed) return;
+        onKeyboardInsetChange?.(
+          keyboard.visible ? Math.round(keyboard.boundingRect.height) : 0,
+        );
+      };
+      keyboard.addEventListener("virtual-keyboard-toggle", reportInset);
+      keyboard.addEventListener("geometrychange", reportInset);
+      // INITIAL SYNC: a field mounted while the keyboard is ALREADY visible
+      // (dialog reopened inside MathLive's hide window, or a remount) observes
+      // no transition event, so without this the band stays unreserved and
+      // the footer reopens under the keyboard (#882).
+      reportInset();
+      detachKeyboard = () => {
+        keyboard.removeEventListener("virtual-keyboard-toggle", reportInset);
+        keyboard.removeEventListener("geometrychange", reportInset);
+      };
+
       requestAnimationFrame(() => {
         if (!disposed) {
           try {
@@ -92,6 +127,9 @@ export function MathFormulaField({
     });
     return () => {
       disposed = true;
+      detachKeyboard?.();
+      // The surface is unmounting with the dialog: no band may stay reserved.
+      onKeyboardInsetChange?.(0);
       fieldRef.current?.remove();
       fieldRef.current = null;
     };
