@@ -142,11 +142,20 @@ describe("RichTextAnswerInput — typed read adoption", () => {
         onChange={() => {}}
       />,
     );
-    const surface = await vi.waitFor(() => {
-      const el = document.querySelector<HTMLElement>(".ProseMirror");
-      if (!el) throw new Error("editor not mounted");
-      return el;
-    });
+    // Budgeted wait (#858): this is the FILE'S FIRST editor mount, so it
+    // still bears Tiptap's residual mount cost (~0.9s under 2-core coverage
+    // contention even with the chunk preloaded at module load above). The
+    // assertion is "the editor mounts and adopts the content", not
+    // "mount under one second"; the default 1000ms waitFor budget sat inside
+    // the cost distribution and was the direct cause of the repeat failures.
+    const surface = await vi.waitFor(
+      () => {
+        const el = document.querySelector<HTMLElement>(".ProseMirror");
+        if (!el) throw new Error("editor not mounted");
+        return el;
+      },
+      { timeout: 5000 },
+    );
     expect(surface.textContent).toContain("普通文本草稿");
   }, 15000);
 
