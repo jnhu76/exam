@@ -469,6 +469,10 @@ describe("CoursePage #785 server-side search and pagination (BDD L2)", () => {
     ).toBeInTheDocument();
   });
 
+  // 15s budget, same as the staff-pagination precedent in UsersPage.test.tsx:
+  // seven real-timer keystrokes against a 300ms debounce plus five settled
+  // assertions over 20-row re-renders put this interaction class past the
+  // 10s CI testTimeout under coverage contention (#858).
   it("B03: search queries the server full set and survives page flips", async () => {
     const user = userEvent.setup();
     const all = [
@@ -507,7 +511,7 @@ describe("CoursePage #785 server-side search and pagination (BDD L2)", () => {
       );
     });
     expect(await screen.findByText(/共 40 条/)).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("B07: deleting the only course on page 2 steps back to page 1", async () => {
     const user = userEvent.setup();

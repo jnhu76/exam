@@ -979,7 +979,13 @@ describe("QuestionPage URL query state (#784 A3)", () => {
     // The applied filter is DISPLAYED. An exact-match implementation would
     // leave the Select on its placeholder — an applied filter the user can
     // neither see nor undo — and would keep the page resolving forever.
-    await waitFor(() => expect(courseTrigger()).toHaveTextContent("大写课程"));
+    // Budgeted wait (#858): this folds through TWO sequential awaited GETs
+    // (options list, then the id probe gated on it) plus dependent Select
+    // commits — cheap on an idle host, but beyond waitFor's 1000ms default
+    // under CI's coverage contention (same lane that kills R1 in readTrust).
+    await waitFor(() => expect(courseTrigger()).toHaveTextContent("大写课程"), {
+      timeout: 5000,
+    });
     // URL, control and request name the same course.
     await waitFor(() => expect(urlSearch()).toContain(`courseId=${canonical}`));
     expect(urlSearch()).not.toContain(canonical.toUpperCase());
