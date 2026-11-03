@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,10 +22,14 @@ import { __resetExamTelemetryForTest } from "@/lib/examTelemetry";
  * - A2-F2: the envelope requestId must surface to the candidate (server-fault
  *   banner detail) so support can locate the server-side request.
  * - A2-F5: started/failed telemetry events carry the save's clientSeq so a
- *   persisted telemetry row joins to its answer-save receipt row.
- * - A2-F7: an HTTP >= 500 failure renders the server-fault banner — the
- *   connection banner must not present a server fault as the candidate's
- *   network problem.
+ *   persisted telemetry row correlates with the receipt row keyed
+ *   (attemptId, questionId, clientSeq) — a candidate correlation key, not
+ *   content identity (a reloaded client can reuse a clientSeq for different
+ *   content; the receipt's answerIdentity digest is the content authority).
+ * - A2-F7 (three-way contract): transport → connection banner; HTTP >= 500
+ *   → server-fault banner; HTTP 4xx (the server ANSWERED with a
+ *   protocol/business rejection) → NEITHER banner — the save-failed surface
+ *   and the telemetry errorCode still carry it.
  *
  * Desensitization is asserted at the PERSISTENCE boundary (the recording
  * buffer's send transport): the persisted record carries categories/stable
@@ -206,7 +210,7 @@ afterEach(() => {
 });
 
 describe("save-fault classification and correlation (#800 PR-B)", () => {
-  it("an HTTP 500 save failure records stable machine facts, joins clientSeq, and renders the server-fault banner (A2-F1/F2/F5/F7)", async () => {
+  it("an HTTP 500 save failure records stable machine facts, carries clientSeq, and renders the server-fault banner (A2-F1/F2/F5/F7)", async () => {
     const send = installRecordingBuffer();
     installTakeRoute();
     let postedClientSeq: unknown;
@@ -259,8 +263,10 @@ describe("save-fault classification and correlation (#800 PR-B)", () => {
     expect(meta.saveMode).toBe("autosave");
     expect(typeof meta.durationMs).toBe("number");
 
-    // A2-F5: started and failed events share the save's clientSeq, and it
-    // equals the clientSeq sent in the POST body (receipt join key).
+    // A2-F5: within this one save, the started/failed rows and the POST
+    // body share the same clientSeq — the candidate key for correlating a
+    // telemetry row with the receipt row (equal clientSeq alone is not
+    // content identity; the receipt's answerIdentity digest is).
     const started = telemetryEvents(send, "answer_autosave_started");
     expect(started).toHaveLength(1);
     const startedMeta = started[0]!.metadata as Record<string, unknown>;
@@ -276,6 +282,56 @@ describe("save-fault classification and correlation (#800 PR-B)", () => {
     expect(meta).not.toHaveProperty("message");
     expect(meta).not.toHaveProperty("stack");
     expect(meta).not.toHaveProperty("serverMessage");
+  });
+
+  it("an HTTP 409 save rejection claims neither connectivity nor server fault: no banner, save-failed surface only, telemetry carries code/status/requestId (A2-F7 three-way)", async () => {
+    const send = installRecordingBuffer();
+    installTakeRoute();
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        const { ApiError } = await import("@/lib/api");
+        throw new ApiError(
+          409,
+          "attempt state conflict confidential-detail",
+          "INVALID_STATE_TRANSITION",
+          undefined,
+          "req-409-xyz",
+        );
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    renderPage();
+    await editAnswer();
+
+    // The save-failed surface is present (per-question retry banner)...
+    await waitFor(
+      () => {
+        expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
+      },
+      { timeout: 4000 },
+    );
+    // ...but NEITHER banner renders: an HTTP-level 4xx is the server
+    // ANSWERING with a rejection — not the candidate's connectivity, and
+    // not a server fault. Same rejection semantics as the typed envelope
+    // path, delivered on the wire-status channel.
+    expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
+    expect(screen.queryByText("服务器错误")).not.toBeInTheDocument();
+
+    await flushAll();
+
+    // The telemetry row is the 4xx's surface: stable code, status, and
+    // requestId for cross-layer correlation — machine facts only.
+    const failed = telemetryEvents(send, "answer_autosave_failed");
+    expect(failed).toHaveLength(1);
+    const meta = failed[0]!.metadata as Record<string, unknown>;
+    expect(meta.errorCode).toBe("INVALID_STATE_TRANSITION");
+    expect(meta.status).toBe(409);
+    expect(meta.requestId).toBe("req-409-xyz");
+    expect(meta).not.toHaveProperty("message");
+    const persisted = JSON.stringify(send.mock.calls);
+    expect(persisted).not.toContain("attempt state conflict");
+    expect(persisted).not.toContain("confidential-detail");
   });
 
   it("a transport-level failure keeps the NETWORK fallback, omits status/requestId, and keeps the connection banner (A2-F1 fallback, A2-F7 unchanged path)", async () => {
@@ -344,5 +400,78 @@ describe("save-fault classification and correlation (#800 PR-B)", () => {
     await flushAll();
     expect(telemetryEvents(send, "answer_autosave_started")).toHaveLength(0);
     expect(telemetryEvents(send, "answer_autosave_failed")).toHaveLength(0);
+  });
+});
+
+/**
+ * The heartbeat is the other live wire probe; it must classify failures with
+ * the SAME three-way contract as the save path (shared
+ * classifyWireFailure). A heartbeat 4xx is the server ANSWERING, so it may
+ * neither clear nor claim connectivity wrongly; a heartbeat 5xx is a server
+ * fault; a fetch-level failure (ApiError status 0) is the candidate's
+ * connection. These run under fake timers so the 30s heartbeat fires
+ * deterministically, with no save scheduled (no edit).
+ */
+describe("heartbeat wire-failure classification (#800 PR-B A2-F7)", () => {
+  function heartbeatFailsWith(status: number, code?: string) {
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        const { ApiError } = await import("@/lib/api");
+        throw new ApiError(
+          status,
+          "heartbeat rejected",
+          code,
+          undefined,
+          "req-hb",
+        );
+      }
+      return { ok: true, serverNow: NOW };
+    });
+  }
+
+  async function renderAndFireHeartbeat() {
+    vi.useFakeTimers();
+    renderPage();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // The heartbeat interval fires at T=30s; advance past it and let the
+    // rejection settle through the catch path.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(31_000);
+    });
+  }
+
+  it("a 4xx heartbeat claims neither connectivity nor server fault (no banner)", async () => {
+    installTakeRoute();
+    heartbeatFailsWith(403, "FORBIDDEN");
+
+    await renderAndFireHeartbeat();
+
+    expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
+    expect(screen.queryByText("服务器错误")).not.toBeInTheDocument();
+  });
+
+  it("a 5xx heartbeat renders the server-fault banner, not the connectivity copy", async () => {
+    installTakeRoute();
+    heartbeatFailsWith(503, "SERVICE_UNAVAILABLE");
+
+    await renderAndFireHeartbeat();
+
+    expect(screen.getByText("服务器错误")).toBeInTheDocument();
+    expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
+  });
+
+  it("a transport-class heartbeat (ApiError status 0) renders the connectivity banner", async () => {
+    installTakeRoute();
+    // The api client wraps fetch-level failures as ApiError status 0; the
+    // heartbeat path must treat that as transport, exactly like the save
+    // path — not clear the connection banner and not claim a server fault.
+    heartbeatFailsWith(0, undefined);
+
+    await renderAndFireHeartbeat();
+
+    expect(screen.getByText("连接异常")).toBeInTheDocument();
+    expect(screen.queryByText("服务器错误")).not.toBeInTheDocument();
   });
 });

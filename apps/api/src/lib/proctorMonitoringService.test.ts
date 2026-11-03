@@ -146,7 +146,8 @@ describe("projectSafeMetadata (per-event allowlist, default-deny)", () => {
 
   // Correlation keys (#800 PR-B): the save-error allowlist must project the
   // envelope requestId, the HTTP status, and the save's clientSeq so a
-  // proctor-timeline failure row joins to the answer-save receipt row and
+  // proctor-timeline failure row can be correlated with the answer-save
+  // receipt row (candidate key — clientSeq is not content identity) and
   // the server-side request log — while non-correlation junk stays dropped.
   it("projects the correlation keys (clientSeq/requestId/status) for save-failure events", () => {
     const out = projectSafeMetadata("answer_autosave_failed", {

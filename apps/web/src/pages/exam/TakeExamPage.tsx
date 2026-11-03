@@ -140,6 +140,33 @@ function getSaveRejectionDisplay(
 type QuestionState = "unanswered" | "answered" | "flagged";
 
 /**
+ * Wire-failure classification shared by the save and heartbeat paths
+ * (#800 PR-B A2-F7). One authority so the two paths cannot drift:
+ *   transport   — the request never produced a server response. The api
+ *                 client wraps fetch-level failures as ApiError status 0;
+ *                 a non-ApiError throw carries no wire facts either, so it
+ *                 is transport-class defensively.
+ *   serverFault — an HTTP >= 500 response: the SERVER failed the request.
+ *   neither     — an HTTP 4xx response: the server ANSWERED with a
+ *                 protocol/business rejection, so it claims neither the
+ *                 candidate's connectivity nor a server fault.
+ * `isDisconnected` is the connection-banner slot flag ("saves cannot persist
+ * right now"): transport and 5xx set it, a 4xx leaves it clear.
+ */
+function classifyWireFailure(err: unknown): {
+  transport: boolean;
+  serverFault: boolean;
+  requestId: string | null;
+} {
+  const apiError = err instanceof ApiError ? err : null;
+  return {
+    transport: apiError === null || apiError.status === 0,
+    serverFault: apiError !== null && apiError.status >= 500,
+    requestId: apiError?.requestId ?? null,
+  };
+}
+
+/**
  * Locked-state presentation branched by the AUTHORITATIVE snapshot lockReason
  * (#674). Each cause states only what is actually true:
  *   deadline  → time-up copy; 正在自动提交 ONLY while the auto-submit flow is
@@ -368,10 +395,12 @@ export function TakeExamPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDisconnected, setIsDisconnected] = useState(false);
   // #800 PR-B A2-F7: a save failure caused by a SERVER-side fault
-  // (HTTP >= 500) must not read as the candidate's connectivity problem.
-  // isDisconnected keeps its existing "saves cannot persist right now"
-  // semantics (both fault kinds set it; success/heartbeat-restore clears
-  // it); this flag only branches WHICH banner copy renders. A2-F2:
+  // (HTTP >= 500) must not read as the candidate's connectivity problem,
+  // and an HTTP 4xx rejection (the server ANSWERED "no") must claim neither
+  // connectivity nor server fault. isDisconnected keeps its "saves cannot
+  // persist right now" banner-slot semantics — transport failures and 5xx
+  // set it, a 4xx leaves it clear; success/heartbeat-restore clears it —
+  // and saveServerFault only branches WHICH banner copy renders. A2-F2:
   // saveFaultRequestId carries the error envelope's requestId so the
   // server-fault banner can surface the support correlation id.
   const [saveServerFault, setSaveServerFault] = useState(false);
@@ -831,10 +860,14 @@ export function TakeExamPage() {
       const baseVersion = versionsRef.current.get(questionId) ?? 0;
       const clientSeq = (clientSeqsRef.current.get(questionId) ?? 0) + 1;
       clientSeqsRef.current.set(questionId, clientSeq);
-      // #800 PR-B A2-F5: started/failed events carry clientSeq so a persisted
-      // telemetry row joins to its answer-save receipt row (the receipt's
-      // composite key includes clientSeq) — computed BEFORE the started event
-      // so the started row already carries the join key.
+      // #800 PR-B A2-F5: started/failed events carry clientSeq so a
+      // persisted telemetry row correlates with the receipt row keyed
+      // (attemptId, questionId, clientSeq). clientSeq is a CANDIDATE
+      // correlation key, not content identity: a reloaded client restarts
+      // its per-question counter, so equal clientSeq does not prove same
+      // content or same persistence outcome — the receipt's answerIdentity
+      // digest is the content authority. Computed BEFORE the started event
+      // so the started row already carries the key.
       trackExamEvent(
         "answer_autosave_started",
         { clientSeq },
@@ -955,15 +988,20 @@ export function TakeExamPage() {
           // failure carries no ApiError facts and keeps the NETWORK fallback
           // without mislabeling.
           const apiError = err instanceof ApiError ? err : null;
-          const serverFault = apiError !== null && apiError.status >= 500;
-          setIsDisconnected(true);
-          // A2-F7: an HTTP >= 500 fault is the SERVER's failure, not the
-          // candidate's connectivity — the banner copy branches on
-          // saveServerFault. Both flags move together everywhere: each new
-          // failure reclassifies, every restore point (save/heartbeat
-          // success, snapshot apply, route change) clears both.
+          // A2-F7 three-way contract (see {@link classifyWireFailure}):
+          //   transport (status 0 / no ApiError) → connectivity banner;
+          //   HTTP >= 500 → server-fault banner;
+          //   HTTP 4xx → NO connectivity claim and NO server-fault claim —
+          //     the server ANSWERED with a protocol/business rejection, so
+          //     only the save-failed surface and the telemetry errorCode
+          //     carry it. Semantically the same rejection as the typed
+          //     envelope path above (accepted === false), delivered on the
+          //     HTTP status channel instead of the reject vocabulary.
+          const { transport, serverFault, requestId } =
+            classifyWireFailure(err);
+          setIsDisconnected(transport || serverFault);
           setSaveServerFault(serverFault);
-          setSaveFaultRequestId(apiError?.requestId ?? null);
+          setSaveFaultRequestId(requestId);
           trackExamEvent(
             "answer_autosave_failed",
             {
@@ -1164,12 +1202,16 @@ export function TakeExamPage() {
         }
         return;
       }
-      setIsDisconnected(true);
-      // The heartbeat's live diagnosis supersedes a stale server-fault
-      // classification: the server is unreachable NOW, so the connection
-      // banner is the current truth (#800 PR-B A2-F7).
-      setSaveServerFault(false);
-      setSaveFaultRequestId(null);
+      // Same three-way contract as the save path (the terminal 409 above
+      // already returned) — see {@link classifyWireFailure}: transport →
+      // connectivity banner; HTTP >= 500 → server-fault banner; any other
+      // 4xx means the server ANSWERED — no connectivity claim and no
+      // server-fault claim. The heartbeat is a live probe, so its current
+      // result supersedes a stale save-path classification (#800 PR-B A2-F7).
+      const { transport, serverFault, requestId } = classifyWireFailure(err);
+      setIsDisconnected(transport || serverFault);
+      setSaveServerFault(serverFault);
+      setSaveFaultRequestId(requestId);
       heartbeatFailureRef.current += 1;
       if (
         heartbeatFailureRef.current >= 3 &&
