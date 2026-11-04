@@ -498,3 +498,126 @@ describe("heartbeat plugin — failure counters and all-failure aggregation log"
     }
   });
 });
+
+// Issue #862 — the persistent business-failure escalation input the operability
+// monitor consumes. The heartbeat tick settles even when BOTH legs (disruption
+// + incident reconciliation) fail every cycle; the escalation signal is the
+// per-tick consecutive-failure counter, reset by the first clean settle.
+describe("heartbeat plugin — persistent business-failure escalation input (#862)", () => {
+  const ORG = { id: "org-1" };
+  const STALE_ATTEMPT = {
+    id: "att-fail",
+    status: "in_progress",
+    lastActivityAt: new Date("2026-09-17T07:00:00Z"),
+  };
+
+  function buildAllFailingDb(): unknown {
+    return {
+      select: () => ({
+        from: (table: unknown) => {
+          if (table === organizations) return Promise.resolve([ORG]);
+          if (table === examAttempts) {
+            return { where: () => Promise.resolve([STALE_ATTEMPT]) };
+          }
+          // The incident leg's first query hits an unhandled table → throws →
+          // reconciliation-leg failure (discovery-level catch).
+          throw new Error("unexpected table in heartbeat fake db");
+        },
+      }),
+      transaction: async () => {
+        throw new Error("forced disruption failure");
+      },
+    };
+  }
+
+  function buildQuietDb(): unknown {
+    const emptyEpisodeChain = {
+      innerJoin: () => emptyEpisodeChain,
+      where: () => emptyEpisodeChain,
+      orderBy: () => Promise.resolve([]),
+    };
+    return {
+      select: () => ({
+        from: (table: unknown) => {
+          if (table === organizations) return Promise.resolve([ORG]);
+          if (table === examAttempts) {
+            return { where: () => Promise.resolve([]) };
+          }
+          if (table === attemptInterruptionEvents) return emptyEpisodeChain;
+          throw new Error("unexpected table in heartbeat fake db");
+        },
+      }),
+    };
+  }
+
+  function buildApp(db: unknown, lines: string[]) {
+    const clock = { current: new Date("2026-09-17T08:00:00Z") };
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        lines.push(chunk.toString());
+        callback();
+      },
+    });
+    const app = Fastify({ logger: { level: "info", stream } });
+    app.decorate<unknown>("db", db as never);
+    app.decorate("now", () => clock.current);
+    return { app, clock };
+  }
+
+  function resetEscalationFacts() {
+    heartbeatMetrics.startedAt = null;
+    heartbeatMetrics.lastStartedAt = null;
+    heartbeatMetrics.lastSettledAt = null;
+    heartbeatMetrics.activeSince = null;
+    heartbeatMetrics.disruptedCount = 0;
+    heartbeatMetrics.disruptionFailedCount = 0;
+    heartbeatMetrics.systemIncidentsCreated = 0;
+    heartbeatMetrics.systemIncidentConflicts = 0;
+    heartbeatMetrics.incidentReconciliationFailedCount = 0;
+    heartbeatMetrics.consecutiveFailedTicks = 0;
+  }
+
+  async function runTick(clock: { current: Date }) {
+    clock.current = new Date(clock.current.getTime() + 30_000);
+    await vi.advanceTimersByTimeAsync(30_000);
+  }
+
+  it("REGRESSION: both legs failing every settled tick increments consecutiveFailedTicks; the first clean tick resets it — the monitor's escalation input", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const failing = buildApp(buildAllFailingDb(), lines);
+    resetEscalationFacts();
+    await failing.app.register(heartbeatPlugin);
+    await failing.app.ready();
+
+    try {
+      for (let i = 0; i < 4; i++) await runTick(failing.clock);
+
+      expect(heartbeatMetrics.consecutiveFailedTicks).toBe(4);
+      // Settling-with-failures is not a stall: the stall classifier stays
+      // healthy on the very input the escalation counter is climbing on.
+      expect(
+        classifyLoopStall(
+          heartbeatMetrics,
+          30_000,
+          heartbeatMetrics.lastSettledAt!,
+        ),
+      ).toBe("healthy");
+    } finally {
+      await failing.app.close();
+    }
+
+    // A fully quiet tick (no marks, no failures on either leg) resets the
+    // consecutive count to zero on the first clean settle.
+    const quiet = buildApp(buildQuietDb(), lines);
+    await quiet.app.register(heartbeatPlugin);
+    await quiet.app.ready();
+    try {
+      await runTick(quiet.clock);
+      expect(heartbeatMetrics.consecutiveFailedTicks).toBe(0);
+    } finally {
+      await quiet.app.close();
+      vi.useRealTimers();
+    }
+  });
+});

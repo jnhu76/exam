@@ -66,6 +66,15 @@ export const heartbeatMetrics = {
   incidentReconciliationFailedCount: 0,
   systemIncidentsCreated: 0,
   systemIncidentConflicts: 0,
+  /**
+   * #862 escalation input: consecutive SETTLED ticks in which EITHER leg had
+   * business failures (disruption or incident reconciliation), reset to 0 by
+   * the first clean settle. A tick-level throw neither increments nor resets
+   * this counter (frozen): those cycles are owned by the readiness events.
+   * Process-local; reset on server restart. Consumed by the operability
+   * monitor's `operability.business_failure` transition.
+   */
+  consecutiveFailedTicks: 0,
 };
 
 /**
@@ -371,6 +380,13 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
             "Conflicting operations occupy heartbeat-derived System incident operationIds",
           );
         }
+        // #862 escalation input: a settled tick where EITHER leg had business
+        // failures extends the consecutive run; the first clean settle on both
+        // legs resets it.
+        heartbeatMetrics.consecutiveFailedTicks =
+          result.failedCount > 0 || incidentCounts.failedCount > 0
+            ? heartbeatMetrics.consecutiveFailedTicks + 1
+            : 0;
       } catch (err) {
         fastify.log.error({ err }, "Error scanning for disrupted attempts");
       }
