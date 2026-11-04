@@ -257,22 +257,31 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
 
   /**
    * Fake db routing by drizzle table identity (same pattern as the heartbeat
-   * #800 fakes): organization discovery resolves one org;
+   * #800 fakes): organization discovery resolves one org (or THROWS while
+   * `orgDiscoveryThrows()` — a tick-level throw, not a business failure);
    * listDeadlineCandidates resolves ONE candidate while `discoveryFails()`,
    * else zero; every per-candidate transaction rejects — so the tick settles
    * with failedCount=1 per failing tick (business work failing, not a stall).
    */
-  function buildDb(discoveryFails: () => boolean): unknown {
+  function buildDb(legs: {
+    discoveryFails: () => boolean;
+    orgDiscoveryThrows?: () => boolean;
+  }): unknown {
     return {
       select: () => ({
         from: (table: unknown) => {
-          if (table === organizations) return Promise.resolve([ORG]);
+          if (table === organizations) {
+            if (legs.orgDiscoveryThrows?.()) {
+              throw new Error("forced org discovery failure");
+            }
+            return Promise.resolve([ORG]);
+          }
           if (table === examAttempts) {
             return {
               innerJoin: () => ({
                 where: () =>
                   Promise.resolve(
-                    discoveryFails() ? [FAILING_CANDIDATE_ROW] : [],
+                    legs.discoveryFails() ? [FAILING_CANDIDATE_ROW] : [],
                   ),
               }),
             };
@@ -298,7 +307,7 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
     const lines: string[] = [];
     let discoveryFails = true;
     const { app, clock } = buildApp(
-      buildDb(() => discoveryFails),
+      buildDb({ discoveryFails: () => discoveryFails }),
       lines,
     );
     resetEscalationFacts();
@@ -336,7 +345,7 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
     const lines: string[] = [];
     let discoveryFails = true;
     const { app, clock } = buildApp(
-      buildDb(() => discoveryFails),
+      buildDb({ discoveryFails: () => discoveryFails }),
       lines,
     );
     resetEscalationFacts();
@@ -352,6 +361,50 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
 
       // A clean tick (discovery returns no candidates → zero failures) resets
       // the consecutive count to zero on the very first quiet settle.
+      discoveryFails = false;
+      await runTick(clock);
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(0);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("REGRESSION: a tick-level THROW freezes the counter — neither resets nor advances it (the documented readiness-ownership boundary)", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    let discoveryFails = true;
+    let orgDiscoveryThrows = false;
+    const { app, clock } = buildApp(
+      buildDb({
+        discoveryFails: () => discoveryFails,
+        orgDiscoveryThrows: () => orgDiscoveryThrows,
+      }),
+      lines,
+    );
+    resetEscalationFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      await runTick(clock);
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(1);
+
+      // A tick whose org discovery THROWS settles via the catch path but
+      // carries NO business-failure evidence: the counter must stay exactly
+      // where it was — not reset to 0 (a throw is not recovery), not
+      // advanced (a thrown cycle is owned by the readiness facts).
+      orgDiscoveryThrows = true;
+      await runTick(clock);
+      expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(1);
+
+      // The frozen run continues from where it froze.
+      orgDiscoveryThrows = false;
+      await runTick(clock);
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(2);
+
+      // And the first clean settle still resets.
       discoveryFails = false;
       await runTick(clock);
       expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(0);

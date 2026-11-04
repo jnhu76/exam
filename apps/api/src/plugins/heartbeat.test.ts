@@ -511,11 +511,18 @@ describe("heartbeat plugin — persistent business-failure escalation input (#86
     lastActivityAt: new Date("2026-09-17T07:00:00Z"),
   };
 
-  function buildAllFailingDb(): unknown {
+  function buildAllFailingDb(
+    orgDiscoveryThrows: () => boolean = () => false,
+  ): unknown {
     return {
       select: () => ({
         from: (table: unknown) => {
-          if (table === organizations) return Promise.resolve([ORG]);
+          if (table === organizations) {
+            if (orgDiscoveryThrows()) {
+              throw new Error("forced org discovery failure");
+            }
+            return Promise.resolve([ORG]);
+          }
           if (table === examAttempts) {
             return { where: () => Promise.resolve([STALE_ATTEMPT]) };
           }
@@ -617,6 +624,41 @@ describe("heartbeat plugin — persistent business-failure escalation input (#86
       expect(heartbeatMetrics.consecutiveFailedTicks).toBe(0);
     } finally {
       await quiet.app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("REGRESSION: a tick-level THROW freezes the counter — neither resets nor advances it (the documented readiness-ownership boundary)", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    let orgDiscoveryThrows = false;
+    const mixed = buildApp(
+      buildAllFailingDb(() => orgDiscoveryThrows),
+      lines,
+    );
+    resetEscalationFacts();
+    await mixed.app.register(heartbeatPlugin);
+    await mixed.app.ready();
+
+    try {
+      await runTick(mixed.clock);
+      expect(heartbeatMetrics.consecutiveFailedTicks).toBe(1);
+
+      // A tick whose org discovery THROWS settles via the catch path but
+      // carries NO business-failure evidence: the counter must stay exactly
+      // where it was — not reset to 0 (a throw is not recovery), not
+      // advanced (a thrown cycle is owned by the readiness facts).
+      orgDiscoveryThrows = true;
+      await runTick(mixed.clock);
+      expect(heartbeatMetrics.lastSettledAt).not.toBeNull();
+      expect(heartbeatMetrics.consecutiveFailedTicks).toBe(1);
+
+      // The frozen run continues from where it froze.
+      orgDiscoveryThrows = false;
+      await runTick(mixed.clock);
+      expect(heartbeatMetrics.consecutiveFailedTicks).toBe(2);
+    } finally {
+      await mixed.app.close();
       vi.useRealTimers();
     }
   });
