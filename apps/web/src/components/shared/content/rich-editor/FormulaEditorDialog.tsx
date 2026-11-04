@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -45,6 +45,25 @@ export function shouldApplyFormulaEdit(
   );
 }
 
+/**
+ * Dialog geometry while the MathLive virtual keyboard owns the bottom band of
+ * the viewport (#882). MathLive pins its keyboard to the browser viewport and
+ * compensates only document flow (body padding), so a viewport-centered fixed
+ * dialog keeps its footer UNDER the keyboard: confirm/cancel then intercept no
+ * pointer events. Reserve the band and re-center in the remaining area instead
+ * of raising z-index, disabling the keyboard, or teaching the caller to avoid
+ * the control. Pure so the geometry contract is testable without a browser.
+ */
+export function formulaDialogKeyboardStyle(
+  inset: number,
+): CSSProperties | undefined {
+  if (!Number.isFinite(inset) || inset <= 0) return undefined;
+  return {
+    top: `calc((100dvh - ${inset}px) / 2)`,
+    maxHeight: `calc(100dvh - ${inset}px - 2rem)`,
+  };
+}
+
 export interface FormulaDialogTarget {
   /** The atom's current latex; "" for an insert. */
   latex: string;
@@ -83,6 +102,9 @@ export function FormulaEditorDialog({
   const [userEdited, setUserEdited] = useState(false);
   const [display, setDisplay] = useState(false);
   const [expertOpen, setExpertOpen] = useState(false);
+  // Owned by the mounted MathLive field (it observes the shared keyboard and
+  // reports 0 on unmount), so no stale band can survive a closed dialog.
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   // Each open re-arms the surface from the targeted atom (or an empty insert);
   // closing always disarms so a stale draft can never leak into the next open.
@@ -133,7 +155,11 @@ export function FormulaEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md" data-testid="formula-dialog">
+      <DialogContent
+        size="md"
+        data-testid="formula-dialog"
+        style={formulaDialogKeyboardStyle(keyboardInset)}
+      >
         <DialogHeader>
           <DialogTitle>
             {isEdit
@@ -145,7 +171,10 @@ export function FormulaEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        {/* data-slot="dialog-body" is the dialog's SINGLE vertical scroll
+            owner (surface/recipes.css): it shrinks and scrolls once the
+            keyboard-reserved cap binds, keeping the footer in place. */}
+        <div data-slot="dialog-body" className="flex flex-col gap-4">
           <MathFormulaField
             key={`${open}-${target?.latex ?? ""}`}
             initialLatex={latex}
@@ -154,6 +183,7 @@ export function FormulaEditorDialog({
               setLatex(value);
             }}
             onEscape={() => onOpenChange(false)}
+            onKeyboardInsetChange={setKeyboardInset}
           />
 
           <div className="flex flex-wrap items-center gap-2">
