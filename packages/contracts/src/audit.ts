@@ -98,24 +98,32 @@ export type AuditLogExportQuery = z.infer<typeof AuditLogExportQuerySchema>;
 // ── Keyset cursor ────────────────────────────────────────────────────
 
 /**
- * Cursor format: `v2|<snapshotTo ISO>|<lastCreatedAt ISO>|<audit row id>`.
+ * Cursor format: `v3|<snapshotTo ISO>|<lastCreatedAt epoch-µs>|<audit row id>`.
  * The leading `snapshotTo` is the frozen upper bound of the audit window the
  * cursor belongs to, making the cursor self-contained: the server re-derives
  * the window from the token on every continuation page. Version-prefixed so
  * an encoding change is detected instead of silently mis-parsed (v1 cursors
- * carried no snapshot and are rejected). URL-unfriendly characters are
- * handled by the client's URLSearchParams / the server's query decoding —
- * the same convention the existing `from`/`to` ISO datetime filters already
- * rely on.
+ * carried no snapshot; v2 carried the last row as a ms-precision ISO instant
+ * — both are rejected). v3 carries the last row's `created_at` as EPOCH
+ * MICROSECONDS, an exact JS integer < 2^53 (the same key the repo projects as
+ * `sortKeyUs`): the column is a µs-precision DB default, and a ms-truncated
+ * cursor position fabricated ties at the millisecond boundary so
+ * continuation pages dropped µs-distinct rows inside the boundary ms.
+ * URL-unfriendly characters are handled by the client's URLSearchParams /
+ * the server's query decoding — the same convention the existing
+ * `from`/`to` ISO datetime filters already rely on.
  */
-export const AUDIT_CURSOR_VERSION = "v2";
+export const AUDIT_CURSOR_VERSION = "v3";
 
 /** Decoded keyset cursor — the snapshot bound plus the previous page's last row. */
 export interface AuditCursor {
   /** Frozen inclusive upper bound of the audit window (ISO datetime). */
   snapshotTo: string;
-  /** ISO datetime of the last-seen row's `createdAt`. */
-  createdAt: string;
+  /**
+   * Epoch microseconds of the last-seen row's `created_at` (exact integer
+   * < 2^53) — full µs precision, unlike a JS Date.
+   */
+  createdAtUs: number;
   /** Id of the last-seen audit row. */
   id: string;
 }
@@ -123,6 +131,8 @@ export interface AuditCursor {
 const AUDIT_CURSOR_SEPARATOR = "|";
 const AUDIT_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Epoch µs is an exact JS integer only below 2^53 (≈9.007e15, 16 digits). */
+const AUDIT_CURSOR_US_PATTERN = /^\d{1,16}$/;
 
 function isISODatetime(value: string): boolean {
   return z.string().datetime().safeParse(value).success;
@@ -130,34 +140,41 @@ function isISODatetime(value: string): boolean {
 
 /**
  * Encodes a snapshot bound and a row's `(createdAt, id)` into an opaque
- * cursor string.
+ * cursor string. `createdAtUs` is the row's full-precision epoch-µs key.
  */
 export function encodeAuditCursor(
   snapshotTo: Date | string,
-  createdAt: Date | string,
+  createdAtUs: number,
   id: string,
 ): string {
   const toISO = (value: Date | string): string =>
     typeof value === "string" ? value : value.toISOString();
-  return [AUDIT_CURSOR_VERSION, toISO(snapshotTo), toISO(createdAt), id].join(
-    AUDIT_CURSOR_SEPARATOR,
-  );
+  return [
+    AUDIT_CURSOR_VERSION,
+    toISO(snapshotTo),
+    String(Math.trunc(createdAtUs)),
+    id,
+  ].join(AUDIT_CURSOR_SEPARATOR);
 }
 
 /**
  * Decodes an audit cursor. Returns `null` when the cursor is malformed
- * (wrong version, wrong segment count, non-datetime, non-uuid id) so the
- * route can answer 400 instead of 500.
+ * (wrong version, wrong segment count, non-datetime snapshot, non-integer
+ * epoch-µs position, non-uuid id) so the route can answer 400 instead of 500.
+ * Stale-version cursors (v1/v2) also decode to `null` — the client restarts
+ * at the first page rather than resuming with a lossy position.
  */
 export function decodeAuditCursor(cursor: string): AuditCursor | null {
   const parts = cursor.split(AUDIT_CURSOR_SEPARATOR);
   if (parts.length !== 4) return null;
-  const [version, snapshotTo, createdAt, id] = parts;
+  const [version, snapshotTo, createdAtUs, id] = parts;
   if (version !== AUDIT_CURSOR_VERSION) return null;
   if (!snapshotTo || !isISODatetime(snapshotTo)) return null;
-  if (!createdAt || !isISODatetime(createdAt)) return null;
+  if (!createdAtUs || !AUDIT_CURSOR_US_PATTERN.test(createdAtUs)) return null;
+  const us = Number(createdAtUs);
+  if (!Number.isSafeInteger(us)) return null;
   if (!id || !AUDIT_ID_PATTERN.test(id)) return null;
-  return { snapshotTo, createdAt, id };
+  return { snapshotTo, createdAtUs: us, id };
 }
 
 // ── Responses ─────────────────────────────────────────────────────────
