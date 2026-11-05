@@ -582,6 +582,7 @@ describe("heartbeat plugin — persistent business-failure escalation input (#86
     heartbeatMetrics.systemIncidentConflicts = 0;
     heartbeatMetrics.incidentReconciliationFailedCount = 0;
     heartbeatMetrics.consecutiveFailedTicks = 0;
+    heartbeatMetrics.consecutiveThrowTicks = 0;
   }
 
   async function runTick(clock: { current: Date }) {
@@ -652,7 +653,8 @@ describe("heartbeat plugin — persistent business-failure escalation input (#86
       // A tick whose org discovery THROWS settles via the catch path but
       // carries NO business-failure evidence: the counter must stay exactly
       // where it was — not reset to 0 (a throw is not recovery), not
-      // advanced (a thrown cycle is owned by the readiness facts).
+      // advanced (a thrown cycle is escalated separately as
+      // operability.tick_failure, ADR-024).
       orgDiscoveryThrows = true;
       await runTick(mixed.clock);
       expect(heartbeatMetrics.lastSettledAt).not.toBeNull();
@@ -661,7 +663,7 @@ describe("heartbeat plugin — persistent business-failure escalation input (#86
       // CONTINUOUS tick-level throws (DB readiness normal throughout): every
       // thrown cycle settles (not stalled), and the business-failure counter
       // stays frozen — a thrown cycle carries no business-failure evidence in
-      // either direction; the readiness facts own it.
+      // either direction; operability.tick_failure owns the throw fact.
       for (let i = 0; i < 3; i++) {
         await runTick(mixed.clock);
         expect(heartbeatMetrics.consecutiveFailedTicks).toBe(1);
@@ -671,6 +673,47 @@ describe("heartbeat plugin — persistent business-failure escalation input (#86
       orgDiscoveryThrows = false;
       await runTick(mixed.clock);
       expect(heartbeatMetrics.consecutiveFailedTicks).toBe(2);
+    } finally {
+      await mixed.app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("#885: throw ticks are counted in their OWN run-length counter — incremented by a throw, reset by a clean settle, never conflated with business failures", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    let orgDiscoveryThrows = false;
+    const mixed = buildApp(
+      buildAllFailingDb(() => orgDiscoveryThrows),
+      lines,
+    );
+    resetEscalationFacts();
+    await mixed.app.register(heartbeatPlugin);
+    await mixed.app.ready();
+
+    try {
+      // Settled ticks where both legs fail at the business level: the #862
+      // counter runs, the throw counter does not move.
+      await runTick(mixed.clock);
+      await runTick(mixed.clock);
+      expect(heartbeatMetrics.consecutiveFailedTicks).toBe(2);
+      expect(heartbeatMetrics.consecutiveThrowTicks).toBe(0);
+
+      // Three throwing ticks: the throw run climbs, the business counter stays
+      // frozen, and every throwing tick still settles and logs its exception.
+      orgDiscoveryThrows = true;
+      for (let i = 0; i < 3; i++) await runTick(mixed.clock);
+      expect(heartbeatMetrics.consecutiveThrowTicks).toBe(3);
+      expect(heartbeatMetrics.consecutiveFailedTicks).toBe(2);
+      expect(heartbeatMetrics.lastSettledAt).not.toBeNull();
+      expect(lines.join("")).toContain("Error scanning for disrupted attempts");
+
+      // The first settled tick without a throw ends the run...
+      orgDiscoveryThrows = false;
+      await runTick(mixed.clock);
+      expect(heartbeatMetrics.consecutiveThrowTicks).toBe(0);
+      // ...and business evidence resumes where its own counter left off.
+      expect(heartbeatMetrics.consecutiveFailedTicks).toBe(3);
     } finally {
       await mixed.app.close();
       vi.useRealTimers();

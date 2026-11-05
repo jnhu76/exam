@@ -49,7 +49,10 @@ export const LOOP_STALL_FACTOR = 4;
  * so only a run of consecutive failed ticks means the retry loop is NOT
  * converging. Compile-time policy — deliberately NOT an env knob (#547 brief
  * §17). A tick that THROWS (e.g. DB down) neither increments nor resets the
- * counter: those cycles are owned by the readiness events, not this alert.
+ * counter: a throw is not evidence about business work, and the throw run is
+ * escalated separately as `operability.tick_failure` (#885, ADR-024). The same
+ * 4-tick window drives both facts — both are counted in ticks of the same scan
+ * cadence.
  */
 export const BUSINESS_FAILURE_TICK_THRESHOLD = 4;
 
@@ -59,9 +62,11 @@ export function loopStaleAfterMs(intervalMs: number): number {
 }
 
 /**
- * #862: one loop's persistent-business-failure state at an explicit
- * consecutive-failed-tick count. Pure threshold predicate; the transition
- * dedupe lives in the caller's tracker.
+ * #862/#885: whether a run of consecutive failed ticks has reached the
+ * escalation window. Used for BOTH the business-failure run and the
+ * tick-throw run — the predicate is about run length, not the failure kind.
+ * Pure threshold predicate; the transition dedupe lives in the caller's
+ * tracker.
  */
 export function classifyPersistentBusinessFailure(
   consecutiveFailedTicks: number,
@@ -165,10 +170,10 @@ export function buildReadinessProbeDeps(fastify: {
 /**
  * Per-loop progress facts recorded by the scanner plugins. `lastSettledAt`
  * means the tick body SETTLED (success OR error): a cycle that throws every
- * interval is failing loudly (existing error logs + readiness alert own DB
- * loss), not stalled. STALLED means no observable progress: a hung in-flight
- * cycle (`activeSince` past the threshold) or a dead timer (nothing settled
- * or started recently).
+ * interval is NOT stalled — it escalates as `operability.tick_failure` (#885)
+ * and, for DB loss, as `operability.readiness`. STALLED means no observable
+ * progress: a hung in-flight cycle (`activeSince` past the threshold) or a
+ * dead timer (nothing settled or started recently).
  */
 export interface LoopActivity {
   /** Plugin registration time — the WARMING grace origin. */
@@ -266,6 +271,14 @@ export interface OperabilitySnapshotInput {
   deadlineConsecutiveFailedTicks: number;
   /** #871: same escalation input for the client-event retention loop. */
   retentionConsecutiveFailedTicks: number;
+  /**
+   * #885 escalation input: consecutive heartbeat ticks whose body THREW,
+   * reset by the first tick that settles without throwing (maintained by the
+   * heartbeat plugin; process-local, reset on restart).
+   */
+  heartbeatConsecutiveThrowTicks: number;
+  /** Same escalation input for the deadline scanner. */
+  deadlineConsecutiveThrowTicks: number;
   now: Date;
 }
 
@@ -274,7 +287,8 @@ export interface OperabilityAlert {
   event:
     | "operability.readiness"
     | "operability.background_loop"
-    | "operability.business_failure";
+    | "operability.business_failure"
+    | "operability.tick_failure";
   component:
     | "database"
     | "redis"
@@ -302,6 +316,11 @@ export interface OperabilityTickTrackers {
     heartbeat: (failed: boolean) => AlertTransition;
     deadline_scanner: (failed: boolean) => AlertTransition;
     client_event_retention: (failed: boolean) => AlertTransition;
+  };
+  /** #885: the throw-run fact, separate from every business/stall/liveness fact. */
+  tick_failure: {
+    heartbeat: (failed: boolean) => AlertTransition;
+    deadline_scanner: (failed: boolean) => AlertTransition;
   };
 }
 
@@ -470,6 +489,55 @@ export function evaluateOperabilityTick(
     trackers.business_failure.client_event_retention(retentionFailing),
   );
 
+  // #885: a tick that THROWS still SETTLES (so the stall facts above stay
+  // healthy) and does not advance the business-failure counter (so #862 stays
+  // silent) — without this leg a loop that throws every tick escalates
+  // nothing. The fact asserted is only the run of throws: root cause, business
+  // outcome and backlog state stay UNKNOWN. Throws share the #862 window
+  // (both are counted in ticks of the same 30s scan cadence), so the existing
+  // predicate is reused deliberately (ADR-024).
+  const tickFailure = (
+    component: "heartbeat" | "deadline_scanner",
+    consecutiveThrowTicks: number,
+    transition: AlertTransition,
+  ) => {
+    if (transition === "raise_failure") {
+      alerts.push({
+        event: "operability.tick_failure",
+        component,
+        state: "failing",
+        level: "error",
+        message: `Critical background loop tick exceptions: ${component} (${consecutiveThrowTicks} consecutive ticks threw; root cause unknown)`,
+      });
+    } else if (transition === "raise_recovery") {
+      alerts.push({
+        event: "operability.tick_failure",
+        component,
+        state: "recovered",
+        level: "info",
+        message: `Critical background loop tick exceptions cleared: ${component} (a settled tick without a throw interrupted the run; business restoration unknown)`,
+      });
+    }
+  };
+
+  const heartbeatTickFailing = classifyPersistentBusinessFailure(
+    input.heartbeatConsecutiveThrowTicks,
+  );
+  tickFailure(
+    "heartbeat",
+    input.heartbeatConsecutiveThrowTicks,
+    trackers.tick_failure.heartbeat(heartbeatTickFailing),
+  );
+
+  const deadlineTickFailing = classifyPersistentBusinessFailure(
+    input.deadlineConsecutiveThrowTicks,
+  );
+  tickFailure(
+    "deadline_scanner",
+    input.deadlineConsecutiveThrowTicks,
+    trackers.tick_failure.deadline_scanner(deadlineTickFailing),
+  );
+
   return alerts;
 }
 
@@ -495,6 +563,10 @@ const operabilityMonitorPlugin: FastifyPluginAsync = async (fastify) => {
       heartbeat: createOperabilityTransitionTracker(),
       deadline_scanner: createOperabilityTransitionTracker(),
       client_event_retention: createOperabilityTransitionTracker(),
+    },
+    tick_failure: {
+      heartbeat: createOperabilityTransitionTracker(),
+      deadline_scanner: createOperabilityTransitionTracker(),
     },
   };
 
@@ -522,6 +594,10 @@ const operabilityMonitorPlugin: FastifyPluginAsync = async (fastify) => {
               deadlineScannerMetrics.consecutiveFailedTicks,
             retentionConsecutiveFailedTicks:
               clientEventRetentionMetrics.consecutiveFailedTicks,
+            heartbeatConsecutiveThrowTicks:
+              heartbeatMetrics.consecutiveThrowTicks,
+            deadlineConsecutiveThrowTicks:
+              deadlineScannerMetrics.consecutiveThrowTicks,
             now,
           },
           trackers,

@@ -73,12 +73,21 @@ export const deadlineScannerMetrics = {
   /**
    * #862 escalation input: consecutive SETTLED ticks with failedCount > 0,
    * reset to 0 by the first clean settle. A tick-level throw neither
-   * increments nor resets this counter (frozen): those cycles are owned by
-   * the readiness events, and a throw is not evidence the business work
+   * increments nor resets this counter (frozen): a thrown cycle carries no
+   * business-failure evidence, and a throw is not evidence the business work
    * recovered. Process-local; reset on server restart. Consumed by the
    * operability monitor's `operability.business_failure` transition.
    */
   consecutiveFailedTicks: 0,
+  /**
+   * #885 escalation input: consecutive ticks whose body THREW — the exception
+   * escaped to the tick-level catch. Reset to 0 by the first tick that
+   * settles without throwing. A tick that settles WITH business failures is
+   * not a throw (that is `consecutiveFailedTicks` above). Process-local;
+   * reset on server restart. Consumed by the operability monitor's
+   * `operability.tick_failure` transition (ADR-024).
+   */
+  consecutiveThrowTicks: 0,
   /**
    * Effective scan interval in milliseconds. INVARIANT: this is a
    * pre-registration placeholder (0); the plugin registration writes the
@@ -358,6 +367,10 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
   let closing = false;
   const interval = setInterval(() => {
     if (closing || activeScan) return;
+    // #885: tick-local throw evidence, declared in the tick's own scope so the
+    // existing .finally() below — the one point every tick passes through —
+    // maintains the run-length counter without a second write point.
+    let threw = false;
     activeScan = (async () => {
       // #547 stall facts: in-flight window; settle clears activeSince and
       // stamps lastSettledAt in .finally (success or error alike).
@@ -385,11 +398,15 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
           );
         }
       } catch (err) {
+        threw = true;
         fastify.log.error({ err }, "Error scanning for expired attempts");
       }
     })().finally(() => {
       activeScan = null;
       deadlineScannerMetrics.activeSince = null;
+      deadlineScannerMetrics.consecutiveThrowTicks = threw
+        ? deadlineScannerMetrics.consecutiveThrowTicks + 1
+        : 0;
       deadlineScannerMetrics.lastSettledAt = fastify.now();
     });
   }, scanIntervalMs);

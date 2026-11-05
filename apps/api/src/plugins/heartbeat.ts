@@ -70,11 +70,21 @@ export const heartbeatMetrics = {
    * #862 escalation input: consecutive SETTLED ticks in which EITHER leg had
    * business failures (disruption or incident reconciliation), reset to 0 by
    * the first clean settle. A tick-level throw neither increments nor resets
-   * this counter (frozen): those cycles are owned by the readiness events.
-   * Process-local; reset on server restart. Consumed by the operability
-   * monitor's `operability.business_failure` transition.
+   * this counter (frozen): a thrown cycle carries no business-failure
+   * evidence in either direction. Process-local; reset on server restart.
+   * Consumed by the operability monitor's `operability.business_failure`
+   * transition.
    */
   consecutiveFailedTicks: 0,
+  /**
+   * #885 escalation input: consecutive ticks whose body THREW — the exception
+   * escaped to the tick-level catch (which leg completed is unknown). Reset
+   * to 0 by the first tick that settles without throwing. A tick that settles
+   * WITH business failures is not a throw (that is `consecutiveFailedTicks`
+   * above). Process-local; reset on server restart. Consumed by the
+   * operability monitor's `operability.tick_failure` transition (ADR-024).
+   */
+  consecutiveThrowTicks: 0,
 };
 
 /**
@@ -318,6 +328,10 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
   let closing = false;
   const interval = setInterval(() => {
     if (closing || activeScan) return;
+    // #885: tick-local throw evidence, declared in the tick's own scope so the
+    // existing .finally() below — the one point every tick passes through —
+    // maintains the run-length counter without a second write point.
+    let threw = false;
     activeScan = (async () => {
       // #547 stall facts: record the in-flight window; settle (success or
       // error) clears activeSince and stamps lastSettledAt in .finally.
@@ -388,11 +402,15 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
             ? heartbeatMetrics.consecutiveFailedTicks + 1
             : 0;
       } catch (err) {
+        threw = true;
         fastify.log.error({ err }, "Error scanning for disrupted attempts");
       }
     })().finally(() => {
       activeScan = null;
       heartbeatMetrics.activeSince = null;
+      heartbeatMetrics.consecutiveThrowTicks = threw
+        ? heartbeatMetrics.consecutiveThrowTicks + 1
+        : 0;
       heartbeatMetrics.lastSettledAt = fastify.now();
     });
   }, scanIntervalMs);
