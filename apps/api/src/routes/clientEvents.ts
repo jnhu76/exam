@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ClientEventBatchSchema,
   ErrorResponseSchema,
+  redactCredentialShapedValue,
   sanitizeClientEvent,
   type ClientEventBatchResponse,
 } from "@exam/contracts";
@@ -18,6 +19,29 @@ const cookieAuth = [{ cookieAuth: [] }] as const;
  * very long UA strings; truncate to keep storage bounded.
  */
 const USER_AGENT_MAX_LENGTH = 500;
+
+/**
+ * #875 at-rest minimization for the top-level `route` free string: persist
+ * the PATHNAME only. Query strings and fragments are credential/PII carriers
+ * (`?token=…`, reset links) with no timeline utility; the web logger already
+ * sends `location.pathname` (logger.ts currentRoute), so this normalizes any
+ * non-web or buggy sender to the same at-rest shape at the persistence
+ * boundary. Unparseable input still yields a bounded, query-free string.
+ */
+function normalizeRouteForStorage(route: string | undefined): string | null {
+  if (!route) return null;
+  try {
+    const url = new URL(route, "http://client-event.invalid");
+    return url.pathname.slice(0, USER_AGENT_MAX_LENGTH) || null;
+  } catch {
+    // Malformed URL (schema-valid string, unparseable): strip any query or
+    // fragment by hand so this fallback cannot contradict the query-free
+    // guarantee (e.g. "http://[?token=…" throws in URL yet still carries a
+    // credential in its query).
+    const pathOnly = route.split(/[?#]/, 1)[0] ?? "";
+    return pathOnly.slice(0, USER_AGENT_MAX_LENGTH) || null;
+  }
+}
 
 /** Local response schema — the request body schema lives in contracts. */
 const clientEventBatchResponseSchema = z.object({
@@ -107,10 +131,16 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
           kind: event.kind,
           level: event.level,
           name: event.name,
-          route: event.route ?? null,
+          route: normalizeRouteForStorage(event.route),
           occurredAt: new Date(event.occurredAt),
           receivedAt,
-          clientSessionId: event.clientSessionId ?? null,
+          // #875: the per-tab session id is a UUID in practice; the same
+          // credential-shape rule as metadata values guards this free string
+          // against a token stuffed here by a hostile sender.
+          clientSessionId:
+            event.clientSessionId !== undefined
+              ? redactCredentialShapedValue(event.clientSessionId)
+              : null,
           // Defense-in-depth: re-sanitize server-side so a malicious client
           // that bypassed (or skipped) client-side redaction cannot persist
           // credentials or exam content. The shared implementation in
