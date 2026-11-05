@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  BUSINESS_FAILURE_TICK_THRESHOLD,
   classifyLoopStall,
+  classifyPersistentBusinessFailure,
   createOperabilityTransitionTracker,
   LOOP_STALL_FACTOR,
   loopStaleAfterMs,
@@ -265,6 +267,11 @@ function snapshotInput(
     heartbeatIntervalMs: 30_000,
     deadline: { ...healthyActivity },
     deadlineIntervalMs: 30_000,
+    retention: { ...healthyActivity },
+    retentionIntervalMs: 30_000,
+    heartbeatConsecutiveFailedTicks: 0,
+    deadlineConsecutiveFailedTicks: 0,
+    retentionConsecutiveFailedTicks: 0,
     now: ms(0),
     ...partial,
   };
@@ -276,6 +283,12 @@ function makeTrackers() {
     redis: createOperabilityTransitionTracker(),
     heartbeat: createOperabilityTransitionTracker(),
     deadline_scanner: createOperabilityTransitionTracker(),
+    client_event_retention: createOperabilityTransitionTracker(),
+    business_failure: {
+      heartbeat: createOperabilityTransitionTracker(),
+      deadline_scanner: createOperabilityTransitionTracker(),
+      client_event_retention: createOperabilityTransitionTracker(),
+    },
   };
 }
 
@@ -508,6 +521,245 @@ describe("evaluateOperabilityTick — the alert catalogue, wired end to end", ()
     ).toEqual([
       "operability.background_loop/heartbeat/stalled",
       "operability.readiness/database/unavailable",
+    ]);
+  });
+});
+
+// Issue #862 — persistent business-failure escalation. A loop whose ticks keep
+// settling (fresh lastSettledAt → classifyLoopStall says healthy) while every
+// business item fails must still escalate; the escalation input is the
+// per-tick consecutive-failure counter the scanner plugins maintain, deduped
+// through the SAME transition-tracker mechanism as every other fact.
+describe("classifyPersistentBusinessFailure — threshold boundary (#862)", () => {
+  it("threshold is compile-time policy (4 consecutive failed ticks), not an env knob", () => {
+    expect(BUSINESS_FAILURE_TICK_THRESHOLD).toBe(4);
+  });
+
+  it("boundary: below the threshold is not failing; at and above the threshold is", () => {
+    expect(
+      classifyPersistentBusinessFailure(BUSINESS_FAILURE_TICK_THRESHOLD - 1),
+    ).toBe(false);
+    expect(
+      classifyPersistentBusinessFailure(BUSINESS_FAILURE_TICK_THRESHOLD),
+    ).toBe(true);
+    expect(
+      classifyPersistentBusinessFailure(BUSINESS_FAILURE_TICK_THRESHOLD + 10),
+    ).toBe(true);
+  });
+
+  it("a fresh process (zero counter) and a single failing tick are not failing", () => {
+    expect(classifyPersistentBusinessFailure(0)).toBe(false);
+    expect(classifyPersistentBusinessFailure(1)).toBe(false);
+  });
+});
+
+describe("evaluateOperabilityTick — persistent business-failure legs (#862)", () => {
+  it("settling loop with per-tick failures BELOW the threshold emits nothing (no noise)", () => {
+    const trackers = makeTrackers();
+    const input = snapshotInput({
+      heartbeatConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD - 1,
+      deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD - 1,
+    });
+    expect(evaluateOperabilityTick(input, trackers)).toEqual([]);
+  });
+
+  it("at threshold BOTH legs raise their OWN operability.business_failure failing ERROR (the #862 gap: stall facts alone stayed healthy here)", () => {
+    const trackers = makeTrackers();
+    const input = snapshotInput({
+      heartbeatConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+      deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+    });
+    const alerts = evaluateOperabilityTick(input, trackers);
+    expect(alerts).toHaveLength(2);
+    expect(alerts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "operability.business_failure",
+          component: "heartbeat",
+          state: "failing",
+          level: "error",
+        }),
+        expect.objectContaining({
+          event: "operability.business_failure",
+          component: "deadline_scanner",
+          state: "failing",
+          level: "error",
+        }),
+      ]),
+    );
+  });
+
+  it("messages are the documented catalogue wording; failing carries the live tick count, recovered is info", () => {
+    const trackers = makeTrackers();
+    const failing = evaluateOperabilityTick(
+      snapshotInput({
+        heartbeatConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+      }),
+      trackers,
+    );
+    expect(failing).toHaveLength(1);
+    expect(failing[0]!.message).toBe(
+      "Critical background loop persistently failing: heartbeat (4 consecutive ticks with business failures)",
+    );
+
+    const recovered = evaluateOperabilityTick(
+      snapshotInput({ heartbeatConsecutiveFailedTicks: 0 }),
+      trackers,
+    );
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]).toMatchObject({
+      event: "operability.business_failure",
+      component: "heartbeat",
+      state: "recovered",
+      level: "info",
+    });
+    expect(recovered[0]!.message).toBe(
+      "Critical background loop business failures cleared: heartbeat",
+    );
+  });
+
+  it("S4: repeated failing evaluations never re-emit (no storm); the first zero-failure tick — idle or successful — recovers exactly once", () => {
+    const trackers = makeTrackers();
+    const failingInput = snapshotInput({
+      deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD + 2,
+    });
+    expect(evaluateOperabilityTick(failingInput, trackers)).toHaveLength(1);
+    expect(evaluateOperabilityTick(failingInput, trackers)).toEqual([]);
+    expect(evaluateOperabilityTick(failingInput, trackers)).toEqual([]);
+
+    const cleanInput = snapshotInput();
+    const recovery = evaluateOperabilityTick(cleanInput, trackers);
+    expect(recovery).toHaveLength(1);
+    expect(recovery[0]).toMatchObject({
+      event: "operability.business_failure",
+      component: "deadline_scanner",
+      state: "recovered",
+      level: "info",
+    });
+    expect(evaluateOperabilityTick(cleanInput, trackers)).toEqual([]);
+  });
+
+  it("#871: a never-fired or hung retention sweep goes STALLED on its own component — no longer log-dark", () => {
+    const trackers = makeTrackers();
+    // Registration long ago, nothing ever settled, no start in flight: the
+    // timer never fired (or a pass hung and cleared) — stalled by absence.
+    const alerts = evaluateOperabilityTick(
+      snapshotInput({
+        retention: {
+          // Five daily windows ago: stalled by absence under the RETENTION
+          // cadence (not the 30s heartbeat/deadline cadence).
+          startedAt: ms(-5 * 86_400_000),
+          lastStartedAt: null,
+          lastSettledAt: null,
+          activeSince: null,
+        },
+        retentionIntervalMs: 86_400_000,
+      }),
+      trackers,
+    );
+    expect(alerts).toEqual([
+      expect.objectContaining({
+        event: "operability.background_loop",
+        component: "client_event_retention",
+        state: "stalled",
+        level: "error",
+        // Operator-facing threshold must use the RETENTION interval: 4 days.
+        message:
+          "Critical background loop stalled: client_event_retention (no settled cycle within 345600s)",
+      }),
+    ]);
+    expect(evaluateOperabilityTick(snapshotInput(), trackers)).toEqual([
+      expect.objectContaining({
+        event: "operability.background_loop",
+        component: "client_event_retention",
+        state: "recovered",
+      }),
+    ]);
+  });
+
+  it("#871: persistent retention pass failures raise operability.business_failure; a clean pass (even with zero deletions) recovers", () => {
+    const trackers = makeTrackers();
+    const failing = snapshotInput({ retentionConsecutiveFailedTicks: 4 });
+    const alerts = evaluateOperabilityTick(failing, trackers);
+    expect(alerts).toEqual([
+      expect.objectContaining({
+        event: "operability.business_failure",
+        component: "client_event_retention",
+        state: "failing",
+        level: "error",
+      }),
+    ]);
+    expect(evaluateOperabilityTick(failing, trackers)).toEqual([]);
+    // Zero-deleted but zero-failed is a CLEAN pass — recovery, not silence:
+    // the counter tracks the run of failed passes, not deletions.
+    const recovered = evaluateOperabilityTick(snapshotInput(), trackers);
+    expect(recovered).toEqual([
+      expect.objectContaining({
+        event: "operability.business_failure",
+        component: "client_event_retention",
+        state: "recovered",
+      }),
+    ]);
+  });
+
+  it("restart semantics: a restarted process (fresh trackers, zeroed counters) carries no failing state and no carry-over recovery; the failure must be re-observed before it is re-claimed", () => {
+    // Process 1: the failure accumulates to the threshold and is claimed.
+    const before = makeTrackers();
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({
+          deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+        }),
+        before,
+      ),
+    ).toHaveLength(1);
+
+    // Process 2 (restart): trackers and the escalation counters are
+    // process-local and start fresh. A healthy first tick emits nothing —
+    // no spurious failing claim, and no spurious recovery for the
+    // pre-restart state either.
+    const after = makeTrackers();
+    expect(evaluateOperabilityTick(snapshotInput(), after)).toEqual([]);
+
+    // The failure must climb back to the threshold before the restarted
+    // process claims it again (docs/operations/active-alerting.md §1).
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({
+          deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD - 1,
+        }),
+        after,
+      ),
+    ).toEqual([]);
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({
+          deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+        }),
+        after,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("stall and persistent business failure are independent facts — a stalled AND persistently-failing loop emits both, on distinct (event, component) keys", () => {
+    const trackers = makeTrackers();
+    const alerts = evaluateOperabilityTick(
+      snapshotInput({
+        heartbeat: {
+          startedAt: T0,
+          lastStartedAt: ms(-300_000),
+          lastSettledAt: ms(-310_000),
+          activeSince: ms(-300_000),
+        },
+        heartbeatConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+      }),
+      trackers,
+    );
+    expect(
+      alerts.map((a) => `${a.event}/${a.component}/${a.state}`).sort(),
+    ).toEqual([
+      "operability.background_loop/heartbeat/stalled",
+      "operability.business_failure/heartbeat/failing",
     ]);
   });
 });

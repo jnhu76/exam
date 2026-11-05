@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { hashPassword } from "@exam/auth/password";
 import { signJWT } from "@exam/auth/session";
 import authRoutes from "./auth.js";
@@ -615,6 +615,53 @@ describe("audit log baseline (S06-lite)", () => {
       expect(new Set(ids).size).toBe(5);
     });
 
+    it("keeps µs-distinct rows inside one millisecond across pages (no sub-ms drop)", async () => {
+      await clearAudits();
+      // Both rows share the millisecond `...123`; they differ only in sub-ms
+      // µs digits. JS Date cannot carry µs, so the instants are planted as
+      // SQL literals — the same shape the DB defaultNow() clock produces.
+      // #877: the cursor position must survive the walk at full µs precision
+      // or the continuation page drops the row inside the boundary ms.
+      for (const [tag, instant] of [
+        ["cursor-us-1", "2026-06-01T12:00:00.123456Z"],
+        ["cursor-us-0", "2026-06-01T12:00:00.123123Z"],
+      ] as const) {
+        await ctx.db.insert(schema.auditLogs).values({
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: "cursor.us",
+          targetType: "cursor_us_test",
+          targetId: tag,
+          metadata: {},
+          createdAt: sql`${instant}::timestamptz`,
+        });
+      }
+
+      const page = async (cursor?: string) => {
+        const qs = `targetType=cursor_us_test&limit=1${
+          cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+        }`;
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/audit-logs?${qs}`,
+          cookies: { "auth-token": adminToken },
+        });
+        expect(res.statusCode).toBe(200);
+        return res.json() as {
+          items: Array<{ targetId: string }>;
+          nextCursor: string | null;
+        };
+      };
+
+      const p1 = await page();
+      expect(p1.items.map((i) => i.targetId)).toEqual(["cursor-us-1"]);
+      expect(typeof p1.nextCursor).toBe("string");
+      const p2 = await page(p1.nextCursor ?? undefined);
+      expect(p2.items.map((i) => i.targetId)).toEqual(["cursor-us-0"]);
+      expect(p2.nextCursor).toBeNull();
+    });
+
     it("rejects a malformed cursor with 400 INVALID_CURSOR", async () => {
       const response = await ctx.app.inject({
         method: "GET",
@@ -623,6 +670,19 @@ describe("audit log baseline (S06-lite)", () => {
       });
       expect(response.statusCode).toBe(400);
       expect(response.json().error.code).toBe("INVALID_CURSOR");
+
+      // A stale-version cursor (v2 carried a ms-truncated position) decodes
+      // to null too: the client gets 400 and restarts at page 1 instead of
+      // resuming with a lossy position (#877).
+      const stale = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?cursor=${encodeURIComponent(
+          `v2|2026-08-30T10:00:00.000Z|2026-08-30T09:36:21.000Z|${crypto.randomUUID()}`,
+        )}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(stale.statusCode).toBe(400);
+      expect(stale.json().error.code).toBe("INVALID_CURSOR");
     });
 
     it("freezes the audit window: rows written after page 1 stay invisible to later pages and a snapshot export", async () => {

@@ -199,6 +199,140 @@ describe("POST /api/client-events", () => {
       .where(eq(schema.clientEvents.name, "test.event.sanitize"));
   });
 
+  describe("at-rest free-input minimization (#875)", () => {
+    const jwt =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+
+    async function fetchRow(name: string) {
+      const rows = await ctx.db
+        .select()
+        .from(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, name));
+      return rows[0] ?? null;
+    }
+
+    it("redacts a credential-shaped metadata VALUE under an innocent key before persist", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.value875",
+              metadata: {
+                note: `retry context ${jwt}`,
+                dsn: "postgresql://exam:hunter2@db.local/exam",
+                keep: { path: "/exam/1", count: 2 },
+              },
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const row = await fetchRow("test.event.value875");
+      expect(row).not.toBeNull();
+      const meta = row!.metadata as Record<string, unknown>;
+      // Credential-shaped values never reach storage verbatim…
+      expect(meta.note).toBe("[redacted]");
+      expect(meta.dsn).toBe("[redacted]");
+      expect(JSON.stringify(row)).not.toContain("SflKxwRJSMeKKF2QT4fwpMeJf36");
+      expect(JSON.stringify(row)).not.toContain("hunter2");
+      // …while ordinary values survive intact.
+      expect(meta.keep).toEqual({ path: "/exam/1", count: 2 });
+
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.value875"));
+    });
+
+    it("persists route as pathname only — query-string credentials never reach storage", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.route875",
+              route: "/exam/123?token=supersecret&invite=alice%40x.local#frag",
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const row = await fetchRow("test.event.route875");
+      expect(row).not.toBeNull();
+      expect(row!.route).toBe("/exam/123");
+      expect(JSON.stringify(row)).not.toContain("supersecret");
+      expect(JSON.stringify(row)).not.toContain("invite");
+
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.route875"));
+    });
+
+    it("strips query/fragment even from an UNPARSEABLE route (fallback must stay query-free)", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.route875bad",
+              route: "http://[?token=supersecret&invite=alice%40x.local",
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const row = await fetchRow("test.event.route875bad");
+      expect(row).not.toBeNull();
+      expect(row!.route).toBe("http://[");
+      expect(JSON.stringify(row)).not.toContain("supersecret");
+      expect(JSON.stringify(row)).not.toContain("invite");
+
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.route875bad"));
+    });
+
+    it("redacts a credential-shaped clientSessionId; the normal UUID passes through", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.session875a",
+              clientSessionId: jwt,
+            }),
+            validEvent({
+              name: "test.event.session875b",
+              clientSessionId: "b5b1c5a3-4ae1-4aa1-9ffc-543872e2017b",
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const hostile = await fetchRow("test.event.session875a");
+      const normal = await fetchRow("test.event.session875b");
+      expect(hostile!.clientSessionId).toBe("[redacted]");
+      expect(normal!.clientSessionId).toBe(
+        "b5b1c5a3-4ae1-4aa1-9ffc-543872e2017b",
+      );
+
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.session875a"));
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.session875b"));
+    });
+  });
+
   describe("client-event idempotency (#863)", () => {
     /**
      * Sends one batch as the given (already-authenticated) test user and

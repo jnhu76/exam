@@ -12,9 +12,13 @@ import {
   CLIENT_EVENT_RETENTION_DAYS,
   CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
   cleanupOrganizationClientEvents,
+  clientEventRetentionMetrics,
   retentionCutoff,
   default as clientEventRetentionPlugin,
 } from "./clientEventRetention.js";
+import { organizations } from "@exam/db/schema/pg";
+import { classifyLoopStall } from "./operabilityMonitor.js";
+import { vi } from "vitest";
 
 /**
  * Client-event retention executor (#544).
@@ -162,4 +166,205 @@ describe("client-event retention executor", () => {
     // Fresh rows survive the startup pass.
     expect(await countRows("exec-fresh")).toBe(1);
   }, 15_000);
+});
+
+describe("client-event retention loop — activity + escalation facts (#871)", () => {
+  const ORG = { id: "org-1" };
+
+  function resetFacts() {
+    clientEventRetentionMetrics.startedAt = null;
+    clientEventRetentionMetrics.lastStartedAt = null;
+    clientEventRetentionMetrics.lastSettledAt = null;
+    clientEventRetentionMetrics.activeSince = null;
+    clientEventRetentionMetrics.consecutiveFailedTicks = 0;
+    clientEventRetentionMetrics.scanIntervalMs = 0;
+  }
+
+  /**
+   * Fake db routing by drizzle table identity (same pattern as the
+   * heartbeat/deadline #862 fakes): org discovery resolves one org (or
+   * THROWS while `orgDiscoveryThrows()` — a tick-level throw); each org's
+   * cleanup delete either resolves empty (clean pass — zero deleted is NOT
+   * a failure) or THROWS while `cleanupThrows()` (business failure).
+   */
+  function buildDb(legs: {
+    orgDiscoveryThrows: () => boolean;
+    cleanupThrows: () => boolean;
+    /** Optional gate: a hung cleanup awaits this before resolving (#871). */
+    beforeCleanupResolve?: () => Promise<void>;
+  }): unknown {
+    return {
+      select: () => ({
+        from: (table: unknown) => {
+          if (table === organizations) {
+            if (legs.orgDiscoveryThrows()) {
+              throw new Error("forced org discovery failure");
+            }
+            return Promise.resolve([ORG]);
+          }
+          throw new Error("unexpected table in retention fake db");
+        },
+      }),
+      delete: () => ({
+        where: () => ({
+          returning: async () => {
+            if (legs.cleanupThrows()) {
+              throw new Error("forced cleanup failure");
+            }
+            if (legs.beforeCleanupResolve) await legs.beforeCleanupResolve();
+            return [];
+          },
+        }),
+      }),
+    };
+  }
+
+  function buildApp(db: unknown) {
+    const clock = { current: new Date("2026-11-05T08:00:00Z") };
+    const app = Fastify({ logger: false });
+    app.decorate<unknown>("db", db as never);
+    app.decorate("now", () => clock.current);
+    return { app, clock };
+  }
+
+  async function runPass(clock: { current: Date }) {
+    clock.current = new Date(clock.current.getTime() + 86_400_000);
+    await vi.advanceTimersByTimeAsync(86_400_000);
+  }
+
+  it("stamps registration/start/settle facts; a settled pass with failed orgs increments, a clean pass (zero deleted) resets", async () => {
+    vi.useFakeTimers();
+    let cleanupThrows = true;
+    const { app, clock } = buildApp(
+      buildDb({
+        orgDiscoveryThrows: () => false,
+        cleanupThrows: () => cleanupThrows,
+      }),
+    );
+    resetFacts();
+    await app.register(clientEventRetentionPlugin);
+    await app.ready();
+
+    try {
+      // Registration: warming origin + interval written; the STARTUP pass
+      // (failed org) settles and increments immediately.
+      expect(clientEventRetentionMetrics.startedAt).not.toBeNull();
+      expect(clientEventRetentionMetrics.scanIntervalMs).toBe(
+        CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clientEventRetentionMetrics.lastSettledAt).not.toBeNull();
+      expect(clientEventRetentionMetrics.activeSince).toBeNull();
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(1);
+
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(2);
+
+      // A clean pass with ZERO deleted rows is still a clean settle — the
+      // counter tracks failed passes, not deletions.
+      cleanupThrows = false;
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(0);
+      expect(
+        classifyLoopStall(
+          clientEventRetentionMetrics,
+          CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
+          clock.current,
+        ),
+      ).toBe("healthy");
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a tick-level THROW freezes the counter — neither resets nor advances (same ownership boundary as #862)", async () => {
+    vi.useFakeTimers();
+    let orgDiscoveryThrows = false;
+    let cleanupThrows = true;
+    const { app, clock } = buildApp(
+      buildDb({
+        orgDiscoveryThrows: () => orgDiscoveryThrows,
+        cleanupThrows: () => cleanupThrows,
+      }),
+    );
+    resetFacts();
+    await app.register(clientEventRetentionPlugin);
+    await app.ready();
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(1);
+
+      orgDiscoveryThrows = true;
+      await runPass(clock);
+      // The throw path still SETTLES at the tick clock (the finally stamps it)
+      // — the counter freeze must not come from a missing settle stamp.
+      expect(clientEventRetentionMetrics.lastSettledAt).toEqual(clock.current);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(1);
+
+      // The frozen run continues from where it froze.
+      orgDiscoveryThrows = false;
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(2);
+
+      cleanupThrows = false;
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(0);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a HUNG pass holds activeSince at its start instant — stalled even while the timer is alive; release clears it (#871)", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { app, clock } = buildApp(
+      buildDb({
+        orgDiscoveryThrows: () => false,
+        cleanupThrows: () => false,
+        beforeCleanupResolve: () => gate,
+      }),
+    );
+    resetFacts();
+    await app.register(clientEventRetentionPlugin);
+    await app.ready();
+
+    try {
+      // The startup pass is in flight, blocked inside the cleanup delete.
+      await vi.advanceTimersByTimeAsync(0);
+      const startedAt = clientEventRetentionMetrics.lastStartedAt!;
+      expect(clientEventRetentionMetrics.activeSince).toEqual(startedAt);
+
+      // Five days later the pass is still hung: the interval cannot start a
+      // second run, activeSince still holds the start instant, and the SAME
+      // classifyLoopStall the monitor uses reports stalled — the timer being
+      // alive is not evidence of progress.
+      clock.current = new Date(clock.current.getTime() + 5 * 86_400_000);
+      expect(clientEventRetentionMetrics.activeSince).toEqual(startedAt);
+      expect(
+        classifyLoopStall(
+          clientEventRetentionMetrics,
+          CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
+          clock.current,
+        ),
+      ).toBe("stalled");
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clientEventRetentionMetrics.activeSince).toBeNull();
+      expect(clientEventRetentionMetrics.lastSettledAt).toEqual(clock.current);
+    } finally {
+      // Idempotent on the happy path; if an assertion above regresses, this
+      // keeps the hung pass from blocking app.close() (and leaking fake
+      // timers into the remaining tests).
+      release();
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
 });

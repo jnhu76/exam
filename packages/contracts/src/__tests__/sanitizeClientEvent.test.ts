@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  redactCredentialShapedValue,
   sanitizeClientEvent,
   sanitizeMetadata,
 } from "../sanitizeClientEvent.js";
@@ -151,5 +152,108 @@ describe("sanitizeMetadata — structure preservation", () => {
     expect(sanitizeMetadata(7)).toBe(7);
     expect(sanitizeMetadata(true)).toBe(true);
     expect(sanitizeMetadata(null)).toBe(null);
+  });
+});
+
+describe("sanitizeClientEvent — value-level credential-shape redaction (#875)", () => {
+  // A non-denylisted key can still carry a credential-shaped VALUE (a buggy
+  // or hostile client stuffing a token under `note`). The key denylist
+  // cannot see that; these shapes are high-confidence (structured JWT /
+  // Bearer scheme / URL-with-userinfo) and safe to redact without a
+  // general sensitive-content detector.
+  const jwt =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+
+  it("redacts a JWT value under an innocent key (top level, nested, and in arrays)", () => {
+    const out = sanitizeClientEvent({
+      note: `attached ${jwt} for debugging`,
+      nested: { carrier: jwt },
+      list: [jwt, "keep me"],
+    });
+    expect(out.note).toBe("[redacted]");
+    expect((out.nested as Record<string, unknown>).carrier).toBe("[redacted]");
+    expect((out.list as unknown[])[0]).toBe("[redacted]");
+    expect((out.list as unknown[])[1]).toBe("keep me");
+  });
+
+  it("redacts a Bearer-scheme value under an innocent key", () => {
+    const out = sanitizeClientEvent({
+      header_echo: "bearer abc.def.ghi",
+      other: "Basic dXNlcjpwYXNz",
+    });
+    // Any credential scheme prefix (bearer/basic) is high-confidence.
+    expect(out.header_echo).toBe("[redacted]");
+    expect(out.other).toBe("[redacted]");
+  });
+
+  it("redacts a URL carrying userinfo credentials under an innocent key", () => {
+    const out = sanitizeClientEvent({
+      dsn: "postgresql://exam:s3cret@db.local:5432/exam",
+      cache: "redis://:pw@redis.local:6379/0",
+    });
+    expect(out.dsn).toBe("[redacted]");
+    expect(out.cache).toBe("[redacted]");
+  });
+
+  it("keeps legitimate look-alikes verbatim (no over-redaction)", () => {
+    const safe = {
+      path: "/exam/123",
+      link: "https://exam.local/login?next=/dashboard",
+      uuid: "b5b1c5a3-4ae1-4aa1-9ffc-543872e2017b",
+      sentence: "the answer is unbearably long prose about Bearer tokens",
+      fragment: "eyJhbGciOiJIUzI1NiJ9",
+      count: 42,
+    };
+    expect(sanitizeClientEvent(safe)).toEqual(safe);
+  });
+
+  it("drops metadata entries whose KEY is credential-shaped (a renamed key still leaks)", () => {
+    const out = sanitizeClientEvent({
+      [jwt]: 1,
+      "postgresql://exam:hunter2@db.local/exam": true,
+      keep: "ok",
+    });
+    expect(out).toEqual({ keep: "ok" });
+    expect(JSON.stringify(out)).not.toContain("SflKxwRJSMeKKF2QT4fwpMeJf36");
+    expect(JSON.stringify(out)).not.toContain("hunter2");
+  });
+
+  it("keeps host:port URLs whose query merely contains an @ (no userinfo)", () => {
+    const safe = {
+      a: "https://exam.local:3000?contact=bob@example.com",
+      b: "https://exam.local:443?redirect=mailto:a@b.c",
+    };
+    expect(sanitizeClientEvent(safe)).toEqual(safe);
+  });
+
+  it("redacts a JWT adjacent to prose punctuation or token characters (boundary-aware)", () => {
+    const cases = [
+      `pasted token: ${jwt}.`,
+      `"${jwt}"`,
+      `token-${jwt}`,
+      `${jwt}...`,
+      `note_${jwt}`,
+      `. ${jwt}`,
+    ];
+    for (const note of cases) {
+      expect(sanitizeClientEvent({ note }).note, note).toBe("[redacted]");
+    }
+  });
+
+  it("redacts DSNs whose password uses valid unencoded userinfo sub-delims", () => {
+    for (const password of ["p,ss", "p;ss", "p'ss", "p(ss", "p)ss"]) {
+      const dsn = `postgresql://exam:${password}@db.local/exam`;
+      expect(redactCredentialShapedValue(dsn), dsn).toBe("[redacted]");
+    }
+  });
+
+  it("scans a 32 KiB adversarial run containing repeated 'eyJ' in linear time", () => {
+    // The schema's per-event budget. The previous unanchored regex took
+    // ~1.7 s on exactly this input; the linear scan is sub-millisecond, so
+    // 500 ms is a wide, deterministic guard against a backtracking relapse.
+    const hostile = "eyJ".repeat(10_900);
+    const started = Date.now();
+    expect(redactCredentialShapedValue(hostile)).toBe(hostile);
+    expect(Date.now() - started).toBeLessThan(500);
   });
 });

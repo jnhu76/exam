@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
 import { getWorkerScopedTestDb } from "../testDb.js";
@@ -77,13 +77,13 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
     }
 
     const seen: string[] = [];
-    let after: { createdAt: Date; id: string } | undefined;
+    let after: { createdAtUs: number; id: string } | undefined;
     let pages = 0;
     for (;;) {
       const params: {
         limit: number;
         filter?: { targetType: string };
-        after?: { createdAt: Date; id: string };
+        after?: { createdAtUs: number; id: string };
       } = { limit: 2, filter: { targetType: "keyset_test" } };
       if (after) params.after = after;
       const { items, hasMore } = await repo.listKeysetFiltered(ctx, params);
@@ -92,7 +92,7 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
       if (!hasMore) break;
       expect(items).toHaveLength(2);
       const last = items[items.length - 1]!;
-      after = { createdAt: last.auditLog.createdAt, id: last.auditLog.id };
+      after = { createdAtUs: last.sortKeyUs, id: last.auditLog.id };
     }
 
     expect(pages).toBe(4); // 2 + 2 + 2 + 1
@@ -106,6 +106,74 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
       filter: { targetType: "keyset_test" },
     });
     expect(seen).toEqual(allAtOnce.map((r) => r.auditLog.id));
+  });
+
+  it("walks rows that share one µs-exact instant (tie beyond JS Date ms precision)", async () => {
+    const repo = createAuditLogTestRepo(db);
+    // Three rows at the SAME microsecond-precise instant. A JS Date cannot
+    // carry sub-ms digits, so the instants are planted as SQL literals — the
+    // same shape the DB defaultNow() clock produces. #877: a ms-truncated
+    // cursor position makes the continuation predicate skip the µs rows
+    // inside the boundary millisecond.
+    const usInstant = "2026-08-01T12:00:00.123456Z";
+    const expectedUs = Date.UTC(2026, 7, 1, 12, 0, 0, 123) * 1000 + 456;
+    for (const tag of ["us-a", "us-b", "us-c"]) {
+      await db.insert(auditLogs).values({
+        id: randomUUID(),
+        organizationId: ctx.organizationId,
+        actorId: ctx.actorId,
+        action: "keyset.us",
+        targetType: "keyset_us",
+        targetId: tag,
+        metadata: {},
+        createdAt: sql`${usInstant}::timestamptz`,
+      });
+    }
+
+    // Guard the fixture itself: all three rows really carry the µs instant,
+    // not a ms-truncated Date that would make this test vacuous.
+    const planted = await db
+      .select({
+        us: sql<number>`(extract(epoch from ${auditLogs.createdAt}) * 1000000)::double precision`,
+      })
+      .from(auditLogs)
+      .where(eq(auditLogs.targetType, "keyset_us"));
+    expect(planted.map((r) => r.us).sort((a, b) => a - b)).toEqual([
+      expectedUs,
+      expectedUs,
+      expectedUs,
+    ]);
+
+    const seen: string[] = [];
+    let after: { createdAtUs: number; id: string } | undefined;
+    let pages = 0;
+    for (;;) {
+      const params: {
+        limit: number;
+        filter?: { targetType: string };
+        after?: { createdAtUs: number; id: string };
+      } = { limit: 2, filter: { targetType: "keyset_us" } };
+      if (after) params.after = after;
+      const { items, hasMore } = await repo.listKeysetFiltered(ctx, params);
+      for (const row of items) seen.push(row.auditLog.targetId);
+      pages += 1;
+      if (!hasMore) break;
+      expect(items).toHaveLength(2);
+      const last = items[items.length - 1]!;
+      // The cursor position is the row's full-precision epoch-µs key — the
+      // same instant the DB ordered by, not a ms-truncated Date.
+      after = { createdAtUs: last.sortKeyUs, id: last.auditLog.id };
+    }
+
+    expect(pages).toBe(2); // 2 + 1
+    expect(new Set(seen).size).toBe(3); // the third same-µs row must survive
+
+    // The paged walk must equal a single full read of the same query.
+    const { items: allAtOnce } = await repo.listKeysetFiltered(ctx, {
+      limit: 100,
+      filter: { targetType: "keyset_us" },
+    });
+    expect(seen).toEqual(allAtOnce.map((r) => r.auditLog.targetId));
   });
 
   it("applies filters (action + targetType + actorId) with the cursor semantics", async () => {
@@ -148,17 +216,24 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
 
   it("returns only rows strictly before the cursor (never repeats the cursor row)", async () => {
     const repo = createAuditLogTestRepo(db);
-    const created = await repo.create(ctx, {
+    await repo.create(ctx, {
       actorId: ctx.actorId,
       action: "keyset.cursor",
       targetType: "keyset_cursor",
       targetId: randomUUID(),
       metadata: {},
     });
+    // The cursor material is a previous page's item: the row's epoch-µs key.
+    const listed = await repo.listKeysetFiltered(ctx, {
+      limit: 10,
+      filter: { targetType: "keyset_cursor" },
+    });
+    expect(listed.items).toHaveLength(1);
+    const cursorRow = listed.items[0]!;
     const { items, hasMore } = await repo.listKeysetFiltered(ctx, {
       limit: 10,
       filter: { targetType: "keyset_cursor" },
-      after: { createdAt: created.createdAt, id: created.id },
+      after: { createdAtUs: cursorRow.sortKeyUs, id: cursorRow.auditLog.id },
     });
     expect(items).toHaveLength(0);
     expect(hasMore).toBe(false);
@@ -199,7 +274,7 @@ describe("auditLogRepo.listKeysetFiltered (keyset pagination)", () => {
       limit: 10,
       filter: { targetType: "keyset_snapshot", to: snapshotTo },
       after: {
-        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        createdAtUs: bounded.items[0]!.sortKeyUs,
         id: bounded.items[0]!.auditLog.id,
       },
     });

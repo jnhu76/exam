@@ -348,7 +348,22 @@ export function AuditLogPage() {
   const hasNext = data?.nextCursor != null;
 
   if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={() => loadLogs()} />;
+  if (error)
+    return (
+      <ErrorState
+        message={error}
+        onRetry={() => {
+          // A failed page load leaves the cursor path holding the failed
+          // session's cursors (e.g. version-stale cursors after a redeploy
+          // → 400 INVALID_CURSOR). Retry restarts at the FIRST page, so the
+          // path must restart with it — otherwise prev/next keep navigating
+          // with dead cursors and re-fail.
+          setCurrentCursor(null);
+          setPastCursors([]);
+          loadLogs();
+        }}
+      />
+    );
 
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
