@@ -28,6 +28,10 @@ other structured log uses — no second channel, no buffering, no batching).
 | `operability.business_failure` | `deadline_scanner` | `recovered` | info | a settled deadline-scanner tick with zero failures |
 | `operability.business_failure` | `client_event_retention` | `failing` | error | 4 consecutive retention passes each with at least one failed organization — expired rows are repeatedly failing to delete (daily cadence: 4 consecutive failed DAYS) |
 | `operability.business_failure` | `client_event_retention` | `recovered` | info | a settled retention pass with zero failed organizations (zero deleted rows is a clean pass — no expired data is not a failure) |
+| `operability.tick_failure` | `heartbeat` | `failing` | error | 4 consecutive heartbeat-scanner ticks whose body THREW (the exception reached the tick-level catch) — the loop keeps settling, so this is invisible to the stall fact, and the throw freezes the business-failure counter. Root cause, business outcome and backlog state are NOT asserted |
+| `operability.tick_failure` | `heartbeat` | `recovered` | info | a settled heartbeat tick with no tick-level throw interrupted the run (tick exceptions cleared; business restoration unknown) |
+| `operability.tick_failure` | `deadline_scanner` | `failing` | error | 4 consecutive deadline-scanner ticks whose body THREW — the loop keeps settling, so this is invisible to the stall fact, and the throw freezes the business-failure counter. Root cause, business outcome and backlog state are NOT asserted |
+| `operability.tick_failure` | `deadline_scanner` | `recovered` | info | a settled deadline-scanner tick with no tick-level throw interrupted the run (tick exceptions cleared; business restoration unknown) |
 
 Example lines:
 
@@ -37,6 +41,8 @@ Example lines:
 {"level":50,"time":...,"event":"operability.background_loop","component":"heartbeat","state":"stalled","msg":"Critical background loop stalled: heartbeat (no settled cycle within 120s)"}
 {"level":50,"time":...,"event":"operability.business_failure","component":"deadline_scanner","state":"failing","msg":"Critical background loop persistently failing: deadline_scanner (4 consecutive ticks with business failures)"}
 {"level":30,"time":...,"event":"operability.business_failure","component":"deadline_scanner","state":"recovered","msg":"Critical background loop business failures cleared: deadline_scanner"}
+{"level":50,"time":...,"event":"operability.tick_failure","component":"heartbeat","state":"failing","msg":"Critical background loop tick exceptions: heartbeat (4 consecutive ticks threw; root cause unknown)"}
+{"level":30,"time":...,"event":"operability.tick_failure","component":"heartbeat","state":"recovered","msg":"Critical background loop tick exceptions cleared: heartbeat (last settled tick did not throw; business restoration unknown)"}
 ```
 
 The business-failure threshold is compile-time policy
@@ -60,12 +66,52 @@ cleared" are therefore one fact; there is deliberately no separate
 NO_FAILURE_OBSERVED state. A tick that THROWS, by contrast, carries no
 business-failure evidence in either direction and freezes the counter (§4).
 
+### Tick-level throws (#885, ADR-024)
+
+A tick-level throw is a distinct fact from a business failure, a stall and a
+dependency outage:
+
+- `failing` raises after **4 consecutive ticks whose body threw**. A throw
+  settles (so the stall fact stays healthy) and freezes the business-failure
+  counter (so #862 stays silent); without this event a loop may throw forever
+  with no escalation.
+- It asserts ONLY the run of throws. It does NOT assert that the database is or
+  is not the root cause — the readiness probe covers `organizations LIMIT 1`
+  and says nothing about the scanners' own query paths (measured in #885: a
+  PostgreSQL-shaped error coexisted with a healthy probe on every sample) — nor
+  that business processing failed, nor that a backlog is or is not converging.
+- `recovered` raises when the run counter falls back below the window: a
+  settled tick without a throw interrupted the run (at the default 15s monitor
+  / 30s scanner cadence that is the first clean tick). It means **tick
+  exceptions cleared**; it does NOT mean the business work succeeded, the
+  underlying fault was fixed, or pending work is drained (business restoration
+  is UNKNOWN). With a scanner interval configured BELOW the 15s monitor
+  cadence, a short interrupted run can fall back between two samples while a
+  newer run is already 1–3 ticks old; the message therefore claims only that a
+  clean tick interrupted the run, not that the latest tick was clean.
+- A throw run may coexist with a stale `operability.business_failure` `failing`
+  line from before the throws started (that counter is frozen, so it neither
+  clears nor advances). Do not read the stale line as fresh evidence, and do
+  not expect a recovery for it until a clean settle occurs.
+- Accepted boundary: the counter is strictly consecutive, so a high-duty-cycle
+  intermittent pattern (3 throwing ticks, then 1 clean tick, repeating) never
+  reaches the threshold. A windowed policy would add state and needs its own
+  decision.
+- Scope: only the `heartbeat` and `deadline_scanner` loops emit this event. The
+  client-event retention loop has the same freeze/settle shape but a daily
+  cadence and the #544 evidence boundary, so a throw run there remains covered
+  only by its per-pass ERROR logs.
+
 ### Diagnostics projection of the escalation counter (#886)
 
-`GET /api/system/diagnostics` exposes the escalation input for the two exam
-loops as read-only fields: `heartbeatStatus.consecutiveFailedTicks` and
+`GET /api/system/diagnostics` exposes the **business-failure** escalation input
+for the two exam loops as read-only fields:
+`heartbeatStatus.consecutiveFailedTicks` and
 `deadlineScannerStatus.consecutiveFailedTicks`. They are a projection of the
-same counter this contract describes — no second authority:
+same counter this contract describes — no second authority. The #885 throw-run
+counter (`consecutiveThrowTicks`) is deliberately NOT projected: a read-only
+field does not close an alert gap, and adding it would widen the response
+contract without changing what pages anyone.
 
 - consecutive SETTLED ticks with business failures; the first clean settle
   resets to 0; a tick-level throw freezes it (§4);
@@ -103,7 +149,7 @@ An external watcher needs nothing beyond the app's stdout JSON:
 CONSUME app stdout JSON (journald / Docker logging driver / Loki / custom)
 IF   level >= 50 (error)
 AND  event   in { "operability.readiness", "operability.background_loop",
-                  "operability.business_failure" }
+                  "operability.business_failure", "operability.tick_failure" }
 AND  state   in { "unavailable", "stalled", "failing" }
 THEN page / notify the operator.
 
@@ -114,6 +160,11 @@ THEN clear / resolve the corresponding notification
 
 - The clear key is `(event, component)`; there is at most one active failure
   per key.
+- `operability.tick_failure` is a NEW event value (#885): a watcher that has
+  not been updated will not page on it. During a database outage
+  `readiness/database` and `tick_failure/<loop>` can fire for the same root
+  cause — two true facts on distinct keys. Correlate and dedupe at the
+  notification layer; the app deliberately performs no causal suppression.
 - `#547 does NOT require any platform` (no Prometheus, Grafana, OTel, Loki,
   PagerDuty, Slack, webhook). #312 (optional external log shipping) remains a
   separate, demand-driven task and is NOT needed to consume this contract.
@@ -139,12 +190,17 @@ THEN clear / resolve the corresponding notification
   subsystem (#544 §9 boundary).
 - **CPU / memory pressure** — diagnostics-only; never an alert condition and
   never readiness-relevant (01-semantics §1).
-- **Transient scanner errors** (e.g. DB-down cycles that THROW) — those
-  settle, are logged by the scanners themselves, and DB loss is owned by the
-  readiness events. STALLED means no observable progress. A tick-level throw
-  also never advances the business-failure escalation counter (#862): DB-down
-  cycles raise `operability.readiness/database`, not a second concurrent
-  business-failure alert for the same root cause.
+- **A single transient scanner error** — one throwing cycle settles, is logged
+  by the scanner itself, and stays below the throw-run threshold. Only a
+  PERSISTENT run escalates, as `operability.tick_failure` (#885; heartbeat and
+  deadline_scanner only, see §1 scope). STALLED means no observable progress; a
+  throw is not a stall.
+- **Root-cause attribution for throws** — `operability.tick_failure` reports
+  the run of exceptions, never the cause. A tick-level throw also never advances
+  the business-failure escalation counter (#862), so a database outage raises
+  `operability.readiness/database` and, when it also makes the scanners throw, a
+  separate `operability.tick_failure` per loop — two true facts, not one fact
+  stated twice. Their correlation belongs to the external watcher (ADR-024).
 - **Occasional business failures** — a failed auto-submit or disruption is
   retried on the next cadence and stays at the existing per-item ERROR /
   aggregate INFO logs. Only PERSISTENT failure (4 consecutive failed ticks)

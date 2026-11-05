@@ -89,13 +89,16 @@ page. Stable fields (stdout pino JSON; full contract:
 [`operations/active-alerting.md`](active-alerting.md) — the canonical contract):
 
 ```text
-event: "operability.readiness"       component: "database"|"redis"          state: "unavailable"|"recovered"
-event: "operability.background_loop" component: "heartbeat"|"deadline_scanner" state: "stalled"|"recovered"
+event: "operability.readiness"        component: "database"|"redis"            state: "unavailable"|"recovered"
+event: "operability.background_loop"  component: "heartbeat"|"deadline_scanner" state: "stalled"|"recovered"
+event: "operability.business_failure" component: loop component                 state: "failing"|"recovered"
+event: "operability.tick_failure"     component: "heartbeat"|"deadline_scanner" state: "failing"|"recovered"
 ```
 
 One log line per state TRANSITION only (no storms; recovery is one `info`
 line). Minimal external hook: alert when `level >= error AND event in
-{operability.readiness, operability.background_loop}` with a failure
+{operability.readiness, operability.background_loop,
+operability.business_failure, operability.tick_failure}` with a failure
 `state`; use `recovered` to clear. Consumable by journald / Docker log
 driver / Loki / a custom watcher — none of which is required or bundled
 (#312 stays separate).

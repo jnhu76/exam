@@ -289,9 +289,10 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-021](ADR-021-exam-semantic-authority-adoption.md) | Exam Semantic Authority Adoption | ACCEPTED | Stale assertions listed in its supersession table (incl. ADR-008 Phase-2 scope statements) | none |
 | [ADR-022](ADR-022-product-capability-composition.md) | Bounded Product Capability Composition | ACCEPTED | none | none |
 | [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) | Remove the Backup-Evidence Subsystem (Host Owns Operational Evidence) | ACCEPTED | ADR-018 (backup/restore-readiness/ops-policy window content); ADR-017 rev-4 backup-evidence scopes as enumerated in ADR-017 §Revision 5 (incl. R4-3 category B, R4-4, D5 `backup.*` gates, D6, D9, D10, D1 backup items, five-capability freeze, R4-1 window-content statement, D13 E2B/E2C line items) | none |
+| [ADR-024](ADR-024-tick-level-throw-escalation.md) | Tick-level Throw Escalation (`operability.tick_failure`) | PROPOSED | none | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-024**.
+ADR numbers are stable and never reused. The next free number is **ADR-025**.
 Files that are audits *about* an ADR belong under `docs/archive/`, not in this
 folder with a conflicting ADR number.
