@@ -61,6 +61,7 @@ describe("clientEventRepo.createMany", () => {
         occurredAt: new Date("2026-06-25T00:00:00.000Z"),
         receivedAt,
         clientSessionId: null,
+        eventId: null,
         metadata: { foo: "bar" },
         userAgent: "vitest",
       },
@@ -76,12 +77,13 @@ describe("clientEventRepo.createMany", () => {
         occurredAt: new Date("2026-06-25T00:00:01.000Z"),
         receivedAt,
         clientSessionId: null,
+        eventId: null,
         metadata: {},
         userAgent: null,
       },
     ]);
 
-    expect(inserted).toBe(2);
+    expect(inserted).toEqual({ inserted: 2, deduplicated: 0 });
 
     const rows = await db
       .select()
@@ -106,8 +108,8 @@ describe("clientEventRepo.createMany", () => {
     const ctx = createContext(orgId);
     const repo = createClientEventRepo(db);
 
-    const inserted = await repo.createMany(ctx, []);
-    expect(inserted).toBe(0);
+    const result = await repo.createMany(ctx, []);
+    expect(result).toEqual({ inserted: 0, deduplicated: 0 });
   });
 
   it("keeps events isolated per organization", async () => {
@@ -129,6 +131,7 @@ describe("clientEventRepo.createMany", () => {
         occurredAt: new Date(),
         receivedAt: new Date(),
         clientSessionId: null,
+        eventId: null,
         metadata: {},
         userAgent: null,
       },
@@ -198,6 +201,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
         occurredAt: new Date(at.getTime() + i),
         receivedAt: new Date(at.getTime() + i),
         clientSessionId: null,
+        eventId: null,
         metadata: r.metadata ?? {},
         userAgent: null,
       })),
@@ -288,6 +292,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
         occurredAt: new Date(at.getTime() + 9000),
         receivedAt: new Date(at.getTime() + 1000),
         clientSessionId: null,
+        eventId: null,
         metadata: {},
         userAgent: null,
       },
@@ -303,6 +308,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
         occurredAt: new Date(at.getTime() + 8000),
         receivedAt: new Date(at.getTime() + 2000),
         clientSessionId: null,
+        eventId: null,
         metadata: { answer: "SECRET_ANSWER", token: "abc", errorCode: "NET" },
         userAgent: null,
       },
@@ -318,6 +324,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
         occurredAt: new Date(at.getTime() + 7000),
         receivedAt: new Date(at.getTime() + 3000),
         clientSessionId: null,
+        eventId: null,
         metadata: {},
         userAgent: null,
       },

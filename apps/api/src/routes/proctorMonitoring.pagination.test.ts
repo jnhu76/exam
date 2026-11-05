@@ -127,6 +127,7 @@ describe("proctor timeline pagination (M2 corrective)", () => {
           occurredAt: opts?.occurredAt ?? receivedAt,
           receivedAt,
           clientSessionId: "pagination-sess",
+          eventId: null,
           metadata: {},
           userAgent: null,
         },
@@ -413,6 +414,7 @@ describe("proctor timeline pagination (M2 corrective)", () => {
       occurredAt: at(i),
       receivedAt: at(i),
       clientSessionId: "p5-sess",
+      eventId: null,
       metadata: {},
       userAgent: null,
     }));
@@ -448,6 +450,7 @@ describe("proctor timeline pagination (M2 corrective)", () => {
         occurredAt: at(-1),
         receivedAt: at(-1),
         clientSessionId: "p5-sess",
+        eventId: null,
         metadata: {},
         userAgent: null,
       });

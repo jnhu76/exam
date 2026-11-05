@@ -1126,6 +1126,11 @@ export const clientEvents = pgTable(
       .defaultNow()
       .notNull(),
     clientSessionId: text("client_session_id"),
+    // #863: optional client-generated idempotency key. NULL for legacy
+    // clients (NULLs are distinct, so they never conflict). The unique
+    // index below carries the authenticated (org, user) boundary — an
+    // eventId alone proves nothing and must never dedupe across users.
+    eventId: text("event_id"),
     metadata: jsonb("metadata")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -1156,6 +1161,14 @@ export const clientEvents = pgTable(
       table.organizationId,
       table.name,
       table.receivedAt,
+    ),
+    // #863 idempotency: one row per (org, user, eventId). Legacy rows
+    // (NULL event_id) are outside the constraint — PostgreSQL treats NULLs
+    // as distinct in unique indexes by default.
+    uniqueIndex("client_events_org_user_event_id_uidx").on(
+      table.organizationId,
+      table.userId,
+      table.eventId,
     ),
   ],
 );

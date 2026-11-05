@@ -23,6 +23,14 @@ export interface ClientEventInsert {
   occurredAt: Date;
   receivedAt: Date;
   clientSessionId: string | null;
+  /**
+   * #863 client idempotency key. NULL for legacy clients (append-only
+   * behavior). When present, `(organizationId, userId, eventId)` is unique —
+   * a resend of an already-stored event is silently deduplicated (first
+   * write wins; the key is never a trusted identity and a replay never
+   * mutates the stored row).
+   */
+  eventId: string | null;
   metadata: Record<string, unknown>;
   userAgent: string | null;
 }
@@ -61,17 +69,24 @@ export interface ClientEventTimelineRow {
 export function createClientEventRepo(db: Database) {
   return {
     /**
-     * Inserts a batch of client events, all scoped to the context's
-     * organization. Each row gets a fresh server-generated `id`. This is a
-     * single bulk insert for efficiency.
+     * Ingests a batch of client events, all scoped to the context's
+     * organization (#863 idempotency). Each row gets a fresh server-generated
+     * `id`. Rows carrying an `eventId` are insert-or-dedup: a conflicting
+     * `(organizationId, userId, eventId)` is silently skipped — first write
+     * wins, the conflicting payload is NOT written and the stored row is NOT
+     * mutated. Rows without an `eventId` (legacy clients) always insert.
+     * Single bulk statement for efficiency.
      *
-     * @returns The number of rows inserted.
+     * @returns How many rows were inserted and how many were deduplicated.
+     *   The route MUST report both as accepted: `accepted < n` is the
+     *   client-side failure signal, and legitimate dedup must not trigger a
+     *   resend loop.
      */
     async createMany(
       ctx: TenantContext | RequestContext,
       rows: ClientEventInsert[],
-    ): Promise<number> {
-      if (rows.length === 0) return 0;
+    ): Promise<{ inserted: number; deduplicated: number }> {
+      if (rows.length === 0) return { inserted: 0, deduplicated: 0 };
       const organizationId = resolveOrganizationId(ctx);
       const values = rows.map((row) => ({
         id: randomUUID(),
@@ -87,11 +102,25 @@ export function createClientEventRepo(db: Database) {
         occurredAt: row.occurredAt,
         receivedAt: row.receivedAt,
         clientSessionId: row.clientSessionId,
+        eventId: row.eventId,
         metadata: row.metadata,
         userAgent: row.userAgent,
       }));
-      await db.insert(clientEvents).values(values);
-      return values.length;
+      const stored = await db
+        .insert(clientEvents)
+        .values(values)
+        .onConflictDoNothing({
+          target: [
+            clientEvents.organizationId,
+            clientEvents.userId,
+            clientEvents.eventId,
+          ],
+        })
+        .returning({ id: clientEvents.id });
+      return {
+        inserted: stored.length,
+        deduplicated: values.length - stored.length,
+      };
     },
 
     /**

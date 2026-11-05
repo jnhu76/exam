@@ -117,6 +117,7 @@ describe("proctor monitoring API", () => {
           occurredAt: new Date(),
           receivedAt: new Date(),
           clientSessionId: "sess-1",
+          eventId: null,
           metadata,
           userAgent: null,
         },
