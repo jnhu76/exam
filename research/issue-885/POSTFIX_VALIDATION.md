@@ -7,7 +7,9 @@ scenarios, unchanged**, against the **implemented** `operability.tick_failure`
 leg and compares the REAL stdout events with the predicted ones, tuple for
 tuple.
 
-- Pre-fix observations: `results/experiments.json` (frozen, `BASE_SHA` code)
+- Pre-fix observations: one deterministic run at `BASE_SHA` — receipt hashes in
+  `REPRO.md` §4.3, regenerable via `REPRO.md` §5 (the dumps are intentionally
+  not committed; scope diet §4.4)
 - Post-fix observations: the same harness, same fake clock, same fake `db`,
   run against the implementation commit (not committed here — it is a replay,
   reproduced by the commands below)
@@ -80,8 +82,9 @@ raised on its first sample. **A real process restart cannot do this** — the
 counter lives in module scope and starts at 0.
 
 Verification (temporary scaffold patch, NOT part of the committed package; the
-committed harness is byte-identical to `BASE_SHA`'s evidence, hash
-`fc8b4596…`):
+harness as run was byte-identical to `BASE_SHA`'s evidence, hash `fc8b4596…` —
+since reformatted by the scope diet, hashes mapped in `REPRO.md` §4.4 and
+re-verified behaviour-identical on 2026-11-06, see §5):
 
 ```ts
 // in resetAllMetrics(), simulating a process restart
@@ -105,3 +108,18 @@ recorded as an **INSTRUMENT ARTIFACT**, never as product behaviour.
   deterministic scenarios cannot support a percentage).
 - **Does not cover:** E12 (chronic intermittent), which remains a documented
   false-negative boundary for every candidate including the implemented one.
+
+## 5. Post-diet replay receipt (2026-11-06)
+
+After the PR #896 scope diet moved the runner into the bundle and reformatted
+the harness (mapping: `REPRO.md` §4.4), the replay was re-executed from the
+diet commit:
+
+- Migrated runner CMD1: 2 files / 2 tests, exit 0.
+- **19/20 scenarios tuple-identical** to candidate C with **38/38** real
+  `operability.tick_failure` lines; E7 reproduces the §3 INSTRUMENT ARTIFACT
+  exactly (225000 unpatched → 330000 with the §3 scaffold → **20/20**), so the
+  reformat is behaviour-neutral.
+- BASE_SHA clean-room control (`REPRO.md` §5 recipe, bundle copied in):
+  3 files / **67 tests**.
+- Post-fix plugin suites through the same runner (DB-free): **75/75**.

@@ -20,7 +20,7 @@ Research verdict: **GO_C (CONDITIONAL)**. Implementation: this branch.
 | [`REPRO.md`](REPRO.md) | Environment, commands, exit codes, timestamps, SHA256 manifest, clean-room recipe |
 | [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) | The implemented leg replayed through the same 20 scenarios vs. the prediction |
 | [`harness/`](harness) | `experiments.test.ts` (recorder, zero assertions), `smoke.test.ts`, `analyze.mjs`, `vitest.config.ts` (bundle-owned runner) |
-| [`results/`](results) | `experiments.json` (step-level observations), `analysis.json` (derived), transcripts |
+| [`results/`](results) | **Not committed** (scope diet — regenerable via `REPRO.md` §5): `experiments.json` (step-level observations), `analysis.json` (derived), transcripts; receipt hashes in `REPRO.md` §4.3 |
 
 Evidence classes are marked throughout: **MEASURED** / **SOURCE_VERIFIED** /
 **INFERRED** / **UNKNOWN**. Plain ERROR logs are never treated as delivered
@@ -48,8 +48,10 @@ fixed 15 s steps: no sleeps, no retries, no network.
 ## Provenance and integrity
 
 `REPRO.md` §4 is the SHA256 manifest of the study as it was run (17 artifacts,
-all verified). Those hashes cover **this package's files unchanged**, which is
-why they still verify in this tree.
+all verified). The document and harness hashes still verify against the files
+here — the harness bytes after the scope-diet reformat are mapped in §4.4 —
+while the `results/` hashes remain the canonical receipts of a regenerable run
+that is intentionally **not committed** (§4.3–§4.4).
 
 > **On the "NON-PERSISTENCE NOTICE" inside `RESULTS.md` and `REPRO.md`:** those
 > paragraphs describe the study's state while it lived in a detached worktree
@@ -58,5 +60,5 @@ why they still verify in this tree.
 > committed for traceability; the durable record remains the
 > [Issue #885 comment](https://github.com/jnhu76/exam/issues/885#issuecomment-6660017391).
 
-`POSTFIX_VALIDATION.md` documents the one post-fix replay and the harness
-restart-scaffold artifact it exposed; the committed harness is unchanged.
+`POSTFIX_VALIDATION.md` documents the one post-fix replay, the harness
+restart-scaffold artifact it exposed, and the post-scope-diet replay receipt.

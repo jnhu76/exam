@@ -227,4 +227,9 @@ Key reads:
 | `results/analysis.json` | Derived latencies/aggregates |
 | `results/run-transcript.txt`, `results/analysis-transcript.txt`, `results/regression-transcript.txt` | Real command stdout |
 
+*(Scope diet 2026-11-06: the two runner configs merged into
+`research/issue-885/harness/vitest.config.ts`, and `results/` is regenerable via `REPRO.md`
+§5 and intentionally not committed — mapping and replay receipt in `REPRO.md` §4.4. The rows
+above are the artifacts as of the study run.)*
+
 SHA256 of each key artifact is recorded in REPRO.md.

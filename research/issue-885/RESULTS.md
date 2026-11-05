@@ -204,6 +204,11 @@ frozen BASE_SHA is fully specified in `REPRO.md`. Raw oversized logs, dependency
 snapshots were never created; `experiments.json`/`analysis.json` are compact structured
 observations (~600 KB / ~220 KB), not raw log dumps.
 
+*(2026-11-06 update: the package is now committed with PR #896 for traceability, with one
+deliberate exception — the `results/` dumps are regenerable outputs of a deterministic run
+and are **not committed**; their receipt hashes stay in `REPRO.md` §4.3 with the mapping in
+§4.4. The NON-PERSISTENCE NOTICE above is the study's accurate history.)*
+
 ## 11. GitHub writeback
 
 One consolidated research comment was posted to #885 (no duplicate, no close, no PR, no

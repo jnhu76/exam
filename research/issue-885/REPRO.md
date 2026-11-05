@@ -131,6 +131,12 @@ ab151ea8cd1ad1d6335afdf556ca4d1357ad9043126d76b8fd4fe6714f0a82e4  research/issue
 > bundle-owned runner by the scope diet — see §4.4.)*
 
 ### 4.3 Machine-readable results & transcripts
+
+> **Scope-diet note (2026-11-06):** these files are **regenerable outputs of one
+> deterministic run** and are intentionally **not committed** to the product
+> repository (see §4.4). The hashes below remain the **canonical receipts** of
+> the run as it happened — re-run §5 at the pinned SHA and compare modulo
+> `generatedAt`.
 ```
 3f0045836f2ed0e28019afc6f8b0caff6b01eed4e25bf4c799a9a59284037aec  research/issue-885/results/experiments.json
 99ee001857f8ad6b768640d819fc24c486f8686af612c3ccb1851c5c246476a8  research/issue-885/results/analysis.json
@@ -164,8 +170,22 @@ The two runner configs were the only Vitest configs under `apps/api/` that were
 not product configs; following the repo's #304 precedent (research-only vitest
 configs are temporary and do not belong in product directories), their `include`
 sets now live in **one** config owned by this bundle. The reformat is mechanical
-prettier formatting plus the `mkdirSync` lines; the replay after migration
-reproduces the frozen receipts (see `POSTFIX_VALIDATION.md`).
+prettier formatting plus the `mkdirSync` lines.
+
+The `results/` dumps are **not committed** (scope diet): they are one
+deterministic study run — 30,025 lines, 89% of the PR's additions — fully
+regenerable from the §5 recipe against the pinned SHA. The §4.3 hashes stay the
+canonical receipts of the run as it happened.
+
+**Post-diet replay receipt (2026-11-06**, scratch worktree at the diet commit,
+deps symlinked per §5**):** migrated runner CMD1 **2 files / 2 tests**, exit 0;
+**19/20 scenarios tuple-identical** to candidate C with **38/38** real
+`operability.tick_failure` lines, E7 reproducing the documented INSTRUMENT
+ARTIFACT (225000 unpatched → 330000 with the `POSTFIX_VALIDATION.md` §3
+scaffold → **20/20**) — the reformatted harness is behaviour-identical to the
+study instrument; `results/experiments.json` regenerated on the spot by the
+same run; BASE_SHA clean-room control (bundle copied in per §5) **67/67**;
+post-fix plugin suites through the same runner (DB-free) **75/75**.
 
 ---
 
