@@ -63,8 +63,8 @@ const MAX_DEPTH = 5;
  * scanned by hand and the anchored Bearer/Basic form is a single class run.
  *
  * - JWT compact form (three base64url segments with plausible header/payload/
- *   signature lengths), matched as a standalone token even when embedded in
- *   surrounding prose;
+ *   signature lengths), matched even when embedded in prose or directly
+ *   adjacent to other token characters;
  * - a whole-value credential scheme (`Bearer <token>` / `Basic <token>`) —
  *   anchored, so prose merely mentioning the word is untouched;
  * - any URL carrying userinfo credentials (`scheme://user:pass@host`), e.g. a
@@ -72,38 +72,84 @@ const MAX_DEPTH = 5;
  */
 const BEARER_BASIC_WHOLE_VALUE = /^(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}$/i;
 
-/** Anchored JWT test applied to one [A-Za-z0-9_-.] token. */
-const COMPACT_JWT_TOKEN =
-  /^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{10,}$/;
-
-/** True for UTF-16 units allowed in a base64url segment or the dot separator. */
-function isJwtTokenUnit(unit: number): boolean {
+/** True for UTF-16 units allowed in a base64url segment (no dot). */
+function isB64UrlUnit(unit: number): boolean {
   return (
     (unit >= 48 && unit <= 57) || // 0-9
     (unit >= 65 && unit <= 90) || // A-Z
     (unit >= 97 && unit <= 122) || // a-z
     unit === 45 || // -
-    unit === 95 || // _
-    unit === 46 // .
+    unit === 95 // _
+  );
+}
+
+/** End (exclusive) of the base64url run starting at `start`. */
+function b64UrlRunEnd(value: string, start: number): number {
+  let i = start;
+  while (i < value.length && isB64UrlUnit(value.charCodeAt(i))) i++;
+  return i;
+}
+
+/** True when an "eyJ" at `p` still has >= 8 header chars before `runEnd`. */
+function isJwtHeaderStart(value: string, p: number, runEnd: number): boolean {
+  return (
+    value.charCodeAt(p) === 101 && // e
+    value.charCodeAt(p + 1) === 121 && // y
+    value.charCodeAt(p + 2) === 74 && // J
+    runEnd - p >= 11 // "eyJ" + {8,}
   );
 }
 
 /**
- * Linear compact-JWT scan: split the string into maximal [base64url + .]
- * tokens and test each token once with the anchored pattern. Every character
- * is visited a constant number of times; the previous unanchored pattern
- * backtracked quadratically on long runs containing "eyJ".
+ * Linear compact-JWT detector. Walks maximal base64url runs once; a run can
+ * only be the JWT header segment when it is followed by '.', and within one
+ * run only the EARLIEST qualifying "eyJ" needs checking — every later start
+ * has the same payload/signature segments but a shorter header, so if the
+ * earliest fails none later can pass. Payload/signature checks start at fixed
+ * delimiters, so the whole scan is O(n). (The previous unanchored
+ * three-segment regex backtracked quadratically on long runs containing
+ * "eyJ".)
  */
 function containsCompactJwt(value: string): boolean {
-  let start = -1;
-  for (let i = 0; i <= value.length; i++) {
-    const inToken = i < value.length && isJwtTokenUnit(value.charCodeAt(i));
-    if (inToken) {
-      if (start < 0) start = i;
-    } else if (start >= 0) {
-      if (COMPACT_JWT_TOKEN.test(value.slice(start, i))) return true;
-      start = -1;
+  const length = value.length;
+  let i = 0;
+  while (i < length) {
+    if (!isB64UrlUnit(value.charCodeAt(i))) {
+      i++;
+      continue;
     }
+    const runStart = i;
+    const runEnd = b64UrlRunEnd(value, i);
+    i = runEnd;
+    // The header segment must be followed by the first '.'.
+    if (value.charCodeAt(runEnd) !== 46) continue;
+
+    // Earliest "eyJ" in this run; later starts have shorter headers.
+    let p = runStart;
+    while (
+      p + 3 <= runEnd &&
+      !(
+        value.charCodeAt(p) === 101 &&
+        value.charCodeAt(p + 1) === 121 &&
+        value.charCodeAt(p + 2) === 74
+      )
+    ) {
+      p++;
+    }
+    if (!isJwtHeaderStart(value, p, runEnd)) continue;
+
+    // Payload segment: >= 4 base64url chars, then the second '.'.
+    const payloadStart = runEnd + 1;
+    const payloadEnd = b64UrlRunEnd(value, payloadStart);
+    if (payloadEnd - payloadStart < 4 || value.charCodeAt(payloadEnd) !== 46) {
+      continue;
+    }
+
+    // Signature segment: >= 10 base64url chars (a longer trailing run is
+    // included in the match, mirroring the old unanchored regex).
+    const signatureStart = payloadEnd + 1;
+    const signatureEnd = b64UrlRunEnd(value, signatureStart);
+    if (signatureEnd - signatureStart >= 10) return true;
   }
   return false;
 }
@@ -123,12 +169,14 @@ function isSchemeUnit(unit: number): boolean {
 /**
  * Authority terminators: the scan stops here, so `@` in a query string
  * (`https://host:3000?contact=bob@example.com`) is NOT mistaken for
- * userinfo. A linear `indexOf("://")` walk plus a bounded forward scan.
+ * userinfo. RFC 3986 sub-delims that can legally appear UNENCODED in
+ * userinfo (`,` `;` `'` `(` `)`) are deliberately NOT terminators, so a
+ * password such as `p,ss` or `p)ss` is still recognized; characters that
+ * cannot appear unencoded there (`"` `<` `>` `]` `}`) are.
  */
 function isAuthorityTerminator(unit: number): boolean {
-  // whitespace, / ? # and common surrounding punctuation
   return (
-    unit === 32 ||
+    unit === 32 || // space
     unit === 9 ||
     unit === 10 ||
     unit === 13 ||
@@ -136,12 +184,8 @@ function isAuthorityTerminator(unit: number): boolean {
     unit === 63 || // ?
     unit === 35 || // #
     unit === 34 || // "
-    unit === 39 || // '
     unit === 60 || // <
     unit === 62 || // >
-    unit === 44 || // ,
-    unit === 59 || // ;
-    unit === 41 || // )
     unit === 93 || // ]
     unit === 125 // }
   );

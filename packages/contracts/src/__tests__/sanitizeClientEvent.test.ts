@@ -226,9 +226,34 @@ describe("sanitizeClientEvent — value-level credential-shape redaction (#875)"
     expect(sanitizeClientEvent(safe)).toEqual(safe);
   });
 
-  it("scans a 32 KiB adversarial run containing repeated 'eyJ' without backtracking blowup", () => {
-    // The schema's per-event budget; the JWT detector must stay linear.
+  it("redacts a JWT adjacent to prose punctuation or token characters (boundary-aware)", () => {
+    const cases = [
+      `pasted token: ${jwt}.`,
+      `"${jwt}"`,
+      `token-${jwt}`,
+      `${jwt}...`,
+      `note_${jwt}`,
+      `. ${jwt}`,
+    ];
+    for (const note of cases) {
+      expect(sanitizeClientEvent({ note }).note, note).toBe("[redacted]");
+    }
+  });
+
+  it("redacts DSNs whose password uses valid unencoded userinfo sub-delims", () => {
+    for (const password of ["p,ss", "p;ss", "p'ss", "p(ss", "p)ss"]) {
+      const dsn = `postgresql://exam:${password}@db.local/exam`;
+      expect(redactCredentialShapedValue(dsn), dsn).toBe("[redacted]");
+    }
+  });
+
+  it("scans a 32 KiB adversarial run containing repeated 'eyJ' in linear time", () => {
+    // The schema's per-event budget. The previous unanchored regex took
+    // ~1.7 s on exactly this input; the linear scan is sub-millisecond, so
+    // 500 ms is a wide, deterministic guard against a backtracking relapse.
     const hostile = "eyJ".repeat(10_900);
+    const started = Date.now();
     expect(redactCredentialShapedValue(hostile)).toBe(hostile);
+    expect(Date.now() - started).toBeLessThan(500);
   });
 });
