@@ -3,7 +3,7 @@ import type {
   ClientEventKind,
   ClientEventLevel,
 } from "@exam/contracts";
-import { generateOpaqueId } from "./opaqueId";
+import { createContextSafeUuid } from "./uuid";
 import { ClientEventBuffer } from "./clientEventBuffer";
 import { sanitizeClientEvent } from "./sanitizeClientEvent";
 
@@ -69,8 +69,8 @@ function record(
     route: currentRoute(),
     // #863: per-event idempotency key, generated once at construction so a
     // buffered resend after a lost ACK carries the SAME key and dedupes
-    // server-side. See opaqueId.ts for the guarded generator.
-    eventId: generateOpaqueId(),
+    // server-side. See uuid.ts for the guarded generator.
+    eventId: createContextSafeUuid(),
     ...(metadata !== undefined
       ? { metadata: sanitizeClientEvent(metadata) }
       : {}),

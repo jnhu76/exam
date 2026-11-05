@@ -5,6 +5,8 @@ import authRoutes from "./auth.js";
 import clientEventRoutes from "./clientEvents.js";
 import { buildTestApp } from "./testHelpers.js";
 import { schema } from "@exam/db/schema/pg";
+import { signJWT } from "@exam/auth/session";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
@@ -292,6 +294,79 @@ describe("POST /api/client-events", () => {
       await ctx.db
         .delete(schema.clientEvents)
         .where(eq(schema.clientEvents.name, "test.event.idem3"));
+    });
+
+    it("the same (user, eventId) under a DIFFERENT organization stores both rows (org boundary in the key)", async () => {
+      // Cross-tenant proof: the unique key is (organization, user, eventId).
+      // A regression to (user, eventId) or eventId-only would collapse these.
+      const otherOrgId = crypto.randomUUID();
+      const otherUserId = crypto.randomUUID();
+      const now = new Date();
+      await ctx.db.insert(schema.organizations).values({
+        id: otherOrgId,
+        name: "Idempotency Org B",
+        displayName: "Idempotency Org B",
+        slug: `idem-org-${otherOrgId}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.users).values({
+        id: otherUserId,
+        organizationId: otherOrgId,
+        username: `idem-user-${otherUserId}`,
+        passwordHash: "unused",
+        name: "Other Org User",
+        role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: otherOrgId,
+        userId: otherUserId,
+        role: "Candidate" as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const otherToken = signJWT(
+        {
+          actorId: otherUserId,
+          role: "Candidate",
+          organizationId: otherOrgId,
+          authEpoch: 0,
+        },
+        getRuntimeConfig().authSecret.jwtSecret,
+      );
+
+      const eventId = "evt-idem-org-000000001";
+      await postBatch(ctx.adminToken, [
+        validEvent({ name: "test.event.idem-org", eventId }),
+      ]);
+      await postBatch(otherToken, [
+        validEvent({ name: "test.event.idem-org", eventId }),
+      ]);
+      expect(await countRows("test.event.idem-org")).toBe(2);
+      const rows = await ctx.db
+        .select({ organizationId: schema.clientEvents.organizationId })
+        .from(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.idem-org"));
+      expect(new Set(rows.map((r) => r.organizationId))).toEqual(
+        new Set([ctx.org.id, otherOrgId]),
+      );
+
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.idem-org"));
+      await ctx.db
+        .delete(schema.userRoleAssignments)
+        .where(eq(schema.userRoleAssignments.userId, otherUserId));
+      await ctx.db.delete(schema.users).where(eq(schema.users.id, otherUserId));
+      await ctx.db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, otherOrgId));
     });
 
     it("a different clientSessionId with the same eventId still deduplicates (restart / new tab resend)", async () => {

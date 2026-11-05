@@ -7,7 +7,7 @@
  * reconstruct one continuous exam-session's frontend flow across reloads.
  */
 
-import { generateOpaqueId } from "./opaqueId";
+import { createContextSafeUuid } from "./uuid";
 
 /** sessionStorage key under which the id is persisted. */
 export const CLIENT_SESSION_ID_KEY = "exam.clientSessionId";
@@ -44,7 +44,7 @@ export function getClientSessionId(): string {
   const existing = readStored();
   if (existing) return existing;
 
-  const id = generateOpaqueId();
+  const id = createContextSafeUuid();
   store(id);
   return id;
 }

@@ -57,6 +57,8 @@ describe("trackExamEvent — core behavior", () => {
     expect(ev.level).toBe("info");
     expect(ev.attemptId).toBe("att-1");
     expect(ev.clientSessionId).toBeTruthy();
+    // #863: every event carries a stable-format idempotency key.
+    expect(ev.eventId).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
   });
 
   it("attaches route, examId, and questionId when provided", async () => {

@@ -1164,7 +1164,9 @@ export const clientEvents = pgTable(
     ),
     // #863 idempotency: one row per (org, user, eventId). Legacy rows
     // (NULL event_id) are outside the constraint — PostgreSQL treats NULLs
-    // as distinct in unique indexes by default.
+    // as distinct in unique indexes by default. Route writes always supply
+    // user_id from ctx.actorId, so a NULL-user row can never be produced by
+    // the ingestion path (and would not dedupe if one were synthesized).
     uniqueIndex("client_events_org_user_event_id_uidx").on(
       table.organizationId,
       table.userId,
