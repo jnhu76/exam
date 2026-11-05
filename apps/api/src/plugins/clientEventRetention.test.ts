@@ -358,6 +358,10 @@ describe("client-event retention loop — activity + escalation facts (#871)", (
       expect(clientEventRetentionMetrics.activeSince).toBeNull();
       expect(clientEventRetentionMetrics.lastSettledAt).toEqual(clock.current);
     } finally {
+      // Idempotent on the happy path; if an assertion above regresses, this
+      // keeps the hung pass from blocking app.close() (and leaking fake
+      // timers into the remaining tests).
+      release();
       await app.close();
       vi.useRealTimers();
     }

@@ -111,7 +111,7 @@ THEN clear / resolve the corresponding notification
   durable-evidence-free (logs only per pass) and that boundary stands:
   deleted counts and individual per-organization failures are NOT alerts.
   #871 added only the LOOP-level facts this contract already uses everywhere
-  else (see §3): a never-fired or hung sweep raises
+  else (see §1): a never-fired or hung sweep raises
   `operability.background_loop/client_event_retention/stalled`, and a run of
   failed daily passes escalates on the shared
   `operability.business_failure` shape (daily cadence → threshold = 4
