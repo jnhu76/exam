@@ -375,6 +375,50 @@ describe("AuditLogPage", () => {
     expect(await screen.findByText("评分录入")).toBeInTheDocument();
   });
 
+  it("retry after a failed page resets the keyset cursor path together with the first page (#877)", async () => {
+    const user = userEvent.setup();
+    const firstPage = {
+      items: auditItems,
+      nextCursor: "fresh-page1-cursor",
+    };
+    let call = 0;
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/api/admin/audit-log/actions")) {
+        return Promise.resolve(actionsMock);
+      }
+      call += 1;
+      if (call === 2) {
+        // Page 2 fails the way a version-stale cursor does (400
+        // INVALID_CURSOR surfaces here as a rejected request).
+        return Promise.reject(new Error("INVALID_CURSOR"));
+      }
+      return Promise.resolve(firstPage);
+    });
+    renderPage();
+    await screen.findByText("评分录入");
+
+    // Navigate forward once so the cursor path holds real state.
+    await user.click(screen.getByRole("button", { name: /下一页/ }));
+    expect(await screen.findByText("加载审计日志失败")).toBeInTheDocument();
+
+    await user.click(screen.getByText("重试"));
+    // The first page is back …
+    expect(await screen.findByText("评分录入")).toBeInTheDocument();
+    // … and the cursor path restarted with it: prev is disabled again. A
+    // stale pastCursors stack would keep it enabled, and every prev hop
+    // would replay a dead cursor and re-fail.
+    const prev = screen.getByRole("button", { name: /上一页/ });
+    await waitFor(() => expect(prev).toBeDisabled());
+
+    // Next continues from the FIRST page's fresh cursor, not the failed
+    // session's position.
+    await user.click(screen.getByRole("button", { name: /下一页/ }));
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain("cursor=fresh-page1-cursor");
+    });
+  });
+
   it("expands metadata on row click", async () => {
     const user = userEvent.setup();
     renderPage();
