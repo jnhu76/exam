@@ -11,11 +11,14 @@ concurrency:
 
 permissions:
   contents: read
-  actions: write
 
 # Turborepo remote cache — TURBO_TOKEN from secrets, TURBO_TEAM from vars.
 # GitHub-native .turbo caching below is an independent fallback and also lets
-# the post-static Build job reuse task outputs produced earlier in this run.
+# later jobs in this run replay task outputs produced earlier (same run,
+# same sha primary key). CI uploads ZERO GitHub Actions artifacts: every
+# dist-consuming job builds in its own execution context (the private-repo
+# artifact storage quota had blocked the whole pipeline), so a cache miss
+# only costs a rebuild — it can never serve another run's or sha's outputs.
 env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
@@ -141,23 +144,6 @@ jobs:
         # source-freshness oracles (see config/workspace-resolution.ts).
         run: pnpm lint:prod-resolution
 
-      - name: Upload build outputs
-        uses: actions/upload-artifact@v7
-        with:
-          # INVARIANT: the build artifact belongs to the workflow RUN, not the
-          # rerun ATTEMPT — a partial rerun (Re-run failed jobs) downloads by
-          # the same run-scoped name, while overwrite lets a full rerun replace
-          # the same-run artifact instead of failing on the immutable name.
-          # Cross-run isolation is provided by github.run_id itself.
-          name: build-outputs-${{ github.run_id }}
-          path: |
-            packages/*/dist/
-            apps/api/dist/
-            apps/web/dist/
-          retention-days: 1
-          if-no-files-found: error
-          overwrite: true
-
   web-coverage:
     name: Web coverage
     runs-on: ubuntu-latest
@@ -180,14 +166,24 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Restore Turbo cache
+        # Same-run, same-sha primary key as the Build gate's save; a miss
+        # (or a prefix fallback to an older sha) only changes speed — Turbo
+        # replays cached task outputs solely when the current inputs hash
+        # to the same task, so this job always tests what it checked out.
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
+            turbo-${{ runner.os }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download build outputs
-        uses: actions/download-artifact@v8
-        with:
-          name: build-outputs-${{ github.run_id }}
-          path: .
+      - name: Build workspace outputs
+        run: pnpm build
 
       - name: Coverage
         run: pnpm --filter @exam/web coverage
@@ -248,14 +244,24 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Restore Turbo cache
+        # Same-run, same-sha primary key as the Build gate's save; a miss
+        # (or a prefix fallback to an older sha) only changes speed — Turbo
+        # replays cached task outputs solely when the current inputs hash
+        # to the same task, so this job always tests what it checked out.
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
+            turbo-${{ runner.os }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download build outputs
-        uses: actions/download-artifact@v8
-        with:
-          name: build-outputs-${{ github.run_id }}
-          path: .
+      - name: Build workspace outputs
+        run: pnpm build
 
       - name: Coverage
         run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage
@@ -305,14 +311,24 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Restore Turbo cache
+        # Same-run, same-sha primary key as the Build gate's save; a miss
+        # (or a prefix fallback to an older sha) only changes speed — Turbo
+        # replays cached task outputs solely when the current inputs hash
+        # to the same task, so this job always tests what it checked out.
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
+            turbo-${{ runner.os }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download build outputs
-        uses: actions/download-artifact@v8
-        with:
-          name: build-outputs-${{ github.run_id }}
-          path: .
+      - name: Build workspace outputs
+        run: pnpm build
 
       - name: Coverage
         run: pnpm --filter "./packages/*" coverage
@@ -384,14 +400,30 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Restore Turbo cache
+        # Same-run, same-sha primary key as the Build gate's save; a miss
+        # (or a prefix fallback to an older sha) only changes speed — Turbo
+        # replays cached task outputs solely when the current inputs hash
+        # to the same task, so this shard always tests what it checked out.
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
+            turbo-${{ runner.os }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download build outputs
-        uses: actions/download-artifact@v8
-        with:
-          name: build-outputs-${{ github.run_id }}
-          path: .
+      # The E2E stack runs the REAL production entrypoint (node dist/server.js
+      # serving the built SPA) plus plain-Node tooling (tsx migrate/seed,
+      # Playwright specs importing @exam/contracts) — all of which resolve
+      # @exam/* through the production default branch. The shard therefore
+      # builds the whole workspace from this checkout; there is no cross-job
+      # build artifact to consume.
+      - name: Build workspace outputs
+        run: pnpm build
 
       - name: Verify preinstalled Playwright browser
         # The same fail-closed verifier also runs in the production browser job.
@@ -445,6 +477,12 @@ jobs:
           kill $API_PID 2>/dev/null || true
 
       - name: Write E2E failure summary
+        # The shard's only failure evidence channel: text diagnostics in the
+        # step summary (server log tail + Playwright error contexts, which
+        # include the failing test names and assertion errors). CI uploads no
+        # artifacts — binary traces/screenshots/videos are reproducible by
+        # running scripts/e2e/run.sh locally (runbook §11) but are NOT
+        # retained by CI.
         if: failure()
         run: |
           {
@@ -466,48 +504,6 @@ jobs:
               fi
             done
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Prepare E2E failure diagnostics
-        if: failure()
-        run: |
-          rm -rf e2e-diagnostics
-          mkdir -p e2e-diagnostics
-
-          if [ -f server.log ]; then
-            cp server.log e2e-diagnostics/server.log
-            tail -200 server.log > e2e-diagnostics/server-tail.log || true
-          fi
-
-          find apps/e2e/test-results -name "error-context.md" -print -exec sh -c '
-            for f do
-              dest="e2e-diagnostics/$(echo "$f" | sed "s#apps/e2e/test-results/##" | tr "/" "_")"
-              cp "$f" "$dest"
-            done
-          ' sh {} + 2>/dev/null || true
-
-          find apps/e2e/test-results -name "*.png" -print -exec sh -c '
-            for f do
-              dest="e2e-diagnostics/$(echo "$f" | sed "s#apps/e2e/test-results/##" | tr "/" "_")"
-              cp "$f" "$dest"
-            done
-          ' sh {} + 2>/dev/null || true
-
-          {
-            echo "## E2E diagnostics"
-            echo ""
-            echo "### Files"
-            find e2e-diagnostics -type f -maxdepth 1 -printf "%f %s bytes\n" | sort || true
-          } > e2e-diagnostics/summary.md
-
-      - name: Upload E2E failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        continue-on-error: true
-        with:
-          name: e2e-failure-diagnostics-${{ matrix.shardIndex }}
-          path: e2e-diagnostics/
-          retention-days: 1
-          if-no-files-found: ignore
 
   # Browser-level transport gate for the LAN HTTP contract: the host-native
   # E2E stack runs APP_MODE=e2e on http://localhost — a browser secure
@@ -647,25 +643,34 @@ jobs:
               exec node node_modules/@playwright/test/cli.js test production-lan-http
             '
 
-      - name: Capture stack logs on failure
+      - name: Write transport failure summary
+        # Text diagnostics into the step summary — the job's only failure
+        # evidence channel (CI uploads no artifacts). The app's own stdout
+        # redaction policy (docs/contracts/observability.md) governs these
+        # logs; no secrets or candidate data are printed. Binary Playwright
+        # traces are reproducible via the local runbook §11 rehearsal.
         if: failure()
         run: |
-          mkdir -p production-transport-diagnostics
-          docker compose --env-file .env.production -f docker-compose.yml logs --no-color app web \
-            > production-transport-diagnostics/stack.log 2>&1 || true
+          {
+            echo "## Production Transport Failure"
+            echo ""
+            echo "### Compose stack logs (app, web — last 200 lines)"
+            echo '```text'
+            docker compose --env-file .env.production -f docker-compose.yml logs --no-color --tail=200 app web || true
+            echo '```'
+            echo ""
+            echo "### Playwright error contexts"
+            find apps/e2e/test-results -name "error-context.md" -print 2>/dev/null | while IFS= read -r f; do
+              if [ -f "$f" ]; then
+                echo ""
+                echo "#### $f"
+                echo '```text'
+                sed -n '1,160p' "$f" || true
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Tear down production stack
         if: always()
         run: docker compose --env-file .env.production -f docker-compose.yml down -v --remove-orphans
-
-      - name: Upload failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        continue-on-error: true
-        with:
-          name: production-transport-diagnostics
-          path: |
-            production-transport-diagnostics/
-            apps/e2e/test-results/
-          retention-days: 1
-          if-no-files-found: ignore
