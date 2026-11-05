@@ -24,11 +24,14 @@
 ## 1. CI Lanes
 
 The CI pipeline (`.github/workflows/ci.yml`) runs on every PR to `master`.
-`static` is the first authority gate. After it passes, `verify-build` produces
-one same-workflow build artifact. Web/API/package coverage and the four E2E
-shards consume the `verify-build` artifact instead of rebuilding the same
-`dist/**` outputs on separate runners. PR CI runs no deployment suite; the
-production deployment itself is the acceptance surface (§1.6).
+`static` is the first authority gate. After it passes, `verify-build` remains
+the build gate (full Turbo build + production resolution oracle). CI uses ZERO
+GitHub Actions artifacts — the private-repo artifact storage quota once
+blocked the whole pipeline — so Web/API/package coverage and the two E2E
+shards each run the same standard `pnpm build` in their own execution context,
+accelerated by the shared GitHub-backed `.turbo` cache. PR CI runs no
+deployment suite; the production deployment itself is the acceptance surface
+(§1.6).
 
 ### 1.1 Static Checks
 
@@ -44,7 +47,7 @@ production deployment itself is the acceptance surface (§1.6).
 | **Cache** | pnpm store plus GitHub-backed `.turbo` cache. Turbo remains the authority for task hashes; the GitHub cache only persists its local CAS between runners/runs. |
 | **Failure attribution** | `format:check` → Prettier issue; `lint` → console-output violation; `lint:arch` → dependency boundary violation; `typecheck` → TypeScript error |
 
-### 1.2 Build Once + Artifact Fan-out
+### 1.2 Build Gate (zero-artifact CI)
 
 | Field | Value |
 |-------|-------|
@@ -53,10 +56,10 @@ production deployment itself is the acceptance surface (§1.6).
 | **Dependency** | Runs after `static` |
 | **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
 | **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
-| **Artifact** | Uploads `packages/*/dist/**`, `apps/api/dist/**`, and `apps/web/dist/**` as `build-outputs-{run_id}` for this workflow run only (1-day retention). The name is run-scoped, not attempt-scoped, so partial reruns of downstream jobs still resolve it; `overwrite: true` lets a full rerun replace the same-run artifact. |
-| **Consumers** | `web-coverage`, `api-coverage`, `package-coverage`, and the two E2E shards download this same-workflow artifact and do not rebuild it. |
-| **Why needed** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph. Sharing the build artifact removes duplicate compilation while keeping every coverage/E2E test execution real. |
-| **Trust boundary** | The artifact is a build product, not a test result or semantic cache. Deployment acceptance does not consume it: the operator's real `docker compose` run uses the pinned release images, not this artifact. |
+| **Artifacts** | NONE. CI uploads no GitHub Actions artifacts (storage quota on this private repo is a hard external limit). Downstream jobs rebuild locally — see below. |
+| **Downstream builds** | `web-coverage`, `api-coverage`, `package-coverage`, and the two E2E shards each restore the `.turbo` cache (same-run, same-sha primary key) and run the same `pnpm build` before their test command. Turbo replays cached task outputs only when the current inputs hash to the same task, so a cache hit or miss changes speed, never provenance: every job tests the SHA it checked out, on first runs and partial reruns alike. |
+| **Why job-local** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph, so dist must be produced inside the job; sharing via artifacts was removed after the storage quota blocked the pipeline. |
+| **Trust boundary** | Deployment acceptance never consumed the CI build product and still does not: the operator's real `docker compose` run uses the pinned release images. |
 
 ### 1.3 Web Coverage
 
@@ -64,7 +67,7 @@ production deployment itself is the acceptance surface (§1.6).
 |-------|-------|
 | **Job** | `web-coverage` |
 | **Command** | `pnpm --filter @exam/web coverage` |
-| **Input build** | Downloads the current workflow's `verify-build` artifact before running coverage. |
+| **Input build** | Restores the `.turbo` cache and runs `pnpm build` in-job before coverage (no cross-job artifact; §1.2). |
 | **Services** | None (pure jsdom) |
 | **Env vars** | None set by the job or the config — Vitest defaults `NODE_ENV` to `test` when unset; `APP_MODE` is not set (the web suite reads no `APP_MODE`-dependent config) |
 | **Allowed resources** | CPU (jsdom + V8 coverage instrumentation) |
@@ -78,7 +81,7 @@ production deployment itself is the acceptance surface (§1.6).
 |-------|-------|
 | **Job** | `api-coverage` |
 | **Command** | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage` |
-| **Input build** | Downloads the current workflow's `verify-build` artifact before running coverage. |
+| **Input build** | Restores the `.turbo` cache and runs `pnpm build` in-job before coverage (no cross-job artifact; §1.2). |
 | **Services** | PostgreSQL (via CI service container on `localhost:5432`) |
 | **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test`, `JWT_SECRET=ci-test-secret`, `APP_MODE=ci`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `REDIS_URL=redis://localhost:6379`, `TEST_DB_ISOLATION=worker-database`, `API_TEST_MAX_WORKERS=4` |
 | **Allowed resources** | PostgreSQL (`exam_test`), Redis, CPU |
@@ -91,7 +94,7 @@ production deployment itself is the acceptance surface (§1.6).
 |-------|-------|
 | **Job** | `package-coverage` |
 | **Command** | `pnpm --filter "./packages/*" coverage` |
-| **Input build** | Downloads the current workflow's `verify-build` artifact before running coverage. |
+| **Input build** | Restores the `.turbo` cache and runs `pnpm build` in-job before coverage (no cross-job artifact; §1.2). |
 | **Services** | PostgreSQL (for `@exam/db` tests only) |
 | **Env vars** | Same as API coverage (inherited from job-level `env:`) |
 | **Allowed resources** | PostgreSQL (`exam_test`), CPU |
@@ -127,7 +130,7 @@ runners remain an explicit startup cost, not a cached guarantee.
 |-------|-------|
 | **Job** | `e2e` (matrix: `shardIndex: [1, 2]`, `shardTotal: [2]`) |
 | **Command** | `pnpm --filter @exam/e2e exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}` |
-| **Input build** | Downloads the current workflow's `verify-build` artifact; the shards do not run `pnpm build` independently. |
+| **Input build** | Job-local: `.turbo` cache restore + `pnpm build` inside each shard (no cross-job artifact; §1.2). |
 | **Browser runtime** | Official Playwright Noble container; its image reference is resolved exactly once by `scripts/ci/playwright-runtime.mjs github-output` in the existing Build job and exported as `playwright_image`, from the exact `@playwright/test` version in `apps/e2e/package.json`. Browser and system dependencies are preinstalled; no runtime APT/browser installation or browser cache. pnpm store remains cached. |
 | **Services** | PostgreSQL (`exam_e2e` at `postgres:5432` inside the job container's GitHub service network) |
 | **Env vars** | `DATABASE_URL=postgresql://exam:exam@postgres:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@postgres:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=${{ matrix.shardTotal }}` (2), fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
@@ -587,25 +590,29 @@ second repository-owned application topology.
 | **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
 | **fail-fast** | `true` (the sibling shards are cancelled after a shard failure) |
 | **Test command** | `pnpm --filter @exam/e2e exec playwright test --shard={index}/{total}` |
-| **Failure diagnostics** | Each failing shard writes a step summary and uploads a 1-day `e2e-failure-diagnostics-{shardIndex}` artifact when files exist. |
+| **Failure diagnostics** | Each failing shard writes a step summary (server log tail + Playwright error contexts). No artifact is uploaded — CI is zero-artifact (§1.2). |
 
 ### 4.3 CI E2E Build/Input Contract
 
-The GitHub-hosted E2E shards use the build artifact produced by `verify-build`
-for the same workflow run. They do not independently run `pnpm build`.
+The GitHub-hosted E2E shards run the E2E stack against the REAL production
+entrypoint (`node dist/server.js` serving the built SPA), and plain-Node
+tooling (tsx migrate/seed, Playwright specs importing `@exam/contracts`)
+resolves `@exam/*` through the production `default` exports branch. Each shard
+therefore builds the whole workspace itself — restore the `.turbo` cache, then
+`pnpm build` (§1.2) — instead of downloading a cross-job artifact.
 
 The shard still performs its real mutable/runtime work independently:
 
 1. install workspace dependencies;
-2. download the same-workflow build artifact;
+2. restore the `.turbo` cache and run `pnpm build` in-job;
 3. verify that the manifest-versioned Playwright image contains Chromium (no install);
 4. migrate and seed its PostgreSQL service;
 5. start the API server;
 6. execute its Playwright shard.
 
-The build artifact may contain only deterministic build products (`dist/**`).
-It must never contain database state, test results, coverage output, secrets, or
-runtime-generated files.
+Build outputs are deterministic build products (`dist/**`) of the checked-out
+SHA. They never include database state, test results, coverage output,
+secrets, or runtime-generated files.
 
 ### 4.4 run.sh Cleanup Contract (issue #256-A)
 
@@ -790,18 +797,17 @@ E2E_WORKERS=4 bash scripts/e2e/run.sh
 | `matrix.shardIndex` | `[1, 2]` |
 | `matrix.shardTotal` | `[2]` |
 | `fail-fast` | `true` |
-| `build input` | same-workflow `verify-build` artifact (`packages/*/dist`, `apps/api/dist`, `apps/web/dist`) |
+| `build input` | job-local: `.turbo` cache restore + `pnpm build` (§1.2); no cross-job artifact |
 | `browser runtime` | Official prebuilt Noble image, common reference from `scripts/ci/playwright-runtime.mjs` via `verify-build.outputs.playwright_image`; verify executable with the same script; no browser/OS dependency download step |
 
-### Failure Artifact Contract
+### Failure Diagnostics Contract (zero-artifact)
 
 | Step | Detail |
 |------|--------|
 | **When** | failure only |
-| **Artifact name** | `e2e-failure-diagnostics-{shardIndex}` |
-| **Contents** | server log/tail, Playwright error contexts, failure screenshots, summary |
-| **Retention** | 1 day |
-| **Upload policy** | best effort (`continue-on-error`), ignore when no files exist |
+| **Channel** | GitHub step summary (text only; no artifact upload — CI is zero-artifact, §1.2) |
+| **Contents** | server log tail, Playwright error contexts (which carry failing test names and assertion errors) |
+| **Lost capability** | binary failure screenshots, traces, and videos are NOT retained by CI; reproduce locally via `pnpm e2e` (`scripts/e2e/run.sh`, runbook §11), which keeps the same evidence on disk |
 
 ---
 
@@ -815,7 +821,7 @@ After any change to test configuration, CI workflow, or vitest config, verify:
 - [ ] `pnpm --filter @exam/web coverage` passes
 - [ ] `pnpm --filter "@exam/api" coverage` passes (with `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`)
 - [ ] `pnpm verify` passes (full pipeline)
-- [ ] All CI E2E shards consume the same-workflow build artifact and execute their real Playwright tests
+- [ ] All CI E2E shards build in-job (`.turbo` cache + `pnpm build`) and execute their real Playwright tests
 - [ ] No `as any` casts in test files
 - [ ] All time-dependent tests use fake timers
 - [ ] No `TEST_DATABASE_URL` fallback to `DATABASE_URL` in test configs
