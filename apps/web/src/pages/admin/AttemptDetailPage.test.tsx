@@ -250,10 +250,21 @@ describe("AttemptDetailPage", () => {
   function mockTimelineResult(
     result: unknown,
     timeline: { events: unknown[] },
+    receiptSummary: unknown = {
+      receiptCount: 0,
+      maxClientSeq: null,
+      lastSavedAt: null,
+    },
   ) {
     apiGet.mockImplementation(async (url: string) => {
       if (typeof url === "string" && url.includes("/timeline")) {
         return timeline;
+      }
+      if (
+        typeof url === "string" &&
+        url.includes("/answer-save-receipt-summary")
+      ) {
+        return receiptSummary;
       }
       return result;
     });
@@ -540,6 +551,14 @@ describe("AttemptDetailPage", () => {
         // telemetry timeline composes for the timeline-only caller too.
         return { items: [], total: 0, page: 1, pageSize: 50, totalPages: 0 };
       }
+      if (
+        typeof url === "string" &&
+        url.includes("/answer-save-receipt-summary")
+      ) {
+        // #866: the receipt summary reuses the SAME attempt.timeline.view
+        // capability — legitimate for the timeline-only caller.
+        return { receiptCount: 0, maxClientSeq: null, lastSavedAt: null };
+      }
       // Any other GET (i.e. the score read) is a contract violation
       // for the timeline-only caller — fail loudly instead of returning data.
       throw new Error(`unexpected privileged request: ${url}`);
@@ -557,15 +576,19 @@ describe("AttemptDetailPage", () => {
     expect(await screen.findByText("开始答题")).toBeInTheDocument();
 
     // The result fetch was never issued — page reachability must not mint a
-    // guaranteed-403 request. The two timeline reads it DOES emit (audit +
-    // telemetry) share the attempt.timeline.view capability this caller holds.
+    // guaranteed-403 request. The three timeline-capability reads it DOES
+    // emit (audit + telemetry + receipt summary, #866) all share the
+    // attempt.timeline.view capability this caller holds.
     await waitFor(() => {
-      expect(apiGet).toHaveBeenCalledTimes(2);
+      expect(apiGet).toHaveBeenCalledTimes(3);
     });
     const timelineUrls = apiGet.mock.calls.map((c) => c[0] as string);
     expect(timelineUrls).toContain("/api/admin/attempts/attempt-1/timeline");
     expect(timelineUrls).toContain(
       "/api/admin/attempts/attempt-1/proctor-events?limit=50",
+    );
+    expect(timelineUrls).toContain(
+      "/api/admin/attempts/attempt-1/answer-save-receipt-summary",
     );
     expect(apiPost).not.toHaveBeenCalled();
 
@@ -1103,5 +1126,47 @@ describe("AttemptDetailPage", () => {
 
     expect(await screen.findByText("答卷时间线")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "恢复档案" })).toBeNull();
+  });
+
+  it("#866 renders the receipt summary scalars with the evidentiary disclaimer", async () => {
+    mockTimelineResult(mockGradedResult, mockTimelineEvents, {
+      receiptCount: 5,
+      maxClientSeq: 3,
+      lastSavedAt: "2026-06-23T08:20:00.000Z",
+    });
+    renderPage();
+    expect(await screen.findByText("保存收据摘要")).toBeInTheDocument();
+    expect(screen.getByText("已接受保存 5 次")).toBeInTheDocument();
+    expect(screen.getByText("最大保存序号（clientSeq）3")).toBeInTheDocument();
+    expect(
+      screen.getByText(/收据只证明协议在服务端时刻接受了某次保存/),
+    ).toBeInTheDocument();
+  });
+
+  it("#866 an empty summary renders the UNKNOWN wording, never 'never saved'", async () => {
+    mockTimelineResult(mockGradedResult, mockTimelineEvents, {
+      receiptCount: 0,
+      maxClientSeq: null,
+      lastSavedAt: null,
+    });
+    renderPage();
+    expect(await screen.findByText(/这不等于考生从未保存/)).toBeInTheDocument();
+  });
+
+  it("#866 a failed summary fetch renders the retry fallback without displacing the rest", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (
+        typeof url === "string" &&
+        url.includes("/answer-save-receipt-summary")
+      ) {
+        throw new Error("boom");
+      }
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return mockTimelineEvents;
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+    expect(await screen.findByText("加载保存收据摘要失败")).toBeInTheDocument();
   });
 });

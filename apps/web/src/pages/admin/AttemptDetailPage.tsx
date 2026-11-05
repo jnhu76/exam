@@ -75,6 +75,7 @@ import type {
   MisconductFlagDTO,
   ProctorAttemptEvent,
   ProctorAttemptEventListResponse,
+  AnswerSaveReceiptSummary,
 } from "@exam/contracts";
 
 /**
@@ -197,6 +198,73 @@ function telemetryLevelClass(level: ProctorAttemptEvent["level"]): string {
   if (level === "error") return "bg-destructive/10 text-destructive";
   if (level === "warn") return "bg-warning/10 text-warning";
   return "bg-muted text-muted-foreground";
+}
+
+/**
+ * #866: read-only answer-save receipt summary — deliberately weak evidence,
+ * presented as such. Three server-aggregated scalars over accepted-save
+ * receipts only: count, MAX clientSeq, last server savedAt. The disclaimer
+ * is part of the contract (issue reconciliation note): receipts are protocol
+ * metadata, NOT independent content-authenticity proof; an empty summary is
+ * NOT "never saved" (rejected or lost saves leave no server record — that
+ * absence is UNKNOWN, not negative evidence); a clientSeq position is not a
+ * content-identity claim across attempts.
+ */
+function ReceiptSummarySection({
+  summary,
+  isLoading,
+  hasError,
+  onRetry,
+}: {
+  summary: AnswerSaveReceiptSummary | null;
+  isLoading: boolean;
+  hasError: boolean;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
+  return (
+    <PageSection
+      title={t("admin.attemptDetail.receiptSummary.title")}
+      description={t("admin.attemptDetail.receiptSummary.description")}
+    >
+      {isLoading ? (
+        <LoadingState />
+      ) : hasError ? (
+        <ErrorState
+          message={t("admin.attemptDetail.receiptSummary.loadFailed")}
+          onRetry={onRetry}
+        />
+      ) : !summary || summary.receiptCount === 0 ? (
+        <p className="type-metadata">
+          {t("admin.attemptDetail.receiptSummary.empty")}
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="type-metadata shrink-0">
+            {t("admin.attemptDetail.receiptSummary.count", {
+              count: summary.receiptCount,
+            })}
+          </span>
+          <span className="type-metadata shrink-0">
+            {t("admin.attemptDetail.receiptSummary.maxClientSeq", {
+              seq: summary.maxClientSeq ?? 0,
+            })}
+          </span>
+          <span className="type-metadata shrink-0">
+            {t("admin.attemptDetail.receiptSummary.lastSavedAt", {
+              time: summary.lastSavedAt
+                ? formatDateTime(summary.lastSavedAt)
+                : "-",
+            })}
+          </span>
+        </div>
+      )}
+      <p className="mt-2 type-metadata">
+        {t("admin.attemptDetail.receiptSummary.disclaimer")}
+      </p>
+    </PageSection>
+  );
 }
 
 /** Props for the telemetry (proctor-events) timeline section. */
@@ -575,6 +643,10 @@ export function AttemptDetailPage() {
   const [error, setError] = useState<string | null>(null);
   // Timeline fetch is independent of the result fetch so it can load and
   // render for any attempt status (live or graded).
+  const [receiptSummary, setReceiptSummary] =
+    useState<AnswerSaveReceiptSummary | null>(null);
+  const [receiptSummaryLoading, setReceiptSummaryLoading] = useState(true);
+  const [receiptSummaryError, setReceiptSummaryError] = useState(false);
   const [timeline, setTimeline] = useState<TimelineEvent[] | null>(null);
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [timelineError, setTimelineError] = useState(false);
@@ -715,6 +787,28 @@ export function AttemptDetailPage() {
     loadTimeline();
   }, [loadTimeline]);
 
+  // #866: receipt summary fetch — independent read-only aggregate.
+  const loadReceiptSummary = useCallback(async () => {
+    if (!id) return;
+    setReceiptSummaryLoading(true);
+    setReceiptSummaryError(false);
+    setReceiptSummary(null);
+    try {
+      const data = await api.get<AnswerSaveReceiptSummary>(
+        `/api/admin/attempts/${id}/answer-save-receipt-summary`,
+      );
+      setReceiptSummary(data);
+    } catch {
+      setReceiptSummaryError(true);
+    } finally {
+      setReceiptSummaryLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadReceiptSummary();
+  }, [loadReceiptSummary]);
+
   const loadTelemetry = useCallback(async () => {
     if (!id) return;
     // Claim the scope: any response still in flight for a previous attempt
@@ -852,6 +946,12 @@ export function AttemptDetailPage() {
             </div>
           }
         />
+        <ReceiptSummarySection
+          summary={receiptSummary}
+          isLoading={receiptSummaryLoading}
+          hasError={receiptSummaryError}
+          onRetry={loadReceiptSummary}
+        />
         <TimelineSection
           events={timeline}
           isLoading={timelineLoading}
@@ -926,6 +1026,12 @@ export function AttemptDetailPage() {
           </div>
         </PageSection>
 
+        <ReceiptSummarySection
+          summary={receiptSummary}
+          isLoading={receiptSummaryLoading}
+          hasError={receiptSummaryError}
+          onRetry={loadReceiptSummary}
+        />
         <TimelineSection
           events={timeline}
           isLoading={timelineLoading}
@@ -1166,6 +1272,13 @@ export function AttemptDetailPage() {
           </TableBody>
         </DataTableSurface>
       </DataTableShell>
+
+      <ReceiptSummarySection
+        summary={receiptSummary}
+        isLoading={receiptSummaryLoading}
+        hasError={receiptSummaryError}
+        onRetry={loadReceiptSummary}
+      />
 
       <TimelineSection
         events={timeline}

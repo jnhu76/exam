@@ -144,6 +144,56 @@ export function createAttemptRepo(db: Database) {
         .groupBy(examAnswerSaveReceipts.questionId);
       return new Map(rows.map((r) => [r.questionId, Number(r.maxSeq)]));
     },
+
+    /**
+     * #866 read-only receipt summary for one attempt: count / MAX clientSeq /
+     * last server `savedAt` over `exam_answer_save_receipts`. Receipts exist
+     * only for ACCEPTED saves — an empty aggregate is "no accepted-save
+     * receipts", never "never saved". Served by the (org, attempt) PK prefix
+     * (same query shape as findMaxClientSeqByQuestion); no new index, no
+     * content, no per-question breakdown (deliberately weak evidence).
+     */
+    async summarizeSaveReceipts(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+    ): Promise<{
+      receiptCount: number;
+      maxClientSeq: number | null;
+      lastSavedAt: Date | null;
+    }> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          receiptCount: sql<number>`count(*)::int`,
+          maxClientSeq: sql<
+            number | null
+          >`max(${examAnswerSaveReceipts.clientSeq})`,
+          lastSavedAt: sql<Date | null>`max(${examAnswerSaveReceipts.savedAt})`,
+        })
+        .from(examAnswerSaveReceipts)
+        .where(
+          and(
+            eq(examAnswerSaveReceipts.organizationId, orgId),
+            eq(examAnswerSaveReceipts.attemptId, attemptId),
+          ),
+        );
+      const row = rows[0];
+      // Raw-SQL aggregates bypass the column-level `mode: "date"` mapping —
+      // the driver may hand back the timestamptz as a string; normalize so
+      // callers always get a Date (or null when no receipts exist).
+      const lastSavedAt =
+        row?.lastSavedAt === null || row?.lastSavedAt === undefined
+          ? null
+          : new Date(row.lastSavedAt as unknown as string | Date);
+      return {
+        receiptCount: Number(row?.receiptCount ?? 0),
+        maxClientSeq:
+          row?.maxClientSeq === null || row?.maxClientSeq === undefined
+            ? null
+            : Number(row.maxClientSeq),
+        lastSavedAt,
+      };
+    },
     /**
      * Appends one immutable replay receipt. Called inside the SaveAnswer
      * transaction so receipt creation and the accepted answers write commit

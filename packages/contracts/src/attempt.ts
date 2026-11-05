@@ -262,6 +262,29 @@ export type SaveAnswerResponseDTO = z.infer<typeof SaveAnswerResponseSchema>;
 /**
  * Route params schema for endpoints that operate on a specific attempt by UUID.
  */
+/**
+ * Response schema for `GET /api/admin/attempts/:attemptId/answer-save-receipt-summary`
+ * (#866): a deliberately WEAK, read-only aggregate over
+ * `exam_answer_save_receipts` — receipt count, MAX clientSeq, last server
+ * `savedAt`. Receipts are written ONLY on the accepted-save path, so zeros /
+ * nulls mean "no accepted save receipts", NEVER "the candidate never saved"
+ * (rejected or lost saves leave no server record — that gap is #861's UNKNOWN
+ * domain). The summary carries NO answer content and NO content-identity
+ * claim: a receipt proves the protocol accepted a save at a server instant,
+ * not what the content was and not that a clientSeq implies the same content
+ * across attempts (T09).
+ */
+export const AnswerSaveReceiptSummarySchema = z.object({
+  receiptCount: z.number().int().min(0),
+  maxClientSeq: z.number().int().min(0).nullable(),
+  lastSavedAt: z.string().datetime().nullable(),
+});
+
+/** Type for the answer-save receipt summary response. */
+export type AnswerSaveReceiptSummary = z.infer<
+  typeof AnswerSaveReceiptSummarySchema
+>;
+
 export const AttemptIdParamsSchema = z.object({
   attemptId: z.string().uuid(),
 });
