@@ -456,6 +456,10 @@ async function buildOperationalDiagnostics(
       failedCount: heartbeatMetrics.disruptionFailedCount,
       incidentReconciliationFailedCount:
         heartbeatMetrics.incidentReconciliationFailedCount,
+      // #886: read-only projection of the #862 escalation input (consecutive
+      // settled ticks with business failures on either leg). The plugin
+      // metrics remain the single authority; no second counter here.
+      consecutiveFailedTicks: heartbeatMetrics.consecutiveFailedTicks,
       // #547 stall facts + the same pure classification the operability
       // monitor alerts on (read-only projection; no second authority).
       startedAt: heartbeatMetrics.startedAt?.toISOString() ?? null,
@@ -475,6 +479,10 @@ async function buildOperationalDiagnostics(
       // #800: the counter already accumulates per tick; only the exposure
       // layer was missing.
       failedCount: deadlineScannerMetrics.failedCount,
+      // #886: read-only projection of the #862 escalation input (consecutive
+      // settled ticks with failures). The plugin metrics remain the single
+      // authority; no second counter here.
+      consecutiveFailedTicks: deadlineScannerMetrics.consecutiveFailedTicks,
       startedAt: deadlineScannerMetrics.startedAt?.toISOString() ?? null,
       lastStartedAt:
         deadlineScannerMetrics.lastStartedAt?.toISOString() ?? null,

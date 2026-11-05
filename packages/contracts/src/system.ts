@@ -202,6 +202,10 @@ export const DiagnosticsResponseSchema = z.object({
     // organization discovery).
     failedCount: z.number().int().min(0),
     incidentReconciliationFailedCount: z.number().int().min(0),
+    // #862/#886: run-length escalation input — consecutive SETTLED ticks
+    // where EITHER leg had business failures. Process-local (reset on
+    // restart); NOT the cumulative failedCount counters above.
+    consecutiveFailedTicks: z.number().int().min(0),
     // #547 stall facts: lastSettledAt is the stall authority (settled =
     // tick finished, success OR error); stallState is the same pure
     // classification the operability monitor alerts on.
@@ -218,6 +222,10 @@ export const DiagnosticsResponseSchema = z.object({
     // #800: cumulative auto-submit failures since process start (in-memory,
     // reset on restart; NOT persisted).
     failedCount: z.number().int().min(0),
+    // #862/#886: run-length escalation input — consecutive SETTLED ticks
+    // with failures. Process-local (reset on restart); NOT the cumulative
+    // failedCount above.
+    consecutiveFailedTicks: z.number().int().min(0),
     startedAt: z.string().nullable(),
     lastStartedAt: z.string().nullable(),
     lastSettledAt: z.string().nullable(),

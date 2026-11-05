@@ -110,6 +110,12 @@ describe("Operational RBAC Boundary", () => {
       expect(typeof body.dbLatency).toBe("number");
       expect(body.redisStatus).toBeDefined();
       expect(body.emailStatus).toBeDefined();
+      // #886: the #862 escalation counters belong to the OPERATIONAL
+      // projection — Maintainer sees both, still never the integrity block.
+      expect(typeof body.heartbeatStatus.consecutiveFailedTicks).toBe("number");
+      expect(typeof body.deadlineScannerStatus.consecutiveFailedTicks).toBe(
+        "number",
+      );
     });
 
     it("a dual-role account (hand-edited DB) fails closed at login (D14 read-side)", async () => {
