@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
+import type { FastifyLoggerOptions } from "fastify";
 import type { TestContext } from "../../testHelpers.js";
 import { buildTestApp, uniquePrefix } from "../../testHelpers.js";
 import examRoutes from "../../exam.js";
@@ -145,11 +146,19 @@ export interface SharedAttemptFixture {
  * shared-fixture file's outer `beforeAll`; pair with `ctx.cleanup()` in
  * `afterAll`.
  */
-export async function buildSharedAttemptFixture(): Promise<SharedAttemptFixture> {
+export async function buildSharedAttemptFixture(opts?: {
+  /**
+   * Fastify logger config forwarded to {@link buildTestApp}. Default: logging
+   * stays disabled. Files that assert structured log lines pass a capturing
+   * stream here (#861) — the app is built once per file, so the app-level
+   * logger is the only wiring point.
+   */
+  logger?: FastifyLoggerOptions;
+}): Promise<SharedAttemptFixture> {
   const ctx = await buildTestApp(async (fastify) => {
     await fastify.register(examRoutes, { prefix: "" });
     await fastify.register(attemptRoutes, { prefix: "" });
-  });
+  }, opts);
 
   const courseId = crypto.randomUUID();
   const questionId = crypto.randomUUID();

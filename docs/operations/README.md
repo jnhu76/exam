@@ -104,6 +104,10 @@ driver / Loki / a custom watcher — none of which is required or bundled
 
 All logs are pino JSON to stdout. Every request carries a `reqId`.
 
+Failed answer-save investigations (what a missing receipt does and does not
+prove, and the UNKNOWN boundary): see
+[`save-failure-evidence.md`](save-failure-evidence.md).
+
 ```bash
 docker compose --env-file .env.production logs -f app          # tail all
 docker compose --env-file .env.production logs app | jq 'select(.level >= 40)'  # warn+

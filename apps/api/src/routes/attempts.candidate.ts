@@ -1112,6 +1112,25 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       }
 
       const conflict = saved.conflict;
+      // #861: protocol rejections previously left ZERO server-side trace —
+      // the verdict existed only in the (ephemeral) 200 body and in 30-day
+      // advisory client telemetry. One structured WARN line is the maximal
+      // reuse of existing machinery (request correlation via the automatic
+      // reqId, no persistence, no schema/contract change, no answer content)
+      // and makes "server rejected" greppable for investigations. This is
+      // deliberately NOT a durable refusal record — the necessity/write-
+      // amplification case failed the #861 decision frame (see
+      // docs/operations/save-failure-evidence.md).
+      request.log.warn(
+        {
+          attemptId,
+          questionId,
+          clientSeq: body.clientSeq,
+          reason: conflict.reason,
+          serverVersion: saved.serverVersion,
+        },
+        "Answer save rejected",
+      );
       return SaveAnswerRejectedSchema.parse({
         accepted: false,
         reason: conflict.reason,
