@@ -66,6 +66,12 @@ CMD3 regression  — CMD3_EXIT=0 — 67 passed (67)   — CMD3_TS=2026-11-05T13:
   passed**. This is the control that the frozen #547/#862/#886 contract is intact and no
   product code was modified.
 
+> **Historical receipt.** §2 and the canonical block above record the commands **as run on
+> 2026-11-05**, with the two runner configs then located in `apps/api/`. The PR #896 scope
+> diet later merged them into the bundle-owned
+> `research/issue-885/harness/vitest.config.ts` (mapping: §4.4); the **live** commands are
+> §5 below.
+
 **Flaky / inconclusive marking:** none of the 5 commands was FLAKY. The full matrix was run
 repeatedly with identical deterministic results (fake clock, no wall-clock sleeps, no DB).
 The one item explicitly marked **INCONCLUSIVE** is a *real PostgreSQL* root-cause fault
@@ -121,7 +127,8 @@ ab151ea8cd1ad1d6335afdf556ca4d1357ad9043126d76b8fd4fe6714f0a82e4  research/issue
 > is scenario-for-scenario identical with and without the amendment (0/20
 > differences; `envDir` only disables implicit env-file admission, and both
 > configs set `test.env` explicitly). Every other entry in §4 is the pre-fix
-> study's byte-identical artifact.
+> study's byte-identical artifact. *(Both configs were later merged into the
+> bundle-owned runner by the scope diet — see §4.4.)*
 
 ### 4.3 Machine-readable results & transcripts
 ```
@@ -138,12 +145,36 @@ Artifact sizes (compact structured observations, NOT raw log dumps, caches, or D
 `experiments.json` 657,195 B; `analysis.json` 228,023 B; transcripts ≤ 6,237 B each. No
 oversized logs, dependency caches, or DB snapshots were created or added to Git.
 
+### 4.4 Scope-diet amendment (PR #896, 2026-11-05)
+
+The PR-diet review removed PR surface that does not need to live in the product
+repository. The frozen hashes in §4.1–§4.3 stay canonical for the study **as it
+was run**; migrated/reformatted artifacts map as follows, and the post-migration
+replay receipt is appended to `POSTFIX_VALIDATION.md`:
+
+| Artifact | Frozen (as run) | Current (this PR) |
+| --- | --- | --- |
+| runner `apps/api/vitest.885.config.ts` | `5b07d022…` → `78ab922d…` (envDir amendment) | **removed** — merged into `research/issue-885/harness/vitest.config.ts` `4f41c671…` |
+| runner `apps/api/vitest.885.regression.config.ts` | `9f42d722…` → `8f0e94be…` (envDir amendment) | **removed** — merged into the same bundle-owned runner |
+| `harness/experiments.test.ts` | `fc8b4596…` | `c9e265c9…` — prettier reformat + `mkdirSync` for the now-uncommitted `results/`; behaviour-neutral (replay receipt) |
+| `harness/smoke.test.ts` | `cd230e7d…` | `c79296f5…` — prettier reformat only |
+| `harness/analyze.mjs` | `ab151ea8…` | `948743df…` — prettier reformat + `mkdirSync` |
+
+The two runner configs were the only Vitest configs under `apps/api/` that were
+not product configs; following the repo's #304 precedent (research-only vitest
+configs are temporary and do not belong in product directories), their `include`
+sets now live in **one** config owned by this bundle. The reformat is mechanical
+prettier formatting plus the `mkdirSync` lines; the replay after migration
+reproduces the frozen receipts (see `POSTFIX_VALIDATION.md`).
+
 ---
 
 ## 5. Re-run from frozen BASE_SHA (clean-room recipe)
 
-The research worktree reuses the main checkout's installed dependencies via symlinks; nothing
-is installed, no DB is started, and the main worktree is never modified.
+The worktree reuses the main checkout's installed dependencies via symlinks; nothing
+is installed, no DB is started, and the main worktree is never modified. Run in a
+scratch worktree, **not** the main checkout — the recipe writes regenerable files
+under `research/issue-885/results/`, which is intentionally not committed.
 
 ```bash
 # 0) From the main checkout — record baseline (read-only)
@@ -153,36 +184,53 @@ git rev-parse HEAD                # expect f2d44b78136cda1358148dbce891590975d4c
 git status --short                 # expect empty
 BASE=f2d44b78136cda1358148dbce891590975d4c88f
 
-# 1) Create a detached research worktree at BASE_SHA (no branch switch, no destructive ops)
-git worktree add --detach /home/hoo/Source/exam-885 "$BASE"
-cd /home/hoo/Source/exam-885
+# 1) Create a detached scratch worktree at BASE_SHA (no branch switch, no destructive ops)
+git worktree add --detach /home/hoo/Source/exam-885-replay "$BASE"
+cd /home/hoo/Source/exam-885-replay
 git rev-parse HEAD                 # expect the same BASE_SHA
 
-# 2) Reuse installed deps (worktrees do not carry node_modules). All are symlinks, read-only use.
-#    apps/api/node_modules must exist in the main checkout (pnpm install there beforehand if needed).
-ln -s /home/hoo/Source/exam-885/apps/api/node_modules research/issue-885/harness/node_modules 2>/dev/null || true
-#    NOTE: the harness dir + configs + results are the evidence package itself; if starting from
-#    a fresh worktree, first copy them in from the durable Issue #885 comment / this package:
-#      apps/api/vitest.885.config.ts
-#      apps/api/vitest.885.regression.config.ts
-#      research/issue-885/harness/{experiments.test.ts,smoke.test.ts,analyze.mjs}
-#    The workspace-resolution plugin (config/workspace-resolution.mjs) and the three product
-#    plugins + their tests come directly from BASE_SHA — they are NOT modified.
+# 2) Reuse installed deps (worktrees do not carry node_modules). From the main
+#    checkout (pnpm install must have been run there), symlink: the ROOT
+#    node_modules (workspace tooling / hoisted bins), each workspace package's
+#    node_modules, and — the load-bearing one — apps/api/node_modules INTO the
+#    harness directory: the bundle-owned runner config and the harness tests
+#    both resolve `vitest` / `fastify` by walking up from research/issue-885/
+#    harness/, and pnpm's root has no top-level vitest. Vite may cache the
+#    bundled config under node_modules/.vite-temp (gitignored, harmless).
+ln -s /home/hoo/Source/exam/node_modules node_modules 2>/dev/null || true
+for d in apps/api packages/*; do
+  ln -s /home/hoo/Source/exam/"$d"/node_modules "$d/node_modules" 2>/dev/null || true
+done
+ln -sfn "$(pwd)"/apps/api/node_modules research/issue-885/harness/node_modules
 
-# 3) Smoke test (config + fake-clock + pino time sanity)
-apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.config.ts -t smoke
+# 3) Copy the research bundle in (only if the scratch worktree is at a BASE that
+#    predates the PR): research/issue-885/harness/{experiments.test.ts,smoke.test.ts,
+#    analyze.mjs,vitest.config.ts}. The workspace-resolution plugin
+#    (config/workspace-resolution.mjs) and the three product plugins + tests come
+#    directly from BASE_SHA — they are NOT modified.
+#    Receipts: pre-diet hashes §4.1–§4.2; post-diet hashes §4.4.
 
-# 4) Full measured matrix (E0–E12) — writes research/issue-885/results/experiments.json
-apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.config.ts
+# 4) Smoke test (config + fake-clock + pino time sanity)
+apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
+  research/issue-885/harness/smoke.test.ts
 
-# 5) Derive latencies/counts — writes research/issue-885/results/analysis.json
+# 5) Full measured matrix (E0–E12) — writes research/issue-885/results/experiments.json
+#    (the harness creates the results/ directory; it is regenerable, not committed)
+apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
+  research/issue-885/harness/
+
+# 6) Derive latencies/counts — writes research/issue-885/results/analysis.json
 node research/issue-885/harness/analyze.mjs
 
-# 6) Control: three EXISTING plugin suites unchanged at BASE_SHA (expect 67 passed)
-apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.regression.config.ts
+# 7) Control: three EXISTING plugin suites unchanged at BASE_SHA (expect 67 passed)
+apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
+  apps/api/src/plugins/heartbeat.test.ts \
+  apps/api/src/plugins/deadlineScanner.test.ts \
+  apps/api/src/plugins/operabilityMonitor.test.ts
 
-# 7) Confirm main worktree is still clean
+# 8) Confirm the main worktree is still clean, then discard the scratch worktree
 cd /home/hoo/Source/exam && git status --short     # expect empty
+git worktree remove --force /home/hoo/Source/exam-885-replay
 ```
 
 **Determinism guarantees:** `vi.useFakeTimers({now: T0})`, `vi.advanceTimersByTimeAsync` in

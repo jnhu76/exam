@@ -19,7 +19,7 @@ Research verdict: **GO_C (CONDITIONAL)**. Implementation: this branch.
 | [`DECISION.md`](DECISION.md) | A/B/C/D adjudication, 13-dimension matrix, change package, binding conditions |
 | [`REPRO.md`](REPRO.md) | Environment, commands, exit codes, timestamps, SHA256 manifest, clean-room recipe |
 | [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) | The implemented leg replayed through the same 20 scenarios vs. the prediction |
-| [`harness/`](harness) | `experiments.test.ts` (recorder, zero assertions), `smoke.test.ts`, `analyze.mjs` |
+| [`harness/`](harness) | `experiments.test.ts` (recorder, zero assertions), `smoke.test.ts`, `analyze.mjs`, `vitest.config.ts` (bundle-owned runner) |
 | [`results/`](results) | `experiments.json` (step-level observations), `analysis.json` (derived), transcripts |
 
 Evidence classes are marked throughout: **MEASURED** / **SOURCE_VERIFIED** /
@@ -32,15 +32,18 @@ watcher implementation).
 `REPRO.md` §5 has the full clean-room recipe. Short form, from the repo root:
 
 ```bash
-apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.config.ts   # 2/2
-node research/issue-885/harness/analyze.mjs                                   # derives analysis.json
-apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.regression.config.ts  # 67/67 control
+apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
+  research/issue-885/harness/                      # 2/2 study matrix (-t smoke for smoke only)
+node research/issue-885/harness/analyze.mjs        # derives analysis.json
+apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
+  apps/api/src/plugins/heartbeat.test.ts apps/api/src/plugins/deadlineScanner.test.ts \
+  apps/api/src/plugins/operabilityMonitor.test.ts  # 67/67 BASE control
 ```
 
-Both configs are research-only: **no `globalSetup`, no PostgreSQL** — the fake
-`fastify.db` reproduces the real drizzle chain shapes, and faults enter through
-the real scanner tick entry. `fileParallelism: false`, fake timers, fixed 15 s
-steps: no sleeps, no retries, no network.
+The bundle-owned runner is research-only: **no `globalSetup`, no PostgreSQL** —
+the fake `fastify.db` reproduces the real drizzle chain shapes, and faults enter
+through the real scanner tick entry. `fileParallelism: false`, fake timers,
+fixed 15 s steps: no sleeps, no retries, no network.
 
 ## Provenance and integrity
 

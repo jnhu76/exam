@@ -48,9 +48,7 @@ describe("#885 harness smoke", () => {
       expect(heartbeatMetrics.activeSince).toBeNull();
       const parsed = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
       expect(
-        parsed.filter(
-          (l) => l.msg === "Error scanning for disrupted attempts",
-        ),
+        parsed.filter((l) => l.msg === "Error scanning for disrupted attempts"),
       ).toHaveLength(1);
       // pino `time` must be the fake-system-clock epoch (controlled clock).
       expect(typeof parsed[0]!.time).toBe("number");

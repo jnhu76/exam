@@ -3,7 +3,7 @@
  * Run: node research/issue-885/harness/analyze.mjs
  * Pure read of experiments.json; writes analysis.json; prints a compact table.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,11 +12,17 @@ const raw = JSON.parse(
   readFileSync(path.resolve(HERE, "../results/experiments.json"), "utf8"),
 );
 
-const isFailure = (e) => e.state === "failing" || e.state === "paged" || e.state === "stalled" || e.state === "unavailable";
+const isFailure = (e) =>
+  e.state === "failing" ||
+  e.state === "paged" ||
+  e.state === "stalled" ||
+  e.state === "unavailable";
 const isRecovery = (e) => e.state === "recovered" || e.state === "cleared";
 
 function latencyFor(events, faultStart, faultClear) {
-  const failures = events.filter(isFailure).sort((a, b) => a.elapsedMs - b.elapsedMs);
+  const failures = events
+    .filter(isFailure)
+    .sort((a, b) => a.elapsedMs - b.elapsedMs);
   const recoveries = events
     .filter(isRecovery)
     .filter((e) => faultClear === null || e.elapsedMs >= faultClear)
@@ -41,7 +47,11 @@ const rows = raw.results.map((r) => {
     state: e.state,
   }));
   const lat = {
-    asBuilt: latencyFor(asBuiltEvents, r.faultStartElapsedMs, r.faultClearElapsedMs),
+    asBuilt: latencyFor(
+      asBuiltEvents,
+      r.faultStartElapsedMs,
+      r.faultClearElapsedMs,
+    ),
   };
   for (const cand of ["A", "B", "C", "D"]) {
     lat[cand] = latencyFor(
@@ -51,7 +61,9 @@ const rows = raw.results.map((r) => {
     );
   }
   const firstThrowStep = r.steps.find((s) => s.hbThrow > 0 || s.dlThrow > 0);
-  const lastThrowStep = [...r.steps].reverse().find((s) => s.hbThrow > 0 || s.dlThrow > 0);
+  const lastThrowStep = [...r.steps]
+    .reverse()
+    .find((s) => s.hbThrow > 0 || s.dlThrow > 0);
   const firstCleanAfterLastThrow = [...r.steps]
     .filter((s) => s.step > (lastThrowStep?.step ?? -1))
     .find((s) => s.hbStarted || s.dlStarted);
@@ -63,7 +75,8 @@ const rows = raw.results.map((r) => {
     faultClear: r.faultClearElapsedMs,
     firstThrowElapsedMs: firstThrowStep?.elapsedMs ?? null,
     lastThrowElapsedMs: lastThrowStep?.elapsedMs ?? null,
-    firstCleanAfterLastThrowElapsedMs: firstCleanAfterLastThrow?.elapsedMs ?? null,
+    firstCleanAfterLastThrowElapsedMs:
+      firstCleanAfterLastThrow?.elapsedMs ?? null,
     asBuilt: {
       totalErrorLines: r.asBuilt.totalErrorLines,
       throwTicks: r.asBuilt.totalThrowTicks,
@@ -93,7 +106,8 @@ const rows = raw.results.map((r) => {
         (s) =>
           r.faultStartElapsedMs !== null &&
           s.elapsedMs >= r.faultStartElapsedMs &&
-          (r.faultClearElapsedMs === null || s.elapsedMs < r.faultClearElapsedMs),
+          (r.faultClearElapsedMs === null ||
+            s.elapsedMs < r.faultClearElapsedMs),
       )
       .map((s) => ({
         step: s.step,
@@ -108,9 +122,16 @@ const rows = raw.results.map((r) => {
   };
 });
 
+// The results directory is regenerable and intentionally not committed; a
+// fresh clean-room clone does not have it yet.
+mkdirSync(path.resolve(HERE, "../results"), { recursive: true });
 writeFileSync(
   path.resolve(HERE, "../results/analysis.json"),
-  JSON.stringify({ baseSha: raw.baseSha, generatedAt: raw.generatedAt, rows }, null, 2),
+  JSON.stringify(
+    { baseSha: raw.baseSha, generatedAt: raw.generatedAt, rows },
+    null,
+    2,
+  ),
 );
 
 for (const r of rows) {

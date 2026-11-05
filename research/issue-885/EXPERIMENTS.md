@@ -29,6 +29,11 @@ existing Fastify-plugin test idiom (fake `db` + `now` decoration + Writable log 
 
 ## 2. Commands actually executed (all exit code 0)
 
+> **Historical receipt.** Commands as run on 2026-11-05 with the two runner configs then
+> located in `apps/api/`; the PR #896 scope diet later merged them into
+> `research/issue-885/harness/vitest.config.ts` (mapping: `REPRO.md` §4.4). Live
+> commands: `REPRO.md` §5.
+
 | # | Command (from `/home/hoo/Source/exam-885`) | Exit | Timestamp (UTC) | Artifact |
 | --- | --- | --- | --- | --- |
 | 1 | `git worktree add --detach /home/hoo/Source/exam-885 f2d44b78…` | 0 | 2026-11-05T13:12Z | frozen worktree |

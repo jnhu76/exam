@@ -24,7 +24,7 @@ import { describe, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { Writable } from "node:stream";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -55,7 +55,9 @@ const RESULTS_PATH = path.resolve(HERE, "../results/experiments.json");
 type Loop = "heartbeat" | "deadline_scanner";
 type ErrorKind = "logic" | "pg";
 type TickOutcome = "throw" | "business_failure" | "clean" | "hang";
-type TransitionFn = (failed: boolean) => "raise_failure" | "raise_recovery" | null;
+type TransitionFn = (
+  failed: boolean,
+) => "raise_failure" | "raise_recovery" | null;
 
 interface Faults {
   /** pingDb AND every organization discovery fail (mandatory dependency gone). */
@@ -247,7 +249,10 @@ function pgError(message: string, code = "42703"): Error {
   return e;
 }
 
-function faultError(kind: ErrorKind | false | undefined, message: string): Error {
+function faultError(
+  kind: ErrorKind | false | undefined,
+  message: string,
+): Error {
   if (kind === "pg") return pgError(`error: ${message}`);
   return new Error(message);
 }
@@ -279,7 +284,10 @@ function makeDb(shared: Shared): unknown {
             if (f.dbDown) {
               shared.stats.pingFailures++;
               shared.stats.throws++;
-              throw pgError("connection refused (readiness probe)", "ECONNREFUSED");
+              throw pgError(
+                "connection refused (readiness probe)",
+                "ECONNREFUSED",
+              );
             }
             return chain([{ id: ORG.id }]);
           }
@@ -287,7 +295,10 @@ function makeDb(shared: Shared): unknown {
           shared.stats.orgSelects++;
           if (f.dbDown) {
             shared.stats.throws++;
-            throw pgError("connection refused (organization discovery)", "ECONNREFUSED");
+            throw pgError(
+              "connection refused (organization discovery)",
+              "ECONNREFUSED",
+            );
           }
           if (f.hangOrg) {
             return new Promise<never>((_resolve, reject) => {
@@ -349,7 +360,9 @@ function makeDb(shared: Shared): unknown {
       shared.stats.txCalls++;
       if (shared.faults.txThrows) {
         shared.stats.throws++;
-        throw new Error("forced per-item business failure (transaction rejected)");
+        throw new Error(
+          "forced per-item business failure (transaction rejected)",
+        );
       }
       return undefined;
     },
@@ -487,7 +500,9 @@ function observe(
     pingFailDelta: shared.stats.pingFailures - before.pingFailures,
     operabilityEvents: newLines
       .filter(
-        (l): l is LogLine & { event: string; component: string; state: string } =>
+        (
+          l,
+        ): l is LogLine & { event: string; component: string; state: string } =>
           typeof l.event === "string" &&
           l.event.startsWith("operability.") &&
           typeof l.component === "string" &&
@@ -506,7 +521,11 @@ function observe(
       dlConsecutiveFailedTicks: deadlineScannerMetrics.consecutiveFailedTicks,
       hbLastSettledAt: hbSettledAt,
       dlLastSettledAt: dlSettledAt,
-      hbStallState: classifyLoopStall(heartbeatMetrics, SCANNER_INTERVAL_MS, now),
+      hbStallState: classifyLoopStall(
+        heartbeatMetrics,
+        SCANNER_INTERVAL_MS,
+        now,
+      ),
       dlStallState: classifyLoopStall(
         deadlineScannerMetrics,
         SCANNER_INTERVAL_MS,
@@ -919,7 +938,12 @@ const scenarios: Scenario[] = [
         steps: 12,
         faults: { orgThrows: "logic" },
       },
-      { label: "RESTART", steps: 0, faults: { orgThrows: "logic" }, restart: true },
+      {
+        label: "RESTART",
+        steps: 0,
+        faults: { orgThrows: "logic" },
+        restart: true,
+      },
       {
         label: "after-restart-continuous-throws",
         steps: 14,
@@ -1024,12 +1048,12 @@ function isFaultPhase(faults: Faults | undefined): boolean {
   if (!faults) return false;
   return Boolean(
     faults.dbDown ||
-      faults.orgThrows ||
-      faults.hbAttemptThrows ||
-      faults.dlAttemptThrows ||
-      faults.txThrows ||
-      faults.hbIncidentThrows ||
-      faults.hangOrg,
+    faults.orgThrows ||
+    faults.hbAttemptThrows ||
+    faults.dlAttemptThrows ||
+    faults.txThrows ||
+    faults.hbIncidentThrows ||
+    faults.hangOrg,
   );
 }
 
@@ -1068,19 +1092,23 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
         cf.d = { heartbeat: 0, deadline_scanner: 0 };
         cf.trackersA = {
           heartbeat: createOperabilityTransitionTracker() as TransitionFn,
-          deadline_scanner: createOperabilityTransitionTracker() as TransitionFn,
+          deadline_scanner:
+            createOperabilityTransitionTracker() as TransitionFn,
         };
         cf.trackersB = {
           heartbeat: createOperabilityTransitionTracker() as TransitionFn,
-          deadline_scanner: createOperabilityTransitionTracker() as TransitionFn,
+          deadline_scanner:
+            createOperabilityTransitionTracker() as TransitionFn,
         };
         cf.trackersC = {
           heartbeat: createOperabilityTransitionTracker() as TransitionFn,
-          deadline_scanner: createOperabilityTransitionTracker() as TransitionFn,
+          deadline_scanner:
+            createOperabilityTransitionTracker() as TransitionFn,
         };
         cf.trackersD = {
           heartbeat: createOperabilityTransitionTracker() as TransitionFn,
-          deadline_scanner: createOperabilityTransitionTracker() as TransitionFn,
+          deadline_scanner:
+            createOperabilityTransitionTracker() as TransitionFn,
         };
         cf.readinessOutageActive = false;
         app = await buildAndRegister(shared);
@@ -1162,8 +1190,10 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
           ? s.metrics.hbConsecutiveFailedTicks
           : s.metrics.dlConsecutiveFailedTicks;
       maxC[loop] = Math.max(maxC[loop], v);
-      const stall = loop === "heartbeat" ? s.metrics.hbStallState : s.metrics.dlStallState;
-      if (!stallStatesSeen[loop].includes(stall)) stallStatesSeen[loop].push(stall);
+      const stall =
+        loop === "heartbeat" ? s.metrics.hbStallState : s.metrics.dlStallState;
+      if (!stallStatesSeen[loop].includes(stall))
+        stallStatesSeen[loop].push(stall);
       const ls =
         loop === "heartbeat"
           ? s.metrics.hbLastSettledAt
@@ -1214,10 +1244,8 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
       totalStartedTicks,
       maxConsecutiveFailedTicks: maxC,
       finalConsecutiveFailedTicks: {
-        heartbeat:
-          steps.at(-1)?.metrics.hbConsecutiveFailedTicks ?? 0,
-        deadline_scanner:
-          steps.at(-1)?.metrics.dlConsecutiveFailedTicks ?? 0,
+        heartbeat: steps.at(-1)?.metrics.hbConsecutiveFailedTicks ?? 0,
+        deadline_scanner: steps.at(-1)?.metrics.dlConsecutiveFailedTicks ?? 0,
       },
       lastSettledAtSequence,
       stallStatesSeen,
@@ -1245,6 +1273,9 @@ describe("#885 fault-injection experiments (E0..E11)", () => {
     for (const scenario of scenarios) {
       results.push(await runScenario(scenario));
     }
+    // The results directory is regenerable and intentionally not committed; a
+    // fresh clean-room clone does not have it yet.
+    mkdirSync(path.dirname(RESULTS_PATH), { recursive: true });
     writeFileSync(
       RESULTS_PATH,
       JSON.stringify(
@@ -1255,8 +1286,7 @@ describe("#885 fault-injection experiments (E0..E11)", () => {
           stepMs: STEP_MS,
           scannerIntervalMs: SCANNER_INTERVAL_MS,
           businessFailureTickThreshold: 4,
-          note:
-            "MEASURED = real plugins + real stdout; COUNTERFACTUAL A/B/C/D = pure classifiers over measured telemetry, NOT product behaviour.",
+          note: "MEASURED = real plugins + real stdout; COUNTERFACTUAL A/B/C/D = pure classifiers over measured telemetry, NOT product behaviour.",
           results,
         },
         null,

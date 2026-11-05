@@ -17,7 +17,8 @@ tuple.
 
 ```bash
 # In the implementation worktree, with the evidence package in place:
-apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.config.ts
+apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
+  research/issue-885/harness/
 # -> rewrites research/issue-885/results/experiments.json (post-fix)
 ```
 
