@@ -340,7 +340,7 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
     }
   });
 
-  it("REGRESSION: consecutiveFailedTicks increments per settled-with-failure tick and resets on the first clean tick — the monitor's escalation input", async () => {
+  it("REGRESSION: consecutiveFailedTicks increments per settled-with-failure tick; the first zero-failure settle — idle OR successful — resets it (the monitor's escalation input)", async () => {
     vi.useFakeTimers();
     const lines: string[] = [];
     let discoveryFails = true;
@@ -359,8 +359,14 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
       await runTick(clock);
       expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(3);
 
-      // A clean tick (discovery returns no candidates → zero failures) resets
-      // the consecutive count to zero on the very first quiet settle.
+      // The counter is a run-length of FAILED ticks; the update rule reads
+      // failedCount only. This tick exercises the idle shape (discovery
+      // returns no candidates → zero failures). The successful shape
+      // (candidates present, every auto-submit succeeds → submittedCount > 0,
+      // failedCount === 0 — pinned by the scanDeadlineCandidates tests above)
+      // feeds the same rule and resets identically: for this state-condition
+      // alert, "no failing work observed" and "failures cleared" are one fact
+      // (docs/operations/active-alerting.md §1 recovery semantics).
       discoveryFails = false;
       await runTick(clock);
       expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(0);
@@ -398,6 +404,24 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
       await runTick(clock);
       expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
       expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(1);
+
+      // CONTINUOUS tick-level throws (DB readiness normal throughout): every
+      // thrown cycle settles, so the loop is not stalled, the readiness
+      // probe is the monitor's separate fact, and the business-failure
+      // counter stays frozen below the threshold indefinitely — the per-tick
+      // ERROR logs are the only signal for this shape, by ownership design.
+      for (let i = 0; i < 3; i++) {
+        await runTick(clock);
+        expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(1);
+      }
+      expect(
+        classifyLoopStall(deadlineScannerMetrics, 30_000, clock.current),
+      ).toBe("healthy");
+      expect(
+        lines
+          .map((l) => JSON.parse(l) as Record<string, unknown>)
+          .filter((l) => String(l.event ?? "").startsWith("operability.")),
+      ).toEqual([]);
 
       // The frozen run continues from where it froze.
       orgDiscoveryThrows = false;

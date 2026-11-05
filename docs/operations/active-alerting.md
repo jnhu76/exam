@@ -41,6 +41,21 @@ Alert state is process-local: a restart resets the counter to zero and a
 persistent outage re-raises only after the threshold re-accumulates (the
 restarted process must re-observe the failure before claiming it).
 
+Recovery semantics (#862): the escalation input is a run-length counter of
+consecutive FAILED ticks — it never observes success. Any settled tick with
+zero failures breaks the run and emits `recovered`, whether that tick was idle
+(no candidates discovered) or successful (submissions/marks created). An idle
+tick is still genuine condition-level recovery for these loops: their failing
+populations are self-retried persistent work — an expired attempt stays a
+deadline candidate until terminalized (or its deadline is extended), a stale
+attempt stays disruption-eligible until disrupted, resumed, or terminalized,
+and an unreconciled episode stays pending until its incident exists — so a
+previously-failing candidate can only leave discovery by being resolved. For
+this state-condition alert, "no failing work observed" and "business failures
+cleared" are therefore one fact; there is deliberately no separate
+NO_FAILURE_OBSERVED state. A tick that THROWS, by contrast, carries no
+business-failure evidence in either direction and freezes the counter (§4).
+
 ## 2. Stability and content guarantees
 
 - `event`, `component`, `state` are STABLE fields (contract; adding a new

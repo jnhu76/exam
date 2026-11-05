@@ -613,7 +613,7 @@ describe("evaluateOperabilityTick — persistent business-failure legs (#862)", 
     );
   });
 
-  it("S4: repeated failing evaluations never re-emit (no storm); the first clean tick recovers exactly once", () => {
+  it("S4: repeated failing evaluations never re-emit (no storm); the first zero-failure tick — idle or successful — recovers exactly once", () => {
     const trackers = makeTrackers();
     const failingInput = snapshotInput({
       deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD + 2,
@@ -632,6 +632,45 @@ describe("evaluateOperabilityTick — persistent business-failure legs (#862)", 
       level: "info",
     });
     expect(evaluateOperabilityTick(cleanInput, trackers)).toEqual([]);
+  });
+
+  it("restart semantics: a restarted process (fresh trackers, zeroed counters) carries no failing state and no carry-over recovery; the failure must be re-observed before it is re-claimed", () => {
+    // Process 1: the failure accumulates to the threshold and is claimed.
+    const before = makeTrackers();
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({
+          deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+        }),
+        before,
+      ),
+    ).toHaveLength(1);
+
+    // Process 2 (restart): trackers and the escalation counters are
+    // process-local and start fresh. A healthy first tick emits nothing —
+    // no spurious failing claim, and no spurious recovery for the
+    // pre-restart state either.
+    const after = makeTrackers();
+    expect(evaluateOperabilityTick(snapshotInput(), after)).toEqual([]);
+
+    // The failure must climb back to the threshold before the restarted
+    // process claims it again (docs/operations/active-alerting.md §1).
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({
+          deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD - 1,
+        }),
+        after,
+      ),
+    ).toEqual([]);
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({
+          deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+        }),
+        after,
+      ),
+    ).toHaveLength(1);
   });
 
   it("stall and persistent business failure are independent facts — a stalled AND persistently-failing loop emits both, on distinct (event, component) keys", () => {

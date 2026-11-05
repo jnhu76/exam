@@ -614,8 +614,13 @@ describe("heartbeat plugin — persistent business-failure escalation input (#86
       await failing.app.close();
     }
 
-    // A fully quiet tick (no marks, no failures on either leg) resets the
-    // consecutive count to zero on the first clean settle.
+    // The first zero-failure settle resets the run. This tick exercises the
+    // idle shape (no marks, no failures on either leg). The successful shape
+    // (disruptions marked / incidents created, zero failures — pinned by the
+    // scanForDisruptedAttempts tests above) feeds the same failedCount-only
+    // rule and resets identically: "no failing work observed" and "failures
+    // cleared" are one fact for this state-condition alert
+    // (docs/operations/active-alerting.md §1 recovery semantics).
     const quiet = buildApp(buildQuietDb(), lines);
     await quiet.app.register(heartbeatPlugin);
     await quiet.app.ready();
@@ -652,6 +657,15 @@ describe("heartbeat plugin — persistent business-failure escalation input (#86
       await runTick(mixed.clock);
       expect(heartbeatMetrics.lastSettledAt).not.toBeNull();
       expect(heartbeatMetrics.consecutiveFailedTicks).toBe(1);
+
+      // CONTINUOUS tick-level throws (DB readiness normal throughout): every
+      // thrown cycle settles (not stalled), and the business-failure counter
+      // stays frozen — a thrown cycle carries no business-failure evidence in
+      // either direction; the readiness facts own it.
+      for (let i = 0; i < 3; i++) {
+        await runTick(mixed.clock);
+        expect(heartbeatMetrics.consecutiveFailedTicks).toBe(1);
+      }
 
       // The frozen run continues from where it froze.
       orgDiscoveryThrows = false;
