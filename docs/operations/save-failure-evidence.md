@@ -18,7 +18,7 @@
 | Save receipt (`exam_answer_save_receipts`) | One immutable row per ACCEPTED `(attempt, question, clientSeq)`, written atomically with the answer state | The protocol accepted that replay key at `saved_at`, at `accepted_version` | Content correctness; that the client received the ACK; that a later failed save did not happen |
 | Attempt domain state (`exam_attempts.answers`) | Current saved answer + per-answer `version` / `savedAt` | The current authoritative saved value and version | Anything about the client's observation |
 | Structured logs | `Answer save rejected` WARN line (`attemptId`, `questionId`, `clientSeq`, `reason`, `serverVersion`, automatic `reqId`); 5xx error lines also carry `reqId` | The server evaluated and refused/faulted a save, with a machine-readable reason | What the UI displayed; durable history beyond log retention |
-| Error envelope `requestId` | Returned to the client on protocol errors; equals the log line's `reqId` | Correlation between a candidate-reported error and server logs | That the request was processed if no line exists |
+| Error envelope `requestId` | Returned to the client on error responses (400/5xx); equals the log line's `reqId` | Correlation between a candidate-reported error and server logs | That the request was processed if no line exists. The 200 `accepted: false` rejection body deliberately carries no `requestId` — correlate F2 by `attemptId` + `questionId` + `clientSeq` and the client's approximate time |
 | Client event telemetry (`client_events`) | Self-service browser telemetry (#544), deduplicated by `eventId` (#863), 30-day retention | What the browser believed/reported | Any server-side fact — it is advisory, never authority |
 
 Receipts are protocol metadata, not audit-grade: they cascade-delete with the
@@ -54,7 +54,8 @@ shows the save never happened (F2/F3 with a retained `reqId`).
 ## Operator procedure
 
 1. Collect `attemptId`, `questionId`, `clientSeq`, the approximate client
-   time, and the UI error's `requestId` (if displayed).
+   time, and — when the UI showed an error envelope (5xx/transport) — its
+   `requestId`.
 2. Check receipts for that question, newest first:
 
    ```sql
@@ -75,9 +76,11 @@ shows the save never happened (F2/F3 with a retained `reqId`).
    WHERE id = :attempt;
    ```
 
-4. Search the app logs for the `reqId` (exact correlation) and for
-   `"Answer save rejected"` lines whose `attemptId` / `clientSeq` match. A
-   rejection line exists for every `accepted: false` verdict.
+4. Search the app logs for the `reqId` (exact correlation, error responses)
+   and for `"Answer save rejected"` lines whose `attemptId` / `questionId` /
+   `clientSeq` match. A rejection line exists for every `accepted: false`
+   verdict; the 200 rejection body carries no `requestId`, so those three
+   fields plus the time window are the keys.
 5. Classify using the matrix above. Record F6 (UNKNOWN) explicitly rather
    than asserting non-arrival.
 6. Follow-up per fact: F2 is candidate-correctable (reload the attempt /
