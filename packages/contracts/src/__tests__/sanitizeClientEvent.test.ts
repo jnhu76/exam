@@ -153,3 +153,56 @@ describe("sanitizeMetadata — structure preservation", () => {
     expect(sanitizeMetadata(null)).toBe(null);
   });
 });
+
+describe("sanitizeClientEvent — value-level credential-shape redaction (#875)", () => {
+  // A non-denylisted key can still carry a credential-shaped VALUE (a buggy
+  // or hostile client stuffing a token under `note`). The key denylist
+  // cannot see that; these shapes are high-confidence (structured JWT /
+  // Bearer scheme / URL-with-userinfo) and safe to redact without a
+  // general sensitive-content detector.
+  const jwt =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+
+  it("redacts a JWT value under an innocent key (top level, nested, and in arrays)", () => {
+    const out = sanitizeClientEvent({
+      note: `attached ${jwt} for debugging`,
+      nested: { carrier: jwt },
+      list: [jwt, "keep me"],
+    });
+    expect(out.note).toBe("[redacted]");
+    expect((out.nested as Record<string, unknown>).carrier).toBe("[redacted]");
+    expect((out.list as unknown[])[0]).toBe("[redacted]");
+    expect((out.list as unknown[])[1]).toBe("keep me");
+  });
+
+  it("redacts a Bearer-scheme value under an innocent key", () => {
+    const out = sanitizeClientEvent({
+      header_echo: "bearer abc.def.ghi",
+      other: "Basic dXNlcjpwYXNz",
+    });
+    // Any credential scheme prefix (bearer/basic) is high-confidence.
+    expect(out.header_echo).toBe("[redacted]");
+    expect(out.other).toBe("[redacted]");
+  });
+
+  it("redacts a URL carrying userinfo credentials under an innocent key", () => {
+    const out = sanitizeClientEvent({
+      dsn: "postgresql://exam:s3cret@db.local:5432/exam",
+      cache: "redis://:pw@redis.local:6379/0",
+    });
+    expect(out.dsn).toBe("[redacted]");
+    expect(out.cache).toBe("[redacted]");
+  });
+
+  it("keeps legitimate look-alikes verbatim (no over-redaction)", () => {
+    const safe = {
+      path: "/exam/123",
+      link: "https://exam.local/login?next=/dashboard",
+      uuid: "b5b1c5a3-4ae1-4aa1-9ffc-543872e2017b",
+      sentence: "the answer is unbearably long prose about Bearer tokens",
+      fragment: "eyJhbGciOiJIUzI1NiJ9",
+      count: 42,
+    };
+    expect(sanitizeClientEvent(safe)).toEqual(safe);
+  });
+});
