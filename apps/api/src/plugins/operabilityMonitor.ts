@@ -37,9 +37,32 @@ export const OPERABILITY_MONITOR_INTERVAL_MS = 15_000;
 /** Stall threshold factor: staleAfter = LOOP_STALL_FACTOR × configured interval. */
 export const LOOP_STALL_FACTOR = 4;
 
+/**
+ * #862 escalation threshold: consecutive SETTLED ticks whose business work
+ * failed (failedCount > 0) before the persistent-business-failure alert
+ * raises. Same 4×-one-window shape as the stall factor, but counted in loop
+ * ticks, not milliseconds: a per-item failure is retried on the next cadence,
+ * so only a run of consecutive failed ticks means the retry loop is NOT
+ * converging. Compile-time policy — deliberately NOT an env knob (#547 brief
+ * §17). A tick that THROWS (e.g. DB down) neither increments nor resets the
+ * counter: those cycles are owned by the readiness events, not this alert.
+ */
+export const BUSINESS_FAILURE_TICK_THRESHOLD = 4;
+
 /** Derive the stall threshold from a loop's configured cadence. */
 export function loopStaleAfterMs(intervalMs: number): number {
   return LOOP_STALL_FACTOR * intervalMs;
+}
+
+/**
+ * #862: one loop's persistent-business-failure state at an explicit
+ * consecutive-failed-tick count. Pure threshold predicate; the transition
+ * dedupe lives in the caller's tracker.
+ */
+export function classifyPersistentBusinessFailure(
+  consecutiveFailedTicks: number,
+): boolean {
+  return consecutiveFailedTicks >= BUSINESS_FAILURE_TICK_THRESHOLD;
 }
 
 // ── Readiness (L2) ─────────────────────────────────────────────────────────
@@ -226,16 +249,44 @@ export interface OperabilitySnapshotInput {
   heartbeatIntervalMs: number;
   deadline: LoopActivity;
   deadlineIntervalMs: number;
+  /**
+   * #862 escalation input: consecutive SETTLED heartbeat ticks whose business
+   * work failed, reset by the first clean settle (maintained by the heartbeat
+   * plugin; process-local, reset on restart).
+   */
+  heartbeatConsecutiveFailedTicks: number;
+  /** Same escalation input for the deadline scanner. */
+  deadlineConsecutiveFailedTicks: number;
   now: Date;
 }
 
 /** Emitted alert fields — the external hook contract (docs/operations/active-alerting.md). */
 export interface OperabilityAlert {
-  event: "operability.readiness" | "operability.background_loop";
+  event:
+    | "operability.readiness"
+    | "operability.background_loop"
+    | "operability.business_failure";
   component: "database" | "redis" | "heartbeat" | "deadline_scanner";
-  state: "unavailable" | "recovered" | "stalled";
+  state: "unavailable" | "recovered" | "stalled" | "failing";
   level: "error" | "info";
   message: string;
+}
+
+/**
+ * Per-fact transition trackers. One tracker per (event, component) key — a
+ * loop can be stalled AND persistently failing at once, and those are distinct
+ * alert keys in the external hook contract (docs/operations/active-alerting.md
+ * §3), never folded into one.
+ */
+export interface OperabilityTickTrackers {
+  database: (failed: boolean) => AlertTransition;
+  redis: (failed: boolean) => AlertTransition;
+  heartbeat: (failed: boolean) => AlertTransition;
+  deadline_scanner: (failed: boolean) => AlertTransition;
+  business_failure: {
+    heartbeat: (failed: boolean) => AlertTransition;
+    deadline_scanner: (failed: boolean) => AlertTransition;
+  };
 }
 
 /**
@@ -246,12 +297,7 @@ export interface OperabilityAlert {
  */
 export function evaluateOperabilityTick(
   input: OperabilitySnapshotInput,
-  trackers: {
-    database: (failed: boolean) => AlertTransition;
-    redis: (failed: boolean) => AlertTransition;
-    heartbeat: (failed: boolean) => AlertTransition;
-    deadline_scanner: (failed: boolean) => AlertTransition;
-  },
+  trackers: OperabilityTickTrackers,
 ): OperabilityAlert[] {
   const alerts: OperabilityAlert[] = [];
 
@@ -334,6 +380,51 @@ export function evaluateOperabilityTick(
     trackers.deadline_scanner(deadlineStalled),
   );
 
+  // #862: persistent business failure — the loop keeps settling (so the stall
+  // facts above stay healthy) while its business work keeps failing. Distinct
+  // fact, distinct (event, component) alert key, same transition dedupe.
+  const businessFailure = (
+    component: "heartbeat" | "deadline_scanner",
+    consecutiveFailedTicks: number,
+    transition: AlertTransition,
+  ) => {
+    if (transition === "raise_failure") {
+      alerts.push({
+        event: "operability.business_failure",
+        component,
+        state: "failing",
+        level: "error",
+        message: `Critical background loop persistently failing: ${component} (${consecutiveFailedTicks} consecutive ticks with business failures)`,
+      });
+    } else if (transition === "raise_recovery") {
+      alerts.push({
+        event: "operability.business_failure",
+        component,
+        state: "recovered",
+        level: "info",
+        message: `Critical background loop business failures cleared: ${component}`,
+      });
+    }
+  };
+
+  const heartbeatFailing = classifyPersistentBusinessFailure(
+    input.heartbeatConsecutiveFailedTicks,
+  );
+  businessFailure(
+    "heartbeat",
+    input.heartbeatConsecutiveFailedTicks,
+    trackers.business_failure.heartbeat(heartbeatFailing),
+  );
+
+  const deadlineFailing = classifyPersistentBusinessFailure(
+    input.deadlineConsecutiveFailedTicks,
+  );
+  businessFailure(
+    "deadline_scanner",
+    input.deadlineConsecutiveFailedTicks,
+    trackers.business_failure.deadline_scanner(deadlineFailing),
+  );
+
   return alerts;
 }
 
@@ -354,6 +445,10 @@ const operabilityMonitorPlugin: FastifyPluginAsync = async (fastify) => {
     redis: createOperabilityTransitionTracker(),
     heartbeat: createOperabilityTransitionTracker(),
     deadline_scanner: createOperabilityTransitionTracker(),
+    business_failure: {
+      heartbeat: createOperabilityTransitionTracker(),
+      deadline_scanner: createOperabilityTransitionTracker(),
+    },
   };
 
   let activeTick: Promise<void> | null = null;
@@ -372,6 +467,10 @@ const operabilityMonitorPlugin: FastifyPluginAsync = async (fastify) => {
             heartbeatIntervalMs: config.heartbeat.scanIntervalMs,
             deadline: deadlineScannerMetrics,
             deadlineIntervalMs: config.heartbeat.deadlineScanIntervalMs,
+            heartbeatConsecutiveFailedTicks:
+              heartbeatMetrics.consecutiveFailedTicks,
+            deadlineConsecutiveFailedTicks:
+              deadlineScannerMetrics.consecutiveFailedTicks,
             now,
           },
           trackers,

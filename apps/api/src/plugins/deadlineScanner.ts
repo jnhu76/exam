@@ -71,6 +71,15 @@ export const deadlineScannerMetrics = {
   autoSubmitCount: 0,
   failedCount: 0,
   /**
+   * #862 escalation input: consecutive SETTLED ticks with failedCount > 0,
+   * reset to 0 by the first clean settle. A tick-level throw neither
+   * increments nor resets this counter (frozen): those cycles are owned by
+   * the readiness events, and a throw is not evidence the business work
+   * recovered. Process-local; reset on server restart. Consumed by the
+   * operability monitor's `operability.business_failure` transition.
+   */
+  consecutiveFailedTicks: 0,
+  /**
    * Effective scan interval in milliseconds. INVARIANT: this is a
    * pre-registration placeholder (0); the plugin registration writes the
    * configured interval before the server starts listening, so no request
@@ -360,6 +369,12 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
         deadlineScannerMetrics.lastScanAt = fastify.now();
         deadlineScannerMetrics.autoSubmitCount += result.submittedCount;
         deadlineScannerMetrics.failedCount += result.failedCount;
+        // #862 escalation input: a settled tick with failures extends the
+        // consecutive run; the first clean settle resets it.
+        deadlineScannerMetrics.consecutiveFailedTicks =
+          result.failedCount > 0
+            ? deadlineScannerMetrics.consecutiveFailedTicks + 1
+            : 0;
         if (result.submittedCount > 0 || result.failedCount > 0) {
           fastify.log.info(
             {
