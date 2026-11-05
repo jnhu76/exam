@@ -20,10 +20,14 @@ other structured log uses — no second channel, no buffering, no batching).
 | `operability.background_loop` | `heartbeat` | `recovered` | info | settled cycles resumed |
 | `operability.background_loop` | `deadline_scanner` | `stalled` | error | deadline scanner likewise not progressing — expired attempts are not being terminalized |
 | `operability.background_loop` | `deadline_scanner` | `recovered` | info | settled cycles resumed |
+| `operability.background_loop` | `client_event_retention` | `stalled` | error | the retention sweep is not progressing — expired client_events are never reclaimed (a never-fired or hung sweep; daily cadence, so detection is on the order of days) |
+| `operability.background_loop` | `client_event_retention` | `recovered` | info | settled cycles resumed |
 | `operability.business_failure` | `heartbeat` | `failing` | error | 4 consecutive settled heartbeat ticks with business failures on either leg (disruption or incident reconciliation) — the tick loop is alive but its work is not succeeding |
 | `operability.business_failure` | `heartbeat` | `recovered` | info | a settled heartbeat tick with zero failures on both legs |
 | `operability.business_failure` | `deadline_scanner` | `failing` | error | 4 consecutive settled deadline-scanner ticks with candidate failures — expired attempts are repeatedly failing to auto-submit (retried every cadence, not converging) |
 | `operability.business_failure` | `deadline_scanner` | `recovered` | info | a settled deadline-scanner tick with zero failures |
+| `operability.business_failure` | `client_event_retention` | `failing` | error | 4 consecutive retention passes each with at least one failed organization — expired rows are repeatedly failing to delete (daily cadence: 4 consecutive failed DAYS) |
+| `operability.business_failure` | `client_event_retention` | `recovered` | info | a settled retention pass with zero failed organizations (zero deleted rows is a clean pass — no expired data is not a failure) |
 
 Example lines:
 
@@ -103,8 +107,16 @@ THEN clear / resolve the corresponding notification
   `worker_heartbeats` degradation surface (diagnostics `emailStatus.worker`)
   and per-cycle error logs; a second in-memory stall alert over the same
   condition would create a second failure authority.
-- **Client-event retention failures** — #544 decision: low-trust telemetry GC,
-  logs only.
+- **Per-pass client-event retention detail** — #544 kept GC itself
+  durable-evidence-free (logs only per pass) and that boundary stands:
+  deleted counts and individual per-organization failures are NOT alerts.
+  #871 added only the LOOP-level facts this contract already uses everywhere
+  else (see §1): a never-fired or hung sweep raises
+  `operability.background_loop/client_event_retention/stalled`, and a run of
+  failed daily passes escalates on the shared
+  `operability.business_failure` shape (daily cadence → threshold = 4
+  consecutive failed days). No `cleanup_runs` table, no second evidence
+  subsystem (#544 §9 boundary).
 - **CPU / memory pressure** — diagnostics-only; never an alert condition and
   never readiness-relevant (01-semantics §1).
 - **Transient scanner errors** (e.g. DB-down cycles that THROW) — those
