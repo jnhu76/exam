@@ -5,6 +5,10 @@ import type { Database } from "@exam/db/types";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { heartbeatMetrics } from "./heartbeat.js";
 import { deadlineScannerMetrics } from "./deadlineScanner.js";
+import {
+  clientEventRetentionMetrics,
+  CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
+} from "./clientEventRetention.js";
 
 /**
  * #547 operability monitor — the single derivation behind the deployment
@@ -249,6 +253,9 @@ export interface OperabilitySnapshotInput {
   heartbeatIntervalMs: number;
   deadline: LoopActivity;
   deadlineIntervalMs: number;
+  /** #871: the client-event retention loop reuses the same two facts. */
+  retention: LoopActivity;
+  retentionIntervalMs: number;
   /**
    * #862 escalation input: consecutive SETTLED heartbeat ticks whose business
    * work failed, reset by the first clean settle (maintained by the heartbeat
@@ -257,6 +264,8 @@ export interface OperabilitySnapshotInput {
   heartbeatConsecutiveFailedTicks: number;
   /** Same escalation input for the deadline scanner. */
   deadlineConsecutiveFailedTicks: number;
+  /** #871: same escalation input for the client-event retention loop. */
+  retentionConsecutiveFailedTicks: number;
   now: Date;
 }
 
@@ -266,7 +275,12 @@ export interface OperabilityAlert {
     | "operability.readiness"
     | "operability.background_loop"
     | "operability.business_failure";
-  component: "database" | "redis" | "heartbeat" | "deadline_scanner";
+  component:
+    | "database"
+    | "redis"
+    | "heartbeat"
+    | "deadline_scanner"
+    | "client_event_retention";
   state: "unavailable" | "recovered" | "stalled" | "failing";
   level: "error" | "info";
   message: string;
@@ -283,9 +297,11 @@ export interface OperabilityTickTrackers {
   redis: (failed: boolean) => AlertTransition;
   heartbeat: (failed: boolean) => AlertTransition;
   deadline_scanner: (failed: boolean) => AlertTransition;
+  client_event_retention: (failed: boolean) => AlertTransition;
   business_failure: {
     heartbeat: (failed: boolean) => AlertTransition;
     deadline_scanner: (failed: boolean) => AlertTransition;
+    client_event_retention: (failed: boolean) => AlertTransition;
   };
 }
 
@@ -339,7 +355,7 @@ export function evaluateOperabilityTick(
   }
 
   const loopFailure = (
-    component: "heartbeat" | "deadline_scanner",
+    component: "heartbeat" | "deadline_scanner" | "client_event_retention",
     stalled: boolean,
     transition: AlertTransition,
   ) => {
@@ -380,11 +396,22 @@ export function evaluateOperabilityTick(
     trackers.deadline_scanner(deadlineStalled),
   );
 
+  // #871: the retention loop is a third consumer of the SAME stall fact —
+  // a never-fired or hung sweep becomes observable instead of log-dark.
+  const retentionStalled =
+    classifyLoopStall(input.retention, input.retentionIntervalMs, input.now) ===
+    "stalled";
+  loopFailure(
+    "client_event_retention",
+    retentionStalled,
+    trackers.client_event_retention(retentionStalled),
+  );
+
   // #862: persistent business failure — the loop keeps settling (so the stall
   // facts above stay healthy) while its business work keeps failing. Distinct
   // fact, distinct (event, component) alert key, same transition dedupe.
   const businessFailure = (
-    component: "heartbeat" | "deadline_scanner",
+    component: "heartbeat" | "deadline_scanner" | "client_event_retention",
     consecutiveFailedTicks: number,
     transition: AlertTransition,
   ) => {
@@ -425,6 +452,17 @@ export function evaluateOperabilityTick(
     trackers.business_failure.deadline_scanner(deadlineFailing),
   );
 
+  // #871: retention passes are daily, so the threshold counts consecutive
+  // failed DAYS — the loop retries every pass, non-convergence is the alert.
+  const retentionFailing = classifyPersistentBusinessFailure(
+    input.retentionConsecutiveFailedTicks,
+  );
+  businessFailure(
+    "client_event_retention",
+    input.retentionConsecutiveFailedTicks,
+    trackers.business_failure.client_event_retention(retentionFailing),
+  );
+
   return alerts;
 }
 
@@ -445,9 +483,11 @@ const operabilityMonitorPlugin: FastifyPluginAsync = async (fastify) => {
     redis: createOperabilityTransitionTracker(),
     heartbeat: createOperabilityTransitionTracker(),
     deadline_scanner: createOperabilityTransitionTracker(),
+    client_event_retention: createOperabilityTransitionTracker(),
     business_failure: {
       heartbeat: createOperabilityTransitionTracker(),
       deadline_scanner: createOperabilityTransitionTracker(),
+      client_event_retention: createOperabilityTransitionTracker(),
     },
   };
 
@@ -467,10 +507,14 @@ const operabilityMonitorPlugin: FastifyPluginAsync = async (fastify) => {
             heartbeatIntervalMs: config.heartbeat.scanIntervalMs,
             deadline: deadlineScannerMetrics,
             deadlineIntervalMs: config.heartbeat.deadlineScanIntervalMs,
+            retention: clientEventRetentionMetrics,
+            retentionIntervalMs: CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
             heartbeatConsecutiveFailedTicks:
               heartbeatMetrics.consecutiveFailedTicks,
             deadlineConsecutiveFailedTicks:
               deadlineScannerMetrics.consecutiveFailedTicks,
+            retentionConsecutiveFailedTicks:
+              clientEventRetentionMetrics.consecutiveFailedTicks,
             now,
           },
           trackers,

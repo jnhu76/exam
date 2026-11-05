@@ -35,6 +35,29 @@ export const CLIENT_EVENT_RETENTION_DAYS = 30;
 /** Sweep frequency. Daily-scale is sufficient for a 30-day horizon. */
 export const CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * #547 stall facts + #862/#871 escalation input for the retention loop —
+ * the same shape the heartbeat and deadline-scanner loops already expose,
+ * so the operability monitor consumes all three uniformly. Before #871 this
+ * loop had NO activity facts at all: a never-fired or hung sweep was
+ * indistinguishable from a quiet-but-healthy one in the log stream.
+ *
+ * `consecutiveFailedTicks`: consecutive SETTLED passes with at least one
+ * failed organization; reset by the first fully-clean pass. A pass that
+ * THROWS (org discovery) neither increments nor resets it (frozen — the
+ * same ownership boundary as the other loops). Process-local; reset on
+ * restart.
+ */
+export const clientEventRetentionMetrics = {
+  /** Effective sweep interval (registration placeholder 0; plugin writes it). */
+  scanIntervalMs: 0,
+  startedAt: null as Date | null,
+  lastStartedAt: null as Date | null,
+  lastSettledAt: null as Date | null,
+  activeSince: null as Date | null,
+  consecutiveFailedTicks: 0,
+};
+
 /** Pure cutoff computation: `receivedAt < cutoff` deletes; `== cutoff` is kept. */
 export function retentionCutoff(now: Date): Date {
   return new Date(
@@ -46,6 +69,8 @@ export function retentionCutoff(now: Date): Date {
 export interface ClientEventRetentionResult {
   deletedCount: number;
   organizationCount: number;
+  /** #871 escalation input: orgs whose cleanup threw in this pass. */
+  failedOrganizationCount: number;
 }
 
 /**
@@ -84,6 +109,7 @@ export async function runClientEventRetentionOnce(
   );
 
   let deletedCount = 0;
+  let failedOrganizationCount = 0;
   for (const organization of organizations) {
     // ADR-006: fastify.now() is the sanctioned plugin-layer clock — the pass
     // `now` stays fixed for the cutoff, per-org durations use a live read.
@@ -109,6 +135,7 @@ export async function runClientEventRetentionOnce(
       }
     } catch (err) {
       // One org's failure must not block the others; the next pass converges.
+      failedOrganizationCount += 1;
       fastify.log.error(
         {
           err,
@@ -121,7 +148,11 @@ export async function runClientEventRetentionOnce(
     }
   }
 
-  return { deletedCount, organizationCount: organizations.length };
+  return {
+    deletedCount,
+    organizationCount: organizations.length,
+    failedOrganizationCount,
+  };
 }
 
 const clientEventRetentionPlugin: FastifyPluginAsync = async (fastify) => {
@@ -130,10 +161,28 @@ const clientEventRetentionPlugin: FastifyPluginAsync = async (fastify) => {
 
   const runPass = () => {
     if (closing || activeRun) return;
+    // #547/#871: same start/settle bookkeeping as the heartbeat and
+    // deadline-scanner loops — settle stamps in .finally (success or error
+    // alike), so a hung pass holds activeSince and a dead timer goes STALLED
+    // by absence of new starts.
+    const startedAt = fastify.now();
+    clientEventRetentionMetrics.lastStartedAt = startedAt;
+    clientEventRetentionMetrics.activeSince = startedAt;
     activeRun = (async () => {
       try {
-        await runClientEventRetentionOnce(fastify);
+        const result = await runClientEventRetentionOnce(fastify);
+        // #871 escalation input: a settled pass with any failed org extends
+        // the consecutive run; the first fully-clean pass (zero deleted is
+        // still clean — no expired data is not a failure) resets it.
+        clientEventRetentionMetrics.consecutiveFailedTicks =
+          result.failedOrganizationCount > 0
+            ? clientEventRetentionMetrics.consecutiveFailedTicks + 1
+            : 0;
       } catch (err) {
+        // Tick-level throw (org discovery): settles via the catch path with
+        // NO business-failure evidence — the counter freezes, never resets
+        // (a throw is not recovery) and never advances. Same frozen rule as
+        // the heartbeat/deadline loops (#862).
         fastify.log.error(
           { err, subsystem: "client_event_retention" },
           "Client-event retention pass failed",
@@ -141,8 +190,15 @@ const clientEventRetentionPlugin: FastifyPluginAsync = async (fastify) => {
       }
     })().finally(() => {
       activeRun = null;
+      clientEventRetentionMetrics.activeSince = null;
+      clientEventRetentionMetrics.lastSettledAt = fastify.now();
     });
   };
+
+  clientEventRetentionMetrics.scanIntervalMs =
+    CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS;
+  // #547: WARMING grace origin — recorded once, at registration.
+  clientEventRetentionMetrics.startedAt = fastify.now();
 
   // Startup convergence: a process that was down across one or more sweep
   // windows catches up immediately instead of waiting a full interval.

@@ -267,8 +267,11 @@ function snapshotInput(
     heartbeatIntervalMs: 30_000,
     deadline: { ...healthyActivity },
     deadlineIntervalMs: 30_000,
+    retention: { ...healthyActivity },
+    retentionIntervalMs: 30_000,
     heartbeatConsecutiveFailedTicks: 0,
     deadlineConsecutiveFailedTicks: 0,
+    retentionConsecutiveFailedTicks: 0,
     now: ms(0),
     ...partial,
   };
@@ -280,9 +283,11 @@ function makeTrackers() {
     redis: createOperabilityTransitionTracker(),
     heartbeat: createOperabilityTransitionTracker(),
     deadline_scanner: createOperabilityTransitionTracker(),
+    client_event_retention: createOperabilityTransitionTracker(),
     business_failure: {
       heartbeat: createOperabilityTransitionTracker(),
       deadline_scanner: createOperabilityTransitionTracker(),
+      client_event_retention: createOperabilityTransitionTracker(),
     },
   };
 }
@@ -632,6 +637,64 @@ describe("evaluateOperabilityTick — persistent business-failure legs (#862)", 
       level: "info",
     });
     expect(evaluateOperabilityTick(cleanInput, trackers)).toEqual([]);
+  });
+
+  it("#871: a never-fired or hung retention sweep goes STALLED on its own component — no longer log-dark", () => {
+    const trackers = makeTrackers();
+    // Registration long ago, nothing ever settled, no start in flight: the
+    // timer never fired (or a pass hung and cleared) — stalled by absence.
+    const alerts = evaluateOperabilityTick(
+      snapshotInput({
+        retention: {
+          startedAt: ms(-900_000),
+          lastStartedAt: null,
+          lastSettledAt: null,
+          activeSince: null,
+        },
+        retentionIntervalMs: 30_000,
+      }),
+      trackers,
+    );
+    expect(alerts).toEqual([
+      expect.objectContaining({
+        event: "operability.background_loop",
+        component: "client_event_retention",
+        state: "stalled",
+        level: "error",
+      }),
+    ]);
+    expect(evaluateOperabilityTick(snapshotInput(), trackers)).toEqual([
+      expect.objectContaining({
+        event: "operability.background_loop",
+        component: "client_event_retention",
+        state: "recovered",
+      }),
+    ]);
+  });
+
+  it("#871: persistent retention pass failures raise operability.business_failure; a clean pass (even with zero deletions) recovers", () => {
+    const trackers = makeTrackers();
+    const failing = snapshotInput({ retentionConsecutiveFailedTicks: 4 });
+    const alerts = evaluateOperabilityTick(failing, trackers);
+    expect(alerts).toEqual([
+      expect.objectContaining({
+        event: "operability.business_failure",
+        component: "client_event_retention",
+        state: "failing",
+        level: "error",
+      }),
+    ]);
+    expect(evaluateOperabilityTick(failing, trackers)).toEqual([]);
+    // Zero-deleted but zero-failed is a CLEAN pass — recovery, not silence:
+    // the counter tracks the run of failed passes, not deletions.
+    const recovered = evaluateOperabilityTick(snapshotInput(), trackers);
+    expect(recovered).toEqual([
+      expect.objectContaining({
+        event: "operability.business_failure",
+        component: "client_event_retention",
+        state: "recovered",
+      }),
+    ]);
   });
 
   it("restart semantics: a restarted process (fresh trackers, zeroed counters) carries no failing state and no carry-over recovery; the failure must be re-observed before it is re-claimed", () => {

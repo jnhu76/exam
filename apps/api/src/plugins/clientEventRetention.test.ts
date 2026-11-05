@@ -12,9 +12,13 @@ import {
   CLIENT_EVENT_RETENTION_DAYS,
   CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
   cleanupOrganizationClientEvents,
+  clientEventRetentionMetrics,
   retentionCutoff,
   default as clientEventRetentionPlugin,
 } from "./clientEventRetention.js";
+import { organizations } from "@exam/db/schema/pg";
+import { classifyLoopStall } from "./operabilityMonitor.js";
+import { vi } from "vitest";
 
 /**
  * Client-event retention executor (#544).
@@ -161,4 +165,149 @@ describe("client-event retention executor", () => {
     // Fresh rows survive the startup pass.
     expect(await countRows("exec-fresh")).toBe(1);
   }, 15_000);
+});
+
+describe("client-event retention loop — activity + escalation facts (#871)", () => {
+  const ORG = { id: "org-1" };
+
+  function resetFacts() {
+    clientEventRetentionMetrics.startedAt = null;
+    clientEventRetentionMetrics.lastStartedAt = null;
+    clientEventRetentionMetrics.lastSettledAt = null;
+    clientEventRetentionMetrics.activeSince = null;
+    clientEventRetentionMetrics.consecutiveFailedTicks = 0;
+    clientEventRetentionMetrics.scanIntervalMs = 0;
+  }
+
+  /**
+   * Fake db routing by drizzle table identity (same pattern as the
+   * heartbeat/deadline #862 fakes): org discovery resolves one org (or
+   * THROWS while `orgDiscoveryThrows()` — a tick-level throw); each org's
+   * cleanup delete either resolves empty (clean pass — zero deleted is NOT
+   * a failure) or THROWS while `cleanupThrows()` (business failure).
+   */
+  function buildDb(legs: {
+    orgDiscoveryThrows: () => boolean;
+    cleanupThrows: () => boolean;
+  }): unknown {
+    return {
+      select: () => ({
+        from: (table: unknown) => {
+          if (table === organizations) {
+            if (legs.orgDiscoveryThrows()) {
+              throw new Error("forced org discovery failure");
+            }
+            return Promise.resolve([ORG]);
+          }
+          throw new Error("unexpected table in retention fake db");
+        },
+      }),
+      delete: () => ({
+        where: () => ({
+          returning: () => {
+            if (legs.cleanupThrows()) {
+              throw new Error("forced cleanup failure");
+            }
+            return Promise.resolve([]);
+          },
+        }),
+      }),
+    };
+  }
+
+  function buildApp(db: unknown) {
+    const clock = { current: new Date("2026-11-05T08:00:00Z") };
+    const app = Fastify({ logger: false });
+    app.decorate<unknown>("db", db as never);
+    app.decorate("now", () => clock.current);
+    return { app, clock };
+  }
+
+  async function runPass(clock: { current: Date }) {
+    clock.current = new Date(clock.current.getTime() + 86_400_000);
+    await vi.advanceTimersByTimeAsync(86_400_000);
+  }
+
+  it("stamps registration/start/settle facts; a settled pass with failed orgs increments, a clean pass (zero deleted) resets", async () => {
+    vi.useFakeTimers();
+    let cleanupThrows = true;
+    const { app, clock } = buildApp(
+      buildDb({
+        orgDiscoveryThrows: () => false,
+        cleanupThrows: () => cleanupThrows,
+      }),
+    );
+    resetFacts();
+    await app.register(clientEventRetentionPlugin);
+    await app.ready();
+
+    try {
+      // Registration: warming origin + interval written; the STARTUP pass
+      // (failed org) settles and increments immediately.
+      expect(clientEventRetentionMetrics.startedAt).not.toBeNull();
+      expect(clientEventRetentionMetrics.scanIntervalMs).toBe(
+        CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clientEventRetentionMetrics.lastSettledAt).not.toBeNull();
+      expect(clientEventRetentionMetrics.activeSince).toBeNull();
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(1);
+
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(2);
+
+      // A clean pass with ZERO deleted rows is still a clean settle — the
+      // counter tracks failed passes, not deletions.
+      cleanupThrows = false;
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(0);
+      expect(
+        classifyLoopStall(
+          clientEventRetentionMetrics,
+          CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
+          clock.current,
+        ),
+      ).toBe("healthy");
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a tick-level THROW freezes the counter — neither resets nor advances (same ownership boundary as #862)", async () => {
+    vi.useFakeTimers();
+    let orgDiscoveryThrows = false;
+    let cleanupThrows = true;
+    const { app, clock } = buildApp(
+      buildDb({
+        orgDiscoveryThrows: () => orgDiscoveryThrows,
+        cleanupThrows: () => cleanupThrows,
+      }),
+    );
+    resetFacts();
+    await app.register(clientEventRetentionPlugin);
+    await app.ready();
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(1);
+
+      orgDiscoveryThrows = true;
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.lastSettledAt).not.toBeNull();
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(1);
+
+      // The frozen run continues from where it froze.
+      orgDiscoveryThrows = false;
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(2);
+
+      cleanupThrows = false;
+      await runPass(clock);
+      expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(0);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
 });
