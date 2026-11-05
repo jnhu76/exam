@@ -19,6 +19,9 @@ const workspaceRoot = path.resolve(__dirname, "../..");
 
 export default defineConfig({
   root: workspaceRoot,
+  // #741: package-local implicit env-file admission stays OFF; the `test.env`
+  // block below is the only environment this harness gets.
+  envDir: false,
   plugins: [workspaceSourceResolutionPlugin()],
   test: {
     env: {

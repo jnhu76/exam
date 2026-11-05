@@ -110,9 +110,18 @@ e7eb5fb78a299436944972586a3c853d20ece2a0dc87b911310b850f90aa17db  research/issue
 fc8b4596ac0d18406db93cda5690b4ac2164cce80b7588709298dee38bd76009  research/issue-885/harness/experiments.test.ts
 cd230e7d35ad328d54cd074e7caec8954dff3c220174b059eab5f218bf2df08f  research/issue-885/harness/smoke.test.ts
 ab151ea8cd1ad1d6335afdf556ca4d1357ad9043126d76b8fd4fe6714f0a82e4  research/issue-885/harness/analyze.mjs
-5b07d022c2e94335f8c5147a4c0e4fc4c792f7bb5a1f600ae463718668a0ff46  apps/api/vitest.885.config.ts
-9f42d722fb236b598b65323274caae9a268e3c3b82819f68fce7e6a8d60979b9  apps/api/vitest.885.regression.config.ts
+5b07d022c2e94335f8c5147a4c0e4fc4c792f7bb5a1f600ae463718668a0ff46 → **78ab922dec410be26775c065b7c39eefbf655c59be2287dd889fcf9c53aae9c9**  apps/api/vitest.885.config.ts
+9f42d722fb236b598b65323274caae9a268e3c3b82819f68fce7e6a8d60979b9 → **8f0e94be45752ba97c953136bc59c92685e854b98dc6103b9509ce4ca62d36f1**  apps/api/vitest.885.regression.config.ts
 ```
+
+> **Amendment (implementation PR #896, 2026-11-05):** both research configs gained
+> `envDir: false` to satisfy the repository `check-env-surface` gate (#741); the
+> values above are the amended files (old hash → new hash). Verified
+> **behaviour-neutral**: the full 20-scenario replay against the implemented code
+> is scenario-for-scenario identical with and without the amendment (0/20
+> differences; `envDir` only disables implicit env-file admission, and both
+> configs set `test.env` explicitly). Every other entry in §4 is the pre-fix
+> study's byte-identical artifact.
 
 ### 4.3 Machine-readable results & transcripts
 ```
