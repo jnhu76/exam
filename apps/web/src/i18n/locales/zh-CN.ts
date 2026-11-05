@@ -2154,6 +2154,19 @@ const zhCN = {
         actorPrefix: "操作者",
         ipAddress: "IP: {{address}}",
       },
+      receiptSummary: {
+        title: "保存收据摘要",
+        description:
+          "服务端已接受的答案保存收据聚合（只读）。收据仅在保存被接受时写入，是协议元数据，不构成答案内容的独立真实性证明。",
+        loadFailed: "加载保存收据摘要失败",
+        empty:
+          "无已接受的保存收据。这不等于考生从未保存——被拒绝或丢失的保存不会留下服务端记录，该情形属于未知（UNKNOWN），不是反面证据。",
+        count: "已接受保存 {{count}} 次",
+        maxClientSeq: "最大保存序号（clientSeq）{{seq}}",
+        lastSavedAt: "最后保存（服务端时间）{{time}}",
+        disclaimer:
+          "证据能力边界：收据只证明协议在服务端时刻接受了某次保存，不证明内容本身，也不意味着同一序号在不同考生处代表同一内容；收据随尝试删除而级联删除。",
+      },
       telemetry: {
         title: "遥测时间线",
         description:

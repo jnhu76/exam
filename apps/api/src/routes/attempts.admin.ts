@@ -7,6 +7,7 @@ import {
   TimeGrantRequestSchema,
   TimeGrantResponseSchema,
   AttemptTimelineResponseSchema,
+  AnswerSaveReceiptSummarySchema,
   AttemptIdParamsSchema,
   AttemptExportResponseSchema,
   type AttemptExportData,
@@ -392,6 +393,70 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           userAgent: row.auditLog.userAgent,
           createdAt: row.auditLog.createdAt.toISOString(),
         })),
+      });
+    },
+  );
+
+  /**
+   * GET /admin/attempts/:attemptId/answer-save-receipt-summary — #866 minimal
+   * read-only projection over `exam_answer_save_receipts`: count / MAX
+   * clientSeq / last server savedAt. Deliberately WEAK evidence, and the UI
+   * must present it as such (#866 reconciliation note): receipts are protocol
+   * metadata of accepted saves only — they are NOT independent content
+   * authenticity proof, an empty summary is NOT "never saved" (rejected or
+   * lost saves leave no server record — #861's UNKNOWN domain), and a
+   * clientSeq position is NOT a content-identity claim across attempts
+   * (T09). Same permission boundary as the timeline (AttemptTimelineView,
+   * Proctor assignment-scoped); no audit event (read-only investigation
+   * aggregate, timeline precedent). 404 if the attempt does not exist in the
+   * caller's organization — no cross-org oracle. Receipts cascade-delete
+   * with their attempt, so a deleted attempt has no summary to read.
+   */
+  fastify.get(
+    "/admin/attempts/:attemptId/answer-save-receipt-summary",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireScopedCapability(
+          Permission.AttemptTimelineView,
+          "attempt",
+          "attemptId",
+          { proctorAccess: "assignment_scoped" },
+        ),
+      ],
+      schema: {
+        params: AttemptIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: AnswerSaveReceiptSummarySchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = AttemptIdParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const { attemptId } = parsed.data;
+
+      const attemptRepo = createAttemptRepo(fastify.db);
+      const attempt = await attemptRepo.findById(ctx, attemptId);
+      if (!attempt) {
+        throw new NotFoundError("Attempt not found");
+      }
+
+      const summary = await attemptRepo.summarizeSaveReceipts(ctx, attemptId);
+      return reply.send({
+        receiptCount: summary.receiptCount,
+        maxClientSeq: summary.maxClientSeq,
+        lastSavedAt: summary.lastSavedAt
+          ? summary.lastSavedAt.toISOString()
+          : null,
       });
     },
   );

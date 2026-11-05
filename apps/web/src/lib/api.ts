@@ -37,6 +37,7 @@ export const API_STATIC_SEGMENTS = new Set([
   "accept",
   "actions",
   "admin",
+  "answer-save-receipt-summary",
   "answers",
   "api",
   "archive",
