@@ -1,0 +1,33 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.7 [39m[90m/home/hoo/Source/exam-885[39m
+
+[90mstdout[2m | research/issue-885/harness/experiments.test.ts[2m > [22m[2m#885 fault-injection experiments (E0..E11)[2m > [22m[2mruns the full matrix and writes the measured + counterfactual evidence
+[22m[39m[E0-normal-empty-tick] loops=both errLogs=0 throw(hb/dl)=0/0 biz(hb/dl)=0/0 clean(hb/dl)=7/7 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=0/0 B=0/0 C=0/0 D=0/0 dupC=0] faultStart=null clear=null
+[E1-db-down-throws] loops=both errLogs=15 throw(hb/dl)=7/7 biz(hb/dl)=0/0 clean(hb/dl)=4/4 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=1+1 biz=0 loop=0] CF[A=2/2 B=2/2 C=2/2 D=2/2 dupC=2] faultStart=45000 clear=255000
+[E2-both-org-discovery-logic-throw] loops=both errLogs=18 throw(hb/dl)=9/9 biz(hb/dl)=0/0 clean(hb/dl)=3/3 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=2/2 B=2/2 C=2/2 D=2/2 dupC=0] faultStart=45000 clear=315000
+[E2-hb-attempt-discovery-logic-throw] loops=heartbeat errLogs=9 throw(hb/dl)=9/0 biz(hb/dl)=0/0 clean(hb/dl)=3/12 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=1/1 B=1/1 C=1/1 D=1/1 dupC=0] faultStart=45000 clear=315000
+[E2-dl-attempt-discovery-logic-throw] loops=deadline_scanner errLogs=9 throw(hb/dl)=0/9 biz(hb/dl)=0/0 clean(hb/dl)=12/3 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=1/1 B=1/1 C=1/1 D=1/1 dupC=0] faultStart=45000 clear=315000
+[E3-hb-pg-query-error] loops=heartbeat errLogs=9 throw(hb/dl)=9/0 biz(hb/dl)=0/0 clean(hb/dl)=3/12 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=1/1 B=1/1 C=1/1 D=1/1 dupC=0] faultStart=45000 clear=315000
+[E3-dl-pg-query-error] loops=deadline_scanner errLogs=9 throw(hb/dl)=0/9 biz(hb/dl)=0/0 clean(hb/dl)=12/3 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=1/1 B=1/1 C=1/1 D=1/1 dupC=0] faultStart=45000 clear=315000
+[E4-both-business-failures-settle] loops=both errLogs=23 throw(hb/dl)=0/0 biz(hb/dl)=7/7 clean(hb/dl)=4/4 maxC(hb/dl)=7/7 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=4 loop=0] CF[A=0/0 B=2/2 C=0/0 D=0/0 dupC=0] faultStart=45000 clear=255000
+[E5-hb-alternating-biz-and-throw] loops=heartbeat errLogs=23 throw(hb/dl)=6/0 biz(hb/dl)=8/0 clean(hb/dl)=4/18 maxC(hb/dl)=8/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=2 loop=0] CF[A=0/0 B=1/1 C=0/0 D=0/0 dupC=0] faultStart=45000 clear=465000
+[E5-dl-alternating-biz-and-throw] loops=deadline_scanner errLogs=15 throw(hb/dl)=0/6 biz(hb/dl)=0/8 clean(hb/dl)=18/4 maxC(hb/dl)=0/8 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=2 loop=0] CF[A=0/0 B=1/1 C=0/0 D=0/0 dupC=0] faultStart=45000 clear=465000
+[E5-both-alternating] loops=both errLogs=38 throw(hb/dl)=6/6 biz(hb/dl)=8/8 clean(hb/dl)=4/4 maxC(hb/dl)=8/8 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=4 loop=0] CF[A=0/0 B=2/2 C=0/0 D=0/0 dupC=0] faultStart=45000 clear=465000
+[E6-hb-recover-after-continuous-throws] loops=heartbeat errLogs=9 throw(hb/dl)=9/0 biz(hb/dl)=0/0 clean(hb/dl)=5/14 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=1/1 B=1/1 C=1/1 D=1/1 dupC=0] faultStart=45000 clear=315000
+[E6-dl-recover-after-continuous-throws] loops=deadline_scanner errLogs=9 throw(hb/dl)=0/9 biz(hb/dl)=0/0 clean(hb/dl)=14/5 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=1/1 B=1/1 C=1/1 D=1/1 dupC=0] faultStart=45000 clear=315000
+[E6-business-failure-recovery] loops=both errLogs=20 throw(hb/dl)=0/0 biz(hb/dl)=6/6 clean(hb/dl)=5/5 maxC(hb/dl)=6/6 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=4 loop=0] CF[A=0/0 B=2/2 C=0/0 D=0/0 dupC=0] faultStart=45000 clear=225000
+[E7-restart-during-continuous-throws] loops=both errLogs=26 throw(hb/dl)=13/13 biz(hb/dl)=0/0 clean(hb/dl)=4/4 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=4/2 B=4/2 C=4/2 D=4/2 dupC=0] faultStart=45000 clear=435000
+[E8-desync-short-bursts] loops=both errLogs=22 throw(hb/dl)=11/11 biz(hb/dl)=0/0 clean(hb/dl)=6/6 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=2/2 B=2/2 C=2/2 D=2/2 dupC=0] faultStart=45000 clear=135000
+[E9-db-down-then-db-up-with-throws] loops=both errLogs=23 throw(hb/dl)=11/11 biz(hb/dl)=0/0 clean(hb/dl)=4/4 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=1+1 biz=0 loop=0] CF[A=2/2 B=2/2 C=2/2 D=2/2 dupC=2] faultStart=45000 clear=375000
+[E10-business-failure-then-continuous-throws] loops=both errLogs=34 throw(hb/dl)=7/7 biz(hb/dl)=6/6 clean(hb/dl)=5/5 maxC(hb/dl)=6/6 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=4 loop=0] CF[A=2/2 B=2/2 C=2/2 D=2/2 dupC=0] faultStart=45000 clear=435000
+[E11-hung-tick-not-throwing] loops=both errLogs=2 throw(hb/dl)=0/0 biz(hb/dl)=0/0 clean(hb/dl)=1/1 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy|active|stalled/warming|healthy|active|stalled ASBUILT[readiness=0+0 biz=0 loop=2] CF[A=0/0 B=0/0 C=0/0 D=0/0 dupC=0] faultStart=45000 clear=255000
+[E12-chronic-intermittent-3-throw-1-clean] loops=both errLogs=24 throw(hb/dl)=12/12 biz(hb/dl)=0/0 clean(hb/dl)=7/7 maxC(hb/dl)=0/0 stall(hb/dl)=warming|healthy/warming|healthy ASBUILT[readiness=0+0 biz=0 loop=0] CF[A=0/0 B=0/0 C=0/0 D=0/0 dupC=0] faultStart=45000 clear=135000
+
+ [32m✓[39m research/issue-885/harness/experiments.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 262[2mms[22m[39m
+ [32m✓[39m research/issue-885/harness/smoke.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 67[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m   Start at [22m 21:49:19
+[2m   Duration [22m 3.07s[2m (transform 992ms, setup 0ms, import 2.48s, tests 328ms, environment 0ms)[22m
+
