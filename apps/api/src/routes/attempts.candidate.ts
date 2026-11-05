@@ -1123,6 +1123,11 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // docs/operations/save-failure-evidence.md).
       request.log.warn(
         {
+          // Tenant/actor scoping per docs/contracts/observability.md: this is
+          // a business log line, so it must be searchable by organization.
+          organizationId: ctx.organizationId,
+          actorId: ctx.actorId,
+          actorRole: ctx.role,
           attemptId,
           questionId,
           clientSeq: body.clientSeq,

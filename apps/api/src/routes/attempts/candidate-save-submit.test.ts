@@ -614,6 +614,7 @@ describe("attempt routes", () => {
         cookies: { "auth-token": ctx.candidateToken },
       });
 
+      expect(res.statusCode).toBe(200);
       expect(res.json().accepted).toBe(false);
       const parsed = logLines
         .flatMap((line) => line.split("\n"))
@@ -623,9 +624,14 @@ describe("attempt routes", () => {
       const entry = parsed[0]!;
       expect(entry.level).toBe(40); // pino warn
       expect(entry.msg).toBe("Answer save rejected");
+      // Tenant/actor scoping (docs/contracts/observability.md).
+      expect(entry.organizationId).toBe(ctx.org.id);
+      expect(entry.actorId).toBe(ctx.candidate.id);
+      expect(entry.actorRole).toBe("Candidate");
       expect(entry.attemptId).toBe(attemptId);
       expect(entry.questionId).toBe(qId);
       expect(entry.clientSeq).toBe(99);
+      expect(typeof entry.serverVersion).toBe("number");
       // The credential-shaped answer is not a valid option id, so shape
       // validation (#301) rejects it before the version check: INVALID_ANSWER
       // rather than STALE_VERSION. Either way it is the same rejection branch

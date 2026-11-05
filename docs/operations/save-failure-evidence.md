@@ -17,9 +17,9 @@
 | --- | --- | --- | --- |
 | Save receipt (`exam_answer_save_receipts`) | One immutable row per ACCEPTED `(attempt, question, clientSeq)`, written atomically with the answer state | The protocol accepted that replay key at `saved_at`, at `accepted_version` | Content correctness; that the client received the ACK; that a later failed save did not happen |
 | Attempt domain state (`exam_attempts.answers`) | Current saved answer + per-answer `version` / `savedAt` | The current authoritative saved value and version | Anything about the client's observation |
-| Structured logs | `Answer save rejected` WARN line (`attemptId`, `questionId`, `clientSeq`, `reason`, `serverVersion`, automatic `reqId`); 5xx error lines also carry `reqId` | The server evaluated and refused/faulted a save, with a machine-readable reason | What the UI displayed; durable history beyond log retention |
+| Structured logs | `Answer save rejected` WARN line (`organizationId`, `actorId`, `actorRole`, `attemptId`, `questionId`, `clientSeq`, `reason`, `serverVersion`, automatic `reqId`); error responses also carry `reqId` | The server evaluated and refused/faulted a save, with a machine-readable reason, tenant- and actor-scoped | What the UI displayed; durable history beyond log retention |
 | Error envelope `requestId` | Returned to the client on error responses (400/5xx); equals the log line's `reqId` | Correlation between a candidate-reported error and server logs | That the request was processed if no line exists. The 200 `accepted: false` rejection body deliberately carries no `requestId` — correlate F2 by `attemptId` + `questionId` + `clientSeq` and the client's approximate time |
-| Client event telemetry (`client_events`) | Self-service browser telemetry (#544), deduplicated by `eventId` (#863), 30-day retention | What the browser believed/reported | Any server-side fact — it is advisory, never authority |
+| Client event telemetry (`client_events`) | Self-service browser telemetry (#544), 30-day retention | What the browser believed/reported | Any server-side fact — it is advisory, never authority |
 
 Receipts are protocol metadata, not audit-grade: they cascade-delete with the
 attempt. The durable command/audit records are separate models and are not
@@ -33,9 +33,9 @@ require positive evidence; absence of evidence never selects F1.
 | Fact | Positive evidence | Meaning |
 | --- | --- | --- |
 | **F1 — pre-arrival loss** | Client-side proof that no request was ever sent or completed (e.g. offline queue never flushed, connection refused before send) | The save never reached the API. |
-| **F2 — server rejection** | HTTP 200 with `accepted: false` + `reason`, plus the matching `Answer save rejected` WARN line | The server evaluated the save and refused it. No receipt, no answer change. Reasons: `STALE_VERSION`, `ATTEMPT_ALREADY_SUBMITTED`, `INVALID_ANSWER`, … This is a protocol verdict, NOT a transport failure. |
-| **F3 — transaction/route failure** | HTTP 5xx (or internal error) for that `reqId`; no receipt for the `clientSeq` | The save did not commit; the receipt + answer write are atomic. Retryable. |
-| **F4 — ACK loss** | A receipt exists for that `(question, clientSeq)` and attempt state reflects it, but the client never observed `accepted: true` (timeout, tab close, response dropped) | The save IS durable — the client's belief is false. Re-sending the same `clientSeq` is idempotent and returns the recorded result. |
+| **F2 — server rejection** | HTTP 200 with `accepted: false` + `reason`, plus the matching `Answer save rejected` WARN line | The server evaluated the save and refused it. This rejection creates no new receipt and changes no answer. An EARLIER receipt for the same `(question, clientSeq)` can still exist (`CONFLICTING_PAYLOAD`: the key was reused with a different canonical answer), so receipt-first investigation must not stop at "a receipt exists". Reasons: `STALE_VERSION`, `CONFLICTING_PAYLOAD`, `ATTEMPT_ALREADY_SUBMITTED`, `ATTEMPT_CLOSED`, `DEADLINE_EXCEEDED`, `INVALID_ANSWER`, … This is a protocol verdict, NOT a transport failure. |
+| **F3 — transaction/route failure** | HTTP 5xx, or HTTP 409 `RESOURCE_CONFLICT` when a retry-exhausted/constraint failure is mapped to conflict (error envelope carries `requestId`); no new receipt for that `clientSeq` — a concurrent winner may already have one | The save did not commit; the receipt + answer write are atomic. Retryable. |
+| **F4 — ACK loss** | A receipt exists for that `(question, clientSeq)` with the same canonical answer, and the attempt state reflects it, but the client never observed `accepted: true` (timeout, tab close, response dropped) | The save IS durable — the client's belief is false. Re-sending the same `clientSeq` with the SAME canonical answer while the attempt is still open returns the recorded result with zero new writes. A receipt for an older `clientSeq` does not describe current state (a newer version may be saved), and replay stops returning the receipt once the lifecycle/deadline guards reject first. |
 | **F5 — success** | Receipt exists and the client observed `accepted: true` | The save is durable and acknowledged. |
 | **F6 — UNKNOWN** | Evidence missing, insufficient, or conflicting: logs rotated past retention, no `reqId` retained, time window ambiguous, attempt deleted (receipts cascaded) | The fact cannot be established. Report UNKNOWN explicitly. |
 
@@ -48,32 +48,35 @@ proof; otherwise it is F6.
 **Retention asymmetry:** client telemetry is bounded at 30 days; save receipts
 live until the attempt is deleted; logs follow deployment log policy. A
 candidate report arriving after log rotation but while the attempt still
-exists usually lands in F6 unless receipts settle it (F4/F5) or domain state
-shows the save never happened (F2/F3 with a retained `reqId`).
+exists usually lands in F6 unless receipts settle it (F4/F5) or the retained
+logs/domain state settle F2/F3.
 
 ## Operator procedure
 
 1. Collect `attemptId`, `questionId`, `clientSeq`, the approximate client
    time, and — when the UI showed an error envelope (5xx/transport) — its
    `requestId`.
-2. Check receipts for that question, newest first:
+2. Read the attempt's organization and current state (then locate the
+   question's entry in the returned `answers` array):
+
+   ```sql
+   SELECT organization_id, status, answers
+   FROM exam_attempts
+   WHERE id = :attempt;
+   ```
+
+3. Check receipts for that question, newest first by SERVER time (`clientSeq`
+   is a client key, not a monotonic clock). `:org` is the `organization_id`
+   from step 2; it is the PK prefix and keeps the lookup index-backed:
 
    ```sql
    SELECT client_seq, accepted_version, saved_at
    FROM exam_answer_save_receipts
-   WHERE attempt_id = :attempt
+   WHERE organization_id = :org
+     AND attempt_id = :attempt
      AND question_id = :question
-   ORDER BY client_seq DESC
+   ORDER BY saved_at DESC, client_seq DESC
    LIMIT 20;
-   ```
-
-3. Check current attempt state (status; then read the question's entry from
-   the returned `answers` array):
-
-   ```sql
-   SELECT status, answers
-   FROM exam_attempts
-   WHERE id = :attempt;
    ```
 
 4. Search the app logs for the `reqId` (exact correlation, error responses)
@@ -83,10 +86,13 @@ shows the save never happened (F2/F3 with a retained `reqId`).
    fields plus the time window are the keys.
 5. Classify using the matrix above. Record F6 (UNKNOWN) explicitly rather
    than asserting non-arrival.
-6. Follow-up per fact: F2 is candidate-correctable (reload the attempt /
-   refresh the version); F3 is a retry; F4 needs no data recovery — a client
-   retry is safe because the protocol is idempotent; F5 is a client-observation
-   inconsistency, not a data loss; F6 is an evidence gap.
+6. Follow-up per fact: for F2, `STALE_VERSION` is resolved by reloading the
+   attempt and refreshing the version, while lifecycle/deadline reasons
+   (`ATTEMPT_ALREADY_SUBMITTED`, `ATTEMPT_CLOSED`, `DEADLINE_EXCEEDED`,
+   `INVALID_ANSWER`) are not fixed by a retry; F3 is a retry; F4 needs no data
+   recovery — a same-answer client retry is safe while the attempt is open;
+   F5 is a client-observation inconsistency, not a data loss; F6 is an
+   evidence gap.
 
 ## Why there is no durable refusal record (#861 decision)
 
@@ -95,17 +101,22 @@ table, (b) advisory evidence only — structured rejection logs plus the
 existing receipts/domain state, (c) reviving a deprecated action. Option (b)
 was adopted; (a) failed its own necessity test and (c) remains forbidden.
 
-- **Business necessity:** a refusal is fully reconstructible from the absence
-  of a receipt plus the current attempt state; no business decision consumes
-  a refusal row.
+- **Business necessity:** the refusal verdict and its reason are carried by
+  the 200 response and the WARN line; receipts plus domain state prove
+  accepted saves. No business decision consumes a durable refusal row, and
+  the absence of a receipt alone never proves a refusal (that is the UNKNOWN
+  boundary).
 - **Atomicity:** a refusal row would either join the save transaction (adding
   writes to the highest-frequency reject path) or sit outside it (allowing
   refusal/state divergence — a second failure model).
 - **Retention:** rejections are unbounded and client-retry-driven; each would
   need its own lifecycle and cascade semantics.
 - **Write amplification:** every `accepted: false` would become a durable
-  write while carrying no new information beyond `(attempt, question,
-  clientSeq, reason, requested version)` — exactly the log line's fields.
+  write while carrying no new information beyond what the log line already
+  records — `(organization, actor, attempt, question, clientSeq, reason,
+  serverVersion)`. The request's `baseVersion` is not logged; diagnose a
+  version conflict from the client's reported `clientSeq` + `reason` +
+  `serverVersion` and the receipt/state timeline.
 
 Adopted boundary: one structured WARN line per rejection, correlated by the
 automatic `reqId`, containing ids/reason/version only — never answer content
