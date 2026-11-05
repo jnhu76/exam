@@ -73,6 +73,33 @@ export function createAuditLogWriter<Action extends string>(
   };
 }
 
+/**
+ * WHY sortKeyUs: full-precision epoch-µs key for `created_at`, a µs-precision
+ * DB default. A JS Date (ms) key would fabricate ties between µs-distinct
+ * rows and let consumers disagree with THIS query's DB order inside one
+ * source — duplicating/dropping rows at page boundaries. Epoch µs < 2^53 →
+ * exact as a JS number. Shared by every consumer that must carry a row's
+ * exact instant out of a query (timeline merge, keyset cursor).
+ */
+const createdAtSortKeyUs = sql<number>`(extract(epoch from ${auditLogs.createdAt}) * 1000000)::double precision`;
+
+/**
+ * Rebuilds an exact µs-precision timestamptz literal from a non-negative
+ * epoch-µs key (the same bound `createdAtSortKeyUs` projects). BigInt keeps
+ * the ms/µs split exact — float division by 1000 here would corrupt the
+ * sub-ms digits the key exists to preserve. The literal binds as a query
+ * parameter cast to timestamptz, so the comparison column stays bare and
+ * sargable.
+ */
+function epochUsToTimestamptzParam(epochUs: number): string {
+  const us = BigInt(Math.trunc(epochUs));
+  const ms = Number(us / 1000n);
+  const subMs = (us % 1000n).toString().padStart(3, "0");
+  // toISOString() carries ms precision (`...SS.sssZ`): splice the µs digits
+  // in before the trailing `Z` so PostgreSQL receives the full instant.
+  return `${new Date(ms).toISOString().slice(0, 23)}${subMs}Z`;
+}
+
 export function createAuditLogQueryRepo(db: Database) {
   return {
     /**
@@ -178,17 +205,11 @@ export function createAuditLogQueryRepo(db: Database) {
       conditions.push(inArray(auditLogs.action, actions));
       const where =
         conditions.length === 1 ? conditions[0] : and(...conditions);
-      // WHY sortKeyUs: full-precision epoch-µs key for the merged timeline.
-      // `created_at` is DB-defaulted (µs clock); a JS Date
-      // (ms) merge key would fabricate ties between µs-distinct rows and
-      // let the merge disagree with THIS query's DB order inside one
-      // source — duplicating/dropping rows at page boundaries. Epoch µs
-      // < 2^53 → exact as a JS number.
       return db
         .select({
           auditLog: auditLogs,
           actorName: users.name,
-          sortKeyUs: sql<number>`(extract(epoch from ${auditLogs.createdAt}) * 1000000)::double precision`,
+          sortKeyUs: createdAtSortKeyUs,
         })
         .from(auditLogs)
         .leftJoin(users, eq(users.id, auditLogs.actorId))
@@ -305,19 +326,22 @@ export function createAuditLogQueryRepo(db: Database) {
      * Ordering is `(created_at DESC, id DESC)` — the `id` tiebreaker makes the
      * order total and stable even for rows sharing an exact `created_at`
      * instant. `after` is the decoded cursor of the last row of the previous
-     * page; rows strictly before it (in the ordering) are returned. Fetches
-     * `limit + 1` rows so the caller learns `hasMore` without a second query
-     * and never skips/duplicates rows when new inserts land between pages.
+     * page, carrying that row's full-precision `sortKeyUs`; rows strictly
+     * before it (in the ordering) are returned. Fetches `limit + 1` rows so
+     * the caller learns `hasMore` without a second query and never
+     * skips/duplicates rows when new inserts land between pages. Every item
+     * carries `sortKeyUs` so callers can issue a cursor position at the same
+     * precision the DB ordered by.
      */
     async listKeysetFiltered(
       ctx: TenantContext | RequestContext,
       params: {
         limit: number;
         filter?: AuditLogListFilter;
-        after?: { createdAt: Date; id: string };
+        after?: { createdAtUs: number; id: string };
       },
     ): Promise<{
-      items: AuditLogRowWithActor[];
+      items: Array<AuditLogRowWithActor & { sortKeyUs: number }>;
       hasMore: boolean;
     }> {
       const orgId = resolveOrganizationId(ctx);
@@ -343,13 +367,18 @@ export function createAuditLogQueryRepo(db: Database) {
       }
       if (params.after) {
         // Keyset predicate: strictly "before" the cursor row in the
-        // (created_at DESC, id DESC) ordering.
-        const after = params.after;
+        // (created_at DESC, id DESC) ordering. The cursor position arrives as
+        // an epoch-µs number and is rebuilt into an exact µs-precision
+        // timestamptz parameter (cast on the bound, never on the column) so
+        // the comparison is sargable and byte-identical to the DB's own
+        // ordering — a ms-truncated bound would drop µs-distinct rows inside
+        // the boundary millisecond.
+        const afterTs = epochUsToTimestamptzParam(params.after.createdAtUs);
         const afterPredicate = or(
-          lt(auditLogs.createdAt, after.createdAt),
+          lt(auditLogs.createdAt, sql`${afterTs}::timestamptz`),
           and(
-            eq(auditLogs.createdAt, after.createdAt),
-            lt(auditLogs.id, after.id),
+            eq(auditLogs.createdAt, sql`${afterTs}::timestamptz`),
+            lt(auditLogs.id, params.after.id),
           ),
         );
         if (afterPredicate) {
@@ -362,6 +391,7 @@ export function createAuditLogQueryRepo(db: Database) {
         .select({
           auditLog: auditLogs,
           actorName: users.name,
+          sortKeyUs: createdAtSortKeyUs,
         })
         .from(auditLogs)
         .leftJoin(users, eq(users.id, auditLogs.actorId))

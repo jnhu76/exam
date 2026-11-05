@@ -1540,37 +1540,46 @@ describe("audit contracts", () => {
     ).toBe(true);
   });
 
-  it("audit cursor round-trips the snapshot bound and the last row", () => {
+  it("audit cursor round-trips the snapshot bound and the last row at µs precision", () => {
     const snapshotTo = "2026-08-30T10:00:00.000Z";
-    const createdAt = "2026-08-30T09:36:21.000Z";
+    // Sub-millisecond digits a JS Date cannot carry: 1785…456 µs, an exact
+    // integer < 2^53.
+    const createdAtUs = Date.UTC(2026, 7, 30, 9, 36, 21, 123) * 1000 + 456;
     const id = "33333333-3333-4333-8333-333333333333";
-    const cursor = encodeAuditCursor(snapshotTo, createdAt, id);
-    expect(decodeAuditCursor(cursor)).toEqual({ snapshotTo, createdAt, id });
+    const cursor = encodeAuditCursor(snapshotTo, createdAtUs, id);
+    expect(decodeAuditCursor(cursor)).toEqual({ snapshotTo, createdAtUs, id });
   });
 
-  it("audit cursor accepts Dates and decodes to the same ISO instants", () => {
+  it("audit cursor accepts a Date snapshot bound and its wire format carries the epoch-µs position", () => {
     const snapshotTo = new Date("2026-08-30T10:00:00.000Z");
-    const createdAt = new Date("2026-08-30T09:36:21.000Z");
+    const createdAtUs = Date.UTC(2026, 7, 30, 9, 36, 21, 123) * 1000 + 456;
     const id = "44444444-4444-4444-8444-444444444444";
-    const cursor = encodeAuditCursor(snapshotTo, createdAt, id);
-    expect(decodeAuditCursor(cursor)).toEqual({
-      snapshotTo: "2026-08-30T10:00:00.000Z",
-      createdAt: "2026-08-30T09:36:21.000Z",
-      id,
-    });
+    const cursor = encodeAuditCursor(snapshotTo, createdAtUs, id);
+    expect(cursor).toBe(`v3|2026-08-30T10:00:00.000Z|${createdAtUs}|${id}`);
+    expect(decodeAuditCursor(cursor)?.createdAtUs).toBe(createdAtUs);
   });
 
   it("audit cursor rejects malformed values and stale versions", () => {
     const id = "55555555-5555-4555-8555-555555555555";
     const ts = "2026-08-30T00:00:00.000Z";
+    const us = String(Date.UTC(2026, 7, 30) * 1000);
     expect(decodeAuditCursor("garbage")).toBeNull();
-    // A well-formed 4-segment cursor carrying an unknown (pre-snapshot v1)
-    // version must be rejected by the version gate, not by the length gate.
+    // Well-formed 4-segment cursors carrying stale versions (pre-snapshot
+    // v1, ms-precision v2) must be rejected by the version gate, not by the
+    // length gate — the client restarts at page 1 instead of resuming with a
+    // lossy position.
     expect(decodeAuditCursor(`v1|${ts}|${ts}|${id}`)).toBeNull();
-    expect(decodeAuditCursor(`v2|not-a-date|${ts}|${id}`)).toBeNull();
-    expect(decodeAuditCursor(`v2|${ts}|not-a-date|${id}`)).toBeNull();
-    expect(decodeAuditCursor(`v2|${ts}|${ts}|not-an-id`)).toBeNull();
-    expect(decodeAuditCursor(`v2|${ts}|${ts}|${id}|extra`)).toBeNull();
+    expect(decodeAuditCursor(`v2|${ts}|${ts}|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v3|not-a-date|${us}|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v3|${ts}|not-a-number|${id}`)).toBeNull();
+    // Fractional or negative epoch-µs positions are not exact row instants.
+    expect(decodeAuditCursor(`v3|${ts}|123.5|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v3|${ts}|-5|${id}`)).toBeNull();
+    // Beyond 2^53 an epoch-µs value is no longer an exact JS integer: 2^53
+    // itself is the first rejected boundary (16 digits, still fails the gate).
+    expect(decodeAuditCursor(`v3|${ts}|9007199254740992|${id}`)).toBeNull();
+    expect(decodeAuditCursor(`v3|${ts}|${us}|not-an-id`)).toBeNull();
+    expect(decodeAuditCursor(`v3|${ts}|${us}|${id}|extra`)).toBeNull();
   });
 });
 

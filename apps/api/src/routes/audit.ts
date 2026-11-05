@@ -154,7 +154,7 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
       // `snapshotTo`; a continuation page takes it from the cursor so rows
       // written mid-pagination never appear, and a stale client-echoed `to`
       // can never widen the window back open.
-      let after: { createdAt: Date; id: string } | undefined;
+      let after: { createdAtUs: number; id: string } | undefined;
       let snapshotTo: Date;
       if (query.cursor) {
         const decoded = decodeAuditCursor(query.cursor);
@@ -163,7 +163,7 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
             .code(400)
             .send(buildErrorResponse(request.id, "INVALID_CURSOR"));
         }
-        after = { createdAt: new Date(decoded.createdAt), id: decoded.id };
+        after = { createdAtUs: decoded.createdAtUs, id: decoded.id };
         snapshotTo = new Date(decoded.snapshotTo);
       } else {
         snapshotTo = query.to ? new Date(query.to) : new Date();
@@ -178,14 +178,12 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
         ...(after ? { after } : {}),
       });
 
+      // The cursor position carries the last row's full-precision epoch-µs
+      // key — the same instant the DB ordered by, not a ms-truncated Date.
       const last = items[items.length - 1];
       const nextCursor =
         hasMore && last
-          ? encodeAuditCursor(
-              snapshotTo,
-              last.auditLog.createdAt,
-              last.auditLog.id,
-            )
+          ? encodeAuditCursor(snapshotTo, last.sortKeyUs, last.auditLog.id)
           : null;
 
       return {
