@@ -147,6 +147,52 @@ describe("clientEventRepo.createMany", () => {
       .delete(schema.clientEvents)
       .where(eq(schema.clientEvents.name, marker));
   });
+
+  it("keeps the SAME user+eventId in two organizations as two rows (#863 org boundary)", async () => {
+    // The unique key is (organization_id, user_id, event_id). Same userId and
+    // eventId across organizations MUST both insert; a regression to
+    // (user_id, event_id) would dedupe the second one.
+    const orgA = await seedOrg("ClientEventIdemOrgA");
+    const orgB = await seedOrg("ClientEventIdemOrgB");
+    const repo = createClientEventRepo(db);
+    const marker = `idem.org.${randomUUID()}`;
+    const userId = randomUUID();
+    const eventId = "evt-repo-org-00000001";
+    const row = {
+      userId,
+      attemptId: null,
+      examId: null,
+      questionId: null,
+      kind: "log" as const,
+      level: "info" as const,
+      name: marker,
+      route: null,
+      occurredAt: new Date(),
+      receivedAt: new Date(),
+      clientSessionId: null,
+      eventId,
+      metadata: {},
+      userAgent: null,
+    };
+
+    const inA = await repo.createMany(createContext(orgA), [row]);
+    const inB = await repo.createMany(createContext(orgB), [row]);
+    expect(inA).toEqual({ inserted: 1, deduplicated: 0 });
+    expect(inB).toEqual({ inserted: 1, deduplicated: 0 });
+
+    const rows = await db
+      .select()
+      .from(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, marker));
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.organizationId))).toEqual(
+      new Set([orgA, orgB]),
+    );
+
+    await db
+      .delete(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, marker));
+  });
 });
 
 describe("clientEventRepo read methods (proctor monitoring)", () => {

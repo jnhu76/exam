@@ -296,9 +296,10 @@ describe("POST /api/client-events", () => {
         .where(eq(schema.clientEvents.name, "test.event.idem3"));
     });
 
-    it("the same (user, eventId) under a DIFFERENT organization stores both rows (org boundary in the key)", async () => {
-      // Cross-tenant proof: the unique key is (organization, user, eventId).
-      // A regression to (user, eventId) or eventId-only would collapse these.
+    it("the same eventId under a DIFFERENT organization stores both rows (org boundary in the key)", async () => {
+      // Cross-tenant proof at the route level. The same-user/same-eventId org
+      // boundary is pinned by clientEventRepo.test.ts, where the repo accepts
+      // a synthetic shared userId across two organization contexts.
       const otherOrgId = crypto.randomUUID();
       const otherUserId = crypto.randomUUID();
       const now = new Date();
@@ -325,7 +326,7 @@ describe("POST /api/client-events", () => {
         id: crypto.randomUUID(),
         organizationId: otherOrgId,
         userId: otherUserId,
-        role: "Candidate" as never,
+        role: "Candidate",
         isPrimary: true,
         isActive: true,
         createdAt: now,
