@@ -544,6 +544,19 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 7,
     },
     {
+      // #866: read-only metadata projection; same capability boundary as the
+      // timeline it complements.
+      method: "GET",
+      path: "/admin/attempts/:attemptId/answer-save-receipt-summary",
+      legacyGate: "Admin",
+      permission: Permission.AttemptTimelineView,
+      scope: Scope.Attempt,
+      resolver: "attempt",
+      sensitive: true,
+      proctorAccess: "assignment_scoped",
+      migrationStage: 7,
+    },
+    {
       method: "GET",
       path: "/admin/attempts/:attemptId/export",
       legacyGate: "Admin",

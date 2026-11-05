@@ -369,7 +369,7 @@ describe("whole-application authorization route regression lock", () => {
     ).toEqual([]);
   });
 
-  it("the full composition reconciles to 143 primary routes (122 protected + 21 non-protected)", () => {
+  it("the full composition reconciles to 144 primary routes (123 protected + 21 non-protected)", () => {
     const protectedCount = capturedRoutes.filter(
       (r) => categorize(r) === "protected",
     ).length;
@@ -384,11 +384,11 @@ describe("whole-application authorization route regression lock", () => {
     expect(
       protectedCount,
       "protected (capability/ownership-gated) routes",
-    ).toBe(122);
+    ).toBe(123);
     expect(nonProtectedCount, "non-protected (auth-only + public) routes").toBe(
       21,
     );
-    expect(capturedRoutes.length, "total primary routes").toBe(143);
+    expect(capturedRoutes.length, "total primary routes").toBe(144);
   });
 
   it("every protected route's capability gate carries a valid catalog permission (no ad-hoc permission strings)", () => {

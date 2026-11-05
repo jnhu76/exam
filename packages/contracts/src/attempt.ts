@@ -260,9 +260,6 @@ export type SaveAnswerResponseDTO = z.infer<typeof SaveAnswerResponseSchema>;
 // ── Route Params ─────────────────────────────────────────────────
 
 /**
- * Route params schema for endpoints that operate on a specific attempt by UUID.
- */
-/**
  * Response schema for `GET /api/admin/attempts/:attemptId/answer-save-receipt-summary`
  * (#866): a deliberately WEAK, read-only aggregate over
  * `exam_answer_save_receipts` — receipt count, MAX clientSeq, last server
@@ -285,6 +282,9 @@ export type AnswerSaveReceiptSummary = z.infer<
   typeof AnswerSaveReceiptSummarySchema
 >;
 
+/**
+ * Route params schema for endpoints that operate on a specific attempt by UUID.
+ */
 export const AttemptIdParamsSchema = z.object({
   attemptId: z.string().uuid(),
 });

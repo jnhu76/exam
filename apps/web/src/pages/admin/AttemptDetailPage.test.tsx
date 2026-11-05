@@ -1138,6 +1138,7 @@ describe("AttemptDetailPage", () => {
     expect(await screen.findByText("保存收据摘要")).toBeInTheDocument();
     expect(screen.getByText("已接受保存 5 次")).toBeInTheDocument();
     expect(screen.getByText("最大保存序号（clientSeq）3")).toBeInTheDocument();
+    expect(screen.getByText(/最后保存（服务端时间）/)).toBeInTheDocument();
     expect(
       screen.getByText(/收据只证明协议在服务端时刻接受了某次保存/),
     ).toBeInTheDocument();
@@ -1153,13 +1154,16 @@ describe("AttemptDetailPage", () => {
     expect(await screen.findByText(/这不等于考生从未保存/)).toBeInTheDocument();
   });
 
-  it("#866 a failed summary fetch renders the retry fallback without displacing the rest", async () => {
+  it("#866 a failed summary fetch renders the retry fallback and retry refetches", async () => {
+    let summaryAttempts = 0;
     apiGet.mockImplementation(async (url: string) => {
       if (
         typeof url === "string" &&
         url.includes("/answer-save-receipt-summary")
       ) {
-        throw new Error("boom");
+        summaryAttempts += 1;
+        if (summaryAttempts === 1) throw new Error("boom");
+        return { receiptCount: 2, maxClientSeq: 1, lastSavedAt: null };
       }
       if (typeof url === "string" && url.includes("/timeline")) {
         return mockTimelineEvents;
@@ -1168,5 +1172,8 @@ describe("AttemptDetailPage", () => {
     });
     renderPage();
     expect(await screen.findByText("加载保存收据摘要失败")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("已接受保存 2 次")).toBeInTheDocument();
+    expect(summaryAttempts).toBe(2);
   });
 });

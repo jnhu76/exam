@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
-import { eq, like } from "drizzle-orm";
+import { like } from "drizzle-orm";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
@@ -9,7 +9,7 @@ import { signJWT } from "@exam/auth/session";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
 import { hashPassword } from "@exam/auth/password";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
-import type { RequestContext, Role } from "@exam/domain";
+import type { Role } from "@exam/domain";
 import { buildExamPayload } from "./__tests__/attempts.testHelpers.js";
 
 const RECEIPT_SUMMARY_PREFIX = "receipt-summary-test-";
@@ -243,17 +243,6 @@ describe("attempt routes — answer-save-receipt summary (#866)", () => {
       return { attemptId: startRes.json().id as string };
     }
 
-    function makeAdminCtx(t: IsolatedTestOrg): RequestContext {
-      return {
-        actorId: t.adminUserId,
-        organizationId: t.orgId,
-        role: "Admin",
-        permissions: [],
-        sessionId: "test",
-        targetOrganizationId: t.orgId,
-      };
-    }
-
     beforeEach(async () => {
       await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
@@ -277,7 +266,6 @@ describe("attempt routes — answer-save-receipt summary (#866)", () => {
     });
 
     it("requires authentication (401 without token)", async () => {
-      const t = await createIsolatedTestOrg();
       const res = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/attempts/${crypto.randomUUID()}/answer-save-receipt-summary`,
