@@ -34,8 +34,8 @@ require positive evidence; absence of evidence never selects F1.
 | --- | --- | --- |
 | **F1 — pre-arrival loss** | Client-side proof that no request was ever sent or completed (e.g. offline queue never flushed, connection refused before send) | The save never reached the API. |
 | **F2 — server rejection** | HTTP 200 with `accepted: false` + `reason`, plus the matching `Answer save rejected` WARN line | The server evaluated the save and refused it. This rejection creates no new receipt and changes no answer. An EARLIER receipt for the same `(question, clientSeq)` can still exist (`CONFLICTING_PAYLOAD`: the key was reused with a different canonical answer), so receipt-first investigation must not stop at "a receipt exists". Reasons: `STALE_VERSION`, `CONFLICTING_PAYLOAD`, `ATTEMPT_ALREADY_SUBMITTED`, `ATTEMPT_CLOSED`, `DEADLINE_EXCEEDED`, `INVALID_ANSWER`, … This is a protocol verdict, NOT a transport failure. |
-| **F3 — transaction/route failure** | HTTP 5xx, or HTTP 409 `RESOURCE_CONFLICT` when a retry-exhausted/constraint failure is mapped to conflict (error envelope carries `requestId`); no new receipt for that `clientSeq` — a concurrent winner may already have one | The save did not commit; the receipt + answer write are atomic. Retryable. |
-| **F4 — ACK loss** | A receipt exists for that `(question, clientSeq)` with the same canonical answer, and the attempt state reflects it, but the client never observed `accepted: true` (timeout, tab close, response dropped) | The save IS durable — the client's belief is false. Re-sending the same `clientSeq` with the SAME canonical answer while the attempt is still open returns the recorded result with zero new writes. A receipt for an older `clientSeq` does not describe current state (a newer version may be saved), and replay stops returning the receipt once the lifecycle/deadline guards reject first. |
+| **F3 — transaction/route failure** | HTTP 5xx, or HTTP 409 `RESOURCE_CONFLICT` when a retry-exhausted/constraint failure is mapped to conflict (error envelope carries `requestId`); no new receipt for that `clientSeq` — a concurrent winner may already have one | The save's transaction did not commit; receipt + answer write are atomic, so no partial state exists. A concurrent winner may have committed the same replay key — check its receipt before retrying. Retryable. |
+| **F4 — ACK loss** | A receipt exists for that `(question, clientSeq)` with the same canonical answer, and the version lineage is consistent, but the client never observed `accepted: true` (timeout, tab close, response dropped) | The save IS durable — the client's belief is false. An older receipt still proves the save it recorded was accepted, even if newer saves exist. Re-sending the same `clientSeq` with the SAME canonical answer while the attempt is still open returns the recorded result with zero new writes; a receipt for an older `clientSeq` does not describe current state, and replay stops returning the receipt once the lifecycle/deadline guards reject first. |
 | **F5 — success** | Receipt exists and the client observed `accepted: true` | The save is durable and acknowledged. |
 | **F6 — UNKNOWN** | Evidence missing, insufficient, or conflicting: logs rotated past retention, no `reqId` retained, time window ambiguous, attempt deleted (receipts cascaded) | The fact cannot be established. Report UNKNOWN explicitly. |
 
@@ -87,12 +87,15 @@ logs/domain state settle F2/F3.
 5. Classify using the matrix above. Record F6 (UNKNOWN) explicitly rather
    than asserting non-arrival.
 6. Follow-up per fact: for F2, `STALE_VERSION` is resolved by reloading the
-   attempt and refreshing the version, while lifecycle/deadline reasons
-   (`ATTEMPT_ALREADY_SUBMITTED`, `ATTEMPT_CLOSED`, `DEADLINE_EXCEEDED`,
-   `INVALID_ANSWER`) are not fixed by a retry; F3 is a retry; F4 needs no data
-   recovery — a same-answer client retry is safe while the attempt is open;
-   F5 is a client-observation inconsistency, not a data loss; F6 is an
-   evidence gap.
+   attempt and refreshing the version; `INVALID_ANSWER` is a shape/
+   canonicalization problem — correct the answer and retry with a fresh
+   `clientSeq`; `CONFLICTING_PAYLOAD` means the client reused a `clientSeq`
+   with different content — never retry that key, allocate a fresh one and
+   reconcile the stored content; lifecycle/deadline reasons
+   (`ATTEMPT_ALREADY_SUBMITTED`, `ATTEMPT_CLOSED`, `DEADLINE_EXCEEDED`) are not
+   fixed by a retry. F3 is a retry; F4 needs no data recovery — a same-answer
+   client retry is safe while the attempt is open; F5 is a client-observation
+   inconsistency, not a data loss; F6 is an evidence gap.
 
 ## Why there is no durable refusal record (#861 decision)
 

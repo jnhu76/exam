@@ -631,7 +631,7 @@ describe("attempt routes", () => {
       expect(entry.attemptId).toBe(attemptId);
       expect(entry.questionId).toBe(qId);
       expect(entry.clientSeq).toBe(99);
-      expect(typeof entry.serverVersion).toBe("number");
+      expect(entry.serverVersion).toBe(2);
       // The credential-shaped answer is not a valid option id, so shape
       // validation (#301) rejects it before the version check: INVALID_ANSWER
       // rather than STALE_VERSION. Either way it is the same rejection branch
@@ -641,6 +641,41 @@ describe("attempt routes", () => {
       expect(typeof entry.reqId).toBe("string");
       // Privacy guardrail (#861): the raw answer never enters the log.
       expect(JSON.stringify(entry)).not.toContain("top-secret-answer-value");
+
+      // A STALE_VERSION rejection is the one whose 200 response carries
+      // `details.serverAnswer`. That answer is a frozen client-facing conflict
+      // detail; it must never be absorbed into the log line. Use a
+      // well-shaped but stale answer and assert the second line's fields plus
+      // the absence of every answer-bearing key.
+      logLines.length = 0;
+      const staleRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "a",
+          clientSeq: 100,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(staleRes.statusCode).toBe(200);
+      expect(staleRes.json().reason).toBe("STALE_VERSION");
+      // The conflict contract DOES expose the stored answer to the client.
+      expect(staleRes.json().details).toEqual({ serverAnswer: "c" });
+      const staleLines = logLines
+        .flatMap((line) => line.split("\n"))
+        .filter((line) => line.includes("Answer save rejected"))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(staleLines).toHaveLength(1);
+      const staleEntry = staleLines[0]!;
+      expect(staleEntry.reason).toBe("STALE_VERSION");
+      expect(staleEntry.serverVersion).toBe(2);
+      for (const key of ["answer", "serverAnswer", "latestAnswer", "details"]) {
+        expect(staleEntry).not.toHaveProperty(key);
+      }
     });
 
     it("preserves a null server answer in stale-version details", async () => {
