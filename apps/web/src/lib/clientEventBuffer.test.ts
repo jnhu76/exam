@@ -273,6 +273,36 @@ describe("logger → buffer integration", () => {
   beforeEach(() => setBuffer(null));
   afterEach(() => setBuffer(null));
 
+  it("logger attaches a unique eventId per event; a resent batch carries the SAME ids (#863 idempotency)", async () => {
+    // First flush fails (ACK lost), the batch requeues, the retry sends the
+    // identical event objects — so the server-side (org, user, eventId)
+    // unique key absorbs the duplicate instead of storing it twice.
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const buf = new ClientEventBuffer({
+      send,
+      batchSize: 100,
+      flushIntervalMs: 0,
+    });
+    setBuffer(buf);
+    logger.warn("test.idem.one");
+    logger.warn("test.idem.two");
+    await buf.flush(); // fails, requeued
+    expect(buf.size).toBe(2);
+    buf.clearBackoffForTest();
+    const sent = await buf.flush();
+    expect(sent).toBe(2);
+    expect(send).toHaveBeenCalledTimes(2);
+    const first = send.mock.calls[0]![0] as ClientEvent[];
+    const retry = send.mock.calls[1]![0] as ClientEvent[];
+    // Ids exist, are unique per event, and are IDENTICAL across the resend.
+    expect(first.map((e) => e.eventId)).toEqual(retry.map((e) => e.eventId));
+    expect(new Set(first.map((e) => e.eventId)).size).toBe(2);
+    expect(first[0]!.eventId).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+  });
+
   it("logger routes events through the buffer and sanitizes metadata", async () => {
     const send = vi.fn().mockResolvedValue(true);
     const buf = new ClientEventBuffer({

@@ -1,4 +1,5 @@
 import type { ClientEvent, ClientEventLevel } from "@exam/contracts";
+import { createContextSafeUuid } from "./uuid";
 import { getBuffer } from "./logger";
 import { logger } from "./logger";
 import { sanitizeClientEvent } from "./sanitizeClientEvent";
@@ -104,6 +105,8 @@ function emitOne(
     name,
     occurredAt: new Date().toISOString(),
     route: currentRoute(),
+    // #863: per-event idempotency key — same rationale as logger.ts.
+    eventId: createContextSafeUuid(),
     clientSessionId: getClientSessionId(),
     ...(opts.attemptId !== undefined ? { attemptId: opts.attemptId } : {}),
     ...(opts.examId !== undefined ? { examId: opts.examId } : {}),

@@ -77,6 +77,7 @@ describe("clientEventRepo.deleteOlderThan (retention primitive)", () => {
       occurredAt: receivedAt,
       receivedAt,
       clientSessionId: null,
+      eventId: null,
       metadata: {},
       userAgent: null,
     };

@@ -61,6 +61,7 @@ describe("clientEventRepo.createMany", () => {
         occurredAt: new Date("2026-06-25T00:00:00.000Z"),
         receivedAt,
         clientSessionId: null,
+        eventId: null,
         metadata: { foo: "bar" },
         userAgent: "vitest",
       },
@@ -76,12 +77,13 @@ describe("clientEventRepo.createMany", () => {
         occurredAt: new Date("2026-06-25T00:00:01.000Z"),
         receivedAt,
         clientSessionId: null,
+        eventId: null,
         metadata: {},
         userAgent: null,
       },
     ]);
 
-    expect(inserted).toBe(2);
+    expect(inserted).toEqual({ inserted: 2, deduplicated: 0 });
 
     const rows = await db
       .select()
@@ -106,8 +108,8 @@ describe("clientEventRepo.createMany", () => {
     const ctx = createContext(orgId);
     const repo = createClientEventRepo(db);
 
-    const inserted = await repo.createMany(ctx, []);
-    expect(inserted).toBe(0);
+    const result = await repo.createMany(ctx, []);
+    expect(result).toEqual({ inserted: 0, deduplicated: 0 });
   });
 
   it("keeps events isolated per organization", async () => {
@@ -129,6 +131,7 @@ describe("clientEventRepo.createMany", () => {
         occurredAt: new Date(),
         receivedAt: new Date(),
         clientSessionId: null,
+        eventId: null,
         metadata: {},
         userAgent: null,
       },
@@ -139,6 +142,52 @@ describe("clientEventRepo.createMany", () => {
       .from(schema.clientEvents)
       .where(eq(schema.clientEvents.organizationId, orgB));
     expect(inB.filter((r) => r.name === marker)).toHaveLength(0);
+
+    await db
+      .delete(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, marker));
+  });
+
+  it("keeps the SAME user+eventId in two organizations as two rows (#863 org boundary)", async () => {
+    // The unique key is (organization_id, user_id, event_id). Same userId and
+    // eventId across organizations MUST both insert; a regression to
+    // (user_id, event_id) would dedupe the second one.
+    const orgA = await seedOrg("ClientEventIdemOrgA");
+    const orgB = await seedOrg("ClientEventIdemOrgB");
+    const repo = createClientEventRepo(db);
+    const marker = `idem.org.${randomUUID()}`;
+    const userId = randomUUID();
+    const eventId = "evt-repo-org-00000001";
+    const row = {
+      userId,
+      attemptId: null,
+      examId: null,
+      questionId: null,
+      kind: "log" as const,
+      level: "info" as const,
+      name: marker,
+      route: null,
+      occurredAt: new Date(),
+      receivedAt: new Date(),
+      clientSessionId: null,
+      eventId,
+      metadata: {},
+      userAgent: null,
+    };
+
+    const inA = await repo.createMany(createContext(orgA), [row]);
+    const inB = await repo.createMany(createContext(orgB), [row]);
+    expect(inA).toEqual({ inserted: 1, deduplicated: 0 });
+    expect(inB).toEqual({ inserted: 1, deduplicated: 0 });
+
+    const rows = await db
+      .select()
+      .from(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, marker));
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.organizationId))).toEqual(
+      new Set([orgA, orgB]),
+    );
 
     await db
       .delete(schema.clientEvents)
@@ -198,6 +247,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
         occurredAt: new Date(at.getTime() + i),
         receivedAt: new Date(at.getTime() + i),
         clientSessionId: null,
+        eventId: null,
         metadata: r.metadata ?? {},
         userAgent: null,
       })),
@@ -288,6 +338,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
         occurredAt: new Date(at.getTime() + 9000),
         receivedAt: new Date(at.getTime() + 1000),
         clientSessionId: null,
+        eventId: null,
         metadata: {},
         userAgent: null,
       },
@@ -303,6 +354,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
         occurredAt: new Date(at.getTime() + 8000),
         receivedAt: new Date(at.getTime() + 2000),
         clientSessionId: null,
+        eventId: null,
         metadata: { answer: "SECRET_ANSWER", token: "abc", errorCode: "NET" },
         userAgent: null,
       },
@@ -318,6 +370,7 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
         occurredAt: new Date(at.getTime() + 7000),
         receivedAt: new Date(at.getTime() + 3000),
         clientSessionId: null,
+        eventId: null,
         metadata: {},
         userAgent: null,
       },

@@ -130,6 +130,50 @@ describe("ClientEventSchema", () => {
   });
 });
 
+describe("ClientEventSchema — eventId idempotency key (#863)", () => {
+  it("accepts a well-formed eventId", () => {
+    const event = ClientEventSchema.parse({
+      kind: "log",
+      level: "info",
+      name: "system_diagnostics.refreshed",
+      occurredAt: "2026-06-25T00:00:00.000Z",
+      eventId: "evt-0123456789abcdef",
+    });
+    expect(event.eventId).toBe("evt-0123456789abcdef");
+  });
+
+  it("rejects eventIds that are too short, too long, or not opaque [A-Za-z0-9_-]", () => {
+    const base = {
+      kind: "log",
+      level: "info",
+      name: "system_diagnostics.refreshed",
+      occurredAt: "2026-06-25T00:00:00.000Z",
+    };
+    expect(
+      ClientEventSchema.safeParse({ ...base, eventId: "short" }).success,
+    ).toBe(false);
+    expect(
+      ClientEventSchema.safeParse({ ...base, eventId: "x".repeat(65) }).success,
+    ).toBe(false);
+    // Free-form prose / spaces are not opaque keys.
+    expect(
+      ClientEventSchema.safeParse({ ...base, eventId: "has spaces in it!!" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("keeps the field optional — legacy clients without eventId stay valid", () => {
+    const base = {
+      kind: "log",
+      level: "info",
+      name: "system_diagnostics.refreshed",
+      occurredAt: "2026-06-25T00:00:00.000Z",
+    };
+    const event = ClientEventSchema.parse(base);
+    expect(event.eventId).toBeUndefined();
+  });
+});
+
 describe("ClientEventBatchSchema", () => {
   it("accepts a valid batch within the size limit", () => {
     const events = Array.from({ length: 5 }, () => baseEvent());

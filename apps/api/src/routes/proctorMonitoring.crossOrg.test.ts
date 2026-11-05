@@ -119,6 +119,7 @@ describe("Proctor scoped routes — cross-org isolation", () => {
           occurredAt: new Date(),
           receivedAt: new Date(),
           clientSessionId: "sess-b-1",
+          eventId: null,
           metadata: {},
           userAgent: null,
         },

@@ -103,6 +103,17 @@ export const ClientEventSchema = z
     examId: z.string().min(1).max(200).optional(),
     questionId: z.string().min(1).max(200).optional(),
     clientSessionId: z.string().min(1).max(200).optional(),
+    // #863 idempotency key: client-generated, stable across resends (ACK
+    // lost / split-batch retry / tab reload), opaque to the server. Optional
+    // by design — legacy clients omit it and keep append-only ingestion.
+    // Dedup identity is (organization, authenticated user, eventId); an
+    // eventId alone proves nothing and is NEVER a trusted business identity.
+    eventId: z
+      .string()
+      .min(8)
+      .max(64)
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .superRefine((event, ctx) => {

@@ -121,7 +121,9 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
         events,
       );
 
-      const inserted = await createClientEventRepo(fastify.db).createMany(
+      const { inserted, deduplicated } = await createClientEventRepo(
+        fastify.db,
+      ).createMany(
         ctx,
         events.map((event, i) => ({
           userId: ctx.actorId,
@@ -141,6 +143,7 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
             event.clientSessionId !== undefined
               ? redactCredentialShapedValue(event.clientSessionId)
               : null,
+          eventId: event.eventId ?? null,
           // Defense-in-depth: re-sanitize server-side so a malicious client
           // that bypassed (or skipped) client-side redaction cannot persist
           // credentials or exam content. The shared implementation in
@@ -150,7 +153,11 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
         })),
       );
 
-      return { accepted: inserted };
+      // #863: deduplicated rows count as accepted. `accepted < n` is the
+      // client's failure signal (clientEvents.ts postClientEvents); treating
+      // a legitimate dedup as a partial failure would loop the resend that
+      // idempotency exists to absorb.
+      return { accepted: inserted + deduplicated };
     },
   );
 };

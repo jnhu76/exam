@@ -81,6 +81,7 @@ describe("client-event retention executor", () => {
       occurredAt: receivedAt,
       receivedAt,
       clientSessionId: null,
+      eventId: null,
       metadata: {},
       userAgent: null,
     };

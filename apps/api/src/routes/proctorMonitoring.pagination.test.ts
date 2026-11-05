@@ -8,6 +8,7 @@ import candidateRoutes from "./candidate.js";
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 import proctorMonitoringRoutes from "./proctorMonitoring.js";
+import clientEventRoutes from "./clientEvents.js";
 import {
   buildTestApp,
   createCandidateViaApi,
@@ -32,12 +33,15 @@ const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(examRoutes);
   await fastify.register(attemptRoutes);
   await fastify.register(proctorMonitoringRoutes);
+  await fastify.register(clientEventRoutes);
 };
 
 describe("proctor timeline pagination (M2 corrective)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let attemptId: string;
   let examId: string;
+  /** Token of the enrolled candidate who owns `attemptId`. */
+  let candToken: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(combinedPlugin, { prefix: "/api" });
@@ -77,6 +81,7 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     });
     expect(start.statusCode).toBe(201);
     attemptId = start.json().id as string;
+    candToken = cand.token;
   });
 
   afterAll(async () => {
@@ -127,6 +132,7 @@ describe("proctor timeline pagination (M2 corrective)", () => {
           occurredAt: opts?.occurredAt ?? receivedAt,
           receivedAt,
           clientSessionId: "pagination-sess",
+          eventId: null,
           metadata: {},
           userAgent: null,
         },
@@ -413,6 +419,7 @@ describe("proctor timeline pagination (M2 corrective)", () => {
       occurredAt: at(i),
       receivedAt: at(i),
       clientSessionId: "p5-sess",
+      eventId: null,
       metadata: {},
       userAgent: null,
     }));
@@ -448,6 +455,7 @@ describe("proctor timeline pagination (M2 corrective)", () => {
         occurredAt: at(-1),
         receivedAt: at(-1),
         clientSessionId: "p5-sess",
+        eventId: null,
         metadata: {},
         userAgent: null,
       });
@@ -556,5 +564,36 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     expect(page2.items.map((i) => i.id)).toEqual([
       "00000000-0000-4000-8000-00000000000b",
     ]);
+  });
+
+  // P8 (#863): a replayed eventId must not inflate the timeline's total or
+  // duplicate rows across the merged-source pagination read path.
+  it("P8: replayed eventId stores one row and does not inflate timeline total", async () => {
+    const base = new Date("2026-09-15T10:00:00.000Z");
+    const event = {
+      kind: "exam_telemetry",
+      level: "info",
+      name: "p8_replayed_event",
+      occurredAt: base.toISOString(),
+      attemptId,
+      eventId: "evt-p8-000000001",
+    };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": candToken },
+        payload: { events: [event] },
+      });
+      expect(res.statusCode).toBe(200);
+      // Deduplicated rows still count as accepted (no client resend loop).
+      expect(res.json().accepted).toBe(1);
+    }
+
+    const timeline = await fetchTimeline(10, 1);
+    expect(timeline.total).toBe(1);
+    expect(
+      timeline.items.filter((i) => i.name === "p8_replayed_event"),
+    ).toHaveLength(1);
   });
 });
