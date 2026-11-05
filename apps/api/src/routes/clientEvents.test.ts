@@ -270,6 +270,32 @@ describe("POST /api/client-events", () => {
         .where(eq(schema.clientEvents.name, "test.event.route875"));
     });
 
+    it("strips query/fragment even from an UNPARSEABLE route (fallback must stay query-free)", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.route875bad",
+              route: "http://[?token=supersecret&invite=alice%40x.local",
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const row = await fetchRow("test.event.route875bad");
+      expect(row).not.toBeNull();
+      expect(row!.route).toBe("http://[");
+      expect(JSON.stringify(row)).not.toContain("supersecret");
+      expect(JSON.stringify(row)).not.toContain("invite");
+
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.route875bad"));
+    });
+
     it("redacts a credential-shaped clientSessionId; the normal UUID passes through", async () => {
       const response = await ctx.app.inject({
         method: "POST",

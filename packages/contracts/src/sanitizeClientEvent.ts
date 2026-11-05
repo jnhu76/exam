@@ -56,28 +56,138 @@ const MAX_DEPTH = 5;
  * narrow — a general sensitive-content detector is out of scope (#875
  * non-goal); anything not matching keeps flowing verbatim.
  *
+ * The detectors are LINEAR in the input length. Metadata values are bounded
+ * per event (32 KiB) but a 32 KiB adversarial string is enough for a
+ * backtracking pattern to block the event loop for seconds on an
+ * authenticated ingestion route (#875 review), so the JWT/userinfo shapes are
+ * scanned by hand and the anchored Bearer/Basic form is a single class run.
+ *
  * - JWT compact form (three base64url segments with plausible header/payload/
- *   signature lengths), matched even when embedded in surrounding prose;
+ *   signature lengths), matched as a standalone token even when embedded in
+ *   surrounding prose;
  * - a whole-value credential scheme (`Bearer <token>` / `Basic <token>`) —
  *   anchored, so prose merely mentioning the word is untouched;
  * - any URL carrying userinfo credentials (`scheme://user:pass@host`), e.g. a
  *   pasted DSN, matched anywhere in the string.
  */
-const CREDENTIAL_VALUE_SHAPES: RegExp[] = [
-  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{10,}/,
-  /^(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}$/i,
-  /[a-z][a-z0-9+.-]*:\/\/[^\s/@]*:[^\s/@]*@/i,
-];
+const BEARER_BASIC_WHOLE_VALUE = /^(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}$/i;
+
+/** Anchored JWT test applied to one [A-Za-z0-9_-.] token. */
+const COMPACT_JWT_TOKEN =
+  /^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{10,}$/;
+
+/** True for UTF-16 units allowed in a base64url segment or the dot separator. */
+function isJwtTokenUnit(unit: number): boolean {
+  return (
+    (unit >= 48 && unit <= 57) || // 0-9
+    (unit >= 65 && unit <= 90) || // A-Z
+    (unit >= 97 && unit <= 122) || // a-z
+    unit === 45 || // -
+    unit === 95 || // _
+    unit === 46 // .
+  );
+}
+
+/**
+ * Linear compact-JWT scan: split the string into maximal [base64url + .]
+ * tokens and test each token once with the anchored pattern. Every character
+ * is visited a constant number of times; the previous unanchored pattern
+ * backtracked quadratically on long runs containing "eyJ".
+ */
+function containsCompactJwt(value: string): boolean {
+  let start = -1;
+  for (let i = 0; i <= value.length; i++) {
+    const inToken = i < value.length && isJwtTokenUnit(value.charCodeAt(i));
+    if (inToken) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      if (COMPACT_JWT_TOKEN.test(value.slice(start, i))) return true;
+      start = -1;
+    }
+  }
+  return false;
+}
+
+/** Scheme characters (first character is checked separately as a letter). */
+function isSchemeUnit(unit: number): boolean {
+  return (
+    (unit >= 48 && unit <= 57) ||
+    (unit >= 65 && unit <= 90) ||
+    (unit >= 97 && unit <= 122) ||
+    unit === 43 || // +
+    unit === 45 || // -
+    unit === 46 // .
+  );
+}
+
+/**
+ * Authority terminators: the scan stops here, so `@` in a query string
+ * (`https://host:3000?contact=bob@example.com`) is NOT mistaken for
+ * userinfo. A linear `indexOf("://")` walk plus a bounded forward scan.
+ */
+function isAuthorityTerminator(unit: number): boolean {
+  // whitespace, / ? # and common surrounding punctuation
+  return (
+    unit === 32 ||
+    unit === 9 ||
+    unit === 10 ||
+    unit === 13 ||
+    unit === 47 || // /
+    unit === 63 || // ?
+    unit === 35 || // #
+    unit === 34 || // "
+    unit === 39 || // '
+    unit === 60 || // <
+    unit === 62 || // >
+    unit === 44 || // ,
+    unit === 59 || // ;
+    unit === 41 || // )
+    unit === 93 || // ]
+    unit === 125 // }
+  );
+}
+
+/** Linear `scheme://user:pass@host` detector (userinfo requires `:`). */
+function containsUserinfoUrl(value: string): boolean {
+  let searchFrom = 0;
+  for (;;) {
+    const sep = value.indexOf("://", searchFrom);
+    if (sep === -1) return false;
+    searchFrom = sep + 3;
+
+    let schemeStart = sep;
+    while (schemeStart > 0 && isSchemeUnit(value.charCodeAt(schemeStart - 1))) {
+      schemeStart--;
+    }
+    const first = value.charCodeAt(schemeStart);
+    const isLetter =
+      (first >= 65 && first <= 90) || (first >= 97 && first <= 122);
+    if (schemeStart === sep || !isLetter) continue;
+
+    let colon = -1;
+    for (let i = sep + 3; i < value.length; i++) {
+      const unit = value.charCodeAt(i);
+      if (unit === 64 /* @ */) {
+        if (colon > sep + 2) return true;
+        break;
+      }
+      if (isAuthorityTerminator(unit)) break;
+      if (unit === 58 /* : */ && colon < 0) colon = i;
+    }
+  }
+}
 
 /**
  * Returns the redaction-safe form of a string value: `REDACTED` when it
  * carries a credential shape, otherwise the value verbatim. Exported for the
  * API ingestion route, which applies the same rule to the top-level
- * `route` / `clientSessionId` free strings (single authority, no second
- * implementation).
+ * `clientSessionId` free string and metadata keys (single authority, no
+ * second implementation).
  */
 export function redactCredentialShapedValue(value: string): string {
-  return CREDENTIAL_VALUE_SHAPES.some((re) => re.test(value))
+  return containsCompactJwt(value) ||
+    BEARER_BASIC_WHOLE_VALUE.test(value) ||
+    containsUserinfoUrl(value)
     ? REDACTED
     : value;
 }
@@ -98,8 +208,9 @@ function carryPrimitive(value: unknown): unknown {
 
 /**
  * Deep-clones a metadata value while redacting any key whose name matches the
- * denylist, plus any credential-shaped string value under a surviving key
- * (#875). Arrays and primitives are preserved verbatim otherwise;
+ * denylist, dropping any entry whose KEY is credential-shaped, plus redacting
+ * any credential-shaped string value under a surviving key (#875). Arrays and
+ * primitives are preserved verbatim otherwise;
  * non-serializable values (functions, symbols) are dropped. This walk is not
  * itself total — a hostile value (getter, proxy) can still throw; totality is
  * provided by the {@link sanitizeClientEvent} wrapper.
@@ -128,6 +239,10 @@ export function sanitizeMetadata<T>(value: T, depth = 0): T {
   const record = value as Record<string, unknown>;
   const result: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(record)) {
+    // A credential-shaped KEY is itself the secret. Copying it through would
+    // persist the exact bytes the value scan exists to remove (#875 review):
+    // drop the entry rather than invent a renamed key.
+    if (redactCredentialShapedValue(key) === REDACTED) continue;
     if (isDenylisted(key)) {
       result[key] = REDACTED;
       continue;

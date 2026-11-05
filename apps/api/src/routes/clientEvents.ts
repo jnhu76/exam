@@ -34,7 +34,12 @@ function normalizeRouteForStorage(route: string | undefined): string | null {
     const url = new URL(route, "http://client-event.invalid");
     return url.pathname.slice(0, USER_AGENT_MAX_LENGTH) || null;
   } catch {
-    return route.slice(0, USER_AGENT_MAX_LENGTH);
+    // Malformed URL (schema-valid string, unparseable): strip any query or
+    // fragment by hand so this fallback cannot contradict the query-free
+    // guarantee (e.g. "http://[?token=…" throws in URL yet still carries a
+    // credential in its query).
+    const pathOnly = route.split(/[?#]/, 1)[0] ?? "";
+    return pathOnly.slice(0, USER_AGENT_MAX_LENGTH) || null;
   }
 }
 

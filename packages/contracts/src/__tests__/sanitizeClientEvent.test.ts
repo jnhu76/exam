@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  redactCredentialShapedValue,
   sanitizeClientEvent,
   sanitizeMetadata,
 } from "../sanitizeClientEvent.js";
@@ -204,5 +205,30 @@ describe("sanitizeClientEvent — value-level credential-shape redaction (#875)"
       count: 42,
     };
     expect(sanitizeClientEvent(safe)).toEqual(safe);
+  });
+
+  it("drops metadata entries whose KEY is credential-shaped (a renamed key still leaks)", () => {
+    const out = sanitizeClientEvent({
+      [jwt]: 1,
+      "postgresql://exam:hunter2@db.local/exam": true,
+      keep: "ok",
+    });
+    expect(out).toEqual({ keep: "ok" });
+    expect(JSON.stringify(out)).not.toContain("SflKxwRJSMeKKF2QT4fwpMeJf36");
+    expect(JSON.stringify(out)).not.toContain("hunter2");
+  });
+
+  it("keeps host:port URLs whose query merely contains an @ (no userinfo)", () => {
+    const safe = {
+      a: "https://exam.local:3000?contact=bob@example.com",
+      b: "https://exam.local:443?redirect=mailto:a@b.c",
+    };
+    expect(sanitizeClientEvent(safe)).toEqual(safe);
+  });
+
+  it("scans a 32 KiB adversarial run containing repeated 'eyJ' without backtracking blowup", () => {
+    // The schema's per-event budget; the JWT detector must stay linear.
+    const hostile = "eyJ".repeat(10_900);
+    expect(redactCredentialShapedValue(hostile)).toBe(hostile);
   });
 });
