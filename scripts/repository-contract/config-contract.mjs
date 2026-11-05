@@ -10,8 +10,8 @@
  * this gate runs in a fresh checkout before any build). What this gate owns
  * is the per-topology binding relations; each section below states its own
  * relation and failure mode (consumption seam, Docker production bindings,
- * Docker test origin, CI env, CI artifact identity, WSL port projection,
- * test env isolation, client-IP trust wiring).
+ * Docker test origin, CI env, CI zero-artifact build topology, WSL port
+ * projection, test env isolation, client-IP trust wiring).
  *
  * Profiles are independent BY DESIGN: nothing here compares values ACROSS
  * topologies (CI may differ from WSL may differ from Docker). Only each
@@ -295,83 +295,83 @@ console.log("3. Checking CI workflow env contract...");
 }
 console.log("   CI env contract check complete.");
 
-// ── 3b. CI build artifact identity: run-scoped, not attempt-scoped ──────────
-console.log("3b. Checking CI build artifact identity contract...");
+// ── 3b. CI zero-artifact build topology ─────────────────────────────────────
+console.log("3b. Checking CI zero-artifact build contract...");
 {
-  // The build artifact belongs to the workflow RUN, not the rerun ATTEMPT.
-  // A partial rerun ("Re-run failed jobs") keeps the original attempt's
-  // build artifact; a consumer looking up an attempt-scoped name would fail
-  // with Artifact not found. A full rerun re-uploads the same run-scoped
-  // name, which requires upload overwrite (artifact names are immutable
-  // within a run). Cross-run provenance is preserved because artifact
-  // lookup is scoped to the current github.run_id.
+  // CI must not depend on GitHub Actions artifacts AT ALL: on this private
+  // repo the artifact storage quota is a hard external limit that once
+  // blocked the entire pipeline (every upload is a step back toward that
+  // outage). Build state is shared only through the .turbo GitHub cache
+  // (task-hash validated) or rebuilt job-locally.
   const ciPath = join(ROOT, ".github/workflows/ci.yml");
   const ciContent = readFileSync(ciPath, "utf-8");
 
-  const RUN_SCOPED = "build-outputs-${{ github.run_id }}";
-  const ATTEMPT_SCOPED =
-    "build-outputs-${{ github.run_id }}-${{ github.run_attempt }}";
-
-  if (ciContent.includes(ATTEMPT_SCOPED)) {
-    fail(
-      "ci.yml build artifact name must be run-scoped — an attempt-scoped " +
-        `name is not downloadable by partial-rerun consumers: ${ATTEMPT_SCOPED}`,
-    );
-  }
-
-  // Every producer/consumer reference must use the exact run-scoped name;
-  // a mismatch would silently change whose build a consumer tests against.
-  const artifactNames = [
-    ...ciContent.matchAll(/^\s*name:\s*(build-outputs.*?)\s*$/gm),
-  ].map((match) => match[1]);
-  if (artifactNames.length < 2) {
-    fail(
-      "ci.yml must declare the build-outputs artifact producer and at " +
-        "least one consumer",
-    );
-  }
-  for (const name of artifactNames) {
-    if (name !== RUN_SCOPED) {
+  for (const action of [
+    "actions/upload-artifact",
+    "actions/download-artifact",
+  ]) {
+    if (ciContent.includes(action)) {
       fail(
-        `ci.yml build-outputs artifact name must be exactly "${RUN_SCOPED}" ` +
-          `(found "${name}") — producer/consumer identity must match`,
+        `ci.yml must not use ${action} — CI is zero-artifact by contract ` +
+          "(artifact storage quota is a hard limit on this repo); share " +
+          "build state through the .turbo cache or job-local builds only",
       );
     }
   }
 
-  // Without overwrite, the full-rerun upload fails on the immutable
-  // same-run artifact name.
-  const uploadStart = ciContent.indexOf("name: Upload build outputs");
-  if (uploadStart === -1) {
-    fail("ci.yml must contain the 'Upload build outputs' step");
-  } else {
-    const uploadBlock = ciContent.slice(
-      uploadStart,
-      ciContent.indexOf("- name:", uploadStart),
-    );
-    if (!uploadBlock.includes("actions/upload-artifact@")) {
-      fail("'Upload build outputs' step must use actions/upload-artifact");
-    }
-    if (!uploadBlock.includes("overwrite: true")) {
+  // A job that reads compiled workspace output (an apps/*/dist or
+  // packages/*/dist path, or a `node dist/…` entrypoint) must produce it in
+  // its own execution context via the standard Turbo build — with no
+  // artifact to download, a dist-reading job without a build tests nothing
+  // (or stale leftovers), on first runs and partial reruns alike. Bounded
+  // job-block scan; comment lines are excluded because a dist reference in
+  // a comment is not a dependency. This anchors the ACTUAL consumption
+  // seams, not job names or step order.
+  for (const [jobId, body] of ciJobBodies(ciContent)) {
+    const codeLines = body
+      .split(/\r?\n/)
+      .filter((line) => !/^\s*#/.test(line))
+      .join("\n");
+    const readsWorkspaceDist =
+      /(?:apps|packages)\/[\w.*-]+\/dist\b/.test(codeLines) ||
+      /\bnode\s+dist\//.test(codeLines);
+    if (readsWorkspaceDist && !/(?:pnpm|turbo)\s+build\b/.test(codeLines)) {
       fail(
-        "'Upload build outputs' must set overwrite: true so a full rerun " +
-          "can replace the same-run run-scoped artifact",
+        `ci.yml job '${jobId}' reads workspace dist output but runs no ` +
+          "build (pnpm/turbo build) in its own execution context — with no " +
+          "artifact to download, dist must be produced by the job itself",
       );
     }
   }
 
-  // download-artifact resolves within the current run by default; an
-  // explicit run-id override would silently widen whose build a consumer
-  // tests against. Like the name checks above, this is a bounded textual
-  // check: quoted/folded scalar forms of the key are not recognized.
-  if (/^\s*run-id:/m.test(ciContent)) {
+  // The repo's own test entry points must keep compiling before testing:
+  // the filtered per-package CI commands rely on Turbo's declared ^build
+  // dependency, and dropping it would let tests run against stale or
+  // absent builds without anyone noticing at the graph level.
+  const turboTasks = JSON.parse(
+    readFileSync(join(ROOT, "turbo.json"), "utf-8"),
+  ).tasks;
+  for (const task of ["test", "coverage"]) {
+    const dependsOn = turboTasks[task]?.dependsOn ?? [];
+    if (!dependsOn.includes("^build")) {
+      fail(
+        `turbo.json task '${task}' must keep dependsOn '^build' — removing ` +
+          "it bypasses compilation for the repo's own test entry points",
+      );
+    }
+  }
+
+  // The production module-resolution oracle stays a CI gate: the plain-Node
+  // polarity check over the built workspace (#794) is the dist-side
+  // complement of the Vitest source-resolution fail-closed design.
+  if (!ciContent.includes("pnpm lint:prod-resolution")) {
     fail(
-      "ci.yml must not override the download-artifact run-id — build " +
-        "consumers resolve the artifact within the current workflow run",
+      "ci.yml must keep running pnpm lint:prod-resolution — the production " +
+        "module-resolution oracle must remain a CI gate",
     );
   }
 }
-console.log("   CI artifact identity check complete.");
+console.log("   CI zero-artifact build contract check complete.");
 
 // ── 4. Local/WSL profile: launch_api owns the per-shard port projection ────
 console.log("4. Checking E2E runner port projection contract...");
@@ -570,6 +570,25 @@ function extractAppEnvironment(composeText) {
     }
   }
   return null;
+}
+
+/**
+ * Split ci.yml into [jobId, bodyText] pairs: job keys are the 2-space-indented
+ * `key:` lines that follow the top-level `jobs:` header (everything deeper —
+ * steps, services, matrix entries — is body text). Bounded textual scan, like
+ * the other topology sections; not a YAML parser.
+ */
+function ciJobBodies(ciContent) {
+  const lines = ciContent.split(/\r?\n/);
+  const jobsStart = lines.findIndex((l) => /^jobs:\s*$/.test(l));
+  if (jobsStart === -1) return [];
+  const jobs = [];
+  for (let i = jobsStart + 1; i < lines.length; i++) {
+    const m = lines[i].match(/^ {2}([\w.-]+):\s*$/);
+    if (m) jobs.push([m[1], []]);
+    if (jobs.length > 0) jobs[jobs.length - 1][1].push(lines[i]);
+  }
+  return jobs.map(([id, bodyLines]) => [id, bodyLines.join("\n")]);
 }
 
 /** Recursive walk with dir pruning; calls `file` on every regular file. */
