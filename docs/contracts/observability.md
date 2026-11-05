@@ -103,6 +103,7 @@ Phase 2 (in-process `setInterval`). Their diagnostics contract:
 | lastScanAt | scannerMetrics | surfaced in `/system/diagnostics` |
 | disruptedCount / autoSubmitCount | scannerMetrics | surfaced in diagnostics |
 | failedCount | scanner error log | pino `logger.error` on failed auto-submit |
+| consecutiveFailedTicks | scannerMetrics | surfaced in diagnostics (#886); #862 escalation run-length (reset on restart, clean settle zeroes, tick throw freezes) — not the cumulative failedCount |
 | organizationId | ctx of the scanned attempt | tenant scoping |
 | attemptId | the scanned row | for incident correlation |
 

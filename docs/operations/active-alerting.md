@@ -60,6 +60,26 @@ cleared" are therefore one fact; there is deliberately no separate
 NO_FAILURE_OBSERVED state. A tick that THROWS, by contrast, carries no
 business-failure evidence in either direction and freezes the counter (§4).
 
+### Diagnostics projection of the escalation counter (#886)
+
+`GET /api/system/diagnostics` exposes the escalation input for the two exam
+loops as read-only fields: `heartbeatStatus.consecutiveFailedTicks` and
+`deadlineScannerStatus.consecutiveFailedTicks`. They are a projection of the
+same counter this contract describes — no second authority:
+
+- consecutive SETTLED ticks with business failures; the first clean settle
+  resets to 0; a tick-level throw freezes it (§4);
+- process-local: a restart starts from 0, like every alert state here;
+- NOT the cumulative `failedCount` also present in diagnostics: a loop can
+  show a high lifetime failure count with `consecutiveFailedTicks === 0`
+  (intermittent failures), or a fresh run climbing from 0;
+- the alert threshold stays the monitor's compile-time policy
+  (`BUSINESS_FAILURE_TICK_THRESHOLD = 4`). The counter is the INPUT: a value
+  ≥ 4 does not by itself confirm that a stdout
+  `operability.business_failure` line was produced or delivered — the
+  monitor evaluates on its own cadence, and delivery depends on the stdout
+  hook (§3).
+
 ## 2. Stability and content guarantees
 
 - `event`, `component`, `state` are STABLE fields (contract; adding a new

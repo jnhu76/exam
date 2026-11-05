@@ -10,6 +10,8 @@ import { buildTestApp } from "./testHelpers.js";
 import systemRoutes from "./system.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 import { getProductCapabilityProjection } from "../product/compositionRoot.js";
+import { heartbeatMetrics } from "../plugins/heartbeat.js";
+import { deadlineScannerMetrics } from "../plugins/deadlineScanner.js";
 import { emailOutbox, workerHeartbeats, schema } from "@exam/db/schema/pg";
 import { eq, inArray } from "drizzle-orm";
 import { BOOTSTRAP_PENDING_MESSAGE } from "../workers/emailDeliveryWorker.js";
@@ -343,6 +345,45 @@ describe("system routes", () => {
       expect(
         body.heartbeatStatus.incidentReconciliationFailedCount,
       ).toBeGreaterThanOrEqual(0);
+    });
+
+    // #886: consecutiveFailedTicks is a live read of the plugin metrics —
+    // the route keeps no counter of its own. Non-zero values set directly on
+    // the metrics (the counter authority) must come back verbatim, and a
+    // changed value on the next read proves the projection re-reads the
+    // metrics rather than caching or zero-filling. try/finally restores the
+    // module-level counters for sibling tests.
+    it("projects non-zero consecutiveFailedTicks live from the scanner metrics", async () => {
+      const prevHeartbeat = heartbeatMetrics.consecutiveFailedTicks;
+      const prevScanner = deadlineScannerMetrics.consecutiveFailedTicks;
+      heartbeatMetrics.consecutiveFailedTicks = 2;
+      deadlineScannerMetrics.consecutiveFailedTicks = 3;
+      try {
+        const first = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.adminToken },
+        });
+        expect(first.statusCode).toBe(200);
+        const firstBody = first.json();
+        expect(firstBody.heartbeatStatus.consecutiveFailedTicks).toBe(2);
+        expect(firstBody.deadlineScannerStatus.consecutiveFailedTicks).toBe(3);
+
+        heartbeatMetrics.consecutiveFailedTicks = 5;
+        deadlineScannerMetrics.consecutiveFailedTicks = 7;
+        const second = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.adminToken },
+        });
+        expect(second.statusCode).toBe(200);
+        const secondBody = second.json();
+        expect(secondBody.heartbeatStatus.consecutiveFailedTicks).toBe(5);
+        expect(secondBody.deadlineScannerStatus.consecutiveFailedTicks).toBe(7);
+      } finally {
+        heartbeatMetrics.consecutiveFailedTicks = prevHeartbeat;
+        deadlineScannerMetrics.consecutiveFailedTicks = prevScanner;
+      }
     });
 
     it("does not expose secrets in diagnostics response", async () => {
