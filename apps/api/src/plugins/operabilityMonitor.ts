@@ -358,6 +358,10 @@ export function evaluateOperabilityTick(
     component: "heartbeat" | "deadline_scanner" | "client_event_retention",
     stalled: boolean,
     transition: AlertTransition,
+    // The OPERATOR-FACING threshold must be the same interval the
+    // classification used; deriving it from a component ternary silently
+    // mislabels any new loop (#871 review).
+    staleAfterMs: number,
   ) => {
     if (transition === "raise_failure") {
       alerts.push({
@@ -365,7 +369,7 @@ export function evaluateOperabilityTick(
         component,
         state: "stalled",
         level: "error",
-        message: `Critical background loop stalled: ${component} (no settled cycle within ${loopStaleAfterMs(component === "heartbeat" ? input.heartbeatIntervalMs : input.deadlineIntervalMs) / 1000}s)`,
+        message: `Critical background loop stalled: ${component} (no settled cycle within ${staleAfterMs / 1000}s)`,
       });
     } else if (transition === "raise_recovery") {
       alerts.push({
@@ -385,6 +389,7 @@ export function evaluateOperabilityTick(
     "heartbeat",
     heartbeatStalled,
     trackers.heartbeat(heartbeatStalled),
+    loopStaleAfterMs(input.heartbeatIntervalMs),
   );
 
   const deadlineStalled =
@@ -394,6 +399,7 @@ export function evaluateOperabilityTick(
     "deadline_scanner",
     deadlineStalled,
     trackers.deadline_scanner(deadlineStalled),
+    loopStaleAfterMs(input.deadlineIntervalMs),
   );
 
   // #871: the retention loop is a third consumer of the SAME stall fact —
@@ -405,6 +411,7 @@ export function evaluateOperabilityTick(
     "client_event_retention",
     retentionStalled,
     trackers.client_event_retention(retentionStalled),
+    loopStaleAfterMs(input.retentionIntervalMs),
   );
 
   // #862: persistent business failure — the loop keeps settling (so the stall

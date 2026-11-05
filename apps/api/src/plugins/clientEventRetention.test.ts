@@ -189,6 +189,8 @@ describe("client-event retention loop — activity + escalation facts (#871)", (
   function buildDb(legs: {
     orgDiscoveryThrows: () => boolean;
     cleanupThrows: () => boolean;
+    /** Optional gate: a hung cleanup awaits this before resolving (#871). */
+    beforeCleanupResolve?: () => Promise<void>;
   }): unknown {
     return {
       select: () => ({
@@ -204,11 +206,12 @@ describe("client-event retention loop — activity + escalation facts (#871)", (
       }),
       delete: () => ({
         where: () => ({
-          returning: () => {
+          returning: async () => {
             if (legs.cleanupThrows()) {
               throw new Error("forced cleanup failure");
             }
-            return Promise.resolve([]);
+            if (legs.beforeCleanupResolve) await legs.beforeCleanupResolve();
+            return [];
           },
         }),
       }),
@@ -294,7 +297,9 @@ describe("client-event retention loop — activity + escalation facts (#871)", (
 
       orgDiscoveryThrows = true;
       await runPass(clock);
-      expect(clientEventRetentionMetrics.lastSettledAt).not.toBeNull();
+      // The throw path still SETTLES at the tick clock (the finally stamps it)
+      // — the counter freeze must not come from a missing settle stamp.
+      expect(clientEventRetentionMetrics.lastSettledAt).toEqual(clock.current);
       expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(1);
 
       // The frozen run continues from where it froze.
@@ -305,6 +310,53 @@ describe("client-event retention loop — activity + escalation facts (#871)", (
       cleanupThrows = false;
       await runPass(clock);
       expect(clientEventRetentionMetrics.consecutiveFailedTicks).toBe(0);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a HUNG pass holds activeSince at its start instant — stalled even while the timer is alive; release clears it (#871)", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { app, clock } = buildApp(
+      buildDb({
+        orgDiscoveryThrows: () => false,
+        cleanupThrows: () => false,
+        beforeCleanupResolve: () => gate,
+      }),
+    );
+    resetFacts();
+    await app.register(clientEventRetentionPlugin);
+    await app.ready();
+
+    try {
+      // The startup pass is in flight, blocked inside the cleanup delete.
+      await vi.advanceTimersByTimeAsync(0);
+      const startedAt = clientEventRetentionMetrics.lastStartedAt!;
+      expect(clientEventRetentionMetrics.activeSince).toEqual(startedAt);
+
+      // Five days later the pass is still hung: the interval cannot start a
+      // second run, activeSince still holds the start instant, and the SAME
+      // classifyLoopStall the monitor uses reports stalled — the timer being
+      // alive is not evidence of progress.
+      clock.current = new Date(clock.current.getTime() + 5 * 86_400_000);
+      expect(clientEventRetentionMetrics.activeSince).toEqual(startedAt);
+      expect(
+        classifyLoopStall(
+          clientEventRetentionMetrics,
+          CLIENT_EVENT_RETENTION_SWEEP_INTERVAL_MS,
+          clock.current,
+        ),
+      ).toBe("stalled");
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clientEventRetentionMetrics.activeSince).toBeNull();
+      expect(clientEventRetentionMetrics.lastSettledAt).toEqual(clock.current);
     } finally {
       await app.close();
       vi.useRealTimers();

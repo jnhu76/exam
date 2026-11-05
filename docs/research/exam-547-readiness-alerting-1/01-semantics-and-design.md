@@ -35,7 +35,7 @@ Measured facts that motivated the split:
 | Redis, `REDIS_MODE=required` | **READINESS_BLOCKING while so configured** | Existing as-built responsibility: the DelegatingRateLimitStore fails CLOSED (503 RATE_LIMIT_UNAVAILABLE) when the runtime is unusable — the instance cannot serve limiter-covered traffic. Readiness mirrors the SAME existing authority: `redisRuntime.shouldUseRedis()` (state `ready` + client present). No new probe, no new state machine, no #554 decision — if #554 changes the responsibility model, this derivation follows the config-declared mode. |
 | SMTP / email outbox worker | DEGRADED_ONLY | Email is an operational notification service; an SMTP outage must not mark the exam system unready (brief §23). Existing diagnostics already surface worker state (durable heartbeat + stale detection). |
 | heartbeat scanner / deadline scanner / incident reconciliation | OPERABILITY (active stall alert), **NOT readiness-blocking** | Convergent on resume (under-lock canonical rechecks; arbiter convergence per #545). A stalled scanner delays bookkeeping/terminalization but the instance still serves exam traffic correctly; blocking readiness on it would restart-loop the app and HIDE the failure — the opposite of #547's goal. |
-| client-event retention | DIAGNOSTIC_ONLY | #544 already decided: low-trust telemetry GC, logs only, no durable evidence. |
+| client-event retention | DIAGNOSTIC_ONLY (**superseded for LOOP health by #871**: active stall alert + 4-consecutive-failed-day escalation; per-pass GC detail remains logs-only) | #544 already decided: low-trust telemetry GC, logs only, no durable evidence. |
 
 ## 3. Readiness design gate (R0–R3)
 
@@ -137,7 +137,7 @@ interval 30s | timeout 5s | retries 3 | start_period 30s   (unchanged — no wid
 | heartbeat scanner (+ System incident reconciliation leg) | disruption detection + incident bookkeeping delayed; converges on resume (#545 arbiter) | next tick; none for hang | **no** | **yes** (`operability.background_loop`, component `heartbeat`) | diagnostics heartbeatStatus + stall fields | exam-time operability critical, but instance still serves traffic correctly |
 | deadline scanner | expired attempts not terminalized/graded until resume; save-time deadline authority still enforced per request | next tick; none for hang | **no** | **yes** (component `deadline_scanner`) | diagnostics deadlineScannerStatus + stall fields | same |
 | email outbox loop | notifications delayed; durable outbox preserves work | supervised retry + lock-timeout recovery + durable worker heartbeat (stale-aware diagnostics already exist) | **no** | **no new one** — existing worker-status degradation + error logs are the authority; adding a parallel in-memory stall alert would create a SECOND failure authority over the durable heartbeat | emailStatus block | degraded operational service, not exam traffic |
-| client-event retention | telemetry GC delayed | next tick / next start | **no** | **no** | logs (by #544 decision) | low-trust telemetry; #544 explicitly rejected durable evidence |
+| client-event retention | telemetry GC delayed | next tick / next start | **no** | **yes, loop-level (#871)** — stall + persistent-pass-failure escalation; per-pass GC detail stays logs-only | logs (by #544 decision) | low-trust telemetry; #544 explicitly rejected durable evidence |
 
 System incident reconciliation runs INSIDE the heartbeat cycle — covered by the
 heartbeat component's stall semantics (a hung reconciliation leg holds the whole

@@ -107,14 +107,16 @@ THEN clear / resolve the corresponding notification
   `worker_heartbeats` degradation surface (diagnostics `emailStatus.worker`)
   and per-cycle error logs; a second in-memory stall alert over the same
   condition would create a second failure authority.
-- **Client-event retention** — #544 kept GC itself durable-evidence-free
-  (logs only per pass); #871 added the LOOP-level facts this contract already
-  uses everywhere else: a never-fired or hung sweep now raises
-  `operability.background_loop/client_event_retention/stalled`, and passes
-  that keep failing per organization escalate on the shared
+- **Per-pass client-event retention detail** — #544 kept GC itself
+  durable-evidence-free (logs only per pass) and that boundary stands:
+  deleted counts and individual per-organization failures are NOT alerts.
+  #871 added only the LOOP-level facts this contract already uses everywhere
+  else (see §3): a never-fired or hung sweep raises
+  `operability.background_loop/client_event_retention/stalled`, and a run of
+  failed daily passes escalates on the shared
   `operability.business_failure` shape (daily cadence → threshold = 4
-  consecutive failed days). Per-pass deleted counts stay in logs; no
-  `cleanup_runs` table, no second evidence subsystem (#544 §9 boundary).
+  consecutive failed days). No `cleanup_runs` table, no second evidence
+  subsystem (#544 §9 boundary).
 - **CPU / memory pressure** — diagnostics-only; never an alert condition and
   never readiness-relevant (01-semantics §1).
 - **Transient scanner errors** (e.g. DB-down cycles that THROW) — those

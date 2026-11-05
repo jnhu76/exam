@@ -646,12 +646,14 @@ describe("evaluateOperabilityTick — persistent business-failure legs (#862)", 
     const alerts = evaluateOperabilityTick(
       snapshotInput({
         retention: {
-          startedAt: ms(-900_000),
+          // Five daily windows ago: stalled by absence under the RETENTION
+          // cadence (not the 30s heartbeat/deadline cadence).
+          startedAt: ms(-5 * 86_400_000),
           lastStartedAt: null,
           lastSettledAt: null,
           activeSince: null,
         },
-        retentionIntervalMs: 30_000,
+        retentionIntervalMs: 86_400_000,
       }),
       trackers,
     );
@@ -661,6 +663,9 @@ describe("evaluateOperabilityTick — persistent business-failure legs (#862)", 
         component: "client_event_retention",
         state: "stalled",
         level: "error",
+        // Operator-facing threshold must use the RETENTION interval: 4 days.
+        message:
+          "Critical background loop stalled: client_event_retention (no settled cycle within 345600s)",
       }),
     ]);
     expect(evaluateOperabilityTick(snapshotInput(), trackers)).toEqual([
