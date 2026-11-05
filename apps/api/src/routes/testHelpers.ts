@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import Fastify from "fastify";
+import Fastify, { type FastifyLoggerOptions } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
@@ -158,6 +158,12 @@ export async function buildTestApp(
     rateLimit?: boolean;
     databaseUrl?: string;
     schemaName?: string;
+    /**
+     * Fastify logger config. Default: logging stays DISABLED (historical
+     * behavior). Tests that assert structured log lines pass a capturing
+     * stream here (#861).
+     */
+    logger?: FastifyLoggerOptions;
   },
 ): Promise<TestContext> {
   const dbUrl = opts?.databaseUrl ?? TEST_DB_URL;
@@ -255,6 +261,7 @@ async function finishBuildTestApp(args: {
     rateLimit?: boolean;
     databaseUrl?: string;
     schemaName?: string;
+    logger?: FastifyLoggerOptions;
   };
   customCleanup?: () => Promise<void>;
 }): Promise<TestContext> {
@@ -276,7 +283,8 @@ async function finishBuildTestApp(args: {
   }
   resetRuntimeConfigForTest();
 
-  const app = Fastify();
+  const app =
+    opts?.logger !== undefined ? Fastify({ logger: opts.logger }) : Fastify();
   setupSecurity(app);
   setupErrorHandler(app);
   await app.register(zodProviderPlugin);

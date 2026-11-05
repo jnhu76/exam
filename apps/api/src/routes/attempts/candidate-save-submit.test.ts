@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
+import { Writable } from "node:stream";
 import { and, eq, sql } from "drizzle-orm";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
@@ -51,6 +52,19 @@ async function installSubmitAuditFailure(
   };
 }
 
+/**
+ * Captured pino output (#861). The shared attempt fixture app is built with
+ * `level: "warn"` and this write-only stream, so ONLY warning/error lines are
+ * collected — request start/finish info lines never pollute the assertions.
+ */
+const logLines: string[] = [];
+const logStream = new Writable({
+  write(chunk: Buffer, _enc: unknown, cb: (err?: Error | null) => void) {
+    logLines.push(chunk.toString());
+    cb();
+  },
+});
+
 describe("attempt routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let examId: string;
@@ -60,7 +74,9 @@ describe("attempt routes", () => {
   let candidateProfileId: string;
 
   beforeAll(async () => {
-    const fixture = await buildSharedAttemptFixture();
+    const fixture = await buildSharedAttemptFixture({
+      logger: { level: "warn", stream: logStream },
+    });
     ctx = fixture.ctx;
     examId = fixture.examId;
     courseId = fixture.courseId;
@@ -577,6 +593,89 @@ describe("attempt routes", () => {
       expect(res.json().message).toBe(getSaveAnswerMessage("STALE_VERSION"));
       expect(res.json().serverVersion).toBe(2);
       expect(res.json().details).toEqual({ serverAnswer: "c" });
+    });
+
+    it("#861 logs a structured server-side rejection line (reqId-correlated, no answer content)", async () => {
+      // Protocol rejections previously left ZERO server-side trace. The same
+      // stale-version request now emits exactly one WARN line: machine fields
+      // + the automatic reqId (request correlation), and NO answer payload.
+      logLines.length = 0;
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "top-secret-answer-value",
+          clientSeq: 99,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().accepted).toBe(false);
+      const parsed = logLines
+        .flatMap((line) => line.split("\n"))
+        .filter((line) => line.includes("Answer save rejected"))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(parsed).toHaveLength(1);
+      const entry = parsed[0]!;
+      expect(entry.level).toBe(40); // pino warn
+      expect(entry.msg).toBe("Answer save rejected");
+      // Tenant/actor scoping (docs/contracts/observability.md).
+      expect(entry.organizationId).toBe(ctx.org.id);
+      expect(entry.actorId).toBe(ctx.candidate.id);
+      expect(entry.actorRole).toBe("Candidate");
+      expect(entry.attemptId).toBe(attemptId);
+      expect(entry.questionId).toBe(qId);
+      expect(entry.clientSeq).toBe(99);
+      expect(entry.serverVersion).toBe(2);
+      // The credential-shaped answer is not a valid option id, so shape
+      // validation (#301) rejects it before the version check: INVALID_ANSWER
+      // rather than STALE_VERSION. Either way it is the same rejection branch
+      // and the log must carry the reason verbatim.
+      expect(entry.reason).toBe("INVALID_ANSWER");
+      // Request correlation comes for free via the request logger.
+      expect(typeof entry.reqId).toBe("string");
+      // Privacy guardrail (#861): the raw answer never enters the log.
+      expect(JSON.stringify(entry)).not.toContain("top-secret-answer-value");
+
+      // A STALE_VERSION rejection is the one whose 200 response carries
+      // `details.serverAnswer`. That answer is a frozen client-facing conflict
+      // detail; it must never be absorbed into the log line. Use a
+      // well-shaped but stale answer and assert the second line's fields plus
+      // the absence of every answer-bearing key.
+      logLines.length = 0;
+      const staleRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "a",
+          clientSeq: 100,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(staleRes.statusCode).toBe(200);
+      expect(staleRes.json().reason).toBe("STALE_VERSION");
+      // The conflict contract DOES expose the stored answer to the client.
+      expect(staleRes.json().details).toEqual({ serverAnswer: "c" });
+      const staleLines = logLines
+        .flatMap((line) => line.split("\n"))
+        .filter((line) => line.includes("Answer save rejected"))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(staleLines).toHaveLength(1);
+      const staleEntry = staleLines[0]!;
+      expect(staleEntry.reason).toBe("STALE_VERSION");
+      expect(staleEntry.serverVersion).toBe(2);
+      for (const key of ["answer", "serverAnswer", "latestAnswer", "details"]) {
+        expect(staleEntry).not.toHaveProperty(key);
+      }
     });
 
     it("preserves a null server answer in stale-version details", async () => {
