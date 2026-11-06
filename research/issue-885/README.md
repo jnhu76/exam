@@ -8,7 +8,7 @@ loop that **settles but throws on every tick** produced no escalation event.
 - Frozen baseline: `f2d44b78136cda1358148dbce891590975d4c88f` (2026-11-05).
 - Research verdict: **GO_C (CONDITIONAL)**.
 - Implementation: this branch.
-- Current replay subject: `3c0b81f8226886d96d8bb717b7108f4057c4474a`, clean
+- Current replay subject: `f088c4bfea918d2344345ff1ab5c9218eeb133c2`, clean
   worktree, instrument `issue-885-instrument-v2`.
 - Current replay result: **20/20 scenarios, 38/38 expected tuples, diff 0**;
   baseline control **20 scenarios, 0 tick_failure events**.

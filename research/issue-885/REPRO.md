@@ -6,7 +6,7 @@ no developer/production data was touched. The product source under test is
 identified by `subjectSha`; the frozen research baseline is identified
 separately by `baselineSha`.
 
-Current subject receipt: `3c0b81f8226886d96d8bb717b7108f4057c4474a` (clean
+Current subject receipt: `f088c4bfea918d2344345ff1ab5c9218eeb133c2` (clean
 worktree, no scaffold). The post-fix comparison is **20/20 scenarios, 38/38
 tuple matches, diff count 0**; the baseline control is **20 scenarios, 0
 `operability.tick_failure` events**. Full result: [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md).
@@ -16,7 +16,7 @@ tuple matches, diff count 0**; the baseline control is **20 scenarios, 0
 | Item | Value |
 | --- | --- |
 | Frozen baseline | `f2d44b78136cda1358148dbce891590975d4c88f` |
-| Subject | `3c0b81f8226886d96d8bb717b7108f4057c4474a` |
+| Subject | `f088c4bfea918d2344345ff1ab5c9218eeb133c2` |
 | Instrument | `issue-885-instrument-v2` |
 | Instrument manifest | [`harness/instrument-manifest.json`](harness/instrument-manifest.json) |
 | Manifest SHA256 | `5f7cec21a25c0e0c90581e42addf4504211ea2385815d952b386a07d055e527f` |
@@ -131,8 +131,8 @@ its own hash):
 0e311e201518b49c88fdd1322f412ad45416d97ae8cce094a2f3a8b7ddd17dcc  EXPERIMENTS.md
 7e592db8534e841092aa736524189d0b14d4b65c288e2ca94abb7ac3cb92e646  ALERT_SEMANTICS.md
 91e93216be068ccbdd3dbb5eaf05ad8e43be0b373f0635b987821f1215ce2f12  DECISION.md
-44512f315ff16a104eca76da5999def7f9391454c3aa187780a8383eca1365a4  README.md
-5a08bcc4aeeca358645c18c0da4dbfcd00b0162e0a054374727e4cf2873ff9df  POSTFIX_VALIDATION.md
+e27a4e2a0f68f62f89f63d2e1b7a1909c4a434d1038489f10fc20440d30a7aa8  README.md
+ddac62d63cdd8c5d12f8e403e25bb33cb698c7f6df95003444bd94b76c6d74f6  POSTFIX_VALIDATION.md
 5f7cec21a25c0e0c90581e42addf4504211ea2385815d952b386a07d055e527f  harness/instrument-manifest.json
 ```
 
@@ -152,7 +152,7 @@ bundle-owned runner and harness resolve `vitest`/`fastify` by walking up from
 set -eu
 REPO_ROOT=$(git rev-parse --show-toplevel)
 BASE=f2d44b78136cda1358148dbce891590975d4c88f
-SUBJECT=3c0b81f8226886d96d8bb717b7108f4057c4474a
+SUBJECT=f088c4bfea918d2344345ff1ab5c9218eeb133c2
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/exam-885-replay.XXXXXX")
 
 # 1) Obtain the bundle from the subject checkout first.

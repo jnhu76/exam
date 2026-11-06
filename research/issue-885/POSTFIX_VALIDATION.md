@@ -10,7 +10,7 @@ instrument and the clean-checkout run below.
 | Item | Value |
 | --- | --- |
 | Frozen baseline | `f2d44b78136cda1358148dbce891590975d4c88f` |
-| Subject under test | `3c0b81f8226886d96d8bb717b7108f4057c4474a` |
+| Subject under test | `f088c4bfea918d2344345ff1ab5c9218eeb133c2` |
 | Subject worktree dirty | **NO** |
 | Instrument | `issue-885-instrument-v2` |
 | Instrument manifest SHA256 | `5f7cec21a25c0e0c90581e42addf4504211ea2385815d952b386a07d055e527f` |
@@ -36,7 +36,7 @@ this receipt were:
 apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts research/issue-885/harness/
 node research/issue-885/harness/baseline-control.mjs
 
-# subject worktree at 3c0b81f8..., no edits, no scaffold
+# subject worktree at f088c4bf..., no edits, no scaffold
 apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts research/issue-885/harness/
 node research/issue-885/harness/analyze.mjs
 node research/issue-885/harness/compare.mjs
