@@ -10,10 +10,10 @@ instrument and the clean-checkout run below.
 | Item | Value |
 | --- | --- |
 | Frozen baseline | `f2d44b78136cda1358148dbce891590975d4c88f` |
-| Subject under test | `f088c4bfea918d2344345ff1ab5c9218eeb133c2` |
+| Subject under test | `40b859d12e6ce991cbe80f099a4cfd845e23414a` |
 | Subject worktree dirty | **NO** |
 | Instrument | `issue-885-instrument-v2` |
-| Instrument manifest SHA256 | `5f7cec21a25c0e0c90581e42addf4504211ea2385815d952b386a07d055e527f` |
+| Instrument manifest SHA256 | `90ad4186a28902791351966cec41ec404c8e78cc33970b5a82908d37dfa4957a` |
 | Baseline control | **PASS** — 20 scenarios, 0 `operability.tick_failure` events |
 | Subject replay | **20/20 scenarios**, **38/38 expected tuples**, **0** tuple differences |
 | Comparator negative control | **PASS** — one mutated tuple produced exit 1 and 19/20 |
@@ -36,7 +36,7 @@ this receipt were:
 apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts research/issue-885/harness/
 node research/issue-885/harness/baseline-control.mjs
 
-# subject worktree at f088c4bf..., no edits, no scaffold
+# subject worktree at 40b859d1..., no edits, no scaffold
 apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts research/issue-885/harness/
 node research/issue-885/harness/analyze.mjs
 node research/issue-885/harness/compare.mjs
@@ -101,9 +101,12 @@ recorded the clear at `315000` for an actual clear at `300000`. Thus:
 - `105000 = 150000 − 45000` was **not** injection-to-failing.
 - `15000 = 330000 − 315000` was **not** removal-to-recovered.
 
-The corrected instrument records the phase switch when it happens, the scanner
-settle time from the metrics, and the pino event time. The episode-level
-results for representative scenarios are:
+The corrected instrument records the phase switch when it happens, the
+scanner catch-log time and the `.finally()` settle time, and the pino event
+time. In these controlled runs the catch log and settle share the same
+fake-clock millisecond (`throwCatchToSettleMs = 0`); the analysis keeps them
+as separate fields so a future scheduling change cannot hide the distinction.
+The episode-level results for representative scenarios are:
 
 | scenario / episode | loop | injection→failing | first throw-settle→failing | removal→recovered | first no-throw settle→recovered |
 | --- | --- | --- | --- | --- | --- |

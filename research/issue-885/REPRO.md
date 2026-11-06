@@ -6,7 +6,7 @@ no developer/production data was touched. The product source under test is
 identified by `subjectSha`; the frozen research baseline is identified
 separately by `baselineSha`.
 
-Current subject receipt: `f088c4bfea918d2344345ff1ab5c9218eeb133c2` (clean
+Current subject receipt: `40b859d12e6ce991cbe80f099a4cfd845e23414a` (clean
 worktree, no scaffold). The post-fix comparison is **20/20 scenarios, 38/38
 tuple matches, diff count 0**; the baseline control is **20 scenarios, 0
 `operability.tick_failure` events**. Full result: [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md).
@@ -16,10 +16,10 @@ tuple matches, diff count 0**; the baseline control is **20 scenarios, 0
 | Item | Value |
 | --- | --- |
 | Frozen baseline | `f2d44b78136cda1358148dbce891590975d4c88f` |
-| Subject | `f088c4bfea918d2344345ff1ab5c9218eeb133c2` |
+| Subject | `40b859d12e6ce991cbe80f099a4cfd845e23414a` |
 | Instrument | `issue-885-instrument-v2` |
 | Instrument manifest | [`harness/instrument-manifest.json`](harness/instrument-manifest.json) |
-| Manifest SHA256 | `5f7cec21a25c0e0c90581e42addf4504211ea2385815d952b386a07d055e527f` |
+| Manifest SHA256 | `90ad4186a28902791351966cec41ec404c8e78cc33970b5a82908d37dfa4957a` |
 | Node / Vitest | recorded inside `results/experiments.json` (`runtime.node`, `runtime.vitest`) |
 | Clock | `vi.useFakeTimers({now:T0})`, `T0=2026-09-17T08:00:00Z`; pino and `fastify.now()` share it |
 | DB | none — injected fake `fastify.db`; no `globalSetup`, no PostgreSQL |
@@ -131,9 +131,9 @@ its own hash):
 0e311e201518b49c88fdd1322f412ad45416d97ae8cce094a2f3a8b7ddd17dcc  EXPERIMENTS.md
 7e592db8534e841092aa736524189d0b14d4b65c288e2ca94abb7ac3cb92e646  ALERT_SEMANTICS.md
 91e93216be068ccbdd3dbb5eaf05ad8e43be0b373f0635b987821f1215ce2f12  DECISION.md
-e27a4e2a0f68f62f89f63d2e1b7a1909c4a434d1038489f10fc20440d30a7aa8  README.md
-ddac62d63cdd8c5d12f8e403e25bb33cb698c7f6df95003444bd94b76c6d74f6  POSTFIX_VALIDATION.md
-5f7cec21a25c0e0c90581e42addf4504211ea2385815d952b386a07d055e527f  harness/instrument-manifest.json
+37ebc91c6766e8036a89cf1403e1f15ef27de1f2c165e5c0534e6219c745b774  README.md
+b9a620e9201fd6e0715b5a4ebc6f1a39027055a2d98353a8cf4c3718220b495e  POSTFIX_VALIDATION.md
+90ad4186a28902791351966cec41ec404c8e78cc33970b5a82908d37dfa4957a  harness/instrument-manifest.json
 ```
 
 `SOURCE_MAP.md` is unchanged from the historical receipt. The other document
@@ -152,7 +152,7 @@ bundle-owned runner and harness resolve `vitest`/`fastify` by walking up from
 set -eu
 REPO_ROOT=$(git rev-parse --show-toplevel)
 BASE=f2d44b78136cda1358148dbce891590975d4c88f
-SUBJECT=f088c4bfea918d2344345ff1ab5c9218eeb133c2
+SUBJECT=40b859d12e6ce991cbe80f099a4cfd845e23414a
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/exam-885-replay.XXXXXX")
 
 # 1) Obtain the bundle from the subject checkout first.
