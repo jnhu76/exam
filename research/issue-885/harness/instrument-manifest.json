@@ -1,0 +1,37 @@
+{
+  "version": "issue-885-instrument-v2",
+  "files": [
+    {
+      "path": "research/issue-885/harness/experiments.test.ts",
+      "sha256": "abaaa85fb2bf44ce713a879e23e4ceedcad85d5ef70fd8c29737c6c5f431a095"
+    },
+    {
+      "path": "research/issue-885/harness/smoke.test.ts",
+      "sha256": "c79296f5a050d23f0780ffd5324fee22ddabf2f55e92d26e9e1103a461c4c294"
+    },
+    {
+      "path": "research/issue-885/harness/analyze.mjs",
+      "sha256": "242c0ae11e67c386683fc1e410b5bd61ef97bcb6511f9881773f1dd2a2c37748"
+    },
+    {
+      "path": "research/issue-885/harness/compare.mjs",
+      "sha256": "ed354db8400d400d6b674ea2666b6d2ec5f8d73a0f03fc468cde06f6b57a557b"
+    },
+    {
+      "path": "research/issue-885/harness/baseline-control.mjs",
+      "sha256": "757c6c0958c1377b89e6df85e09e80dd50c5b984ea442b36ed1558182d4fb99d"
+    },
+    {
+      "path": "research/issue-885/harness/expected-events.json",
+      "sha256": "1eff9a9a7548ecdce8e5acb5f7c0bda1bea93dd02be48b961ca966e818c7318e"
+    },
+    {
+      "path": "research/issue-885/harness/vitest.config.ts",
+      "sha256": "4f41c6712c56aeae972ed090981b63d89311bd8ab64e9390230ee348350f8027"
+    },
+    {
+      "path": "research/issue-885/harness/fingerprint.mjs",
+      "sha256": "09481c8c30a1275fd3ead19387752132785652fe778284150ad9653512dc7569"
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "instrumentVersion": "issue-885-instrument-v2",
+  "baselineSha": "f2d44b78136cda1358148dbce891590975d4c88f",
+  "timeOrigin": "elapsedMs is measured from T0=2026-09-17T08:00:00Z on the fake clock",
+  "scannerIntervalMs": 30000,
+  "monitorIntervalMs": 15000,
+  "threshold": 4,
+  "derivation": "Independent schedule table, not a counterfactual produced by the production classifier/tracker. Each scenario starts with the shared 2-step baseline, then the listed fault phases. A failing tuple is expected at the first monitor sample after the Kth consecutive throw settles and before the next clean settle; a recovered tuple is expected at the first sample after a clean settle resets the counter. E7 is a new process at 210s: the old process's counter cannot carry over, so the second raise requires four post-restart throws. Times are the observed pino event times on the controlled clock; no wall-clock sleep is involved.",
+  "scenarios": {
+    "E0-normal-empty-tick": {},
+    "E1-db-down-throws": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 270000 }
+      ],
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 270000 }
+      ]
+    },
+    "E2-both-org-discovery-logic-throw": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 330000 }
+      ],
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 330000 }
+      ]
+    },
+    "E2-hb-attempt-discovery-logic-throw": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 330000 }
+      ]
+    },
+    "E2-dl-attempt-discovery-logic-throw": {
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 330000 }
+      ]
+    },
+    "E3-hb-pg-query-error": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 330000 }
+      ]
+    },
+    "E3-dl-pg-query-error": {
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 330000 }
+      ]
+    },
+    "E4-both-business-failures-settle": {},
+    "E5-hb-alternating-biz-and-throw": {},
+    "E5-dl-alternating-biz-and-throw": {},
+    "E5-both-alternating": {},
+    "E6-hb-recover-after-continuous-throws": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 330000 }
+      ]
+    },
+    "E6-dl-recover-after-continuous-throws": {
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 330000 }
+      ]
+    },
+    "E6-business-failure-recovery": {},
+    "E7-restart-during-continuous-throws": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "failing", "elapsedMs": 330000 },
+        { "state": "recovered", "elapsedMs": 450000 }
+      ],
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "failing", "elapsedMs": 330000 },
+        { "state": "recovered", "elapsedMs": 450000 }
+      ]
+    },
+    "E8-desync-short-bursts": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 300000 },
+        { "state": "recovered", "elapsedMs": 450000 }
+      ],
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 300000 },
+        { "state": "recovered", "elapsedMs": 450000 }
+      ]
+    },
+    "E9-db-down-then-db-up-with-throws": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 390000 }
+      ],
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 150000 },
+        { "state": "recovered", "elapsedMs": 390000 }
+      ]
+    },
+    "E10-business-failure-then-continuous-throws": {
+      "heartbeat": [
+        { "state": "failing", "elapsedMs": 330000 },
+        { "state": "recovered", "elapsedMs": 450000 }
+      ],
+      "deadline_scanner": [
+        { "state": "failing", "elapsedMs": 330000 },
+        { "state": "recovered", "elapsedMs": 450000 }
+      ]
+    },
+    "E11-hung-tick-not-throwing": {},
+    "E12-chronic-intermittent-3-throw-1-clean": {}
+  }
+}

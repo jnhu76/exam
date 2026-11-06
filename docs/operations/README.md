@@ -84,21 +84,29 @@ runtime traffic block — health status never routes or restarts traffic.
 ## Active Alerting (operability events)
 
 The app emits BOUNDED structured transition events on critical operational
-conditions, so a machine can page without anyone opening the diagnostics
-page. Stable fields (stdout pino JSON; full contract:
+conditions, so a deployed watcher can notify an operator without anyone opening
+the diagnostics page. The application produces stdout events only; it does not
+deploy the watcher or prove delivery. Stable fields (stdout pino JSON; full
+contract:
 [`operations/active-alerting.md`](active-alerting.md) — the canonical contract):
 
 ```text
-event: "operability.readiness"       component: "database"|"redis"          state: "unavailable"|"recovered"
-event: "operability.background_loop" component: "heartbeat"|"deadline_scanner" state: "stalled"|"recovered"
+event: "operability.readiness"        component: "database"|"redis"            state: "unavailable"|"recovered"
+event: "operability.background_loop"  component: "heartbeat"|"deadline_scanner" state: "stalled"|"recovered"
+event: "operability.business_failure" component: loop component                 state: "failing"|"recovered"
+event: "operability.tick_failure"     component: "heartbeat"|"deadline_scanner" state: "failing"|"recovered"
 ```
 
-One log line per state TRANSITION only (no storms; recovery is one `info`
-line). Minimal external hook: alert when `level >= error AND event in
-{operability.readiness, operability.background_loop}` with a failure
-`state`; use `recovered` to clear. Consumable by journald / Docker log
-driver / Loki / a custom watcher — none of which is required or bundled
-(#312 stays separate).
+At most one log line per observed state TRANSITION (no storms; recovery is one
+`info` line). A lost line is not automatically re-sent while the state is
+unchanged, and a restart does not emit a recovery for the previous process.
+Minimal external hook: alert when `level >= error AND event in
+{operability.readiness, operability.background_loop,
+operability.business_failure, operability.tick_failure}` with a failure
+`state`; use `recovered` to clear, keyed by `(event, component)`. The watcher
+must be deployed/updated before the new event reaches a pager. Consumable by
+journald / Docker log driver / Loki / a custom watcher — none of which is
+required or bundled (#312 stays separate).
 
 ## Logs and Monitoring
 

@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  organizations,
+  examAttempts,
+  attemptInterruptionEvents,
+} from "@exam/db/schema/pg";
+import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
+import heartbeatPlugin from "./heartbeat.js";
+import deadlineScannerPlugin from "./deadlineScanner.js";
+import { clientEventRetentionMetrics } from "./clientEventRetention.js";
+import {
   BUSINESS_FAILURE_TICK_THRESHOLD,
   classifyLoopStall,
   classifyPersistentBusinessFailure,
@@ -272,6 +281,8 @@ function snapshotInput(
     heartbeatConsecutiveFailedTicks: 0,
     deadlineConsecutiveFailedTicks: 0,
     retentionConsecutiveFailedTicks: 0,
+    heartbeatConsecutiveThrowTicks: 0,
+    deadlineConsecutiveThrowTicks: 0,
     now: ms(0),
     ...partial,
   };
@@ -288,6 +299,10 @@ function makeTrackers() {
       heartbeat: createOperabilityTransitionTracker(),
       deadline_scanner: createOperabilityTransitionTracker(),
       client_event_retention: createOperabilityTransitionTracker(),
+    },
+    tick_failure: {
+      heartbeat: createOperabilityTransitionTracker(),
+      deadline_scanner: createOperabilityTransitionTracker(),
     },
   };
 }
@@ -761,5 +776,491 @@ describe("evaluateOperabilityTick — persistent business-failure legs (#862)", 
       "operability.background_loop/heartbeat/stalled",
       "operability.business_failure/heartbeat/failing",
     ]);
+  });
+});
+
+describe("evaluateOperabilityTick — tick-level throw legs (#885)", () => {
+  it("below the threshold emits nothing; at the threshold BOTH loops raise their own operability.tick_failure failing ERROR", () => {
+    const below = makeTrackers();
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({
+          heartbeatConsecutiveThrowTicks: BUSINESS_FAILURE_TICK_THRESHOLD - 1,
+          deadlineConsecutiveThrowTicks: BUSINESS_FAILURE_TICK_THRESHOLD - 1,
+        }),
+        below,
+      ),
+    ).toEqual([]);
+
+    const at = makeTrackers();
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({
+          heartbeatConsecutiveThrowTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+          deadlineConsecutiveThrowTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+        }),
+        at,
+      ),
+    ).toEqual([
+      {
+        event: "operability.tick_failure",
+        component: "heartbeat",
+        state: "failing",
+        level: "error",
+        // The message states the run of throws and NOTHING about its cause.
+        message:
+          "Critical background loop tick exceptions: heartbeat (4 consecutive ticks threw; root cause unknown)",
+      },
+      {
+        event: "operability.tick_failure",
+        component: "deadline_scanner",
+        state: "failing",
+        level: "error",
+        message:
+          "Critical background loop tick exceptions: deadline_scanner (4 consecutive ticks threw; root cause unknown)",
+      },
+    ]);
+  });
+
+  it("throw runs are their own fact: business-failure-only and stall-only inputs emit ZERO tick_failure lines", () => {
+    const business = makeTrackers();
+    const businessAlerts = evaluateOperabilityTick(
+      snapshotInput({
+        heartbeatConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+        deadlineConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+      }),
+      business,
+    );
+    expect(businessAlerts.map((a) => a.event)).toEqual([
+      "operability.business_failure",
+      "operability.business_failure",
+    ]);
+
+    const stalled = makeTrackers();
+    const stalledAlerts = evaluateOperabilityTick(
+      snapshotInput({
+        heartbeat: {
+          startedAt: T0,
+          lastStartedAt: ms(-300_000),
+          lastSettledAt: ms(-310_000),
+          activeSince: ms(-300_000),
+        },
+      }),
+      stalled,
+    );
+    expect(stalledAlerts).toEqual([
+      expect.objectContaining({
+        event: "operability.background_loop",
+        component: "heartbeat",
+        state: "stalled",
+      }),
+    ]);
+  });
+
+  it("S4: one line per transition, the recovery claims only that exceptions cleared, and a new run must reach the threshold again", () => {
+    const trackers = makeTrackers();
+    const throwing = snapshotInput({
+      heartbeatConsecutiveThrowTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+    });
+    expect(evaluateOperabilityTick(throwing, trackers)).toHaveLength(1);
+    expect(evaluateOperabilityTick(throwing, trackers)).toEqual([]);
+    expect(evaluateOperabilityTick(throwing, trackers)).toEqual([]);
+
+    const clean = snapshotInput();
+    expect(evaluateOperabilityTick(clean, trackers)).toEqual([
+      {
+        event: "operability.tick_failure",
+        component: "heartbeat",
+        state: "recovered",
+        level: "info",
+        // "exceptions cleared" — explicitly NOT "business recovered", and
+        // "a settled tick interrupted the run" — NOT "the last tick was clean"
+        // (the monitor observes the counter, not every tick).
+        message:
+          "Critical background loop tick exceptions cleared: heartbeat (a settled tick without a throw interrupted the run; business restoration unknown)",
+      },
+    ]);
+    expect(evaluateOperabilityTick(clean, trackers)).toEqual([]);
+
+    // 4 → clean → 4: after the recovery a new run below the window stays
+    // silent and must reach the threshold again before re-raising. A monitor
+    // observes the counter only at its actual read points; the scheduling
+    // boundaries (including the default 15s/30s configuration) are covered by
+    // the real-scanner tests in the sampling-boundary describe below.
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({ heartbeatConsecutiveThrowTicks: 3 }),
+        trackers,
+      ),
+    ).toEqual([]);
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({ heartbeatConsecutiveThrowTicks: 4 }),
+        trackers,
+      ),
+    ).toHaveLength(1);
+    // A second recovery is emitted once, then the state is quiet again.
+    expect(evaluateOperabilityTick(clean, trackers)).toHaveLength(1);
+    expect(evaluateOperabilityTick(clean, trackers)).toEqual([]);
+  });
+
+  it("restart: a fresh process claims nothing and carries no recovery across processes (process-local state)", () => {
+    const before = makeTrackers();
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({ deadlineConsecutiveThrowTicks: 4 }),
+        before,
+      ),
+    ).toHaveLength(1);
+
+    const after = makeTrackers();
+    expect(evaluateOperabilityTick(snapshotInput(), after)).toEqual([]);
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({ deadlineConsecutiveThrowTicks: 3 }),
+        after,
+      ),
+    ).toEqual([]);
+    expect(
+      evaluateOperabilityTick(
+        snapshotInput({ deadlineConsecutiveThrowTicks: 4 }),
+        after,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("coexisting facts keep their own keys: DB outage + throw run + a stale business_failure are three true lines, never folded into one", () => {
+    const trackers = makeTrackers();
+    const alerts = evaluateOperabilityTick(
+      snapshotInput({
+        readiness: {
+          ready: false,
+          database: false,
+          redis: null,
+          failedComponent: "database",
+        },
+        // #862 counter frozen from before the throws started (E10).
+        heartbeatConsecutiveFailedTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+        heartbeatConsecutiveThrowTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+        deadlineConsecutiveThrowTicks: BUSINESS_FAILURE_TICK_THRESHOLD,
+      }),
+      trackers,
+    );
+    expect(
+      alerts.map((a) => `${a.event}/${a.component}/${a.state}`).sort(),
+    ).toEqual([
+      "operability.business_failure/heartbeat/failing",
+      "operability.readiness/database/unavailable",
+      "operability.tick_failure/deadline_scanner/failing",
+      "operability.tick_failure/heartbeat/failing",
+    ]);
+  });
+});
+
+import Fastify from "fastify";
+import { Writable } from "node:stream";
+import operabilityMonitorPlugin, {
+  OPERABILITY_MONITOR_INTERVAL_MS,
+} from "./operabilityMonitor.js";
+import { heartbeatMetrics } from "./heartbeat.js";
+import { deadlineScannerMetrics } from "./deadlineScanner.js";
+
+function tickFailureLines(lines: string[]): string[] {
+  return lines
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((entry) => entry.event === "operability.tick_failure")
+    .map(
+      (entry) =>
+        `${String(entry.event)}/${String(entry.component)}/${String(entry.state)}/${String(entry.level)}`,
+    );
+}
+
+/**
+ * #885 wiring: the pure leg above is fed by hand-built snapshots, so a swapped
+ * counter pair would pass every one of those tests. This registers the REAL
+ * plugin and reads the REAL metric singletons, pinning the snapshot wiring and
+ * the emitted stdout fields end to end.
+ */
+/**
+ * Characterization of the sampling boundary, not a promise that all finite
+ * runs are reported. These tests use the REAL scanner and monitor plugins with
+ * controlled fake timers, deferred database work and a delayed readiness
+ * probe. They pin the current contract; changing them to "make everything
+ * alert" would be a different design decision (ADR-024).
+ */
+describe("ADR-024 sampling boundary — real scanner + monitor execution order", () => {
+  const ORG = { id: "org-1" };
+  const T0_MS = T0.getTime();
+
+  function resetBoundaryMetrics(): void {
+    for (const m of [
+      heartbeatMetrics,
+      deadlineScannerMetrics,
+      clientEventRetentionMetrics,
+    ]) {
+      m.startedAt = null;
+      m.lastStartedAt = null;
+      m.lastSettledAt = null;
+      m.activeSince = null;
+      m.consecutiveFailedTicks = 0;
+    }
+    heartbeatMetrics.consecutiveThrowTicks = 0;
+    deadlineScannerMetrics.consecutiveThrowTicks = 0;
+    // The retention loop is not under study. Keep its four-day staleness
+    // threshold healthy so it cannot add a confounder alert.
+    clientEventRetentionMetrics.startedAt = new Date(T0);
+    clientEventRetentionMetrics.lastStartedAt = new Date(T0);
+    clientEventRetentionMetrics.lastSettledAt = new Date(T0);
+    clientEventRetentionMetrics.activeSince = null;
+    clientEventRetentionMetrics.scanIntervalMs = 86_400_000;
+  }
+
+  function makeBoundaryApp(lines: string[], db: unknown) {
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        lines.push(chunk.toString());
+        callback();
+      },
+    });
+    const app = Fastify({ logger: { level: "info", stream } });
+    app.decorate<unknown>("db", db as never);
+    app.decorate("now", () => new Date(Date.now()));
+    return app;
+  }
+
+  it("default 30s/15s: a 4th throw settling at 149s, a clean settle at 150.1s and a readiness-delayed read at 151s produce no failing event", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const lines: string[] = [];
+    const pingReadsMs: number[] = [];
+    const db = {
+      select: (...args: unknown[]) => ({
+        from: (table: unknown) => {
+          if (table === organizations) {
+            if (args.length > 0) {
+              // readiness pingDb(): record the ACTUAL read point (after the
+              // probe resolves), not the monitor timer trigger. The 150s probe
+              // resolves at 151s.
+              const recordRead = () => {
+                pingReadsMs.push(Date.now() - T0_MS);
+                return [ORG];
+              };
+              if (Date.now() === T0_MS + 150_000) {
+                return {
+                  limit: () =>
+                    new Promise((resolve) =>
+                      setTimeout(() => resolve(recordRead()), 1_000),
+                    ),
+                };
+              }
+              return { limit: () => Promise.resolve().then(recordRead) };
+            }
+            const now = Date.now();
+            if (now < T0_MS + 120_000) {
+              throw new Error("scheduled scanner discovery throw");
+            }
+            if (now === T0_MS + 120_000) {
+              // Fourth scanner tick starts at 120s and throws only at 149s.
+              return new Promise((_resolve, reject) => {
+                setTimeout(
+                  () => reject(new Error("slow scanner discovery throw")),
+                  29_000,
+                );
+              });
+            }
+            if (now === T0_MS + 150_000) {
+              // Next tick starts at 150s and clean-settles at 150.1s.
+              return new Promise((resolve) => {
+                setTimeout(() => resolve([ORG]), 100);
+              });
+            }
+            return Promise.resolve([ORG]);
+          }
+          if (table === examAttempts) {
+            if (args.length > 0) {
+              return {
+                innerJoin: () => ({
+                  where: () => Promise.resolve([]),
+                }),
+              };
+            }
+            return { where: () => Promise.resolve([]) };
+          }
+          if (table === attemptInterruptionEvents) {
+            const chain = {
+              innerJoin: () => chain,
+              where: () => chain,
+              orderBy: () => Promise.resolve([]),
+              limit: () => Promise.resolve([]),
+            };
+            return chain;
+          }
+          // Incident arbiter / other discovery tables: an empty drizzle-like
+          // chain that supports the builder methods the repositories call.
+          const empty = Promise.resolve([]) as unknown as Promise<unknown[]> & {
+            innerJoin: () => unknown;
+            where: () => unknown;
+            orderBy: () => unknown;
+            limit: () => unknown;
+          };
+          empty.innerJoin = () => empty;
+          empty.where = () => empty;
+          empty.orderBy = () => empty;
+          empty.limit = () => empty;
+          return empty;
+        },
+      }),
+    };
+    const app = makeBoundaryApp(lines, db);
+    resetBoundaryMetrics();
+    try {
+      await app.register(heartbeatPlugin);
+      await app.register(deadlineScannerPlugin);
+      await app.register(operabilityMonitorPlugin);
+      await app.ready();
+
+      // Three immediate throws at 30/60/90; the fourth starts at 120.
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(heartbeatMetrics.consecutiveThrowTicks).toBe(3);
+
+      // Monitor reads C=3 at 135; the fourth throw settles at 149.
+      await vi.advanceTimersByTimeAsync(29_000);
+      expect(heartbeatMetrics.consecutiveThrowTicks).toBe(4);
+      expect(pingReadsMs).toContain(135_000);
+      expect(tickFailureLines(lines)).toEqual([]);
+
+      // At 150 the monitor starts but awaits readiness until 151; the
+      // scanner clean-settles at 150.1 and resets the counter before the read.
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(heartbeatMetrics.consecutiveThrowTicks).toBe(0);
+      expect(pingReadsMs).toContain(151_000);
+      expect(tickFailureLines(lines)).toEqual([]);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("scanner S=1s, monitor M=15s: a 4-throw run ending at 5s is fully reset before the first 15s read, so no failing is emitted", async () => {
+    vi.useFakeTimers({ now: T0 });
+    process.env.HEARTBEAT_SCAN_INTERVAL_MS = "1000";
+    process.env.DEADLINE_SCAN_INTERVAL_MS = "30000";
+    resetRuntimeConfigForTest();
+    const lines: string[] = [];
+    const db = {
+      select: (...args: unknown[]) => ({
+        from: (table: unknown) => {
+          if (table === organizations) {
+            if (args.length > 0) {
+              return { limit: () => Promise.resolve([ORG]) };
+            }
+            if (Date.now() <= T0_MS + 4_000) {
+              throw new Error("scheduled fast-scanner throw");
+            }
+            return Promise.resolve([ORG]);
+          }
+          if (table === examAttempts)
+            return { where: () => Promise.resolve([]) };
+          return Promise.resolve([]);
+        },
+      }),
+    };
+    const app = makeBoundaryApp(lines, db);
+    resetBoundaryMetrics();
+    try {
+      await app.register(heartbeatPlugin);
+      await app.register(operabilityMonitorPlugin);
+      await app.ready();
+
+      // Ticks at 1/2/3/4s throw; the 5s tick settles cleanly.
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(heartbeatMetrics.consecutiveThrowTicks).toBe(4);
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(heartbeatMetrics.consecutiveThrowTicks).toBe(0);
+      expect(tickFailureLines(lines)).toEqual([]);
+    } finally {
+      await app.close();
+      delete process.env.HEARTBEAT_SCAN_INTERVAL_MS;
+      delete process.env.DEADLINE_SCAN_INTERVAL_MS;
+      resetRuntimeConfigForTest();
+      vi.useRealTimers();
+    }
+  });
+
+  it("narrow recovery: sample 4 → clean → 3 throws → sample 3 emits recovered without claiming the latest tick was clean", () => {
+    const trackers = makeTrackers();
+    const failing = snapshotInput({ heartbeatConsecutiveThrowTicks: 4 });
+    expect(evaluateOperabilityTick(failing, trackers)).toHaveLength(1);
+
+    const recovery = evaluateOperabilityTick(snapshotInput(), trackers);
+    expect(recovery).toHaveLength(1);
+    expect(recovery[0]!.message).toBe(
+      "Critical background loop tick exceptions cleared: heartbeat (a settled tick without a throw interrupted the run; business restoration unknown)",
+    );
+    expect(recovery[0]!.message).not.toContain("last settled tick");
+
+    // A new run reaches 3 throws before the next sample; the sampled value is
+    // below the window, so no new failing is claimed — and the recovery above
+    // still does not assert that the latest tick was clean.
+    for (const count of [1, 2, 3]) {
+      expect(
+        evaluateOperabilityTick(
+          snapshotInput({ heartbeatConsecutiveThrowTicks: count }),
+          trackers,
+        ),
+      ).toEqual([]);
+    }
+  });
+});
+
+describe("operability monitor plugin — #885 wiring (real metrics → real stdout)", () => {
+  it("each scanner's throw counter drives its OWN component, in both directions", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const lines: string[] = [];
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        lines.push(chunk.toString());
+        callback();
+      },
+    });
+    const app = Fastify({ logger: { level: "info", stream } });
+    // The only db access in this test is the readiness probe:
+    // SELECT id FROM organizations LIMIT 1.
+    app.decorate<unknown>("db", {
+      select: () => ({
+        from: () => ({ limit: () => Promise.resolve([{ id: "org-1" }]) }),
+      }),
+    } as never);
+    app.decorate("now", () => new Date(T0));
+
+    heartbeatMetrics.consecutiveThrowTicks = 0;
+    deadlineScannerMetrics.consecutiveThrowTicks = 0;
+    try {
+      await app.register(operabilityMonitorPlugin);
+      await app.ready();
+
+      heartbeatMetrics.consecutiveThrowTicks = BUSINESS_FAILURE_TICK_THRESHOLD;
+      await vi.advanceTimersByTimeAsync(OPERABILITY_MONITOR_INTERVAL_MS);
+      // Pino emits the NUMERIC level (50 = error, 30 = info); the §3 external
+      // hook pages on `level >= 50`, so these are the numbers that matter.
+      expect(tickFailureLines(lines)).toEqual([
+        "operability.tick_failure/heartbeat/failing/50",
+      ]);
+
+      // The heartbeat run clears while the deadline scanner enters one: a
+      // swapped pair (or a shared tracker) would not produce this shape.
+      heartbeatMetrics.consecutiveThrowTicks = 0;
+      deadlineScannerMetrics.consecutiveThrowTicks =
+        BUSINESS_FAILURE_TICK_THRESHOLD;
+      await vi.advanceTimersByTimeAsync(OPERABILITY_MONITOR_INTERVAL_MS);
+      expect(tickFailureLines(lines).slice(1)).toEqual([
+        "operability.tick_failure/heartbeat/recovered/30",
+        "operability.tick_failure/deadline_scanner/failing/50",
+      ]);
+    } finally {
+      await app.close();
+      heartbeatMetrics.consecutiveThrowTicks = 0;
+      deadlineScannerMetrics.consecutiveThrowTicks = 0;
+      vi.useRealTimers();
+    }
   });
 });

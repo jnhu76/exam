@@ -120,7 +120,7 @@ representability, and stored reserved values cannot silently redefine it.
 | Document | Purpose |
 | --- | --- |
 | [`adr/README.md`](adr/README.md) | ADR index — status, supersession, numbering |
-| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-023-remove-backup-evidence-subsystem.md`](adr/ADR-023-remove-backup-evidence-subsystem.md) | Formal architecture decisions |
+| [`adr/ADR-001-redis.md`](adr/ADR-001-redis.md) … [`ADR-024-tick-level-throw-escalation.md`](adr/ADR-024-tick-level-throw-escalation.md) | Formal architecture decisions |
 
 Product capability composition: [`architecture/product-capability-composition.md`](architecture/product-capability-composition.md)
 — adopted by [ADR-022](adr/ADR-022-product-capability-composition.md), tracked by

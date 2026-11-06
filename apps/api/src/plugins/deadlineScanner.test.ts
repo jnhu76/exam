@@ -239,6 +239,7 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
     deadlineScannerMetrics.autoSubmitCount = 0;
     deadlineScannerMetrics.failedCount = 0;
     deadlineScannerMetrics.consecutiveFailedTicks = 0;
+    deadlineScannerMetrics.consecutiveThrowTicks = 0;
   }
 
   function buildApp(db: unknown, lines: string[]) {
@@ -399,17 +400,18 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
       // A tick whose org discovery THROWS settles via the catch path but
       // carries NO business-failure evidence: the counter must stay exactly
       // where it was — not reset to 0 (a throw is not recovery), not
-      // advanced (a thrown cycle is owned by the readiness facts).
+      // advanced (a thrown cycle is escalated separately as
+      // operability.tick_failure, ADR-024).
       orgDiscoveryThrows = true;
       await runTick(clock);
       expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
       expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(1);
 
       // CONTINUOUS tick-level throws (DB readiness normal throughout): every
-      // thrown cycle settles, so the loop is not stalled, the readiness
-      // probe is the monitor's separate fact, and the business-failure
-      // counter stays frozen below the threshold indefinitely — the per-tick
-      // ERROR logs are the only signal for this shape, by ownership design.
+      // thrown cycle settles, so the loop is not stalled, and the
+      // business-failure counter stays frozen below the threshold
+      // indefinitely. This plugin keeps its per-tick ERROR log; the throw run
+      // itself escalates through the monitor's operability.tick_failure.
       for (let i = 0; i < 3; i++) {
         await runTick(clock);
         expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(1);
@@ -432,6 +434,51 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
       discoveryFails = false;
       await runTick(clock);
       expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(0);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("#885: throw ticks are counted in their OWN run-length counter — incremented by a throw, reset by a clean settle, never conflated with business failures", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    let discoveryFails = true;
+    let orgDiscoveryThrows = false;
+    const { app, clock } = buildApp(
+      buildDb({
+        discoveryFails: () => discoveryFails,
+        orgDiscoveryThrows: () => orgDiscoveryThrows,
+      }),
+      lines,
+    );
+    resetEscalationFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      // Settled ticks with candidate business failures: the #862 counter runs,
+      // the throw counter does not move.
+      await runTick(clock);
+      await runTick(clock);
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(2);
+      expect(deadlineScannerMetrics.consecutiveThrowTicks).toBe(0);
+
+      // Three throwing ticks: the throw run climbs, the business counter stays
+      // frozen, and the tick still settles.
+      orgDiscoveryThrows = true;
+      for (let i = 0; i < 3; i++) await runTick(clock);
+      expect(deadlineScannerMetrics.consecutiveThrowTicks).toBe(3);
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(2);
+      expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
+      expect(lines.join("")).toContain("Error scanning for expired attempts");
+
+      // The first settled tick without a throw ends the run...
+      orgDiscoveryThrows = false;
+      await runTick(clock);
+      expect(deadlineScannerMetrics.consecutiveThrowTicks).toBe(0);
+      // ...and business evidence resumes where its own counter left off.
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(3);
     } finally {
       await app.close();
       vi.useRealTimers();
