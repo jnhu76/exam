@@ -2,14 +2,15 @@
 
 ## Status
 
-- Status: **PROPOSED** — recorded with the #885 change for the decision owner's
-  review. Acceptance happens at merge (AGENTS.md §7: accepting a substantive
-  architecture decision is a human gate), so until then `master` keeps the #547
-  behaviour — throws settle, are logged, and are not escalated — and this
-  branch is a proposal whose code is implemented and tested but not yet
-  authoritative.
-- Date: 2026-11-05 (contract precision revised 2026-11-06; status unchanged)
-- Decision owners: project
+- Status: **ACCEPTED** — the project Owner explicitly approved the
+  independent, monitor-sampled `operability.tick_failure` decision on
+  2026-11-06 and authorized PR #896 to merge. The acceptance retains the
+  shared initial threshold `K = 4` and the documented sampling limitations:
+  finite throw runs can be missed, and no universal detection SLA, root-cause
+  attribution, business restoration, or operator-notification delivery is
+  guaranteed. This decision becomes binding on `master` when PR #896 merges.
+- Date: 2026-11-05 (contract precision revised 2026-11-06; Owner accepted 2026-11-06)
+- Decision owners: project (explicit Owner approval, PR #896, 2026-11-06)
 - Supersedes: none — **revises** one paragraph of
   [`docs/operations/active-alerting.md`](../operations/active-alerting.md) §4
   ("Transient scanner errors")
