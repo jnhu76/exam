@@ -48,6 +48,16 @@ jobs:
             exit 1
           fi
 
+          # The README badges are static to avoid false "no releases" responses
+          # from third-party GitHub API badge lookups. Keep them version-bound.
+          expected_badge="[![Release](https://img.shields.io/badge/release-${version}-blue.svg)](https://github.com/jnhu76/exam/releases)"
+          for readme in README.md README.zh-CN.md; do
+            if ! grep -Fxq "$expected_badge" "$readme"; then
+              echo "$readme release badge must match .release-version ($version)" >&2
+              exit 1
+            fi
+          done
+
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "notes=$notes" >> "$GITHUB_OUTPUT"
 
