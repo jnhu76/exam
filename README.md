@@ -7,7 +7,7 @@
 Run exams on your own infrastructure — from authoring and delivery to grading,
 recovery, audit, and day-2 operations.
 
-[![Release](https://img.shields.io/github/v/release/jnhu76/exam?display_name=tag)](https://github.com/jnhu76/exam/releases)
+[![Release](https://img.shields.io/badge/release-v0.0.11-blue.svg)](https://github.com/jnhu76/exam/releases)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Self-hosted](https://img.shields.io/badge/deployment-self--hosted-success.svg)](INSTALL.md)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](INSTALL.md)
