@@ -4,6 +4,13 @@
 Verdict: **GO_C (CONDITIONAL)** — a research/decision verdict, **not** implementation
 authorization.
 
+> **Replay errata (2026-11-06).** The `105 s` detection / `15 s` recovery figures in this
+> historical study were measured from phase observation markers, not from the actual
+> injection/throw-settle events. The corrected episode-level measurements and the committed
+> E7 reset instrument are in [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) §6. The
+> “0 allocations” wording is narrowed there: no new scanning or persistent I/O was added,
+> but heap allocation was not measured and per-monitor-tick closures do allocate.
+
 ## 1. Baseline (from `origin/master`, 2026-11-05)
 
 | Item | Value |
@@ -130,8 +137,9 @@ E10's stale `business_failure` is a separate, documented residual.
 **MINIMAL_MACHINE_WORK** (C, SOURCE_VERIFIED/INFERRED): per scanner tick 1 integer increment
 or reset (via a tick-local `threw` flag written in the existing `.finally()`); per monitor
 tick 2 integer reads + 2 classifier calls + 2 tracker calls, with at most one extra stdout
-line **only on a transition**. **0 new timers, 0 new DB probes, 0 new I/O channels, 0 new
-allocations, 0 durable state, 0 env knobs, 0 schema changes.** New state = **4 scalars**
+line **only on a transition**. **0 new timers, 0 new DB probes, 0 new I/O channels,
+0 new scanning/persistent I/O, 0 durable state, 0 env knobs, 0 schema changes.** New state =
+**4 scalars**. Heap allocation was not measured; per-monitor-tick closures do allocate.
 (2 process-local integers + 2 tracker `boolean|null`). Measured detection **105 s** from the
 actual fault, recovery **15 s**.
 

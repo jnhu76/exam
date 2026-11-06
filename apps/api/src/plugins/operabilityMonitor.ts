@@ -494,8 +494,8 @@ export function evaluateOperabilityTick(
   // silent) — without this leg a loop that throws every tick escalates
   // nothing. The fact asserted is only the run of throws: root cause, business
   // outcome and backlog state stay UNKNOWN. Throws share the #862 window
-  // (both are counted in ticks of the same 30s scan cadence), so the existing
-  // predicate is reused deliberately (ADR-024).
+  // (both are counted in ticks of the same configured scan cadence), so the
+  // existing predicate is reused deliberately (ADR-024).
   const tickFailure = (
     component: "heartbeat" | "deadline_scanner",
     consecutiveThrowTicks: number,

@@ -24,7 +24,9 @@ import { describe, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { Writable } from "node:stream";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -51,6 +53,103 @@ const STEP_MS = OPERABILITY_MONITOR_INTERVAL_MS; // 15_000, real monitor cadence
 const SCANNER_INTERVAL_MS = 30_000; // real default HEARTBEAT_SCAN_INTERVAL_MS
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_PATH = path.resolve(HERE, "../results/experiments.json");
+const BASELINE_SHA = "f2d44b78136cda1358148dbce891590975d4c88f";
+const INSTRUMENT_VERSION = "issue-885-instrument-v2";
+const REPO_ROOT = path.resolve(HERE, "../../..");
+const PRODUCT_MODULES = [
+  "heartbeat",
+  "deadlineScanner",
+  "operabilityMonitor",
+] as const;
+
+function sha256File(filePath: string): string {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function gitOutput(args: string[]): string | null {
+  try {
+    return execFileSync("git", args, {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function readInstrumentManifest(): {
+  version: string;
+  files: Array<{ path: string; sha256: string }>;
+  manifestSha256: string;
+} | null {
+  const manifestPath = path.resolve(HERE, "instrument-manifest.json");
+  try {
+    const raw = readFileSync(manifestPath);
+    const parsed = JSON.parse(raw.toString("utf8")) as {
+      version: string;
+      files: Array<{ path: string; sha256: string }>;
+    };
+    return {
+      version: parsed.version,
+      files: parsed.files,
+      manifestSha256: createHash("sha256").update(raw).digest("hex"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function collectProvenance() {
+  const subjectSha = gitOutput(["rev-parse", "HEAD"]);
+  const status = gitOutput(["status", "--porcelain"]);
+  const productModules = PRODUCT_MODULES.map((name) => {
+    const modulePath = realpathSync(
+      path.resolve(REPO_ROOT, "apps/api/src/plugins", `${name}.ts`),
+    );
+    return {
+      name,
+      path: modulePath,
+      sha256: sha256File(modulePath),
+    };
+  });
+  return {
+    baselineSha: BASELINE_SHA,
+    subjectSha: subjectSha ?? "UNKNOWN",
+    subjectDirty: status === null ? "UNKNOWN" : status.length > 0,
+    subjectDirtyFiles:
+      status === null
+        ? null
+        : status.length === 0
+          ? []
+          : status.split("\n").slice(0, 30),
+    productModules,
+    instrument: {
+      version: INSTRUMENT_VERSION,
+      manifest: readInstrumentManifest(),
+    },
+    runtime: {
+      node: process.version,
+      vitest: (() => {
+        try {
+          return (
+            JSON.parse(
+              readFileSync(
+                path.resolve(HERE, "node_modules/vitest/package.json"),
+                "utf8",
+              ),
+            ) as { version: string }
+          ).version;
+        } catch {
+          return "UNKNOWN";
+        }
+      })(),
+    },
+    command:
+      "vitest run --config research/issue-885/harness/vitest.config.ts research/issue-885/harness/",
+    generatedAt: null as string | null,
+  };
+}
 
 type Loop = "heartbeat" | "deadline_scanner";
 type ErrorKind = "logic" | "pg";
@@ -88,11 +187,19 @@ interface Stats {
   throws: number;
 }
 
+interface MonitorRead {
+  loop: Loop;
+  atMs: number;
+  elapsedMs: number;
+  value: number;
+}
+
 interface Shared {
   faults: Faults;
   stats: Stats;
   lines: string[];
   hangRejects: Array<(e: Error) => void>;
+  reads: MonitorRead[];
 }
 
 interface LogLine {
@@ -115,6 +222,14 @@ interface StepObs {
   hbSettled: boolean;
   dlStarted: boolean;
   dlSettled: boolean;
+  hbStartedAtMs: number | null;
+  hbSettledAtMs: number | null;
+  dlStartedAtMs: number | null;
+  dlSettledAtMs: number | null;
+  hbThrew: boolean;
+  dlThrew: boolean;
+  hbCleanSettled: boolean;
+  dlCleanSettled: boolean;
   hbThrow: number;
   dlThrow: number;
   hbBusinessFail: number;
@@ -122,6 +237,7 @@ interface StepObs {
   errorLines: number;
   pingDelta: number;
   pingFailDelta: number;
+  monitorReads: MonitorRead[];
   operabilityEvents: Array<{
     event: string;
     component: string;
@@ -133,11 +249,30 @@ interface StepObs {
   metrics: {
     hbConsecutiveFailedTicks: number;
     dlConsecutiveFailedTicks: number;
+    hbConsecutiveThrowTicks: number;
+    dlConsecutiveThrowTicks: number;
     hbLastSettledAt: number | null;
     dlLastSettledAt: number | null;
     hbStallState: string;
     dlStallState: string;
   };
+}
+
+interface PhaseObservation {
+  label: string;
+  startedAtElapsedMs: number;
+  endedAtElapsedMs: number;
+  faults: Faults;
+  restart: boolean;
+}
+
+interface FaultEpisode {
+  index: number;
+  injectedAtElapsedMs: number;
+  removedAtElapsedMs: number | null;
+  removalReason: "clean" | "signature_change" | "restart" | "open";
+  faults: Faults;
+  processEpoch: number;
 }
 
 interface CfEvent {
@@ -183,8 +318,8 @@ interface Scenario {
 
 interface ScenarioResult {
   scenario: Scenario;
-  faultStartElapsedMs: number | null;
-  faultClearElapsedMs: number | null;
+  phases: PhaseObservation[];
+  faultEpisodes: FaultEpisode[];
   steps: StepObs[];
   asBuilt: {
     totalErrorLines: number;
@@ -202,7 +337,9 @@ interface ScenarioResult {
       component: string;
       state: string;
       level: string;
+      timeMs: number;
       elapsedMs: number;
+      observedAtStepElapsedMs: number;
     }>;
     readinessFailureEvents: number;
     readinessRecoveryEvents: number;
@@ -371,6 +508,58 @@ function makeDb(shared: Shared): unknown {
 
 // ── App + metrics ───────────────────────────────────────────────────────────
 
+let activeReadSink: Shared | null = null;
+
+function resetOptionalCounter(metrics: object, key: string): void {
+  const record = metrics as Record<string, unknown>;
+  if (key in record) record[key] = 0;
+}
+
+function readOptionalCounter(metrics: object, key: string): number {
+  const value = (metrics as Record<string, unknown>)[key];
+  return typeof value === "number" ? value : 0;
+}
+
+/**
+ * Read-side observation only. The monitor is the sole reader of the throw
+ * counter; instrumenting the getter records the ACTUAL r_j read point (after
+ * the readiness await), not the monitor timer trigger. On the frozen baseline
+ * the field does not exist, so the probe is skipped rather than fabricating a
+ * product field.
+ */
+function installThrowReadProbe(metrics: object, loop: Loop): void {
+  const record = metrics as Record<string, unknown>;
+  if (!("consecutiveThrowTicks" in record)) return;
+  const descriptor = Object.getOwnPropertyDescriptor(
+    record,
+    "consecutiveThrowTicks",
+  );
+  if (descriptor?.get) return;
+  let value = readOptionalCounter(metrics, "consecutiveThrowTicks");
+  Object.defineProperty(record, "consecutiveThrowTicks", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      if (activeReadSink !== null) {
+        const atMs = Date.now();
+        activeReadSink.reads.push({
+          loop,
+          atMs,
+          elapsedMs: atMs - T0,
+          value,
+        });
+      }
+      return value;
+    },
+    set(next: number) {
+      value = next;
+    },
+  });
+}
+
+installThrowReadProbe(heartbeatMetrics, "heartbeat");
+installThrowReadProbe(deadlineScannerMetrics, "deadline_scanner");
+
 function resetAllMetrics(): void {
   for (const m of [
     heartbeatMetrics,
@@ -382,6 +571,7 @@ function resetAllMetrics(): void {
     m.lastSettledAt = null;
     m.activeSince = null;
     m.consecutiveFailedTicks = 0;
+    resetOptionalCounter(m, "consecutiveThrowTicks");
   }
   heartbeatMetrics.disruptedCount = 0;
   heartbeatMetrics.disruptionFailedCount = 0;
@@ -431,6 +621,7 @@ async function buildAndRegister(shared: Shared): Promise<FastifyInstance> {
 
 interface Snap {
   linesLen: number;
+  readsLen: number;
   hbStartedAt: number | null;
   hbSettledAt: number | null;
   dlStartedAt: number | null;
@@ -442,6 +633,7 @@ interface Snap {
 function snap(shared: Shared): Snap {
   return {
     linesLen: shared.lines.length,
+    readsLen: shared.reads.length,
     hbStartedAt: heartbeatMetrics.lastStartedAt?.getTime() ?? null,
     hbSettledAt: heartbeatMetrics.lastSettledAt?.getTime() ?? null,
     dlStartedAt: deadlineScannerMetrics.lastStartedAt?.getTime() ?? null,
@@ -480,6 +672,10 @@ function observe(
   const hbSettledAt = heartbeatMetrics.lastSettledAt?.getTime() ?? null;
   const dlStartedAt = deadlineScannerMetrics.lastStartedAt?.getTime() ?? null;
   const dlSettledAt = deadlineScannerMetrics.lastSettledAt?.getTime() ?? null;
+  const hbThrow = newLines.filter((l) => l.msg === HB_CATCH).length;
+  const dlThrow = newLines.filter((l) => l.msg === DL_CATCH).length;
+  const hbSettled = hbSettledAt !== null && hbSettledAt !== before.hbSettledAt;
+  const dlSettled = dlSettledAt !== null && dlSettledAt !== before.dlSettledAt;
   const now = new Date(tMs);
   return {
     step,
@@ -488,16 +684,25 @@ function observe(
     phase: phaseLabel,
     faults: { ...faults },
     hbStarted: hbStartedAt !== null && hbStartedAt !== before.hbStartedAt,
-    hbSettled: hbSettledAt !== null && hbSettledAt !== before.hbSettledAt,
+    hbSettled,
     dlStarted: dlStartedAt !== null && dlStartedAt !== before.dlStartedAt,
-    dlSettled: dlSettledAt !== null && dlSettledAt !== before.dlSettledAt,
-    hbThrow: newLines.filter((l) => l.msg === HB_CATCH).length,
-    dlThrow: newLines.filter((l) => l.msg === DL_CATCH).length,
+    dlSettled,
+    hbStartedAtMs: hbStartedAt,
+    hbSettledAtMs: hbSettledAt,
+    dlStartedAtMs: dlStartedAt,
+    dlSettledAtMs: dlSettledAt,
+    hbThrew: hbThrow > 0,
+    dlThrew: dlThrow > 0,
+    hbCleanSettled: hbSettled && hbThrow === 0,
+    dlCleanSettled: dlSettled && dlThrow === 0,
+    hbThrow,
+    dlThrow,
     hbBusinessFail: newLines.filter((l) => HB_BIZ.includes(l.msg ?? "")).length,
     dlBusinessFail: newLines.filter((l) => DL_BIZ.includes(l.msg ?? "")).length,
     errorLines: newLines.filter((l) => (l.level ?? 0) >= 50).length,
     pingDelta: shared.stats.pings - before.pings,
     pingFailDelta: shared.stats.pingFailures - before.pingFailures,
+    monitorReads: shared.reads.slice(before.readsLen),
     operabilityEvents: newLines
       .filter(
         (
@@ -519,6 +724,14 @@ function observe(
     metrics: {
       hbConsecutiveFailedTicks: heartbeatMetrics.consecutiveFailedTicks,
       dlConsecutiveFailedTicks: deadlineScannerMetrics.consecutiveFailedTicks,
+      hbConsecutiveThrowTicks: readOptionalCounter(
+        heartbeatMetrics,
+        "consecutiveThrowTicks",
+      ),
+      dlConsecutiveThrowTicks: readOptionalCounter(
+        deadlineScannerMetrics,
+        "consecutiveThrowTicks",
+      ),
       hbLastSettledAt: hbSettledAt,
       dlLastSettledAt: dlSettledAt,
       hbStallState: classifyLoopStall(
@@ -677,7 +890,7 @@ function applyCounterfactual(cf: CfState, obs: StepObs): void {
       "recovered",
       `Critical background loop tick execution persistently failing: ${loop} (${nc} consecutive ticks threw; cause unknown)`,
       obs,
-      `Critical background loop tick exceptions cleared: ${loop} (no throw in last settled tick; business restoration unknown)`,
+      `Critical background loop tick exceptions cleared: ${loop} (a settled tick without a throw interrupted the run; business restoration unknown)`,
     );
     // D: freeze the tracker while the mandatory dependency is unavailable.
     if (!readinessDown) {
@@ -692,7 +905,7 @@ function applyCounterfactual(cf: CfState, obs: StepObs): void {
         "recovered",
         `Critical background loop tick execution persistently failing: ${loop} (${nd} consecutive ticks threw; cause unknown)`,
         obs,
-        `Critical background loop tick exceptions cleared: ${loop} (no throw in last settled tick; business restoration unknown)`,
+        `Critical background loop tick exceptions cleared: ${loop} (a settled tick without a throw interrupted the run; business restoration unknown)`,
       );
     }
     const na = cf.a[loop];
@@ -1064,25 +1277,40 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
     stats: { pings: 0, pingFailures: 0, orgSelects: 0, txCalls: 0, throws: 0 },
     lines: [],
     hangRejects: [],
+    reads: [],
   };
   const cf = makeCfState();
   resetAllMetrics();
   holdRetentionHealthy();
+  activeReadSink = shared;
   let app = await buildAndRegister(shared);
   const steps: StepObs[] = [];
-  let faultStartElapsedMs: number | null = null;
-  let faultClearElapsedMs: number | null = null;
+  const phases: PhaseObservation[] = [];
+  const faultEpisodes: FaultEpisode[] = [];
+  let currentEpisode: FaultEpisode | null = null;
+  let processEpoch = 0;
   let elapsed = 0;
   let stepIdx = 0;
-  let wasFault = false;
+
+  const sameFaultSignature = (a: Faults, b: Faults) =>
+    JSON.stringify(a) === JSON.stringify(b);
 
   try {
     for (const phase of scenario.phases) {
+      const phaseStartedAt = elapsed;
       shared.faults = phase.faults ? { ...phase.faults } : {};
+
       if (phase.restart) {
-        // Simulate a process restart: close the app, zero process-local
-        // metrics, build a NEW app (fresh monitor trackers), keep the clock.
+        // A restart ends the old process's alert episode and all of its
+        // process-local counters. Close the app BEFORE resetting so no old
+        // monitor/log write can observe the new process's state.
+        if (currentEpisode !== null) {
+          currentEpisode.removedAtElapsedMs = phaseStartedAt;
+          currentEpisode.removalReason = "restart";
+          currentEpisode = null;
+        }
         await app.close();
+        processEpoch++;
         resetAllMetrics();
         holdRetentionHealthy();
         // Fresh-process trackers for the counterfactual candidates too.
@@ -1112,9 +1340,36 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
         };
         cf.readinessOutageActive = false;
         app = await buildAndRegister(shared);
-        continue;
       }
-      const inFault = isFaultPhase(phase.faults);
+
+      // Episode boundaries are recorded when the fault switch actually
+      // changes, not reconstructed after the next advance.
+      if (isFaultPhase(phase.faults)) {
+        if (
+          currentEpisode === null ||
+          currentEpisode.processEpoch !== processEpoch ||
+          !sameFaultSignature(currentEpisode.faults, shared.faults)
+        ) {
+          if (currentEpisode !== null) {
+            currentEpisode.removedAtElapsedMs = phaseStartedAt;
+            currentEpisode.removalReason = "signature_change";
+          }
+          currentEpisode = {
+            index: faultEpisodes.length,
+            injectedAtElapsedMs: phaseStartedAt,
+            removedAtElapsedMs: null,
+            removalReason: "open",
+            faults: { ...shared.faults },
+            processEpoch,
+          };
+          faultEpisodes.push(currentEpisode);
+        }
+      } else if (currentEpisode !== null) {
+        currentEpisode.removedAtElapsedMs = phaseStartedAt;
+        currentEpisode.removalReason = "clean";
+        currentEpisode = null;
+      }
+
       for (let i = 0; i < phase.steps; i++) {
         const before = snap(shared);
         await vi.advanceTimersByTimeAsync(STEP_MS);
@@ -1127,21 +1382,24 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
           before,
           shared,
         );
-        if (inFault && !wasFault && faultStartElapsedMs === null)
-          faultStartElapsedMs = obs.elapsedMs;
-        if (!inFault && wasFault && faultClearElapsedMs === null)
-          faultClearElapsedMs = obs.elapsedMs;
-        wasFault = inFault;
         steps.push(obs);
         applyCounterfactual(cf, obs);
         stepIdx++;
       }
+      phases.push({
+        label: phase.label,
+        startedAtElapsedMs: phaseStartedAt,
+        endedAtElapsedMs: elapsed,
+        faults: { ...shared.faults },
+        restart: phase.restart === true,
+      });
     }
   } finally {
     for (const reject of shared.hangRejects) {
       reject(new Error("test teardown: release hung discovery"));
     }
     await app.close();
+    activeReadSink = null;
     vi.useRealTimers();
   }
 
@@ -1206,7 +1464,11 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
         component: e.component,
         state: e.state,
         level: e.level,
-        elapsedMs: s.elapsedMs,
+        // Actual pino emission time on the controlled clock. The observation
+        // step is retained separately; it must not replace the event time.
+        timeMs: e.time,
+        elapsedMs: e.time - T0,
+        observedAtStepElapsedMs: s.elapsedMs,
       });
     }
   }
@@ -1232,8 +1494,8 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
 
   return {
     scenario,
-    faultStartElapsedMs,
-    faultClearElapsedMs,
+    phases,
+    faultEpisodes,
     steps,
     asBuilt: {
       totalErrorLines,
@@ -1275,18 +1537,24 @@ describe("#885 fault-injection experiments (E0..E11)", () => {
     }
     // The results directory is regenerable and intentionally not committed; a
     // fresh clean-room clone does not have it yet.
+    const provenance = collectProvenance();
+    provenance.generatedAt = new Date().toISOString();
     mkdirSync(path.dirname(RESULTS_PATH), { recursive: true });
     writeFileSync(
       RESULTS_PATH,
       JSON.stringify(
         {
-          baseSha: "f2d44b78136cda1358148dbce891590975d4c88f",
-          generatedAt: new Date().toISOString(),
+          ...provenance,
           t0: T0,
+          t0Iso: new Date(T0).toISOString(),
           stepMs: STEP_MS,
           scannerIntervalMs: SCANNER_INTERVAL_MS,
+          monitorIntervalMs: OPERABILITY_MONITOR_INTERVAL_MS,
           businessFailureTickThreshold: 4,
-          note: "MEASURED = real plugins + real stdout; COUNTERFACTUAL A/B/C/D = pure classifiers over measured telemetry, NOT product behaviour.",
+          scenarioCount: results.length,
+          clock:
+            "vi.useFakeTimers({now:T0}); fastify.now() and pino time share the controlled clock",
+          note: "MEASURED = real plugins + real stdout; COUNTERFACTUAL A/B/C/D = pure classifiers over measured telemetry, NOT product behaviour. subjectSha/subjectDirty identify the source actually imported, not the frozen baseline.",
           results,
         },
         null,
@@ -1309,7 +1577,7 @@ describe("#885 fault-injection experiments (E0..E11)", () => {
           `stall(hb/dl)=${a.stallStatesSeen.heartbeat.join("|")}/${a.stallStatesSeen.deadline_scanner.join("|")} ` +
           `ASBUILT[readiness=${a.readinessFailureEvents}+${a.readinessRecoveryEvents} biz=${a.businessFailureEvents} loop=${a.backgroundLoopEvents}] ` +
           `CF[A=${c.A.failureEvents}/${c.A.recoveryEvents} B=${c.B.failureEvents}/${c.B.recoveryEvents} C=${c.C.failureEvents}/${c.C.recoveryEvents} D=${c.D.failureEvents}/${c.D.recoveryEvents} dupC=${c.C.duplicateWithReadiness}] ` +
-          `faultStart=${r.faultStartElapsedMs} clear=${r.faultClearElapsedMs}`,
+          `episodes=${r.faultEpisodes.map((e) => `${e.injectedAtElapsedMs}->${e.removedAtElapsedMs ?? "open"}@p${e.processEpoch}`).join(",") || "-"}`,
       );
     }
   }, 300_000);

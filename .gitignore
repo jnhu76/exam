@@ -46,3 +46,8 @@ apps/e2e/test-results-patrol/
 docs-site/content/
 docs-site/.vitepress/cache/
 docs-site/.vitepress/dist/
+
+# #885 research replay output: deterministic, regenerable observations and
+# transcripts. The compact comparison and instrument manifest are committed;
+# the large raw dumps are not (see research/issue-885/REPRO.md).
+research/issue-885/results/

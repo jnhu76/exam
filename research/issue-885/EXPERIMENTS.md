@@ -3,6 +3,13 @@
 **BASE_SHA** `f2d44b78136cda1358148dbce891590975d4c88f`. Worktree `/home/hoo/Source/exam-885`.
 All numbers below are **MEASURED** unless the column is explicitly labelled COUNTERFACTUAL.
 
+> **Replay errata (2026-11-06).** The `105 s` detection / `15 s` recovery figures in this
+> historical study were measured from phase observation markers, not from the actual
+> injection/throw-settle events. The corrected episode-level measurements and the committed
+> E7 reset instrument are in [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) §6. The
+> “0 allocations” wording is narrowed there: no new scanning or persistent I/O was added,
+> but heap allocation was not measured and per-monitor-tick closures do allocate.
+
 ## 1. What is real and what is simulated
 
 - **MEASURED (as-built)**: three REAL Fastify plugins — `heartbeatPlugin`,

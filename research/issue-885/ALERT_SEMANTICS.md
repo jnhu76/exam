@@ -5,6 +5,13 @@ Facts first, then fields/counters/events. Every claim below is tagged
 **INFERRED** (reasoning over the two). Where evidence cannot decide, the answer is
 **UNKNOWN** and stays UNKNOWN.
 
+> **Replay errata (2026-11-06).** The `105 s` detection / `15 s` recovery figures in this
+> historical study were measured from phase observation markers, not from the actual
+> injection/throw-settle events. The corrected episode-level measurements and the committed
+> E7 reset instrument are in [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) §6. The
+> “0 allocations” wording is narrowed there: no new scanning or persistent I/O was added,
+> but heap allocation was not measured and per-monitor-tick closures do allocate.
+
 ## 1. The four fact states
 
 | State | Definition (what is actually observable) | Existing authority | What it does NOT mean |

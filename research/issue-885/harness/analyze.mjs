@@ -1,148 +1,239 @@
 /**
- * Derive #885 decision inputs from the MEASURED + COUNTERFACTUAL raw results.
- * Run: node research/issue-885/harness/analyze.mjs
- * Pure read of experiments.json; writes analysis.json; prints a compact table.
+ * Derive #885 evidence inputs from the MEASURED + COUNTERFACTUAL raw results.
+ *
+ * The replay evidence is keyed by fault EPISODE, not by the first throw in the
+ * whole experiment. Times are actual fake-clock milliseconds; injection and
+ * removal are recorded when the fault switch changes, and event times are the
+ * pino emission times (not the enclosing observation step).
+ *
+ * Usage: node research/issue-885/harness/analyze.mjs
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const raw = JSON.parse(
-  readFileSync(path.resolve(HERE, "../results/experiments.json"), "utf8"),
-);
+const RESULTS_PATH = path.resolve(HERE, "../results/experiments.json");
+const OUT_PATH = path.resolve(HERE, "../results/analysis.json");
+const raw = JSON.parse(readFileSync(RESULTS_PATH, "utf8"));
+const T0 = raw.t0;
+const loops = ["heartbeat", "deadline_scanner"];
 
-const isFailure = (e) =>
-  e.state === "failing" ||
-  e.state === "paged" ||
-  e.state === "stalled" ||
-  e.state === "unavailable";
-const isRecovery = (e) => e.state === "recovered" || e.state === "cleared";
+function settledAt(step, loop) {
+  return loop === "heartbeat" ? step.hbSettledAtMs : step.dlSettledAtMs;
+}
 
-function latencyFor(events, faultStart, faultClear) {
-  const failures = events
-    .filter(isFailure)
-    .sort((a, b) => a.elapsedMs - b.elapsedMs);
-  const recoveries = events
-    .filter(isRecovery)
-    .filter((e) => faultClear === null || e.elapsedMs >= faultClear)
-    .sort((a, b) => a.elapsedMs - b.elapsedMs);
+function threw(step, loop) {
+  return loop === "heartbeat" ? step.hbThrew : step.dlThrew;
+}
+
+function cleanSettled(step, loop) {
+  return loop === "heartbeat" ? step.hbCleanSettled : step.dlCleanSettled;
+}
+
+function eventElapsed(event) {
+  return event.elapsedMs;
+}
+
+function inWindow(event, start, end) {
+  return (
+    eventElapsed(event) >= start && (end === null || eventElapsed(event) < end)
+  );
+}
+
+function firstOrNull(items, key) {
+  return items.length === 0 ? null : key(items[0]);
+}
+
+function episodeEvidence(result, episode, active) {
+  const start = episode.injectedAtElapsedMs;
+  const end = episode.removedAtElapsedMs;
+  const events = result.asBuilt.operabilityEvents.filter(
+    (event) => event.event === "operability.tick_failure",
+  );
+  const perLoop = {};
+  for (const loop of loops) {
+    const alertActiveAtStart = active[loop];
+    const loopEvents = events.filter((event) => event.component === loop);
+    const failing = loopEvents
+      .filter(
+        (event) => event.state === "failing" && inWindow(event, start, end),
+      )
+      .sort((a, b) => eventElapsed(a) - eventElapsed(b));
+    if (failing.length > 0) active[loop] = true;
+    if (episode.removalReason === "restart") active[loop] = false;
+    const recovered =
+      // A recovery belongs to this episode if an alert was already active at
+      // its start (E9's cause changed without a recovered transition) or this
+      // episode raised one. A recovery must not be pulled from an unrelated
+      // later episode.
+      active[loop] && episode.removalReason === "clean" && end !== null
+        ? loopEvents
+            .filter(
+              (event) =>
+                event.state === "recovered" && eventElapsed(event) >= end,
+            )
+            .sort((a, b) => eventElapsed(a) - eventElapsed(b))
+        : [];
+    if (recovered.length > 0) active[loop] = false;
+    const throwSettles = result.steps
+      .filter(
+        (step) =>
+          threw(step, loop) &&
+          settledAt(step, loop) !== null &&
+          settledAt(step, loop) - T0 >= start &&
+          (end === null || settledAt(step, loop) - T0 < end),
+      )
+      .map((step) => ({
+        elapsedMs: settledAt(step, loop) - T0,
+        phase: step.phase,
+      }))
+      .sort((a, b) => a.elapsedMs - b.elapsedMs);
+    const cleanSettles =
+      end === null
+        ? []
+        : result.steps
+            .filter(
+              (step) =>
+                cleanSettled(step, loop) &&
+                settledAt(step, loop) !== null &&
+                settledAt(step, loop) - T0 >= end,
+            )
+            .map((step) => ({
+              elapsedMs: settledAt(step, loop) - T0,
+              phase: step.phase,
+            }))
+            .sort((a, b) => a.elapsedMs - b.elapsedMs);
+    const firstThrowSettle = firstOrNull(throwSettles, (x) => x.elapsedMs);
+    const firstCleanSettle = firstOrNull(cleanSettles, (x) => x.elapsedMs);
+    const firstFailing = firstOrNull(failing, eventElapsed);
+    const firstRecovered = firstOrNull(recovered, eventElapsed);
+    perLoop[loop] = {
+      alertActiveAtEpisodeStart: alertActiveAtStart,
+      failingRaisedInEpisode: failing.length > 0,
+      activeAlertAfterEpisode: active[loop],
+      firstThrowSettleElapsedMs: firstThrowSettle,
+      firstFailingEventElapsedMs: firstFailing,
+      injectionToFailingMs: firstFailing === null ? null : firstFailing - start,
+      firstThrowSettleToFailingMs:
+        firstFailing === null || firstThrowSettle === null
+          ? null
+          : firstFailing - firstThrowSettle,
+      firstNoThrowSettleAfterRemovalElapsedMs: firstCleanSettle,
+      firstRecoveryEventElapsedMs: firstRecovered,
+      removalToRecoveryMs:
+        firstRecovered === null || end === null ? null : firstRecovered - end,
+      firstNoThrowSettleToRecoveryMs:
+        firstRecovered === null || firstCleanSettle === null
+          ? null
+          : firstRecovered - firstCleanSettle,
+      monitorReads:
+        end === null
+          ? result.steps
+              .flatMap((step) => step.monitorReads)
+              .filter((read) => read.loop === loop && read.elapsedMs >= start)
+          : result.steps
+              .flatMap((step) => step.monitorReads)
+              .filter(
+                (read) =>
+                  read.loop === loop &&
+                  read.elapsedMs >= start &&
+                  read.elapsedMs < end,
+              ),
+    };
+  }
   return {
-    firstFailureElapsedMs: failures.length ? failures[0].elapsedMs : null,
-    detectionLatencyMs:
-      failures.length && faultStart !== null
-        ? failures[0].elapsedMs - faultStart
-        : null,
-    firstRecoveryElapsedMs: recoveries.length ? recoveries[0].elapsedMs : null,
-    recoveryLatencyMs:
-      recoveries.length && faultClear !== null
-        ? recoveries[0].elapsedMs - faultClear
-        : null,
+    index: episode.index,
+    processEpoch: episode.processEpoch,
+    injectedAtElapsedMs: start,
+    removedAtElapsedMs: end,
+    removalReason: episode.removalReason,
+    faults: episode.faults,
+    loops: perLoop,
   };
 }
 
-const rows = raw.results.map((r) => {
-  const asBuiltEvents = r.asBuilt.operabilityEvents.map((e) => ({
-    ...e,
-    state: e.state,
-  }));
-  const lat = {
-    asBuilt: latencyFor(
-      asBuiltEvents,
-      r.faultStartElapsedMs,
-      r.faultClearElapsedMs,
-    ),
-  };
-  for (const cand of ["A", "B", "C", "D"]) {
-    lat[cand] = latencyFor(
-      r.counterfactual.events.filter((e) => e.candidate === cand),
-      r.faultStartElapsedMs,
-      r.faultClearElapsedMs,
-    );
-  }
-  const firstThrowStep = r.steps.find((s) => s.hbThrow > 0 || s.dlThrow > 0);
-  const lastThrowStep = [...r.steps]
-    .reverse()
-    .find((s) => s.hbThrow > 0 || s.dlThrow > 0);
-  const firstCleanAfterLastThrow = [...r.steps]
-    .filter((s) => s.step > (lastThrowStep?.step ?? -1))
-    .find((s) => s.hbStarted || s.dlStarted);
+const rows = raw.results.map((result) => {
+  const events = result.asBuilt.operabilityEvents;
   return {
-    id: r.scenario.id,
-    ex: r.scenario.ex,
-    loops: r.scenario.loops,
-    faultStart: r.faultStartElapsedMs,
-    faultClear: r.faultClearElapsedMs,
-    firstThrowElapsedMs: firstThrowStep?.elapsedMs ?? null,
-    lastThrowElapsedMs: lastThrowStep?.elapsedMs ?? null,
-    firstCleanAfterLastThrowElapsedMs:
-      firstCleanAfterLastThrow?.elapsedMs ?? null,
+    id: result.scenario.id,
+    ex: result.scenario.ex,
+    loops: result.scenario.loops,
+    phases: result.phases,
+    episodes: (() => {
+      const active = { heartbeat: false, deadline_scanner: false };
+      return result.faultEpisodes.map((episode) =>
+        episodeEvidence(result, episode, active),
+      );
+    })(),
     asBuilt: {
-      totalErrorLines: r.asBuilt.totalErrorLines,
-      throwTicks: r.asBuilt.totalThrowTicks,
-      businessFailureTicks: r.asBuilt.totalBusinessFailureTicks,
-      cleanTicks: r.asBuilt.totalCleanTicks,
-      settledTicks: r.asBuilt.totalSettledTicks,
-      startedTicks: r.asBuilt.totalStartedTicks,
-      maxConsecutiveFailedTicks: r.asBuilt.maxConsecutiveFailedTicks,
-      stallStatesSeen: r.asBuilt.stallStatesSeen,
-      events: r.asBuilt.operabilityEvents,
-      counts: {
-        readinessFailure: r.asBuilt.readinessFailureEvents,
-        readinessRecovery: r.asBuilt.readinessRecoveryEvents,
-        businessFailure: r.asBuilt.businessFailureEvents,
-        backgroundLoop: r.asBuilt.backgroundLoopEvents,
-      },
-      latency: lat.asBuilt,
-    },
-    counterfactual: {
-      counts: r.counterfactual.byCandidate,
-      latency: { A: lat.A, B: lat.B, C: lat.C, D: lat.D },
-      events: r.counterfactual.events,
-    },
-    // lastSettledAt progression during the fault window (proves settled != stalled)
-    lastSettledAtDuringFault: r.steps
-      .filter(
-        (s) =>
-          r.faultStartElapsedMs !== null &&
-          s.elapsedMs >= r.faultStartElapsedMs &&
-          (r.faultClearElapsedMs === null ||
-            s.elapsedMs < r.faultClearElapsedMs),
-      )
-      .map((s) => ({
-        step: s.step,
-        elapsed: s.elapsedMs,
-        hb: s.metrics.hbLastSettledAt,
-        dl: s.metrics.dlLastSettledAt,
-        hbC: s.metrics.hbConsecutiveFailedTicks,
-        dlC: s.metrics.dlConsecutiveFailedTicks,
-        pingDelta: s.pingDelta,
-        pingFailDelta: s.pingFailDelta,
+      totalErrorLines: result.asBuilt.totalErrorLines,
+      throwTicks: result.asBuilt.totalThrowTicks,
+      businessFailureTicks: result.asBuilt.totalBusinessFailureTicks,
+      cleanTicks: result.asBuilt.totalCleanTicks,
+      settledTicks: result.asBuilt.totalSettledTicks,
+      startedTicks: result.asBuilt.totalStartedTicks,
+      maxConsecutiveFailedTicks: result.asBuilt.maxConsecutiveFailedTicks,
+      stalls: result.asBuilt.stallStatesSeen,
+      events: events.map((event) => ({
+        event: event.event,
+        component: event.component,
+        state: event.state,
+        level: event.level,
+        timeMs: event.timeMs,
+        elapsedMs: event.elapsedMs,
+        observedAtStepElapsedMs: event.observedAtStepElapsedMs,
       })),
+      tickFailureEvents: events.filter(
+        (event) => event.event === "operability.tick_failure",
+      ).length,
+      readinessFailureEvents: result.asBuilt.readinessFailureEvents,
+      readinessRecoveryEvents: result.asBuilt.readinessRecoveryEvents,
+      businessFailureEvents: result.asBuilt.businessFailureEvents,
+      backgroundLoopEvents: result.asBuilt.backgroundLoopEvents,
+    },
   };
 });
 
-// The results directory is regenerable and intentionally not committed; a
-// fresh clean-room clone does not have it yet.
-mkdirSync(path.resolve(HERE, "../results"), { recursive: true });
+mkdirSync(path.dirname(OUT_PATH), { recursive: true });
 writeFileSync(
-  path.resolve(HERE, "../results/analysis.json"),
+  OUT_PATH,
   JSON.stringify(
-    { baseSha: raw.baseSha, generatedAt: raw.generatedAt, rows },
+    {
+      baselineSha: raw.baselineSha,
+      subjectSha: raw.subjectSha,
+      subjectDirty: raw.subjectDirty,
+      instrument: raw.instrument,
+      generatedAt: raw.generatedAt,
+      timeOrigin: "elapsedMs from T0 on the controlled fake clock",
+      rows,
+    },
     null,
     2,
   ),
 );
 
-for (const r of rows) {
-  const c = r.counterfactual.counts;
+for (const row of rows) {
+  const tick = row.asBuilt.tickFailureEvents;
+  const episodeText =
+    row.episodes.length === 0
+      ? "-"
+      : row.episodes
+          .map((episode) => {
+            const hb = episode.loops.heartbeat;
+            const dl = episode.loops.deadline_scanner;
+            return (
+              `ep${episode.index}[${episode.injectedAtElapsedMs}->${episode.removedAtElapsedMs ?? "open"}` +
+              `,${episode.removalReason}] ` +
+              `hb(inj->fail=${hb.injectionToFailingMs},throwSettle->fail=${hb.firstThrowSettleToFailingMs},` +
+              `remove->rec=${hb.removalToRecoveryMs},cleanSettle->rec=${hb.firstNoThrowSettleToRecoveryMs}) ` +
+              `dl(inj->fail=${dl.injectionToFailingMs},throwSettle->fail=${dl.firstThrowSettleToFailingMs},` +
+              `remove->rec=${dl.removalToRecoveryMs},cleanSettle->rec=${dl.firstNoThrowSettleToRecoveryMs})`
+            );
+          })
+          .join(" | ");
   console.log(
-    `${r.id.padEnd(48)} ` +
-      `asBuilt[rd=${r.asBuilt.counts.readinessFailure}+${r.asBuilt.counts.readinessRecovery} biz=${r.asBuilt.counts.businessFailure} loop=${r.asBuilt.counts.backgroundLoop}] ` +
-      `det(ms)=${r.asBuilt.latency.detectionLatencyMs} rec(ms)=${r.asBuilt.latency.recoveryLatencyMs} | ` +
-      `C[fail=${c.C.failureEvents} dup=${c.C.duplicateWithReadiness} det=${r.counterfactual.latency.C.detectionLatencyMs} rec=${r.counterfactual.latency.C.recoveryLatencyMs}] ` +
-      `B[fail=${c.B.failureEvents} dup=${c.B.duplicateWithReadiness} det=${r.counterfactual.latency.B.detectionLatencyMs} rec=${r.counterfactual.latency.B.recoveryLatencyMs}] ` +
-      `D[fail=${c.D.failureEvents} dup=${c.D.duplicateWithReadiness}] ` +
-      `A[fail=${c.A.failureEvents} det=${r.counterfactual.latency.A.detectionLatencyMs}]`,
+    `${row.id.padEnd(48)} tick_failure=${tick} ` +
+      `episodes=${row.episodes.length} ${episodeText}`,
   );
 }

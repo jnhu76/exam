@@ -9,6 +9,13 @@ Evidence classes used throughout: **MEASURED** (real plugin stdout/metrics in th
 **SOURCE_VERIFIED** (read from BASE_SHA), **INFERRED** (reasoning over the two),
 **UNKNOWN** (cannot be decided here). No statistical rates are claimed.
 
+> **Replay errata (2026-11-06).** The `105 s` detection / `15 s` recovery figures in this
+> historical study were measured from phase observation markers, not from the actual
+> injection/throw-settle events. The corrected episode-level measurements and the committed
+> E7 reset instrument are in [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) §6. The
+> “0 allocations” wording is narrowed there: no new scanning or persistent I/O was added,
+> but heap allocation was not measured and per-monitor-tick closures do allocate.
+
 ## 1. Candidate analysis
 
 ### A — keep runtime, fix docs + external log rules
@@ -88,9 +95,9 @@ Cells are tagged `[M]` MEASURED, `[S]` SOURCE_VERIFIED, `[I]` INFERRED, `[U]` UN
 | Incident diagnosability | `[U]` log text + `err` only; no stable `event`/`component` | `[M]` Misleading: blames business work | `[S]` Stable `event`/`component`/`state`; existing ERROR logs retain the `err` for diagnosis; UNKNOWN explicitly documented | `[S]` Same as C, minus visibility during readiness outages |
 | Detection latency (from actual fault) | `[M]` 105000 ms in-process (CF log rule) `[U]` real watcher | `[M]` 105000 ms | `[M]` **105000 ms** (E2/E3/E6); readiness itself 0 ms in E1/E9 (worst case ≤15 s + probe) | `[M]` 105000–210000 ms; suppressed window delays it |
 | Recovery latency | `[U]` absence-derived, unbounded | `[M]` 15000 ms | `[M]` **15000 ms** (first clean settle) | `[M]` 15000 ms + phantom raise/recover pairs |
-| New machine work per scanner tick | `[S]` 0 | `[I]` 1 integer increment (catch) | `[S]` 1 integer increment (catch) OR 1 assignment to 0 (end of `try`); **0 objects, 0 I/O** | `[I]` same as C |
+| New machine work per scanner tick | `[S]` 0 | `[I]` 1 integer increment (catch) | `[S]` 1 integer increment (catch) OR 1 assignment to 0 (end of `try`); **0 new I/O** (object allocation not measured) | `[I]` same as C |
 | New machine work per monitor tick | `[S]` 0 in-process; `[U]` external | `[I]` 0 (reuses existing leg) | `[I]` 2 integer reads + 2 classifier calls + 2 tracker calls; 1 extra stdout line **only on a transition** | `[I]` C + 1 readiness gate + 1 freeze condition per tracker |
-| New timer / DB probe / I/O / allocations | `[S]` 0 in-process; `[U]` external pipeline | `[S]` 0 | `[S]` **0 new timers, 0 new probes, 0 new allocations** (reuses `:550`, `:508`, the existing `alerts` array) | `[S]` 0 new timers/probes; +1 gate branch |
+| New timer / DB probe / I/O / scanning work | `[S]` 0 in-process; `[U]` external pipeline | `[S]` 0 | `[S]` **0 new timers, 0 new probes, 0 new scanning/persistent I/O** (reuses `:550`, `:508`, the existing `alerts` array); heap allocation not measured, and the per-monitor-tick closure allocates | `[S]` 0 new timers/probes; +1 gate branch |
 | New state | `[S]` 0 in-process; `[U]` new external state | `[S]` 0 new (but redefines an existing field) | `[I]` **4 scalars**: 2 process-local integers + 2 tracker `boolean\|null`. No durable state/schema/env knob | `[I]` C + 2 freeze conditions |
 | Code change & regression scope | `[S]` 0 product files; `[U]` external rule | `[S]` 2 plugin files + doc §1/§4 + **2 freeze REGRESSION tests must change** | `[S]` 2 plugins + 1 monitor + 1 doc; 3 test files (2 mechanical fixture extensions, 1 new test set). 2 freeze REGRESSION tests stay **unchanged** | `[S]` C + correlation logic + more tests |
 | Compatibility with existing external log consumers | `[S]` Backward-compatible for the app, but consumers must build a new pipeline | `[M]` **Breaking**: same event name now emitted for a different fact | `[S]` **Additive, backward-compatible**: +1 `event` value, `state`/`component` unions already fit; old watchers ignore it. **BUT §3 whitelist must add the new event before anyone is paged** | `[S]` Same additive change as C |
@@ -329,7 +336,7 @@ the machinery already present: add 2 process-local integers to the scanner metri
 increment per throw, one reset per clean settle), feed them into the existing 15 s monitor
 snapshot, classify with the existing threshold predicate, dedupe with the existing transition
 tracker, and emit one additive stdout event through the existing loop. **Zero new timers,
-probes, durable state, env knobs, channels or allocations per tick.** Leave readiness,
+probes, durable state, env knobs or I/O channels per tick.** Leave readiness,
 business_failure and stall facts exactly as they are; refuse to attribute a root cause; state
 recovery as "exceptions cleared" with business restoration UNKNOWN; and update the external
 hook whitelist so the produced event can actually be consumed. Measured: 105 s detection,
