@@ -82,6 +82,14 @@ function toAuditLogResponse(row: AuditLogRowWithActor) {
  * stable column shape. Export carries safe operational fields only — the same
  * redaction rule as the underlying audit data (no secrets, no plaintext
  * credentials, no raw personal payloads).
+ *
+ * Identity columns map by metadata KEY, never by value shape: 请求ID carries
+ * `metadata.requestId` (HTTP request identity), 操作ID carries
+ * `metadata.operationId` (system operation identity). Rows written before the
+ * keys were split stored the operationId under `metadata.requestId`; those
+ * values keep rendering under 请求ID (no historical rewrite, no shape-based
+ * reclassification) — a deploy-visible export contract change that release
+ * notes must call out.
  */
 const EXPORT_HEADERS = [
   // i18n-copy-allow: data-format — CSV export header/value data contract
@@ -100,6 +108,8 @@ const EXPORT_HEADERS = [
   "IP地址",
   // i18n-copy-allow: data-format — CSV export header/value data contract
   "请求ID",
+  // i18n-copy-allow: data-format — CSV export header/value data contract
+  "操作ID",
 ] as const;
 
 function toExportRow(row: AuditLogRowWithActor): Record<string, unknown> {
@@ -113,6 +123,8 @@ function toExportRow(row: AuditLogRowWithActor): Record<string, unknown> {
     对象ID: row.auditLog.targetId,
     IP地址: row.auditLog.ipAddress ?? "",
     请求ID: typeof metadata.requestId === "string" ? metadata.requestId : "",
+    操作ID:
+      typeof metadata.operationId === "string" ? metadata.operationId : "",
   };
 }
 

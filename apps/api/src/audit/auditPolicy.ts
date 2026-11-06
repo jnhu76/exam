@@ -34,6 +34,7 @@ export interface AuditActionDefinition {
 export const AUDIT_TARGET_TYPE_MAX_LENGTH = 64;
 export const AUDIT_TARGET_ID_MAX_LENGTH = 128;
 export const AUDIT_REQUEST_ID_MAX_LENGTH = 128;
+export const AUDIT_OPERATION_ID_MAX_LENGTH = 128;
 export const AUDIT_USER_AGENT_MAX_LENGTH = 512;
 export const AUDIT_IP_ADDRESS_MAX_LENGTH = 64;
 export const AUDIT_METADATA_MAX_BYTES = 4_096;

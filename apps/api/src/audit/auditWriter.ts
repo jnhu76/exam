@@ -16,6 +16,7 @@ import { assertAuditAction, type AuditActionKey } from "@exam/authz";
 import {
   AUDIT_IP_ADDRESS_MAX_LENGTH,
   AUDIT_METADATA_MAX_BYTES,
+  AUDIT_OPERATION_ID_MAX_LENGTH,
   AUDIT_REQUEST_ID_MAX_LENGTH,
   AUDIT_TARGET_ID_MAX_LENGTH,
   AUDIT_TARGET_TYPE_MAX_LENGTH,
@@ -35,7 +36,13 @@ export interface AuditTarget<Action extends AuditActionKey = AuditActionKey> {
 
 export interface SystemAuditContext {
   tenant: TenantContext | RequestContext;
-  correlationId?: string;
+  /**
+   * INVARIANT/PROTOCOL: the system operation's own identity (e.g. the
+   * episode-derived incident operationId). It is persisted under
+   * metadata.operationId; metadata.requestId is the HTTP writer's key and is
+   * never fabricated for system rows (adjudication EXAM-860/874 §C2/PR-A).
+   */
+  operationId?: string;
 }
 
 const boundedTargetType = z.string().min(1).max(AUDIT_TARGET_TYPE_MAX_LENGTH);
@@ -108,11 +115,11 @@ function systemEvent<Action extends AuditActionKey>(
   const checked = validatedTarget(target);
   const metadata = {
     ...checked.metadata,
-    ...(context.correlationId
+    ...(context.operationId
       ? {
-          requestId: truncate(
-            context.correlationId,
-            AUDIT_REQUEST_ID_MAX_LENGTH,
+          operationId: truncate(
+            context.operationId,
+            AUDIT_OPERATION_ID_MAX_LENGTH,
           ),
         }
       : {}),

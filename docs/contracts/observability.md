@@ -88,6 +88,23 @@ table):
 | userAgent | text? | request UA |
 | createdAt | timestamptz | immutable |
 
+Identity metadata keys are reserved by the audit writer and carry disjoint
+semantics:
+
+- `metadata.requestId` — HTTP request identity (Fastify `request.id`), written
+  by the HTTP writer paths only.
+- `metadata.operationId` — system operation identity (e.g. the episode-derived
+  system incident operationId), written by the system writer path only. A
+  system audit row never fabricates an HTTP request id.
+
+Provenance is never inferred from the value's string shape. Rows written
+before the keys were split stored system operationIds under
+`metadata.requestId`; they are historical evidence and stay as written (no
+migration, no reclassification). The CSV export projects the two keys into
+separate columns (请求ID / 操作ID) by key name; because the exported columns
+are an operations-visible contract, a release that ships the new column calls
+it out in its release notes.
+
 > Implementation status: complete. `GET /api/admin/audit-logs` exposes it
 > (action/targetType/date filter). No change needed.
 
