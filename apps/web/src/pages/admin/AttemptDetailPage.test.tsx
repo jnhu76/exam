@@ -679,6 +679,11 @@ describe("AttemptDetailPage", () => {
   // raw client_events.metadata blob never reaches the wire — only the
   // allowlisted keys do. `answer_autosave_failed` carries the stable
   // questionId/saveMode/durationMs/errorCode category codes, NOT raw content.
+  // requestId/status mirror the #800 PR-B correlation keys: the client COPIES
+  // the error envelope's values into its own telemetry — they are client
+  // claims about a server interaction, never server-verified per-field facts
+  // (#860 PR-T), so the UI must render them only inside an explicit
+  // client-claimed/unverified group label.
   // `serverRecordedAt` is the server-owned receive instant (ordering
   // authority); `occurredAt` is the source-specific display instant.
   const mockTelemetry = {
@@ -695,6 +700,8 @@ describe("AttemptDetailPage", () => {
           saveMode: "auto",
           durationMs: 1500,
           errorCode: "SAVE_NETWORK_TIMEOUT",
+          requestId: "req-42",
+          status: 500,
         },
         source: "client_event",
       },
@@ -729,6 +736,39 @@ describe("AttemptDetailPage", () => {
     // telemetry vs authoritative audit rows stay distinguishable.
     expect(screen.getByText("前端遥测")).toBeInTheDocument();
     expect(screen.getByText("审计记录")).toBeInTheDocument();
+  });
+
+  // ── #860 PR-T: client-claimed metadata group label ──────────────────
+  // The allowlisted metadata of a client_event row (requestId/status/
+  // errorCode/clientSeq…) is the CLIENT's claim about a server interaction.
+  // The investigator must never read it as a server-verified fact: the whole
+  // metadata group carries the "客户端声明，未经服务端核验" label. A forged
+  // requestId/status stays visible (a correlation CANDIDATE) but only inside
+  // that group. Audit rows are the server's own record and are never marked
+  // as client claims.
+
+  it("renders client-event metadata inside the client-claimed/unverified group label and keeps audit rows unmarked", async () => {
+    mockFullTimeline(mockGradedResult, mockTelemetry);
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    await screen.findByText("遥测时间线");
+
+    // Client row: the forged/correlated requestId + status stay visible, but
+    // only inside the explicit unverified group label.
+    const clientRow = screen
+      .getByText("answer_autosave_failed")
+      .closest("div")!;
+    const clientText = clientRow.textContent ?? "";
+    expect(clientText).toContain("客户端声明，未经服务端核验");
+    expect(clientText).toContain("req-42");
+    expect(clientText).toContain("500");
+
+    // Audit row: server-authoritative record — the client-claimed label must
+    // NOT appear (the whole audit row is not mislabeled as client_claimed).
+    const auditRow = screen.getByText("force_submit").closest("div")!;
+    const auditText = auditRow.textContent ?? "";
+    expect(auditText).not.toContain("客户端声明，未经服务端核验");
   });
 
   it("shows the server receive instant as the primary row time and only client rows carry the client claim", async () => {

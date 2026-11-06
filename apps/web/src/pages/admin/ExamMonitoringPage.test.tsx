@@ -237,6 +237,91 @@ describe("ExamMonitoringPage", () => {
     expect(getStatusMetaSpy).toHaveBeenCalledWith("in_progress");
   });
 
+  // ── #860 PR-T: monitoring dialog trust semantics ────────────────────
+  // The dialog's source badge must branch on the row's REAL `source`, not on
+  // `kind`: audit rows are emitted with kind "proctor" (provenance lives in
+  // source, not kind — proctorMonitoringService.ts), so a kind-based badge
+  // mislabels server-authoritative audit rows as frontend telemetry. The
+  // allowlisted metadata of a client_event row is the client's claim about a
+  // server interaction and renders only inside the explicit
+  // "客户端声明，未经服务端核验" group label; audit metadata (the server's
+  // own record) carries no such label.
+
+  function makeTimelineEvent(
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      id: crypto.randomUUID(),
+      serverRecordedAt: "2026-06-23T08:06:00.000Z",
+      occurredAt: "2026-06-23T08:05:00.000Z",
+      name: "answer_autosave_failed",
+      level: "error",
+      kind: "exam_telemetry",
+      metadata: {
+        questionId: "q1",
+        errorCode: "SAVE_NETWORK_TIMEOUT",
+        requestId: "req-42",
+        status: 500,
+      },
+      source: "client_event",
+      ...overrides,
+    };
+  }
+
+  it("renders dialog source badges from real source and marks only client-event metadata as client-claimed/unverified", async () => {
+    getMock.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/proctor-events")) {
+        return {
+          items: [
+            makeTimelineEvent(),
+            // Server-authoritative audit row: kind is "proctor" (NOT
+            // "audit_log") — the kind-based badge never labeled it 操作.
+            makeTimelineEvent({
+              id: crypto.randomUUID(),
+              name: "force_submit",
+              level: "warn",
+              kind: "proctor",
+              metadata: { reason: "proctor" },
+              source: "audit_log",
+              occurredAt: "2026-06-23T08:30:00.000Z",
+              serverRecordedAt: "2026-06-23T08:30:00.000Z",
+            }),
+          ],
+          total: 2,
+          page: 1,
+          pageSize: 50,
+          totalPages: 1,
+        };
+      }
+      return { items: [makeAttempt()], total: 1 };
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("张三");
+    await user.click(screen.getByRole("button", { name: "时间线" }));
+
+    // Client telemetry row: badge from real source + unverified group label
+    // around the (visible) forged requestId/status correlation claims.
+    expect(await screen.findByText("answer_autosave_failed")).toBeVisible();
+    const clientRow = screen
+      .getByText("answer_autosave_failed")
+      .closest("div")!;
+    const clientText = clientRow.textContent ?? "";
+    expect(clientText).toContain("前端");
+    expect(clientText).toContain("客户端声明，未经服务端核验");
+    expect(clientText).toContain("req-42");
+    expect(clientText).toContain("500");
+
+    // Audit row: labeled 操作 from its real source (never 前端), and its
+    // server-owned metadata is NOT marked as a client claim.
+    const auditRow = screen.getByText("force_submit").closest("div")!;
+    const auditText = auditRow.textContent ?? "";
+    expect(auditText).toContain("操作");
+    expect(auditText).not.toContain("前端");
+    expect(auditText).not.toContain("客户端声明，未经服务端核验");
+  });
+
   // ── #800 PR-C A3-F7: recovery-archive deep link ────────────────────
   // A proctor spotting a suspicious candidate had no way to jump from the
   // monitoring row into that attempt's Recovery archive — only the timeline
