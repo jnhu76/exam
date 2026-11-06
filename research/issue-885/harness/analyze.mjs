@@ -27,6 +27,10 @@ function threw(step, loop) {
   return loop === "heartbeat" ? step.hbThrew : step.dlThrew;
 }
 
+function throwAt(step, loop) {
+  return loop === "heartbeat" ? step.hbThrowAtMs : step.dlThrowAtMs;
+}
+
 function cleanSettled(step, loop) {
   return loop === "heartbeat" ? step.hbCleanSettled : step.dlCleanSettled;
 }
@@ -76,6 +80,18 @@ function episodeEvidence(result, episode, active) {
             .sort((a, b) => eventElapsed(a) - eventElapsed(b))
         : [];
     if (recovered.length > 0) active[loop] = false;
+    const throwCatches = result.steps
+      .filter(
+        (step) =>
+          throwAt(step, loop) !== null &&
+          throwAt(step, loop) - T0 >= start &&
+          (end === null || throwAt(step, loop) - T0 < end),
+      )
+      .map((step) => ({
+        elapsedMs: throwAt(step, loop) - T0,
+        phase: step.phase,
+      }))
+      .sort((a, b) => a.elapsedMs - b.elapsedMs);
     const throwSettles = result.steps
       .filter(
         (step) =>
@@ -104,6 +120,7 @@ function episodeEvidence(result, episode, active) {
               phase: step.phase,
             }))
             .sort((a, b) => a.elapsedMs - b.elapsedMs);
+    const firstThrowCatch = firstOrNull(throwCatches, (x) => x.elapsedMs);
     const firstThrowSettle = firstOrNull(throwSettles, (x) => x.elapsedMs);
     const firstCleanSettle = firstOrNull(cleanSettles, (x) => x.elapsedMs);
     const firstFailing = firstOrNull(failing, eventElapsed);
@@ -112,7 +129,12 @@ function episodeEvidence(result, episode, active) {
       alertActiveAtEpisodeStart: alertActiveAtStart,
       failingRaisedInEpisode: failing.length > 0,
       activeAlertAfterEpisode: active[loop],
+      firstThrowCatchElapsedMs: firstThrowCatch,
       firstThrowSettleElapsedMs: firstThrowSettle,
+      throwCatchToSettleMs:
+        firstThrowCatch === null || firstThrowSettle === null
+          ? null
+          : firstThrowSettle - firstThrowCatch,
       firstFailingEventElapsedMs: firstFailing,
       injectionToFailingMs: firstFailing === null ? null : firstFailing - start,
       firstThrowSettleToFailingMs:
@@ -225,9 +247,9 @@ for (const row of rows) {
             return (
               `ep${episode.index}[${episode.injectedAtElapsedMs}->${episode.removedAtElapsedMs ?? "open"}` +
               `,${episode.removalReason}] ` +
-              `hb(inj->fail=${hb.injectionToFailingMs},throwSettle->fail=${hb.firstThrowSettleToFailingMs},` +
+              `hb(inj->fail=${hb.injectionToFailingMs},catch->fail=${hb.firstThrowCatchElapsedMs === null ? null : hb.firstFailingEventElapsedMs - hb.firstThrowCatchElapsedMs},throwSettle->fail=${hb.firstThrowSettleToFailingMs},` +
               `remove->rec=${hb.removalToRecoveryMs},cleanSettle->rec=${hb.firstNoThrowSettleToRecoveryMs}) ` +
-              `dl(inj->fail=${dl.injectionToFailingMs},throwSettle->fail=${dl.firstThrowSettleToFailingMs},` +
+              `dl(inj->fail=${dl.injectionToFailingMs},catch->fail=${dl.firstThrowCatchElapsedMs === null ? null : dl.firstFailingEventElapsedMs - dl.firstThrowCatchElapsedMs},throwSettle->fail=${dl.firstThrowSettleToFailingMs},` +
               `remove->rec=${dl.removalToRecoveryMs},cleanSettle->rec=${dl.firstNoThrowSettleToRecoveryMs})`
             );
           })

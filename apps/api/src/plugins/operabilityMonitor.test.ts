@@ -1031,21 +1031,28 @@ describe("ADR-024 sampling boundary — real scanner + monitor execution order",
   it("default 30s/15s: a 4th throw settling at 149s, a clean settle at 150.1s and a readiness-delayed read at 151s produce no failing event", async () => {
     vi.useFakeTimers({ now: T0 });
     const lines: string[] = [];
+    const pingReadsMs: number[] = [];
     const db = {
       select: (...args: unknown[]) => ({
         from: (table: unknown) => {
           if (table === organizations) {
             if (args.length > 0) {
-              // readiness pingDb(): the monitor's 150s probe resolves at 151s
+              // readiness pingDb(): record the ACTUAL read point (after the
+              // probe resolves), not the monitor timer trigger. The 150s probe
+              // resolves at 151s.
+              const recordRead = () => {
+                pingReadsMs.push(Date.now() - T0_MS);
+                return [ORG];
+              };
               if (Date.now() === T0_MS + 150_000) {
                 return {
                   limit: () =>
                     new Promise((resolve) =>
-                      setTimeout(() => resolve([ORG]), 1_000),
+                      setTimeout(() => resolve(recordRead()), 1_000),
                     ),
                 };
               }
-              return { limit: () => Promise.resolve([ORG]) };
+              return { limit: () => Promise.resolve().then(recordRead) };
             }
             const now = Date.now();
             if (now < T0_MS + 120_000) {
@@ -1118,12 +1125,14 @@ describe("ADR-024 sampling boundary — real scanner + monitor execution order",
       // Monitor reads C=3 at 135; the fourth throw settles at 149.
       await vi.advanceTimersByTimeAsync(29_000);
       expect(heartbeatMetrics.consecutiveThrowTicks).toBe(4);
+      expect(pingReadsMs).toContain(135_000);
       expect(tickFailureLines(lines)).toEqual([]);
 
       // At 150 the monitor starts but awaits readiness until 151; the
       // scanner clean-settles at 150.1 and resets the counter before the read.
       await vi.advanceTimersByTimeAsync(2_000);
       expect(heartbeatMetrics.consecutiveThrowTicks).toBe(0);
+      expect(pingReadsMs).toContain(151_000);
       expect(tickFailureLines(lines)).toEqual([]);
     } finally {
       await app.close();

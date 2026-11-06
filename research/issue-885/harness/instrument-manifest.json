@@ -3,7 +3,7 @@
   "files": [
     {
       "path": "research/issue-885/harness/experiments.test.ts",
-      "sha256": "9af31f099b053a8e56de1262e71e9d6e2bdccb2964ad61b4e99c4d73cadad0b5"
+      "sha256": "abaaa85fb2bf44ce713a879e23e4ceedcad85d5ef70fd8c29737c6c5f431a095"
     },
     {
       "path": "research/issue-885/harness/smoke.test.ts",
@@ -11,7 +11,7 @@
     },
     {
       "path": "research/issue-885/harness/analyze.mjs",
-      "sha256": "821f952319c10a5c77f58850ee5895eaba6fd4ee6c9c1a06c7dd378031445039"
+      "sha256": "242c0ae11e67c386683fc1e410b5bd61ef97bcb6511f9881773f1dd2a2c37748"
     },
     {
       "path": "research/issue-885/harness/compare.mjs",

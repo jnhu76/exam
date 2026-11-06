@@ -224,8 +224,10 @@ interface StepObs {
   dlSettled: boolean;
   hbStartedAtMs: number | null;
   hbSettledAtMs: number | null;
+  hbThrowAtMs: number | null;
   dlStartedAtMs: number | null;
   dlSettledAtMs: number | null;
+  dlThrowAtMs: number | null;
   hbThrew: boolean;
   dlThrew: boolean;
   hbCleanSettled: boolean;
@@ -672,8 +674,12 @@ function observe(
   const hbSettledAt = heartbeatMetrics.lastSettledAt?.getTime() ?? null;
   const dlStartedAt = deadlineScannerMetrics.lastStartedAt?.getTime() ?? null;
   const dlSettledAt = deadlineScannerMetrics.lastSettledAt?.getTime() ?? null;
-  const hbThrow = newLines.filter((l) => l.msg === HB_CATCH).length;
-  const dlThrow = newLines.filter((l) => l.msg === DL_CATCH).length;
+  const hbCatchLines = newLines.filter((l) => l.msg === HB_CATCH);
+  const dlCatchLines = newLines.filter((l) => l.msg === DL_CATCH);
+  const hbThrow = hbCatchLines.length;
+  const dlThrow = dlCatchLines.length;
+  const hbThrowAt = hbCatchLines[0]?.time ?? null;
+  const dlThrowAt = dlCatchLines[0]?.time ?? null;
   const hbSettled = hbSettledAt !== null && hbSettledAt !== before.hbSettledAt;
   const dlSettled = dlSettledAt !== null && dlSettledAt !== before.dlSettledAt;
   const now = new Date(tMs);
@@ -689,8 +695,10 @@ function observe(
     dlSettled,
     hbStartedAtMs: hbStartedAt,
     hbSettledAtMs: hbSettledAt,
+    hbThrowAtMs: hbThrowAt,
     dlStartedAtMs: dlStartedAt,
     dlSettledAtMs: dlSettledAt,
+    dlThrowAtMs: dlThrowAt,
     hbThrew: hbThrow > 0,
     dlThrew: dlThrow > 0,
     hbCleanSettled: hbSettled && hbThrow === 0,
