@@ -47,17 +47,17 @@ describe("postClientEvents — success semantics (H4)", () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it("acknowledges nothing for a genuinely empty batch (clean no-op round-trip)", async () => {
-    // accepted:0 with no events sent is a legitimate empty flush, not failure.
+  it("returns an empty classification for an empty batch without a network round-trip", async () => {
+    // Nothing to send and nothing unconfirmed — a round-trip would be an
+    // unobserved side effect; the buffer short-circuits empty queues anyway.
     const { fn } = mockFetch(() => ({
       ok: true,
       status: 200,
       json: () => ({ accepted: 0 }),
     }));
     const result = await postClientEvents([]);
-    // Empty batch: still a clean round-trip.
     expect(result).toEqual({ acknowledgedCount: 0, rejected: [] });
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).not.toHaveBeenCalled();
   });
 
   it("leaves every event unconfirmed when the server accepts 0 of a non-empty batch (data-loss signal)", async () => {
@@ -230,7 +230,7 @@ describe("postClientEvents — send result classification (#874 PR-W)", () => {
     });
   });
 
-  it("treats a standard 400 whose indices fall OUTSIDE this sub-batch as unconfirmed (no guessing)", async () => {
+  it("treats a standard 400 whose indices fall OUTSIDE this sub-batch as unconfirmed (no guessing) and flags the protocol anomaly", async () => {
     mockFetch(() => ({
       ok: false,
       status: 400,
@@ -238,10 +238,17 @@ describe("postClientEvents — send result classification (#874 PR-W)", () => {
     }));
     await expect(
       postClientEvents([makeEvent("a"), makeEvent("b")]),
-    ).resolves.toEqual({ acknowledgedCount: 0, rejected: [] });
+    ).resolves.toEqual({
+      acknowledgedCount: 0,
+      rejected: [],
+      protocolAnomaly: {
+        status: 400,
+        reason: "http_400_without_usable_event_indices",
+      },
+    });
   });
 
-  it("treats a standard 400 with only batch-level paths (no event index) as unconfirmed", async () => {
+  it("treats a standard 400 with only batch-level paths (no event index) as unconfirmed with a protocol anomaly", async () => {
     mockFetch(() => ({
       ok: false,
       status: 400,
@@ -250,10 +257,14 @@ describe("postClientEvents — send result classification (#874 PR-W)", () => {
     await expect(postClientEvents([makeEvent("a")])).resolves.toEqual({
       acknowledgedCount: 0,
       rejected: [],
+      protocolAnomaly: {
+        status: 400,
+        reason: "http_400_without_usable_event_indices",
+      },
     });
   });
 
-  it("treats a NON-standard 400 (no error envelope) as unconfirmed, never as a rejection", async () => {
+  it("treats a NON-standard 400 (no error envelope) as unconfirmed with a protocol anomaly, never as a rejection", async () => {
     mockFetch(() => ({
       ok: false,
       status: 400,
@@ -262,6 +273,10 @@ describe("postClientEvents — send result classification (#874 PR-W)", () => {
     await expect(postClientEvents([makeEvent("a")])).resolves.toEqual({
       acknowledgedCount: 0,
       rejected: [],
+      protocolAnomaly: {
+        status: 400,
+        reason: "http_400_without_usable_event_indices",
+      },
     });
   });
 

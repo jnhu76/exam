@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ClientEvent } from "@exam/contracts";
+import type { ClientEventPostResult } from "./clientEvents";
 import { ClientEventBuffer } from "./clientEventBuffer";
 import { setBuffer, logger } from "./logger";
 
@@ -23,29 +24,29 @@ const ackAllImpl = async (events: ClientEvent[]) => ({
 });
 const retryAllImpl = async () => ({ acknowledgedCount: 0, rejected: [] });
 
+/** Buffers created by {@link makeBuffer}, disposed after every test. */
+const buffers: ClientEventBuffer[] = [];
+
+beforeEach(() => {
+  buffers.length = 0;
+  // Reset the logger singleton so tests don't share state.
+  setBuffer(null);
+});
+
+afterEach(() => {
+  for (const b of buffers) b.dispose();
+  buffers.length = 0;
+  setBuffer(null);
+  vi.useRealTimers();
+});
+
+function makeBuffer(opts: ConstructorParameters<typeof ClientEventBuffer>[0]) {
+  const b = new ClientEventBuffer(opts);
+  buffers.push(b);
+  return b;
+}
+
 describe("ClientEventBuffer", () => {
-  let buffers: ClientEventBuffer[] = [];
-
-  beforeEach(() => {
-    buffers = [];
-    // Reset the logger singleton so tests don't share state.
-    setBuffer(null);
-  });
-
-  afterEach(() => {
-    for (const b of buffers) b.dispose();
-    setBuffer(null);
-    vi.useRealTimers();
-  });
-
-  function makeBuffer(
-    opts: ConstructorParameters<typeof ClientEventBuffer>[0],
-  ) {
-    const b = new ClientEventBuffer(opts);
-    buffers.push(b);
-    return b;
-  }
-
   it("queues events until batch size triggers a flush", async () => {
     const send = vi.fn(ackAllImpl);
     const buf = makeBuffer({
@@ -281,9 +282,6 @@ describe("ClientEventBuffer", () => {
 });
 
 describe("logger → buffer integration", () => {
-  beforeEach(() => setBuffer(null));
-  afterEach(() => setBuffer(null));
-
   it("logger attaches a unique eventId per event; a resent batch carries the SAME ids (#863 idempotency)", async () => {
     // First flush fails (ACK lost), the batch requeues, the retry sends the
     // identical event objects — so the server-side (org, user, eventId)
@@ -355,29 +353,9 @@ describe("logger → buffer integration", () => {
 // so the buffer must: keep determinately-rejected events OUT of the queue,
 // keep their schema-valid peers pending for bounded-backoff retry with the
 // ORIGINAL eventId/occurredAt/payload, never count a rejection as accepted,
-// and record payload-free local diagnostics for the visible loss.
+// and record payload-free local diagnostics for the visible loss. Scaffolding
+// (buffers / hooks / makeBuffer) is shared at module scope.
 describe("ClientEventBuffer — poison batch isolation (#874 PR-W)", () => {
-  let buffers: ClientEventBuffer[] = [];
-
-  beforeEach(() => {
-    buffers = [];
-    setBuffer(null);
-  });
-
-  afterEach(() => {
-    for (const b of buffers) b.dispose();
-    setBuffer(null);
-    vi.useRealTimers();
-  });
-
-  function makeBuffer(
-    opts: ConstructorParameters<typeof ClientEventBuffer>[0],
-  ) {
-    const b = new ClientEventBuffer(opts);
-    buffers.push(b);
-    return b;
-  }
-
   it("isolates a determinately rejected event and keeps its valid peers pending in order", async () => {
     const send = vi.fn(async (_events: ClientEvent[]) => ({
       acknowledgedCount: 0,
@@ -517,8 +495,17 @@ describe("ClientEventBuffer — poison batch isolation (#874 PR-W)", () => {
     expect(buf.size).toBe(0);
   });
 
-  it("treats an unclassified outcome (empty classification from an ambiguous 400) as pending, deleting nothing", async () => {
-    const send = vi.fn(async () => ({ acknowledgedCount: 0, rejected: [] }));
+  it("treats an ambiguous 400 as pending, deleting nothing, and records the protocol diagnostic (§C4.5)", async () => {
+    const send = vi.fn(
+      async (_events: ClientEvent[]): Promise<ClientEventPostResult> => ({
+        acknowledgedCount: 0,
+        rejected: [],
+        protocolAnomaly: {
+          status: 400,
+          reason: "http_400_without_usable_event_indices",
+        },
+      }),
+    );
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("keep.0"));
     buf.push(makeEvent("keep.1"));
@@ -527,5 +514,34 @@ describe("ClientEventBuffer — poison batch isolation (#874 PR-W)", () => {
     expect(buf.size).toBe(2);
     expect(buf.getRejectedDiagnostics()).toEqual([]);
     expect(buf.rejectedEventCount).toBe(0);
+    // The protocol violation is visibly diagnosable — unlike a network
+    // failure, an ambiguous 400 is a protocol-level event.
+    expect(buf.protocolAnomalyCount).toBe(1);
+    expect(buf.getProtocolAnomalies()).toEqual([
+      { status: 400, reason: "http_400_without_usable_event_indices" },
+    ]);
+  });
+
+  it("does NOT record a protocol diagnostic for a network-style retry (no 400 seen)", async () => {
+    const send = vi.fn(retryAllImpl);
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("keep.0"));
+    await expect(buf.flush()).resolves.toBe(0);
+    expect(buf.size).toBe(1);
+    expect(buf.protocolAnomalyCount).toBe(0);
+    expect(buf.getProtocolAnomalies()).toEqual([]);
+  });
+
+  it("does NOT record a protocol diagnostic when a 400 determinately names events", async () => {
+    const send = vi.fn(async () => ({
+      acknowledgedCount: 0,
+      rejected: [{ index: 0, fields: ["occurredAt"] }],
+    }));
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("poison"));
+    await expect(buf.flush()).resolves.toBe(0);
+    expect(buf.size).toBe(0);
+    expect(buf.protocolAnomalyCount).toBe(0);
+    expect(buf.getProtocolAnomalies()).toEqual([]);
   });
 });

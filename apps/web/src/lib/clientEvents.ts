@@ -33,6 +33,22 @@ export interface ClientEventRejection {
 }
 
 /**
+ * Protocol-level anomaly for an AMBIGUOUS 400 (#874 adjudication §C4.5): the
+ * endpoint (or an intermediary) answered HTTP 400 but the body carried no
+ * usable per-event indices for THIS sub-batch. Nothing may be deleted on such
+ * a response — the events stay pending — but unlike a network failure the
+ * protocol itself misbehaved, so the transport surfaces the violation instead
+ * of folding it into an ordinary retry. Diagnostics only; never a deletion
+ * verdict.
+ */
+export interface ClientEventProtocolAnomaly {
+  /** HTTP status of the anomalous response (always 400 today). */
+  status: number;
+  /** Stable machine reason: a 400 without usable per-event indices. */
+  reason: "http_400_without_usable_event_indices";
+}
+
+/**
  * Internal transport result for one {@link postClientEvents} call.
  *
  * This is NOT an HTTP protocol change — the wire stays
@@ -50,7 +66,10 @@ export interface ClientEventRejection {
  *   UNCONFIRMED (network error, 5xx, 401/403/429, malformed body, a 200 that
  *   did not confirm the whole sub-batch, or a 400 without usable per-event
  *   indices) and remain the buffer's responsibility — retried with the
- *   existing bounded backoff, never deleted on a guess.
+ *   existing bounded backoff, never deleted on a guess. An ambiguous 400 is
+ *   additionally reported via `protocolAnomaly` so the buffer can give the
+ *   protocol violation a visible diagnostic (§C4.5) instead of losing it in
+ *   an ordinary network-style retry.
  *
  * Known deviation from the pre-#874 accounting: an event that cannot fit a
  * single keepalive request is no longer silently lost when its peers were
@@ -64,13 +83,19 @@ export interface ClientEventPostResult {
   acknowledgedCount: number;
   /** Events deterministically rejected; indices are into the input batch. */
   rejected: ClientEventRejection[];
+  /**
+   * Present only when a sub-batch received an ambiguous 400 (no usable
+   * per-event indices) and the flush stopped there. Absent for network
+   * failures and other non-400 outcomes — those are not protocol violations.
+   */
+  protocolAnomaly?: ClientEventProtocolAnomaly;
 }
 
 /** Outcome of a single POST round trip, before original-index mapping. */
 type SubBatchResult =
   | { state: "acknowledged" }
   | { state: "rejected"; localRejections: ClientEventRejection[] }
-  | { state: "retry" };
+  | { state: "retry"; protocolAnomaly?: ClientEventProtocolAnomaly };
 
 /**
  * Event-index segments of THIS endpoint's standard 400 field paths, e.g.
@@ -149,6 +174,17 @@ async function sendOne(batch: ClientEvent[]): Promise<SubBatchResult> {
         response,
         batch.length,
       );
+      if (localRejections.length === 0) {
+        // An ambiguous 400: keep the batch pending (never delete on a guess),
+        // but surface the protocol violation for diagnosability (§C4.5).
+        return {
+          state: "retry",
+          protocolAnomaly: {
+            status: 400,
+            reason: "http_400_without_usable_event_indices",
+          },
+        };
+      }
       return { state: "rejected", localRejections };
     }
     if (!response.ok) return { state: "retry" };
@@ -221,10 +257,9 @@ export async function postClientEvents(
   events: ClientEvent[],
 ): Promise<ClientEventPostResult> {
   if (events.length === 0) {
-    // No events to send — confirm the round-trip once so callers can treat an
-    // empty flush as success. (The buffer short-circuits before calling for
-    // empty queues, but this keeps the transport self-consistent.)
-    await sendOne([]);
+    // Nothing to send and nothing unconfirmed: an empty flush is a clean
+    // no-op with no round-trip (the buffer short-circuits empty queues, so
+    // this path exists only for direct callers).
     return { acknowledgedCount: 0, rejected: [] };
   }
 
@@ -243,8 +278,16 @@ export async function postClientEvents(
     }
     if (result.state === "retry") {
       // Stop at the first unconfirmed sub-batch: later events were never
-      // sent, earlier ones are already counted in `acknowledged`.
-      return { acknowledgedCount: acknowledged, rejected: [] };
+      // sent, earlier ones are already counted in `acknowledged`. An
+      // ambiguous 400 carries its protocol anomaly for the buffer's
+      // diagnostics; network-style retries carry none.
+      return {
+        acknowledgedCount: acknowledged,
+        rejected: [],
+        ...(result.protocolAnomaly
+          ? { protocolAnomaly: result.protocolAnomaly }
+          : {}),
+      };
     }
     // Deterministic rejection: map sub-batch-local indices to ORIGINAL batch
     // indices (acknowledged is exactly the size of the confirmed prefix).

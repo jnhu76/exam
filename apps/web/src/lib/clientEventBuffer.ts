@@ -1,5 +1,9 @@
 import type { ClientEvent } from "@exam/contracts";
-import { postClientEvents, type ClientEventPostResult } from "./clientEvents";
+import {
+  postClientEvents,
+  type ClientEventPostResult,
+  type ClientEventProtocolAnomaly,
+} from "./clientEvents";
 
 /** Maximum events buffered before a forced flush. */
 const FLUSH_BATCH_SIZE = 20;
@@ -22,6 +26,12 @@ const FAILURE_BACKOFF_MAX_MS = 5 * 60_000; // 5 min
  * memory bound, not a loss of the count.
  */
 const REJECTED_DIAGNOSTICS_MAX = 50;
+
+/**
+ * Upper bound on retained ambiguous-400 protocol diagnostics (§C4.5), same
+ * bound/total split as the rejected-event diagnostics.
+ */
+const PROTOCOL_ANOMALY_MAX = 50;
 
 /**
  * Local diagnostic for one determinately rejected event (#874 PR-W): the
@@ -92,6 +102,10 @@ export class ClientEventBuffer {
   private rejectedDiagnostics: RejectedEventDiagnostic[] = [];
   /** Total determinately rejected events over the buffer's lifetime. */
   private rejectedEventTotal = 0;
+  /** Most recent ambiguous-400 protocol diagnostics (bounded, oldest dropped). */
+  private protocolAnomalies: ClientEventProtocolAnomaly[] = [];
+  /** Total ambiguous-400 protocol anomalies over the buffer's lifetime. */
+  private protocolAnomalyTotal = 0;
   private boundOnVisibilityChange: (() => void) | null = null;
   private boundOnPageHide: (() => void) | null = null;
   private readonly cleanups: Array<() => void> = [];
@@ -185,6 +199,20 @@ export class ClientEventBuffer {
       );
     }
 
+    // Protocol diagnostics (§C4.5): an ambiguous 400 is a protocol violation
+    // distinct from a network failure — the batch stays pending, but the
+    // violation is visibly counted instead of disappearing into a retry.
+    if (result.protocolAnomaly) {
+      this.protocolAnomalies.push(result.protocolAnomaly);
+      this.protocolAnomalyTotal += 1;
+      if (this.protocolAnomalies.length > PROTOCOL_ANOMALY_MAX) {
+        this.protocolAnomalies.splice(
+          0,
+          this.protocolAnomalies.length - PROTOCOL_ANOMALY_MAX,
+        );
+      }
+    }
+
     // Poison isolation (#874): drop confirmed and determinately rejected
     // events; keep only the unconfirmed remainder, in order, for retry.
     const pending = batch.filter(
@@ -245,6 +273,20 @@ export class ClientEventBuffer {
   /** Total number of determinately rejected events over this buffer's lifetime. */
   get rejectedEventCount(): number {
     return this.rejectedEventTotal;
+  }
+
+  /**
+   * Ambiguous-400 protocol diagnostics (bounded to the most recent); §C4.5
+   * protocol-level visibility for 400s that name no usable event index.
+   * Payload-free by construction.
+   */
+  getProtocolAnomalies(): readonly ClientEventProtocolAnomaly[] {
+    return this.protocolAnomalies;
+  }
+
+  /** Total number of ambiguous-400 protocol anomalies over this buffer's lifetime. */
+  get protocolAnomalyCount(): number {
+    return this.protocolAnomalyTotal;
   }
 
   /** Current computed backoff window in ms (testing only). */
