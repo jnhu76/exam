@@ -1,295 +1,251 @@
-# EXAM #885 — REPRO (reproduction & evidence integrity)
+# EXAM #885 — REPRO (reproduction and evidence integrity)
 
-This file records the **environment, exact commands, exit codes, timestamps, and SHA256
-hashes** for every key artifact in the #885 evidence package, plus a complete recipe to
-re-run the study from the frozen `BASE_SHA`. All experiments are **in-process, fake-clock,
-fake-`db`** — no PostgreSQL was opened and no developer/production data was touched.
+This file is the current clean-room recipe and the historical receipt mapping.
+The study is **in-process, fake-clock, fake-`db`**: no PostgreSQL was opened and
+no developer/production data was touched. The product source under test is
+identified by `subjectSha`; the frozen research baseline is identified
+separately by `baselineSha`.
 
-> **NON-PERSISTENCE NOTICE.** This package lives in a **local, detached research worktree**
-> (`/home/hoo/Source/exam-885`, detached at `BASE_SHA`). It was **NOT committed or pushed**
-> (the task grants no commit/push authorization). A worktree is ephemeral local state: if the
-> directory or repository is removed, the evidence is lost. The **durable record** is the
-> GitHub Issue #885 writeback comment. Re-running from `BASE_SHA` is fully specified below.
+Current subject receipt: `3c0b81f8226886d96d8bb717b7108f4057c4474a` (clean
+worktree, no scaffold). The post-fix comparison is **20/20 scenarios, 38/38
+tuple matches, diff count 0**; the baseline control is **20 scenarios, 0
+`operability.tick_failure` events**. Full result: [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md).
 
----
-
-## 1. Environment (verified 2026-11-05T13:49:18Z, captured in `results/final-run.txt`)
+## 1. Environment (current replay)
 
 | Item | Value |
 | --- | --- |
-| `BASE_SHA` / `git HEAD` of worktree | `f2d44b78136cda1358148dbce891590975d4c88f` |
-| Main worktree `/home/hoo/Source/exam` | branch `master`, `git status --short` **clean (0 lines)** at baseline and at end |
-| Research worktree | `/home/hoo/Source/exam-885` (detached at BASE_SHA) |
-| Node | `v24.22.1` |
-| pnpm | `11.1.2` |
-| Vitest | `vitest/4.1.7` (`linux-x64 node-v24.22.1`) |
-| OS | `Linux Hu 6.18.54.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux` |
-| Shell | zsh |
-| Harness runner | `apps/api/node_modules/.bin/vitest` (from worktree root) |
-| DB | **none** — fake `fastify.db` injected in-process; `globalSetup` deliberately absent from research configs |
+| Frozen baseline | `f2d44b78136cda1358148dbce891590975d4c88f` |
+| Subject | `3c0b81f8226886d96d8bb717b7108f4057c4474a` |
+| Instrument | `issue-885-instrument-v2` |
+| Instrument manifest | [`harness/instrument-manifest.json`](harness/instrument-manifest.json) |
+| Manifest SHA256 | `5f7cec21a25c0e0c90581e42addf4504211ea2385815d952b386a07d055e527f` |
+| Node / Vitest | recorded inside `results/experiments.json` (`runtime.node`, `runtime.vitest`) |
+| Clock | `vi.useFakeTimers({now:T0})`, `T0=2026-09-17T08:00:00Z`; pino and `fastify.now()` share it |
+| DB | none — injected fake `fastify.db`; no `globalSetup`, no PostgreSQL |
 
-Pinned constants (from real source at BASE_SHA, read by the harness, not redefined):
-`OPERABILITY_MONITOR_INTERVAL_MS = 15_000`, `HEARTBEAT_SCAN_INTERVAL_MS = 30_000`,
-`BUSINESS_FAILURE_TICK_THRESHOLD = 4`, `T0 = 2026-09-17T08:00:00Z`, `STEP_MS = 15_000`.
+The replay records these provenance fields in `results/experiments.json`:
+`baselineSha`, `subjectSha`, `subjectDirty`, `subjectDirtyFiles`,
+`productModules[].path`, `productModules[].sha256`, `instrument.version`,
+`instrument.manifest.manifestSha256`, `runtime`, `command`, `scenarioCount`,
+`generatedAt`, and the clock description. `subjectDirty` is **false** for the
+receipt above; a dirty worktree is never represented as a precise subject.
 
-Research config `env` is name-safe only: `TEST_DATABASE_URL=postgres://exam:exam@127.0.0.1:5432/exam_test_885_inprocess`
-(a syntactically valid URL for `resolveTestBranchUrl`; **no connection is ever opened**),
-`JWT_SECRET=research-only-not-a-real-secret-885` (a non-real placeholder, never a real secret).
+The three product-module hashes for the current subject are:
 
----
+| module | SHA256 |
+| --- | --- |
+| `apps/api/src/plugins/heartbeat.ts` | `d2430fd2d302d2f5b1ca052f0d8554d0b83cfb2fd1af21a206ab822ba2073265` |
+| `apps/api/src/plugins/deadlineScanner.ts` | `3aa2cd377bbde8fe5ef81370411d7ae788f571f320b28fe930513728ed222edb` |
+| `apps/api/src/plugins/operabilityMonitor.ts` | `61358d1975d6cf7944082aaf21e1760f13e41a1adb7db5fa0069e2a7808609ad` |
 
-## 2. Commands actually executed (all from `/home/hoo/Source/exam-885`)
+## 2. Historical receipts (2026-11-05, preserved)
 
-| # | Command | Exit | Timestamp (UTC) | Produces |
-| --- | --- | --- | --- | --- |
-| 1 | `git worktree add --detach /home/hoo/Source/exam-885 f2d44b78…` | 0 | 2026-11-05T13:12Z | frozen worktree |
-| 2 | `apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.config.ts` (smoke) | 0 | 2026-11-05T13:18Z | `results/run-transcript.txt` (first run) |
-| 3 | `apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.config.ts` (full E0–E12) | 0 | 2026-11-05T13:24Z / canonical 13:49:21Z | `results/experiments.json`, `results/run-transcript.txt` |
-| 4 | `node research/issue-885/harness/analyze.mjs` | 0 | 2026-11-05T13:25Z / canonical 13:49:22Z | `results/analysis.json`, `results/analysis-transcript.txt` |
-| 5 | `apps/api/node_modules/.bin/vitest run --config apps/api/vitest.885.regression.config.ts` | 0 | 2026-11-05T13:26Z / canonical 13:49:26Z | `results/regression-transcript.txt` |
+These are the commands and hashes of the original study. They are not silently
+rewritten; several artifacts have since changed for the reasons in §4.
 
-**Canonical final run** (`2026-11-05T13:49:18Z`, recorded verbatim in `results/final-run.txt`):
-
-```
-CMD1 full matrix — CMD1_EXIT=0 — 2 tests passed (2) — CMD1_TS=2026-11-05T13:49:22Z
-CMD2 analysis    — CMD2_EXIT=0                     — CMD2_TS=2026-11-05T13:49:22Z
-CMD3 regression  — CMD3_EXIT=0 — 67 passed (67)   — CMD3_TS=2026-11-05T13:49:26Z
-```
-
-- **CMD1** = ` vitest run --config apps/api/vitest.885.config.ts` → `experiments.test.ts` +
-  `smoke.test.ts`: **2 files / 2 tests passed**, duration 3.07s. Writes `experiments.json`.
-- **CMD2** = `node research/issue-885/harness/analyze.mjs` → reads `experiments.json`, writes
-  `analysis.json`, prints the compact 20-row latency/count table (`analysis-transcript.txt`).
-- **CMD3** = ` vitest run --config apps/api/vitest.885.regression.config.ts` → the **three
-  EXISTING plugin suites unchanged** at BASE_SHA: `heartbeat.test.ts` (13),
-  `deadlineScanner.test.ts` (10), `operabilityMonitor.test.ts` (44) = **3 files / 67 tests
-  passed**. This is the control that the frozen #547/#862/#886 contract is intact and no
-  product code was modified.
-
-> **Historical receipt.** §2 and the canonical block above record the commands **as run on
-> 2026-11-05**, with the two runner configs then located in `apps/api/`. The PR #896 scope
-> diet later merged them into the bundle-owned
-> `research/issue-885/harness/vitest.config.ts` (mapping: §4.4); the **live** commands are
-> §5 below.
-
-**Flaky / inconclusive marking:** none of the 5 commands was FLAKY. The full matrix was run
-repeatedly with identical deterministic results (fake clock, no wall-clock sleeps, no DB).
-The one item explicitly marked **INCONCLUSIVE** is a *real PostgreSQL* root-cause fault
-(E3 uses a PostgreSQL-shaped `42703` error in the fake `db`; no real DB fault was injected) —
-that conclusion rests on SOURCE_VERIFIED query-path difference, not a measured DB incident.
-
----
-
-## 3. Aggregated measured evidence (from `experiments.json`, canonical run)
-
-```
-scenarios=20  steps=556  errorLines=337  throwTicks=218  settledTicks=538
-real operability.* transitions=26  counterfactual events (A/B/C/D)=168
-baseSha=f2d44b78136cda1358148dbce891590975d4c88f
-generatedAt=2026-11-05T13:49:21.293Z
+```text
+BASE_SHA=f2d44b78136cda1358148dbce891590975d4c88f
+Research worktree=/home/hoo/Source/exam-885 (historical path)
+CMD1 full matrix   exit 0, 2 tests passed (recorder)
+CMD2 analysis      exit 0
+CMD3 regression    exit 0, 67 passed
+generatedAt        2026-11-05T13:49:21.293Z
+scenarios          20
+steps              556
 ```
 
-Decisive reproduction (E2/E3/E6, DB healthy): 9 consecutive throw ticks per loop, 18 monitor
-samples with `pingFailDeltaSum = 0`, all ticks settled, `consecutiveFailedTicks` frozen at 0,
-`stallState=healthy`, **ZERO** escalated `operability.*` events → `DB_HEALTHY_THROW_GAP = CONFIRMED`.
+Historical SHA256 receipts (as run, before the 2026-11-06 corrections):
 
----
-
-## 4. SHA256 of key artifacts
-
-Computed 2026-11-05 on the canonical evidence. Paths relative to `/home/hoo/Source/exam-885`.
-`sha256sum <file>` reproduces them. Document hashes cover the six named evidence files; the
-`REPRO.md` hash is intentionally omitted (a file cannot contain its own hash — recompute it
-with `sha256sum research/issue-885/REPRO.md`).
-
-### 4.1 Evidence documents
-```
-077f44a76a06a3c9a35fe54dfe21363ffaff65a11a2971e5c30761c919b57be6  research/issue-885/RESULTS.md
-48f774c5cb09e3b35cb05e45ac7eddd699eca7c0e731de9aa606b657089c14b2  research/issue-885/SOURCE_MAP.md
-f087ec64ca04a5330a1b9c4c67fc2e851c9d3817fb1868dae8555effb9646cef  research/issue-885/EXPERIMENTS.md
-e7eb5fb78a299436944972586a3c853d20ece2a0dc87b911310b850f90aa17db  research/issue-885/ALERT_SEMANTICS.md
-7a18186237fb495bc53754a346cf524d966be3f8dc86d8d74d7f9112cef74055  research/issue-885/DECISION.md
+```text
+077f44a76a06a3c9a35fe54dfe21363ffaff65a11a2971e5c30761c919b57be6  RESULTS.md
+48f774c5cb09e3b35cb05e45ac7eddd699eca7c0e731de9aa606b657089c14b2  SOURCE_MAP.md
+f087ec64ca04a5330a1b9c4c67fc2e851c9d3817fb1868dae8555effb9646cef  EXPERIMENTS.md
+e7eb5fb78a299436944972586a3c853d20ece2a0dc87b911310b850f90aa17db  ALERT_SEMANTICS.md
+7a18186237fb495bc53754a346cf524d966be3f8dc86d8d74d7f9112cef74055  DECISION.md
+fc8b4596ac0d18406db93cda5690b4ac2164cce80b7588709298dee38bd76009  harness/experiments.test.ts
+cd230e7d35ad328d54cd074e7caec8954dff3c220174b059eab5f218bf2df08f  harness/smoke.test.ts
+ab151ea8cd1ad1d6335afdf556ca4d1357ad9043126d76b8fd4fe6714f0a82e4  harness/analyze.mjs
+3f0045836f2ed0e28019afc6f8b0caff6b01eed4e25bf4c799a9a59284037aec  results/experiments.json
+99ee001857f8ad6b768640d819fc24c486f8686af612c3ccb1851c5c246476a8  results/analysis.json
+725e1de34b6ef12a6c83e35bdfa5653c1779f68e08c97ac9499e425c7efcdcb0  results/final-run.txt
+a0f9494f4f0103d5202445d7b99483c24f957394bd6fd5c986e3bea82ad9f185  results/run-transcript.txt
+ef2351177147c4acbb24d53195be91acae0813a8661b4e837c92d8e99864a574  results/regression-transcript.txt
+6a49f85d65232e11abc8dfcdb61f1965ebab487e27798c71315e649877c31ca2  results/analysis-transcript.txt
+4d2ca4360f834e5b4c509f020438c9b8fce6f9ef2a8683d25df4ba11f60f843f  results/_matrix_rows.md
 ```
 
-### 4.2 Harness source & configs
-```
-fc8b4596ac0d18406db93cda5690b4ac2164cce80b7588709298dee38bd76009  research/issue-885/harness/experiments.test.ts
-cd230e7d35ad328d54cd074e7caec8954dff3c220174b059eab5f218bf2df08f  research/issue-885/harness/smoke.test.ts
-ab151ea8cd1ad1d6335afdf556ca4d1357ad9043126d76b8fd4fe6714f0a82e4  research/issue-885/harness/analyze.mjs
-5b07d022c2e94335f8c5147a4c0e4fc4c792f7bb5a1f600ae463718668a0ff46 → **78ab922dec410be26775c065b7c39eefbf655c59be2287dd889fcf9c53aae9c9**  apps/api/vitest.885.config.ts
-9f42d722fb236b598b65323274caae9a268e3c3b82819f68fce7e6a8d60979b9 → **8f0e94be45752ba97c953136bc59c92685e854b98dc6103b9509ce4ca62d36f1**  apps/api/vitest.885.regression.config.ts
-```
+The historical runner configs were `apps/api/vitest.885.config.ts`
+(`5b07d022…` → `78ab922d…` after `envDir:false`) and
+`apps/api/vitest.885.regression.config.ts` (`9f42d722…` → `8f0e94be…`). They
+were later removed from `apps/api/` and merged into
+`research/issue-885/harness/vitest.config.ts` (`4f41c671…`).
 
-> **Amendment (implementation PR #896, 2026-11-05):** both research configs gained
-> `envDir: false` to satisfy the repository `check-env-surface` gate (#741); the
-> values above are the amended files (old hash → new hash). Verified
-> **behaviour-neutral**: the full 20-scenario replay against the implemented code
-> is scenario-for-scenario identical with and without the amendment (0/20
-> differences; `envDir` only disables implicit env-file admission, and both
-> configs set `test.env` explicitly). Every other entry in §4 is the pre-fix
-> study's byte-identical artifact. *(Both configs were later merged into the
-> bundle-owned runner by the scope diet — see §4.4.)*
+## 3. Evidence-class discipline
 
-### 4.3 Machine-readable results & transcripts
+- **MEASURED**: real plugin stdout/metrics/transitions and their actual
+  pino/fake-clock timestamps. The default 30s/15s variable-tick miss and the
+  `S=1s/M=15s` miss are product characterization tests, not study claims.
+- **SOURCE_VERIFIED**: facts read from the source (probe path, freeze semantics,
+  monitor reader, transition tracker).
+- **COUNTERFACTUAL / HISTORICAL**: A/B/C/D candidate streams in the original
+  study. They are not the post-fix oracle.
+- **UNKNOWN / NOT CLAIMED**: operator delivery; real-PostgreSQL fault; heap
+  allocation; statistical miss/false-positive rates; multi-instance notification
+  behavior; stdout loss.
 
-> **Scope-diet note (2026-11-06):** these files are **regenerable outputs of one
-> deterministic run** and are intentionally **not committed** to the product
-> repository (see §4.4). The hashes below remain the **canonical receipts** of
-> the run as it happened — re-run §5 at the pinned SHA and compare modulo
-> `generatedAt`.
-```
-3f0045836f2ed0e28019afc6f8b0caff6b01eed4e25bf4c799a9a59284037aec  research/issue-885/results/experiments.json
-99ee001857f8ad6b768640d819fc24c486f8686af612c3ccb1851c5c246476a8  research/issue-885/results/analysis.json
-725e1de34b6ef12a6c83e35bdfa5653c1779f68e08c97ac9499e425c7efcdcb0  research/issue-885/results/final-run.txt
-a0f9494f4f0103d5202445d7b99483c24f957394bd6fd5c986e3bea82ad9f185  research/issue-885/results/run-transcript.txt
-ef2351177147c4acbb24d53195be91acae0813a8661b4e837c92d8e99864a574  research/issue-885/results/regression-transcript.txt
-6a49f85d65232e11abc8dfcdb61f1965ebab487e27798c71315e649877c31ca2  research/issue-885/results/analysis-transcript.txt
-4d2ca4360f834e5b4c509f020438c9b8fce6f9ef2a8683d25df4ba11f60f843f  research/issue-885/results/_matrix_rows.md
-```
+The E3 `42703` observation is a **simulated PostgreSQL-shaped error injected
+through the fake db**. It is not a real database fault. The logical conclusion
+that a healthy `organizations LIMIT 1` probe cannot exclude a scanner query-path
+cause is source-verified.
 
-Artifact sizes (compact structured observations, NOT raw log dumps, caches, or DB snapshots):
-`experiments.json` 657,195 B; `analysis.json` 228,023 B; transcripts ≤ 6,237 B each. No
-oversized logs, dependency caches, or DB snapshots were created or added to Git.
+## 4. Revision mapping (old → new)
 
-### 4.4 Scope-diet amendment (PR #896, 2026-11-05)
+The historical receipt hashes above remain the hashes of the files as they were.
+Current files differ where noted. The authoritative current instrument hashes
+are in `harness/instrument-manifest.json`; that manifest deliberately does not
+hash itself.
 
-The PR-diet review removed PR surface that does not need to live in the product
-repository. The frozen hashes in §4.1–§4.3 stay canonical for the study **as it
-was run**; migrated/reformatted artifacts map as follows, and the post-migration
-replay receipt is appended to `POSTFIX_VALIDATION.md`:
-
-| Artifact | Frozen (as run) | Current (this PR) |
+| Artifact | Historical | Current / reason |
 | --- | --- | --- |
-| runner `apps/api/vitest.885.config.ts` | `5b07d022…` → `78ab922d…` (envDir amendment) | **removed** — merged into `research/issue-885/harness/vitest.config.ts` `4f41c671…` |
-| runner `apps/api/vitest.885.regression.config.ts` | `9f42d722…` → `8f0e94be…` (envDir amendment) | **removed** — merged into the same bundle-owned runner |
-| `harness/experiments.test.ts` | `fc8b4596…` | `c9e265c9…` — prettier reformat + `mkdirSync` for the now-uncommitted `results/`; behaviour-neutral (replay receipt) |
-| `harness/smoke.test.ts` | `cd230e7d…` | `c79296f5…` — prettier reformat only |
-| `harness/analyze.mjs` | `ab151ea8…` | `948743df…` — prettier reformat + `mkdirSync` |
+| `harness/experiments.test.ts` | `fc8b4596…` | current manifest entry; E7 reset, actual read/settle/event timestamps, subject provenance, `.gitignore` output path |
+| `harness/analyze.mjs` | `ab151ea8…` | current manifest entry; episode-keyed injection/removal/settle/event latencies |
+| `harness/compare.mjs` | none (new) | current manifest entry; independent expected-event comparator |
+| `harness/baseline-control.mjs` | none (new) | current manifest entry; frozen-baseline zero-event control |
+| `harness/expected-events.json` | none (new) | current manifest entry; schedule-derived oracle table |
+| `harness/instrument-manifest.json` | none (new) | hashes the instrument; not self-hashed |
+| `harness/vitest.config.ts` | runner merge `4f41c671…` | unchanged bundle-owned runner |
+| `results/*` | historical hashes above | deliberately not committed; regenerable, ignored under `research/issue-885/results/` |
+| `POSTFIX_VALIDATION.md` | old replay narrative | rewritten with the committed E7 correction, corrected timestamps, and the clean-checkout receipt |
 
-The two runner configs were the only Vitest configs under `apps/api/` that were
-not product configs; following the repo's #304 precedent (research-only vitest
-configs are temporary and do not belong in product directories), their `include`
-sets now live in **one** config owned by this bundle. The reformat is mechanical
-prettier formatting plus the `mkdirSync` lines.
+The old 19/20 (E7 `225000`) and the old 20/20-with-uncommitted-scaffold claims
+are historical. The current committed instrument produces 20/20 without a
+scaffold; see [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) §3 and §7.
 
-The `results/` dumps are **not committed** (scope diet): they are one
-deterministic study run — 30,025 lines, 89% of the PR's additions — fully
-regenerable from the §5 recipe against the pinned SHA. The §4.3 hashes stay the
-canonical receipts of the run as it happened.
+Current document hashes (computed from this revision; `REPRO.md` cannot contain
+its own hash):
 
-**Post-diet replay receipt (2026-11-06**, scratch worktree at the diet commit,
-deps symlinked per §5**):** migrated runner CMD1 **2 files / 2 tests**, exit 0;
-**19/20 scenarios tuple-identical** to candidate C with **38/38** real
-`operability.tick_failure` lines, E7 reproducing the documented INSTRUMENT
-ARTIFACT (225000 unpatched → 330000 with the `POSTFIX_VALIDATION.md` §3
-scaffold → **20/20**) — the reformatted harness is behaviour-identical to the
-study instrument; `results/experiments.json` regenerated on the spot by the
-same run; BASE_SHA clean-room control (bundle copied in per §5) **67/67**;
-post-fix plugin suites through the same runner (DB-free) **75/75**.
+```text
+7aecfa6acbaffffc25b15b06e87486228c39ea3fe050163e5a97207749882fac  RESULTS.md
+48f774c5cb09e3b35cb05e45ac7eddd699eca7c0e731de9aa606b657089c14b2  SOURCE_MAP.md
+0e311e201518b49c88fdd1322f412ad45416d97ae8cce094a2f3a8b7ddd17dcc  EXPERIMENTS.md
+7e592db8534e841092aa736524189d0b14d4b65c288e2ca94abb7ac3cb92e646  ALERT_SEMANTICS.md
+91e93216be068ccbdd3dbb5eaf05ad8e43be0b373f0635b987821f1215ce2f12  DECISION.md
+44512f315ff16a104eca76da5999def7f9391454c3aa187780a8383eca1365a4  README.md
+5a08bcc4aeeca358645c18c0da4dbfcd00b0162e0a054374727e4cf2873ff9df  POSTFIX_VALIDATION.md
+5f7cec21a25c0e0c90581e42addf4504211ea2385815d952b386a07d055e527f  harness/instrument-manifest.json
+```
 
----
+`SOURCE_MAP.md` is unchanged from the historical receipt. The other document
+hashes map the intentional 2026-11-06 edits (errata, E7 correction, current
+replay).
 
-## 5. Re-run from frozen BASE_SHA (clean-room recipe)
+## 5. Clean-room recipe
 
-The worktree reuses the main checkout's installed dependencies via symlinks; nothing
-is installed, no DB is started, and the main worktree is never modified. Run in a
-scratch worktree, **not** the main checkout — the recipe writes regenerable files
-under `research/issue-885/results/`, which is intentionally not committed.
+The recipe is path-independent. Run it from a checkout you are willing to leave
+dirty only in ignored paths; never run it in the main working tree. The research
+bundle must be present **before** dependency links are created, because the
+bundle-owned runner and harness resolve `vitest`/`fastify` by walking up from
+`research/issue-885/harness/`.
 
 ```bash
-# 0) From the main checkout — record baseline (read-only)
-cd /home/hoo/Source/exam
-git fetch origin master            # baseline: origin/master == f2d44b78…
-git rev-parse HEAD                # expect f2d44b78136cda1358148dbce891590975d4c88f
-git status --short                 # expect empty
+set -eu
+REPO_ROOT=$(git rev-parse --show-toplevel)
 BASE=f2d44b78136cda1358148dbce891590975d4c88f
+SUBJECT=3c0b81f8226886d96d8bb717b7108f4057c4474a
+SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/exam-885-replay.XXXXXX")
 
-# 1) Create a detached scratch worktree at BASE_SHA (no branch switch, no destructive ops)
-git worktree add --detach /home/hoo/Source/exam-885-replay "$BASE"
-cd /home/hoo/Source/exam-885-replay
-git rev-parse HEAD                 # expect the same BASE_SHA
+# 1) Obtain the bundle from the subject checkout first.
+git -C "$REPO_ROOT" worktree add --detach "$SCRATCH/subject" "$SUBJECT"
+cp -a "$REPO_ROOT/research/issue-885" "$SCRATCH/subject/research/"
 
-# 2) Reuse installed deps (worktrees do not carry node_modules). From the main
-#    checkout (pnpm install must have been run there), symlink: the ROOT
-#    node_modules (workspace tooling / hoisted bins), each workspace package's
-#    node_modules, and — the load-bearing one — apps/api/node_modules INTO the
-#    harness directory: the bundle-owned runner config and the harness tests
-#    both resolve `vitest` / `fastify` by walking up from research/issue-885/
-#    harness/, and pnpm's root has no top-level vitest. Vite may cache the
-#    bundled config under node_modules/.vite-temp (gitignored, harmless).
-ln -s /home/hoo/Source/exam/node_modules node_modules 2>/dev/null || true
+# 2) Then link dependencies. Adjust only if your install is not at REPO_ROOT.
+ln -s "$REPO_ROOT/node_modules" "$SCRATCH/subject/node_modules"
 for d in apps/api packages/*; do
-  ln -s /home/hoo/Source/exam/"$d"/node_modules "$d/node_modules" 2>/dev/null || true
+  [ -d "$SCRATCH/subject/$d" ] || continue
+  ln -s "$REPO_ROOT/$d/node_modules" "$SCRATCH/subject/$d/node_modules" 2>/dev/null || true
 done
-ln -sfn "$(pwd)"/apps/api/node_modules research/issue-885/harness/node_modules
+ln -sfn "$SCRATCH/subject/apps/api/node_modules" \
+  "$SCRATCH/subject/research/issue-885/harness/node_modules"
 
-# 3) Copy the research bundle in (only if the scratch worktree is at a BASE that
-#    predates the PR): research/issue-885/harness/{experiments.test.ts,smoke.test.ts,
-#    analyze.mjs,vitest.config.ts}. The workspace-resolution plugin
-#    (config/workspace-resolution.mjs) and the three product plugins + tests come
-#    directly from BASE_SHA — they are NOT modified.
-#    Receipts: pre-diet hashes §4.1–§4.2; post-diet hashes §4.4.
-
-# 4) Smoke test (config + fake-clock + pino time sanity)
-apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
-  research/issue-885/harness/smoke.test.ts
-
-# 5) Full measured matrix (E0–E12) — writes research/issue-885/results/experiments.json
-#    (the harness creates the results/ directory; it is regenerable, not committed)
-apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
-  research/issue-885/harness/
-
-# 6) Derive latencies/counts — writes research/issue-885/results/analysis.json
+# 3) Subject replay.
+cd "$SCRATCH/subject"
+apps/api/node_modules/.bin/vitest run \
+  --config research/issue-885/harness/vitest.config.ts research/issue-885/harness/
 node research/issue-885/harness/analyze.mjs
-
-# 7) Control: three EXISTING plugin suites unchanged at BASE_SHA (expect 67 passed)
-apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
+node research/issue-885/harness/compare.mjs
+apps/api/node_modules/.bin/vitest run \
+  --config research/issue-885/harness/vitest.config.ts \
   apps/api/src/plugins/heartbeat.test.ts \
   apps/api/src/plugins/deadlineScanner.test.ts \
   apps/api/src/plugins/operabilityMonitor.test.ts
 
-# 8) Confirm the main worktree is still clean, then discard the scratch worktree
-cd /home/hoo/Source/exam && git status --short     # expect empty
-git worktree remove --force /home/hoo/Source/exam-885-replay
+# 4) Baseline control. The frozen tree does not contain the bundle; copy the
+#    same instrument into it after creating the worktree, then link deps.
+git -C "$REPO_ROOT" worktree add --detach "$SCRATCH/base" "$BASE"
+cp -a "$REPO_ROOT/research/issue-885" "$SCRATCH/base/research/"
+ln -s "$REPO_ROOT/node_modules" "$SCRATCH/base/node_modules"
+for d in apps/api packages/*; do
+  [ -d "$SCRATCH/base/$d" ] || continue
+  ln -s "$REPO_ROOT/$d/node_modules" "$SCRATCH/base/$d/node_modules" 2>/dev/null || true
+done
+ln -sfn "$SCRATCH/base/apps/api/node_modules" \
+  "$SCRATCH/base/research/issue-885/harness/node_modules"
+cd "$SCRATCH/base"
+apps/api/node_modules/.bin/vitest run \
+  --config research/issue-885/harness/vitest.config.ts research/issue-885/harness/
+node research/issue-885/harness/baseline-control.mjs
+
+# 5) Comparator negative control: mutate ONE tuple in a temporary copy.
+TMPCASE=$(mktemp -d)
+node - "$TMPCASE/experiments.json" <<'NODE'
+const fs = require("node:fs");
+const src = require("./research/issue-885/results/experiments.json");
+const event = src.results
+  .find((r) => r.scenario.id === "E1-db-down-throws")
+  .asBuilt.operabilityEvents.find((e) => e.event === "operability.tick_failure");
+event.state = event.state === "failing" ? "recovered" : "failing";
+fs.writeFileSync(process.argv[2], JSON.stringify(src));
+NODE
+if node research/issue-885/harness/compare.mjs \
+  --actual "$TMPCASE/experiments.json" --out "$TMPCASE/comparison.json"; then
+  echo "NEGATIVE CONTROL FAILED: comparator accepted a mutated tuple" >&2
+  exit 1
+else
+  echo "NEGATIVE CONTROL PASS"
+fi
+
+# 6) Cleanup. Remove only the scratch worktrees created above.
+git -C "$REPO_ROOT" worktree remove --force "$SCRATCH/subject"
+git -C "$REPO_ROOT" worktree remove --force "$SCRATCH/base"
+rm -rf "$SCRATCH" "$TMPCASE"
 ```
 
-**Determinism guarantees:** `vi.useFakeTimers({now: T0})`, `vi.advanceTimersByTimeAsync` in
-fixed 15 s steps, a fake `fastify.db` returning the exact repo Drizzle chain shapes, and
-`fileParallelism: false`. There are no `sleep`, no retries, no timeout inflation, and no
-network. Re-running yields byte-identical `experiments.json` (modulo `generatedAt`) and the
-same 20-row analysis table.
+Expected current values: subject `20/20`, `38/38`, diff 0; baseline 20 scenarios
+and 0 `tick_failure`; subject product suites 78; comparator negative control exit
+1; baseline product suites 67. The recorder's `2/2` test count is not a substitute
+for the per-tuple comparison.
 
-**What is real vs simulated in this harness:**
-- **REAL (MEASURED):** the three product plugins (`heartbeat`, `deadlineScanner`,
-  `operabilityMonitor`), their real `try/catch/.finally`, `lastSettledAt` stamping,
-  `consecutiveFailedTicks` updates, `classifyLoopStall`, `classifyPersistentBusinessFailure`,
-  `createOperabilityTransitionTracker`, and all pino JSON stdout lines. Faults enter through
-  the real scanner tick entry via the injected `fastify.db`.
-- **COUNTERFACTUAL (A/B/C/D):** pure classifiers over the measured telemetry; these are
-  **hypotheses**, NEVER reported as delivered product behaviour. No product code was changed.
+## 6. Determinism and limitations
 
----
-
-## 6. Evidence-class discipline & what is NOT claimed
-
-- **MEASURED**: real plugin stdout/metrics/transitions and their latencies. Detection latency is
-  measured from the **actual fault occurrence** in the fake timeline, not derived from threshold
-  arithmetic.
-- **SOURCE_VERIFIED**: facts read from BASE_SHA (call DAG, probe query path, freeze tests).
-- **INFERRED**: reasoning over the two (e.g. the 4-scalar machine-work estimate for candidate C).
-- **UNKNOWN / NOT CLAIMED**: **operator delivery latency** — no external watcher exists in the
-  repo, so only stdout **event-production** latency is measured; do not say "operator notified".
-  **Statistical miss/FP rates** — 20 deterministic scenarios cannot support a percentage;
-  results are scenario-level. **Real PostgreSQL fault** — INCONCLUSIVE, not executed.
-  **Plain ERROR logs are NOT treated as delivered active alerts** (they are outside the §3
-  external-hook whitelist). Delivery, multi-instance aggregation, stdout loss, and log-shipping
-  lag all remain UNKNOWN.
-
----
+- Fake timers, fixed 15 s steps, a fake drizzle-shaped db, `fileParallelism:
+  false`; no sleeps, retries, network, or PostgreSQL.
+- The 20 scenarios are deterministic evidence, not a statistical sample. No
+  miss/false-positive percentage is claimed.
+- The default 30s/15s counterexample and the `S=1s/M=15s` case are pinned by
+  product tests; they demonstrate boundaries, not a universal detection SLA.
+- No watcher exists in the repository. Only stdout event production is measured;
+  delivery, notification correlation, multi-instance behavior, and stdout loss
+  remain UNKNOWN.
+- No real PostgreSQL fault was injected. E3 is a simulated PostgreSQL-shaped
+  error.
+- Heap allocation was not measured. The monitor adds a closure per tick and
+  alert objects on transitions; the evidence does not claim zero allocations.
 
 ## 7. Boundaries honored
 
-No product runtime code was modified; no `lastSettledAt` redefinition; no durable alert state or
-DB schema; no new monitoring platform, env var, or tunable threshold in product; no product PR,
-merge, release, or Issue close; #547/#862 historical decisions unchanged. The research verdict
-(**GO_C — CONDITIONAL**) is a decision only, **not** implementation authorization.
+No product runtime behavior was changed for this research correction. The only
+product source change is an inaccurate comment; the counters, classifier,
+tracker, scheduler, thresholds, recovery conditions, and production messages
+are unchanged. ADR-024 remains `PROPOSED`; this package does not accept it,
+merge the PR, close an Issue, or authorize a release.

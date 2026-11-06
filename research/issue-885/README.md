@@ -5,39 +5,52 @@ Fault-injection study behind
 [ADR-024](../../docs/adr/ADR-024-tick-level-throw-escalation.md): a background
 loop that **settles but throws on every tick** produced no escalation event.
 
-Baseline: `f2d44b78136cda1358148dbce891590975d4c88f` (2026-11-05).
-Research verdict: **GO_C (CONDITIONAL)**. Implementation: this branch.
+- Frozen baseline: `f2d44b78136cda1358148dbce891590975d4c88f` (2026-11-05).
+- Research verdict: **GO_C (CONDITIONAL)**.
+- Implementation: this branch.
+- Current replay subject: `3c0b81f8226886d96d8bb717b7108f4057c4474a`, clean
+  worktree, instrument `issue-885-instrument-v2`.
+- Current replay result: **20/20 scenarios, 38/38 expected tuples, diff 0**;
+  baseline control **20 scenarios, 0 tick_failure events**.
+
+The original study's `105 s` / `15 s` latency labels are historical and were
+measured from phase observation markers. The corrected episode-level timestamps
+and the committed E7 reset instrument are in
+[`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md).
 
 ## Read in this order
 
 | File | What it holds |
 | --- | --- |
-| [`RESULTS.md`](RESULTS.md) | Condensed findings: root cause, reproduction, matrix, verdict |
-| [`SOURCE_MAP.md`](SOURCE_MAP.md) | Call DAG with `file:line` for every node + the 8 source-verified facts |
-| [`EXPERIMENTS.md`](EXPERIMENTS.md) | All 20 scenarios: injection seam, counts, expected vs actual |
-| [`ALERT_SEMANTICS.md`](ALERT_SEMANTICS.md) | The four fact states and the nine semantic questions, defined before any field name |
-| [`DECISION.md`](DECISION.md) | A/B/C/D adjudication, 13-dimension matrix, change package, binding conditions |
-| [`REPRO.md`](REPRO.md) | Environment, commands, exit codes, timestamps, SHA256 manifest, clean-room recipe |
-| [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) | The implemented leg replayed through the same 20 scenarios vs. the prediction |
-| [`harness/`](harness) | `experiments.test.ts` (recorder, zero assertions), `smoke.test.ts`, `analyze.mjs`, `vitest.config.ts` (bundle-owned runner) |
-| [`results/`](results) | **Not committed** (scope diet — regenerable via `REPRO.md` §5): `experiments.json` (step-level observations), `analysis.json` (derived), transcripts; receipt hashes in `REPRO.md` §4.3 |
+| [`RESULTS.md`](RESULTS.md) | Condensed findings: root cause, reproduction, matrix, verdict; replay errata at top |
+| [`SOURCE_MAP.md`](SOURCE_MAP.md) | Call DAG with `file:line` for every node + source-verified facts |
+| [`EXPERIMENTS.md`](EXPERIMENTS.md) | Historical 20-scenario matrix; replay errata at top |
+| [`ALERT_SEMANTICS.md`](ALERT_SEMANTICS.md) | Fact states and semantic answers; replay errata at top |
+| [`DECISION.md`](DECISION.md) | A/B/C/D adjudication, change package, binding conditions; replay errata at top |
+| [`REPRO.md`](REPRO.md) | Historical receipts, old→new mapping, current path-independent clean-room recipe |
+| [`POSTFIX_VALIDATION.md`](POSTFIX_VALIDATION.md) | Current implemented replay, E7 proof, corrected timestamps, negative control |
+| [`harness/`](harness) | Recorder, expected-event table, comparator, baseline control, analyzer, bundle-owned runner, instrument manifest |
+| `results/` | **Not committed**: regenerable observations/transcripts, ignored by Git; receipt hashes and current run metadata live in `REPRO.md`/`POSTFIX_VALIDATION.md` |
 
 Evidence classes are marked throughout: **MEASURED** / **SOURCE_VERIFIED** /
 **INFERRED** / **UNKNOWN**. Plain ERROR logs are never treated as delivered
 alerts; no operator-delivery latency is claimed (the repository contains no
-watcher implementation).
+watcher implementation). E3's `42703` is a simulated PostgreSQL-shaped fake-db
+error, not a real database fault.
 
 ## Reproduce
 
-`REPRO.md` §5 has the full clean-room recipe. Short form, from the repo root:
+The full path-independent recipe is [`REPRO.md`](REPRO.md) §5. Short form from
+the current subject checkout:
 
 ```bash
 apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
-  research/issue-885/harness/                      # 2/2 study matrix (-t smoke for smoke only)
-node research/issue-885/harness/analyze.mjs        # derives analysis.json
+  research/issue-885/harness/                      # recorder: 2/2, not the 20/20 comparison
+node research/issue-885/harness/analyze.mjs
+node research/issue-885/harness/compare.mjs        # 20/20, 38/38, diff 0
 apps/api/node_modules/.bin/vitest run --config research/issue-885/harness/vitest.config.ts \
   apps/api/src/plugins/heartbeat.test.ts apps/api/src/plugins/deadlineScanner.test.ts \
-  apps/api/src/plugins/operabilityMonitor.test.ts  # 67/67 BASE control
+  apps/api/src/plugins/operabilityMonitor.test.ts  # 78/78 on the subject
 ```
 
 The bundle-owned runner is research-only: **no `globalSetup`, no PostgreSQL** —
@@ -47,18 +60,20 @@ fixed 15 s steps: no sleeps, no retries, no network.
 
 ## Provenance and integrity
 
-`REPRO.md` §4 is the SHA256 manifest of the study as it was run (17 artifacts,
-all verified). The document and harness hashes still verify against the files
-here — the harness bytes after the scope-diet reformat are mapped in §4.4 —
-while the `results/` hashes remain the canonical receipts of a regenerable run
-that is intentionally **not committed** (§4.3–§4.4).
+[`harness/instrument-manifest.json`](harness/instrument-manifest.json) is the
+authoritative current instrument manifest; it hashes the harness sources,
+expected table, comparator, baseline control, analyzer, runner and fingerprint
+generator, and does not hash itself. Historical SHA256 receipts and their
+old→new mapping are preserved in `REPRO.md` §2 and §4. `experiments.json` records
+the actual `subjectSha`, dirty state, product-module paths and file hashes; no
+post-fix artifact is labelled with the frozen baseline SHA.
 
-> **On the "NON-PERSISTENCE NOTICE" inside `RESULTS.md` and `REPRO.md`:** those
-> paragraphs describe the study's state while it lived in a detached worktree
-> and had not been committed. They are accurate history and are deliberately
-> left byte-identical so the manifest keeps verifying. The package is now
+> **On the “NON-PERSISTENCE NOTICE” inside `RESULTS.md` and `REPRO.md`:** those
+> paragraphs describe the study while it lived in a detached worktree and had
+> not been committed. They are accurate history and are deliberately left
+> intact so the historical manifest still verifies. The package is now
 > committed for traceability; the durable record remains the
 > [Issue #885 comment](https://github.com/jnhu76/exam/issues/885#issuecomment-6660017391).
 
-`POSTFIX_VALIDATION.md` documents the one post-fix replay, the harness
-restart-scaffold artifact it exposed, and the post-scope-diet replay receipt.
+`POSTFIX_VALIDATION.md` documents the current committed replay, the E7 reset
+proof, the 19/20 historical instrument artifact, and the corrected timestamps.

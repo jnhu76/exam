@@ -1089,7 +1089,7 @@ describe("ADR-024 sampling boundary — real scanner + monitor execution order",
           }
           // Incident arbiter / other discovery tables: an empty drizzle-like
           // chain that supports the builder methods the repositories call.
-          const empty = Promise.resolve([]) as Promise<unknown[]> & {
+          const empty = Promise.resolve([]) as unknown as Promise<unknown[]> & {
             innerJoin: () => unknown;
             where: () => unknown;
             orderBy: () => unknown;

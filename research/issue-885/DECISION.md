@@ -51,8 +51,8 @@ it changes the #862/#884 contract. Lowest line count is not a correctness argume
 
 ### C — independent continuous tick-execution-failure escalation
 
-`MEASURED`: C covers E2/E3/E6 (detection **105 s** from actual fault occurrence, recovery
-**15 s**), is silent in E0/E4/E5(no throws)/E6-business-failure/E11/E12, re-raises correctly
+`MEASURED` (historical phase-marker basis): C covers E2/E3/E6 (detection **105 s**, recovery
+**15 s**; corrected episode-level values are in `POSTFIX_VALIDATION.md` §4), is silent in E0/E4/E5(no throws)/E6-business-failure/E11/E12, re-raises correctly
 after restart (E7), and correctly ignores 3-tick bursts (E8). It is the only candidate with a
 truthful, cause-UNKNOWN fact. `SOURCE_VERIFIED`: it reuses the existing 15 s timer
 (`operabilityMonitor.ts:550`), the single readiness probe (`:508`), the tracker factory
@@ -93,8 +93,8 @@ Cells are tagged `[M]` MEASURED, `[S]` SOURCE_VERIFIED, `[I]` INFERRED, `[U]` UN
 | Same-root-cause duplicate alerts | `[M]` 2 (E1) + 2 (E9) `[S]` plus a whole new watcher pipeline | `[M]` 2 + 2 (`dup=2` in E1/E9) **and** duplicate authority in E4/E5 | `[M]` 2 + 2 (`dup=2`), truthful distinct facts, `(event,component)`-keyed | `[M]` 0 during outage, but 2 delayed/late raises after recovery |
 | Correctness & semantic precision | `[I]` Low: no event, absence-based recovery, free-text `msg` keying | `[M]` **Wrong**: false "business failures" message; breaks freeze contract | `[S]` High: says only "N consecutive ticks threw; cause unknown"; `recovered` = "exceptions cleared", not business recovery | `[M]` Medium: no root-cause claim in wording, but suppression is a causal over-claim |
 | Incident diagnosability | `[U]` log text + `err` only; no stable `event`/`component` | `[M]` Misleading: blames business work | `[S]` Stable `event`/`component`/`state`; existing ERROR logs retain the `err` for diagnosis; UNKNOWN explicitly documented | `[S]` Same as C, minus visibility during readiness outages |
-| Detection latency (from actual fault) | `[M]` 105000 ms in-process (CF log rule) `[U]` real watcher | `[M]` 105000 ms | `[M]` **105000 ms** (E2/E3/E6); readiness itself 0 ms in E1/E9 (worst case ≤15 s + probe) | `[M]` 105000–210000 ms; suppressed window delays it |
-| Recovery latency | `[U]` absence-derived, unbounded | `[M]` 15000 ms | `[M]` **15000 ms** (first clean settle) | `[M]` 15000 ms + phantom raise/recover pairs |
+| Detection latency (historical phase-marker basis) | `[M]` 105000 ms in-process (CF log rule) `[U]` real watcher | `[M]` 105000 ms | `[M]` **105000 ms** (E2/E3/E6); corrected episode values in POSTFIX §4; readiness itself 0 ms in E1/E9 | `[M]` 105000–210000 ms; suppressed window delays it |
+| Recovery latency (historical phase-marker basis) | `[U]` absence-derived, unbounded | `[M]` 15000 ms | `[M]` **15000 ms**; corrected episode values in POSTFIX §4 | `[M]` 15000 ms + phantom raise/recover pairs |
 | New machine work per scanner tick | `[S]` 0 | `[I]` 1 integer increment (catch) | `[S]` 1 integer increment (catch) OR 1 assignment to 0 (end of `try`); **0 new I/O** (object allocation not measured) | `[I]` same as C |
 | New machine work per monitor tick | `[S]` 0 in-process; `[U]` external | `[I]` 0 (reuses existing leg) | `[I]` 2 integer reads + 2 classifier calls + 2 tracker calls; 1 extra stdout line **only on a transition** | `[I]` C + 1 readiness gate + 1 freeze condition per tracker |
 | New timer / DB probe / I/O / scanning work | `[S]` 0 in-process; `[U]` external pipeline | `[S]` 0 | `[S]` **0 new timers, 0 new probes, 0 new scanning/persistent I/O** (reuses `:550`, `:508`, the existing `alerts` array); heap allocation not measured, and the per-monitor-tick closure allocates | `[S]` 0 new timers/probes; +1 gate branch |

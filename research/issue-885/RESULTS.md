@@ -140,8 +140,8 @@ tick 2 integer reads + 2 classifier calls + 2 tracker calls, with at most one ex
 line **only on a transition**. **0 new timers, 0 new DB probes, 0 new I/O channels,
 0 new scanning/persistent I/O, 0 durable state, 0 env knobs, 0 schema changes.** New state =
 **4 scalars**. Heap allocation was not measured; per-monitor-tick closures do allocate.
-(2 process-local integers + 2 tracker `boolean|null`). Measured detection **105 s** from the
-actual fault, recovery **15 s**.
+(2 process-local integers + 2 tracker `boolean|null`). Historical phase-marker measurement:
+**105 s** and **15 s**; the corrected episode-level replay is in `POSTFIX_VALIDATION.md` §4.
 
 ## 7. Independent reviews
 
@@ -168,7 +168,8 @@ failure authority > minimal machine work > code lines.
 - B rejected on correctness (false "business failures" message, breaks 2 freeze tests).
 - A rejected on verifiable coverage (no escalatable event; delivery unowned).
 - D rejected on measured phantom alerts + causal over-claim.
-- C: 105 s detection / 15 s recovery, 0 measured false positives in clean,
+- C: historical 105 s phase-marker detection / 15 s recovery (corrected replay in
+  `POSTFIX_VALIDATION.md` §4), 0 measured false positives in clean,
   business-failure-only, stall, short-burst and intermittent scenarios, at 4 scalars + one
   additive contract entry.
 
