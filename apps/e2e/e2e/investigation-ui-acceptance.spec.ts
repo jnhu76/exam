@@ -10,7 +10,9 @@ import { loginAsAdmin } from "../lib/login";
 import {
   adminApiToken,
   candidateApiToken,
+  candidateLogin,
   candidateStartAttempt,
+  startExamFromList,
 } from "../lib/flow";
 
 /**
@@ -345,5 +347,189 @@ test.describe("investigation UI browser acceptance (#856)", () => {
     });
     await expectNoPageOverflow(page);
     await expect(page.getByLabel("答卷 ID")).toBeVisible();
+  });
+
+  // #874 PR-W browser acceptance: the candidate take page runs the REAL
+  // logger → ClientEventBuffer → postClientEvents chain, so (1) events queued
+  // while the browser context is offline must reach the server after reconnect
+  // (bounded-backoff recovery, no loss), and (2) a year-0000 poison batch
+  // posted from the page's own session must be rejected ATOMICALLY by the
+  // real server with the standard 400 naming events.<index>.occurredAt, leave
+  // zero rows, and leave the ingestion channel fully usable for the valid
+  // remainder resent under the SAME eventIds (first-write-wins dedup absorbs
+  // an ACK-loss resend without extra rows).
+  test("#874 PR-W: offline recovery sending and atomic year-0000 poison-batch rejection", async ({
+    page,
+    request,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const seeded = await seedExam(request, "poison-batch");
+    const candidateToken = await candidateApiToken(request, seeded.candidate);
+    const adminToken = await adminApiToken(request);
+
+    // Real candidate page (real buffer/transport bundled in the web app).
+    await candidateLogin(page, seeded.candidate);
+    await startExamFromList(page, seeded.examId);
+    // Restore-start over the API returns the SAME in-flight attempt id.
+    const attemptId = await candidateStartAttempt(
+      request,
+      candidateToken,
+      seeded.examId,
+    );
+
+    const timelineNames = async (): Promise<string[]> => {
+      const res = await request.get(
+        `${BASE_URL}/api/admin/attempts/${attemptId}/proctor-events?limit=50&page=1`,
+        { headers: { Cookie: `auth-token=${adminToken}` } },
+      );
+      expect(res.ok(), await res.text()).toBe(true);
+      return (
+        (await res.json()) as { items: Array<{ name: string }> }
+      ).items.map((i) => i.name);
+    };
+
+    // --- 1. Browser recovery flow: offline queueing → reconnect → delivery.
+    await page.context().setOffline(true);
+    // Keep the offline window long enough for one real failed flush attempt
+    // (the buffer timer fires every 5s), so recovery also exercises the
+    // bounded-backoff path, not just a first-try success.
+    await page.waitForTimeout(6_500);
+    await page.context().setOffline(false);
+
+    await expect
+      .poll(
+        async () =>
+          (await timelineNames()).some((n) => n === "browser_offline"),
+        {
+          timeout: 90_000,
+          message:
+            "the event buffered while offline must reach the server after reconnect",
+        },
+      )
+      .toBe(true);
+    await expect
+      .poll(
+        async () => (await timelineNames()).some((n) => n === "browser_online"),
+        {
+          timeout: 30_000,
+          message: "the reconnect event must reach the server too",
+        },
+      )
+      .toBe(true);
+
+    // --- 2. Poison batch through the page's own session (real cookies, real
+    // Fastify schema serializer, real PostgreSQL): mixed [valid, year-0000,
+    // valid] must return the standard 400 VALIDATION_ERROR naming the exact
+    // sub-batch index, and store zero rows.
+    const postFromPage = (
+      events: unknown[],
+    ): Promise<{
+      status: number;
+      body: {
+        accepted?: number;
+        error?: {
+          code?: string;
+          details?: { fields?: Array<{ field: string }> };
+        };
+      };
+    }> =>
+      page.evaluate(async (payload) => {
+        const res = await fetch("/api/client-events", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ events: payload }),
+        });
+        return { status: res.status, body: await res.json() };
+      }, events);
+
+    const validBefore = {
+      kind: "exam_telemetry",
+      level: "info",
+      name: "prw_mix_valid_before",
+      occurredAt: new Date().toISOString(),
+      attemptId,
+      examId: seeded.examId,
+      eventId: "prw-e2e-valid-a-00000001",
+    };
+    const validAfter = {
+      kind: "exam_telemetry",
+      level: "info",
+      name: "prw_mix_valid_after",
+      occurredAt: new Date().toISOString(),
+      attemptId,
+      examId: seeded.examId,
+      eventId: "prw-e2e-valid-b-00000001",
+    };
+    const poison = {
+      kind: "exam_telemetry",
+      level: "info",
+      name: "prw_mix_poison",
+      occurredAt: "0000-01-01T00:00:00.000Z",
+      attemptId,
+      examId: seeded.examId,
+      eventId: "prw-e2e-poison-00000001",
+    };
+
+    const mixed = await postFromPage([validBefore, poison, validAfter]);
+    expect(mixed.status).toBe(400);
+    expect(mixed.body.error?.code).toBe("VALIDATION_ERROR");
+    const fieldPaths = (mixed.body.error?.details?.fields ?? []).map(
+      (f) => f.field,
+    );
+    expect(fieldPaths).toContain("events.1.occurredAt");
+
+    // Atomic batch: not a single event of the rejected batch reached storage.
+    const afterRejection = await timelineNames();
+    expect(afterRejection).not.toContain("prw_mix_valid_before");
+    expect(afterRejection).not.toContain("prw_mix_poison");
+    expect(afterRejection).not.toContain("prw_mix_valid_after");
+
+    // --- 3. Isolation + resend: a conforming client drops ONLY the named
+    // event and resends the valid remainder with the SAME eventIds.
+    const resend = await postFromPage([validBefore, validAfter]);
+    expect(resend.status).toBe(200);
+    expect(resend.body.accepted).toBe(2);
+    const afterResend = await timelineNames();
+    expect(afterResend).toContain("prw_mix_valid_before");
+    expect(afterResend).toContain("prw_mix_valid_after");
+
+    // --- 4. ACK loss: the identical resend is absorbed by the (org, user,
+    // eventId) dedup key — accepted stays 2 and no extra rows appear.
+    const ackLossResend = await postFromPage([validBefore, validAfter]);
+    expect(ackLossResend.status).toBe(200);
+    expect(ackLossResend.body.accepted).toBe(2);
+    const finalNames = await timelineNames();
+    expect(finalNames.filter((n) => n === "prw_mix_valid_before")).toHaveLength(
+      1,
+    );
+    expect(finalNames.filter((n) => n === "prw_mix_valid_after")).toHaveLength(
+      1,
+    );
+    expect(finalNames).not.toContain("prw_mix_poison");
+
+    // --- 5. Visual evidence: the attempt timeline shows the recovered rows
+    // and stays operable at desktop and 390px widths.
+    await loginAsAdmin(page);
+    await page.goto(`/admin/attempts/${attemptId}`);
+    await expect(page.getByText("遥测时间线")).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.getByText("遥测时间线").scrollIntoViewIfNeeded();
+    await expect(page.getByText("prw_mix_valid_before")).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.screenshot({
+      path: testInfo.outputPath("pr-w-attempt-poison-recovery.png"),
+      fullPage: true,
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoPageOverflow(page);
+    await expect(page.getByText("prw_mix_valid_before")).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath("pr-w-attempt-poison-recovery-390px.png"),
+      fullPage: true,
+    });
   });
 });

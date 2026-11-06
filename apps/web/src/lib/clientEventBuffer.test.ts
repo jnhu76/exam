@@ -12,6 +12,17 @@ function makeEvent(name = "test.event"): ClientEvent {
   };
 }
 
+/**
+ * #874 PR-W send contract. A transport override that ACKNOWLEDGES every
+ * event it receives; a transport override that leaves everything
+ * UNCONFIRMED (the old boolean-failure case).
+ */
+const ackAllImpl = async (events: ClientEvent[]) => ({
+  acknowledgedCount: events.length,
+  rejected: [],
+});
+const retryAllImpl = async () => ({ acknowledgedCount: 0, rejected: [] });
+
 describe("ClientEventBuffer", () => {
   let buffers: ClientEventBuffer[] = [];
 
@@ -36,7 +47,7 @@ describe("ClientEventBuffer", () => {
   }
 
   it("queues events until batch size triggers a flush", async () => {
-    const send = vi.fn().mockResolvedValue(true);
+    const send = vi.fn(ackAllImpl);
     const buf = makeBuffer({
       send,
       batchSize: 3,
@@ -56,7 +67,7 @@ describe("ClientEventBuffer", () => {
   });
 
   it("flush sends the current queue and reports count", async () => {
-    const send = vi.fn().mockResolvedValue(true);
+    const send = vi.fn(ackAllImpl);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("a"));
     buf.push(makeEvent("b"));
@@ -68,7 +79,7 @@ describe("ClientEventBuffer", () => {
   });
 
   it("flush on empty queue is a no-op", async () => {
-    const send = vi.fn().mockResolvedValue(true);
+    const send = vi.fn(ackAllImpl);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     const sent = await buf.flush();
     expect(send).not.toHaveBeenCalled();
@@ -79,7 +90,7 @@ describe("ClientEventBuffer", () => {
     // H-requeue: a failed flush re-enqueues the batch to the FRONT of the
     // queue so the next (post-backoff) flush retries it, instead of silently
     // dropping it. Combined with maxBufferSize this stays memory-bounded.
-    const send = vi.fn().mockResolvedValue(false);
+    const send = vi.fn(retryAllImpl);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("x"));
     await buf.flush();
@@ -91,8 +102,8 @@ describe("ClientEventBuffer", () => {
     // First flush fails (transient), second succeeds -> data not lost.
     const send = vi
       .fn()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+      .mockResolvedValueOnce({ acknowledgedCount: 0, rejected: [] })
+      .mockImplementation(ackAllImpl);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("keep"));
     await buf.flush(); // fails, requeued
@@ -114,7 +125,7 @@ describe("ClientEventBuffer", () => {
   });
 
   it("backs off after a failed flush (skips retries within backoff window)", async () => {
-    const send = vi.fn().mockResolvedValue(false);
+    const send = vi.fn(retryAllImpl);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("f1"));
     await buf.flush(); // fails, requeued to front
@@ -132,8 +143,8 @@ describe("ClientEventBuffer", () => {
   it("pagehide flush bypasses the backoff window (best-effort unload send)", async () => {
     const send = vi
       .fn()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+      .mockResolvedValueOnce({ acknowledgedCount: 0, rejected: [] })
+      .mockImplementation(ackAllImpl);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("u1"));
     await buf.flush(); // fails → backoff set
@@ -154,8 +165,8 @@ describe("ClientEventBuffer", () => {
   it("successful pagehide flush clears the backoff window", async () => {
     const send = vi
       .fn()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+      .mockResolvedValueOnce({ acknowledgedCount: 0, rejected: [] })
+      .mockImplementation(ackAllImpl);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("r1"));
     await buf.flush();
@@ -169,7 +180,7 @@ describe("ClientEventBuffer", () => {
   });
 
   it("visibilitychange hidden flush still respects the backoff window", async () => {
-    const send = vi.fn().mockResolvedValue(false);
+    const send = vi.fn(retryAllImpl);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("v1"));
     await buf.flush();
@@ -190,7 +201,7 @@ describe("ClientEventBuffer", () => {
     // (flushBlockedUntil - Date.now()) that shrinks as real wall-clock elapses
     // between flush() and the assertion, flaking as `expected 9 >= 10` under
     // CI coverage instrumentation.
-    const send = vi.fn().mockResolvedValue(false);
+    const send = vi.fn(retryAllImpl);
     const buf = makeBuffer({
       send,
       batchSize: 100,
@@ -214,8 +225,8 @@ describe("ClientEventBuffer", () => {
   it("resets backoff to zero after a successful flush", async () => {
     const send = vi
       .fn()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+      .mockResolvedValueOnce({ acknowledgedCount: 0, rejected: [] })
+      .mockImplementation(ackAllImpl);
     const buf = makeBuffer({
       send,
       batchSize: 100,
@@ -237,7 +248,7 @@ describe("ClientEventBuffer", () => {
 
   it("bounds memory: requeued batch is still subject to max buffer size", async () => {
     // Requeue must not grow the queue beyond maxBufferSize even under failures.
-    const send = vi.fn().mockResolvedValue(false);
+    const send = vi.fn(retryAllImpl);
     const buf = makeBuffer({
       send,
       batchSize: 2,
@@ -254,7 +265,7 @@ describe("ClientEventBuffer", () => {
   });
 
   it("drops oldest events when exceeding max buffer size", () => {
-    const send = vi.fn().mockResolvedValue(true);
+    const send = vi.fn(ackAllImpl);
     const buf = makeBuffer({
       send,
       batchSize: 1000, // never auto-flush
@@ -279,8 +290,8 @@ describe("logger → buffer integration", () => {
     // unique key absorbs the duplicate instead of storing it twice.
     const send = vi
       .fn()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+      .mockResolvedValueOnce({ acknowledgedCount: 0, rejected: [] })
+      .mockImplementation(ackAllImpl);
     const buf = new ClientEventBuffer({
       send,
       batchSize: 100,
@@ -304,7 +315,7 @@ describe("logger → buffer integration", () => {
   });
 
   it("logger routes events through the buffer and sanitizes metadata", async () => {
-    const send = vi.fn().mockResolvedValue(true);
+    const send = vi.fn(ackAllImpl);
     const buf = new ClientEventBuffer({
       send,
       batchSize: 100,
@@ -336,5 +347,185 @@ describe("logger → buffer integration", () => {
     };
     setBuffer(buf);
     expect(() => logger.error("no.throw")).not.toThrow();
+  });
+});
+
+// #874 PR-W poison-batch recovery. The transport result now classifies each
+// round trip (acknowledged prefix / deterministic rejections / unconfirmed),
+// so the buffer must: keep determinately-rejected events OUT of the queue,
+// keep their schema-valid peers pending for bounded-backoff retry with the
+// ORIGINAL eventId/occurredAt/payload, never count a rejection as accepted,
+// and record payload-free local diagnostics for the visible loss.
+describe("ClientEventBuffer — poison batch isolation (#874 PR-W)", () => {
+  let buffers: ClientEventBuffer[] = [];
+
+  beforeEach(() => {
+    buffers = [];
+    setBuffer(null);
+  });
+
+  afterEach(() => {
+    for (const b of buffers) b.dispose();
+    setBuffer(null);
+    vi.useRealTimers();
+  });
+
+  function makeBuffer(
+    opts: ConstructorParameters<typeof ClientEventBuffer>[0],
+  ) {
+    const b = new ClientEventBuffer(opts);
+    buffers.push(b);
+    return b;
+  }
+
+  it("isolates a determinately rejected event and keeps its valid peers pending in order", async () => {
+    const send = vi.fn(async (_events: ClientEvent[]) => ({
+      acknowledgedCount: 0,
+      rejected: [{ index: 1, fields: ["occurredAt"] }],
+    }));
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("good.one"));
+    buf.push(makeEvent("poison"));
+    buf.push(makeEvent("good.two"));
+
+    // The flush itself confirmed nothing: rejected events are NOT accepted.
+    await expect(buf.flush()).resolves.toBe(0);
+    // The poison is gone; its schema-valid peers stay queued, in order.
+    expect(buf.size).toBe(2);
+    expect(buf.getRejectedDiagnostics()).toEqual([
+      { identifier: "poison", fields: ["occurredAt"] },
+    ]);
+
+    // Retry after the isolation sends ONLY the valid peers, unchanged.
+    buf.clearBackoffForTest();
+    await buf.flush();
+    expect(send).toHaveBeenCalledTimes(2);
+    const resent = send.mock.calls[1]![0] as ClientEvent[];
+    expect(resent.map((e) => e.name)).toEqual(["good.one", "good.two"]);
+  });
+
+  it("diagnostics prefer the stable eventId and never retain the payload", async () => {
+    const send = vi.fn(async () => ({
+      acknowledgedCount: 0,
+      rejected: [{ index: 0, fields: ["occurredAt"] }],
+    }));
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push({
+      ...makeEvent("poison.named"),
+      eventId: "evt-poison-000000001",
+      metadata: { secret: "sensitive-payload" },
+    });
+    await buf.flush();
+    expect(buf.getRejectedDiagnostics()).toEqual([
+      { identifier: "evt-poison-000000001", fields: ["occurredAt"] },
+    ]);
+    expect(JSON.stringify(buf.getRejectedDiagnostics())).not.toContain(
+      "sensitive-payload",
+    );
+  });
+
+  it("bounds retained diagnostics while still counting every rejection", async () => {
+    const send = vi.fn(async () => ({
+      acknowledgedCount: 0,
+      rejected: [{ index: 0, fields: ["occurredAt"] }],
+    }));
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    for (let i = 0; i < 60; i++) {
+      buf.push(makeEvent(`poison.${i}`));
+      await buf.flush();
+      expect(buf.size).toBe(0);
+    }
+    // All rejections counted; only the most recent entries retained.
+    expect(buf.rejectedEventCount).toBe(60);
+    expect(buf.getRejectedDiagnostics().length).toBeLessThanOrEqual(50);
+    expect(buf.getRejectedDiagnostics().at(-1)!.identifier).toBe("poison.59");
+  });
+
+  it("resolves the batch when every event is determinately rejected (no retry loop)", async () => {
+    const send = vi.fn(async (_events: ClientEvent[]) => ({
+      acknowledgedCount: 0,
+      rejected: [
+        { index: 0, fields: ["occurredAt"] },
+        { index: 1, fields: ["occurredAt"] },
+      ],
+    }));
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("bad.one"));
+    buf.push(makeEvent("bad.two"));
+    await expect(buf.flush()).resolves.toBe(0);
+    // Queue is empty and the channel answered definitively: no backoff debt.
+    expect(buf.size).toBe(0);
+    expect(buf.currentBackoffForTest()).toBe(0);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps only unconfirmed events when a later sub-batch fails after an acknowledged one", async () => {
+    const send = vi.fn(async (_events: ClientEvent[]) => ({
+      acknowledgedCount: 2,
+      rejected: [],
+    }));
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("acked.0"));
+    buf.push(makeEvent("acked.1"));
+    buf.push(makeEvent("pending.2"));
+    await expect(buf.flush()).resolves.toBe(2);
+    expect(buf.size).toBe(1);
+    buf.clearBackoffForTest();
+    await buf.flush();
+    const resent = send.mock.calls[1]![0] as ClientEvent[];
+    expect(resent.map((e) => e.name)).toEqual(["pending.2"]);
+  });
+
+  it("removes rejected events from a partially acknowledged batch and requeues the rest", async () => {
+    const send = vi.fn(async (_events: ClientEvent[]) => ({
+      acknowledgedCount: 1,
+      rejected: [{ index: 2, fields: ["occurredAt"] }],
+    }));
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("acked.0"));
+    buf.push(makeEvent("pending.1"));
+    buf.push(makeEvent("poison.2"));
+    buf.push(makeEvent("pending.3"));
+    await expect(buf.flush()).resolves.toBe(1);
+    expect(buf.size).toBe(2);
+    expect(buf.getRejectedDiagnostics()).toEqual([
+      { identifier: "poison.2", fields: ["occurredAt"] },
+    ]);
+    buf.clearBackoffForTest();
+    await buf.flush();
+    const resent = send.mock.calls[1]![0] as ClientEvent[];
+    expect(resent.map((e) => e.name)).toEqual(["pending.1", "pending.3"]);
+  });
+
+  it("keeps new events flowing: a poison event never blocks later valid events", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({
+        acknowledgedCount: 0,
+        rejected: [{ index: 0, fields: ["occurredAt"] }],
+      })
+      .mockResolvedValueOnce({ acknowledgedCount: 1, rejected: [] });
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("poison"));
+    await buf.flush();
+    // New traffic after the poison was identified.
+    buf.push(makeEvent("fresh.valid"));
+    buf.clearBackoffForTest();
+    await expect(buf.flush()).resolves.toBe(1);
+    const resent = send.mock.calls[1]![0] as ClientEvent[];
+    expect(resent.map((e) => e.name)).toEqual(["fresh.valid"]);
+    expect(buf.size).toBe(0);
+  });
+
+  it("treats an unclassified outcome (empty classification from an ambiguous 400) as pending, deleting nothing", async () => {
+    const send = vi.fn(async () => ({ acknowledgedCount: 0, rejected: [] }));
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("keep.0"));
+    buf.push(makeEvent("keep.1"));
+    await expect(buf.flush()).resolves.toBe(0);
+    // Nothing was determinate: the whole batch stays queued for backoff retry.
+    expect(buf.size).toBe(2);
+    expect(buf.getRejectedDiagnostics()).toEqual([]);
+    expect(buf.rejectedEventCount).toBe(0);
   });
 });

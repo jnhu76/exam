@@ -1,4 +1,9 @@
-import type { ClientEvent, ClientEventBatchResponse } from "@exam/contracts";
+import {
+  ErrorResponseSchema,
+  ValidationErrorDetailsSchema,
+  type ClientEvent,
+  type ClientEventBatchResponse,
+} from "@exam/contracts";
 
 /** Endpoint path for client-event batch uploads. */
 const CLIENT_EVENTS_PATH = "/api/client-events";
@@ -16,27 +21,148 @@ const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 export const KEEPALIVE_MAX_BODY_BYTES = 64 * 1024;
 
 /**
- * Sends a single serialized batch to the server. Returns the server-reported
- * accepted count, or `null` on any failure (network error, non-2xx, malformed
- * body). Never throws.
+ * One event the server deterministically rejected via THIS endpoint's
+ * standard 400 VALIDATION_ERROR envelope (#874 PR-W). `index` is the event's
+ * position in the ORIGINAL batch passed to {@link postClientEvents} (the
+ * server's per-POST sub-batch index is mapped back here); `fields` are the
+ * failing field paths relative to the event (e.g. `occurredAt`).
  */
-async function sendOne(events: ClientEvent[]): Promise<number | null> {
+export interface ClientEventRejection {
+  index: number;
+  fields: string[];
+}
+
+/**
+ * Internal transport result for one {@link postClientEvents} call.
+ *
+ * This is NOT an HTTP protocol change — the wire stays
+ * `200 {accepted: n}` / standard `400 VALIDATION_ERROR`. It is the
+ * client-side classification the buffer needs to tell three outcomes apart:
+ *
+ * - ACKNOWLEDGED: the events covered by `acknowledgedCount` — always a
+ *   contiguous prefix of the input batch, because sub-requests are sent in
+ *   order and the flush stops at the first sub-batch that is not fully
+ *   acknowledged.
+ * - REJECTED: `rejected` — events the server determinately named in a
+ *   standard 400 with an in-range `events.<index>.*` path. These are poison
+ *   events; the buffer removes exactly these, never their peers.
+ * - RETRY: everything else. Events not covered by either field are
+ *   UNCONFIRMED (network error, 5xx, 401/403/429, malformed body, a 200 that
+ *   did not confirm the whole sub-batch, or a 400 without usable per-event
+ *   indices) and remain the buffer's responsibility — retried with the
+ *   existing bounded backoff, never deleted on a guess.
+ *
+ * Known deviation from the pre-#874 accounting: an event that cannot fit a
+ * single keepalive request is no longer silently lost when its peers were
+ * sent — it simply stays unconfirmed (pending) and is retried. With
+ * schema-valid events this path is unreachable (metadata is capped well
+ * below the keepalive cap server-side); the buffer's max-size bound keeps
+ * even that retry bounded.
+ */
+export interface ClientEventPostResult {
+  /** Events confirmed accepted: exactly the first `acknowledgedCount` of the input batch. */
+  acknowledgedCount: number;
+  /** Events deterministically rejected; indices are into the input batch. */
+  rejected: ClientEventRejection[];
+}
+
+/** Outcome of a single POST round trip, before original-index mapping. */
+type SubBatchResult =
+  | { state: "acknowledged" }
+  | { state: "rejected"; localRejections: ClientEventRejection[] }
+  | { state: "retry" };
+
+/**
+ * Event-index segments of THIS endpoint's standard 400 field paths, e.g.
+ * `events.1.occurredAt` → event index 1, relative field `occurredAt`.
+ * Anything that does not name an event (batch-level paths, `_root`) yields
+ * no match — those 400s stay unconfirmed.
+ */
+const EVENT_FIELD_PATTERN = /^events\.(\d+)(?:\.(.+))?$/;
+
+/**
+ * Extracts deterministic per-event rejections from the standard 400 body.
+ * Rejections are produced ONLY when the body parses as the standard error
+ * envelope with `code === "VALIDATION_ERROR"` AND a field path names an
+ * event index inside THIS request's batch. Everything else — non-standard
+ * 400, malformed JSON, out-of-range or non-numeric indices, batch-level
+ * paths — yields no rejections: the outcome stays uncertain and the batch is
+ * retried, never deleted on a guess (#874 PR-W).
+ */
+async function parseValidationRejections(
+  response: Response,
+  batchSize: number,
+): Promise<ClientEventRejection[]> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return [];
+  }
+  const envelope = ErrorResponseSchema.safeParse(body);
+  if (
+    !envelope.success ||
+    envelope.data.error.code !== "VALIDATION_ERROR" ||
+    envelope.data.error.details === undefined
+  ) {
+    return [];
+  }
+  const details = ValidationErrorDetailsSchema.safeParse(
+    envelope.data.error.details,
+  );
+  if (!details.success) return [];
+
+  const byIndex = new Map<number, string[]>();
+  for (const issue of details.data.fields) {
+    const match = EVENT_FIELD_PATTERN.exec(issue.field);
+    if (!match) continue;
+    const index = Number(match[1]);
+    if (!Number.isInteger(index) || index < 0 || index >= batchSize) continue;
+    // A bare `events.<index>` path still identifies the event; only the
+    // diagnostic field label falls back to the raw path in that case.
+    const field = match[2] ?? issue.field;
+    const fields = byIndex.get(index);
+    if (fields) fields.push(field);
+    else byIndex.set(index, [field]);
+  }
+  return [...byIndex.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([index, fields]) => ({ index, fields }));
+}
+
+/**
+ * Sends a single serialized sub-batch to the server and classifies the
+ * outcome. Never throws.
+ */
+async function sendOne(batch: ClientEvent[]): Promise<SubBatchResult> {
   try {
     const response = await fetch(`${baseUrl}${CLIENT_EVENTS_PATH}`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ events }),
+      body: JSON.stringify({ events: batch }),
       // `keepalive` lets the request outlive the page during unload flushes.
       keepalive: true,
     });
-    if (!response.ok) return null;
+    if (response.status === 400) {
+      const localRejections = await parseValidationRejections(
+        response,
+        batch.length,
+      );
+      return { state: "rejected", localRejections };
+    }
+    if (!response.ok) return { state: "retry" };
     const body = (await response.json()) as Partial<ClientEventBatchResponse>;
-    if (typeof body?.accepted !== "number") return null;
-    return body.accepted;
+    if (typeof body?.accepted !== "number") return { state: "retry" };
+    // The server confirms a sub-batch only by accepting ALL of it: accepted
+    // is inserted + deduplicated (#863), so a schema-valid batch always
+    // reports exactly n. Anything else is an unconfirmed outcome.
+    if (body.accepted !== batch.length) return { state: "retry" };
+    return { state: "acknowledged" };
   } catch {
-    // Network error, parse error, or any other runtime failure: swallow.
-    return null;
+    // Network error, parse error, or any other runtime failure: the outcome
+    // is unknown, never an event-content verdict.
+    return { state: "retry" };
   }
 }
 
@@ -78,48 +204,58 @@ function planRequests(events: ClientEvent[]): ClientEvent[][] {
  * permitted to call the `/api/client-events` endpoint.
  *
  * Contract:
- * - NEVER throws. All failures are swallowed and reported via the boolean
- *   return; the caller (the buffer) drops the batch or backs off — it must not
- *   re-enqueue a log about the failure, which would create an infinite loop.
- * - NEVER logs recursively. On failure it returns `false`; the buffer handles
- *   retry/backoff.
+ * - NEVER throws. All failures are swallowed and reported via the classified
+ *   result; the caller (the buffer) isolates rejected events or backs off —
+ *   it must not re-enqueue a log about the failure, which would create an
+ *   infinite loop.
+ * - NEVER logs recursively.
  * - Splits the batch into multiple requests when the combined body would exceed
  *   the keepalive byte cap (H6), so unload flushes are not silently dropped.
- * - Success semantics (H4): returns `true` when every event was accepted by the
- *   server. A non-empty batch whose server reports `accepted: 0` is treated as
- *   failure (a data-loss signal) so the buffer can retry; a genuinely empty
- *   flush is a clean no-op success.
+ * - Success semantics (H4, refined by #874 PR-W): {@link ClientEventPostResult}
+ *   tells the buffer which events the server CONFIRMED accepted (a contiguous
+ *   prefix), which it determinately rejected, and which stay unconfirmed.
  *
- * @returns `true` if the batch was fully accepted (or was empty), `false` otherwise.
+ * @returns the classification for the input batch (never throws).
  */
 export async function postClientEvents(
   events: ClientEvent[],
-): Promise<boolean> {
+): Promise<ClientEventPostResult> {
   if (events.length === 0) {
     // No events to send — confirm the round-trip once so callers can treat an
     // empty flush as success. (The buffer short-circuits before calling for
     // empty queues, but this keeps the transport self-consistent.)
-    const accepted = await sendOne([]);
-    return accepted !== null && accepted >= 0;
+    await sendOne([]);
+    return { acknowledgedCount: 0, rejected: [] };
   }
 
   const requests = planRequests(events);
   if (requests.length === 0) {
-    // Every event was too large to send — nothing accepted.
-    return false;
+    // Every event was too large to send — nothing accepted, nothing rejected.
+    return { acknowledgedCount: 0, rejected: [] };
   }
 
-  let totalSent = 0;
-  let totalAccepted = 0;
+  let acknowledged = 0;
   for (const batch of requests) {
-    const accepted = await sendOne(batch);
-    if (accepted === null) return false; // any failed request fails the flush
-    // Server must accept every event in THIS request, else treat as failure.
-    if (accepted < batch.length) return false;
-    totalSent += batch.length;
-    totalAccepted += accepted;
+    const result = await sendOne(batch);
+    if (result.state === "acknowledged") {
+      acknowledged += batch.length;
+      continue;
+    }
+    if (result.state === "retry") {
+      // Stop at the first unconfirmed sub-batch: later events were never
+      // sent, earlier ones are already counted in `acknowledged`.
+      return { acknowledgedCount: acknowledged, rejected: [] };
+    }
+    // Deterministic rejection: map sub-batch-local indices to ORIGINAL batch
+    // indices (acknowledged is exactly the size of the confirmed prefix).
+    // Later sub-batches were never sent and stay unconfirmed.
+    return {
+      acknowledgedCount: acknowledged,
+      rejected: result.localRejections.map((r) => ({
+        index: acknowledged + r.index,
+        fields: r.fields,
+      })),
+    };
   }
-  // Every sent event was accepted. (Dropped over-cap events are intentionally
-  // excluded from this accounting.)
-  return totalAccepted === totalSent && totalSent > 0;
+  return { acknowledgedCount: acknowledged, rejected: [] };
 }

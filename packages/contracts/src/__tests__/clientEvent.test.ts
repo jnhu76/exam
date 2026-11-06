@@ -76,6 +76,42 @@ describe("ClientEventSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  // #874 PR-W write representability: year 0000 is not representable as a
+  // PostgreSQL timestamptz (22008), so it must be rejected at the schema
+  // boundary — the accepted client-claim domain is years 0001–9999.
+  it("rejects a year-0000 occurredAt (write-representability boundary)", () => {
+    const result = ClientEventSchema.safeParse(
+      baseEvent({ occurredAt: "0000-01-01T00:00:00.000Z" }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("keeps the 0001–9999 occurredAt support range", () => {
+    expect(
+      ClientEventSchema.safeParse(
+        baseEvent({ occurredAt: "0001-01-01T00:00:00.000Z" }),
+      ).success,
+    ).toBe(true);
+    expect(
+      ClientEventSchema.safeParse(
+        baseEvent({ occurredAt: "9999-12-31T23:59:59.000Z" }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("rejects a year-0000 batch event with the events.<index>.occurredAt path", () => {
+    const result = ClientEventBatchSchema.safeParse({
+      events: [baseEvent(), baseEvent({ occurredAt: "0000-06-15T12:00:00Z" })],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const paths = result.error.issues.map((issue) =>
+        issue.path.map(String).join("."),
+      );
+      expect(paths).toContain("events.1.occurredAt");
+    }
+  });
+
   it("rejects metadata nested deeper than the limit", () => {
     // Build an obviously-over-limit chain (8 levels of nesting).
     let nested: unknown = { leaf: true };
