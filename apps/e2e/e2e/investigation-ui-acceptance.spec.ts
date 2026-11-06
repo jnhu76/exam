@@ -351,12 +351,12 @@ test.describe("investigation UI browser acceptance (#856)", () => {
    * PR-A (EXAM-860/874 adjudication §C2): system audit identity semantics.
    * The System incident delivery's audit row must carry its operation
    * identity under metadata.operationId and never a fabricated HTTP
-   * requestId, while HTTP rows keep requestId. The CSV export projects the
-   * two keys into separate columns (请求ID / 操作ID). The system row is
-   * identified by its writer identity (system actor) + the seeded exam —
-   * never by the string shape of an id value.
+   * requestId, while HTTP rows keep requestId. (The CSV column projection
+   * for these keys is owned by the routes/audit.test.ts integration suite.)
+   * The system row is identified by its writer identity (system actor) + the
+   * seeded exam — never by the string shape of an id value.
    */
-  test("PR-A: system audit carries operationId, HTTP audit keeps requestId, CSV splits the columns", async ({
+  test("PR-A: system audit carries operationId, HTTP audit keeps requestId", async ({
     page,
     request,
   }) => {
@@ -408,27 +408,18 @@ test.describe("investigation UI browser acceptance (#856)", () => {
       path: "test-results/pr-a-http-audit-metadata.png",
       fullPage: true,
     });
-
-    // The CSV export projects the two identity keys into separate columns
-    // and leaves the system row's 请求ID cell empty.
-    const csvRes = await request.get(
-      `${BASE_URL}/api/admin/audit-logs/export?targetType=incident&targetId=${systemRow.targetId}`,
-      { headers: { Cookie: `auth-token=${adminToken}` } },
-    );
-    expect(csvRes.ok(), await csvRes.text()).toBe(true);
-    const lines = (await csvRes.text()).replace(/^\uFEFF/, "").split("\n");
-    const header = lines[0]!.split(",");
-    const requestCol = header.indexOf("请求ID");
-    const operationCol = header.indexOf("操作ID");
-    expect(requestCol).toBeGreaterThanOrEqual(0);
-    expect(operationCol).toBeGreaterThanOrEqual(0);
-    const csvRow = lines
-      .find((line) => line.includes(systemRow.targetId))!
-      .split(",");
-    expect(csvRow[operationCol]).toBe(systemRow.metadata.operationId);
-    expect(csvRow[requestCol]).toBe("");
   });
 });
+
+/**
+ * One System incident delivery audit row as the audit search projects it.
+ */
+interface IncidentAuditItem {
+  id: string;
+  actorId: string;
+  targetId: string;
+  metadata: Record<string, unknown>;
+}
 
 /**
  * Polls the admin audit search until the System incident delivery's canonical
@@ -439,18 +430,7 @@ async function pollSystemIncidentAuditRow(
   request: APIRequestContext,
   adminToken: string,
   examId: string,
-): Promise<{
-  id: string;
-  actorId: string;
-  targetId: string;
-  metadata: Record<string, unknown>;
-}> {
-  interface IncidentAuditItem {
-    id: string;
-    actorId: string;
-    targetId: string;
-    metadata: Record<string, unknown>;
-  }
+): Promise<IncidentAuditItem> {
   let found: IncidentAuditItem | undefined;
   await expect
     .poll(

@@ -113,17 +113,25 @@ function systemEvent<Action extends AuditActionKey>(
   target: AuditTarget<Action>,
 ) {
   const checked = validatedTarget(target);
-  const metadata = {
-    ...checked.metadata,
-    ...(context.operationId
-      ? {
-          operationId: truncate(
-            context.operationId,
-            AUDIT_OPERATION_ID_MAX_LENGTH,
-          ),
-        }
-      : {}),
-  };
+  const metadata = { ...checked.metadata };
+  if (context.operationId) {
+    // A payload may legitimately carry its own operationId (e.g. an attempt
+    // receipt); a DIFFERENT context operationId is malformed audit input —
+    // refuse it loudly rather than silently overriding one identity with
+    // another.
+    if (
+      metadata.operationId !== undefined &&
+      metadata.operationId !== context.operationId
+    ) {
+      throw new Error(
+        "System audit payload operationId conflicts with the context operationId",
+      );
+    }
+    metadata.operationId = truncate(
+      context.operationId,
+      AUDIT_OPERATION_ID_MAX_LENGTH,
+    );
+  }
   validateMetadataSize(metadata);
   return {
     actorId: truncate(context.tenant.actorId, AUDIT_TARGET_ID_MAX_LENGTH),

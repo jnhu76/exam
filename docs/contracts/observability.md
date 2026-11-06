@@ -88,14 +88,17 @@ table):
 | userAgent | text? | request UA |
 | createdAt | timestamptz | immutable |
 
-Identity metadata keys are reserved by the audit writer and carry disjoint
+Identity metadata keys are injected at the writer boundary with distinct
 semantics:
 
-- `metadata.requestId` — HTTP request identity (Fastify `request.id`), written
-  by the HTTP writer paths only.
-- `metadata.operationId` — system operation identity (e.g. the episode-derived
-  system incident operationId), written by the system writer path only. A
+- `metadata.requestId` — HTTP request identity (Fastify `request.id`), injected
+  by the HTTP writer paths only. No writer injects it for a system row: a
   system audit row never fabricates an HTTP request id.
+- `metadata.operationId` — the operation identity of the recorded change. A
+  business payload may carry it (HTTP rows persist e.g. the attempt receipt
+  operationIds unchanged); the system writer injects it from the system
+  context (e.g. the episode-derived system incident operationId) and refuses
+  to overwrite a different value already present in the payload.
 
 Provenance is never inferred from the value's string shape. Rows written
 before the keys were split stored system operationIds under

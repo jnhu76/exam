@@ -85,11 +85,12 @@ function toAuditLogResponse(row: AuditLogRowWithActor) {
  *
  * Identity columns map by metadata KEY, never by value shape: 请求ID carries
  * `metadata.requestId` (HTTP request identity), 操作ID carries
- * `metadata.operationId` (system operation identity). Rows written before the
- * keys were split stored the operationId under `metadata.requestId`; those
- * values keep rendering under 请求ID (no historical rewrite, no shape-based
- * reclassification) — a deploy-visible export contract change that release
- * notes must call out.
+ * `metadata.operationId` (the recorded change's operation identity — a system
+ * row's context-injected operationId, or a business payload's own operationId
+ * on HTTP rows). Rows written before the keys were split stored the
+ * operationId under `metadata.requestId`; those values keep rendering under
+ * 请求ID (no historical rewrite, no shape-based reclassification) — a
+ * deploy-visible export contract change that release notes must call out.
  */
 const EXPORT_HEADERS = [
   // i18n-copy-allow: data-format — CSV export header/value data contract

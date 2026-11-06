@@ -23,6 +23,12 @@ const systemAtomicBodySchema = z.object({
   operationId: z.string().optional(),
 });
 
+const forceSubmitBodySchema = z.object({
+  attemptId: z.string(),
+  operationId: z.string().uuid(),
+  contextOperationId: z.string().uuid(),
+});
+
 const changedFieldsBodySchema = z.object({
   targetId: z.string(),
   changedFields: z.array(z.string()),
@@ -125,6 +131,35 @@ describe("owned audit writer boundary", () => {
                   examId: body.examId,
                   type: "network_interruption",
                   version: 1,
+                },
+              },
+            );
+          });
+          return { ok: true };
+        },
+      );
+
+      // Collision seam: an action whose strict payload schema itself admits
+      // operationId (attempt.forceSubmit receipt) — the shape a future
+      // system-writer caller could plausibly emit alongside a context
+      // operationId.
+      fastify.post(
+        "/audit-writer/system-atomic-force-submit",
+        { preHandler: fastify.authenticate },
+        async (request) => {
+          const tenant = ensureTargetOrg(getRequestContext(request));
+          const body = forceSubmitBodySchema.parse(request.body);
+          await executeInTransaction(fastify.db, async (tx) => {
+            await recordAtomicSystemAudit(
+              tx,
+              { tenant, operationId: body.contextOperationId },
+              {
+                action: "attempt.forceSubmit",
+                targetType: "attempt",
+                targetId: body.attemptId,
+                metadata: {
+                  operationId: body.operationId,
+                  reason: "review-collision-fixture",
                 },
               },
             );
@@ -273,5 +308,49 @@ describe("owned audit writer boundary", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.metadata).not.toHaveProperty("operationId");
     expect(rows[0]?.metadata).not.toHaveProperty("requestId");
+  });
+
+  // metadata.operationId may legitimately arrive in a system action's own
+  // payload (e.g. an attempt receipt). A DIFFERENT context operationId is a
+  // malformed audit input: the writer refuses it loudly instead of silently
+  // overriding one identity with another.
+  it("refuses a system audit whose payload operationId conflicts with the context operationId", async () => {
+    const attemptId = crypto.randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/audit-writer/system-atomic-force-submit",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: {
+        attemptId,
+        operationId: crypto.randomUUID(),
+        contextOperationId: crypto.randomUUID(),
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const rows = await ctx.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, attemptId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("accepts a system audit whose payload operationId equals the context operationId", async () => {
+    const attemptId = crypto.randomUUID();
+    const operationId = crypto.randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/audit-writer/system-atomic-force-submit",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { attemptId, operationId, contextOperationId: operationId },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rows = await ctx.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, attemptId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toMatchObject({ operationId });
   });
 });
