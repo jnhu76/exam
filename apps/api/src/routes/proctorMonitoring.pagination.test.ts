@@ -296,7 +296,10 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     // occurredAt survives as ADVISORY display data (T9, #544): the adversarial
     // claim does not reorder the timeline but is still projected on the row.
     const futuro = all.items.find((i) => i.name === "p3_Cfuturo")!;
-    expect(futuro.occurredAt).toBe("2099-01-01T00:00:00.000Z");
+    // #874 PR-R: client claims leave the SELECT as UTC ISO text with the
+    // stored microseconds, so the wire value normalizes to 6 fractional
+    // digits (the ms write path stores .000 → projected .000000).
+    expect(futuro.occurredAt).toBe("2099-01-01T00:00:00.000000Z");
     // The ordering/display authority is the server RECEIVE instant, which the
     // adversarial 2099 claim cannot touch: serverRecordedAt is the seeded
     // receivedAt while occurredAt stays the claim.
@@ -595,5 +598,174 @@ describe("proctor timeline pagination (M2 corrective)", () => {
     expect(
       timeline.items.filter((i) => i.name === "p8_replayed_event"),
     ).toHaveLength(1);
+  });
+
+  // P9 (#874 PR-R): extreme-year read totality on the merged timeline. Rows
+  // already stored with extreme client-asserted occurredAt (0001/1900/9999,
+  // plus a legacy µs row) must not 500 the whole timeline nor project a wrong
+  // year — the client claim leaves the SELECT as exact UTC ISO text, while
+  // serverRecordedAt (ordering authority) and the audit row stay unchanged.
+  it("P9: extreme-year stored rows return 200 with exact UTC occurredAt text", async () => {
+    const base = new Date("2026-09-15T10:00:00.000Z");
+    const at = (n: number) => new Date(base.getTime() + n * 1000);
+    const years = [
+      "0001",
+      "0099",
+      "0100",
+      "1900",
+      "1901",
+      "1970",
+      "2038",
+      "9999",
+    ] as const;
+    const claims: Record<string, string> = {
+      "0001": "0001-01-01T00:00:00.000Z",
+      "0099": "0099-01-01T00:00:00.000Z",
+      "0100": "0100-01-01T00:00:00.000Z",
+      "1900": "1900-01-01T00:00:00.000Z",
+      "1901": "1901-01-01T00:00:00.000Z",
+      "1970": "1970-01-01T00:00:00.000Z",
+      "2038": "2038-01-01T00:00:00.000Z",
+      "9999": "9999-12-31T23:59:59.999Z",
+    };
+    const repo = createClientEventRepo(ctx.db);
+    const ctxShape = {
+      actorId: ctx.candidate.id,
+      organizationId: ctx.org.id,
+      role: "Candidate" as const,
+      permissions: [],
+      sessionId: "p9-sess",
+    };
+    // Current write path: Date-precision claims (ms) ingested the way the API
+    // route stores them.
+    for (let i = 0; i < years.length; i++) {
+      const year = years[i]!;
+      await repo.createMany(ctxShape, [
+        {
+          userId: ctx.candidate.id,
+          attemptId,
+          examId,
+          questionId: null,
+          kind: "exam_telemetry",
+          level: "info",
+          name: `p9_y${year}`,
+          route: null,
+          occurredAt: new Date(claims[year]!),
+          receivedAt: at(i + 1),
+          clientSessionId: "p9-sess",
+          eventId: null,
+          metadata: {},
+          userAgent: null,
+        },
+      ]);
+    }
+    // Two client rows sharing one receivedAt (id tiebreak), and one legacy
+    // µs-precision stored row the current ms write path cannot produce.
+    const sharedIds = [
+      "00000000-0000-4000-8000-0000000000b1",
+      "00000000-0000-4000-8000-0000000000b2",
+    ];
+    for (const id of sharedIds) {
+      await ctx.db.insert(schema.clientEvents).values({
+        id,
+        organizationId: ctx.org.id,
+        userId: ctx.candidate.id,
+        attemptId,
+        examId,
+        questionId: null,
+        kind: "exam_telemetry",
+        level: "info",
+        name: `p9_shared_${id.slice(-2)}`,
+        route: null,
+        occurredAt: new Date("1900-01-01T00:00:00.000Z"),
+        receivedAt: at(9),
+        clientSessionId: "p9-sess",
+        eventId: null,
+        metadata: {},
+        userAgent: null,
+      });
+    }
+    await ctx.db.execute(sql`
+      INSERT INTO client_events
+        (id, organization_id, user_id, attempt_id, exam_id, kind, level, name,
+         occurred_at, received_at, metadata)
+      VALUES (
+        '00000000-0000-4000-8000-0000000000b3', ${ctx.org.id},
+        ${ctx.candidate.id}, ${attemptId}, ${examId},
+        'exam_telemetry', 'info', 'p9_us',
+        '1901-01-01 00:00:00.123456+00'::timestamptz,
+        ${at(10).toISOString()}::timestamptz, '{}'
+      )
+    `);
+    // One timeline-relevant audit row in the same timeline.
+    await seedAuditEvent("attempt.timeGrant", at(11));
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/proctor-events?limit=10&page=1`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    // Before PR-R this request 500s (Invalid Date RangeError under a session
+    // TZ with LMT second-offsets) or silently projects wrong years (0001 →
+    // 2001 under UTC); either way the contract below fails.
+    expect(res.statusCode, res.body).toBe(200);
+    const page1 = res.json() as {
+      items: Array<{
+        id: string;
+        name: string;
+        source: string;
+        serverRecordedAt: string;
+        occurredAt: string;
+      }>;
+      total: number;
+      totalPages: number;
+    };
+    expect(page1.total).toBe(12);
+    expect(page1.totalPages).toBe(2);
+    expect(page1.items).toHaveLength(10);
+
+    const page2res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/proctor-events?limit=10&page=2`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(page2res.statusCode).toBe(200);
+    const page2 = page2res.json() as typeof page1;
+
+    // No duplicate, no loss across pages.
+    const allNames = [...page1.items, ...page2.items].map((i) => i.name);
+    expect(allNames).toHaveLength(12);
+    expect(new Set(allNames).size).toBe(12);
+    for (const y of years) expect(allNames).toContain(`p9_y${y}`);
+    expect(allNames).toContain("p9_us");
+    expect(allNames).toContain("p9_shared_b1");
+    expect(allNames).toContain("p9_shared_b2");
+    expect(allNames).toContain("grant_time");
+
+    const byName = new Map(
+      [...page1.items, ...page2.items].map((i) => [i.name, i]),
+    );
+    // Every client claim projects as exact UTC ISO text: stored year intact
+    // (no 0001→2001), stored microseconds intact (.123456), fractional
+    // precision normalized to 6 digits by the wire format.
+    for (const y of years) {
+      const item = byName.get(`p9_y${y}`)!;
+      expect(item.source).toBe("client_event");
+      expect(item.occurredAt).toBe(`${claims[y]!.slice(0, 23)}000Z`);
+    }
+    expect(byName.get("p9_us")!.occurredAt).toBe("1901-01-01T00:00:00.123456Z");
+    expect(byName.get("p9_shared_b1")!.occurredAt).toBe(
+      "1900-01-01T00:00:00.000000Z",
+    );
+    expect(byName.get("p9_shared_b2")!.occurredAt).toBe(
+      "1900-01-01T00:00:00.000000Z",
+    );
+    // Ordering authority untouched: serverRecordedAt is still the seeded
+    // receive instant, and the audit row's own server instant is unchanged.
+    expect(byName.get("p9_y0001")!.serverRecordedAt).toBe(at(1).toISOString());
+    const audit = byName.get("grant_time")!;
+    expect(audit.source).toBe("audit_log");
+    expect(audit.occurredAt).toBe(audit.serverRecordedAt);
+    expect(audit.serverRecordedAt).toBe(at(11).toISOString());
   });
 });

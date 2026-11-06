@@ -14,6 +14,37 @@ import {
 } from "../lib/flow";
 
 /**
+ * Posts one client event through the REAL ingestion endpoint with a
+ * candidate-controlled occurredAt (advisory claim — #874).
+ */
+async function postClientEvent(
+  request: APIRequestContext,
+  candidateToken: string,
+  event: {
+    name: string;
+    occurredAt: string;
+    attemptId: string;
+    examId: string;
+  },
+): Promise<void> {
+  const res = await request.post(`${BASE_URL}/api/client-events`, {
+    headers: { Cookie: `auth-token=${candidateToken}` },
+    data: {
+      events: [
+        {
+          kind: "exam_telemetry",
+          level: "info",
+          metadata: {},
+          ...event,
+        },
+      ],
+    },
+  });
+  expect(res.ok(), await res.text()).toBe(true);
+  expect(((await res.json()) as { accepted: number }).accepted).toBe(1);
+}
+
+/**
  * #856 browser acceptance for PR-C (#851).
  *
  * The component suites prove the filter controls are wired to the query
@@ -345,5 +376,151 @@ test.describe("investigation UI browser acceptance (#856)", () => {
     });
     await expectNoPageOverflow(page);
     await expect(page.getByLabel("答卷 ID")).toBeVisible();
+  });
+
+  // #874 PR-R (temporal read totality) browser acceptance: rows already
+  // stored with extreme client-claimed occurredAt (1900 / 0001) used to 500
+  // the whole timeline endpoint, so the attempt page rendered a load-failure
+  // state. They must now render — with the year exact and the claim shown as
+  // the raw UTC ISO text under a client-declared (UTC) label — and the page
+  // must stay operable (no overflow, no uncaught Date parse errors), with the
+  // monitoring dialog still anchored on the server receive instant.
+  test("extreme client-claimed dates render as exact UTC text without breaking the attempt page", async ({
+    page,
+    request,
+  }, testInfo) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (err) => pageErrors.push(String(err)));
+
+    const seeded = await seedExam(request, "extreme-date");
+    const candidateToken = await candidateApiToken(request, seeded.candidate);
+    const attemptId = await candidateStartAttempt(
+      request,
+      candidateToken,
+      seeded.examId,
+    );
+
+    // Extreme claims first POSTed through the real ingestion endpoint (the
+    // write path keeps accepting 0001–9999; PR-W owns the year-0000 guard).
+    await postClientEvent(request, candidateToken, {
+      name: "visibility_lost",
+      occurredAt: "1900-01-01T00:00:00.000Z",
+      attemptId,
+      examId: seeded.examId,
+    });
+    await postClientEvent(request, candidateToken, {
+      name: "browser_offline",
+      occurredAt: "0001-01-01T00:00:00.000000Z",
+      attemptId,
+      examId: seeded.examId,
+    });
+    // A current, client-valid date shares the timeline with the extremes.
+    await postClientEvent(request, candidateToken, {
+      name: "heartbeat_ok",
+      occurredAt: new Date().toISOString(),
+      attemptId,
+      examId: seeded.examId,
+    });
+
+    // Endpoint oracle: the timeline API must serve the attempt (no 500).
+    const adminToken = await adminApiToken(request);
+    const apiRes = await request.get(
+      `${BASE_URL}/api/admin/attempts/${attemptId}/proctor-events?limit=50&page=1`,
+      { headers: { Cookie: `auth-token=${adminToken}` } },
+    );
+    expect(apiRes.ok(), await apiRes.text()).toBe(true);
+    const apiBody = (await apiRes.json()) as {
+      items: Array<{ name: string; occurredAt: string; source: string }>;
+    };
+    const apiByName = new Map(apiBody.items.map((i) => [i.name, i]));
+    expect(apiByName.get("visibility_lost")!.occurredAt).toBe(
+      "1900-01-01T00:00:00.000000Z",
+    );
+    expect(apiByName.get("browser_offline")!.occurredAt).toBe(
+      "0001-01-01T00:00:00.000000Z",
+    );
+    expect(apiByName.get("heartbeat_ok")!.source).toBe("client_event");
+
+    // Browser: the extreme rows render with the exact stored year, and the
+    // claim is labeled as a client-declared UTC value next to the server
+    // receive instant (the primary row time).
+    await loginAsAdmin(page);
+    await page.goto(`/admin/attempts/${attemptId}`);
+    await expect(page.getByText("遥测时间线")).toBeVisible({
+      timeout: 30_000,
+    });
+
+    const clientRow = page
+      .getByText("visibility_lost")
+      .locator(
+        "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' flex flex-wrap ')]",
+      )
+      .first();
+    await expect(clientRow).toBeVisible({ timeout: 30_000 });
+    const clientRowText = (await clientRow.textContent()) ?? "";
+    // Year exact (the old decoder turned 0001 into 2001); µs wire text
+    // verbatim, never re-formatted through a timezone formatter.
+    expect(clientRowText).toContain("客户端声明（UTC）");
+    expect(clientRowText).toContain("1900-01-01T00:00:00.000000Z");
+    expect(clientRowText).not.toContain("2001");
+    expect(clientRowText).toMatch(/服务端接收.*客户端声明（UTC）/);
+
+    const offlineRowText =
+      (await page
+        .getByText("browser_offline")
+        .locator(
+          "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' flex flex-wrap ')]",
+        )
+        .first()
+        .textContent()) ?? "";
+    expect(offlineRowText).toContain("0001-01-01T00:00:00.000000Z");
+
+    // Scrolling to the timeline footer works — the page is not wedged.
+    await page.getByText(/已显示 3 \/ 3 条事件/).scrollIntoViewIfNeeded();
+    await expect(page.getByText(/已显示 3 \/ 3 条事件/)).toBeVisible();
+
+    await expect.poll(() => pageErrors, { timeout: 5_000 }).toEqual([]);
+
+    // Desktop screenshot evidence (kept in the Playwright output dir; copied
+    // out of band for the adjudication record).
+    await page.getByText("遥测时间线").scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath("pr-r-attempt-extreme-dates.png"),
+      fullPage: true,
+    });
+
+    // Narrow viewport: the long µs ISO text must wrap, not overflow.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoPageOverflow(page);
+    await expect(clientRow).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath("pr-r-attempt-extreme-dates-390px.png"),
+      fullPage: true,
+    });
+
+    // The monitoring dialog keeps the server receive instant as the row time
+    // and does not re-sort or break on the extreme claims (no client
+    // occurredAt is shown there at all).
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(`/admin/exams/${seeded.examId}/proctor/monitor`);
+    const monitorRow = page
+      .getByRole("row")
+      .filter({ hasText: seeded.candidate.name });
+    await expect(monitorRow).toBeVisible({ timeout: 30_000 });
+    await monitorRow.getByRole("button", { name: "时间线" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText(/事件时间线/)).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(dialog.getByText("visibility_lost")).toBeVisible();
+    await expect(dialog.getByText("browser_offline")).toBeVisible();
+    // The dialog shows no client-claimed label and no extreme-year text: its
+    // row time is exclusively the server receive instant.
+    await expect(dialog.getByText(/客户端声明/)).toHaveCount(0);
+    await expect(dialog.getByText(/1900-01-01/)).toHaveCount(0);
+    await expect(dialog.getByText(/0001-01-01/)).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath("pr-r-monitor-dialog-extreme-dates.png"),
+    });
   });
 });
