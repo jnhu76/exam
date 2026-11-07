@@ -26,7 +26,7 @@ const tableConsumers = [
   "../../pages/exam/ResultPage.tsx",
 ] as const;
 
-describe("data table column-contract migration", () => {
+describe("data table column contract", () => {
   it.each(tableConsumers)(
     "routes every column in %s through semantic roles",
     (path) => {
