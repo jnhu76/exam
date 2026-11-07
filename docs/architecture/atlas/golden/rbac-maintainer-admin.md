@@ -31,7 +31,7 @@ FORBIDDEN OUTPUT: "the registry says it is exhaustive, therefore it describes th
 
 | Identity | IR representation | Evidence that this is the right shape |
 | --- | --- | --- |
-| Admin | `role:Admin` (`preset_kind = APPLICATION_ROLE`) | `packages/authz/src/catalog.ts:213-221` (`Role` values `:214-220`); Admin compatibility superset asserted by `packages/authz/src/adminCompatibility.test.ts` / `apps/api/src/authz/adminSuperset.test.ts` |
+| Admin | `role:Admin` (`preset_kind = APPLICATION_ROLE`) | `packages/authz/src/catalog.ts:213-221` (`Role` values `:214-220`); Admin compatibility superset asserted by `apps/api/src/authz/adminSuperset.test.ts`; Admin preset metadata pinned by `packages/authz/src/adminPresetMetadata.test.ts` |
 | Teacher | `role:Teacher` | same closed set; `teacher_course_assignments` scope |
 | Proctor | `role:Proctor` | same closed set; `exam_proctor_assignments` scope |
 | Grader | `role:Grader` | same closed set; `grader_exam_assignments` scope |
@@ -237,7 +237,7 @@ slice therefore:
 
 | Evidence | Kind | Strength | `proves` | `does_not_prove` |
 | --- | --- | --- | --- | --- |
-| `packages/authz/src/catalog-closed-union.test.ts`, `presets.test.ts`, `presets-boundaries.test.ts`, `adminCompatibility.test.ts`, `permissionMetadata.test.ts` | `TEST_SEMANTIC` | `BEHAVIOURAL_PURE` | The role/permission/scope sets are closed and the preset invariants (incl. Maintainer's two reads, Admin superset, boundary exclusions) hold | Any runtime enforcement |
+| `packages/authz/src/catalog-closed-union.test.ts`, `presets.test.ts`, `presets-boundaries.test.ts`, `adminPresetMetadata.test.ts`, `permissionMetadata.test.ts` | `TEST_SEMANTIC` | `BEHAVIOURAL_PURE` | The role/permission/scope sets are closed and the preset invariants (incl. Maintainer's two reads, Admin superset, boundary exclusions) hold | Any runtime enforcement |
 | `packages/authz/src/maintainerPreset.test.ts`, `apps/api/src/authz/adminSuperset.test.ts`, `adminInvariant.test.ts` | `TEST_SEMANTIC` | `BEHAVIOURAL_PURE` | The Maintainer/Admin boundary as declared | Route gating |
 | `packages/authz/src/systemActor.test.ts` | `TEST_SEMANTIC` | `BEHAVIOURAL_PURE` | The synthetic actor's closed id set and refusal behaviour | Route-level effect |
 | `apps/api/src/authz/assignmentAuthority.test.ts` | `TEST_SEMANTIC` | `BEHAVIOURAL_PURE` | The resolver's fail-closed rules (subject/org anchor, dual-role, unknown role) | Database integration |
