@@ -76,7 +76,7 @@ export async function deliverSystemIncidentForHeartbeatEpisode(
       ) => {
         await recordAtomicSystemAudit(
           tx,
-          { tenant: ctx, correlationId: operationId },
+          { tenant: ctx, operationId },
           {
             action: action as never,
             targetType: "incident",

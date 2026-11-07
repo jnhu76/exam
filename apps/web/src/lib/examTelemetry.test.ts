@@ -11,7 +11,10 @@ import {
 
 /** Build a buffer whose transport records every flushed event. */
 function recordingBuffer() {
-  const send = vi.fn().mockResolvedValue(true);
+  const send = vi.fn(async (events: ClientEvent[]) => ({
+    acknowledgedCount: events.length,
+    rejected: [],
+  }));
   const buf = new ClientEventBuffer({
     send,
     batchSize: 100,

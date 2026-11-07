@@ -11,6 +11,7 @@ import userRoutes from "./user.js";
 import roleAssignmentRoutes from "./roleAssignments.js";
 import { buildTestApp } from "./testHelpers.js";
 import { hashPassword } from "@exam/auth/password";
+import { ErrorResponseSchema } from "@exam/contracts";
 import { schema } from "@exam/db/schema/pg";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "@exam/db/types";
@@ -573,6 +574,74 @@ describe("role-assignment routes", () => {
           requestId: expect.any(String),
         },
       });
+    });
+  });
+
+  // INVARIANT: the GET/POST user-not-found branches declare
+  // `404: ErrorResponseSchema`, so the sent payload must satisfy that schema
+  // through the real Zod serializer — a flat legacy `{ requestId, error }`
+  // payload fails serialization and escalates to 500 (M4, EXAM-860-874 E).
+  describe("404 envelope — user-not-found negatives", () => {
+    const expectStandard404 = (
+      res: { statusCode: number; json: () => unknown },
+      label: string,
+    ) => {
+      expect(res.statusCode, label).toBe(404);
+      const body = res.json() as Record<string, unknown>;
+      expect(body).toMatchObject({
+        error: {
+          code: "RESOURCE_NOT_FOUND",
+          requestId: expect.any(String),
+        },
+      });
+      expect(
+        ErrorResponseSchema.safeParse(body).success,
+        `${label}: body must satisfy ErrorResponseSchema`,
+      ).toBe(true);
+    };
+
+    it("GET /api/users/:id/role-assignments with a nonexistent user returns the standard 404 envelope", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/users/${crypto.randomUUID()}/role-assignments`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expectStandard404(res, "GET nonexistent user");
+    });
+
+    it("POST /api/users/:id/role-assignments with a nonexistent user returns the standard 404 envelope", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${crypto.randomUUID()}/role-assignments`,
+        cookies: { "auth-token": ctx.adminToken },
+        payload: { role: "Teacher" },
+      });
+      expectStandard404(res, "POST nonexistent user");
+    });
+
+    it("cross-org user is non-enumerable: GET and POST return the same standard 404 envelope", async () => {
+      const foreignOrgId = crypto.randomUUID();
+      await ctx.db.insert(schema.organizations).values({
+        id: foreignOrgId,
+        name: "Foreign org (role 404)",
+        displayName: "Foreign org (role 404)",
+        slug: `foreign-role404-${crypto.randomUUID().slice(0, 8)}`,
+      });
+      const foreignUser = await createTargetUser(
+        ctx.db,
+        foreignOrgId,
+        "foreign-404",
+      );
+
+      for (const method of ["GET", "POST"] as const) {
+        const res = await ctx.app.inject({
+          method,
+          url: `/api/users/${foreignUser.id}/role-assignments`,
+          ...(method === "POST" ? { payload: { role: "Teacher" } } : {}),
+          cookies: { "auth-token": ctx.adminToken },
+        });
+        expectStandard404(res, `${method} cross-org user (must not enumerate)`);
+      }
     });
   });
 });
