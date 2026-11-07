@@ -17,6 +17,7 @@ import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
 import { mutateWithEffectiveAdminPostcondition } from "../authz/adminInvariant.js";
 import { mutateWithAuthorityInvariants } from "../authz/adminMaintainerExclusion.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -100,7 +101,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
       if (!target) {
         return reply
           .code(404)
-          .send({ requestId: request.id, error: "RESOURCE_NOT_FOUND" });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
       const rows = await assignmentRepo.listForUser(ctx, id);
@@ -141,7 +142,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
       if (!target) {
         return reply
           .code(404)
-          .send({ requestId: request.id, error: "RESOURCE_NOT_FOUND" });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       // ADR-017 D14: assignment creation runs inside the canonical
       // authority-mutation seam — same org advisory lock + Admin↔Maintainer
