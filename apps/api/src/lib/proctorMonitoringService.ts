@@ -54,6 +54,12 @@ function parseAttemptStatus(raw: string): ProctorAttemptStatus["status"] {
  * Builds one timeline row from a raw client_event row, validating the
  * `level`/`kind` strings against the ProctorAttemptEventSchema instead of
  * `as`-casting them. Unknown values fall back to safe defaults.
+ *
+ * `occurredAt` is the UTC ISO text the repo's SELECT already produced (#874
+ * PR-R) and passes through UNCHANGED: no `new Date()` / `.toISOString()`
+ * re-conversion may be reintroduced here — a JS Date re-decode would re-open
+ * the wrong-year (0001 → 2001) and Invalid-Date (pre-1901 LMT offsets) holes
+ * the SQL projection closed.
  */
 function toTimelineEventFromClient(
   r: ClientEventTimelineRow,
@@ -62,7 +68,7 @@ function toTimelineEventFromClient(
   const base = ProctorAttemptEventSchema.safeParse({
     id: r.id,
     serverRecordedAt: r.receivedAt.toISOString(),
-    occurredAt: r.occurredAt.toISOString(),
+    occurredAt: r.occurredAt,
     name: r.name,
     level: r.level,
     kind: r.kind,
@@ -81,7 +87,7 @@ function toTimelineEventFromClient(
   return {
     id: r.id,
     serverRecordedAt: r.receivedAt.toISOString(),
-    occurredAt: r.occurredAt.toISOString(),
+    occurredAt: r.occurredAt,
     name: r.name,
     level,
     kind,
@@ -136,6 +142,17 @@ function auditActionToEventName(action: string): string | null {
 // answerIdentity digest. requestId joins a row to the server-side request
 // log / error envelope; status distinguishes a server fault (HTTP >= 500)
 // from a transport failure.
+//
+// TRUST (#860 PR-T): every value below (requestId, status, errorCode,
+// clientSeq) is projected from client_events metadata — the CLIENT's claim
+// about a server interaction, copied from the error envelope it saw. It is
+// a correlation candidate only, never a per-field server verification; the
+// UI renders these rows' metadata under the explicit "客户端声明，未经服务端
+// 核验" group label and investigators must confirm a claimed requestId
+// against the server's own request log before treating it as one request's
+// identity (one match is not cross-restart uniqueness; several is
+// AMBIGUOUS). This projection stays an allowlist of stable identifiers —
+// no client-asserted value is promoted into a business authority here.
 const SAVE_ERROR_METADATA = [
   "questionId",
   "saveMode",

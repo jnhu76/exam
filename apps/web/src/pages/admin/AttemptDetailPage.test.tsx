@@ -679,6 +679,11 @@ describe("AttemptDetailPage", () => {
   // raw client_events.metadata blob never reaches the wire — only the
   // allowlisted keys do. `answer_autosave_failed` carries the stable
   // questionId/saveMode/durationMs/errorCode category codes, NOT raw content.
+  // requestId/status mirror the #800 PR-B correlation keys: the client COPIES
+  // the error envelope's values into its own telemetry — they are client
+  // claims about a server interaction, never server-verified per-field facts
+  // (#860 PR-T), so the UI must render them only inside an explicit
+  // client-claimed/unverified group label.
   // `serverRecordedAt` is the server-owned receive instant (ordering
   // authority); `occurredAt` is the source-specific display instant.
   const mockTelemetry = {
@@ -695,6 +700,8 @@ describe("AttemptDetailPage", () => {
           saveMode: "auto",
           durationMs: 1500,
           errorCode: "SAVE_NETWORK_TIMEOUT",
+          requestId: "req-42",
+          status: 500,
         },
         source: "client_event",
       },
@@ -731,6 +738,39 @@ describe("AttemptDetailPage", () => {
     expect(screen.getByText("审计记录")).toBeInTheDocument();
   });
 
+  // ── #860 PR-T: client-claimed metadata group label ──────────────────
+  // The allowlisted metadata of a client_event row (requestId/status/
+  // errorCode/clientSeq…) is the CLIENT's claim about a server interaction.
+  // The investigator must never read it as a server-verified fact: the whole
+  // metadata group carries the "客户端声明，未经服务端核验" label. A forged
+  // requestId/status stays visible (a correlation CANDIDATE) but only inside
+  // that group. Audit rows are the server's own record and are never marked
+  // as client claims.
+
+  it("renders client-event metadata inside the client-claimed/unverified group label and keeps audit rows unmarked", async () => {
+    mockFullTimeline(mockGradedResult, mockTelemetry);
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    await screen.findByText("遥测时间线");
+
+    // Client row: the forged/correlated requestId + status stay visible, but
+    // only inside the explicit unverified group label.
+    const clientRow = screen
+      .getByText("answer_autosave_failed")
+      .closest("div")!;
+    const clientText = clientRow.textContent ?? "";
+    expect(clientText).toContain("客户端声明，未经服务端核验");
+    expect(clientText).toContain("req-42");
+    expect(clientText).toContain("500");
+
+    // Audit row: server-authoritative record — the client-claimed label must
+    // NOT appear (the whole audit row is not mislabeled as client_claimed).
+    const auditRow = screen.getByText("force_submit").closest("div")!;
+    const auditText = auditRow.textContent ?? "";
+    expect(auditText).not.toContain("客户端声明，未经服务端核验");
+  });
+
   it("shows the server receive instant as the primary row time and only client rows carry the client claim", async () => {
     mockFullTimeline(mockGradedResult, mockTelemetry);
     renderPage();
@@ -751,6 +791,56 @@ describe("AttemptDetailPage", () => {
     const auditText = auditRow.textContent ?? "";
     expect(auditText).toContain("服务端接收");
     expect(auditText).not.toContain("客户端声明");
+  });
+
+  // #874 PR-R (temporal read totality): the client claim renders as the RAW
+  // UTC ISO text the API returned — never re-parsed through a JS Date / Intl
+  // formatter, which is exactly the decoder that corrupts extreme years
+  // (0001 → 2001, Invalid Date for pre-1901 LMT offsets) and can cross the
+  // era boundary in negative offsets. The label marks it as a client-declared
+  // UTC claim.
+  it("renders the client claim as raw UTC ISO text with the client-declared (UTC) label", async () => {
+    mockFullTimeline(mockGradedResult, {
+      items: [
+        {
+          id: "tel-extreme",
+          serverRecordedAt: "2026-06-23T08:06:00.000Z",
+          occurredAt: "0001-01-01T00:00:00.000000Z",
+          name: "visibility_lost",
+          level: "info",
+          kind: "exam_telemetry",
+          metadata: {},
+          source: "client_event",
+        },
+        {
+          id: "tel-audit",
+          serverRecordedAt: "2026-06-23T08:30:00.000Z",
+          occurredAt: "2026-06-23T08:30:00.000Z",
+          name: "force_submit",
+          level: "warn",
+          kind: "proctor",
+          metadata: {},
+          source: "audit_log",
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    await screen.findByText("遥测时间线");
+
+    const clientRow = screen.getByText("visibility_lost").closest("div")!;
+    const clientText = clientRow.textContent ?? "";
+    // The stored year-0001 claim is displayed verbatim, microseconds intact.
+    expect(clientText).toContain("0001-01-01T00:00:00.000000Z");
+    expect(clientText).toContain("客户端声明（UTC）");
+    // The server instant stays the primary row time (product-timezone
+    // formatted).
+    expect(clientText).toMatch(/服务端接收/);
   });
 
   it("Load More appends the next page, keeps loaded rows, and updates the shown/total footer", async () => {

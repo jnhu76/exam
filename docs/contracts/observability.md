@@ -46,6 +46,34 @@ Every request has a correlation id. The minimum traceable shape:
 > are included in error envelopes and audit rows, and SHOULD be added to
 > business-specific log statements where troubleshooting value is high.
 
+## Request correlation semantics (#860)
+
+The requestId is a per-instance investigation clue, not a global identity.
+These interpretation rules are part of the contract (KEEP_DEFAULT_OPTION_B:
+Fastify default generator, `requestIdHeader` disabled — a client-supplied
+`request-id` / `X-Request-Id` header never controls `request.id`):
+
+- **Identity scope.** The default generator is a local counter. A requestId
+  has determinate identity semantics only inside one Fastify instance and one
+  counter cycle (it wraps at 2^31). It is not unique across process restarts,
+  multiple instances on one host, or multi-instance deployments;
+  `hostname + pid + requestId` narrows candidates but guarantees nothing
+  unconditionally (PID reuse, container PID namespaces, stable hostnames).
+- **Query discipline.** Correlate only within a known source, a SERVER time
+  window, and a subject (actor/attempt/organization) — never by requestId
+  shape (`req-*` vs UUID proves nothing about origin).
+- **Result vocabulary.** Zero matching log lines is NO_MATCH-to-evidence, not
+  proof a request never happened (UNKNOWN per the UNKNOWN boundary); exactly
+  one candidate is a working hypothesis, not a uniqueness proof; multiple
+  candidates must be reported as AMBIGUOUS, never silently narrowed.
+- **Client-claimed candidates.** A requestId that arrived via client
+  telemetry (`client_events` metadata projected into the proctor timeline /
+  attempt detail surfaces) is the client's claim about a server interaction.
+  It is displayed under an explicit "客户端声明，未经服务端核验" label and
+  must be confirmed against the server's own request log before being treated
+  as one request's identity. Server audit rows are never marked as client
+  claims.
+
 ## State transition log fields
 
 State transitions (exam/attempt/enrollment) already emit **audit** rows. The
