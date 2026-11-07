@@ -898,6 +898,83 @@ describe("audit log baseline (S06-lite)", () => {
       });
     });
 
+    // PR-A: request and operation identity project into SEPARATE columns by
+    // metadata KEY, never by value shape. A historical system row that stored
+    // its operationId under metadata.requestId (the pre-PR-A writer) keeps
+    // rendering under 请求ID — the export must not reclassify historical
+    // values by their UUID/req-* format.
+    it("projects request and operation identity into separate columns without reclassifying historical rows", async () => {
+      await clearAudits();
+      const historicalOperationId = crypto.randomUUID();
+      const operationId = crypto.randomUUID();
+      await ctx.db.insert(schema.auditLogs).values([
+        {
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: "export.marker",
+          targetType: "export_identity_test",
+          targetId: "historical-system",
+          metadata: { requestId: historicalOperationId },
+          createdAt: new Date("2026-05-01T00:00:00.000Z"),
+        },
+        {
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: "export.marker",
+          targetType: "export_identity_test",
+          targetId: "system-delivery",
+          metadata: { operationId },
+          createdAt: new Date("2026-05-01T00:00:01.000Z"),
+        },
+        {
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: "export.marker",
+          targetType: "export_identity_test",
+          targetId: "http-request",
+          metadata: { requestId: "req-4" },
+          createdAt: new Date("2026-05-01T00:00:02.000Z"),
+        },
+      ]);
+
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/audit-logs/export?targetType=export_identity_test",
+        cookies: { "auth-token": adminToken },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const lines = response.body.replace(/^\uFEFF/, "").split("\n");
+      const header = lines[0]!.split(",");
+      const requestCol = header.indexOf("请求ID");
+      const operationCol = header.indexOf("操作ID");
+      expect(requestCol).toBeGreaterThanOrEqual(0);
+      expect(operationCol).toBeGreaterThanOrEqual(0);
+      expect(operationCol).not.toBe(requestCol);
+
+      const rowFor = (targetId: string): string[] => {
+        const line = lines.find((l: string) => l.includes(targetId));
+        expect(line, `row for ${targetId}`).toBeTruthy();
+        return line!.split(",");
+      };
+
+      // Historical system value keeps rendering under 请求ID.
+      const historical = rowFor("historical-system");
+      expect(historical[requestCol]).toBe(historicalOperationId);
+      expect(historical[operationCol]).toBe("");
+      // New system rows expose the operationId under its own column only.
+      const systemRow = rowFor("system-delivery");
+      expect(systemRow[operationCol]).toBe(operationId);
+      expect(systemRow[requestCol]).toBe("");
+      // HTTP request identity stays untouched in 请求ID.
+      const httpRequest = rowFor("http-request");
+      expect(httpRequest[requestCol]).toBe("req-4");
+      expect(httpRequest[operationCol]).toBe("");
+    });
+
     // 30s budget (#858): the contract under test IS the volume — 10,001
     // inserted rows plus the server fetching limit+1 rows to refuse — and
     // that deterministic fixture cost exceeded the default 5s testTimeout on

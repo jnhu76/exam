@@ -384,6 +384,15 @@ describe("system incident delivery — durable completion evidence (#304)", () =
     )[0]!;
     expect(audit).toBeTruthy();
 
+    // PR-A: the episode-derived system operation identity survives under its
+    // own metadata key. metadata.requestId is reserved for HTTP request
+    // identity — a system row must never carry a fabricated HTTP id.
+    expect(audit.metadata).toMatchObject({
+      operationId: systemIncidentOperationId(episodeId),
+    });
+    expect(audit.metadata).not.toHaveProperty("requestId");
+    expect(audit.organizationId).toBe(fixture.organizationId);
+
     // Restart/sweep simulation: the completed episode is no longer pending.
     const second = await reconcileSystemIncidents(
       dbShared,

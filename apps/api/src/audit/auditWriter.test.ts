@@ -5,12 +5,28 @@ import { schema } from "@exam/db/schema/pg";
 import { executeInTransaction } from "@exam/db/types";
 import { buildTestApp, type TestContext } from "../routes/testHelpers.js";
 import { ensureTargetOrg, getRequestContext } from "../routes/helpers.js";
-import { recordAtomicHttpAudit, recordBestEffortAudit } from "./auditWriter.js";
+import {
+  recordAtomicHttpAudit,
+  recordAtomicSystemAudit,
+  recordBestEffortAudit,
+} from "./auditWriter.js";
 
 const atomicBodySchema = z.object({
   targetType: z.string(),
   targetId: z.string(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const systemAtomicBodySchema = z.object({
+  incidentId: z.string(),
+  examId: z.string(),
+  operationId: z.string().optional(),
+});
+
+const forceSubmitBodySchema = z.object({
+  attemptId: z.string(),
+  operationId: z.string().uuid(),
+  contextOperationId: z.string().uuid(),
 });
 
 const changedFieldsBodySchema = z.object({
@@ -85,6 +101,68 @@ describe("owned audit writer boundary", () => {
             targetId: "bounded-user-agent",
             // #325 logout audit payload schema requires the revocation flag.
             metadata: { revoked: false },
+          });
+          return { ok: true };
+        },
+      );
+
+      // PR-A regression seam: the system writer boundary as the incident
+      // delivery orchestrator exercises it (atomic system audit inside a
+      // transaction, optional operation identity, no HTTP request).
+      fastify.post(
+        "/audit-writer/system-atomic",
+        { preHandler: fastify.authenticate },
+        async (request) => {
+          const tenant = ensureTargetOrg(getRequestContext(request));
+          const body = systemAtomicBodySchema.parse(request.body);
+          await executeInTransaction(fastify.db, async (tx) => {
+            await recordAtomicSystemAudit(
+              tx,
+              {
+                tenant,
+                ...(body.operationId ? { operationId: body.operationId } : {}),
+              },
+              {
+                action: "incident.created",
+                targetType: "incident",
+                targetId: body.incidentId,
+                metadata: {
+                  incidentId: body.incidentId,
+                  examId: body.examId,
+                  type: "network_interruption",
+                  version: 1,
+                },
+              },
+            );
+          });
+          return { ok: true };
+        },
+      );
+
+      // Collision seam: an action whose strict payload schema itself admits
+      // operationId (attempt.forceSubmit receipt) — the shape a future
+      // system-writer caller could plausibly emit alongside a context
+      // operationId.
+      fastify.post(
+        "/audit-writer/system-atomic-force-submit",
+        { preHandler: fastify.authenticate },
+        async (request) => {
+          const tenant = ensureTargetOrg(getRequestContext(request));
+          const body = forceSubmitBodySchema.parse(request.body);
+          await executeInTransaction(fastify.db, async (tx) => {
+            await recordAtomicSystemAudit(
+              tx,
+              { tenant, operationId: body.contextOperationId },
+              {
+                action: "attempt.forceSubmit",
+                targetType: "attempt",
+                targetId: body.attemptId,
+                metadata: {
+                  operationId: body.operationId,
+                  reason: "review-collision-fixture",
+                },
+              },
+            );
           });
           return { ok: true };
         },
@@ -185,5 +263,94 @@ describe("owned audit writer boundary", () => {
       .where(eq(schema.auditLogs.targetId, "bounded-user-agent"));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.userAgent).toHaveLength(512);
+  });
+
+  // PR-A: the system writer carries the operation identity under
+  // metadata.operationId. metadata.requestId is the HTTP writer's key — a
+  // system row must never present an operation id (or any other value) as an
+  // HTTP request id.
+  it("preserves the system operation identity under metadata.operationId without fabricating an HTTP requestId", async () => {
+    const incidentId = crypto.randomUUID();
+    const operationId = crypto.randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/audit-writer/system-atomic",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { incidentId, examId: crypto.randomUUID(), operationId },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rows = await ctx.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, incidentId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toMatchObject({ operationId });
+    expect(rows[0]?.metadata).not.toHaveProperty("requestId");
+    // System audits keep the tenant boundary of the context they were given.
+    expect(rows[0]?.organizationId).toBe(ctx.org.id);
+  });
+
+  it("writes neither identity key for a system audit without an operationId", async () => {
+    const incidentId = crypto.randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/audit-writer/system-atomic",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { incidentId, examId: crypto.randomUUID() },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rows = await ctx.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, incidentId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).not.toHaveProperty("operationId");
+    expect(rows[0]?.metadata).not.toHaveProperty("requestId");
+  });
+
+  // metadata.operationId may legitimately arrive in a system action's own
+  // payload (e.g. an attempt receipt). A DIFFERENT context operationId is a
+  // malformed audit input: the writer refuses it loudly instead of silently
+  // overriding one identity with another.
+  it("refuses a system audit whose payload operationId conflicts with the context operationId", async () => {
+    const attemptId = crypto.randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/audit-writer/system-atomic-force-submit",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: {
+        attemptId,
+        operationId: crypto.randomUUID(),
+        contextOperationId: crypto.randomUUID(),
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const rows = await ctx.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, attemptId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("accepts a system audit whose payload operationId equals the context operationId", async () => {
+    const attemptId = crypto.randomUUID();
+    const operationId = crypto.randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/audit-writer/system-atomic-force-submit",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { attemptId, operationId, contextOperationId: operationId },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rows = await ctx.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, attemptId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toMatchObject({ operationId });
   });
 });

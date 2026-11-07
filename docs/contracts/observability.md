@@ -116,6 +116,26 @@ table):
 | userAgent | text? | request UA |
 | createdAt | timestamptz | immutable |
 
+Identity metadata keys are injected at the writer boundary with distinct
+semantics:
+
+- `metadata.requestId` — HTTP request identity (Fastify `request.id`), injected
+  by the HTTP writer paths only. No writer injects it for a system row: a
+  system audit row never fabricates an HTTP request id.
+- `metadata.operationId` — the operation identity of the recorded change. A
+  business payload may carry it (HTTP rows persist e.g. the attempt receipt
+  operationIds unchanged); the system writer injects it from the system
+  context (e.g. the episode-derived system incident operationId) and refuses
+  to overwrite a different value already present in the payload.
+
+Provenance is never inferred from the value's string shape. Rows written
+before the keys were split stored system operationIds under
+`metadata.requestId`; they are historical evidence and stay as written (no
+migration, no reclassification). The CSV export projects the two keys into
+separate columns (请求ID / 操作ID) by key name; because the exported columns
+are an operations-visible contract, a release that ships the new column calls
+it out in its release notes.
+
 > Implementation status: complete. `GET /api/admin/audit-logs` exposes it
 > (action/targetType/date filter). No change needed.
 

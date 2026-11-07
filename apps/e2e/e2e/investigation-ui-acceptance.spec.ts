@@ -915,4 +915,115 @@ test.describe("investigation UI browser acceptance (#856)", () => {
       fullPage: true,
     });
   });
+
+  /**
+   * PR-A (EXAM-860/874 adjudication §C2): system audit identity semantics.
+   * The System incident delivery's audit row must carry its operation
+   * identity under metadata.operationId and never a fabricated HTTP
+   * requestId, while HTTP rows keep requestId. (The CSV column projection
+   * for these keys is owned by the routes/audit.test.ts integration suite.)
+   * The system row is identified by its writer identity (system actor) + the
+   * seeded exam — never by the string shape of an id value.
+   */
+  test("PR-A: system audit carries operationId, HTTP audit keeps requestId", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const seeded = await seedExam(request, "audit-identity");
+    const candidateToken = await candidateApiToken(request, seeded.candidate);
+
+    // Abandon an in-progress attempt: with the E2E scanner env
+    // (HEARTBEAT_TIMEOUT_MS=15000, HEARTBEAT_SCAN_INTERVAL_MS=5000) the
+    // heartbeat scan commits a detected episode and the reconciliation leg
+    // delivers the System incident with its canonical atomic audit row.
+    await candidateStartAttempt(request, candidateToken, seeded.examId);
+
+    const adminToken = await adminApiToken(request);
+    const systemRow = await pollSystemIncidentAuditRow(
+      request,
+      adminToken,
+      seeded.examId,
+    );
+
+    await loginAsAdmin(page);
+    await page.goto("/admin/audit-logs");
+    await expect(page.getByLabel("对象 ID")).toBeVisible({ timeout: 30_000 });
+    await page.getByLabel("对象 ID").fill(systemRow.targetId);
+    await page.getByLabel("对象 ID").press("Enter");
+    await expect(visibleText(page, "创建事件", { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    await visibleText(page, "创建事件", { exact: true }).click();
+    const detail = page.locator("pre").first();
+    await expect(detail).toContainText('"operationId"');
+    await expect(detail).not.toContainText('"requestId"');
+    await page.screenshot({
+      path: "test-results/pr-a-system-audit-metadata.png",
+      fullPage: true,
+    });
+
+    // HTTP rows keep their request identity under the HTTP writer's key.
+    await page.getByRole("button", { name: "清空筛选" }).click();
+    await page.getByLabel("对象 ID").fill(seeded.questionId);
+    await page.getByLabel("对象 ID").press("Enter");
+    await expect(visibleText(page, "创建题目", { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    await visibleText(page, "创建题目", { exact: true }).click();
+    await expect(detail).toContainText('"requestId"');
+    await expect(detail).not.toContainText('"operationId"');
+    await page.screenshot({
+      path: "test-results/pr-a-http-audit-metadata.png",
+      fullPage: true,
+    });
+  });
 });
+
+/**
+ * One System incident delivery audit row as the audit search projects it.
+ */
+interface IncidentAuditItem {
+  id: string;
+  actorId: string;
+  targetId: string;
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * Polls the admin audit search until the System incident delivery's canonical
+ * `incident.created` audit row for `examId` appears (heartbeat timeout + scan
+ * interval + reconciliation all run inside the server). Returns the row.
+ */
+async function pollSystemIncidentAuditRow(
+  request: APIRequestContext,
+  adminToken: string,
+  examId: string,
+): Promise<IncidentAuditItem> {
+  let found: IncidentAuditItem | undefined;
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(
+          `${BASE_URL}/api/admin/audit-logs?action=incident.created&limit=100`,
+          { headers: { Cookie: `auth-token=${adminToken}` } },
+        );
+        expect(res.ok(), await res.text()).toBe(true);
+        const body = (await res.json()) as { items: IncidentAuditItem[] };
+        found = body.items.find(
+          (row) =>
+            row.actorId === "system:incident-detector" &&
+            row.metadata.examId === examId,
+        );
+        return found ?? null;
+      },
+      {
+        timeout: 60_000,
+        intervals: [5_000],
+        message: "system incident.created audit row must appear",
+      },
+    )
+    .not.toBeNull();
+  if (!found) throw new Error("system incident audit row did not appear");
+  return found;
+}
