@@ -8,12 +8,12 @@ import {
 import { InvalidStateTransitionError } from "@exam/domain";
 
 describe("examStateMachine", () => {
-  describe("canTransition — Phase 1 真实转移表", () => {
+  describe("canTransition — 真实转移表", () => {
     it("draft → published 允许", () => {
       expect(canTransition(ExamStatus.Draft, ExamStatus.Published)).toBe(true);
     });
 
-    it("draft → archived 不允许（Phase 1：必须先 published）", () => {
+    it("draft → archived 不允许（必须先 published）", () => {
       expect(canTransition(ExamStatus.Draft, ExamStatus.Archived)).toBe(false);
     });
 

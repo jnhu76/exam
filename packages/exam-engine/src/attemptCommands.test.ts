@@ -596,7 +596,7 @@ describe("attemptCommands", () => {
       expect(result.status).toBe("in_progress");
     });
 
-    it("rejects when no enrollment exists (Phase 1 requires explicit assignment)", async () => {
+    it("rejects when no enrollment exists (explicit assignment required)", async () => {
       const exam = makeExam();
       const examRepo = {
         findById: () => exam,

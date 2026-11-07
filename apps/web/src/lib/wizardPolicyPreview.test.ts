@@ -90,7 +90,7 @@ describe("buildWizardPolicyPreview — profile path", () => {
     expect(sources.retakePolicy).toBe("profile");
   });
 
-  it("PRESERVES explicit null (does NOT erase it to profile value) — the M1/M2 invariant", () => {
+  it("PRESERVES explicit null (does NOT erase it to profile value) — single-state authority", () => {
     // The whole point of single-state authority: explicit null must survive.
     const { resolved, sources } = buildWizardPolicyPreview({
       profile,

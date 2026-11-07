@@ -7,7 +7,7 @@ import {
 } from "./enrollmentStateMachine.js";
 
 describe("enrollmentStateMachine", () => {
-  describe("canTransition — Phase 1 转移表", () => {
+  describe("canTransition — 转移表", () => {
     it("assigned → started 允许", () => {
       expect(
         canTransition(EnrollmentStatus.Assigned, EnrollmentStatus.Started),
