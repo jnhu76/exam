@@ -455,3 +455,186 @@ describe("clientEventRepo read methods (proctor monitoring)", () => {
       .where(eq(schema.clientEvents.examId, examId));
   });
 });
+
+/**
+ * #874 PR-R (temporal read totality): rows already stored with extreme
+ * client-asserted occurredAt must not block the attempt timeline.
+ *
+ * Failure this guards: the native column projection decodes timestamptz via
+ * the driver's `new Date(text)` parser. Node maps years 1–99 onto 1900+y
+ * (0001 → 2001) and cannot parse pre-1901 second-precision LMT offsets
+ * (`+08:05:43` → Invalid Date), so the service layer's `.toISOString()` either
+ * throws RangeError (timeline 500) or silently projects a wrong year.
+ *
+ * The repo contract is the adjudicated SELECT projection: `occurredAt` leaves
+ * this query as UTC ISO TEXT with the stored year and microseconds intact,
+ * independent of the session TimeZone. Ordering (receivedAt DESC, id DESC),
+ * prefix windows, org scoping, and retention are unchanged.
+ */
+describe("clientEventRepo.listTimelinePrefixByAttempt extreme-year read totality (#874 PR-R)", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("db-clientEventRepo-extreme");
+    db = result.db;
+    cleanup = result.cleanup;
+  }, 30_000);
+
+  afterAll(async () => {
+    await cleanup();
+  }, 30_000);
+
+  async function seedOrg(name: string) {
+    const orgRepo = createOrganizationRepo(db);
+    const org = await orgRepo.create(createContext("system"), {
+      name,
+      displayName: name,
+      slug: `${name.toLowerCase()}-${randomUUID().slice(0, 8)}`,
+    });
+    return org.id;
+  }
+
+  /**
+   * Stored-row fixture: years the current wire contract supports (0001–9999),
+   * each carrying sub-second microseconds, inserted directly as EXISTING rows
+   * (the .123456 µs storage the current ms write path can no longer produce
+   * but older rows hold). receivedAt stays modern and distinct so ordering is
+   * deterministic and unrelated to the occurredAt extremes.
+   */
+  const EXTREME_YEARS = [
+    "0001",
+    "0099",
+    "0100",
+    "1900",
+    "1901",
+    "1970",
+    "2038",
+    "9999",
+  ] as const;
+
+  /** The exact UTC text each stored instant must project as. */
+  const expectedOccurredAt = (year: string): string =>
+    `${year}-01-02T03:04:05.123456Z`;
+
+  async function seedExtremeRows(orgId: string, attemptId: string) {
+    const base = new Date("2026-09-15T10:00:00.000Z");
+    for (let i = 0; i < EXTREME_YEARS.length; i++) {
+      await db.execute(sql`
+        INSERT INTO client_events
+          (id, organization_id, user_id, attempt_id, exam_id, kind, level, name,
+           occurred_at, received_at, metadata)
+        VALUES (
+          ${randomUUID()}, ${orgId}, NULL, ${attemptId}, NULL,
+          'exam_telemetry', 'info', ${`extreme_${EXTREME_YEARS[i]}`},
+          ${`${EXTREME_YEARS[i]}-01-02 03:04:05.123456+00`}::timestamptz,
+          ${new Date(base.getTime() + i * 1000).toISOString()}::timestamptz,
+          '{}'
+        )
+      `);
+    }
+  }
+
+  /**
+   * The session-timezone matrix: the projection must yield the SAME UTC text
+   * regardless of the database session TimeZone. Asia/Shanghai is the
+   * discriminating case — pre-1901 instants render with a second-precision LMT
+   * offset there, which the driver's Date decoder turns into Invalid Date.
+   */
+  it.each(["UTC", "Asia/Shanghai"] as const)(
+    "projects stored extreme occurredAt as exact UTC text under session TimeZone %s (µs preserved, no wrong year, no Invalid Date)",
+    async (timeZone) => {
+      const orgId = await seedOrg(`ExtremeRead-${timeZone}`);
+      const attemptId = randomUUID();
+      await seedExtremeRows(orgId, attemptId);
+
+      // max:1 pinned connection (isolated-schema fixture): the session SET
+      // applies to every statement this fixture issues afterwards. The
+      // identifier comes from the fixed it.each tuple, never from input.
+      await db.execute(sql.raw(`SET TIME ZONE '${timeZone}'`));
+
+      const repo = createClientEventRepo(db);
+      const rows = await repo.listTimelinePrefixByAttempt(
+        createContext(orgId),
+        attemptId,
+        10,
+      );
+
+      expect(rows).toHaveLength(EXTREME_YEARS.length);
+      for (const row of rows) {
+        // The runtime value must BE a string, not a Date in string clothing.
+        expect(typeof row.occurredAt).toBe("string");
+        const year = row.name.slice("extreme_".length);
+        expect(row.occurredAt).toBe(expectedOccurredAt(year));
+        // Ordering authority untouched: modern receivedAt still decodes.
+        expect(row.receivedAt instanceof Date).toBe(true);
+      }
+
+      // Prefix-window membership: fetching a smaller prefix then the full one
+      // must not duplicate or lose any stored row (page-boundary totality).
+      const prefix4 = await repo.listTimelinePrefixByAttempt(
+        createContext(orgId),
+        attemptId,
+        4,
+      );
+      expect(prefix4).toHaveLength(4);
+      const allNames = rows.map((r) => r.name);
+      const prefix4Names = prefix4.map((r) => r.name);
+      expect(new Set(prefix4Names).size).toBe(4);
+      for (const name of prefix4Names) {
+        expect(allNames).toContain(name);
+      }
+      // Newest first by server-owned receivedAt: the 4-row prefix is exactly
+      // the head of the 10-row prefix.
+      expect(prefix4Names).toEqual(allNames.slice(0, 4));
+
+      await db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.attemptId, attemptId));
+    },
+    30_000,
+  );
+
+  it("keeps shared-receivedAt rows total and id-tiebroken while projecting occurredAt text", async () => {
+    const orgId = await seedOrg("ExtremeReadShared");
+    const attemptId = randomUUID();
+    const sharedReceivedAt = new Date("2026-09-15T10:00:00.000Z");
+    const sharedIds = [
+      "00000000-0000-4000-8000-0000000000a1",
+      "00000000-0000-4000-8000-0000000000a2",
+      "00000000-0000-4000-8000-0000000000a3",
+    ];
+    for (const id of sharedIds) {
+      await db.execute(sql`
+        INSERT INTO client_events
+          (id, organization_id, user_id, attempt_id, exam_id, kind, level, name,
+           occurred_at, received_at, metadata)
+        VALUES (
+          ${id}, ${orgId}, NULL, ${attemptId}, NULL,
+          'exam_telemetry', 'info', ${`shared_${id.slice(-2)}`},
+          '1900-01-01 00:00:00.123456+00'::timestamptz,
+          ${sharedReceivedAt.toISOString()}::timestamptz,
+          '{}'
+        )
+      `);
+    }
+
+    await db.execute(sql.raw(`SET TIME ZONE 'Asia/Shanghai'`));
+
+    const rows = await createClientEventRepo(db).listTimelinePrefixByAttempt(
+      createContext(orgId),
+      attemptId,
+      10,
+    );
+    // All three tied rows surface exactly once (no loss, no duplication) with
+    // the deterministic id DESC tiebreaker.
+    expect(rows.map((r) => r.id)).toEqual([...sharedIds].reverse());
+    for (const row of rows) {
+      expect(row.occurredAt).toBe("1900-01-01T00:00:00.123456Z");
+    }
+
+    await db
+      .delete(schema.clientEvents)
+      .where(eq(schema.clientEvents.attemptId, attemptId));
+  });
+});

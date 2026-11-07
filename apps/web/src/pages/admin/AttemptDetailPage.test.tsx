@@ -753,6 +753,56 @@ describe("AttemptDetailPage", () => {
     expect(auditText).not.toContain("客户端声明");
   });
 
+  // #874 PR-R (temporal read totality): the client claim renders as the RAW
+  // UTC ISO text the API returned — never re-parsed through a JS Date / Intl
+  // formatter, which is exactly the decoder that corrupts extreme years
+  // (0001 → 2001, Invalid Date for pre-1901 LMT offsets) and can cross the
+  // era boundary in negative offsets. The label marks it as a client-declared
+  // UTC claim.
+  it("renders the client claim as raw UTC ISO text with the client-declared (UTC) label", async () => {
+    mockFullTimeline(mockGradedResult, {
+      items: [
+        {
+          id: "tel-extreme",
+          serverRecordedAt: "2026-06-23T08:06:00.000Z",
+          occurredAt: "0001-01-01T00:00:00.000000Z",
+          name: "visibility_lost",
+          level: "info",
+          kind: "exam_telemetry",
+          metadata: {},
+          source: "client_event",
+        },
+        {
+          id: "tel-audit",
+          serverRecordedAt: "2026-06-23T08:30:00.000Z",
+          occurredAt: "2026-06-23T08:30:00.000Z",
+          name: "force_submit",
+          level: "warn",
+          kind: "proctor",
+          metadata: {},
+          source: "audit_log",
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    await screen.findByText("遥测时间线");
+
+    const clientRow = screen.getByText("visibility_lost").closest("div")!;
+    const clientText = clientRow.textContent ?? "";
+    // The stored year-0001 claim is displayed verbatim, microseconds intact.
+    expect(clientText).toContain("0001-01-01T00:00:00.000000Z");
+    expect(clientText).toContain("客户端声明（UTC）");
+    // The server instant stays the primary row time (product-timezone
+    // formatted).
+    expect(clientText).toMatch(/服务端接收/);
+  });
+
   it("Load More appends the next page, keeps loaded rows, and updates the shown/total footer", async () => {
     const pageOne = {
       items: [mockTelemetry.items[0]!],
