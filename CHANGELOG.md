@@ -8,6 +8,93 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-11-07
+
+### Added
+
+- Investigation surfaces for the observability campaign (#800 first merged
+  wave): frontend capture of render crashes, unhandled errors and transport
+  failures into the client-event pipeline with category identifiers and
+  stable error codes only (#854, PR #853); exam-save fault correlation
+  across client telemetry, proctor timeline and server logs (#855, PR #850);
+  a read-only telemetry investigation UI with paging, server receive time,
+  precise filters and deep links (#856, PRs #851, #880); and failure
+  counters plus scanner/dead-letter diagnostics on the diagnostics surface
+  (#857, PR #852).
+- Client-event upload idempotency: a client-generated event key with a
+  unique `(organization, user, event_id)` index — migration `0046` — so
+  ACK-loss batch resends no longer duplicate low-trust telemetry
+  (#863, PR #889).
+- Persistent background-loop failures now escalate: `operability.business_failure`
+  for consecutive business-failure ticks (#862, PR #884) and
+  `operability.tick_failure` for persistent tick-level throws (#885, PR #896,
+  ADR-024), with run-length counters projected in diagnostics
+  (#886, PR #893) and client-event retention loop liveness/stall
+  observability (#871, PR #890).
+- A read-only answer-save receipt summary projection (count, max clientSeq,
+  last savedAt) for admin investigation (#866, PR #891).
+
+### Changed
+
+- HTTP request correlation identity is a server-generated UUIDv4 per
+  request (ADR-025): production ignores client request-id headers, and the
+  same id flows through error envelopes and structured logs, making
+  cross-process/restart correlation unambiguous (#860, PR #912).
+- The client-events at-rest surface is minimized: credential-shaped values
+  are rejected under any key name, the top-level route string is
+  structured, and query strings no longer persist into the proctor
+  timeline (#875, PR #888).
+- Client-event temporal integrity: the proctor timeline projects client
+  `occurredAt` as exact UTC text so extreme client dates cannot make an
+  attempt timeline unusable (#874, PR #904); unrepresentable client dates
+  are rejected at the schema boundary with per-event client isolation
+  instead of failing the whole batch (#903, PR #911, ADR-026); and
+  client-claimed metadata is labeled as unverified next to server facts
+  (#901, PR #902).
+- System audit identity: background operations persist their operation id
+  under `metadata.operationId`, separated from HTTP `metadata.requestId`
+  (#905, PR #906), and the candidate-import audit target names a real
+  entity even when the import log write fails (#908, PR #910).
+- Refused answer saves emit exactly one structured WARN line keyed by the
+  request id, and save-failure evidence reading is codified with an
+  explicit UNKNOWN boundary (#861, #867, PR #892).
+- CI builds are job-local (zero-artifact), pinned-docs fetches are
+  authenticated, and README release badges must match `.release-version`
+  by release-workflow enforcement (PRs #894, #881, #899).
+
+### Fixed
+
+- Audit keyset pagination carries the cursor at epoch-µs precision
+  (cursor v3), ending silent row loss on µs-truncated timestamps; the
+  client resets the cursor path on error retry (#877, PR #887).
+- Role-assignment not-found responses satisfy the declared 404 error
+  envelope instead of failing serialization into a 500 (#907, PR #909).
+- The MathLive virtual keyboard no longer buries the formula dialog
+  (#882, PR #883), and the coverage-lane timing races behind repeated CI
+  flakes were fixed at their proven layers (#858, PR #859).
+
+### Security
+
+- client_events persistence denies credential-shaped values regardless of
+  key name and stops persisting raw query strings (#875, PR #888); the
+  production request-id header is untrusted by construction (guarded at
+  boot) (#901, PR #902).
+
+### Deployment / operations
+
+- Migration `0046` is the only schema change (additive column + unique
+  index; NULL event ids stay outside the constraint, preserving legacy
+  append-only senders). No environment or configuration change is
+  required; log consumers should expect UUIDv4 request ids instead of
+  `req-<base36>`.
+
+### Internal / infrastructure
+
+- Naming cleanup retired stale phase-era and RBAC-migration-era vocabulary
+  across production code, tests and tools (PRs #915, #916); ADR-024,
+  ADR-025 and ADR-026 were adopted and their provenance recorded (PRs
+  #896, #913, #914).
+
 ## [0.0.11] - 2026-11-02
 
 ### Added
@@ -732,7 +819,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.11...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.12...HEAD
+[0.0.12]: https://github.com/jnhu76/exam/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/jnhu76/exam/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/jnhu76/exam/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/jnhu76/exam/compare/v0.0.8...v0.0.9
