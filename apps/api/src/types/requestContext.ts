@@ -3,9 +3,9 @@
  *
  * The authoritative runtime authority for a human actor is derived from
  * their ACTIVE `user_role_assignments` rows, not from `users.role`. This
- * interface extends the legacy {@link RequestContext} (in `@exam/domain`,
- * which is a leaf package and CANNOT depend on `@exam/authz`) with the two
- * fields every authenticated HTTP request now carries:
+ * interface extends the base domain {@link RequestContext} (in
+ * `@exam/domain`, which is a leaf package and CANNOT depend on `@exam/authz`)
+ * with the two fields every authenticated HTTP request now carries:
  *
  *   - `roles`        every active assigned role (deduped, stable-ordered);
  *   - `capabilities` the authoritative permission union across all active

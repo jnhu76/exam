@@ -404,7 +404,7 @@ describe("auth routes", () => {
     });
   });
 
-  it("POST /api/auth/register is disabled in Phase 1 (no public self-register)", async () => {
+  it("POST /api/auth/register is disabled in the current deployment (no public self-register)", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/register",
