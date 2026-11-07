@@ -984,16 +984,16 @@ describe("runtimeConfig", () => {
           APP_MODE: "development",
           DEPLOYMENT_MODE: "  multiTenant  ",
         }),
-      ).toThrow(/Phase 1/);
+      ).toThrow(/is not supported/);
     });
 
-    it("multiTenant -> throws (Phase 1 single-tenant only)", () => {
+    it("multiTenant -> throws (single-tenant only)", () => {
       expect(() =>
         loadRuntimeConfig({
           APP_MODE: "development",
           DEPLOYMENT_MODE: "multiTenant",
         }),
-      ).toThrow(/Phase 1.*singleTenant|singleTenant.*Phase 1/);
+      ).toThrow(/single-tenant \(singleTenant\)/);
     });
 
     it("invalid value -> throws", () => {
@@ -1005,7 +1005,7 @@ describe("runtimeConfig", () => {
       ).toThrow();
     });
 
-    it("multiTenant error references Phase 1 and singleTenant", () => {
+    it("multiTenant error references the single-tenant deployment contract", () => {
       try {
         loadRuntimeConfig({
           APP_MODE: "development",
@@ -1014,7 +1014,7 @@ describe("runtimeConfig", () => {
         throw new Error("expected throw");
       } catch (e) {
         const msg = String((e as Error).message);
-        expect(msg).toMatch(/Phase 1/);
+        expect(msg).toMatch(/single-tenant/);
         expect(msg).toMatch(/singleTenant/);
       }
     });

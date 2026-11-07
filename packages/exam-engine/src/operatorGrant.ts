@@ -93,7 +93,11 @@ export interface GrantAttemptTimeInput {
   reasonText: string;
   /** Optional interruption the grant addresses; must belong to the attempt. */
   interruptionId?: string | null;
-  /** Reserved for REC-I6; must be null in B1. */
+  /**
+   * Links the grant to an operator incident (ADR-014 §10); non-null values
+   * are scope-validated via {@link IncidentGrantValidator} before deadline
+   * reconciliation runs.
+   */
   incidentId?: string | null;
   /** Authenticated operator. */
   actorId: string;

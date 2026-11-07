@@ -579,9 +579,10 @@ function appEnvLeaf(): SettingLeaf<"development" | "test" | "production"> {
 }
 
 /**
- * DEPLOYMENT_MODE. Phase 1 is single-tenant only; `multiTenant` is a Phase 4
- * platformization capability and is rejected as a runnable mode. The raw
- * value is intentionally NOT echoed in the error (no config-value leaks).
+ * DEPLOYMENT_MODE. The current deployment contract is single-tenant;
+ * `multiTenant` remains a future platformization capability and is rejected
+ * as a runnable mode. The raw value is intentionally NOT echoed in the
+ * error (no config-value leaks).
  */
 function deploymentModeLeaf(): SettingLeaf<"singleTenant"> {
   return {
@@ -592,13 +593,13 @@ function deploymentModeLeaf(): SettingLeaf<"singleTenant"> {
       if (trimmed === "singleTenant") return "singleTenant";
       if (trimmed === "multiTenant") {
         throw new SettingsError(
-          "DEPLOYMENT_MODE=multiTenant is not supported in Phase 1. " +
-            "Phase 1 runtime is single-tenant only (singleTenant). " +
-            "Optional multiTenant is a Phase 4 platformization capability.",
+          "DEPLOYMENT_MODE=multiTenant is not supported. " +
+            "The current deployment contract is single-tenant (singleTenant). " +
+            "multiTenant remains a future platformization capability.",
         );
       }
       throw new SettingsError(
-        "Invalid DEPLOYMENT_MODE. Phase 1 runtime supports singleTenant only.",
+        "Invalid DEPLOYMENT_MODE. The current deployment contract supports singleTenant only.",
       );
     },
     defaultRaw: "singleTenant",

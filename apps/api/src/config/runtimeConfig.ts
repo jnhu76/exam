@@ -46,12 +46,12 @@ export type AppMode = AppModeCore;
 export type AppEnv = "development" | "test" | "production";
 
 /**
- * Phase 1 runtime deployment mode.
+ * Runtime deployment mode.
  *
- * Phase 1 is single-tenant only: one internal default organization, no tenant
- * switcher, no SuperAdmin product path. `multiTenant` is a Phase 4
- * platformization capability and is NOT a current runnable mode; setting
- * `DEPLOYMENT_MODE=multiTenant` fails fast at startup.
+ * The current deployment contract is single-tenant: one internal default
+ * organization, no tenant switcher, no SuperAdmin product path. `multiTenant`
+ * remains a future platformization capability and is NOT a runnable mode;
+ * setting `DEPLOYMENT_MODE=multiTenant` fails fast at startup.
  */
 export type DeploymentMode = "singleTenant";
 

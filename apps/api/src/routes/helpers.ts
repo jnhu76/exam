@@ -12,8 +12,9 @@ import type { RuntimeRequestContext } from "../types/requestContext.js";
  * Use this instead of `request.ctx!` to get a runtime guard plus type narrowing.
  *
  * Returns {@link RuntimeRequestContext} — every authenticated request now
- * carries `roles` + `capabilities` (union-of-assignments authority); the legacy `RequestContext`
- * base fields are still present.
+ * carries `roles` + `capabilities` (union-of-assignments authority); the base
+ * domain `RequestContext` fields are still present (only its `role` /
+ * `permissions` slots are legacy compatibility shape).
  */
 export function getRequestContext(
   request: FastifyRequest,

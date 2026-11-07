@@ -53,7 +53,7 @@ export const errorMessages = {
   INCIDENT_VERSION_CONFLICT: "事件版本冲突，请刷新后重试",
   INCIDENT_ACTION_ALREADY_LINKED: "该操作已关联到其他事件",
   CSRF_ORIGIN_REJECTED: "请求来源不被允许",
-  AUTH_REGISTER_DISABLED: "Phase 1 不支持公开注册",
+  AUTH_REGISTER_DISABLED: "当前部署未开放注册",
   LAUNCHPAD_ALREADY_INITIALIZED: "系统已完成初始化，请直接登录",
   LAUNCHPAD_INVALID_SETUP_TOKEN: "初始化令牌无效或未配置",
   PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED: "不能重置该角色用户的密码",

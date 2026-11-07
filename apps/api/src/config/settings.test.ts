@@ -192,7 +192,7 @@ describe("resolveSettings primitives", () => {
     );
     expect(() =>
       resolveSettings({ DEPLOYMENT_MODE: "multiTenant" }, DEV),
-    ).toThrow(/Phase 1/);
+    ).toThrow(/single-tenant/);
     // The raw value must not leak for the deployment-mode misconfiguration.
     try {
       resolveSettings({ DEPLOYMENT_MODE: "secret-sensitive-value" }, DEV);

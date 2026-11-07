@@ -174,7 +174,7 @@ export async function publishExam(
   if (exam.questionIds.length === 0) {
     throw new ValidationError("Exam must have at least one question");
   }
-  // Phase-1 invariants. The timing/selection/retake enum values are
+  // Current-contract invariants. The timing/selection/retake enum values are
   // narrowed by Zod literals at the contract boundary; these guards are the
   // engine-side re-check (publish is the freeze/acceptance gate) and also
   // defend against historically/stale data that predates a narrower contract.
@@ -185,13 +185,15 @@ export async function publishExam(
   }
   if (exam.questionSelectionMode !== "manual") {
     throw new ValidationError(
-      "Phase 1 only supports manual question selection",
+      "Only manual question selection is supported by the current exam contract",
     );
   }
   if (
     !["unlimited", "max_attempts", "pass_then_stop"].includes(exam.retakePolicy)
   ) {
-    throw new ValidationError("Retake policy is not supported in Phase 1");
+    throw new ValidationError(
+      "Retake policy is not supported by the current exam contract",
+    );
   }
   // `duration_minutes` has no DB CHECK (> 0), so publish is the last line for
   // historical/stale rows that bypass the Zod `.positive()` shape boundary

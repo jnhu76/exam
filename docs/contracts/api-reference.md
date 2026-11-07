@@ -58,9 +58,9 @@
 
 ### POST /auth/register
 
-**权限**: 公开（Phase 1 已禁用）
+**权限**: 公开（注册已禁用）
 
-> Phase 1 不支持公开注册。该端点始终返回 `403 AUTH_REGISTER_DISABLED`。第一个 Admin 通过本地 `bootstrap:admin` 脚本创建。
+> 当前部署未开放注册。该端点始终返回 `403 AUTH_REGISTER_DISABLED`。第一个 Admin 通过本地 `bootstrap:admin` 脚本创建。
 
 **响应** (403):
 
@@ -68,7 +68,7 @@
 {
   "error": {
     "code": "AUTH_REGISTER_DISABLED",
-    "message": "Phase 1 不支持公开注册",
+    "message": "当前部署未开放注册",
     "requestId": "550e8400-e29b-41d4-a716-446655440000"
   }
 }
