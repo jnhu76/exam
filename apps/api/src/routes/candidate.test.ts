@@ -6,7 +6,7 @@ import { hashPassword } from "@exam/auth/password";
 import { signJWT } from "@exam/auth/session";
 import { schema } from "@exam/db/schema/pg";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import candidateRoutes from "./candidate.js";
 import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
@@ -38,6 +38,37 @@ async function installCandidateCreateAuditFailure(
   return async () => {
     await db.execute(
       sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON audit_logs`),
+    );
+    await db.execute(sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`));
+  };
+}
+
+async function installImportJobLogFailure(
+  db: Awaited<ReturnType<typeof buildTestApp>>["db"],
+): Promise<() => Promise<void>> {
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const functionName = `fail_import_job_log_${suffix}`;
+  const triggerName = `fail_import_job_log_trigger_${suffix}`;
+  await db.execute(
+    sql.raw(`
+      CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'injected import job log failure';
+      END;
+      $$ LANGUAGE plpgsql
+    `),
+  );
+  await db.execute(
+    sql.raw(`
+      CREATE TRIGGER ${triggerName}
+      BEFORE INSERT ON import_job_logs
+      FOR EACH ROW
+      EXECUTE FUNCTION ${functionName}()
+    `),
+  );
+  return async () => {
+    await db.execute(
+      sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON import_job_logs`),
     );
     await db.execute(sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`));
   };
@@ -572,6 +603,97 @@ describe("candidate routes", () => {
         .from(schema.users)
         .where(eq(schema.users.username, username));
       expect(users).toHaveLength(0);
+    } finally {
+      await removeFailure();
+    }
+  });
+
+  // INVARIANT: the candidate.import audit targetId must always name a real
+  // entity. When the import-log write succeeds it names that import-log row;
+  // when the write fails no import-log entity exists, so the audit falls
+  // back to the caller's organization — never the HTTP request id.
+  it("candidate.import audit targets the persisted import log when the log write succeeds", async () => {
+    const username = `log-success-${Date.now()}`;
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates/import",
+      payload: {
+        rows: [
+          {
+            username,
+            password: "password123",
+            name: "Log Success Candidate",
+            fields: { [identityFieldName]: `LS-${Date.now()}` },
+          },
+        ],
+      },
+      cookies: { "auth-token": adminToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.created).toBe(1);
+    expect(body.logId).toEqual(expect.any(String));
+
+    await ctx.drainAuditWrites();
+
+    const [audit] = await ctx.db
+      .select({
+        targetType: schema.auditLogs.targetType,
+        targetId: schema.auditLogs.targetId,
+      })
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.action, "candidate.import"))
+      .orderBy(desc(schema.auditLogs.createdAt))
+      .limit(1);
+    expect(audit).toBeDefined();
+    expect(audit!.targetType).toBe("candidate_import");
+    expect(audit!.targetId).toBe(body.logId);
+  });
+
+  it("candidate.import audit targets the organization when the import log write fails", async () => {
+    const username = `log-failure-${Date.now()}`;
+    const removeFailure = await installImportJobLogFailure(ctx.db);
+    try {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/candidates/import",
+        payload: {
+          rows: [
+            {
+              username,
+              password: "password123",
+              name: "Log Failure Candidate",
+              fields: { [identityFieldName]: `LF-${Date.now()}` },
+            },
+          ],
+        },
+        cookies: { "auth-token": adminToken },
+      });
+
+      // Best-effort log failure must not escalate into the import result.
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.created).toBe(1);
+      expect(body.errors).toHaveLength(0);
+      expect(body.logId).toBeUndefined();
+
+      await ctx.drainAuditWrites();
+
+      // No import-log entity exists, so the audit target is the caller's
+      // organization — never the HTTP request id.
+      const [audit] = await ctx.db
+        .select({
+          targetType: schema.auditLogs.targetType,
+          targetId: schema.auditLogs.targetId,
+        })
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.action, "candidate.import"))
+        .orderBy(desc(schema.auditLogs.createdAt))
+        .limit(1);
+      expect(audit).toBeDefined();
+      expect(audit!.targetType).toBe("organization");
+      expect(audit!.targetId).toBe(organizationId);
     } finally {
       await removeFailure();
     }
