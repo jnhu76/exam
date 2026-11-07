@@ -161,7 +161,7 @@ async function bootProductionServer(): Promise<BootedServer> {
   };
 }
 
-PG_DESCRIBE("production requestId guard (#860 PR-T header guard)", () => {
+PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
   it("ignores request-id / X-Request-Id headers and keeps error envelope ↔ pino reqId identical", async () => {
     const server = await bootProductionServer();
     try {
@@ -170,7 +170,7 @@ PG_DESCRIBE("production requestId guard (#860 PR-T header guard)", () => {
 
       // Probe 1: forged headers on an unmatched /api route → the canonical
       // 404 error envelope. The envelope's requestId must be the server's
-      // own default-format id, never a header echo.
+      // own UUIDv4 id, never a header echo.
       const notFoundPath = `/api/no-such-route-${crypto.randomUUID()}`;
       const res = await fetch(
         `http://127.0.0.1:${server.port}${notFoundPath}`,
@@ -276,5 +276,4 @@ PG_DESCRIBE("production requestId guard (#860 PR-T header guard)", () => {
       }
     }
   }, 180_000);
-
 });
