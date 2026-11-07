@@ -13,7 +13,6 @@ import {
   createAssignedUserForTest,
   createCandidateViaApi,
   createExamViaApi,
-  createFutureRoleUserForTest,
 } from "./testHelpers.js";
 import { schema } from "@exam/db/schema/pg";
 import { createClientEventRepo } from "@exam/db/repository/clientEventRepo";
@@ -186,7 +185,7 @@ describe("Proctor scoped routes — cross-org isolation", () => {
     let proctorAToken: string;
 
     beforeAll(async () => {
-      const proctorA = await createFutureRoleUserForTest(
+      const proctorA = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Proctor",

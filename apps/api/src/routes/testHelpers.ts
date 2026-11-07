@@ -79,23 +79,6 @@ export const UNSUPPORTED_ROLES = [
 /** Union type of unsupported role string literals. */
 export type UnsupportedRole = (typeof UNSUPPORTED_ROLES)[number];
 
-/**
- * @deprecated Kept only while old call sites migrate. Mixes assignable and
- * unsupported roles, which obscures fixture intent. Prefer
- * {@link createUnassignedAssignableUserForTest} or
- * {@link createUnsupportedRoleUserForTest}.
- */
-export const LEGACY_ROLES = [
-  ...UNSUPPORTED_ROLES,
-  "Teacher",
-  "Proctor",
-  "Grader",
-] as const;
-/**
- * @deprecated Use AssignableRole or UnsupportedRole explicitly.
- */
-export type LegacyRole = (typeof LEGACY_ROLES)[number];
-
 let _counter = 0;
 /**
  * Generates a unique string prefix using the current timestamp and an
@@ -173,7 +156,7 @@ export async function buildTestApp(
 
   // When the caller did not pass an explicit schemaName AND the environment
   // selected worker-database mode, use the per-worker database adapter instead
-  // of legacy per-file schema isolation. The worker DB is already migrated by
+  // of per-file schema isolation. The worker DB is already migrated by
   // the adapter (Drizzle tracks applied migrations in
   // `drizzle.__drizzle_migrations`, so re-running is a no-op).
   //
@@ -251,7 +234,7 @@ export async function buildTestApp(
 /**
  * Shared tail of {@link buildTestApp}: seeds the DB, builds the Fastify app,
  * registers plugins, mints auth tokens, and returns the TestContext. Split
- * out so the worker-DB and legacy code paths share identical app assembly.
+ * out so the worker-DB and file-schema code paths share identical app assembly.
  */
 async function finishBuildTestApp(args: {
   routePlugin: FastifyPluginAsync;
@@ -435,19 +418,6 @@ export async function createAssignedUserForTest(
 }
 
 /**
- * @deprecated Alias for {@link createAssignedUserForTest}. Replace callers
- * with createAssignedUserForTest(role) and remove this helper.
- */
-export async function createFutureRoleUserForTest(
-  db: Database,
-  orgId: string,
-  role: AssignableRole,
-  usernamePrefix: string,
-): Promise<{ user: TestUser; token: string }> {
-  return createAssignedUserForTest(db, orgId, role, usernamePrefix);
-}
-
-/**
  * Creates a user row with an assignable role but WITHOUT any role assignment.
  * Use this for "no active assignment" tests where the compatibility
  * projection itself is a legitimate assignable role.
@@ -535,7 +505,7 @@ export async function createUnsupportedRoleUserForTest(
 export async function createUnassignedUserForTest(
   db: Database,
   orgId: string,
-  role: LegacyRole,
+  role: AssignableRole | UnsupportedRole,
   usernamePrefix: string,
 ): Promise<{ user: TestUser; token: string }> {
   if (
@@ -545,12 +515,7 @@ export async function createUnassignedUserForTest(
   ) {
     return createUnsupportedRoleUserForTest(db, orgId, role, usernamePrefix);
   }
-  return createUnassignedAssignableUserForTest(
-    db,
-    orgId,
-    role as AssignableRole,
-    usernamePrefix,
-  );
+  return createUnassignedAssignableUserForTest(db, orgId, role, usernamePrefix);
 }
 
 /**

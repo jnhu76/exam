@@ -11,7 +11,7 @@ import { resolveTestDbUrl } from "@exam/db/testDb";
  * Two coverage layers:
  *   - Mode selection: the Phase 3A `setupWorkerTestDatabase` is mocked and the
  *     adapter must pick the right path for each TEST_DB_ISOLATION strategy
- *     value (worker-database opt-in vs legacy file-schema).
+ *     value (worker-database opt-in vs file-schema).
  *   - TEST_DB_ISOLATION_ENABLED authority (F-04): the per-file schema path is
  *     NOT mocked — the enabled/disabled counterfactual cells run the real
  *     `setupIsolatedTestDb` (real CREATE/DROP SCHEMA against the test DB) and
@@ -60,7 +60,7 @@ describe("isWorkerDatabaseMode", () => {
 // --- adapter wiring (mocked worker helper, no PG) ---------------------------
 
 describe("setupApiTestDatabaseFromEnv — mode selection", () => {
-  it("default (unset) → legacy file-schema, schemaName defined, resetPostgres no-op", async () => {
+  it("default (unset) → file-schema mode, schemaName defined, resetPostgres no-op", async () => {
     const h = await setupApiTestDatabaseFromEnv({
       env: { TEST_DATABASE_URL: BASE_URL },
       namespace: "unit-default",
@@ -69,13 +69,13 @@ describe("setupApiTestDatabaseFromEnv — mode selection", () => {
     expect(typeof h.schemaName).toBe("string");
     expect(h.schemaName).toMatch(/^test_/);
     expect(setupWorkerMock).not.toHaveBeenCalled();
-    // resetPostgres in legacy mode is a no-op (resolves without touching PG).
+    // resetPostgres in file-schema mode is a no-op (resolves without touching PG).
     await expect(h.resetPostgres()).resolves.toBeUndefined();
     await h.close();
   });
 
-  it("TEST_DB_ISOLATION=file-schema → legacy path with per-file schema (NOT silently disabled)", async () => {
-    // "file-schema" is the documented legacy mode name; under the canonical
+  it("TEST_DB_ISOLATION=file-schema → per-file schema path (NOT silently disabled)", async () => {
+    // "file-schema" is a documented mode name; under the canonical
     // TEST_DB_ISOLATION_ENABLED grammar only exact "0"/"false" disable, so it
     // resolves ENABLED and must get a per-file schema (never the shared
     // `public` schema with no isolation).

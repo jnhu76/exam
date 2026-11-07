@@ -33,8 +33,9 @@ export type ApiTestDatabaseMode = "file-schema" | "worker-database";
  *   - `databaseUrl`   — full PG URL to hand to `createDatabase`
  *   - `schemaName`    — schema for `search_path` / `migrationsSchema`, or
  *                       `undefined` in worker-DB mode (default `public`).
- *   - `resetPostgres()` — truncate business tables (no-op in legacy mode,
- *                       which relies on per-file schema isolation instead).
+ *   - `resetPostgres()` — truncate business tables (no-op in file-schema
+ *                       mode, which relies on per-file schema isolation
+ *                       instead).
  *   - `close()`       — release pools / drop schema (idempotent).
  */
 export interface ApiTestDatabaseHandle {
@@ -43,15 +44,15 @@ export interface ApiTestDatabaseHandle {
   /** Full PostgreSQL connection URL for the selected database. */
   databaseUrl: string;
   /**
-   * Schema name for legacy per-file isolation; `undefined` in worker-DB mode
+   * Schema name for per-file schema isolation; `undefined` in worker-DB mode
    * (business tables live in the default `public` schema of the worker DB).
    */
   schemaName: string | undefined;
   /**
    * Reset business-table state. In worker-DB mode this truncates the worker
-   * DB (preserving migration metadata). In legacy mode this is a no-op:
-   * legacy isolation gives every file its own schema, so there is no shared
-   * mutable state to reset.
+   * DB (preserving migration metadata). In file-schema mode this is a no-op:
+   * per-file schema isolation gives every file its own schema, so there is
+   * no shared mutable state to reset.
    */
   resetPostgres(): Promise<void>;
   /** Release all resources owned by this handle. Idempotent. */
@@ -114,9 +115,9 @@ export async function setupApiTestDatabaseFromEnv(options?: {
   // created and `schemaName` is `undefined` (shared-DB path).
   if (isTestDbIsolationEnabled(env)) {
     const iso = await setupIsolatedTestDb({ namespace, databaseUrl: baseUrl });
-    return wrapLegacyIso(iso, baseUrl);
+    return wrapFileSchemaIso(iso, baseUrl);
   }
-  return wrapLegacyIso(
+  return wrapFileSchemaIso(
     {
       schemaName: undefined,
       databaseUrl: baseUrl,
@@ -145,34 +146,34 @@ function wrapWorkerHandle(worker: WorkerDatabaseHandle): ApiTestDatabaseHandle {
 }
 
 /**
- * Build the unified handle around the legacy `IsolatedTestDb`.
+ * Build the unified handle around the file-schema `IsolatedTestDb`.
  *
- * `resetPostgres` is a no-op here: legacy mode gives each test file its own
- * schema, so there is no cross-file mutable state to truncate. Tests that
- * need within-file resets keep using their existing helpers.
+ * `resetPostgres` is a no-op here: per-file schema isolation gives each test
+ * file its own schema, so there is no cross-file mutable state to truncate.
+ * Tests that need within-file resets keep using their existing helpers.
  *
  * `schemaName` may be `undefined` when isolation is explicitly disabled
  * (`TEST_DB_ISOLATION=0`); callers then connect to the base DB's default
  * schema.
  */
-interface LegacyIsoLike {
+interface FileSchemaIsoLike {
   schemaName: string | undefined;
   databaseUrl: string;
   cleanup: () => Promise<void>;
 }
-function wrapLegacyIso(
-  iso: LegacyIsoLike,
+function wrapFileSchemaIso(
+  iso: FileSchemaIsoLike,
   fallbackBaseUrl: string,
 ): ApiTestDatabaseHandle {
   let closed = false;
   return {
     mode: "file-schema",
-    // Legacy callers connect to the base URL (the schema is selected via
-    // `search_path`, not the URL). `iso.databaseUrl` is that base URL.
+    // File-schema callers connect to the base URL (the schema is selected
+    // via `search_path`, not the URL). `iso.databaseUrl` is that base URL.
     databaseUrl: iso.databaseUrl ?? fallbackBaseUrl,
     schemaName: iso.schemaName,
     resetPostgres: async () => {
-      /* no-op in legacy per-file schema mode */
+      /* no-op in file-schema mode */
     },
     close: async () => {
       if (closed) return;

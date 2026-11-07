@@ -13,12 +13,11 @@ import authRoutes from "./auth.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 import {
   buildTestApp,
-  createFutureRoleUserForTest,
+  createAssignedUserForTest,
   createUnassignedUserForTest,
   createUnassignedAssignableUserForTest,
   createUnsupportedRoleUserForTest,
   corruptUsersRoleProjectionForTest,
-  LEGACY_ROLES,
   rebuildAppOnSameDb,
   type UnsupportedRole,
 } from "./testHelpers.js";
@@ -568,7 +567,7 @@ describe("auth routes", () => {
     // Teacher-only capabilities (e.g. exam.view) even though primary is
     // Candidate. This is the /me-side proof of the union that E19 proves on
     // the score route; here we assert the /me surface carries it.
-    const { user, token } = await createFutureRoleUserForTest(
+    const { user, token } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
       "Candidate",
