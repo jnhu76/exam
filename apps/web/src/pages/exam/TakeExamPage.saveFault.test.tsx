@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
-import type { CandidateTakeSnapshot } from "@exam/contracts";
+import type { CandidateTakeSnapshot, ClientEvent } from "@exam/contracts";
 import { permissionsForRole } from "@exam/authz";
 import { ClientEventBuffer } from "@/lib/clientEventBuffer";
 import { setBuffer, getBuffer } from "@/lib/logger";
@@ -126,7 +126,10 @@ vi.mock("sonner", () => ({
 
 /** Recording buffer: captures every event the page pushes for persistence. */
 function installRecordingBuffer() {
-  const send = vi.fn().mockResolvedValue(true);
+  const send = vi.fn(async (events: ClientEvent[]) => ({
+    acknowledgedCount: events.length,
+    rejected: [],
+  }));
   setBuffer(
     new ClientEventBuffer({
       send,

@@ -563,4 +563,161 @@ describe("POST /api/client-events", () => {
         .where(eq(schema.clientEvents.name, "test.event.idem6"));
     });
   });
+
+  // #874 PR-W write representability: year 0000 is not representable as a
+  // PostgreSQL timestamptz (22008 date/time field value out of range), so on
+  // the pre-PR-W schema a single client-claimed year-0000 instant failed the
+  // whole batch INSERT with 500 and blocked its schema-valid peers. The
+  // frozen contract (adjudication §C4): the accepted client-claim domain is
+  // years 0001–9999; year 0000 is rejected at the schema boundary with the
+  // STANDARD 400 VALIDATION_ERROR envelope carrying the precise per-event
+  // field path `events.<index>.occurredAt`, and the whole batch stays
+  // atomic (400 → zero rows). The success protocol is unchanged.
+  describe("write representability (#874 PR-W)", () => {
+    async function countRows(name: string): Promise<number> {
+      const rows = await ctx.db
+        .select({ id: schema.clientEvents.id })
+        .from(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, name));
+      return rows.length;
+    }
+
+    function detailFields(body: {
+      error?: { details?: { fields?: Array<{ field: string }> } };
+    }): string[] {
+      return (body.error?.details?.fields ?? []).map((f) => f.field);
+    }
+
+    it("rejects a single year-0000 event with the standard 400 and the events.0.occurredAt path, writing zero rows", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.prw-y0-single",
+              occurredAt: "0000-01-01T00:00:00.000Z",
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.error.code).toBe("VALIDATION_ERROR");
+      expect(detailFields(body)).toContain("events.0.occurredAt");
+      expect(await countRows("test.event.prw-y0-single")).toBe(0);
+    });
+
+    it("rejects a mixed [valid, year-0000, valid] batch atomically: 400, zero rows for ANY event, sub-batch index in the field path", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({ name: "test.event.prw-mix-a" }),
+            validEvent({
+              name: "test.event.prw-mix-poison",
+              occurredAt: "0000-06-15T12:00:00.000Z",
+            }),
+            validEvent({ name: "test.event.prw-mix-b" }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.error.code).toBe("VALIDATION_ERROR");
+      // The index must be the event's actual position in THIS POST body.
+      expect(detailFields(body)).toContain("events.1.occurredAt");
+      // Atomic batch: the poison blocks its own row, never its peers'.
+      expect(await countRows("test.event.prw-mix-a")).toBe(0);
+      expect(await countRows("test.event.prw-mix-poison")).toBe(0);
+      expect(await countRows("test.event.prw-mix-b")).toBe(0);
+    });
+
+    it("lists every invalid event index when several events are invalid", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.prw-multi-0",
+              occurredAt: "0000-01-01T00:00:00.000Z",
+            }),
+            validEvent({ name: "test.event.prw-multi-1" }),
+            validEvent({
+              name: "test.event.prw-multi-2",
+              occurredAt: "0000-12-31T23:59:59.999Z",
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.error.code).toBe("VALIDATION_ERROR");
+      const fields = detailFields(body);
+      expect(fields).toContain("events.0.occurredAt");
+      expect(fields).toContain("events.2.occurredAt");
+      expect(fields).not.toContain("events.1.occurredAt");
+      expect(await countRows("test.event.prw-multi-1")).toBe(0);
+    });
+
+    it("rejects an all-invalid batch and still writes zero rows", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.prw-all-0",
+              occurredAt: "0000-01-01T00:00:00.000Z",
+            }),
+            validEvent({
+              name: "test.event.prw-all-1",
+              occurredAt: "0000-01-01T00:00:00.000Z",
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("VALIDATION_ERROR");
+      expect(await countRows("test.event.prw-all-0")).toBe(0);
+      expect(await countRows("test.event.prw-all-1")).toBe(0);
+    });
+
+    it("keeps the 0001–9999 support range: boundary years are still accepted", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [
+            validEvent({
+              name: "test.event.prw-lo",
+              occurredAt: "0001-01-01T00:00:00.000Z",
+            }),
+            validEvent({
+              name: "test.event.prw-hi",
+              occurredAt: "9999-12-31T23:59:59.000Z",
+            }),
+          ],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ accepted: 2 });
+      expect(await countRows("test.event.prw-lo")).toBe(1);
+      expect(await countRows("test.event.prw-hi")).toBe(1);
+
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.prw-lo"));
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.prw-hi"));
+    });
+  });
 });
