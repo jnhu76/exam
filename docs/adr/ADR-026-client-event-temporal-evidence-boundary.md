@@ -9,7 +9,7 @@
 - Date: 2026-11-07
 - Decision owners: project (explicit Owner decision, #874)
 - Supersedes: none within the ADR corpus.
-  `SUPERSEDES_RESEARCH_RECOMMENDATION=TIME_WINDOW_NO_GO` — the #874 research
+  `ADOPTS_RESEARCH_RECOMMENDATION=TIME_WINDOW_NO_GO` — the #874 research
   recommendation is hereby adopted as binding policy rather than superseded.
 - Related: ADR-006 (exam time authority), ADR-018 (maintainer window D7),
   ADR-025 (client telemetry requestId unverified), #874, #903, #800
