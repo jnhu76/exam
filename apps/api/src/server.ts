@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -104,6 +105,12 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
  */
 async function main() {
   const app = Fastify({
+    // #860: server-generated UUIDv4 is scoped to each HTTP request, not a
+    // business/operation identity. It avoids per-process counter reuse across
+    // restarts and future API replicas; no shared generator service is needed.
+    genReqId: () => randomUUID(),
+    // Never let untrusted request-id / x-request-id headers override it.
+    requestIdHeader: false,
     logger: {
       level: "info",
       redact: REDACT_CONFIG,
