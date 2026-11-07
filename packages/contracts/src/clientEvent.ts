@@ -117,6 +117,22 @@ export const ClientEventSchema = z
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .superRefine((event, ctx) => {
+    // INVARIANT (#874): the accepted client-claim domain for occurredAt is
+    // years 0001–9999. Year 0000 is not representable as a PostgreSQL
+    // timestamptz (22008 date/time field value out of range), so accepting it
+    // here let a single event fail the whole batch INSERT with 500 and block
+    // its schema-valid peers. `datetime()` has already fixed the wire shape,
+    // so the first four characters are exactly the year digits (no sign, no
+    // other year encoding) — this check adds no second time authority and no
+    // window policy; it is the write-representability boundary only.
+    if (event.occurredAt.startsWith("0000-")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["occurredAt"],
+        message:
+          "occurredAt year 0000 is outside the supported 0001-9999 range",
+      });
+    }
     if (event.metadata !== undefined) {
       const depth = measureDepth(event.metadata);
       if (depth > CLIENT_EVENT_METADATA_MAX_DEPTH) {

@@ -2178,7 +2178,7 @@ const zhCN = {
         sourceClientEvent: "前端遥测",
         sourceAuditLog: "审计记录",
         serverReceivedAt: "服务端接收",
-        clientClaimedAt: "客户端声明",
+        clientClaimedAt: "客户端声明（UTC）",
         clientClaimedMetadata: "客户端声明，未经服务端核验",
         loadMore: "加载更早事件",
         loadMoreFailed: "加载更早事件失败，已显示的事件不受影响",

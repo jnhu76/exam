@@ -54,6 +54,12 @@ function parseAttemptStatus(raw: string): ProctorAttemptStatus["status"] {
  * Builds one timeline row from a raw client_event row, validating the
  * `level`/`kind` strings against the ProctorAttemptEventSchema instead of
  * `as`-casting them. Unknown values fall back to safe defaults.
+ *
+ * `occurredAt` is the UTC ISO text the repo's SELECT already produced (#874
+ * PR-R) and passes through UNCHANGED: no `new Date()` / `.toISOString()`
+ * re-conversion may be reintroduced here — a JS Date re-decode would re-open
+ * the wrong-year (0001 → 2001) and Invalid-Date (pre-1901 LMT offsets) holes
+ * the SQL projection closed.
  */
 function toTimelineEventFromClient(
   r: ClientEventTimelineRow,
@@ -62,7 +68,7 @@ function toTimelineEventFromClient(
   const base = ProctorAttemptEventSchema.safeParse({
     id: r.id,
     serverRecordedAt: r.receivedAt.toISOString(),
-    occurredAt: r.occurredAt.toISOString(),
+    occurredAt: r.occurredAt,
     name: r.name,
     level: r.level,
     kind: r.kind,
@@ -81,7 +87,7 @@ function toTimelineEventFromClient(
   return {
     id: r.id,
     serverRecordedAt: r.receivedAt.toISOString(),
-    occurredAt: r.occurredAt.toISOString(),
+    occurredAt: r.occurredAt,
     name: r.name,
     level,
     kind,
