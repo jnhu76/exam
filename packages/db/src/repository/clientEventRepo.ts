@@ -42,11 +42,13 @@ export interface ClientEventInsert {
  * the response). No `userId`/`userAgent`.
  *
  * `receivedAt` (server-owned) is the timeline ORDERING authority;
- * `occurredAt` (client-asserted) is carried for display only.
+ * `occurredAt` (client-asserted) is carried for display only, as the exact UTC
+ * ISO text of the stored value (see the SELECT projection in
+ * {@link createClientEventRepo.listTimelinePrefixByAttempt}).
  */
 export interface ClientEventTimelineRow {
   id: string;
-  occurredAt: Date;
+  occurredAt: string;
   receivedAt: Date;
   name: string;
   level: string;
@@ -198,7 +200,27 @@ export function createClientEventRepo(db: Database) {
       const rows = await db
         .select({
           id: clientEvents.id,
-          occurredAt: clientEvents.occurredAt,
+          // #874 PR-R (temporal read totality): project the client-asserted
+          // instant as UTC ISO TEXT instead of the native timestamptz decode.
+          // INVARIANT: this changes only the SELECT value — it never appears
+          // in WHERE/ORDER BY/LIMIT or the sortKeyUs merge key, so ordering,
+          // pagination, and index usage are untouched (no new index needed).
+          //
+          // WHY text, not Date: the driver decodes timestamptz with JS
+          // `new Date(text)`, which silently maps years 1–99 onto 1900+y
+          // (0001 → 2001) and cannot parse the second-precision LMT offsets
+          // PostgreSQL emits for pre-1901 instants in zones like
+          // Asia/Shanghai (+08:05:43 → Invalid Date) — the Invalid Date then
+          // throws RangeError at `.toISOString()` and 500s the whole timeline.
+          // `AT TIME ZONE 'UTC'` pins the rendering to UTC regardless of the
+          // session TimeZone; `.US` preserves the stored microseconds.
+          //
+          // REPRESENTATION BOUNDARY: this template faithfully represents the
+          // current wire contract (four-digit AD years, 0001–9999). BC years,
+          // year 0000, and 'infinity' are outside that contract and are NOT
+          // represented by it — their storage is a separate representation
+          // gap, never to be silently filtered or rewritten here.
+          occurredAt: sql<string>`to_char(${clientEvents.occurredAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
           receivedAt: clientEvents.receivedAt,
           // WHY sortKeyUs: the merged timeline sorts on this full-precision
           // epoch-µs key. JS Date (getTime) truncates timestamptz to

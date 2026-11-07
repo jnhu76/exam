@@ -293,10 +293,11 @@ interface TelemetrySectionProps {
  * Time authority (#544): the timeline is ordered by the server-owned receive
  * instant, projected per row as `serverRecordedAt` — shown first on every
  * row. Client rows additionally carry the client-ASSERTED `occurredAt`,
- * labeled as a claim, never as the ordering instant. Older evidence pages
- * load via Load-More append; the counts footer always states how much of the
- * server total is on screen, so a partial view is never mistaken for the
- * full history.
+ * displayed verbatim as the UTC ISO text the API returned and labeled as a
+ * client-declared UTC claim (#874 PR-R), never as the ordering instant. Older
+ * evidence pages load via Load-More append; the counts footer always states
+ * how much of the server total is on screen, so a partial view is never
+ * mistaken for the full history.
  */
 function TelemetrySection({
   events,
@@ -342,9 +343,16 @@ function TelemetrySection({
                 {formatDateTime(event.serverRecordedAt)}
               </span>
               {event.source === "client_event" && (
-                <span className="type-metadata shrink-0 whitespace-nowrap">
+                // #874 PR-R: the client claim renders as the raw UTC ISO text
+                // the API returned. Re-running it through the product-timezone
+                // formatter would re-introduce a JS Date parse — the exact
+                // decoder that corrupts extreme years (0001 → 2001,
+                // Invalid Date for pre-1901 LMT offsets) — and Intl can move
+                // near-year-1 dates across the era boundary in negative
+                // offsets. Copyable, wraps, no overflow (long µs text).
+                <span className="type-metadata min-w-0 break-all">
                   {t("admin.attemptDetail.telemetry.clientClaimedAt")}{" "}
-                  {formatDateTime(event.occurredAt)}
+                  {event.occurredAt}
                 </span>
               )}
               <Badge
