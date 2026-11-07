@@ -8,7 +8,7 @@ import { schema } from "@exam/db/schema/pg";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
 import { desc, eq, sql } from "drizzle-orm";
 import candidateRoutes from "./candidate.js";
-import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
+import { buildTestApp, createAssignedUserForTest } from "./testHelpers.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 async function installCandidateCreateAuditFailure(
@@ -127,7 +127,7 @@ describe("candidate routes", () => {
       },
       getRuntimeConfig().authSecret.jwtSecret,
     );
-    ({ token: teacherToken } = await createFutureRoleUserForTest(
+    ({ token: teacherToken } = await createAssignedUserForTest(
       ctx.db,
       organizationId,
       "Teacher",

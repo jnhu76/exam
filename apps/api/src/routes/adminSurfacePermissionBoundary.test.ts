@@ -15,7 +15,7 @@ import type { HTTPMethods } from "fastify";
 import {
   buildTestApp,
   createCandidateViaApi,
-  createFutureRoleUserForTest,
+  createAssignedUserForTest,
   uniquePrefix,
 } from "./testHelpers.js";
 import authRoutes from "./auth.js";
@@ -265,21 +265,21 @@ describe("admin-surface permission boundary", () => {
     let candidateToken: string;
 
     beforeAll(async () => {
-      const teacher = await createFutureRoleUserForTest(
+      const teacher = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Teacher",
         "admin-surface-all-teacher",
       );
       teacherToken = teacher.token;
-      const proctor = await createFutureRoleUserForTest(
+      const proctor = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Proctor",
         "admin-surface-all-proctor",
       );
       proctorToken = proctor.token;
-      const grader = await createFutureRoleUserForTest(
+      const grader = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Grader",
@@ -355,7 +355,7 @@ describe("admin-surface permission boundary", () => {
     let teacherToken: string;
 
     beforeAll(async () => {
-      const teacher = await createFutureRoleUserForTest(
+      const teacher = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Teacher",

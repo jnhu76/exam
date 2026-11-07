@@ -3,7 +3,7 @@ import { schema } from "@exam/db/schema/pg";
 import courseRoutes, { isCourseCodeConflict } from "./course.js";
 import {
   buildTestApp,
-  createFutureRoleUserForTest,
+  createAssignedUserForTest,
   uniquePrefix,
 } from "./testHelpers.js";
 
@@ -65,7 +65,7 @@ describe("course routes", () => {
 
   beforeAll(async () => {
     ctx = await buildTestApp(courseRoutes);
-    ({ token: teacherToken } = await createFutureRoleUserForTest(
+    ({ token: teacherToken } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
       "Teacher",

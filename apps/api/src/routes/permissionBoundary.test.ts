@@ -4,7 +4,7 @@ import type { HTTPMethods } from "fastify";
 import {
   buildTestApp,
   createCandidateViaApi,
-  createFutureRoleUserForTest,
+  createAssignedUserForTest,
   uniquePrefix,
 } from "./testHelpers.js";
 import authRoutes from "./auth.js";
@@ -228,21 +228,21 @@ describe("permission boundary", () => {
     let graderToken: string;
 
     beforeAll(async () => {
-      const teacher = await createFutureRoleUserForTest(
+      const teacher = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Teacher",
         "boundary-tchr",
       );
       teacherToken = teacher.token;
-      const proctor = await createFutureRoleUserForTest(
+      const proctor = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Proctor",
         "boundary-proc",
       );
       proctorToken = proctor.token;
-      const grader = await createFutureRoleUserForTest(
+      const grader = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Grader",
@@ -732,21 +732,21 @@ describe("permission boundary", () => {
       );
       candidateToken = candidate.token;
       // Future roles via direct DB insert.
-      const teacher = await createFutureRoleUserForTest(
+      const teacher = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Teacher",
         "perm-boundary-tchr",
       );
       teacherToken = teacher.token;
-      const proctor = await createFutureRoleUserForTest(
+      const proctor = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Proctor",
         "perm-boundary-proc",
       );
       proctorToken = proctor.token;
-      const grader = await createFutureRoleUserForTest(
+      const grader = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
         "Grader",
@@ -966,8 +966,8 @@ describe("permission boundary", () => {
       // Boundary #2: the actual System-role non-login policy.
       // Seed a real active System-role user with a valid password
       // (users.role is plain text — no CHECK constraint — so direct
-      // insert of role="System" is allowed; createFutureRoleUserForTest
-      // cannot be used because LegacyRole excludes "System").
+      // insert of role="System" is allowed; createAssignedUserForTest
+      // cannot be used because System is not an assignable role).
       const username = `perm-boundary-system-${uniquePrefix()}`;
       const password = "password123";
       const userId = randomUUID();

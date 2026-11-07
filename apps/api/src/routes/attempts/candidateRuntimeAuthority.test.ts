@@ -11,7 +11,7 @@ import {
   buildTestApp,
   createCandidateViaApi,
   createExamViaApi,
-  createFutureRoleUserForTest,
+  createAssignedUserForTest,
   publishExamViaApi,
   uniquePrefix,
 } from "../testHelpers.js";
@@ -338,7 +338,7 @@ describe("candidate runtime — non-Candidate role denial (directive §9.2)", ()
 
   beforeAll(async () => {
     ctx = await buildTestApp(routePlugin, { prefix: "/api" });
-    proctor = await createFutureRoleUserForTest(
+    proctor = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
       "Proctor",

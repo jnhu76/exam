@@ -5,7 +5,7 @@ import type { ExamStatus, Role } from "@exam/domain";
 import proctorMonitoringRoutes from "./proctorMonitoring.js";
 import {
   buildTestApp,
-  createFutureRoleUserForTest,
+  createAssignedUserForTest,
   uniquePrefix,
 } from "./testHelpers.js";
 
@@ -18,10 +18,10 @@ describe("GET /api/admin/proctor/exams", () => {
   let foreignExamId: string;
 
   async function createRoleToken(role: Exclude<Role, "Admin" | "System">) {
-    // Delegate to createFutureRoleUserForTest so the user gets an
+    // Delegate to createAssignedUserForTest so the user gets an
     // active primary role assignment — without it, authenticate denies 401 and
     // the future-role capability decisions under test never run.
-    const { user, token } = await createFutureRoleUserForTest(
+    const { user, token } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
       role,

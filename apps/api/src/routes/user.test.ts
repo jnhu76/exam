@@ -11,7 +11,6 @@ import userRoutes from "./user.js";
 import {
   buildTestApp,
   createAssignedUserForTest,
-  createFutureRoleUserForTest,
   createUnassignedUserForTest,
 } from "./testHelpers.js";
 import { hashPassword } from "@exam/auth/password";
@@ -249,7 +248,7 @@ describe("user routes", () => {
       expect(beforeRes.statusCode).toBe(200);
       const beforeBody = beforeRes.json();
 
-      const teacher = await createFutureRoleUserForTest(
+      const teacher = await createAssignedUserForTest(
         legacyCtx.db,
         legacyCtx.org.id,
         "Teacher",
