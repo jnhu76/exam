@@ -69,7 +69,7 @@
   "error": {
     "code": "AUTH_REGISTER_DISABLED",
     "message": "Phase 1 不支持公开注册",
-    "requestId": "req-..."
+    "requestId": "550e8400-e29b-41d4-a716-446655440000"
   }
 }
 ```

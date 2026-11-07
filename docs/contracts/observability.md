@@ -29,7 +29,7 @@ Every request has a correlation id. The minimum traceable shape:
 
 | Field | Source | Example | Notes |
 |---|---|---|---|
-| requestId | `request.id` (Fastify default genReqId) | `"abc123"` | surfaced in error envelope `error.requestId`; thread through logs |
+| requestId | `request.id` (server UUIDv4 `genReqId`) | `"550e8400-e29b-41d4-a716-446655440000"` | server-generated; error envelope, Pino and HTTP audit correlation |
 | method | HTTP method | `POST` | pino default request log |
 | path / route | request path | `/api/attempts/:id/submit` | pino default |
 | statusCode | reply status | `200` | pino onResponse log |
@@ -46,33 +46,42 @@ Every request has a correlation id. The minimum traceable shape:
 > are included in error envelopes and audit rows, and SHOULD be added to
 > business-specific log statements where troubleshooting value is high.
 
-## Request correlation semantics (#860)
+## Request correlation semantics (#860 — owner supersession: UUIDv4)
 
-The requestId is a per-instance investigation clue, not a global identity.
-These interpretation rules are part of the contract (KEEP_DEFAULT_OPTION_B:
-Fastify default generator, `requestIdHeader` disabled — a client-supplied
-`request-id` / `X-Request-Id` header never controls `request.id`):
+The production API explicitly generates a fresh UUIDv4 using Node
+`crypto.randomUUID()` for each HTTP request. This supersedes the historical
+`KEEP_DEFAULT_OPTION_B` (Fastify local counter) proposal. No boot ID,
+central ID service, database allocation, or distributed-tracing runtime is
+required merely to identify an HTTP request.
 
-- **Identity scope.** The default generator is a local counter. A requestId
-  has determinate identity semantics only inside one Fastify instance and one
-  counter cycle (it wraps at 2^31). It is not unique across process restarts,
-  multiple instances on one host, or multi-instance deployments;
-  `hostname + pid + requestId` narrows candidates but guarantees nothing
-  unconditionally (PID reuse, container PID namespaces, stable hostnames).
-- **Query discipline.** Correlate only within a known source, a SERVER time
-  window, and a subject (actor/attempt/organization) — never by requestId
-  shape (`req-*` vs UUID proves nothing about origin).
-- **Result vocabulary.** Zero matching log lines is NO_MATCH-to-evidence, not
-  proof a request never happened (UNKNOWN per the UNKNOWN boundary); exactly
-  one candidate is a working hypothesis, not a uniqueness proof; multiple
-  candidates must be reported as AMBIGUOUS, never silently narrowed.
-- **Client-claimed candidates.** A requestId that arrived via client
-  telemetry (`client_events` metadata projected into the proctor timeline /
-  attempt detail surfaces) is the client's claim about a server interaction.
-  It is displayed under an explicit "客户端声明，未经服务端核验" label and
-  must be confirmed against the server's own request log before being treated
-  as one request's identity. Server audit rows are never marked as client
-  claims.
+- **Identity scope.** UUIDv4 gives a server-generated, probabilistically
+  unique correlation value across different API processes and process
+  lifecycles; collision risk is negligible but not mathematically impossible.
+  It is not a tenant, authentication, answer, event, transaction, or operation
+  identity. Historical logs/audit rows still contain legacy `req-<base36>`
+  values; do not rewrite them or infer provenance solely from ID shape.
+- **Untrusted headers.** Fastify `requestIdHeader` remains explicitly disabled.
+  Client-supplied `request-id` / `X-Request-Id` is never authoritative
+  for the server's `request.id`.
+- **End-to-end correlation.** The same server-generated requestId is carried
+  in the error envelope, Pino request logs, and HTTP audit metadata where
+  an audit row exists. Not every HTTP request produces an audit row.
+  A UUIDv4 is a correlation key, not proof of causality or of complete
+  log retention. Use the known server time, origin, tenant/actor and request
+  lifecycle to interpret evidence; NO_MATCH may mean UNKNOWN and multiple
+  plausible records remain AMBIGUOUS.
+- **Client-claimed candidates.** A requestId sent inside client telemetry
+  remains an unverified claim about a previous interaction. The "客户端声明，
+  未经服务端核验" label applies to all such metadata until corroborated by
+  the server's logs. A matching UUID string alone does not authenticate
+  the sender or establish ownership of the claimed request.
+- **Background work.** Background scanner/incident operations continue to
+  use their existing workerInstanceId/operationId; do not fabricate an HTTP
+  requestId for work that did not originate from an HTTP request.
+- **Multi-instance boundary.** Generating unique request IDs does NOT make
+  the current deployment multi-instance safe. Scanner ownership, scheduling,
+  deployment and lifecycle concerns require a separate architecture decision.
+
 
 ## State transition log fields
 

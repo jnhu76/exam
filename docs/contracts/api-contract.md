@@ -66,7 +66,7 @@ All standardized API errors use a single envelope:
   "error": {
     "code": "RESOURCE_CONFLICT",
     "message": "资源状态冲突",
-    "requestId": "req-...",
+    "requestId": "550e8400-e29b-41d4-a716-446655440000",
     "details": {}
   }
 }

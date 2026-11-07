@@ -1051,8 +1051,9 @@ docker compose --env-file .env.production logs -f
 # Filter by service
 docker compose --env-file .env.production logs -f app
 
-# Filter by request id (JSON log)
-docker compose --env-file .env.production logs app | jq 'select(.reqId == "req-42")'
+# Filter by the server-issued UUIDv4 from an error envelope (replace this example).
+# Historical logs may still contain Fastify's old req-<base36> IDs.
+docker compose --env-file .env.production logs app | jq 'select(.reqId == "550e8400-e29b-41d4-a716-446655440000")'
 
 # Filter by log level
 docker compose --env-file .env.production logs app | jq 'select(.level >= 40)'   # warn and above
