@@ -425,7 +425,7 @@ export function ExamMonitoringPage() {
                           ordering, so it is not shown as the row's time. */}
                       {formatTime(ev.serverRecordedAt)}
                     </span>
-                    <EventBadge level={ev.level} kind={ev.kind} />
+                    <EventBadge level={ev.level} source={ev.source} />
                     <span>{ev.name}</span>
                     {ev.route && (
                       <span className="text-muted-foreground truncate max-w-32">
@@ -433,9 +433,23 @@ export function ExamMonitoringPage() {
                       </span>
                     )}
                     {ev.metadata && Object.keys(ev.metadata).length > 0 && (
-                      <span className="text-muted-foreground">
-                        {JSON.stringify(ev.metadata)}
-                      </span>
+                      <>
+                        {/* #860 PR-T: provenance lives in `source`, not
+                            `kind` (audit rows emit kind "proctor"), and a
+                            client row's allowlisted metadata is the CLIENT's
+                            claim about a server interaction — the whole
+                            group carries the unverified label. */}
+                        {ev.source === "client_event" && (
+                          <span className="text-warning shrink-0 whitespace-nowrap">
+                            {t(
+                              "admin.examMonitoring.timeline.clientClaimedMetadata",
+                            )}
+                          </span>
+                        )}
+                        <span className="text-muted-foreground">
+                          {JSON.stringify(ev.metadata)}
+                        </span>
+                      </>
                     )}
                   </div>
                 ))}
@@ -452,7 +466,7 @@ export function ExamMonitoringPage() {
   );
 }
 
-function EventBadge({ level, kind }: { level: string; kind: string }) {
+function EventBadge({ level, source }: { level: string; source: string }) {
   const { t } = useTranslation();
   let color: string;
   if (level === "error") {
@@ -464,7 +478,11 @@ function EventBadge({ level, kind }: { level: string; kind: string }) {
   }
   return (
     <Badge variant="secondary" className={`shrink-0 ${color}`}>
-      {kind === "audit_log"
+      {/* #860 PR-T: the origin label branches on the row's REAL `source`.
+          `kind` is a display vocabulary (audit rows emit kind "proctor";
+          client rows may emit kind "proctor"/"log"/"exam_telemetry"), so a
+          kind-based check mislabels server audit rows as frontend. */}
+      {source === "audit_log"
         ? t("admin.examMonitoring.timeline.auditLog")
         : t("admin.examMonitoring.timeline.frontend")}
     </Badge>

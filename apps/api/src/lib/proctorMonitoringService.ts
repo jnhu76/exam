@@ -142,6 +142,17 @@ function auditActionToEventName(action: string): string | null {
 // answerIdentity digest. requestId joins a row to the server-side request
 // log / error envelope; status distinguishes a server fault (HTTP >= 500)
 // from a transport failure.
+//
+// TRUST (#860 PR-T): every value below (requestId, status, errorCode,
+// clientSeq) is projected from client_events metadata — the CLIENT's claim
+// about a server interaction, copied from the error envelope it saw. It is
+// a correlation candidate only, never a per-field server verification; the
+// UI renders these rows' metadata under the explicit "客户端声明，未经服务端
+// 核验" group label and investigators must confirm a claimed requestId
+// against the server's own request log before treating it as one request's
+// identity (one match is not cross-restart uniqueness; several is
+// AMBIGUOUS). This projection stays an allowlist of stable identifiers —
+// no client-asserted value is promoted into a business authority here.
 const SAVE_ERROR_METADATA = [
   "questionId",
   "saveMode",

@@ -1777,6 +1777,7 @@ const zhCN = {
         noEvents: "暂无事件",
         auditLog: "操作",
         frontend: "前端",
+        clientClaimedMetadata: "客户端声明，未经服务端核验",
       },
       actions: {
         recoveryArchive: "恢复档案",
@@ -2178,6 +2179,7 @@ const zhCN = {
         sourceAuditLog: "审计记录",
         serverReceivedAt: "服务端接收",
         clientClaimedAt: "客户端声明（UTC）",
+        clientClaimedMetadata: "客户端声明，未经服务端核验",
         loadMore: "加载更早事件",
         loadMoreFailed: "加载更早事件失败，已显示的事件不受影响",
         counts: "已显示 {{shown}} / {{total}} 条事件",

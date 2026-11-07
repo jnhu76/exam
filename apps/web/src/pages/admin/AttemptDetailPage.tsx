@@ -365,9 +365,22 @@ function TelemetrySection({
               </Badge>
               <span className="font-medium">{event.name}</span>
               {event.metadata && Object.keys(event.metadata).length > 0 && (
-                <span className="type-metadata min-w-0 break-all">
-                  {JSON.stringify(event.metadata)}
-                </span>
+                <>
+                  {/* #860 PR-T: the allowlisted metadata of a client_event
+                      row (requestId/status/errorCode/clientSeq…) is the
+                      CLIENT's claim about a server interaction — a
+                      correlation candidate, never a per-field server
+                      verification. The whole group carries the unverified
+                      label; audit rows are the server's own record. */}
+                  {event.source === "client_event" && (
+                    <span className="type-metadata shrink-0 whitespace-nowrap">
+                      {t("admin.attemptDetail.telemetry.clientClaimedMetadata")}
+                    </span>
+                  )}
+                  <span className="type-metadata min-w-0 break-all">
+                    {JSON.stringify(event.metadata)}
+                  </span>
+                </>
               )}
             </div>
           ))}

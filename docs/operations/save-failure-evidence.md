@@ -84,6 +84,14 @@ logs/domain state settle F2/F3.
    `clientSeq` match. A rejection line exists for every `accepted: false`
    verdict; the 200 rejection body carries no `requestId`, so those three
    fields plus the time window are the keys.
+   A `requestId` reported by the CLIENT (error banner, or the allowlisted
+   `requestId` in the client-event telemetry metadata) is the client's
+   claim about the envelope it saw — a correlation candidate (#860). Confirm
+   it against the server's own request log before treating it as one
+   request's identity: exactly one match inside the source/time/subject
+   window is a working hypothesis (not a cross-restart uniqueness proof),
+   several matches are AMBIGUOUS, and no match is an evidence gap (F6),
+   never proof of non-arrival.
 5. Classify using the matrix above. Record F6 (UNKNOWN) explicitly rather
    than asserting non-arrival.
 6. Follow-up per fact: for F2, `STALE_VERSION` is resolved by reloading the
