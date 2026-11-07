@@ -719,10 +719,16 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           "Failed to persist candidate import log; import result is unchanged",
         );
       }
+      // INVARIANT: the audit targetId must name a real entity. When the
+      // import-log write succeeded it names that row; when it failed no
+      // import-log entity exists, so the target is the caller's
+      // organization — never the HTTP request id.
+      const auditTarget = logId
+        ? { targetType: "candidate_import", targetId: logId }
+        : { targetType: "organization", targetId: ctx.organizationId };
       recordBestEffortAudit(fastify, request, ctx, {
         action: "candidate.import",
-        targetType: "candidate_import",
-        targetId: logId ?? request.id,
+        ...auditTarget,
         metadata: {
           total: data.rows.length,
           created,
