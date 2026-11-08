@@ -17,7 +17,7 @@ let navigateFn: ((path: string) => void) | null = null;
  */
 const networkFailureLimiter = createTelemetryRateLimiter();
 
-/** Test-only: clears the network-failure limiter window. */
+/** Test-only: clears the module-level limiter (all bounded-warn keys). */
 export function __resetNetworkFailureLimiterForTest(): void {
   networkFailureLimiter.reset();
 }
@@ -196,6 +196,13 @@ export class ApiError extends Error {
     readonly details?: unknown,
     readonly requestId?: string,
     readonly serverMessage?: string,
+    /**
+     * The error response's `x-request-id` header value (#924). Captured for
+     * diagnostics only — unlike {@link requestId} (the typed wire contract)
+     * it is never the promoted fact: consumers keying support correlation
+     * off an ApiError keep using `requestId`.
+     */
+    readonly headerRequestId?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -232,6 +239,37 @@ export async function responseToApiError(
   } catch {
     // body parse failed; fall through to status-string message
   }
+  // #924 Case D: the header is read on the ERROR path too (previously
+  // discarded here) so a mismatch between the two correlation carriers is a
+  // recorded fact instead of a silent pick. Header values survive body
+  // consumption — headers are independent of the stream.
+  const headerRequestId = response.headers.get("x-request-id") ?? undefined;
+  if (
+    requestId !== undefined &&
+    headerRequestId !== undefined &&
+    requestId !== headerRequestId
+  ) {
+    // Neither value is promoted: the envelope stays the authoritative
+    // `requestId` (typed wire contract) and the divergence is recorded as
+    // one bounded client-log warn (#924; TASK-CONTRACT §3.3 Case D
+    // "correlation inconsistency"). Bounded via the module-level limiter so
+    // a mismatch storm stays a fixed number of persisted rows — same
+    // fixed-key pattern as `api.network_failed` below.
+    //
+    // PROVENANCE: this warn flows through the generic logger, whose
+    // kind:"log" events carry NO attemptId dimension, so the proctor
+    // timeline query (WHERE organizationId + attemptId) can never match it —
+    // it exists only in the client log stream as a diagnostic trace. The
+    // monitoring SAFE_METADATA_ALLOWLIST projecting unknown log names to {}
+    // is a second, independent line of defense, not the reason it is
+    // timeline-invisible.
+    if (networkFailureLimiter.allow("api.request_id_correlation_mismatch")) {
+      logger.warn("api.request_id_correlation_mismatch", {
+        envelopeRequestId: requestId,
+        headerRequestId,
+      });
+    }
+  }
   const message = serverMessage || `${response.status} Request failed`;
   return new ApiError(
     response.status,
@@ -240,6 +278,7 @@ export async function responseToApiError(
     details,
     requestId,
     serverMessage,
+    headerRequestId,
   );
 }
 
@@ -371,9 +410,9 @@ export const api = {
   },
   // #865: success-path variants that also surface the server's x-request-id
   // response header; callers that need correlation opt in — the plain
-  // helpers above keep their signature and behavior unchanged. Currently
-  // consumed by tests only: this is the deliberate public surface future
-  // correlation UI/reporting work builds on.
+  // helpers above keep their signature and behavior unchanged. Consumed by
+  // TakeExamPage's save path (#924) so a 200 business rejection keeps a
+  // client-claimed correlation id; other call sites opt in as needed.
   getWithMeta<T>(
     path: string,
     opts?: ApiRequestOptions,

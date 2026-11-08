@@ -18,7 +18,7 @@
 | Save receipt (`exam_answer_save_receipts`) | One immutable row per ACCEPTED `(attempt, question, clientSeq)`, written atomically with the answer state | The protocol accepted that replay key at `saved_at`, at `accepted_version` | Content correctness; that the client received the ACK; that a later failed save did not happen |
 | Attempt domain state (`exam_attempts.answers`) | Current saved answer + per-answer `version` / `savedAt` | The current authoritative saved value and version | Anything about the client's observation |
 | Structured logs | `Answer save rejected` WARN line (`organizationId`, `actorId`, `actorRole`, `attemptId`, `questionId`, `clientSeq`, `reason`, `serverVersion`, automatic `reqId`); error responses also carry `reqId` | The server evaluated and refused/faulted a save, with a machine-readable reason, tenant- and actor-scoped | What the UI displayed; durable history beyond log retention |
-| Error envelope `requestId` | Returned to the client on error responses (400/5xx); equals the log line's `reqId` | Correlation between a candidate-reported error and server logs | That the request was processed if no line exists. The 200 `accepted: false` rejection body deliberately carries no `requestId` — correlate F2 by `attemptId` + `questionId` + `clientSeq` and the client's approximate time |
+| Error envelope `requestId` | Returned to the client on error responses (400/5xx); equals the log line's `reqId` | Correlation between a candidate-reported error and server logs | That the request was processed if no line exists. The 200 `accepted: false` rejection body deliberately carries no `requestId` — since #924 the rejection response's `x-request-id` header is the client-visible carrier of the same request id (surfaced as the rejection alert's 请求编号 and the allowlisted `requestId` in `answer_autosave_failed` telemetry, both client-claimed); before/alongside that, correlate F2 by `attemptId` + `questionId` + `clientSeq` and the client's approximate time |
 | Client event telemetry (`client_events`) | Self-service browser telemetry (#544), 30-day retention | What the browser believed/reported | Any server-side fact — it is advisory, never authority |
 
 Receipts are protocol metadata, not audit-grade: they cascade-delete with the
@@ -83,15 +83,18 @@ logs/domain state settle F2/F3.
    and for `"Answer save rejected"` lines whose `attemptId` / `questionId` /
    `clientSeq` match. A rejection line exists for every `accepted: false`
    verdict; the 200 rejection body carries no `requestId`, so those three
-   fields plus the time window are the keys.
-   A `requestId` reported by the CLIENT (error banner, or the allowlisted
-   `requestId` in the client-event telemetry metadata) is the client's
-   claim about the envelope it saw — a correlation candidate (#860). Confirm
-   it against the server's own request log before treating it as one
-   request's identity: exactly one match inside the source/time/subject
-   window is a working hypothesis (not a cross-restart uniqueness proof),
-   several matches are AMBIGUOUS, and no match is an evidence gap (F6),
-   never proof of non-arrival.
+   fields plus the time window are the keys. Since #924 the candidate can
+   also report the rejection alert's 请求编号 (the 200 response's
+   `x-request-id` header value) — search that id directly; it is the same
+   request id that keys the rejection WARN line.
+   A `requestId` reported by the CLIENT (error banner, rejection alert, or
+   the allowlisted `requestId` in the client-event telemetry metadata) is
+   the client's claim about the envelope/header it saw — a correlation
+   candidate (#860). Confirm it against the server's own request log before
+   treating it as one request's identity: exactly one match inside the
+   source/time/subject window is a working hypothesis (not a cross-restart
+   uniqueness proof), several matches are AMBIGUOUS, and no match is an
+   evidence gap (F6), never proof of non-arrival.
 5. Classify using the matrix above. Record F6 (UNKNOWN) explicitly rather
    than asserting non-arrival.
 6. Follow-up per fact: for F2, `STALE_VERSION` is resolved by reloading the

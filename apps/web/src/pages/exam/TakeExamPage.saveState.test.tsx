@@ -114,10 +114,11 @@ function lockedSnapshot(): CandidateTakeSnapshot {
   );
 }
 
-const { apiGet, apiPost, takeHandler } = vi.hoisted(() => ({
+const { apiGet, apiPost, takeHandler, postMeta } = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
   takeHandler: vi.fn(),
+  postMeta: { requestId: null as string | null },
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -149,6 +150,13 @@ vi.mock("@/lib/api", () => ({
   api: {
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
+    // #924: the save path calls postWithMeta; delegate to the same apiPost
+    // mock (url/body assertions stay single-sourced) and thread the per-test
+    // response-header id through postMeta.requestId.
+    postWithMeta: async (...args: unknown[]) => ({
+      data: await apiPost(...args),
+      meta: { requestId: postMeta.requestId },
+    }),
   },
   setNavigate: () => {},
 }));
@@ -230,6 +238,7 @@ beforeEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
   takeHandler.mockReset();
+  postMeta.requestId = null;
 });
 
 afterEach(() => {
@@ -401,6 +410,10 @@ describe("save-state chip mapping (real timers)", () => {
       }
       return { ok: true, serverNow: NOW };
     });
+    // #924: the rejection response carries an x-request-id header — the
+    // reconcile branch must be unchanged by its presence (no failure fact,
+    // no rejection alert; the captured id is simply unused on this path).
+    postMeta.requestId = "req-p6-stale-865";
 
     renderPage();
     const checkboxes = await screen.findAllByRole("checkbox");
@@ -418,6 +431,9 @@ describe("save-state chip mapping (real timers)", () => {
     const boxes = screen.getAllByRole("checkbox");
     expect(boxes[0]).toBeChecked();
     expect(boxes[1]).toBeChecked();
+    expect(
+      screen.queryByTestId("save-rejection-alert"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the failed question's banner visible after a later question saves (last-event chip, #677 F6)", async () => {

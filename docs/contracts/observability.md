@@ -70,7 +70,13 @@ required merely to identify an HTTP request.
   server-generated value (which already keys the pino lines and the error
   envelope) readable by the caller on 2xx responses, where no envelope
   exists. The web client consumes it opt-in
-  (`api.getWithMeta` / `api.postWithMeta` in `apps/web/src/lib/api.ts`);
+  (`api.getWithMeta` / `api.postWithMeta` in `apps/web/src/lib/api.ts`); the
+  answer-save path is the first production consumer (#924): a 200 business
+  rejection (`accepted: false`) surfaces the header id as the rejection
+  alert's 请求编号 and as the client-claimed `requestId` in the
+  `answer_autosave_failed` telemetry metadata — never as a server-verified
+  fact. On error responses the envelope `requestId` stays authoritative; a
+  divergent header is recorded as a bounded client-log warn, not promoted.
   CORS exposes it only to the configured web origin
   (`docs/contracts/api-contract.md` §Standard response headers).
   Non-carriable boundary: requests whose response is never sent — connection

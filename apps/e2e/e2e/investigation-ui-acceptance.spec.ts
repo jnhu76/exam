@@ -916,6 +916,181 @@ test.describe("investigation UI browser acceptance (#856)", () => {
     });
   });
 
+  // ── M4/M5 (#924): the 200 business rejection's request id, end to end ──
+  // M4 proves the whole chain with a REAL protocol rejection (not an
+  // injected 500): the server's own CONFLICTING_PAYLOAD verdict on a real
+  // replay-key collision, the actual x-request-id response header, the
+  // candidate-visible 请求编号 in the rejection alert, and the client-claimed
+  // id landing in the admin timeline inside the unverified group.
+  test("M4: real 200 business rejection — the candidate reads the actual response's request id from the UI, and the claim reaches the timeline", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const seeded = await seedExam(request, "reqid-rej");
+    const adminToken = await adminApiToken(request);
+    const candidateToken = await candidateApiToken(request, seeded.candidate);
+
+    await loginAsCandidate(page, seeded.candidate);
+    await startExamFromList(page, seeded.examId);
+
+    const detailRes = await request.get(
+      `${BASE_URL}/api/candidate/exams/${seeded.examId}`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(detailRes.ok(), await detailRes.text()).toBe(true);
+    const attemptId = ((await detailRes.json()) as { activeAttemptId?: string })
+      .activeAttemptId;
+    expect(
+      attemptId,
+      "seeded candidate must have an active attempt",
+    ).toBeTruthy();
+
+    // Race-free replay-key collision: intercept the page's answer-save POST,
+    // FIRST persist a conflicting receipt for the SAME replay key
+    // (attemptId, questionId, clientSeq=1) with different canonical content,
+    // THEN let the page's real request through. Only arrival ORDER is
+    // controlled — the rejection verdict is computed by the real server from
+    // real state (same clientSeq, different answer → CONFLICTING_PAYLOAD).
+    let conflictSeeded = false;
+    const questionId = seeded.questionId;
+    await page.route("**/api/attempts/*/answers/*", async (route) => {
+      if (route.request().method() === "POST" && !conflictSeeded) {
+        conflictSeeded = true;
+        const pre = await request.post(
+          `${BASE_URL}/api/attempts/${attemptId}/answers/${questionId}`,
+          {
+            headers: { Cookie: `auth-token=${candidateToken}` },
+            data: {
+              attemptId,
+              questionId,
+              answer: false,
+              clientSeq: 1,
+              clientSavedAt: new Date().toISOString(),
+              baseVersion: 0,
+            },
+          },
+        );
+        expect(pre.ok(), await pre.text()).toBe(true);
+        expect(((await pre.json()) as { accepted: boolean }).accepted).toBe(
+          true,
+        );
+      }
+      await route.continue();
+    });
+
+    const saveResponsePromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/answers/") && res.request().method() === "POST",
+      { timeout: 30_000 },
+    );
+    // Registered BEFORE the edit (M3 pattern): the failure telemetry is
+    // buffered and batch-POSTed asynchronously — the waiter must already be
+    // armed when the batch leaves the browser.
+    const telemetryAccepted = page.waitForResponse(
+      (res) =>
+        res.url().includes("/api/client-events") &&
+        res.request().method() === "POST" &&
+        res.ok(),
+      { timeout: 30_000 },
+    );
+    await answerTrueFalse(page, true);
+    const saveResponse = await saveResponsePromise;
+    expect(saveResponse.status()).toBe(200);
+    const saveBody = (await saveResponse.json()) as {
+      accepted: boolean;
+      reason?: string;
+    };
+    expect(saveBody.accepted).toBe(false);
+    expect(saveBody.reason).toBe("CONFLICTING_PAYLOAD");
+    const headerRequestId = saveResponse.headers()["x-request-id"];
+    expect(
+      headerRequestId,
+      "200 rejection must carry x-request-id",
+    ).toBeTruthy();
+
+    // Browser-level proof of the §3.4 delivery requirement: the candidate
+    // can read the id off the ACTUAL rejection alert after a real protocol
+    // rejection.
+    const alert = page.getByTestId("save-rejection-alert");
+    await expect(alert).toBeVisible({ timeout: 15_000 });
+    await expect(alert).toContainText("请求编号");
+    await expect(alert).toContainText(`${headerRequestId}`);
+    await page.screenshot({
+      path: `${SHOT_DIR}/05-save-rejection-request-id.png`,
+      fullPage: true,
+    });
+
+    // Explicitly wait for the buffered client-events batch (async, 5s
+    // interval) BEFORE asserting any server-side projection; the visibility
+    // assertions below additionally retry past remaining batch edges.
+    const telemetryRes = await telemetryAccepted;
+    expect(
+      ((await telemetryRes.json()) as { accepted: number }).accepted,
+    ).toBeGreaterThanOrEqual(1);
+
+    // Admin timeline: the claimed id lands inside the
+    // "客户端声明，未经服务端核验" group — a correlation candidate, never a
+    // verified identity.
+    await loginAsAdmin(page);
+    await page.goto(`/admin/exams/${seeded.examId}/proctor/monitor`);
+    const monitorRow = page
+      .getByRole("row")
+      .filter({ hasText: seeded.candidate.name });
+    await expect(monitorRow).toBeVisible({ timeout: 30_000 });
+    await monitorRow.getByRole("button", { name: "时间线" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("answer_autosave_failed")).toBeVisible({
+      timeout: 30_000,
+    });
+    const failedRow = dialog
+      .locator("div.rounded-md.border", { hasText: "answer_autosave_failed" })
+      .first();
+    const failedRowText = (await failedRow.innerText()) ?? "";
+    expect(failedRowText).toContain("客户端声明，未经服务端核验");
+    expect(failedRowText).toContain(`${headerRequestId}`);
+    await page.screenshot({
+      path: `${SHOT_DIR}/06-timeline-client-claimed-request-id.png`,
+      fullPage: true,
+    });
+  });
+
+  // M5 pins the transport boundary: with the answer-save POST aborted at the
+  // network layer there is NO response to observe, so no surface may claim
+  // any request id (UNKNOWN semantics) — only the connectivity banner.
+  test("M5: transport-level save failure claims no request id anywhere (UNKNOWN semantics)", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const seeded = await seedExam(request, "reqid-transport");
+
+    await loginAsCandidate(page, seeded.candidate);
+    await startExamFromList(page, seeded.examId);
+
+    await page.route("**/api/attempts/*/answers/*", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.abort("connectionreset");
+        return;
+      }
+      await route.continue();
+    });
+
+    await answerTrueFalse(page, true);
+
+    await expect(page.getByText("连接异常")).toBeVisible({ timeout: 15_000 });
+    // No id of any kind: the request never produced a server response, so
+    // 请求编号 (rejection header) and 错误编号 (error envelope) must both be
+    // absent — a fabricated id would break the UNKNOWN boundary.
+    await expect(page.getByText(/请求编号/)).toHaveCount(0);
+    await expect(page.getByText(/错误编号/)).toHaveCount(0);
+    await expect(page.getByTestId("save-rejection-alert")).toHaveCount(0);
+    await page.screenshot({
+      path: `${SHOT_DIR}/07-transport-unknown-no-request-id.png`,
+      fullPage: true,
+    });
+  });
+
   /**
    * PR-A (EXAM-860/874 adjudication §C2): system audit identity semantics.
    * The System incident delivery's audit row must carry its operation
