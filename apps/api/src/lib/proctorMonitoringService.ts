@@ -10,6 +10,7 @@ import {
   MONITORING_OFFLINE_THRESHOLD_MS,
   ProctorAttemptStatusEnum,
   ProctorAttemptEventSchema,
+  projectClientEventRoute,
 } from "@exam/contracts";
 import type { Database } from "@exam/db/types";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
@@ -64,6 +65,11 @@ function parseAttemptStatus(raw: string): ProctorAttemptStatus["status"] {
 function toTimelineEventFromClient(
   r: ClientEventTimelineRow,
 ): ProctorAttemptEvent {
+  // #864: re-project the stored route through the same closed template
+  // vocabulary used at ingest. Rows written by the pre-#864 regime (raw
+  // pathnames persisted verbatim) must not re-enter an authorized response;
+  // already-safe template values pass through unchanged (idempotent).
+  const route = projectClientEventRoute(r.route);
   // Validate the full event shape; override the validated/derived fields below.
   const base = ProctorAttemptEventSchema.safeParse({
     id: r.id,
@@ -73,7 +79,7 @@ function toTimelineEventFromClient(
     level: r.level,
     kind: r.kind,
     metadata: projectSafeMetadata(r.name, r.metadata),
-    ...(r.route ? { route: r.route } : {}),
+    ...(route ? { route } : {}),
     source: "client_event",
   });
   if (base.success) return base.data;
@@ -92,7 +98,7 @@ function toTimelineEventFromClient(
     level,
     kind,
     metadata: projectSafeMetadata(r.name, r.metadata),
-    ...(r.route ? { route: r.route } : {}),
+    ...(route ? { route } : {}),
     source: "client_event",
   };
 }
