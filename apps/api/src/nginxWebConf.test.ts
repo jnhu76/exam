@@ -82,19 +82,24 @@ describe("nginx access-log privacy pin (#925)", () => {
   it("the documented HTTPS activation template carries the same privacy directives", () => {
     const tpl = httpsTemplateBody();
     expect(tpl).toMatch(/access_log\s+\S+\s+exam_privacy;/);
-    expect(tpl).toMatch(/error_log\s+\S+\s+crit;/);
+    expect(tpl).toMatch(/error_log\s+\S+\s+error;/);
     const routePlaceholders = tpl.match(/set \$exam_route/g) ?? [];
     expect(routePlaceholders.length).toBeGreaterThanOrEqual(2);
     expect(tpl).not.toMatch(/\$request([^_a-zA-Z]|$)/);
     expect(tpl).not.toMatch(/\$request_uri/);
   });
 
-  it("the vhost error_log is filtered to crit (request-line quoting lives at error level)", () => {
-    // Live witness (#925): an upstream-resolution failure logged the FULL
-    // request line with query at error level. crit+ keeps catastrophic
-    // failures; the access log carries the 5xx story instead. Active
-    // config only — the commented template has its own pin below.
-    expect(activeConfig(conf)).toMatch(/error_log\s+\S+\s+crit;/);
+  it("the vhost error_log keeps native error-level diagnostics (Owner Decision A)", () => {
+    // #925 live witness: nginx core quotes the FULL request line (with
+    // query) in error-level messages, e.g. upstream resolution failures.
+    // Owner Decision A accepts that raw-URL exposure so a self-managed
+    // deployment keeps nginx's native fault diagnostics; `crit` would
+    // suppress them and is banned. This is a SEPARATE claim from the
+    // access-log privacy pins above — never merge the two into one
+    // "no raw URLs in nginx logs" statement. Active config only — the
+    // commented template has its own pin below.
+    expect(activeConfig(conf)).toMatch(/error_log\s+\S+\s+error;/);
+    expect(activeConfig(conf)).not.toMatch(/error_log\s+\S+\s+crit;/);
   });
 
   it("the log format keeps the safe diagnostic fields", () => {

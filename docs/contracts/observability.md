@@ -78,16 +78,30 @@ required merely to identify an HTTP request.
 - **Background work.** Background scanner/incident operations continue to
   use their existing workerInstanceId/operationId; do not fabricate an HTTP
   requestId for work that did not originate from an HTTP request.
-- **Raw URLs never persisted (#925).** No server-side log pathway writes the
-  raw client URL (query or path): the pino request line logs the matched
-  route template via the `req` serializer in `lib/logRedaction.ts`; error,
-  authz-denial and 404 logging use the same `routeTemplateOf`; the nginx
-  edge logs a fixed prefix placeholder plus server-observed fields
-  (`deploy/nginx/web.conf`, format `exam_privacy`), with its error_log
-  filtered to crit because nginx core quotes full request lines at error
-  level. nginx error_log below crit and any third-party log collector
-  outside the deployment boundary remain documented residuals, not verified
-  surfaces.
+- **Raw URLs never persisted in app pathways (#925).** No application-side
+  log pathway writes the raw client URL (query or path): the pino request
+  line logs the matched route template via the `req` serializer in
+  `lib/logRedaction.ts`; error, authz-denial and 404 logging use the same
+  `routeTemplateOf`. This is a separate claim from the nginx edge below —
+  do not merge them into one statement.
+- **nginx access-log privacy vs error-log risk acceptance (#925 / Owner
+  Decision A).** The nginx edge access log keeps the secret-free
+  `exam_privacy` format (`deploy/nginx/web.conf`): fixed prefix-level
+  route placeholder plus server-observed fields only — raw request
+  line/URI, Referer, Cookie and Authorization are banned from it forever.
+  The nginx error_log stays at the native `error` level so a self-managed
+  deployment keeps upstream/resolution fault diagnostics; nginx core quotes
+  the FULL request line (including query secrets) in error-level messages
+  during upstream/DNS failures — verified by container fault injection
+  (access log: zero raw-URL leaks across all scenarios/levels; error log:
+  leaks in the upstream-failure family; `crit` suppresses all diagnosis;
+  `warn` adds no failure-diagnostic value but additionally leaks malformed
+  request lines via uninitialized-variable warnings) — and that raw-URL
+  exposure is an explicitly accepted, bounded risk (no `crit` suppression,
+  no log-filtering proxy). Access-log
+  privacy and error-log exposure are reported as separate verdicts; any
+  third-party log collector outside the deployment boundary remains a
+  documented residual, not a verified surface.
 - **Multi-instance boundary.** Generating unique request IDs does NOT make
   the current deployment multi-instance safe. Scanner ownership, scheduling,
   deployment and lifecycle concerns require a separate architecture decision.
