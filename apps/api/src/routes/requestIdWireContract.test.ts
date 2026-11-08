@@ -1,7 +1,8 @@
 /**
  * #865 (865-C) X-Request-Id wire contract — the server-owned response
  * header, on the real wire (ephemeral listener, production plugin
- * composition: root-scope cors + requestId header + the /api surface).
+ * composition: the fp root-scope cors plugin from plugins/cors.ts + the
+ * requestId header + the /api surface).
  *
  * Ownership under test: ONE root-scope onRequest hook stamps
  * `x-request-id: request.id` (ADR-025 UUIDv4, `requestIdHeader:false`)
@@ -21,7 +22,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Writable } from "node:stream";
 import Fastify, { type FastifyInstance } from "fastify";
-import corsPlugin from "@fastify/cors";
+import corsPlugin from "../plugins/cors.js";
 import {
   serializerCompiler,
   validatorCompiler,
@@ -61,6 +62,10 @@ let logs: LogCapture;
 
 beforeAll(async () => {
   process.env.RATE_LIMIT_DISABLED = "true";
+  // Feed the production cors plugin through runtime config (CORS_ORIGIN is
+  // the env owner of the origin) so this suite exercises the real wiring —
+  // including the fp root-scope registration — not a hand-rolled duplicate.
+  process.env.CORS_ORIGIN = CONFIGURED_ORIGIN;
   resetRuntimeConfigForTest();
 
   logs = new LogCapture();
@@ -78,11 +83,7 @@ beforeAll(async () => {
   // The auth-error 401 path needs the auth+DB stack and lives in
   // requestIdStatusMatrix.test.ts instead.
   setupErrorHandler(app);
-  await app.register(corsPlugin, {
-    origin: CONFIGURED_ORIGIN,
-    credentials: true,
-    exposedHeaders: ["x-request-id"],
-  });
+  await app.register(corsPlugin);
   await app.register(apiSurfacePlugin, { prefix: "/api" });
   await app.listen({ host: "127.0.0.1", port: 0 });
   const address = app.addresses()[0];
