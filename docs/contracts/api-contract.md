@@ -86,6 +86,12 @@ All standardized API errors use a single envelope:
 | ---------------- | --------- | ------------------------------------------------------------ |
 | `error.details`  | `unknown` | Structured context — shape varies by `error.code` (see D0.8) |
 
+## Standard response headers
+
+| Header         | Where sent | Description                                                                                          |
+| -------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
+| `x-request-id` | every response (#865) | The server-owned request id (ADR-025 UUIDv4 `request.id`) stamped by one root-scope hook. Same value as `error.requestId` on error envelopes and the pino `reqId` of the request's log lines; readable on 2xx where no envelope exists. Client-supplied `x-request-id` / `request-id` headers never influence it (`requestIdHeader: false`). It is a correlation key only — never a credential or business identity. Non-carriable boundary: responses never sent (connection destroyed mid-request, socket-level HTTP framing failures, Node request/keepAlive timeouts) carry no header. |
+
 ## OPTIONS / CORS wire contract
 
 The CORS/OPTIONS protocol layer is owned by `@fastify/cors`, registered on

@@ -6,11 +6,12 @@
  * Ownership under test: ONE root-scope onRequest hook stamps
  * `x-request-id: request.id` (ADR-025 UUIDv4, `requestIdHeader:false`)
  * onto every Fastify-managed response — success, business rejection,
- * validation error, auth error, unmatched route, thrown error. The same
- * value must equal the pino `reqId` of that request's log lines and the
- * error envelope's `error.requestId` when an envelope exists. Client
- * headers (x-request-id / request-id / traceparent) never influence the
- * value.
+ * validation error, unmatched route. The same value must equal the pino
+ * `reqId` of that request's log lines and the error envelope's
+ * `error.requestId` when an envelope exists. Client headers (x-request-id /
+ * request-id / traceparent) never influence the value. Auth-gated status
+ * paths (401/403/409/500 with real fixtures) are covered by
+ * requestIdStatusMatrix.test.ts.
  *
  * Requests that can NEVER carry the header (documented boundary, not
  * covered here): responses never sent (connection destroyed mid-request,
@@ -28,6 +29,7 @@ import {
 import { decorateApiRouteStubs } from "../openapi/swagger.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 import { setupRequestIdHeader } from "../plugins/requestIdHeader.js";
+import { setupErrorHandler } from "../plugins/errors.js";
 import apiSurfacePlugin from "./apiSurface.js";
 
 const CONFIGURED_ORIGIN = "http://web.example.test";
@@ -71,6 +73,11 @@ beforeAll(async () => {
   app.setSerializerCompiler(serializerCompiler);
   decorateApiRouteStubs(app);
   setupRequestIdHeader(app);
+  // Unified error handler so business/validation rejections carry the
+  // canonical envelope (error.requestId) the envelope-equality cases assert.
+  // The auth-error 401 path needs the auth+DB stack and lives in
+  // requestIdStatusMatrix.test.ts instead.
+  setupErrorHandler(app);
   await app.register(corsPlugin, {
     origin: CONFIGURED_ORIGIN,
     credentials: true,
@@ -129,19 +136,6 @@ describe("X-Request-Id response header wire contract (#865)", () => {
     expect(logs.forRequest(header!).length).toBeGreaterThan(0);
   });
 
-  it("401 unauthenticated: header present (envelope equality)", async () => {
-    const res = await fetch(`${baseUrl}/api/client-events`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events: [] }),
-    });
-    expect(res.status).toBe(401);
-    const header = res.headers.get("x-request-id");
-    expect(header).toMatch(UUID_V4);
-    const body = (await res.json()) as { error?: { requestId?: string } };
-    expect(body.error?.requestId).toBe(header);
-  });
-
   it("404 unmatched /api route (canonical JSON boundary): header present", async () => {
     const res = await fetch(`${baseUrl}/api/no-such-route`);
     expect(res.status).toBe(404);
@@ -189,14 +183,16 @@ describe("X-Request-Id response header wire contract (#865)", () => {
       .map((s) => s.trim().toLowerCase());
     expect(exposed).toContain("x-request-id");
 
-    // No broadening: an unknown origin is never reflected and gets no CORS
-    // headers beyond the safe defaults — reading the id cross-origin stays
-    // limited to the configured origin.
+    // No broadening: a disallowed origin is never REFLECTED — with the
+    // production single-string origin shape, ACAO stays the fixed configured
+    // value (optionsCorsWireContract.test.ts pins that shape), which an
+    // attacker-origin page cannot use because its origin does not match.
     const denied = await fetch(`${baseUrl}/api/health`, {
       headers: { origin: "http://attacker.example.test" },
     });
     expect(denied.status).toBe(200);
-    expect(denied.headers.get("access-control-allow-origin")).toBeNull();
+    const deniedAcao = denied.headers.get("access-control-allow-origin");
+    expect(deniedAcao).not.toContain("attacker.example.test");
   });
 });
 

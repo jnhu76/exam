@@ -243,8 +243,33 @@ export async function responseToApiError(
   );
 }
 
-/** Executes an HTTP request, handles error parsing, and throws ApiError. */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** Success-path response metadata surfaced by the `*WithMeta` helpers. */
+export interface ApiResponseMeta {
+  /**
+   * Server-minted request id from the `x-request-id` response header (#865);
+   * null when the header is absent (older server, or a hop that strips it).
+   * Correlates with the same id in server logs and error envelopes — it is
+   * never a credential or business identity.
+   */
+  requestId: string | null;
+}
+
+/** Result of the `*WithMeta` request helpers: parsed body plus metadata. */
+export interface ApiResultWithMeta<T> {
+  data: T;
+  meta: ApiResponseMeta;
+}
+
+/**
+ * Executes an HTTP request, handles error parsing, and returns the parsed 2xx
+ * body plus response metadata. Single implementation core shared by
+ * {@link request} and the `*WithMeta` helpers so every surface keeps
+ * identical error, 401-redirect, and network-telemetry behavior.
+ */
+async function requestWithMeta<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<ApiResultWithMeta<T>> {
   try {
     const hasBody = init?.body !== undefined;
     const response = await fetch(`${baseUrl}${path}`, {
@@ -266,11 +291,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw await responseToApiError(response);
     }
 
+    const meta: ApiResponseMeta = {
+      requestId: response.headers.get("x-request-id"),
+    };
     if (response.status === 204) {
-      return undefined as T;
+      return { data: undefined as T, meta };
     }
 
-    return (await response.json()) as T;
+    return { data: (await response.json()) as T, meta };
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -293,6 +321,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(0, "Network request failed");
   }
+}
+
+/** Executes an HTTP request, handles error parsing, and throws ApiError. */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { data } = await requestWithMeta<T>(path, init);
+  return data;
 }
 
 /**
@@ -331,5 +365,26 @@ export const api = {
   },
   delete<T>(path: string): Promise<T> {
     return request<T>(path, { method: "DELETE" });
+  },
+  // #865: success-path variants that also surface the server's x-request-id
+  // response header; callers that need correlation opt in — the plain
+  // helpers above keep their signature and behavior unchanged.
+  getWithMeta<T>(
+    path: string,
+    opts?: ApiRequestOptions,
+  ): Promise<ApiResultWithMeta<T>> {
+    return requestWithMeta<T>(
+      path,
+      opts?.signal ? { signal: opts.signal } : undefined,
+    );
+  },
+  postWithMeta<T, TBody = unknown>(
+    path: string,
+    body?: TBody,
+  ): Promise<ApiResultWithMeta<T>> {
+    return requestWithMeta<T>(path, {
+      method: "POST",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
   },
 };
