@@ -21,9 +21,8 @@ import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import { registerStaticFrontend } from "./plugins/staticFrontend.js";
-import apiSurfacePlugin, {
-  registerRootNotFoundBoundary,
-} from "./routes/apiSurface.js";
+import apiSurfacePlugin from "./routes/apiSurface.js";
+import { registerRootNotFoundBoundary } from "./plugins/rootNotFoundBoundary.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import {

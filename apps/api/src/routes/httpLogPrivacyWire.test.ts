@@ -16,7 +16,7 @@ import type { FastifyPluginAsync } from "fastify";
 import candidateRoutes from "./candidate.js";
 import authRoutes from "./auth.js";
 import { buildTestApp } from "./testHelpers.js";
-import { buildErrorResponse } from "../lib/errorResponse.js";
+import { sendResourceNotFound } from "../plugins/rootNotFoundBoundary.js";
 import {
   serializeErrorForLog,
   serializeReqForLog,
@@ -46,10 +46,6 @@ class LogCapture extends Writable {
 }
 
 /** Routes under test: authz denial surface + a thrown-handler 500 surface. */
-/** Pino line-flush settle (sonic-boom writes are async). */
-async function waitForLogFlush(): Promise<void> {
-  await new Promise((r) => setTimeout(r, 25));
-}
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
@@ -57,20 +53,39 @@ const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.get("/__test/throw", async () => {
     throw new Error("intentional test failure for log-privacy matrix");
   });
-  // Production /api-scoped 404 policy (routes/apiSurface.ts #429): replaces
-  // Fastify's default basic404, which logs "Route <raw url> not found" —
-  // raw client URL bytes. The ROOT-scope boundary (also #925, wired in
-  // server.ts) is proven by server.requestId.test.ts, which spawns the
-  // real entrypoint; buildTestApp boots its app before this file can
-  // register at root scope.
-  fastify.setNotFoundHandler((request, reply) => {
-    reply.code(404).send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-  });
+  // Production /api-scoped 404 policy (routes/apiSurface.ts #429): the
+  // shared envelope helper, replacing Fastify's default basic404, which
+  // logs "Route <raw url> not found" — raw client URL bytes. The
+  // ROOT-scope boundary (also #925, wired in server.ts) is proven by
+  // server.requestId.test.ts, which spawns the real entrypoint;
+  // buildTestApp boots its app before this file can register at root scope.
+  fastify.setNotFoundHandler(sendResourceNotFound);
 };
 
 describe("HTTP log privacy — raw URL never persisted (#925)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let logs: LogCapture;
+
+  /**
+   * Explicit lifecycle barrier: an inject() resolves when the reply is sent,
+   * but pino writes through the stream asynchronously. Poll until at least
+   * `total` completion lines are on the stream — no fixed sleep, so a slow CI
+   * cannot false-pass the negative assertions below (AGENTS §7).
+   */
+  function completedCount(): number {
+    return logs.parsed().filter((l) => l.msg === "request completed").length;
+  }
+
+  async function injectSettled(
+    args: Parameters<typeof ctx.app.inject>[0],
+  ): Promise<Awaited<ReturnType<typeof ctx.app.inject>>> {
+    const before = completedCount();
+    const res = await ctx.app.inject(args);
+    await expect
+      .poll(completedCount, { timeout: 2_000 })
+      .toBeGreaterThanOrEqual(before + 1);
+    return res;
+  }
 
   beforeAll(async () => {
     logs = new LogCapture();
@@ -104,7 +119,6 @@ describe("HTTP log privacy — raw URL never persisted (#925)", () => {
       url: "/api/auth/logout",
     });
     expect(res.statusCode).toBe(204);
-    await waitForLogFlush();
     const line = logs
       .incoming()
       .find(
@@ -122,7 +136,7 @@ describe("HTTP log privacy — raw URL never persisted (#925)", () => {
   });
 
   it("unmatched route: fixed placeholder in the incoming line, raw path absent", async () => {
-    const res = await ctx.app.inject({
+    const res = await injectSettled({
       method: "GET",
       url: `/api/no-such-${CANARY}-route`,
     });
@@ -139,7 +153,7 @@ describe("HTTP log privacy — raw URL never persisted (#925)", () => {
     // not on ordinary denials — so this case pins the NEGATIVE (the query
     // canary reaches no line); the sites' template-only output is pinned
     // by the drift guard below + routeTemplateOf's implementation.
-    const res = await ctx.app.inject({
+    const res = await injectSettled({
       method: "POST",
       url: `/api/candidates?token=${CANARY}-q403`,
       cookies: { "auth-token": ctx.candidateToken },
@@ -151,7 +165,6 @@ describe("HTTP log privacy — raw URL never persisted (#925)", () => {
       },
     });
     expect(res.statusCode).toBe(403);
-    await waitForLogFlush();
     expect(logs.lines.some((l) => l.includes(CANARY))).toBe(false);
   });
 
@@ -180,7 +193,7 @@ describe("HTTP log privacy — raw URL never persisted (#925)", () => {
   });
 
   it("500 thrown handler: the error-handler log carries the template, not the raw URL", async () => {
-    const res = await ctx.app.inject({
+    const res = await injectSettled({
       method: "GET",
       url: `/api/__test/throw?token=${CANARY}-q500`,
     });
@@ -210,9 +223,8 @@ describe("HTTP log privacy — raw URL never persisted (#925)", () => {
       ["GET", `/api/auth/me?q=${CANARY}-unicode-%E7%A7%98%E5%AF%86`],
     ];
     for (const [method, url] of cases) {
-      await ctx.app.inject({ method, url });
+      await injectSettled({ method, url });
     }
-    await new Promise((r) => setTimeout(r, 25));
     const hits = logs.lines.filter((l) => l.includes(CANARY));
     expect(
       hits,
@@ -221,8 +233,7 @@ describe("HTTP log privacy — raw URL never persisted (#925)", () => {
   });
 
   it("PINO_RAW_SECRET_EXPOSURE = 0 across the whole file's captured output", async () => {
-    await ctx.app.inject({ method: "POST", url: "/api/auth/logout" });
-    await new Promise((r) => setTimeout(r, 25));
+    await injectSettled({ method: "POST", url: "/api/auth/logout" });
     expect(logs.lines.some((l) => l.includes(CANARY))).toBe(false);
   });
 });

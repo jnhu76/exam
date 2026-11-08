@@ -10,6 +10,7 @@ import { ErrorResponseSchema } from "@exam/contracts";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { healthResponseSchema, readyResponseSchema } from "./healthSchema.js";
 import { registerApiRouteModules } from "./registerApiRouteModules.js";
+import { sendResourceNotFound } from "../plugins/rootNotFoundBoundary.js";
 
 /**
  * The single Fastify scope that owns the whole /api namespace.
@@ -41,22 +42,6 @@ import { registerApiRouteModules } from "./registerApiRouteModules.js";
  * must be registered AFTER the root infrastructure plugins (auth, authz,
  * db, ...) and BEFORE the static frontend fallback.
  */
-/**
- * #429/#925 canonical unmatched-request policy for the ROOT scope: the same
- * JSON envelope the /api scope serves. WHY a root handler is needed at all:
- * Fastify's default `basic404` logs `Route <raw url> not found` — persisting
- * raw client-controlled URL bytes (query and path). The deployed edge only
- * forwards /api/**, but direct API access (dev :3000, misrouted proxies)
- * must not regress the #925 invariant either.
- */
-export function registerRootNotFoundBoundary(
-  app: ReturnType<typeof Fastify>,
-): void {
-  app.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {
-    reply.code(404).send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-  });
-}
-
 const apiSurfacePlugin: FastifyPluginAsync = async (api) => {
   // Rate limiting first: its onRoute hook must run before any route in this
   // scope registers so per-route `config.rateLimit` overrides are observed.
@@ -119,9 +104,7 @@ const apiSurfacePlugin: FastifyPluginAsync = async (api) => {
   // Canonical unmatched-request policy for the /api namespace (#429): any
   // request the router classifies as /api without a matching route stays in
   // the JSON error boundary — never HTML, never the static/SPA fallback.
-  api.setNotFoundHandler((request, reply) => {
-    reply.code(404).send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-  });
+  api.setNotFoundHandler(sendResourceNotFound);
 };
 
 export default apiSurfacePlugin;

@@ -251,6 +251,7 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
       const rootRes = await fetch(
         `http://127.0.0.1:${server.port}/outside-api?token=${rootCanary}`,
       );
+      let rootRequestId: string | null = null;
       if (staticLayout) {
         expect(rootRes.status).toBe(200);
         expect(await rootRes.text()).toContain("<");
@@ -261,8 +262,23 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
         };
         expect(rootBody.error.code).toBe("RESOURCE_NOT_FOUND");
         expect(rootBody.error.requestId).toMatch(UUID_V4_REQUEST_ID_RE);
+        rootRequestId = rootBody.error.requestId;
       }
-      await new Promise((r) => setTimeout(r, 50));
+      // Explicit barrier: wait for the root request's completion line
+      // (same reqId) before the negative assertions — no fixed sleep.
+      if (rootRequestId !== null) {
+        await expect
+          .poll(() => server.stdout().includes(`"reqId":"${rootRequestId}"`), {
+            timeout: 2_000,
+          })
+          .toBe(true);
+      } else {
+        await expect
+          .poll(() => server.stdout().includes('"msg":"request completed"'), {
+            timeout: 2_000,
+          })
+          .toBe(true);
+      }
       expect(server.stdout()).not.toContain(rootCanary);
       expect(server.stdout()).not.toContain("Route GET");
 

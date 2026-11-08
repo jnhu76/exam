@@ -20,6 +20,21 @@ const conf = readFileSync(
   "utf8",
 );
 
+/**
+ * Active (non-comment) config text only: the commented HTTPS template must
+ * never satisfy the guards for the ACTIVE vhost — if the active
+ * access_log/error_log lines are removed, the guards must go red while the
+ * template stays intact (architecture-review finding: the earlier
+ * whole-file regexes matched the template's commented copy and masked
+ * exactly that regression).
+ */
+function activeConfig(confText: string): string {
+  return confText
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+}
+
 /** Extracts the body of the `log_format <name> ...;` directive. */
 function logFormatBody(confText: string): string | null {
   const m = /log_format\s+\S+\s+([\s\S]*?);/.exec(confText);
@@ -47,10 +62,11 @@ function httpsTemplateBody(): string {
 
 describe("nginx access-log privacy pin (#925)", () => {
   it("declares an explicit log_format and uses it for access_log", () => {
-    expect(logFormatBody(conf)).not.toBeNull();
-    const name = /log_format\s+(\S+)/.exec(conf)?.[1];
+    const active = activeConfig(conf);
+    expect(logFormatBody(active)).not.toBeNull();
+    const name = /log_format\s+(\S+)/.exec(active)?.[1];
     expect(name).toBeTruthy();
-    expect(conf).toMatch(new RegExp(`access_log\\s+\\S+\\s+${name};`));
+    expect(active).toMatch(new RegExp(`access_log\\s+\\S+\\s+${name};`));
   });
 
   it("the log format never contains the raw request line, request URI, or raw path", () => {
@@ -76,8 +92,9 @@ describe("nginx access-log privacy pin (#925)", () => {
   it("the vhost error_log is filtered to crit (request-line quoting lives at error level)", () => {
     // Live witness (#925): an upstream-resolution failure logged the FULL
     // request line with query at error level. crit+ keeps catastrophic
-    // failures; the access log carries the 5xx story instead.
-    expect(conf).toMatch(/error_log\s+\S+\s+crit;/);
+    // failures; the access log carries the 5xx story instead. Active
+    // config only — the commented template has its own pin below.
+    expect(activeConfig(conf)).toMatch(/error_log\s+\S+\s+crit;/);
   });
 
   it("the log format keeps the safe diagnostic fields", () => {
