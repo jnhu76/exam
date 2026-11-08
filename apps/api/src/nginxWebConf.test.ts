@@ -26,6 +26,25 @@ function logFormatBody(confText: string): string | null {
   return m ? m[1]! : null;
 }
 
+/**
+ * The commented HTTPS activation template with comment markers stripped —
+ * the documented operator path (docs/deployment/README.md) is to uncomment
+ * this block into an overriding conf. Asserting on the uncommented shape
+ * pins that activated HTTPS keeps the same privacy directives; without them
+ * the 443 vhost would inherit the http-level combined format and re-open
+ * the token-in-query leak (#925 security review, P2).
+ */
+function httpsTemplateBody(): string {
+  const start = conf.indexOf("# server {");
+  expect(start).toBeGreaterThan(-1);
+  return conf
+    .slice(start)
+    .split("\n")
+    .map((line) => line.replace(/^#\s?/, ""))
+    .filter((line) => !line.trim().startsWith("#"))
+    .join("\n");
+}
+
 describe("nginx access-log privacy pin (#925)", () => {
   it("declares an explicit log_format and uses it for access_log", () => {
     expect(logFormatBody(conf)).not.toBeNull();
@@ -42,6 +61,16 @@ describe("nginx access-log privacy pin (#925)", () => {
     expect(body).not.toMatch(/\$uri([^_a-zA-Z]|$)/);
     // No credential-bearing client headers.
     expect(body).not.toMatch(/\$http_(referer|cookie|authorization)/i);
+  });
+
+  it("the documented HTTPS activation template carries the same privacy directives", () => {
+    const tpl = httpsTemplateBody();
+    expect(tpl).toMatch(/access_log\s+\S+\s+exam_privacy;/);
+    expect(tpl).toMatch(/error_log\s+\S+\s+crit;/);
+    const routePlaceholders = tpl.match(/set \$exam_route/g) ?? [];
+    expect(routePlaceholders.length).toBeGreaterThanOrEqual(2);
+    expect(tpl).not.toMatch(/\$request([^_a-zA-Z]|$)/);
+    expect(tpl).not.toMatch(/\$request_uri/);
   });
 
   it("the vhost error_log is filtered to crit (request-line quoting lives at error level)", () => {
