@@ -254,7 +254,7 @@ Ownership fencing prevents a stale/lost worker from updating delivery state; it 
 | INV-CE-002 | `attemptId`/`examId`/`questionId` are NULLed unless server-provable for the actor; anti-enumeration: response always `{accepted: N}`. | `clientEventReferenceNormalizer.ts` | Ownership chain + frozen question-set check |
 | INV-CE-003 | Monitoring timeline ordering is server-owned `receivedAt + id`; `occurredAt` is display-only. | `clientEventRepo.ts` + `proctorMonitoringService.ts` | `orderBy(desc(receivedAt), desc(id))` |
 | INV-CE-004 | `client_events` retention is 30 days from `receivedAt`; no durable cleanup evidence table. | `clientEventRetention.ts` | `deleteOlderThan` + structured operational log |
-| INV-CE-005 | Persisted/read `client_events.route` ∈ `SPA_ROUTE_TEMPLATES` ∪ {null}; every failure path fails closed. | `clientEventRoute.ts` (contracts) | Ingest + timeline read both project; drift guard vs App.tsx |
+| INV-CE-005 | `client_events.route` is closed-vocabulary at its boundaries: (a) every value WRITTEN by current code ∈ `SPA_ROUTE_TEMPLATES` ∪ {null}; (b) every value READ through the authorized proctor timeline ∈ `SPA_ROUTE_TEMPLATES` ∪ {null}; (c) pre-#864 at-rest bytes are legacy — immutable, re-projected on read, retention-aged. Every failure path fails closed. | `clientEventRoute.ts` (contracts) | Ingest + timeline read both project; drift guard vs App.tsx |
 
 ## 15. Client-Event Trust Boundary
 
@@ -305,10 +305,18 @@ The client-reported `route` free string is untrusted input. At BOTH the
 ingest boundary and the proctor-timeline read boundary it is projected onto
 the closed SPA route-template vocabulary `SPA_ROUTE_TEMPLATES`
 (`@exam/contracts`, single authority; a drift-guard test pins it to the
-router declared in `apps/web/src/App.tsx`):
+router declared in `apps/web/src/App.tsx`). The invariant has three parts:
 
-- the persisted/read value is the matched template (dynamic identifiers
-  become `:param` placeholders — never echoed) or `null`;
+1. **current-code writes**: every `client_events.route` value written by
+   this codebase is the matched template (dynamic identifiers become
+   `:param` placeholders — never echoed) or `null`;
+2. **authorized reads**: every value returned through the proctor timeline
+   is the matched template or `null` — legacy rows are re-projected on read
+   (see 3);
+3. **legacy at-rest bytes**: rows written by the pre-#864 regime may still
+   hold raw pathnames in the database. They are immutable (#875), are never
+   returned raw (read-side projection), and age out under the 30-day
+   retention. No data migration rewrites them.
 - unknown routes, non-http(s) schemes (incl. opaque `user:…@` and `data:`),
   malformed URLs, and structural garbage all fail closed to `null` — there
   is deliberately no raw/truncated/partially-sanitized fallback (the

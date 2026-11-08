@@ -85,7 +85,13 @@ function extractDeclaredPaths(source: string): RouteTree {
         splats++;
         continue; // splat placeholders never enter the vocabulary
       }
-      absolute = parent ? `${parent}/${declared}` : declared;
+      // React Router semantics: a child path beginning with "/" is itself
+      // absolute and ignores the parent prefix.
+      absolute = declared.startsWith("/")
+        ? declared
+        : parent
+          ? `${parent}/${declared}`
+          : declared;
     } else {
       throw new Error(`<Route> without path/index: ${attrs}`);
     }
@@ -94,6 +100,59 @@ function extractDeclaredPaths(source: string): RouteTree {
   }
   return { paths, splats };
 }
+
+/**
+ * Parser self-tests on synthetic fixtures: the drift guard's trust rests on
+ * this parser, so a JSX-style change must fail HERE instead of silently
+ * narrowing the guard (vacuity counter alone cannot catch a validator that
+ * stops validating — architecture-review hardening).
+ */
+describe("extractDeclaredPaths fixture self-test", () => {
+  it("handles nested layouts, index routes, absolute children, self-closing and splats", () => {
+    const fixture = [
+      "export function AppRoutes() {",
+      "  return (",
+      "    <Routes>",
+      '      <Route path="/admin" element={<AdminLayout />}>',
+      "        <Route index element={<Home />} />",
+      '        <Route path="users" element={<Users />} />',
+      '        <Route path="/abs" element={<Abs />} />',
+      '        <Route path="*" element={<NotFound />} />',
+      '        <Route path="items" element={<Items />}>',
+      '          <Route path=":id/edit" element={<Edit />} />',
+      "        </Route>",
+      "      </Route>",
+      '      <Route path="/standalone" element={<S />} />',
+      '      <Route path="*" element={<N />} />',
+      "    </Routes>",
+      "  );",
+      "}",
+      "/**",
+      " * doc tail",
+      " */",
+    ].join("\n");
+    const { paths, splats } = extractDeclaredPaths(fixture);
+    expect(paths).toEqual(
+      new Set([
+        "/admin",
+        "/admin/users",
+        "/abs",
+        "/admin/items",
+        "/admin/items/:id/edit",
+        "/standalone",
+      ]),
+    );
+    expect(splats).toBe(2);
+  });
+
+  it("throws on a route-shaped tag without path/index", () => {
+    expect(() =>
+      extractDeclaredPaths(
+        "export function AppRoutes() { return <Routes><Route element={<X />} /></Routes>; }\n/**\n */",
+      ),
+    ).toThrow(/<Route> without path\/index/);
+  });
+});
 
 describe("SPA route-template vocabulary drift guard (#864)", () => {
   // vitest runs with the app package root as cwd; resolve the router source

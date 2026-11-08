@@ -1,16 +1,20 @@
 /**
  * #864 closed route-template vocabulary for client events.
  *
- * INVARIANT: the persisted/read value of `client_events.route` is ALWAYS a
- * member of {@link SPA_ROUTE_TEMPLATES} or `null` — never raw client bytes.
- * The 2026-11 secure-correlation audit proved the previous pathname-only
- * projection leaked attacker-controlled content at rest and through the
- * authorized proctor timeline (RT-3 plaintext path secret, RT-8 encoded
- * query smuggling, RT-12B opaque-scheme credentials, RT-12C data: payload,
- * RT-14B raw CRLF; archive: docs/research/exam-secure-observability-
- * remediation/ 02-SECURITY-EVIDENCE.md). Every failure path below fails
- * closed to `null`; there is deliberately NO raw/truncated/partially
- * sanitized fallback.
+ * INVARIANT (three parts): (a) every value WRITTEN by current code is a
+ * member of {@link SPA_ROUTE_TEMPLATES} or `null` — never raw client bytes;
+ * (b) every value READ through the authorized proctor timeline is a member
+ * of the same set (this projection runs read-side too); (c) pre-#864 rows
+ * may still hold raw pathnames at rest — immutable legacy, re-projected on
+ * read, retention-aged, never migrated. The 2026-11 secure-correlation
+ * audit proved the previous pathname-only projection leaked
+ * attacker-controlled content at rest and through the authorized proctor
+ * timeline (RT-3 plaintext path secret, RT-8 encoded query smuggling,
+ * RT-12B opaque-scheme credentials, RT-12C data: payload, RT-14B raw CRLF;
+ * archive: docs/research/exam-secure-observability-remediation/
+ * 02-SECURITY-EVIDENCE.md). Every failure path below fails closed to
+ * `null`; there is deliberately NO raw/truncated/partially sanitized
+ * fallback.
  *
  * This vocabulary mirrors the SPA router declared in `apps/web/src/App.tsx`
  * (browser navigation paths — NOT Fastify API route templates). The drift
