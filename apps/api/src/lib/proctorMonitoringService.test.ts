@@ -150,13 +150,16 @@ describe("projectSafeMetadata (per-event allowlist, default-deny)", () => {
   // receipt row (candidate key — clientSeq is not content identity) and
   // the server-side request log — while non-correlation junk stays dropped.
   it("projects the correlation keys (clientSeq/requestId/status) for save-failure events", () => {
+    // requestId sample is a well-formed UUID because that is the ONLY shape
+    // the server mints (genReqId — server.ts) and the only shape the
+    // projection gate passes (see the shape-gate test below).
     const out = projectSafeMetadata("answer_autosave_failed", {
       questionId: "q1",
       saveMode: "autosave",
       durationMs: 120,
       errorCode: "SAVE_PERSISTENCE_FAILED",
       clientSeq: 3,
-      requestId: "req-500-abc",
+      requestId: "1b0e6f2a-9c3d-4e5f-8a7b-6c5d4e3f2a1b",
       status: 500,
       // Non-correlation extras stay dropped by the allowlist itself.
       rawMessage: "internal ooops",
@@ -169,12 +172,64 @@ describe("projectSafeMetadata (per-event allowlist, default-deny)", () => {
       durationMs: 120,
       errorCode: "SAVE_PERSISTENCE_FAILED",
       clientSeq: 3,
-      requestId: "req-500-abc",
+      requestId: "1b0e6f2a-9c3d-4e5f-8a7b-6c5d4e3f2a1b",
       status: 500,
     });
     expect(out).not.toHaveProperty("rawMessage");
     expect(out).not.toHaveProperty("stack");
     expect(out).not.toHaveProperty("answer");
+  });
+
+  // Security F2 (#864 §7.4 fix loop): the server mints requestId exclusively
+  // as a UUID (genReqId — server.ts), and the authorized timeline renders
+  // this allowlist field under 请求编号 semantics. The raw metadata blob is
+  // client-owned, so the projection must SHAPE-GATE the claim: only a
+  // well-formed UUID string may ride the allowlist; anything else (prose, an
+  // oversized payload, someone else's real UUID embedded in text, non-string
+  // values) is dropped — the field stays a client-claimed correlation
+  // candidate, never a free-form content-injection slot in the investigator
+  // view.
+  it("shape-gates client-claimed requestId: only a well-formed UUID string is projected", () => {
+    const uuid = "3f2b8c9e-1a2b-4c3d-9e8f-7a6b5c4d3e2f";
+    // A genuine UUID claim keeps its correlation value.
+    expect(
+      projectSafeMetadata("answer_autosave_failed", { requestId: uuid }),
+    ).toEqual({ requestId: uuid });
+    // Prose / legacy-style free text: not projected.
+    expect(
+      projectSafeMetadata("answer_autosave_failed", {
+        requestId: "req-500-abc",
+      }),
+    ).toEqual({});
+    // A foreign real UUID embedded in prose must not slip through either.
+    expect(
+      projectSafeMetadata("answer_autosave_failed", {
+        requestId: `investigate ${uuid} please`,
+      }),
+    ).toEqual({});
+    // Oversized payload (≤32KiB is storable in the jsonb metadata).
+    expect(
+      projectSafeMetadata("answer_autosave_failed", {
+        requestId: "x".repeat(32_768),
+      }),
+    ).toEqual({});
+    // Non-string shapes: not projected.
+    expect(
+      projectSafeMetadata("answer_autosave_failed", { requestId: 12345 }),
+    ).toEqual({});
+    expect(
+      projectSafeMetadata("answer_autosave_failed", { requestId: null }),
+    ).toEqual({});
+    expect(
+      projectSafeMetadata("answer_autosave_failed", { requestId: true }),
+    ).toEqual({});
+    // Other allowlisted keys are unaffected by the requestId gate.
+    expect(
+      projectSafeMetadata("answer_autosave_failed", {
+        requestId: "not-a-uuid",
+        clientSeq: 7,
+      }),
+    ).toEqual({ clientSeq: 7 });
   });
 
   it("returns empty object for an unknown event name (default-deny)", () => {
