@@ -160,7 +160,7 @@ exam-domain truth.
 | [ADR-003](ADR-003-job-queue.md) | Queue/workload classification and adoption boundary | ACCEPTED policy / generic platform DEFERRED |
 | [ADR-004](ADR-004-desktop-electron.md) | Optional Desktop/Electron runtime adoption | DEFERRED |
 | [ADR-007](ADR-007-stateful-infrastructure-test-isolation.md) | Stateful infrastructure test isolation/lifecycle | ACCEPTED core; later work partly deferred |
-| [ADR-025](ADR-025-http-request-correlation-identity.md) | HTTP request correlation identity (server-generated UUIDv4 request id) | ACCEPTED |
+| [ADR-025](ADR-025-http-request-correlation-identity.md) | HTTP request correlation identity (server-generated UUIDv4 request id) | ACCEPTED, amended (2026-11-08: x-request-id response header, #865) |
 
 ### B. Exam execution & correctness core
 
@@ -294,7 +294,7 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-022](ADR-022-product-capability-composition.md) | Bounded Product Capability Composition | ACCEPTED | none | none |
 | [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) | Remove the Backup-Evidence Subsystem (Host Owns Operational Evidence) | ACCEPTED | ADR-018 (backup/restore-readiness/ops-policy window content); ADR-017 rev-4 backup-evidence scopes as enumerated in ADR-017 §Revision 5 (incl. R4-3 category B, R4-4, D5 `backup.*` gates, D6, D9, D10, D1 backup items, five-capability freeze, R4-1 window-content statement, D13 E2B/E2C line items) | none |
 | [ADR-024](ADR-024-tick-level-throw-escalation.md) | Tick-level Throw Escalation (`operability.tick_failure`) | ACCEPTED | none | none |
-| [ADR-025](ADR-025-http-request-correlation-identity.md) | HTTP Request Correlation Identity | ACCEPTED | none (adopts UUIDv4 over the #860 research recommendation `KEEP_DEFAULT_OPTION_B`, which was not an ADR) | none |
+| [ADR-025](ADR-025-http-request-correlation-identity.md) | HTTP Request Correlation Identity | ACCEPTED, amended (2026-11-08: x-request-id response header, #865) | none (adopts UUIDv4 over the #860 research recommendation `KEEP_DEFAULT_OPTION_B`, which was not an ADR) | none |
 | [ADR-026](ADR-026-client-event-temporal-evidence-boundary.md) | Client Event Temporal Evidence Boundary | ACCEPTED | none (adopts the #874 research recommendation `TIME_WINDOW_NO_GO` as binding policy) | none |
 
 ## Numbering

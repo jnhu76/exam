@@ -29,7 +29,7 @@ Every request has a correlation id. The minimum traceable shape:
 
 | Field | Source | Example | Notes |
 |---|---|---|---|
-| requestId | `request.id` (server UUIDv4 `genReqId`) | `"550e8400-e29b-41d4-a716-446655440000"` | server-generated; error envelope, Pino and HTTP audit correlation |
+| requestId | `request.id` (server UUIDv4 `genReqId`) | `"550e8400-e29b-41d4-a716-446655440000"` | server-generated; error envelope, `x-request-id` response header (#865), Pino and HTTP audit correlation |
 | method | HTTP method | `POST` | pino default request log |
 | path / route | request path | `/api/attempts/:id/submit` | pino default |
 | statusCode | reply status | `200` | pino onResponse log |
@@ -63,8 +63,31 @@ required merely to identify an HTTP request.
 - **Untrusted headers.** Fastify `requestIdHeader` remains explicitly disabled.
   Client-supplied `request-id` / `X-Request-Id` is never authoritative
   for the server's `request.id`.
+- **Response-header carrier (#865).** One root-scope `onRequest` hook stamps
+  `x-request-id: request.id` onto every Fastify-managed response — success,
+  business rejection, validation error, unmatched route, and thrown-error
+  paths alike. No second id is minted: the header makes the SAME
+  server-generated value (which already keys the pino lines and the error
+  envelope) readable by the caller on 2xx responses, where no envelope
+  exists. The web client consumes it opt-in
+  (`api.getWithMeta` / `api.postWithMeta` in `apps/web/src/lib/api.ts`); the
+  answer-save path is the first production consumer (#924): a 200 business
+  rejection (`accepted: false`) surfaces the header id as the rejection
+  alert's 请求编号 and as the client-claimed `requestId` in the
+  `answer_autosave_failed` telemetry metadata — never as a server-verified
+  fact. On error responses the envelope `requestId` stays authoritative; a
+  divergent header is recorded as a bounded client-log warn, not promoted.
+  CORS exposes it only to the configured web origin
+  (`docs/contracts/api-contract.md` §Standard response headers).
+  Non-carriable boundary: requests whose response is never sent — connection
+  destroyed mid-request, socket-level HTTP framing failures, Node-level
+  request/keepAlive timeouts — and protocol-level framework errors answered
+  in router lookup before request construction (malformed request target,
+  e.g. `FST_ERR_BAD_URL`) carry no header; the server's log lines for the
+  former are still keyed by the same `request.id`.
 - **End-to-end correlation.** The same server-generated requestId is carried
-  in the error envelope, Pino request logs, and HTTP audit metadata where
+  in the error envelope, the `x-request-id` response header (#865), Pino
+  request logs, and HTTP audit metadata where
   an audit row exists. Not every HTTP request produces an audit row.
   A UUIDv4 is a correlation key, not proof of causality or of complete
   log retention. Use the known server time, origin, tenant/actor and request

@@ -35,6 +35,7 @@ describe("Proctor scoped routes — cross-org isolation", () => {
   let orgBAttemptId: string;
   let orgBCandidateToken: string;
   let orgBAdminToken: string;
+  let orgBCandidateUserId: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(combinedPlugin, { prefix: "/api" });
@@ -82,6 +83,7 @@ describe("Proctor scoped routes — cross-org isolation", () => {
     );
     orgBCandidateProfileId = orgBCand.candidateProfileId;
     orgBCandidateToken = orgBCand.token;
+    orgBCandidateUserId = orgBCand.userId;
 
     await ctx.app.inject({
       method: "POST",
@@ -209,6 +211,81 @@ describe("Proctor scoped routes — cross-org isolation", () => {
     });
 
     it("GET /admin/attempts/:attemptId/proctor-events — cross-org 404, anti-enumeration", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/attempts/${orgBAttemptId}/proctor-events?limit=20`,
+        cookies: { "auth-token": proctorAToken },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+
+    it("GET /admin/attempts/:attemptId/proctor-events — a client-claimed requestId in telemetry metadata grants no cross-org visibility (#924)", async () => {
+      // #924 lets a 200 save rejection's header id flow into the
+      // answer_autosave_failed telemetry metadata (client-claimed
+      // correlation candidate). This test pins that the claim confers NO
+      // access: it is readable only inside the OWNING tenant, and the
+      // timeline itself stays 404 cross-org exactly as before.
+      const claimedRequestId = `req-cross-org-${randomUUID()}`;
+      await createClientEventRepo(ctx.db).createMany(
+        {
+          actorId: orgBCandidateUserId,
+          organizationId: orgBId,
+          role: "Candidate",
+          permissions: [],
+          sessionId: "sess-b",
+        },
+        [
+          {
+            userId: orgBCandidateUserId,
+            attemptId: orgBAttemptId,
+            examId: orgBExamId,
+            questionId: null,
+            kind: "exam_telemetry",
+            level: "warn",
+            name: "answer_autosave_failed",
+            route: null,
+            occurredAt: new Date(),
+            receivedAt: new Date(),
+            clientSessionId: "sess-b-2",
+            eventId: null,
+            metadata: {
+              saveMode: "autosave",
+              durationMs: 12,
+              errorCode: "CONFLICTING_PAYLOAD",
+              clientSeq: 1,
+              requestId: claimedRequestId,
+            },
+            userAgent: null,
+          },
+        ],
+      );
+
+      // Positive control: the OWNING org's admin sees the row with the
+      // requestId projected through the allowlist (a correlation candidate,
+      // rendered under the client-claim trust label downstream).
+      const sameOrg = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/attempts/${orgBAttemptId}/proctor-events?limit=20`,
+        cookies: { "auth-token": orgBAdminToken },
+      });
+      expect(sameOrg.statusCode).toBe(200);
+      const items = (
+        sameOrg.json() as {
+          items: Array<{
+            name: string;
+            metadata: Record<string, unknown>;
+          }>;
+        }
+      ).items;
+      const claimedRow = items.find(
+        (item) => item.name === "answer_autosave_failed",
+      );
+      expect(claimedRow).toBeTruthy();
+      expect(claimedRow!.metadata.requestId).toBe(claimedRequestId);
+
+      // Cross-org proctor: the claimed id opens no access path — the
+      // timeline stays 404, and the id is not a query key anywhere.
       const res = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/attempts/${orgBAttemptId}/proctor-events?limit=20`,
