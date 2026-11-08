@@ -70,7 +70,15 @@
 文档中引用 token 的复现命令一律以 `$(cat .tmp/.../xxx.token)` 形式引用文件路径，
 不内嵌值。`exam:exam` 开发库凭据与 `admin/admin123` 等 seed 账号为仓库已提交的
 开发缺省值（`docker-compose.dev.yml`、e2e seed），不构成新增暴露。
-内部 LAN 地址仅出现在未入档的 server.log 中。
+
+地址与主机标识的边界（精确表述）：
+- 唯一入档的私有地址是 `172.18.0.3/32`（Docker bridge 网关侧看到的容器自身地址），
+  出现在 `06-REPRODUCIBILITY.md` 的数据库身份核验输出中；它是容器网络地址而非
+  机构 LAN 主机，且不伴随任何凭据。
+- 入档证据保留开发机路径（`/home/<user>/Source/...`）、Node 版本路径与 Pino
+  `hostname` 字段（开发机命名）——属于宿主指纹级信息，非凭据/秘密/PII；如需最小化
+  可在发布前统一规范化。
+- 真实内部 LAN 主机名/IP 仅出现在未入档的 server.log 中（已排除）。
 
 ## 复现
 
