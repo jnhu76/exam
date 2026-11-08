@@ -13,6 +13,9 @@ import {
   SENSITIVE_LOG_PATHS,
   REDACT_CONFIG,
   serializeErrorForLog,
+  routeTemplateOf,
+  serializeReqForLog,
+  UNROUTED_LOG_PLACEHOLDER,
 } from "./logRedaction.js";
 import { setupErrorHandler } from "../plugins/errors.js";
 
@@ -286,6 +289,39 @@ describe("err channel whitelist serializer (EXSEM-017 observability boundary)", 
       fileURLToPath(new URL("../server.ts", import.meta.url)),
       "utf8",
     );
-    expect(source).toContain("serializers: { err: serializeErrorForLog }");
+    expect(source).toContain(
+      "serializers: { req: serializeReqForLog, err: serializeErrorForLog }",
+    );
+  });
+});
+
+describe("#925 routeTemplateOf / serializeReqForLog", () => {
+  it("returns the matched route template when routed", () => {
+    expect(
+      routeTemplateOf({ routeOptions: { url: "/api/exams/:id/start" } }),
+    ).toBe("/api/exams/:id/start");
+  });
+
+  it("returns the fixed placeholder when unrouted — never a raw pathname", () => {
+    expect(routeTemplateOf({ routeOptions: null })).toBe(
+      UNROUTED_LOG_PLACEHOLDER,
+    );
+    expect(routeTemplateOf({})).toBe(UNROUTED_LOG_PLACEHOLDER);
+  });
+
+  it("serializeReqForLog emits server-observed facts only (no url/host)", () => {
+    const out = serializeReqForLog({
+      method: "POST",
+      routeOptions: { url: "/api/auth/login" },
+      ip: "10.0.0.9",
+      socket: { remotePort: 51234 },
+    });
+    expect(out).toEqual({
+      method: "POST",
+      route: "/api/auth/login",
+      remoteAddress: "10.0.0.9",
+      remotePort: 51234,
+    });
+    expect(Object.keys(out)).not.toContain("url");
   });
 });

@@ -43,7 +43,9 @@ interface PinoLine {
   reqId?: string;
   msg?: string;
   res?: { statusCode?: number };
-  req?: { url?: string; method?: string };
+  // #925: the incoming line carries the trusted route template (or the
+  // fixed placeholder) — never the raw url.
+  req?: { route?: string; method?: string; url?: string | undefined };
   responseTime?: number;
 }
 
@@ -197,13 +199,19 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
       // Probe 3: envelope ↔ pino correspondence for the 404 request. Pino
       // stamps every line of a request with the SAME reqId the error handler
       // passed to buildErrorResponse (request.id). The "incoming request"
-      // line carries req.url; the completion line carries res.statusCode —
-      // correlate the pair through their shared reqId.
+      // line carries the #925 route field (never a raw url); the completion
+      // line carries res.statusCode — correlate the pair through reqId.
       let requestLine: PinoLine | undefined;
       await expect
         .poll(() => {
-          requestLine = parsePinoLines(server.stdout()).find(
-            (line) => line.req?.url === notFoundPath && line.reqId,
+          const lines = parsePinoLines(server.stdout());
+          const reqId404 = lines
+            .filter((l) => l.res?.statusCode === 404 && l.reqId)
+            .map((l) => l.reqId!)
+            .at(-1);
+          requestLine = lines.find(
+            (line) =>
+              line.msg === "incoming request" && line.reqId === reqId404,
           );
           return requestLine?.reqId;
         })
@@ -212,6 +220,11 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
       expect(reqId).not.toBe(forgedLower);
       expect(reqId).not.toBe(forgedUpper);
       expect(body.error.requestId).toBe(reqId);
+      // #925: the incoming line for an unmatched route carries the trusted
+      // template/placeholder — never the raw path bytes.
+      expect(requestLine!.req?.url).toBeUndefined();
+      expect(requestLine!.req?.route).toBeTruthy();
+      expect(requestLine!.req?.route).not.toContain(notFoundPath);
 
       const completionLines = parsePinoLines(server.stdout()).filter(
         (line) => line.reqId === reqId && line.res?.statusCode === 404,
@@ -220,6 +233,25 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
         completionLines.length,
         `expected a pino completion line for ${notFoundPath}`,
       ).toBeGreaterThanOrEqual(1);
+
+      // Probe 4 (#925): an unmatched NON-/api path with a query canary —
+      // the root-scope 404 boundary (registerRootNotFoundBoundary) must
+      // answer the same JSON envelope, and Fastify's default basic404
+      // message ("Route <raw url> not found" — raw URL bytes) must never
+      // reach the log stream.
+      const rootCanary = `EXAMAUDIT-CANARY-LOG-root-${crypto.randomUUID()}`;
+      const rootRes = await fetch(
+        `http://127.0.0.1:${server.port}/outside-api?token=${rootCanary}`,
+      );
+      expect(rootRes.status).toBe(404);
+      const rootBody = (await rootRes.json()) as {
+        error: { code: string; requestId: string };
+      };
+      expect(rootBody.error.code).toBe("RESOURCE_NOT_FOUND");
+      expect(rootBody.error.requestId).toMatch(UUID_V4_REQUEST_ID_RE);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(server.stdout()).not.toContain(rootCanary);
+      expect(server.stdout()).not.toContain("Route GET");
 
       // The server-generated UUIDv4 format on the wire: no log line anywhere in
       // this boot may carry a forged header value as its reqId, and the

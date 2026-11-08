@@ -21,14 +21,20 @@ import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import { registerStaticFrontend } from "./plugins/staticFrontend.js";
-import apiSurfacePlugin from "./routes/apiSurface.js";
+import apiSurfacePlugin, {
+  registerRootNotFoundBoundary,
+} from "./routes/apiSurface.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import {
   getRuntimeConfig,
   resolveTrustProxyOption,
 } from "./config/runtimeConfig.js";
-import { REDACT_CONFIG, serializeErrorForLog } from "./lib/logRedaction.js";
+import {
+  REDACT_CONFIG,
+  serializeErrorForLog,
+  serializeReqForLog,
+} from "./lib/logRedaction.js";
 
 loadRootEnv();
 
@@ -114,7 +120,11 @@ async function main() {
     logger: {
       level: "info",
       redact: REDACT_CONFIG,
-      serializers: { err: serializeErrorForLog },
+      // #925: the req serializer replaces Fastify's default, which persists
+      // the raw req.url (full query string) on every "incoming request"
+      // line. The replacement emits the matched route template (or a fixed
+      // placeholder pre-routing) — never raw client-controlled URL bytes.
+      serializers: { req: serializeReqForLog, err: serializeErrorForLog },
     },
     // #546: the ONLY place client-IP trust is decided. Empty TRUSTED_PROXY_CIDRS
     // keeps request.ip = socket peer (DIRECT_LAN); a non-empty list enables the
@@ -145,6 +155,11 @@ async function main() {
   await app.register(operabilityMonitorPlugin);
 
   await registerOpenApiDocs(app);
+
+  // #925: root-scope unmatched boundary — replaces Fastify's default 404
+  // handler, which logs `Route <raw url> not found` (raw query/path bytes).
+  // The /api scope below keeps its own, identical policy (#429).
+  registerRootNotFoundBoundary(app);
 
   // The whole /api namespace lives in one encapsulated scope: registered
   // routes, the liveness probe, the rate limiter, and the canonical
