@@ -1,0 +1,39 @@
+# pb-s3 raw — 2026-11-07T17:18:09Z — 情形3：仅 attemptId+questionId+clientSeq
+client report: {attemptId:db3a024d-07e3-4517-9aee-33896939bca3, questionId:c9e708fe-a009-4f66-bdec-463f4b336ac1, clientSeq:2, claimedOutcome:'rejected conflict'} (S6-3) and {clientSeq:1, claimedOutcome:'accepted'} (S1-1)
+
+## path A: rejected save -> WARN line carries the FULL scope + reqId (no time window needed)
+$ jq 'select(.msg=="Answer save rejected" and .attemptId=="…" and .questionId=="…" and .clientSeq==2)' env/server.log
+{"t":"2026-11-07T17:14:50Z","reqId":"8d751675-9c65-4a21-a6ae-235d640a42b0","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"5fdcab8e-4709-45d7-92fd-cc8ffbd63e62","actorRole":"Candidate","attemptId":"db3a024d-07e3-4517-9aee-33896939bca3","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","clientSeq":2,"reason":"CONFLICTING_PAYLOAD","serverVersion":2}
+
+## path B: accepted save (cs=1) -> NO WARN; receipt is the only authoritative record
+ client_seq | accepted_version |          saved_at          |           utc           
+------------+------------------+----------------------------+-------------------------
+          1 |                1 | 2026-11-08 01:14:50.108+08 | 2026-11-07 17:14:50.108
+(1 row)
+
+
+## path B step2: time-window match of incoming requests (url contains attemptId) around saved_at=17:14:50.108Z, window +/-150ms
+$ jq: select incoming & url contains attemptId & time in [1794071690030, 1794071690230]
+{"t":1794071663955,"reqId":"61379984-63eb-4991-bcc6-9b404f844ad3"}
+{"t":1794071663975,"reqId":"d1728904-4635-493e-817d-68b5cf13df9d"}
+{"t":1794071663995,"reqId":"279c7493-aafc-4aad-a169-9a0fb7242f05"}
+{"t":1794071664015,"reqId":"e0ac192d-a826-4f90-8fb4-083d91895648"}
+{"t":1794071664034,"reqId":"3de1ee17-36e5-4209-aaa7-b6c8666dc23f"}
+{"t":1794071690103,"reqId":"0c31ea1d-baa9-4862-9d34-1f83113f3c6e"}
+{"t":1794071690148,"reqId":"48fcd633-00b6-4b89-80b4-9c8bb7c4a8c7"}
+{"t":1794071690168,"reqId":"54b7b764-5469-47fd-af5f-d41443899d51"}
+{"t":1794071690213,"reqId":"17dde44c-ab03-41a5-9737-fda34745aea9"}
+{"t":1794071690254,"reqId":"8d751675-9c65-4a21-a6ae-235d640a42b0"}
+
+## full req+res ms timeline for the 5 pb-02 requests (for window analysis)
+{"reqId":"0c31ea1d","t":1794071690103,"msg":"incoming request","status":null}
+{"reqId":"0c31ea1d","t":1794071690129,"msg":"request completed","status":200}
+{"reqId":"48fcd633","t":1794071690148,"msg":"incoming request","status":null}
+{"reqId":"48fcd633","t":1794071690148,"msg":"request completed","status":400}
+{"reqId":"54b7b764","t":1794071690168,"msg":"incoming request","status":null}
+{"reqId":"54b7b764","t":1794071690193,"msg":"request completed","status":200}
+{"reqId":"17dde44c","t":1794071690213,"msg":"incoming request","status":null}
+{"reqId":"17dde44c","t":1794071690234,"msg":"request completed","status":200}
+{"reqId":"8d751675","t":1794071690254,"msg":"incoming request","status":null}
+{"reqId":"8d751675","t":1794071690274,"msg":"Answer save rejected","status":null}
+{"reqId":"8d751675","t":1794071690275,"msg":"request completed","status":200}

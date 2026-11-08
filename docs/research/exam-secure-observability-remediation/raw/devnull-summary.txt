@@ -1,0 +1,9 @@
+scenario,variant,rps_file_sink,rps_devnull,delta_pct
+answers,a,182.2,180.3,-1.1
+answers,b,184.7,182.7,-1.1
+answers,c,185.9,178.1,-4.2
+answers,d,185.5,179.2,-3.4
+events,a,407.9,428.8,5.1
+events,b,413.1,425.3,3.0
+events,c,422.6,433.9,2.7
+events,d,431.5,424.2,-1.7

@@ -1,0 +1,26 @@
+# pb-s2 raw — 2026-11-07T17:17:42Z — 情形2：仅错误信封 requestId
+client report: envelope requestId=48fcd633-00b6-4b89-80b4-9c8bb7c4a8c7 (from pb-02 S2-1, HTTP 400 VALIDATION_ERROR clientSeq TOO_SMALL)
+
+## step1: scoped pino lookup
+$ jq -cR 'fromjson? // empty | select(.reqId=="48fcd633-…") | {t:(.time/1000|todateiso8601),msg,url:.req.url,status:.res.statusCode,rt:.responseTime}' env/server.log
+{"t":"2026-11-07T17:14:50Z","msg":"incoming request","url":"/api/attempts/db3a024d-07e3-4517-9aee-33896939bca3/answers/c9e708fe-a009-4f66-bdec-463f4b336ac1","status":null,"rt":null}
+{"t":"2026-11-07T17:14:50Z","msg":"request completed","url":null,"status":400,"rt":0.526587963104248}
+object_hits=2
+
+## step2: any WARN/audit line for this reqId (business-reject lines carry clientSeq etc.)
+(no output = schema rejection happens pre-handler, no business WARN)
+
+## step3: DB zero-write proof for the attempted (attempt,question) up to now
+ client_seq | accepted_version |                         answer_identity                          |          saved_at          
+------------+------------------+------------------------------------------------------------------+----------------------------
+          1 |                1 | b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b | 2026-11-08 01:14:50.108+08
+          2 |                2 | fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa | 2026-11-08 01:14:50.174+08
+(2 rows)
+
+
+## step4: org/actor attribution — 400 schema line has NO context fields; pivot = url attemptId -> DB
+2b86e7e9-5240-4ca2-a2a5-0d65a8849905|9839b440-61cf-4fcb-b329-aaa908ef2fdc|6b8d0782-cee9-430f-9253-b0de3a905d07
+
+## step5: field-name variance — Login denied line carries requestId (not reqId) + org + actor
+{"t":"2026-11-07T16:34:53Z","requestId":"6fe94433-90d1-4a1d-aed8-71e0f3eccfd3","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":null,"event":"security.authentication","outcome":"denied"}
+{"t":"2026-11-07T17:05:52Z","requestId":"4b5e09fc-2999-4703-b832-6aa77087095f","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"70d1ae6f-ffef-4a53-b706-1cc4b23be2be","event":"security.authentication","outcome":"denied"}

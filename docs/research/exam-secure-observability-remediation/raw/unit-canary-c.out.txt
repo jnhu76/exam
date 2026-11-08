@@ -1,0 +1,25 @@
+source_file: /tmp/wt-perf-c/apps/api/src/routes/clientEvents.ts
+source_sha256: be0ccaf88312223ae731017772caeb7b67210086454e978ad896da6f14303923
+snippet_sha256: cb6caac00a21b719b76d05d35b7bfbb297e72cf57845c13d39d58987e2f83d6d
+{"id":"RT-1","input":"/exams/EXAMAUDIT-CANARY-RT-1","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-3","input":"/password-reset/EXAMAUDIT-CANARY-RT-3","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-4","input":"/exam/list?token=EXAMAUDIT-CANARY-RT-4","output":"/exam/list","threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-5","input":"/exam/list#EXAMAUDIT-CANARY-RT-5","output":"/exam/list","threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-6","input":"/reset/%45%58%41%4D%41%55%44%49%54-CANARY-RT-6","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-8","input":"/a%2Fb%3Ftoken%3DEXAMAUDIT-CANARY-RT-8","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-8B","input":"/admin/exams%3Ftoken%3DEXAMAUDIT-CANARY-RT-8B","output":"/admin/exams","threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-9","input":"/考试/EXAMAUDIT-CANARY-RT-9","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-11","input":"https://evil.example/exam/EXAMAUDIT-CANARY-RT-11","output":"/exam/EXAMAUDIT-CANARY-RT-11","threw":false,"canaryReachableAfterDecode":true}
+{"id":"RT-12","input":"http://EXAMAUDIT-CANARY-RT-12@example.com/path","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-12B","input":"user:EXAMAUDIT-CANARY-RT-12B@example.com/path","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-12C","input":"data:text/html,EXAMAUDIT-CANARY-RT-12C","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-13","input":"http://[","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-14B","input":"http://[\r\nEXAMAUDIT-CANARY-RT-14B","output":null,"threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-15","input":"/exam/take/EXAMAUDIT-CANARY-RT-15","output":"/exam/take/EXAMAUDIT-CANARY-RT-15","threw":false,"canaryReachableAfterDecode":true}
+{"id":"RT-LEGIT-1","input":"/exam/2f9c1a4e-8b3d-4c5a-9e6f-7a8b9c0d1e2f/take","output":"/exam/2f9c1a4e-8b3d-4c5a-9e6f-7a8b9c0d1e2f/take","threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-LEGIT-2","input":"/admin/exams","output":"/admin/exams","threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-LEGIT-3","input":"/login","output":"/login","threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-LEGIT-4","input":"/exam/list","output":"/exam/list","threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-LEGIT-5","input":"/reset-password","output":"/reset-password","threw":false,"canaryReachableAfterDecode":false}
+{"id":"RT-LEGIT-6","input":"/exam/abc/take?token=EXAMAUDIT-CANARY-RT-Q","output":"/exam/abc/take","threw":false,"canaryReachableAfterDecode":false}
+LEAK_COUNT: 2

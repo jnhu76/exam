@@ -1,0 +1,24 @@
+# pb-s1 raw — 2026-11-07T17:17:09Z
+## B: scoped pino lookup
+$ jq -cR 'fromjson? // empty | select(.reqId=="0c31ea1d-baa9-4862-9d34-1f83113f3c6e") | {t:(.time/1000|todateiso8601), msg, url:.req.url, status:.res.statusCode, rt:.responseTime}' env/server.log
+{"t":"2026-11-07T17:14:50Z","msg":"incoming request","url":"/api/attempts/db3a024d-07e3-4517-9aee-33896939bca3/answers/c9e708fe-a009-4f66-bdec-463f4b336ac1","status":null,"rt":null}
+{"t":"2026-11-07T17:14:50Z","msg":"request completed","url":null,"status":200,"rt":26.060638904571533}
+hit_count=27  # pretty-print artifact; true object count=2 (corrected below)
+
+## C: org attribution pivot via DB
+$ docker exec exam-dev-db-1 psql -U exam -d exam_ci_audit -tAc "SELECT a.organization_id, a.candidate_id, a.status FROM exam_attempts a WHERE a.id='db3a024d-07e3-4517-9aee-33896939bca3'"
+2b86e7e9-5240-4ca2-a2a5-0d65a8849905|9839b440-61cf-4fcb-b329-aaa908ef2fdc|disrupted
+
+## D: receipt verification
+$ psql ... SELECT client_seq, accepted_version, answer_identity, saved_at FROM exam_answer_save_receipts WHERE attempt_id=... AND client_seq=1
+ client_seq | accepted_version |                         answer_identity                          |          saved_at          |           utc           
+------------+------------------+------------------------------------------------------------------+----------------------------+-------------------------
+          1 |                1 | b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b | 2026-11-08 01:14:50.108+08 | 2026-11-07 17:14:50.108
+(1 row)
+
+$ printf true | sha256sum
+b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b  -
+
+## correction: hit_count above (27) was pretty-print line count; true object count:
+$ jq -cR 'fromjson? // empty | select(.reqId=="0c31ea1d…")' env/server.log | wc -l
+2

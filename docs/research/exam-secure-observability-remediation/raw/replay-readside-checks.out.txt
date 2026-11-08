@@ -1,0 +1,19 @@
+### proctorA1 timeline /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/proctor-events?limit=100&page=1
+status: 200
+bytes: 10582
+canary_hits: 12
+
+### proctorA2 (unassigned) timeline /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/proctor-events?limit=100&page=1
+status: 404
+bytes: 108
+canary_hits: 0
+
+### admin audit timeline /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/timeline
+status: 200
+bytes: 3536
+canary_hits: 0
+
+### admin CSV export scores /api/exams/6b8d0782-cee9-430f-9253-b0de3a905d07/export/scores
+status: 200
+bytes: 330
+canary_hits: 0
