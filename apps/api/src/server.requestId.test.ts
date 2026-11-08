@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPostgresDatabase } from "@exam/db/postgres";
@@ -234,21 +235,33 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
         `expected a pino completion line for ${notFoundPath}`,
       ).toBeGreaterThanOrEqual(1);
 
-      // Probe 4 (#925): an unmatched NON-/api path with a query canary —
-      // the root-scope 404 boundary (registerRootNotFoundBoundary) must
-      // answer the same JSON envelope, and Fastify's default basic404
-      // message ("Route <raw url> not found" — raw URL bytes) must never
-      // reach the log stream.
+      // Probe 4 (#925): an unmatched NON-/api path with a query canary.
+      // Both root layouts must stay leak-free — and the caller-visible
+      // policy differs by layout:
+      //  - public/ present (production image / built CI): the static
+      //    surface owns the root policy → 200 SPA shell for GET deep links;
+      //  - public/ absent (API-only): registerRootNotFoundBoundary answers
+      //    the canonical JSON envelope (the default basic404 would log
+      //    "Route <raw url> not found" — raw URL bytes).
+      // Either way the canary must never reach the log stream.
       const rootCanary = `EXAMAUDIT-CANARY-LOG-root-${crypto.randomUUID()}`;
+      const staticLayout = existsSync(
+        resolve(__dirname, "..", "public", "index.html"),
+      );
       const rootRes = await fetch(
         `http://127.0.0.1:${server.port}/outside-api?token=${rootCanary}`,
       );
-      expect(rootRes.status).toBe(404);
-      const rootBody = (await rootRes.json()) as {
-        error: { code: string; requestId: string };
-      };
-      expect(rootBody.error.code).toBe("RESOURCE_NOT_FOUND");
-      expect(rootBody.error.requestId).toMatch(UUID_V4_REQUEST_ID_RE);
+      if (staticLayout) {
+        expect(rootRes.status).toBe(200);
+        expect(await rootRes.text()).toContain("<");
+      } else {
+        expect(rootRes.status).toBe(404);
+        const rootBody = (await rootRes.json()) as {
+          error: { code: string; requestId: string };
+        };
+        expect(rootBody.error.code).toBe("RESOURCE_NOT_FOUND");
+        expect(rootBody.error.requestId).toMatch(UUID_V4_REQUEST_ID_RE);
+      }
       await new Promise((r) => setTimeout(r, 50));
       expect(server.stdout()).not.toContain(rootCanary);
       expect(server.stdout()).not.toContain("Route GET");

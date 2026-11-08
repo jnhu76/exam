@@ -156,11 +156,6 @@ async function main() {
 
   await registerOpenApiDocs(app);
 
-  // #925: root-scope unmatched boundary — replaces Fastify's default 404
-  // handler, which logs `Route <raw url> not found` (raw query/path bytes).
-  // The /api scope below keeps its own, identical policy (#429).
-  registerRootNotFoundBoundary(app);
-
   // The whole /api namespace lives in one encapsulated scope: registered
   // routes, the liveness probe, the rate limiter, and the canonical
   // unmatched-request JSON boundary (#429). Fastify owns all routing
@@ -172,7 +167,16 @@ async function main() {
   );
   app.log.info({ publicDir, exists: existsSync(publicDir) }, "static dir");
   if (existsSync(publicDir)) {
+    // The static surface owns the root unmatched policy (SPA shell fallback
+    // for GET/HEAD, plain 404 otherwise — it logs no URL, so #925 holds).
+    // Fastify allows ONE root notFound handler; registering the API-only
+    // boundary here too would throw "Not found handler already set".
     await registerStaticFrontend(app, publicDir);
+  } else {
+    // #925 API-only deployments: replace the default basic404, which logs
+    // `Route <raw url> not found` (raw query/path bytes), with the same
+    // JSON envelope the /api scope serves (#429).
+    registerRootNotFoundBoundary(app);
   }
 
   registerShutdownSignals(app);
