@@ -731,3 +731,88 @@ describe("API path-category vocabulary sync", () => {
     ).toEqual([]);
   });
 });
+
+describe("api client — X-Request-Id success-path consumption (#865)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setNavigate(() => {});
+    vi.clearAllMocks();
+    __resetNetworkFailureLimiterForTest();
+  });
+
+  function okResponse(body: unknown, headers: Record<string, string> = {}) {
+    return new Response(JSON.stringify(body), {
+      headers: { "Content-Type": "application/json", ...headers },
+    });
+  }
+
+  it("requestWithMeta exposes the server x-request-id from a 2xx response", async () => {
+    const requestId = "0b2f6f1e-7c1a-4c3f-9d2e-48464aa6b1f5";
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          okResponse({ accepted: 1 }, { "x-request-id": requestId }),
+        ),
+    );
+
+    const { data, meta } = await api.postWithMeta<{ accepted: number }>(
+      "/api/client-events",
+      { events: [] },
+    );
+
+    expect(data).toEqual({ accepted: 1 });
+    expect(meta.requestId).toBe(requestId);
+  });
+
+  it("meta.requestId is null when the header is absent (older server / hop)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okResponse({ ok: true })));
+
+    const { meta } = await api.getWithMeta<{ ok: boolean }>("/api/health");
+
+    expect(meta.requestId).toBeNull();
+  });
+
+  it("the plain request<T> API is unchanged (no meta leakage)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          okResponse({ ok: true }, { "x-request-id": "irrelevant-id" }),
+        ),
+    );
+
+    const result = await api.get<{ ok: boolean }>("/api/health");
+
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("error responses keep using the envelope requestId (existing contract)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "bad",
+              requestId: "envelope-req-id",
+            },
+          }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    await expect(api.get("/api/nope")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 400,
+      requestId: "envelope-req-id",
+    });
+  });
+});
