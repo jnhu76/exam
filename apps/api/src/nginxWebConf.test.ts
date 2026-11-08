@@ -113,4 +113,39 @@ describe("nginx access-log privacy pin (#925)", () => {
     expect(body).toMatch(/\$sent_http_x_request_id/);
     expect(body).not.toMatch(/\$request_id/);
   });
+
+  it("the HTTPS redirect guidance keeps a /healthz exemption for the compose healthcheck", () => {
+    // ops F1/F2 (independent review of #926): the old guidance — a bare
+    // server-level `return 301` — (a) left port 80 serving the SPA and
+    // /api proxy in plaintext after "HTTPS activation", silently
+    // defeating the transport-confidentiality intent, and (b) breaks the
+    // compose healthcheck: wget follows the redirect to the self-signed
+    // certificate it cannot verify, so the web container reads unhealthy
+    // forever. A server-level `return` also runs BEFORE location
+    // matching, so the exemption MUST be a sibling exact-match location
+    // with the redirect moved into the catch-all location.
+    const guidance = conf
+      .split("\n")
+      .filter((line) => /#\s*(return 301|location)/.test(line))
+      .map((line) => line.replace(/^[\s#]*#?\s*/, ""))
+      .join("\n");
+    expect(guidance).toMatch(/location = \/healthz \{ return 200; \}/);
+    expect(guidance).toMatch(
+      /location \/ \{ return 301 https:\/\/\$host\$request_uri; \}/,
+    );
+    // The bare server-level form must no longer be offered as the recipe.
+    expect(guidance).not.toMatch(/^return 301 /m);
+  });
+
+  it("the compose web healthcheck probes the exempted /healthz path", () => {
+    // Same finding as above: the healthcheck must target the path the
+    // redirect guidance exempts, so an HTTPS-activated edge stays
+    // probeable over plain HTTP on the loopback hop.
+    const compose = readFileSync(
+      join(process.cwd(), "..", "..", "docker-compose.yml"),
+      "utf8",
+    );
+    expect(compose).toMatch(/wget.*"http:\/\/127\.0\.0\.1:80\/healthz"/);
+    expect(compose).not.toMatch(/http:\/\/127\.0\.0\.1:80\/"/);
+  });
 });
