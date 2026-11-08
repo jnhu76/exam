@@ -82,14 +82,23 @@
 
 ## 复现
 
-见 [06-REPRODUCIBILITY.md](06-REPRODUCIBILITY.md)（全部使用仓库语义命令：
+见 [06-REPRODUCIBILITY.md](06-REPRODUCIBILITY.md)（主要步骤使用仓库语义命令：
 `pnpm db:up`、`pnpm seed:e2e`、`pnpm --filter @exam/api dev`，数据库生命周期遵循
 `docs/standards/testing.md` §2.8 所有权契约）。注意：原始 `.tmp` 脚本
 （`canary/unit-normalize.mjs`、`adversarial/post-canaries.mjs`、
 `correlation/exp1-2.sh`、`performance/scripts/run-bench.sh` 等）未随本归档入库；
 按 06-REPRODUCIBILITY.md 与各证据文件内嵌的命令行可重建等价实验。
 
+复现口径（精确表述）：06 中出现的 `CREATE DATABASE exam_ci_audit` 等手工命令是
+**审计时的一次性证据采集步骤**，不是第四套数据库生命周期；数据库生命周期的唯一
+权威仍是 `docs/standards/testing.md` §2.8（库名属 `exam_ci[_-]<suffix>` 合法族、
+未触碰 dev `exam`、未执行 `db:down`/`db:reset`）。`raw/replay-timeline-proctorA1.json`
+与 `raw/timeline-proctorA1.json` 逐字节相同——这是重放复现实验的**结果证据**
+（同一请求序列产生相同投影），不是重复文件。
+
 ## 完整性
 
 `SHA256SUMS` 覆盖本目录除自身外的全部文件。该目录加入 `.prettierignore`，
-格式化工具不得改动证据原文。
+格式化工具不得改动证据原文。完整性校验是**手动步骤**（`sha256sum -c SHA256SUMS`，
+实测 62/62 OK）；CI 目前不校验该清单——如需自动化，应在后续变更中增加独立检查，
+而非在本归档内引入工具。
