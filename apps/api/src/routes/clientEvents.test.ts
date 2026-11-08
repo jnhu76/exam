@@ -48,6 +48,15 @@ describe("POST /api/client-events", () => {
     };
   }
 
+  /** Fetches the single client_event row persisted under a test event name. */
+  async function fetchRow(name: string) {
+    const rows = await ctx.db
+      .select()
+      .from(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, name));
+    return rows[0] ?? null;
+  }
+
   it("writes a valid batch scoped to the authenticated user/org", async () => {
     const response = await ctx.app.inject({
       method: "POST",
@@ -203,14 +212,6 @@ describe("POST /api/client-events", () => {
   describe("at-rest free-input minimization (#875)", () => {
     const jwt =
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
-
-    async function fetchRow(name: string) {
-      const rows = await ctx.db
-        .select()
-        .from(schema.clientEvents)
-        .where(eq(schema.clientEvents.name, name));
-      return rows[0] ?? null;
-    }
 
     it("redacts a credential-shaped metadata VALUE under an innocent key before persist", async () => {
       const response = await ctx.app.inject({
@@ -398,7 +399,15 @@ describe("POST /api/client-events", () => {
         expected: "/admin/exams/:id",
       },
       { id: "unknown", route: "/admin/nonexistent-page", expected: null },
-      { id: "traversal", route: "/exam/%2e%2e/admin/users", expected: null },
+      // WHATWG URL normalization decodes percent-encoded dot segments
+      // (%2e%2e == ".."), resolving this to the canonical /admin/users —
+      // the same thing the browser address bar would show. Output stays a
+      // member of the closed set; %2F/%3F stay opaque (see rt8b).
+      {
+        id: "traversal",
+        route: "/exam/%2e%2e/admin/users",
+        expected: "/admin/users",
+      },
       { id: "empty-seg", route: "/admin//users", expected: null },
       { id: "root", route: "/", expected: null },
       // Registered routes keep their diagnostic signal.

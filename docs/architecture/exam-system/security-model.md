@@ -254,6 +254,7 @@ Ownership fencing prevents a stale/lost worker from updating delivery state; it 
 | INV-CE-002 | `attemptId`/`examId`/`questionId` are NULLed unless server-provable for the actor; anti-enumeration: response always `{accepted: N}`. | `clientEventReferenceNormalizer.ts` | Ownership chain + frozen question-set check |
 | INV-CE-003 | Monitoring timeline ordering is server-owned `receivedAt + id`; `occurredAt` is display-only. | `clientEventRepo.ts` + `proctorMonitoringService.ts` | `orderBy(desc(receivedAt), desc(id))` |
 | INV-CE-004 | `client_events` retention is 30 days from `receivedAt`; no durable cleanup evidence table. | `clientEventRetention.ts` | `deleteOlderThan` + structured operational log |
+| INV-CE-005 | Persisted/read `client_events.route` ∈ `SPA_ROUTE_TEMPLATES` ∪ {null}; every failure path fails closed. | `clientEventRoute.ts` (contracts) | Ingest + timeline read both project; drift guard vs App.tsx |
 
 ## 15. Client-Event Trust Boundary
 
@@ -297,5 +298,30 @@ Unprovable references are NULLed. **The event is always accepted** (`{accepted: 
 ### 15.6 Retention (INV-CE-004)
 
 30-day fixed horizon from server-owned `receivedAt`. No per-tenant configurability, no generic retention framework. The executor is application-owned (plugin following the `deadlineScanner` pattern): startup convergence + daily interval + in-flight guard + `onClose` join. No durable cleanup evidence table (no new DB tables; ADR-023 removed the backup-evidence tables and none may be reused for client-event GC).
+
+### 15.7 Route closed-vocabulary projection (INV-CE-005, #864)
+
+The client-reported `route` free string is untrusted input. At BOTH the
+ingest boundary and the proctor-timeline read boundary it is projected onto
+the closed SPA route-template vocabulary `SPA_ROUTE_TEMPLATES`
+(`@exam/contracts`, single authority; a drift-guard test pins it to the
+router declared in `apps/web/src/App.tsx`):
+
+- the persisted/read value is the matched template (dynamic identifiers
+  become `:param` placeholders — never echoed) or `null`;
+- unknown routes, non-http(s) schemes (incl. opaque `user:…@` and `data:`),
+  malformed URLs, and structural garbage all fail closed to `null` — there
+  is deliberately no raw/truncated/partially-sanitized fallback (the
+  pre-#864 pathname-only regime was proven leakable: path-segment secrets,
+  encoded query smuggling, opaque-scheme credentials; audit archive
+  `docs/research/exam-secure-observability-remediation/`);
+- percent escapes other than dot segments are NOT decoded (decoding `%2F`/
+  `%3F` would re-open separator smuggling);
+- the projection is idempotent, so the read-side projection of legacy rows
+  (written by the pre-#864 regime with raw pathnames) blocks historical
+  bytes from re-entering an authorized response without any data migration.
+
+The route vocabulary is the SPA router's, never Fastify's
+(`request.routeOptions.url` describes API routes, not browser navigation).
 
 ## 16. Security Invariant Summary (continued)

@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SPA_ROUTE_TEMPLATES } from "@exam/contracts";
-import { AppRoutes } from "../App";
 
 /**
  * #864 drift guard: the server-side closed route-template vocabulary
@@ -13,13 +12,15 @@ import { AppRoutes } from "../App";
  * the vocabulary fails this test — and vice versa — instead of silently
  * widening or narrowing what `client_events.route` may persist.
  *
- * The parser below is deliberately structural (brace-aware tag scanning),
- * not a regex over path literals: JSX attributes carry `>` inside
- * `element={<X />}`, so a flat regex would mis-slice the tree.
+ * This test reads App.tsx as SOURCE TEXT only (importing the app module
+ * would drag the React tree into a unit test and rewrites import.meta.url
+ * semantics); the parser below is deliberately structural (brace-aware tag
+ * scanning), not a regex over path literals: JSX attributes carry `>`
+ * inside `element={<X />}`, so a flat regex would mis-slice the tree.
  */
 
 interface RouteTree {
-  /** Absolute paths of every non-wildcard, non-redirect-only route. */
+  /** Absolute paths of every non-wildcard route declaration. */
   paths: Set<string>;
   /** Count of `*` splat routes (rendered placeholders — excluded by design). */
   splats: number;
@@ -36,9 +37,14 @@ function extractDeclaredPaths(source: string): RouteTree {
   let splats = 0;
   // Context stack of absolute parent paths for currently-open layout routes.
   const stack: string[] = [];
+  // `<Route` must be followed by whitespace/`>`/`/` so the outer `<Routes>`
+  // wrapper is not mistaken for a route element.
+  const OPEN_TAG = /<Route(?=[\s/>])/g;
   let i = 0;
   while (i < body.length) {
-    const open = body.indexOf("<Route", i);
+    OPEN_TAG.lastIndex = i;
+    const openMatch = OPEN_TAG.exec(body);
+    const open = openMatch === null ? -1 : openMatch.index;
     const close = body.indexOf("</Route>", i);
     if (open === -1 && close === -1) break;
     if (close !== -1 && (open === -1 || close < open)) {
@@ -90,14 +96,10 @@ function extractDeclaredPaths(source: string): RouteTree {
 }
 
 describe("SPA route-template vocabulary drift guard (#864)", () => {
-  const appSource = readFileSync(
-    fileURLToPath(new URL("../App.tsx", import.meta.url)),
-    "utf8",
-  );
-
-  it("AppRoutes is still exported (guard anchor)", () => {
-    expect(typeof AppRoutes).toBe("function");
-  });
+  // vitest runs with the app package root as cwd; resolve the router source
+  // from there instead of import.meta.url (which vite rewrites when the
+  // module graph reaches the browser-oriented app tree).
+  const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
 
   it("SPA_ROUTE_TEMPLATES exactly equals the App.tsx route declarations", () => {
     const { paths } = extractDeclaredPaths(appSource);
