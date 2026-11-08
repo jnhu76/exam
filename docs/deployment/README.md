@@ -169,6 +169,16 @@ never terminates it and no certificate automation is bundled.
   (a copy of `web.conf` with the 443 server block uncommented) over
   `/etc/nginx/conf.d/default.conf`, and publish 443 on the `web` service
   — for example via a compose override file.
+  **Port 80 must be dispositioned in the same activation** (ops review of
+  #926): leaving the plaintext vhost serving the SPA and `/api` proxy
+  as-is silently defeats the transport-confidentiality intent. In the
+  overriding conf, replace the port-80 server's routing with the recipe
+  documented in `web.conf` — an exact-match `location = /healthz
+  { return 200; }` exemption (compose's `web` healthcheck probes
+  `http://127.0.0.1:80/healthz`; a redirect there would fail against the
+  self-signed certificate) followed by `location / { return 301
+  https://$host$request_uri; }` — or, alternatively, block port 80 at
+  the network layer and move the healthcheck probe accordingly.
 - **Transport policy.** The `PUBLIC_WEB_ORIGIN` scheme is the ONE
   transport-policy authority: an `http://` canonical origin ships auth
   cookies WITHOUT `Secure` and no HSTS / CSP `upgrade-insecure-requests`;
