@@ -1,0 +1,66 @@
+############ 族1 跨组织负例 — Org B 主体 vs Org A 资源 (2026-11-07T22:38:04Z) ############
+# 矩阵主体: adminB(userId f642d936, org 17d33b22=Org B, role Admin), candB1(userId 1931b0dd, org B, Candidate)
+# 目标资源: Org A attempt f665c325-f4a1-4547-89f5-5aa97bea026e (owner candA1) / d9bc2a50-db93-435e-8cb4-96c2fbf2d704 (owner candA2), exam 6b8d0782-cee9-430f-9253-b0de3a905d07
+# 所有请求附带伪造 x-request-id: EXAMAUDIT-CANARY-forged-request-id-0001（族7 前置：不得影响授权/不得被采纳为 requestId）
+
+===== 1.1 adminB → attempt 证据/日志端点（期望 404；resolver org 谓词 attemptRepo.ts:290）=====
+--- [adminB→A1 timeline] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/timeline
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"05cb7569-ddba-4c17-abcd-79be696fc618"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.017590
+
+--- [adminB→A1 receipt-summary] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/answer-save-receipt-summary
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"c97f8d81-b05d-4550-a3ab-f342e23110e5"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.008002
+
+--- [adminB→A1 proctor-events] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/proctor-events
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"988fdac5-49ea-4dd0-91af-b5a9fdc50c79"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006790
+
+--- [adminB→A1 export] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/export
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"9d34f997-920d-4604-af5d-233e1583908e"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.010291
+
+--- [adminB→A1 result] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/result
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"de904306-e8e0-4cb1-aa84-7de739330eca"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.009154
+
+===== 1.2 adminB → exam 端点 =====
+--- [adminB→exam proctor/attempts] GET /api/admin/exams/6b8d0782-cee9-430f-9253-b0de3a905d07/proctor/attempts
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"66ce51ab-a2d6-4107-a809-ff2dec258d21"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007887
+
+--- [adminB→exam incidents] GET /api/admin/exams/6b8d0782-cee9-430f-9253-b0de3a905d07/incidents
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"3cb379aa-3db4-413b-aff7-25ca1d6a92c0"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007762
+
+===== 1.3 adminB → audit-logs（AuditLogView org 谓词；不得返回 Org A 行）=====
+--- [adminB→audit-logs(all)] GET /api/admin/audit-logs?limit=50
+{"items":[{"id":"da484c90-eca0-484d-a3ac-53078dd4fdc3","organizationId":"17d33b22-e60a-4b50-89fc-03b02b735455","actorId":"f642d936-4346-44bb-bea3-1fe86d9e816e","actorName":"Canary Admin B","action":"audit_log.exported","targetType":"organization","targetId":"17d33b22-e60a-4b50-89fc-03b02b735455","metadata":{"format":"csv","rowCount":1,"requestId":"63fae7dc-448d-41ec-acc0-24bb4c05f7ee"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:49:10.842Z"},{"id":"9c1a9a8d-77c7-49ad-bd39-1920fc570314","organizationId":"17d33b22-e60a-4b50-89fc-03b02b735455","actorId":"f642d936-4346-44bb-bea3-1fe86d9e816e","actorName":"Canary Admin B","action":"audit_log.exported","targetType":"organization","targetId":"17d33b22-e60a-4b50-89fc-03b02b735455","metadata":{"format":"csv","rowCount":0,"requestId":"3dd8a73c-784b-4642-b0ac-f29f83ba4136"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:49:10.014Z"}],"nextCursor":null,"snapshotTo":"2026-11-07T22:38:04.430Z"}
+>> HTTP_STATUS:200 TIME_TOTAL:0.015091
+
+--- [adminB→audit-logs?targetId=A1attempt] GET /api/admin/audit-logs?targetId=f665c325-f4a1-4547-89f5-5aa97bea026e&limit=50
+{"items":[],"nextCursor":null,"snapshotTo":"2026-11-07T22:38:04.451Z"}
+>> HTTP_STATUS:200 TIME_TOTAL:0.007892
+
+===== 1.4 candB1 → 候选 own-attempt / score 端点（期望 404）=====
+--- [candB1→GET /attempts/:A1] GET /api/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"fd0c8975-6ec4-4394-91fe-46b9618a6933"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006982
+
+--- [candB1→take] GET /api/candidate/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/take
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"272c988d-d29f-415e-b8ca-32e17dad6a1d"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006751
+
+--- [candB1→score] GET /api/scores/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"3f5aa098-1a5b-4403-83de-38d97d3c61ea"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006481
+
+===== 1.5 对照组（正例）：Org A 内合法读取，证明端点本身可用 =====
+--- [candA1→GET /attempts/:own] GET /api/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e
+{"id":"f665c325-f4a1-4547-89f5-5aa97bea026e","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","enrollmentId":"4d9c01c6-a770-433f-addb-18870e4f3b73","candidateId":"a073d0af-a3bc-47c3-9046-0aa6bea85e03","attemptNo":1,"status":"graded","questionSnapshot":[{"originalQuestionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","type":"true_false","content":"EXAMAUDIT-CANARY: 2FA 默认启用是安全最佳实践","contentDocument":null,"answerMode":null,"attachments":[],"options":[],"score":5,"order":0}],"answers":[{"questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"version":1,"savedAt":"2026-11-07T16:34:23.258Z"}],"score":5,"passed":true,"startedAt":"2026-11-07T16:34:23.179Z","submittedAt":"2026-11-07T17:04:25.369Z","deadlineAt":"2026-11-07T17:04:23.179Z","lastActivityAt":"2026-11-07T16:34:23.258Z","createdAt":"2026-11-07T16:34:23.196Z","updatedAt":"2026-11-07T17:04:25.416Z","serverNow":"2026-11-07T22:38:04.519Z"}
+>> HTTP_STATUS:200 TIME_TOTAL:0.016427
+
+--- [proctorA1(assigned)→A1 timeline] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/timeline
+{"events":[{"id":"aa2b25f4-34c3-472b-83ab-232e3ff7a1cc","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","actorName":"Admin","action":"attempt.exported","targetType":"attempt","targetId":"f665c325-f4a1-4547-89f5-5aa97bea026e","metadata":{"format":"json","requestId":"d1c4581f-dcef-4e91-9316-e846fe7b809f"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:48:56.645Z"},{"id":"e48bb2a5-51af-4f70-a538-f34983f92b35","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","actorName":"Admin","action":"attempt.exported","targetType":"attempt","targetId":"f665c325-f4a1-4547-89f5-5aa97bea026e","metadata":{"format":"csv","requestId":"ee2f64ac-8521-468c-b863-a2440c639414"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:48:56.671Z"},{"id":"2cea52c8-e1a5-4a71-8b4e-28c4272bb15b","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","actorName":"Admin","action":"attempt.exported","targetType":"attempt","targetId":"f665c325-f4a1-4547-89f5-5aa97bea026e","metadata":{"format":"json","requestId":"0e61ed68-b5d1-43cc-9d8f-b46e13dfda56"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:48:56.954Z"},{"id":"cca12145-3f8e-4544-a78f-158e596da3d1","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","actorName":"Admin","action":"attempt.exported","targetType":"attempt","targetId":"f665c325-f4a1-4547-89f5-5aa97bea026e","metadata":{"format":"csv","requestId":"885fdd35-4a44-42fb-9360-d98064d06f00"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:48:56.974Z"},{"id":"951f6136-7bd4-4c9c-9ca7-3f44d0988d6c","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","actorName":"Admin","action":"attempt.exported","targetType":"attempt","targetId":"f665c325-f4a1-4547-89f5-5aa97bea026e","metadata":{"format":"json","requestId":"36827388-0cdc-445f-a627-aa341138545a"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:49:10.580Z"},{"id":"6cd8c89f-9dc9-478c-9720-fa11151d5592","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","actorName":"Admin","action":"attempt.exported","targetType":"attempt","targetId":"f665c325-f4a1-4547-89f5-5aa97bea026e","metadata":{"format":"csv","requestId":"dbec8c0a-1290-4292-911b-c4fd7cbe9ccf"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:49:10.611Z"},{"id":"411e3d98-e794-49cd-ab3f-9675f457bd0d","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","actorName":"Admin","action":"attempt.exported","targetType":"attempt","targetId":"f665c325-f4a1-4547-89f5-5aa97bea026e","metadata":{"format":"json","requestId":"68f09672-24d6-4895-a3d7-acaa547545ba"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:49:10.931Z"},{"id":"74dea34a-f9a3-4770-bd7d-33bbe36eeb14","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","actorName":"Admin","action":"attempt.exported","targetType":"attempt","targetId":"f665c325-f4a1-4547-89f5-5aa97bea026e","metadata":{"format":"csv","requestId":"8dcf85b1-9b78-452a-b46e-682abddaedbb"},"ipAddress":"127.0.0.1","userAgent":"curl/8.18.0","createdAt":"2026-11-07T16:49:10.951Z"}]}
+>> HTTP_STATUS:200 TIME_TOTAL:0.021622
+

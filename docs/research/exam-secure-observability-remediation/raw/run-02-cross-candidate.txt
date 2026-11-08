@@ -1,0 +1,117 @@
+############ 族2 同组织互读负例 (2026-11-07T16:43:07Z) ############
+# 主体: candA1(70d1ae6f, owner of f665c325-f4a1-4547-89f5-5aa97bea026e), candA2(5fdcab8e, owner of d9bc2a50-db93-435e-8cb4-96c2fbf2d704), proctorA2(460f82e4 未分配), proctorA1(4837ff2c assigned)
+
+===== 2.1 candA1 换用 A2 的 attemptId（读面，期望 404 反枚举 ownAttemptCapability.ts:148-156）=====
+--- [candA1→GET /attempts/:A2own] GET /api/attempts/d9bc2a50-db93-435e-8cb4-96c2fbf2d704
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"568d9e71-e6f0-444a-a228-b259570176bd"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007418
+
+--- [candA1→take(A2)] GET /api/candidate/attempts/d9bc2a50-db93-435e-8cb4-96c2fbf2d704/take
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"d22b625e-0a32-4f0d-8a2c-2082527632ab"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006736
+
+--- [candA1→score(A2)] GET /api/scores/attempts/d9bc2a50-db93-435e-8cb4-96c2fbf2d704
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"c4c24493-5bfa-4dee-9407-8f1400e7bfeb"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006892
+
+===== 2.2 candA1 换用 A2 的 attemptId + 同考试 questionId（写面，期望 404）=====
+--- [candA1→save-answer-on-A2-attempt] POST /api/attempts/d9bc2a50-db93-435e-8cb4-96c2fbf2d704/answers/c9e708fe-a009-4f66-bdec-463f4b336ac1
+{"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","details":{"fields":[{"field":"attemptId","code":"INVALID_TYPE","params":{"expected":"string","received":"undefined"},"message":"Required"},{"field":"questionId","code":"INVALID_TYPE","params":{"expected":"string","received":"undefined"},"message":"Required"}]},"requestId":"833be46e-490e-40ef-ac78-0b304d5bf0e5"}}
+>> HTTP_STATUS:400 TIME_TOTAL:0.002116
+
+--- [candA1→heartbeat-A2-attempt] POST /api/attempts/d9bc2a50-db93-435e-8cb4-96c2fbf2d704/heartbeat
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"04efa9b2-9ee9-49c8-8f50-2d4c936eb9af"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006816
+
+--- [candA1→submit-A2-attempt] POST /api/attempts/d9bc2a50-db93-435e-8cb4-96c2fbf2d704/submit
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"fbca03cf-c82e-444e-9e53-537155f5257c"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006805
+
+===== 2.3 candA2 换用 A1 的 attemptId（读+写，期望 404）=====
+--- [candA2→GET /attempts/:A1] GET /api/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"7c0bbae5-c2b2-455e-aaa5-161101196922"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006746
+
+--- [candA2→take(A1)] GET /api/candidate/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/take
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"841e1968-071b-4536-aaf3-5773cab58734"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007058
+
+--- [candA2→score(A1)] GET /api/scores/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"deb6b436-3ba5-4454-a138-22c27e211b72"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006366
+
+--- [candA2→save-answer-on-A1-attempt] POST /api/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/answers/c9e708fe-a009-4f66-bdec-463f4b336ac1
+{"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","details":{"fields":[{"field":"attemptId","code":"INVALID_TYPE","params":{"expected":"string","received":"undefined"},"message":"Required"},{"field":"questionId","code":"INVALID_TYPE","params":{"expected":"string","received":"undefined"},"message":"Required"}]},"requestId":"3db1cd01-4bd7-4e53-a956-6ff3ca429eac"}}
+>> HTTP_STATUS:400 TIME_TOTAL:0.001901
+
+--- [candA2→heartbeat-A1-attempt] POST /api/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/heartbeat
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"e9e0dc5d-7817-4ad5-af87-9b5f14c17071"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006625
+
+===== 2.4 考生 → 监考/管理证据端点（无 capability，期望 403，先于资源解析）=====
+--- [candA1→admin timeline(A1)] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/timeline
+{"error":{"code":"PERMISSION_DENIED","message":"无权执行此操作","requestId":"bf1503c2-a238-465d-8318-04ce3436e96c"}}
+>> HTTP_STATUS:403 TIME_TOTAL:0.004621
+
+--- [candA1→admin proctor-events(A1)] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/proctor-events
+{"error":{"code":"PERMISSION_DENIED","message":"无权执行此操作","requestId":"d2ef44b6-0e32-49ec-8db7-e33efe745486"}}
+>> HTTP_STATUS:403 TIME_TOTAL:0.005111
+
+--- [candA1→admin receipt-summary(A1)] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/answer-save-receipt-summary
+{"error":{"code":"PERMISSION_DENIED","message":"无权执行此操作","requestId":"6e290506-f058-4455-82b8-02d1db1b9f88"}}
+>> HTTP_STATUS:403 TIME_TOTAL:0.004980
+
+===== 2.5 proctorA2（同 org 未分配）→ 监考证据端点（期望 404 分配门折叠）=====
+--- [proctorA2→timeline(A1)] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/timeline
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"da59e4d8-e773-4818-beb8-570cd1825adc"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007155
+
+--- [proctorA2→proctor-events(A1)] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/proctor-events
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"0e12711d-f3f3-46a4-8172-76ae6cbb4af0"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007615
+
+--- [proctorA2→receipt-summary(A1)] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/answer-save-receipt-summary
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"fc7ed88a-1518-4030-8b1b-4b1b0df65a9e"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007884
+
+--- [proctorA2→exam proctor/attempts] GET /api/admin/exams/6b8d0782-cee9-430f-9253-b0de3a905d07/proctor/attempts
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"31dbe5e1-887f-4665-83aa-ac5c599fea43"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007481
+
+===== 2.6 对照组（正例）=====
+--- [candA2→GET /attempts/:own(200 预期)] GET /api/attempts/d9bc2a50-db93-435e-8cb4-96c2fbf2d704
+{"id":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","enrollmentId":"53d7f591-027a-4cd3-b0e7-331b6dfba630","candidateId":"9839b440-61cf-4fcb-b329-aaa908ef2fdc","attemptNo":1,"status":"disrupted","questionSnapshot":[{"originalQuestionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","type":"true_false","content":"EXAMAUDIT-CANARY: 2FA 默认启用是安全最佳实践","contentDocument":null,"answerMode":null,"attachments":[],"options":[],"score":5,"order":0}],"answers":[],"startedAt":"2026-11-07T16:41:27.056Z","deadlineAt":"2026-11-07T17:11:27.056Z","lastActivityAt":"2026-11-07T16:41:27.056Z","createdAt":"2026-11-07T16:41:27.067Z","updatedAt":"2026-11-07T16:41:45.277Z","serverNow":"2026-11-07T16:43:08.196Z"}
+>> HTTP_STATUS:200 TIME_TOTAL:0.010994
+
+--- [proctorA1→timeline(A2 同考试已分配,200 预期)] GET /api/admin/attempts/d9bc2a50-db93-435e-8cb4-96c2fbf2d704/timeline
+{"events":[]}
+>> HTTP_STATUS:200 TIME_TOTAL:0.010388
+
+===== 2.7 DB 终态核验：A2 attempt 的 answers 不得被 2.2 的越权写入污染 =====
+                  id                  |        username         |  status   | answer_count |         updated_at         
+--------------------------------------+-------------------------+-----------+--------------+----------------------------
+ f665c325-f4a1-4547-89f5-5aa97bea026e | EXAMAUDIT-CANARY-candA1 | disrupted |            1 | 2026-11-08 00:34:40.253+08
+ d9bc2a50-db93-435e-8cb4-96c2fbf2d704 | EXAMAUDIT-CANARY-candA2 | disrupted |            0 | 2026-11-08 00:41:45.277+08
+(2 rows)
+
+===== 2.2 补测：合法形状的越权写（body 携带受害者 attemptId/questionId，path=body 一致）=====
+--- [candA1→save-answer-on-A2-attempt(valid shape)]
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"d77c1acd-ec90-41bb-9dd3-ca3dcdf3ff1f"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006854
+
+--- [candA2→save-answer-on-A1-attempt(valid shape)]
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"c926f9ce-5e43-4d50-86be-0574d56e6324"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006775
+
+===== 2.2 补测：path/body 不一致（path=自己 attempt, body=他人 attemptId）=====
+--- [candA1→save-answer path=own body=A2attemptId]
+{"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","requestId":"26b940e7-8c5f-4e6c-aa1e-40deca3fab9b"}}
+>> HTTP_STATUS:400 TIME_TOTAL:0.007501
+
+===== DB 终态核验 =====
+                  id                  |        username         |  status   | answer_count |         updated_at         
+--------------------------------------+-------------------------+-----------+--------------+----------------------------
+ f665c325-f4a1-4547-89f5-5aa97bea026e | EXAMAUDIT-CANARY-candA1 | disrupted |            1 | 2026-11-08 00:34:40.253+08
+ d9bc2a50-db93-435e-8cb4-96c2fbf2d704 | EXAMAUDIT-CANARY-candA2 | disrupted |            0 | 2026-11-08 00:41:45.277+08
+(2 rows)
+

@@ -1,0 +1,72 @@
+%% Trust Boundary DAG — secure-correlation-audit 任务二
+%% 基线 master @ 423f2945（2026-11-08）。节点标信任级别，边标携带字段。
+%% 证据标注：SV=SOURCE_VERIFIED（path:line 见 source/field-provenance.md）；
+%%          LV=LIVE_VERIFIED（本会话动态探针）；IV=INFRA_ACCESS_NOT_VERIFIED。
+flowchart TB
+
+    subgraph CLIENT["信任域 0：客户端（全部输出按不可信声明处理）"]
+        B["Browser / web SPA<br/>TRUST: UNTRUSTED<br/>产出: eventId, clientSeq, operationId(uuid),<br/>route=location.pathname, metadata(自由JSON),<br/>client-claimed requestId(抄自信封), errorCode"]
+    end
+
+    subgraph EDGE["信任域 1：部署边缘"]
+        NX["nginx edge（web 容器, 唯一公网入口）<br/>TRUST: NETWORK BOUNDARY<br/>web.conf 无 access_log 覆写 → 默认 combined 访问日志<br/>记录完整 request line 含 query 与 referer<br/>运行时行为 IV（本地无部署环境）<br/>部署: deploy/nginx/web.conf + docker-compose.yml web"]
+    end
+
+    subgraph SERVER["信任域 2：API 进程（服务端可信身份的铸造与仲裁层）"]
+        F["Fastify ingress<br/>TRUST: SERVER / requestId 唯一铸造点<br/>genReqId=UUIDv4, requestIdHeader=false<br/>默认 incoming-request 日志携带原始 req.url 含 query (LV)"]
+        RL["Rate limiter（/api scope 内）<br/>TRUST: SERVER<br/>key 读 request.ip 单点派生"]
+        AUTH["Authenticate（auth-token cookie → session）<br/>TRUST: SERVER<br/>ctx.actorId / organizationId 服务端派生，payload 不可声明"]
+        AZ["Authz：capability × resolver × assignment gate × 所有权<br/>TRUST: SERVER<br/>404 反枚举 / 403 org 链 / 503 fail-closed"]
+        H["Handler + 契约校验<br/>TRUST: SERVER（输入边界）<br/>Zod schema / normalizeRouteForStorage(仅 pathname)<br/>sanitizeClientEvent / 引用归一化(证明或 NULL)"]
+        ENG["Domain engine + DB（org 谓词承担租户隔离）<br/>TRUST: SERVER / 数据权威<br/>SaveAnswer 同事务: answers 更新 + receipt 追加<br/>audit insert 事务内 / best-effort 排队"]
+    end
+
+    subgraph SINKS["信任域 3：证据持久化与日志通道"]
+        PINO["Pino stdout（唯一日志通道）<br/>TRUST: INTERNAL（读取权在源码外 UNKNOWN）<br/>redact remove 17 路径; err 白名单 serializer<br/>每行自动 reqId; 默认请求行含原始 URL 含 query (LV)"]
+        AUD["audit_logs（PG）<br/>TRUST: SERVER / durable, 无 TTL<br/>metadata.requestId(仅 HTTP writer) / metadata.operationId(系统行)<br/>actorId / ipAddress(request.ip 派生) / userAgent"]
+        CEV["client_events（PG）<br/>TRUST: LOW-TRUST STORE（客户端声明柜）<br/>org/userId/receivedAt 服务端自有<br/>route 仅 pathname / metadata 已消毒 / 引用已归一<br/>保留 30 天"]
+        RCP["exam_answer_save_receipts（PG）<br/>TRUST: SERVER / 协议元数据权威<br/>PK(org,attempt,question,clientSeq) append-only<br/>answerIdentity=canonical digest; 随 attempt cascade"]
+    end
+
+    subgraph READ["信任域 4：监控/导出读取面（投影即防线）"]
+        MON["Proctor 监控 / 时间线<br/>AttemptTimelineView + assignment_scoped<br/>SAFE_METADATA_ALLOWLIST default-deny<br/>requestId 投影标 client_claimed(客户端声明未经核验)"]
+        AUDR["Audit 搜索 / CSV 导出<br/>AuditLogView (Admin-only)<br/>CSV 请求ID/操作ID 按 metadata KEY 投影, 不导出 metadata JSON"]
+        SUM["Receipt 摘要端点<br/>仅 count / MAX(clientSeq) / lastSavedAt<br/>空摘要不等于从未保存(UNKNOWN 域)"]
+        EXPT["Attempt / Scores 导出<br/>AttemptExport / ScoreExport (Admin-only)<br/>导出动作自身落敏感读审计"]
+    end
+
+    V["Authorized Viewer（Admin / Proctor / Maintainer 人）<br/>TRUST: HUMAN / 最终读取者<br/>三态调查语义: NO_MATCH=UNKNOWN / ONE_CANDIDATE / AMBIGUOUS"]
+
+    %% ---- 数据流 ----
+    B -->|"HTTP 请求: auth-token cookie + 原始 URL(含 query) +<br/>body: operationId, clientSeq, eventId, route, metadata"| NX
+    B -.->|"SPA 全页 GET: reset-password 与 invite 页携带 token 于 query<br/>(BrowserRouter) — 仅达 nginx 静态分支, 不进 Fastify"| NX
+    NX -->|"proxy_pass /api/ 原样转发 URI; XFF/X-Real-IP 强制覆写(信任代理前提)"| F
+    F -->|"requestId 于此铸造; 进程内身份: reqId = envelope.requestId = audit metadata.requestId"| AUTH
+    F -->|"限流前置"| RL
+    RL --> AUTH
+    AUTH -->|"actorId/orgId 仅来自 session"| AZ
+    AZ -->|"通过者获 capability + scope"| H
+    H -->|"clientSeq, operationId, answer"| ENG
+    H -->|"eventId, route(pathname), metadata(已消毒), occurredAt;<br/>org/userId/receivedAt 服务端覆盖"| CEV
+    ENG -->|"accepted 时: receipt(questionId,clientSeq,answerIdentity,version,savedAt)"| RCP
+    ENG -->|"HTTP 行: metadata.requestId; 系统行: metadata.operationId"| AUD
+
+    %% ---- 日志通道 ----
+    F -.->|"每请求: reqId + 原始 req.url 含 query (LV)"| PINO
+    H -.->|"Answer save rejected WARN: org/actor/attempt/question/clientSeq/reason + 自动 reqId"| PINO
+    AZ -.->|"resolver 失败 error 行: route=request.url 原始含 query"| PINO
+    H -.->|"序列化失败 500: err + url=request.url 原始含 query"| PINO
+
+    %% ---- 读取面 ----
+    CEV -->|"metadata/route/occurredAt(advisory) 经 allowlist 投影"| MON
+    AUD -->|"行 + 请求ID/操作ID 列"| AUDR
+    RCP -->|"三标量聚合"| SUM
+    ENG -->|"冻结答案/成绩投影"| EXPT
+    MON --> V
+    AUDR --> V
+    SUM --> V
+    EXPT --> V
+
+    %% ---- 调查关联回路（虚线：人工 join，非自动信任传递）----
+    V -.->|"核对 client-claimed requestId 对服务端日志: 候选而非证明"| PINO
+    V -.->|"clientSeq join: (attempt,question,clientSeq)+时间窗"| PINO
