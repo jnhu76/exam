@@ -90,7 +90,7 @@ All standardized API errors use a single envelope:
 
 | Header         | Where sent | Description                                                                                          |
 | -------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
-| `x-request-id` | every response (#865) | The server-owned request id (ADR-025 UUIDv4 `request.id`) stamped by one root-scope hook. Same value as `error.requestId` on error envelopes and the pino `reqId` of the request's log lines; readable on 2xx where no envelope exists. Client-supplied `x-request-id` / `request-id` headers never influence it (`requestIdHeader: false`). It is a correlation key only — never a credential or business identity. Non-carriable boundary: responses never sent (connection destroyed mid-request, socket-level HTTP framing failures, Node request/keepAlive timeouts) carry no header. |
+| `x-request-id` | every request-lifecycle response (#865) | The server-owned request id (ADR-025 UUIDv4 `request.id`) stamped by one root-scope hook. Same value as `error.requestId` on error envelopes and the pino `reqId` of the request's log lines; readable on 2xx where no envelope exists. Client-supplied `x-request-id` / `request-id` headers never influence it (`requestIdHeader: false`). It is a correlation key only — never a credential or business identity. Non-carriable boundary: responses never sent (connection destroyed mid-request, socket-level HTTP framing failures, Node request/keepAlive timeouts) and protocol-level framework errors answered in router lookup before request construction (malformed request target, e.g. `FST_ERR_BAD_URL`) carry no header. |
 
 ## OPTIONS / CORS wire contract
 
@@ -107,6 +107,8 @@ Allowed origin(s), methods, and headers are plugin-config/default values —
 the repository does not duplicate or re-classify them anywhere (no second
 CORS authority):
 
+- `exposedHeaders`: `x-request-id` (#865) — readable by the configured
+  origin's JS on actual responses; no other response header is exposed.
 - `origin`: the configured CORS origin(s). A disallowed `Origin` never gets
   reflected; with a single-origin (string) config the response carries the
   configured origin only. Enforcement is browser-side against

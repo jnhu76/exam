@@ -249,7 +249,10 @@ export interface ApiResponseMeta {
    * Server-minted request id from the `x-request-id` response header (#865);
    * null when the header is absent (older server, or a hop that strips it).
    * Correlates with the same id in server logs and error envelopes — it is
-   * never a credential or business identity.
+   * never a credential or business identity. OPAQUE value: treat as a
+   * correlation string, never parse or log it as trusted text (a misbehaving
+   * intermediary could substitute it; the server-minted claim holds only for
+   * direct responses).
    */
   requestId: string | null;
 }
@@ -368,7 +371,9 @@ export const api = {
   },
   // #865: success-path variants that also surface the server's x-request-id
   // response header; callers that need correlation opt in — the plain
-  // helpers above keep their signature and behavior unchanged.
+  // helpers above keep their signature and behavior unchanged. Currently
+  // consumed by tests only: this is the deliberate public surface future
+  // correlation UI/reporting work builds on.
   getWithMeta<T>(
     path: string,
     opts?: ApiRequestOptions,

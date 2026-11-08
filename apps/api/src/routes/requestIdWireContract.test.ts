@@ -17,7 +17,9 @@
  * Requests that can NEVER carry the header (documented boundary, not
  * covered here): responses never sent (connection destroyed mid-request,
  * socket-level HTTP framing failures, Node-level request/keepAlive
- * timeouts) — Fastify never reaches the reply for those.
+ * timeouts) — Fastify never reaches the reply for those — and
+ * protocol-level framework errors answered in router lookup before request
+ * construction (malformed request target, e.g. FST_ERR_BAD_URL).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Writable } from "node:stream";
@@ -103,7 +105,7 @@ describe("X-Request-Id response header wire contract (#865)", () => {
     expect(header).toMatch(UUID_V4);
     // The pino request/response lines for this exact request carry the SAME
     // id — the header locates the server log lines.
-    await waitForLogFlush();
+    await waitForCompletion(header!);
     const lines = logs.forRequest(header!);
     expect(lines.length).toBeGreaterThanOrEqual(2);
     expect(
@@ -134,6 +136,7 @@ describe("X-Request-Id response header wire contract (#865)", () => {
     expect(header).toMatch(UUID_V4);
     const body = (await res.json()) as { error?: { requestId?: string } };
     expect(body.error?.requestId).toBe(header);
+    await waitForCompletion(header!);
     expect(logs.forRequest(header!).length).toBeGreaterThan(0);
   });
 
@@ -167,6 +170,7 @@ describe("X-Request-Id response header wire contract (#865)", () => {
     expect(header).not.toBe(FORGED);
     // The server-side log lines use the server-minted id; the forged value
     // appears nowhere server-side.
+    await waitForCompletion(header!);
     expect(logs.forRequest(header!).length).toBeGreaterThan(0);
     expect(logs.lines.some((l) => l.includes(FORGED))).toBe(false);
   });
@@ -197,7 +201,24 @@ describe("X-Request-Id response header wire contract (#865)", () => {
   });
 });
 
-/** Lets pino flush the response line before the assertion reads the stream. */
-async function waitForLogFlush(): Promise<void> {
-  await new Promise((r) => setTimeout(r, 25));
+/**
+ * Explicit lifecycle barrier: poll until the request's completion line
+ * (a pino entry with `res.statusCode` for that reqId) is on the stream.
+ * No fixed sleep — a slow CI must not false-pass the negative assertion
+ * that follows (AGENTS §7: no sleeps as synchronization).
+ */
+async function waitForCompletion(reqId: string): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        logs
+          .forRequest(reqId)
+          .some(
+            (l) =>
+              (l.res as { statusCode?: number } | undefined)?.statusCode !==
+              undefined,
+          ),
+      { timeout: 2_000 },
+    )
+    .toBe(true);
 }

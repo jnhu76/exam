@@ -24,8 +24,10 @@ export default fp(async function cors(app: FastifyInstance) {
     credentials: true,
     // #865: let the configured web origin's JS read the server-minted
     // x-request-id (success-path correlation). This only adds an entry to
-    // Access-Control-Expose-Headers — it does not broaden origin reflection;
-    // unknown origins still receive no CORS headers.
+    // Access-Control-Expose-Headers — it does not broaden origin reflection:
+    // with a configured string origin, @fastify/cors emits that FIXED value
+    // on every response; a disallowed origin is never reflected, and the
+    // browser rejects the mismatch (its own origin won't equal the value).
     exposedHeaders: ["x-request-id"],
   });
 });

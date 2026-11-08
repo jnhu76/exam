@@ -4,9 +4,10 @@
  * accept, 204 no-content, 403 role denial, 409 unique-violation conflict,
  * and 500 from a thrown handler — all through the one production hook.
  *
- * Rate-limit 429 is deliberately NOT asserted here: the limiter is
- * structurally disabled in test/e2e modes (runtimeConfig), matching the
- * audit's U2 boundary; production limiter behavior stays a separate item.
+ * Rate-limit 429 is covered by requestIdRateLimit.test.ts, which builds
+ * the production hook ordering explicitly (buildTestApp's helper disables
+ * the limiter unless a test opts in; the ordering property is what makes
+ * the 429 header assertion meaningful).
  *
  * Id FORMAT (UUIDv4 from production genReqId) is pinned in
  * requestIdWireContract.test.ts, which builds the app with the production
@@ -48,7 +49,7 @@ describe("X-Request-Id across status paths (real DB fixtures) (#865)", () => {
     await ctx.cleanup();
   });
 
-  it("200 business accept (client-events): header is a fresh UUIDv4", async () => {
+  it("200 business accept (client-events): header present", async () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/client-events",

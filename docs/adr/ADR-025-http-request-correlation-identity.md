@@ -65,6 +65,12 @@ deployment); there is no central log store, and none is introduced here.
 
 ## Addendum — 2026-11-08, #865 (scope 865-C): `x-request-id` response header
 
+> **Status: ACCEPTED (amended)** — recorded human decision: the 2026-11-08
+> final-remediation authorization reopened #865 under its own reopen clause
+> and scoped this fourth carrier (865-C). Form follows the ADR-010/ADR-019
+> amendment precedent; decisions 1–6 above are unchanged and nothing is
+> superseded.
+
 This addendum extends the identity correspondence invariant with a fourth
 carrier. It does not supersede any part of the Decision above: the id remains
 the single server-generated UUIDv4 from decision 1, `requestIdHeader: false`
@@ -77,8 +83,8 @@ telemetry claims unverified, historical values immutable) apply unchanged.
   Fastify-managed response. No second randomUUID call exists; the header
   value IS the id from decision 1. With it, the invariant of decision 3
   becomes four-way within one request: response header == pino `reqId` ==
-  error envelope `error.requestId` == HTTP audit `metadata.requestId`
-  (where an audit row exists).
+  error envelope `error.requestId` (when an envelope exists — errors only)
+  == HTTP audit `metadata.requestId` (where an audit row exists).
 - **Why a fourth carrier.** The envelope only exists on error responses;
   success responses previously exposed no request id to the caller, so
   2xx-side correlation relied on client-claimed telemetry ids. The header

@@ -75,8 +75,10 @@ required merely to identify an HTTP request.
   (`docs/contracts/api-contract.md` §Standard response headers).
   Non-carriable boundary: requests whose response is never sent — connection
   destroyed mid-request, socket-level HTTP framing failures, Node-level
-  request/keepAlive timeouts — carry no header; the server's log lines for
-  them are still keyed by the same `request.id`.
+  request/keepAlive timeouts — and protocol-level framework errors answered
+  in router lookup before request construction (malformed request target,
+  e.g. `FST_ERR_BAD_URL`) carry no header; the server's log lines for the
+  former are still keyed by the same `request.id`.
 - **End-to-end correlation.** The same server-generated requestId is carried
   in the error envelope, the `x-request-id` response header (#865), Pino
   request logs, and HTTP audit metadata where

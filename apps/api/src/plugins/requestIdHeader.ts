@@ -15,8 +15,11 @@ import type { FastifyInstance } from "fastify";
  *
  * Requests that can NEVER carry the header are a documented boundary, not a
  * defect (docs/contracts/observability.md): replies never sent (connection
- * destroyed mid-request), socket-level HTTP framing failures, and Node-level
- * request/keepAlive timeouts — Fastify never reaches a reply for those.
+ * destroyed mid-request), socket-level HTTP framing failures, Node-level
+ * request/keepAlive timeouts — Fastify never reaches a reply for those — and
+ * protocol-level framework errors (malformed request target, e.g.
+ * FST_ERR_BAD_URL) which Fastify answers in router lookup BEFORE the request
+ * lifecycle (no genReqId, no hooks; pinned by an architecture-review witness).
  */
 export function setupRequestIdHeader(app: FastifyInstance): void {
   // onRequest is the earliest hook that has both the request id (minted by
