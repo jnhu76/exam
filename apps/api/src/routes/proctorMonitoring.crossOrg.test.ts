@@ -226,7 +226,10 @@ describe("Proctor scoped routes — cross-org isolation", () => {
       // correlation candidate). This test pins that the claim confers NO
       // access: it is readable only inside the OWNING tenant, and the
       // timeline itself stays 404 cross-org exactly as before.
-      const claimedRequestId = `req-cross-org-${randomUUID()}`;
+      // The projection shape-gates client-claimed requestId to the
+      // server-minted UUID shape (#864/#923), so the claim fixture is a bare
+      // UUID — the same shape the real x-request-id header carries.
+      const claimedRequestId = randomUUID();
       await createClientEventRepo(ctx.db).createMany(
         {
           actorId: orgBCandidateUserId,

@@ -762,7 +762,10 @@ test.describe("investigation UI browser acceptance (#856)", () => {
     // Inject a real-shaped server-fault envelope with a FORGED requestId.
     // The page's own save path, banner logic, and telemetry recorder run for
     // real against it; only the network answer is the injected fault.
-    const forgedRequestId = "req-forged-prt-0001";
+    // FORGED requestId — UUID-shaped because the telemetry projection only
+    // carries the server-minted UUID shape (#864/#923); the claim stays
+    // unverified regardless of its shape.
+    const forgedRequestId = "00000000-0000-4000-8000-000000000bad";
     await page.route("**/api/attempts/*/answers/*", async (route) => {
       if (route.request().method() === "POST") {
         await route.fulfill({
