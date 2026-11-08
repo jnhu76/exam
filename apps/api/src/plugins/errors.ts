@@ -10,6 +10,7 @@ import {
   buildValidationErrorResponse,
   normalizeErrorCode,
 } from "../lib/errorResponse.js";
+import { routeTemplateOf } from "../lib/logRedaction.js";
 
 /**
  * Extracts individual `ZodIssue` objects from a Fastify Zod type-provider
@@ -124,7 +125,7 @@ export function setupErrorHandler(app: FastifyInstance): void {
     // not a client error -> 500 with logging.
     if (isResponseSerializationError(error)) {
       request.log.error(
-        { err: error, url: request.url, method: request.method },
+        { err: error, route: routeTemplateOf(request), method: request.method },
         "Response serialization error",
       );
       return reply

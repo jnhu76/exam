@@ -156,3 +156,68 @@ function serializeCause(
   }
   return out;
 }
+
+/**
+ * #925 fixed placeholder when no trusted route template exists (pre-routing
+ * paths — e.g. Fastify's 404 fallback serializes the RAW node request,
+ * which has no `routeOptions`). INVARIANT: never fall back to a raw
+ * pathname — the path itself can carry client secrets, not just the query.
+ */
+export const UNROUTED_LOG_PLACEHOLDER = "(unrouted)";
+
+/**
+ * Structural shape the #925 request serializer accepts: a FastifyRequest
+ * (has `routeOptions` and the derived `ip`) or a raw node request from the
+ * pre-routing fallback paths (has neither).
+ */
+interface LoggableRequest {
+  // `| undefined` on every member: the package compiles with
+  // exactOptionalPropertyTypes, and FastifyRequest's routeOptions.url is
+  // `string | undefined` — a plain optional member would reject it.
+  method?: string | undefined;
+  routeOptions?: { url?: string | undefined } | null | undefined;
+  ip?: string | undefined;
+  socket?: { remotePort?: number | undefined } | null | undefined;
+}
+
+/**
+ * #925 trusted route template for a request being logged: Fastify's matched
+ * route (`routeOptions.url`, e.g. `/api/exams/:id`) or the fixed
+ * placeholder. INVARIANT: this never returns the raw URL — dynamic segment
+ * bytes and query strings are structurally excluded, not sanitized.
+ */
+export function routeTemplateOf(request: LoggableRequest): string {
+  return request.routeOptions?.url ?? UNROUTED_LOG_PLACEHOLDER;
+}
+
+/** Shape of the serialized `req` entry (undefined members are omitted). */
+export interface SerializedReqForLog {
+  // Index signature: fastify's serializers.req contract expects a
+  // string-indexable return value.
+  [key: string]: unknown;
+  method?: string;
+  route: string;
+  remoteAddress?: string;
+  remotePort?: number;
+}
+
+/**
+ * #925 serializer for the pino `req` channel, replacing Fastify's default
+ * `asReqValue` which persists the raw `req.url` (full query string) on the
+ * "incoming request" line of every request.
+ *
+ * Policy: keep server-observed facts only — method, matched route template,
+ * socket address/port. Client-controlled `url`, `host`, and `accept-version`
+ * are structurally absent. No per-line URL parsing: the template is a
+ * precomputed property of the matched route.
+ */
+export function serializeReqForLog(req: LoggableRequest): SerializedReqForLog {
+  // Members are set only when observed: the package compiles with
+  // exactOptionalPropertyTypes, and pino drops absent keys anyway.
+  const out: SerializedReqForLog = { route: routeTemplateOf(req) };
+  if (req.method !== undefined) out.method = req.method;
+  if (req.ip !== undefined) out.remoteAddress = req.ip;
+  const remotePort = req.socket ? req.socket.remotePort : undefined;
+  if (remotePort !== undefined) out.remotePort = remotePort;
+  return out;
+}

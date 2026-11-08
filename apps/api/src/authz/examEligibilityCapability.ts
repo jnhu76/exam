@@ -36,6 +36,7 @@ import type { Database } from "@exam/db/types";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { type PermissionKey, type ResolverContext } from "@exam/authz";
 import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
+import { routeTemplateOf } from "../lib/logRedaction.js";
 import {
   resolveExamEligibilityScope,
   isExamEligibilityDenied,
@@ -114,7 +115,7 @@ export function buildExamEligibilityCapabilityPreHandler(
     const examId = params[resourceIdKey];
     if (!examId) {
       request.log.error(
-        { route: request.url, resourceIdKey, permission },
+        { route: routeTemplateOf(request), resourceIdKey, permission },
         "authz exam-eligibility capability resource id missing on params",
       );
       return reply
