@@ -199,6 +199,19 @@ const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
 type SafeMetadataValue = string | number | boolean | null;
 
 /**
+ * Security F2 (#864 §7.4): the server mints requestId exclusively as a UUID
+ * (`genReqId` — server.ts), and the timeline renders this allowlist field
+ * under 请求编号 semantics. The raw metadata blob is client-owned, so the
+ * projection SHAPE-GATES the claim: only a well-formed UUID string may ride
+ * the allowlist. Prose, oversized payloads, a foreign UUID embedded in text,
+ * and non-string values are dropped (not projected) — keeping the field a
+ * client-claimed correlation candidate rather than an authorized-content
+ * injection slot.
+ */
+const REQUEST_ID_UUID_SHAPE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * Projects a raw metadata blob into the allowlisted safe metadata for the
  * given event name. Unknown event names → empty object (default-deny).
  * Exported for unit testing.
@@ -214,6 +227,12 @@ export function projectSafeMetadata(
   for (const key of allowed) {
     if (key in raw) {
       const val = raw[key];
+      if (key === "requestId") {
+        if (typeof val === "string" && REQUEST_ID_UUID_SHAPE.test(val)) {
+          out[key] = val;
+        }
+        continue;
+      }
       if (
         typeof val === "string" ||
         typeof val === "number" ||
