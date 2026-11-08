@@ -196,13 +196,6 @@ export class ApiError extends Error {
     readonly details?: unknown,
     readonly requestId?: string,
     readonly serverMessage?: string,
-    /**
-     * The error response's `x-request-id` header value (#924). Captured for
-     * diagnostics only — unlike {@link requestId} (the typed wire contract)
-     * it is never the promoted fact: consumers keying support correlation
-     * off an ApiError keep using `requestId`.
-     */
-    readonly headerRequestId?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -239,10 +232,13 @@ export async function responseToApiError(
   } catch {
     // body parse failed; fall through to status-string message
   }
-  // #924 Case D: the header is read on the ERROR path too (previously
-  // discarded here) so a mismatch between the two correlation carriers is a
-  // recorded fact instead of a silent pick. Header values survive body
-  // consumption — headers are independent of the stream.
+  // #924 Case D: the header is read on the ERROR path too so a mismatch
+  // between the two correlation carriers is a recorded fact instead of a
+  // silent pick. Header values survive body consumption — headers are
+  // independent of the stream. The header value stays LOCAL to this
+  // function: it is never promoted onto the ApiError (the envelope
+  // `requestId` is the typed wire contract and the only correlation fact
+  // consumers read).
   const headerRequestId = response.headers.get("x-request-id") ?? undefined;
   if (
     requestId !== undefined &&
@@ -250,11 +246,11 @@ export async function responseToApiError(
     requestId !== headerRequestId
   ) {
     // Neither value is promoted: the envelope stays the authoritative
-    // `requestId` (typed wire contract) and the divergence is recorded as
-    // one bounded client-log warn (#924; TASK-CONTRACT §3.3 Case D
-    // "correlation inconsistency"). Bounded via the module-level limiter so
-    // a mismatch storm stays a fixed number of persisted rows — same
-    // fixed-key pattern as `api.network_failed` below.
+    // `requestId` and the divergence is recorded as one bounded client-log
+    // warn (#924; TASK-CONTRACT §3.3 Case D "correlation inconsistency").
+    // Bounded via the module-level limiter so a mismatch storm stays a fixed
+    // number of persisted rows — same fixed-key pattern as
+    // `api.network_failed` below.
     //
     // PROVENANCE: this warn flows through the generic logger, whose
     // kind:"log" events carry NO attemptId dimension, so the proctor
@@ -278,7 +274,6 @@ export async function responseToApiError(
     details,
     requestId,
     serverMessage,
-    headerRequestId,
   );
 }
 
@@ -410,9 +405,15 @@ export const api = {
   },
   // #865: success-path variants that also surface the server's x-request-id
   // response header; callers that need correlation opt in — the plain
-  // helpers above keep their signature and behavior unchanged. Consumed by
-  // TakeExamPage's save path (#924) so a 200 business rejection keeps a
-  // client-claimed correlation id; other call sites opt in as needed.
+  // helpers above keep their signature and behavior unchanged. postWithMeta
+  // is the production surface (TakeExamPage's save path, #924).
+  //
+  // getWithMeta below is a DOCUMENTED FORWARD SURFACE: it currently has no
+  // production caller (its contract is pinned by api.test.ts only). It is
+  // retained deliberately as the read-side counterpart of the same opt-in
+  // seam — recorded in docs/contracts/observability.md (#865/#924) — not an
+  // accidentally dead duplicate. Delete it only together with that contract
+  // note.
   getWithMeta<T>(
     path: string,
     opts?: ApiRequestOptions,

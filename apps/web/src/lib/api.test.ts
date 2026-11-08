@@ -860,9 +860,9 @@ describe("api client — X-Request-Id success-path consumption (#865)", () => {
       name: "ApiError",
       status: 500,
       // Priority stays with the typed wire contract (the envelope); the
-      // header is a captured observation, never the promoted fact.
+      // header never reaches the ApiError — its observation lives only in
+      // the warn payload below.
       requestId: "envelope-req-id",
-      headerRequestId: "header-req-id",
     });
 
     // Not silently choosing one: the inconsistency itself is recorded as a
@@ -923,7 +923,8 @@ describe("api client — X-Request-Id success-path consumption (#865)", () => {
       ),
     );
     await expect(api.get("/api/b")).rejects.toThrow();
-    // Header only (no envelope requestId).
+    // Header only (no envelope requestId): a lone header is not a mismatch —
+    // no warn fires (the header stays internal to the error parser).
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -936,9 +937,7 @@ describe("api client — X-Request-Id success-path consumption (#865)", () => {
         }),
       ),
     );
-    await expect(api.get("/api/c")).rejects.toMatchObject({
-      headerRequestId: "header-only",
-    });
+    await expect(api.get("/api/c")).rejects.toThrow();
 
     expect(
       vi

@@ -76,7 +76,11 @@ required merely to identify an HTTP request.
   alert's 请求编号 and as the client-claimed `requestId` in the
   `answer_autosave_failed` telemetry metadata — never as a server-verified
   fact. On error responses the envelope `requestId` stays authoritative; a
-  divergent header is recorded as a bounded client-log warn, not promoted.
+  divergent header is recorded as a bounded client-log warn, not promoted
+  onto the error object. `api.getWithMeta` itself is a documented
+  forward-looking surface with no production caller yet (read-side
+  counterpart of the same opt-in seam, contract pinned by its unit test) —
+  retained deliberately, not dead code.
   CORS exposes it only to the configured web origin
   (`docs/contracts/api-contract.md` §Standard response headers).
   Non-carriable boundary: requests whose response is never sent — connection

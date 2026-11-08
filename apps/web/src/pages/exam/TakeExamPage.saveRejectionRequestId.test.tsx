@@ -1,4 +1,10 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -754,4 +760,217 @@ describe("save-rejection requestId correlation (#924, TASK-CONTRACT §3.6)", () 
     // reuse the one saveAnswer orchestration.
     expect(source.match(/api\.post<SaveAnswerResponseDTO>/g)).toBeNull();
   });
+});
+
+/**
+ * Heartbeat × save-rejection interaction (TASK-CONTRACT §3.4: "不因
+ * Heartbeat 的 requestId 覆盖一次 SaveAnswer 的拒绝 ID"). The two states are
+ * structurally separate writers (the heartbeat only touches the server-fault
+ * trio), but that separation is a contract, not an accident — these pin it
+ * against a future "unified" regression. Fake timers drive the 30s heartbeat
+ * deterministically (no edit is needed for it to fire).
+ */
+describe("heartbeat never overwrites the save-rejection id (#924, TASK-CONTRACT §3.4)", () => {
+  async function editCurrentBlank(value: string) {
+    const input = screen.getByLabelText("第1空答案");
+    await act(async () => {
+      fireEvent.change(input, { target: { value } });
+    });
+  }
+
+  it("a heartbeat 5xx updates the server-fault banner on its own; the rejection id survives the failure/restore cycle unchanged", async () => {
+    const send = installRecordingBuffer();
+    // Null effectiveDeadline (untimed allows it): under the frozen fake
+    // clock the default Jul-4 deadline is ALWAYS in the past, which would
+    // fire the deadline auto-submit machinery every second and bury the
+    // heartbeat cycle under its state churn.
+    installTakeRoute([buildSnapshot({ effectiveDeadline: null })]);
+    postMeta.requestId = "req-rej-hb-865";
+    let heartbeatCalls = 0;
+    let q1SaveCalls = 0;
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        q1SaveCalls += 1;
+        if (q1SaveCalls === 1) {
+          return rejection("FUTURE_VERSION");
+        }
+        // Post-restore retries of q1 answer 403: the catch path claims
+        // neither connectivity nor server fault and NEVER re-writes the
+        // rejection pair — so the id shown at steady state is the one the
+        // ORIGINAL rejection wrote, making any heartbeat-path overwrite or
+        // clear of it observable instead of masked by retry re-writes.
+        const { ApiError } = await import("@/lib/api");
+        throw new ApiError(403, "forbidden confidential-detail", "FORBIDDEN");
+      }
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        heartbeatCalls += 1;
+        if (heartbeatCalls === 1) {
+          const { ApiError } = await import("@/lib/api");
+          throw new ApiError(
+            500,
+            "heartbeat boom confidential-detail",
+            "INTERNAL_ERROR",
+            undefined,
+            "req-hb-500",
+          );
+        }
+        return { ok: true, serverNow: NOW };
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    vi.useFakeTimers();
+    renderPage();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // Sync query: under fake timers findBy* polling never advances — the
+    // advance above already flushed the snapshot GET's microtasks.
+    expect(screen.getByText("填空 q1")).toBeInTheDocument();
+    await editCurrentBlank("x");
+    // Debounce (1500ms) fires → 200 rejection → the alert shows its id.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(screen.getByTestId("save-rejection-alert")).toHaveTextContent(
+      "请求编号：req-rej-hb-865",
+    );
+
+    // First heartbeat fails 5xx: the server-fault banner carries the
+    // HEARTBEAT's own envelope id, never the rejection's; the rejection
+    // alert is hidden while disconnected but its state is untouched.
+    //
+    // Timing: the heartbeat interval re-arms across render cycles, so the
+    // beat sits at no fixed fake-time offset — drive it with whole-interval
+    // jumps (fine 250ms stepping starves the re-arming interval) and stop
+    // at the first observable state.
+    let faultShown = false;
+    for (let jump = 0; jump < 4 && !faultShown; jump += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+      faultShown = screen.queryByTestId("server-fault-alert") !== null;
+    }
+    expect(
+      faultShown,
+      "first heartbeat must render the server-fault banner",
+    ).toBe(true);
+    const faultBanner = screen.getByTestId("server-fault-alert");
+    expect(faultBanner).toHaveTextContent("错误编号：req-hb-500");
+    expect(faultBanner).not.toHaveTextContent("req-rej-hb-865");
+    expect(
+      screen.queryByTestId("save-rejection-alert"),
+    ).not.toBeInTheDocument();
+
+    // Next heartbeat succeeds: connectivity restored → the rejection alert
+    // reappears with the ORIGINAL id — the heartbeat's id neither overwrote
+    // the rejection pair nor cleared it (§3.4), and nothing re-writes the
+    // pair afterwards (q1 retries 403), so the steady state is the proof.
+    let alertRestored = false;
+    for (let jump = 0; jump < 4 && !alertRestored; jump += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+      alertRestored = (
+        screen.queryByTestId("save-rejection-alert")?.textContent ?? ""
+      ).includes("请求编号：req-rej-hb-865");
+    }
+    expect(
+      alertRestored,
+      "restored heartbeat must re-surface the rejection alert with its id",
+    ).toBe(true);
+    const alert = screen.getByTestId("save-rejection-alert");
+    expect(alert).not.toHaveTextContent("req-hb-500");
+    expect(screen.queryByTestId("server-fault-alert")).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("a later transport failure hides the rejection alert; restored connectivity re-surfaces it with the id and no 错误编号", async () => {
+    // Save-path variant of the §3.4 separation, single-question shape (the
+    // same deterministic skeleton as the online-retry test above): a
+    // transport failure's isDisconnected HIDES the pending rejection alert
+    // without consuming it, and the restoration that clears the fault trio
+    // leaves the rejection pair (and its id) untouched. The heartbeat-
+    // triggered restoration cycle is pinned by the sibling test above.
+    const send = installRecordingBuffer();
+    // Null effectiveDeadline — same fake-clock rationale as the sibling test.
+    installTakeRoute([buildSnapshot({ effectiveDeadline: null })]);
+    postMeta.requestId = "req-q1-rej";
+    let saveCalls = 0;
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        saveCalls += 1;
+        if (saveCalls === 1) {
+          return rejection("INVALID_ANSWER");
+        }
+        if (saveCalls === 2) {
+          throw new Error("socket hang up");
+        }
+        // The post-restoration retry answers 403: the catch path clears
+        // isDisconnected while claiming neither connectivity nor server
+        // fault and never re-writes the rejection pair, so the id shown at
+        // steady state is the one the ORIGINAL rejection wrote.
+        const { ApiError } = await import("@/lib/api");
+        throw new ApiError(403, "forbidden confidential-detail", "FORBIDDEN");
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    vi.useFakeTimers();
+    renderPage();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText("填空 q1")).toBeInTheDocument();
+
+    // Save 1: business rejection with an id → alert visible.
+    await editCurrentBlank("x");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(screen.getByTestId("save-rejection-alert")).toHaveTextContent(
+      "请求编号：req-q1-rej",
+    );
+
+    // Save 2 (another edit): transport failure → connectivity banner, the
+    // rejection alert hidden (isDisconnected), the pair only hidden.
+    await editCurrentBlank("y");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(screen.getByText("连接异常")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("save-rejection-alert"),
+    ).not.toBeInTheDocument();
+
+    // Connectivity restored (online event → existing retry orchestration):
+    // the 403-answered retry clears isDisconnected only — the rejection
+    // alert+id re-surface untouched, and no 错误编号 text appears anywhere.
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    const alert = screen.getByTestId("save-rejection-alert");
+    expect(alert).toHaveTextContent("请求编号：req-q1-rej");
+    expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
+    expect(screen.queryByText(/错误编号/)).not.toBeInTheDocument();
+
+    await flushAll();
+    const failed = telemetryEvents(send, "answer_autosave_failed");
+    // The ORIGINAL rejection row keeps its own id; the transport row and
+    // the 403 retry rows claim none — no invented or borrowed ids anywhere.
+    for (const row of failed) {
+      const meta = row.metadata as Record<string, unknown>;
+      if (meta.errorCode === "INVALID_ANSWER") {
+        expect(meta.requestId).toBe("req-q1-rej");
+      } else {
+        expect(
+          meta.errorCode === "FORBIDDEN" || meta.errorCode === "NETWORK",
+        ).toBe(true);
+        expect(meta).not.toHaveProperty("requestId");
+      }
+    }
+    expect(failed.length).toBeGreaterThanOrEqual(2);
+  }, 10_000);
 });
