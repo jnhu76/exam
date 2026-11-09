@@ -1,0 +1,8 @@
+== exam_ci_perf_a stored routes ==
+/password-reset/EXAMAUDIT-CANARY-PERF-a
+/admin/exams%3Ftoken%3DEXAMAUDIT-CANARY-PERF-a
+EXAMAUDIT-CANARY-PERF-a@host/path
+== exam_ci_perf_c stored routes ==
+
+/admin/exams
+

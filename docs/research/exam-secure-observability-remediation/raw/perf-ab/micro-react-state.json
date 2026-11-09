@@ -1,0 +1,9 @@
+{
+  "react": "19.2.6",
+  "render12SlotsNsPerRender": 5994,
+  "render13SlotsNsPerRender": 7978,
+  "oneExtraUseStateSlotDeltaNs": 1984,
+  "rendersAfterOneSetState": 1,
+  "rendersAfterTwoSameSiteSetStates": 1,
+  "note": "extra dispatch is batched: two same-site setStates => same render count as one"
+}

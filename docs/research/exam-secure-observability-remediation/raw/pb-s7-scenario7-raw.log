@@ -1,0 +1,28 @@
+# pb-s7 raw — 2026-11-07T17:19:47Z — 情形7：客户端声称成功，服务端证据核验
+
+## claim P (positive control): "cs=1 answer=true 保存成功"
+1|1|b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b|2026-11-07 17:14:50.108
+claimed content sha256: b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b
+
+## claim N1: "cs=99 answer=true 保存成功（客户端坚称收到成功提示）"
+-- receipt for cs=99:
+0
+-- WARN lines mentioning clientSeq=99 on this attempt:
+hits=0
+-- enumerate ALL receipts for the attempt (complete accepted set):
+1|1|2026-11-07 17:14:50.108
+2|2|2026-11-07 17:14:50.174
+
+## claim N2: "cs=2 answer=true 已保存"（实际保存的是 false）
+2|fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa
+claimed sha256(true)=b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b
+actual row identity above = sha256(false)=fcbcf165… ⇒ content mismatch; and the true-attempt was rejected:
+{"t":"2026-11-07T17:14:50Z","reqId":"8d751675-9c65-4a21-a6ae-235d640a42b0","reason":"CONFLICTING_PAYLOAD","serverVersion":2}
+
+## claim N3 (HTTP-200 fallacy): "8d751675 返回 200，所以保存成功了"
+{"t":"2026-11-07T17:14:50Z","msg":"incoming request","status":null,"reason":null,"clientSeq":null}
+{"t":"2026-11-07T17:14:50Z","msg":"Answer save rejected","status":null,"reason":"CONFLICTING_PAYLOAD","clientSeq":2}
+{"t":"2026-11-07T17:14:50Z","msg":"request completed","status":200,"reason":null,"clientSeq":null}
+
+## claim N4 (insufficient-evidence class): truncated log (post-17:15:30Z only) + claim cs=99 — cannot distinguish never-arrived vs rejected-and-rotated
+warn_hits_truncated=0

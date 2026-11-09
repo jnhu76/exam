@@ -1,0 +1,15 @@
+2026/11/08 13:19:43 [notice] 1#1: using the "epoll" event method
+2026/11/08 13:19:43 [notice] 1#1: nginx/1.30.5
+2026/11/08 13:19:43 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
+2026/11/08 13:19:43 [notice] 1#1: OS: Linux 6.18.54.1-microsoft-standard-WSL2
+2026/11/08 13:19:43 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
+2026/11/08 13:19:43 [notice] 1#1: start worker processes
+2026/11/08 13:19:43 [notice] 1#1: start worker process 21
+2026/11/08 13:19:43 [notice] 1#1: start worker process 22
+2026/11/08 13:19:43 [notice] 1#1: start worker process 23
+2026/11/08 13:19:43 [notice] 1#1: start worker process 24
+2026/11/08 13:19:43 [notice] 1#1: start worker process 25
+2026/11/08 13:19:43 [notice] 1#1: start worker process 26
+2026/11/08 13:19:43 [notice] 1#1: start worker process 27
+2026/11/08 13:19:43 [notice] 1#1: start worker process 28
+2026/11/08 13:19:47 [error] 21#21: *1 app could not be resolved (2: Server failure), client: 172.19.0.1, server: _, request: "GET /api/ok?token=EXAMAUDIT-CANARY-FIJ-S07E HTTP/1.1", host: "127.0.0.1:18080"

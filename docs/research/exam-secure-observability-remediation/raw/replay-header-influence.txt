@@ -1,0 +1,10 @@
+# R4 forged-header influence replay (2026-11-07T22:39:10Z) — E1b/E1c style from correlation/exp1-2.sh
+--- E1b: unauthenticated save with forged headers
+HTTP_STATUS:401
+{"error":{"code":"AUTH_REQUIRED","message":"请先登录","requestId":"b89cb51c-12d0-4098-ad36-3d5fddb99ecf"}}
+--- server.log canary count (expect 0):
+0
+--- envelope requestId pino pairing:
+envelope requestId=b89cb51c-12d0-4098-ad36-3d5fddb99ecf
+incoming request
+request completed

@@ -1,0 +1,28 @@
+[1;36m[e2e-wsl][0m 启动 dev compose (db + redis)...
+ Container exam-dev-db-1 Running 
+ Container exam-dev-redis-1 Running 
+ Container exam-dev-db-1 Waiting 
+ Container exam-dev-redis-1 Waiting 
+ Container exam-dev-db-1 Healthy 
+ Container exam-dev-redis-1 Healthy 
+[1;36m[e2e-wsl][0m 构建前端 + API + 同步 apps/api/public...
+$ tsc -b && vite build
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+$ node ../../scripts/clean-dist.mjs . && tsc -p tsconfig.build.json
+[1;36m[e2e-wsl][0m 迁移 exam_e2e 库...
+[1;36m[e2e-wsl][0m E2E seed (baseline + demo)...
+[1;36m[e2e-wsl][0m 启动 api dev server (:3510, APP_MODE=e2e, fast scanners)...
+[1;36m[e2e-wsl][0m 等待 api 健康...
+[1;36m[e2e-wsl][0m 运行 Playwright（WSL 本地，workers=1）...
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › e2e/investigation-ui-acceptance.spec.ts:1064:3 › investigation UI browser acceptance (#856) › M5: transport-level save failure claims no request id anywhere (UNKNOWN semantics) (3.4s)
+
+  1 passed (4.1s)
+[1;33m[e2e-wsl][0m KEEP_SERVER=1，保留 dev server (pid 1963885). 手动停: kill 1963885
+EXIT=0
