@@ -49,7 +49,7 @@ FLAKE_INVESTIGATION = PARTIAL
 FLAKES_FIXED = 2 deterministic UUID-fixture contract failures (ca7e62ec / 9dd1d5f4) + partial #878 geometry fix 1f29b614 (1/5 probes)
 FLAKES_DEFERRED = 1 (#878 geometry flake, OPEN/DEFER, 4 residual fixed-150ms waits, ROOT_CAUSE_CONFIDENCE=HYPOTHESIS) + 2 new signatures registered (:555 toBeFocused, A3-F7 :341) + run 42483066387 occurrence
 FLAKE_ISSUES_CREATED_OR_UPDATED = #878 (OPEN, 4 unchecked Acceptance; registry updated) / #930 (OPEN, GitHub billing)
-REQUIRED_CI_FAILURES = 2 (runs 42572487639 / 42593850473: Static checks fail, 6 required jobs skipped, billing annotation; gh pr checks 928 = FAIL exit 1; 0 green runs)
+REQUIRED_CI_FAILURES = 4+ (every completed run on the integration branch is FAIL: e.g. 42572487639 / 42593850473 / 42607941019 / 42608435613 (final exact SHA, attempt 1); Static checks fail, 6 required jobs skipped, billing annotation; gh pr checks 928 = FAIL exit 1; 0 green runs)
 
 GLOBAL_PRODUCT_CONSISTENCY = PASS
 DOCUMENTATION_CONSISTENCY = PASS
@@ -93,6 +93,7 @@ END_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 | #878 / #930 | 均 `state=OPEN` | `gh issue view 878` / `gh issue view 930` |
 | master | `5140c3dd…`，集成树非其祖先 | `git rev-parse master`；`git merge-base --is-ancestor a5df2c90 master` → exit 1 |
 | CI | `gh pr checks 928` → `PR_CHECKS_EXIT=1`；head_sha 唯一 run `42593850473` `conclusion=failure`；success-run 计数 `0` | `gh pr checks` / `gh api …/actions/runs?head_sha=…` |
+| 最终 exact-SHA CI（attempt 1） | 本 ask 给定 state FAIL；本会话复核 run `42608435613` `conclusion=failure`（head_sha `f32693c7…`），`Static checks fail 1s` + 6 required job `skipping` + `CodeRabbit skipping`，`gh pr checks 928` → `EXIT=1`，ANNOTATIONS = 账户计费 job 未启动 | `gh api …/runs/42608435613`、`gh run view`、`gh pr checks 928`；见 §8 |
 
 `pr-body.md:3` 明示本分支 `Draft PR for CI only — do not merge directly`。**未合并、未发布、未授权任何 merge / release。**
 
@@ -152,8 +153,45 @@ END_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 本轮交付产生两次非 force 快进 push：`a5df2c90..e97e15fb`、`e97e15fb..<final>`（`PUSH_EXIT=0`）。以下结论不依赖「某个瞬间是否已有新 run」，因为提交不能自含其 SHA、且每次 push 都可能触发新的 CI run：
 
 - **分支与 PR 同一性**（可复核）：PR #928 `headRefOid` = 本地 `git rev-parse HEAD` = `gh api .../git/ref/heads/integration/production-closure-20261109` 的 `object.sha`，三者始终相等；`state=OPEN, isDraft=true, mergedAt=null, baseRefName=master`；`git status --short` 为空（clean tree）。最终 HEAD 的 SHA = `FinalResult.finalSha`，以 Git ref / GitHub headRefOid 为权威。
-- **required CI 在本分支任何 SHA 上从未取得绿灯**：本会话观察到的所有已完成 run —— `42572487639`(0b2e2d8a)、`42593850473`(a5df2c90)、`42607941019`(交付 HEAD) —— 全部 `conclusion=failure`；`Static checks` 因外部 GitHub 账户计费未启动（1–2s 失败、日志 404），6 个 required job 全部 `skipped`，0 success job / 0 green run；阻断登记于 Issue **#930**（OPEN）。`gh pr checks 928` 在最后查询为 `PR_CHECKS_EXIT=1`；`mergeStateStatus=UNSTABLE`。
+- **required CI 在本分支任何 SHA 上从未取得绿灯**：本会话观察到的所有已完成 run —— 例如 `42572487639`(0b2e2d8a)、`42593850473`(a5df2c90)、`42607941019`、`42608435613`(最终 exact SHA `f32693c7…`，attempt 1，见 §8) —— 全部 `conclusion=failure`；`Static checks` 因外部 GitHub 账户计费未启动（1–2s 失败、日志 404），6 个 required job 全部 `skipped`，0 success job / 0 green run；阻断登记于 Issue **#930**（OPEN）。`gh pr checks 928` 在最后查询为 `PR_CHECKS_EXIT=1`；`mergeStateStatus=UNSTABLE`。每次新的 push 都会在同一外部条件下触发新的 FAIL run，故该清单按「所有已完成 run 全 FAIL」的不变量表述，不穷举瞬时 run。
 - **瞬时态的正确读法**：若某个新 push 之后 GitHub 尚未触发 run，`gh pr checks 928` 可能短暂只显示 `CodeRabbit skipping`、`EXIT=0`、`mergeStateStatus=CLEAN`。这**不是绿 CI**：7 个 required job 零执行 / 零 success，`CLEAN` 只表示当前无挂起或失败的 check，不构成 required CI 通过证据。一旦 run 触发，其结论仍为本节上一条的 FAIL（外部计费，代码/文档改动不能修复）。
 - 因此 §1 的 `FULL_CI = FAIL` / `MERGE_STATUS = BLOCKED` / `RELEASE_STATUS = NOT_RELEASED` 与「未合并、未发布」结论**不变**；§1 / §2 中 `gh pr checks 928 → EXIT=1` 是推送前在 `a5df2c90` head 上本会话实跑的记录，作为该 SHA 的 CI 事实保留。外部计费恢复后须在 clean tree 的 exact SHA 上重跑完整 CI、取得 7 个 required job 全 success，并按 SPEC §7.2 产生新 SHA 与独立复审；在此之前维持 draft / OPEN。
 
 > 最终 `FinalResult.finalSha` = 本分支最终 HEAD（含本补记提交）= PR #928 `headRefOid`；提交不能自含其 SHA，故以 Git ref / GitHub headRefOid 为权威。
+
+---
+
+## 8. attempt 1 — 最终 exact-SHA CI FAIL 的记录与处置（本 ask）
+
+**ask 给定材料**：「最终 exact-SHA CI 未通过（attempt 1，state FAIL）」及 `gh pr checks 928` 输出尾部：`Static checks fail 1s`（run `42608435613` / job `129130254392`）；`API coverage / Build / CodeRabbit / E2E / Package coverage / Production transport regression / Web coverage` 全部 `skipping`。
+
+**本会话独立复核（命令与输出）**：
+
+| 命令 | 输出 |
+| --- | --- |
+| `gh api "repos/jnhu76/exam/actions/runs/42608435613"` | `{"conclusion":"failure","event":"pull_request","head_sha":"f32693c7c6e6e46b2dd273a0bee54d087f4d7d21","id":42608435613,"status":"completed"}`，created `2026-11-09T11:21:47Z` |
+| `gh api "…/runs/42608435613/jobs?per_page=100" --jq '[.jobs[]\|{name,conclusion}]'` | `Static checks=failure`（started 11:21:48、completed 11:21:49，1s）+ `Build / Web coverage / API coverage / E2E / Package coverage / Production transport regression` = 6 × `skipped` |
+| `gh run view 42608435613 --repo jnhu76/exam` | ANNOTATIONS 原文 *"The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"* |
+| `gh pr checks 928 --repo jnhu76/exam` | `Static checks fail 1s` + 6 required `skipping` + `CodeRabbit skipping`；`PR_CHECKS_EXIT=1`（与 ask 给定输出一致） |
+
+**诊断（CI 可解释的文档问题）**：这是**外部 GitHub 账户计费**导致 `Static checks` job 根本未启动（无 runner、1s 即失败、日志 404），6 个 required job 因依赖 `skipped`。它不是代码失败，也不是文档 / 链接 / 生成物失败；仓库侧的文档、链接与生成物门禁（下表）全部通过，CI 层面不存在可由文档修改修复的缺陷。按本 ask「只修文档/链接/生成物/CI 可解释的文档问题；不得改产品代码或放宽测试」，本次**零产品代码、零测试改动、零测试放宽**，仅做文档准确性修正：
+
+1. §1 `REQUIRED_CI_FAILURES`、§2 CI 行、§7 run 清单补入 `42608435613`（attempt 1），并把「所有已完成 run 全 FAIL、0 green run」固化为时间无关不变量（每次 push 的新 run 仍 FAIL）；
+2. `FINAL_PRODUCT_ADJUDICATION.md` 附录 D、`PERFORMANCE_AND_CI.md` §1、`DOCUMENTATION_CONSISTENCY_AUDIT.md` §6 同步补记；
+3. 新增本节记录 attempt 1 的 FAIL 与诊断；重新生成 `SHA256SUMS`（文档字节变更）。
+
+**本会话实跑的文档 / 链接 / 生成物检查（全部 exit 0，均为根 `package.json` 语义命令）**：
+
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `pnpm --filter @exam/api api:openapi:check` | **`0`** | `openapi.json is up to date.`（生成物无漂移） |
+| `pnpm docs:build` | **`0`** | `check-site.mjs` 10 项全 PASS：allowlist 8/8、16 页哈希、16 路由、中英路由对应、**380 内部链接与片段**、16 路由可达、**130 permalinks**、404、search index en/zh 各 50 documents → `All documentation checks passed.` |
+| `pnpm format:check` | **`0`** | `All matched files use Prettier code style!`（注意：`.prettierignore` 含 `*.md`，不校验 Markdown） |
+| `sha256sum -c SHA256SUMS`（本目录） | **`0`** | 18 条目全 `OK` / `0 FAILED` |
+| `git diff --check` | **`0`** | 无空白 / 冲突标记 |
+
+**结论**：verdict 仍 **BLOCKED**（blocker 1 required CI FAIL 决定性未解，外部计费 #930 OPEN；blocker 2 与之耦合）；4× KEEP_AND_MERGE 不变；`FULL_CI = FAIL`、`POST_MERGE_SMOKE = NOT_RUN`、`MERGE_STATUS = BLOCKED`、`RELEASE_STATUS = NOT_RELEASED`。外部计费恢复后须在 clean tree 的 exact SHA 上重跑完整 CI、取得 7 个 required job 全 success 并按 SPEC §7.2 产生新 SHA 与独立复审；在此之前维持 draft / OPEN。**未合并、未发布。**
+
+> 附注：本 ask 期间检测到未跟踪 scratch `/home/hoo/Source/exam/.tmp/production-closure/reviews/REVIEW_RERUN_1.md` 被外部进程改写（`cmp -s` 与 `reviews/` 内已提交副本不一致）。`reviews/` 副本是受控 Git 历史中的交付快照、由 `SHA256SUMS` 钉住字节，依 SPEC §9「不能依赖未跟踪 `.tmp` 作为唯一交付依据」不从 scratch 重新复制，避免注入未经复核的内容。
+
+— 交付文档编辑，2026-11-09，attempt 1

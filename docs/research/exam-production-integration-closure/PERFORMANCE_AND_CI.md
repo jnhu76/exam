@@ -19,6 +19,8 @@
 
 **判定**：这是**外部账户计费条件，非代码失败**，但门禁事实未变：clean-tree exact-SHA required CI **FAIL**。按 SPEC §7.2（required CI 失败必须 BLOCKED）、§8.1.7、§6.2、§3.6（「新 Issue 不是 CI 豁免」），`FULL_CI = FAIL`、`MERGE_STATUS = BLOCKED`。本地 `pnpm verify` / `pnpm e2e` 绿灯不替代 required CI（`pr-body.md` §Notes 自述）。
 
+**attempt 1（ask 给定 + 本会话复核）**：最终 exact SHA `f32693c7…` 的 CI 仍为 **FAIL（state FAIL / attempt 1）**。ask 给定的 `gh pr checks 928` 尾部为 `Static checks fail 1s` + `API coverage / Build / CodeRabbit / E2E / Package coverage / Production transport regression / Web coverage` 全 `skipping`。本会话 `gh api …/actions/runs/42608435613` → `conclusion=failure`、`head_sha=f32693c7…`；`…/jobs` → `Static checks=failure`(1s) + 6 个 required job `skipped`；`gh run view 42608435613` ANNOTATIONS 为 *"The job was not started because recent account payments have failed…"*；`gh pr checks 928` → `PR_CHECKS_EXIT=1`。这是外部计费导致 job 未启动，**不是文档 / 链接 / 生成物或代码失败**；本 ask 的文档修正与全部文档/链接/生成物检查（openapi:check、docs:build、format:check、sha256sum -c、git diff --check，全部 exit 0）见 `FINAL_INTEGRATION_RECORD.md` §8。verdict 仍 BLOCKED，未合并、未发布。
+
 ---
 
 ## 2. 本地门禁证据（给定材料，本会话未复跑）
@@ -66,6 +68,8 @@
 两条命令均在仓库根 `package.json` 定义的语义命令上实跑，未使用替代品；`docs:build` 的生成物（`docs-site/content/`、`.vitepress/dist/`）被 `.gitignore` 忽略，`git status --short` 复核无新增受控文件。
 
 `pnpm format:check` 为 `prettier --check .`；`.prettierignore` 含 `*.md`，因此该门禁**不校验 Markdown 文件**（本目录交付物与长期文档均为 `.md`）。`pnpm docs:build` = `node docs-site/scripts/project-content.mjs && vitepress build docs-site && node docs-site/scripts/check-site.mjs`；生成物 `docs-site/content/`、`.vitepress/cache/`、`.vitepress/dist/` 均被 `.gitignore` 忽略，不进入受控树。
+
+**attempt 1 复跑（本 ask，全部 exit 0）**：`pnpm --filter @exam/api api:openapi:check` → `openapi.json is up to date.`（生成物无漂移）；`pnpm docs:build` → 10 项 PASS（380 links / 16 routes / 130 permalinks / 中英 50-doc search index）；`pnpm format:check` → `All matched files use Prettier code style!`；`sha256sum -c SHA256SUMS` → 18 条目全 OK；`git diff --check` → 0。结论：不存在文档 / 链接 / 生成物缺陷，最终 exact-SHA CI FAIL 由外部计费导致 Static checks 未启动；命令与输出见 `FINAL_INTEGRATION_RECORD.md` §8。
 
 ---
 

@@ -150,6 +150,8 @@ sha256sum -c SHA256SUMS
 
 > 说明：两条 `pnpm` 命令均取自根 `package.json` scripts，未用更快替代品；`docs:build` 生成物（`docs-site/content/`、`.vitepress/dist/`）被 `.gitignore` 忽略，`git status --short` 复核无新增受控文件。`pnpm format:check` 为 `prettier --check .`，而 `.prettierignore` 含 `*.md`，因此该门禁**不校验 Markdown 文件**；本目录交付物与长期文档均为 `.md`，故其 PASS 不代表对新文档做了格式校验，文档一致性依赖本审计的 review。`docs:build` 的 `project-content.mjs` 生成 `docs-site/content/`，`check-site.mjs` 校验站点导航/链接（本目录 research 文档不在 docs-site 的 16 页 allowlist 内，故不影响站点门禁）。
 
+**attempt 1 复核（本 ask，全部 exit 0）**：`pnpm --filter @exam/api api:openapi:check` → `openapi.json is up to date.`（生成物无漂移）；`pnpm docs:build` → check-site.mjs 10 项全 PASS（380 内部链接与片段、16 路由、130 permalinks、search index en/zh 各 50 documents）；`pnpm format:check` → `All matched files use Prettier code style!`；`sha256sum -c SHA256SUMS` → 18 条目全 OK / 0 FAILED；`git diff --check` → 0。结论：**不存在文档 / 链接 / 生成物缺陷**；最终 exact-SHA CI FAIL（attempt 1，run `42608435613`，`Static checks fail 1s` + 6 required job `skipping` + `CodeRabbit skipping`）是外部 GitHub 计费导致 job 未启动，不是本类问题，不由代码/文档改动修复（#930 OPEN）。诊断、命令与处置见 `FINAL_INTEGRATION_RECORD.md` §8；四个文档一致性门禁仍 PASS，不声称 CI 通过、不声称已合并、不声称已发布。
+
 ---
 
 ## 7. 结论
