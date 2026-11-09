@@ -126,6 +126,12 @@ export const ProctorAttemptEventSchema = z.object({
     z.string(),
     z.string().or(z.number()).or(z.boolean()).or(z.null()),
   ),
+  /**
+   * Client-claimed SPA page, projected server-side onto the closed
+   * `SPA_ROUTE_TEMPLATES` vocabulary (#864) at BOTH ingest and read time —
+   * the value is a route template (`/exam/:attemptId/take`) or the field is
+   * omitted; raw client bytes never appear on the wire.
+   */
   route: z.string().min(1).max(500).optional(),
   /** Origin of the timeline row: frontend telemetry vs. compliance audit log. */
   source: z.enum(["client_event", "audit_log"]),

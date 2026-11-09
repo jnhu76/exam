@@ -13,6 +13,7 @@ import {
   createExamViaApi,
 } from "./testHelpers.js";
 import { schema } from "@exam/db/schema/pg";
+import { SPA_ROUTE_TEMPLATES } from "@exam/contracts";
 import { createClientEventRepo } from "@exam/db/repository/clientEventRepo";
 import { createAuditLogRepo } from "@exam/db/repository/auditLogRepo";
 
@@ -95,6 +96,7 @@ describe("proctor monitoring API", () => {
     name: string,
     metadata: Record<string, unknown> = {},
     level: "debug" | "info" | "warn" | "error" = "info",
+    route: string | null = null,
   ): Promise<void> {
     await createClientEventRepo(ctx.db).createMany(
       {
@@ -113,7 +115,7 @@ describe("proctor monitoring API", () => {
           kind: "exam_telemetry",
           level,
           name,
-          route: null,
+          route,
           occurredAt: new Date(),
           receivedAt: new Date(),
           clientSessionId: "sess-1",
@@ -241,6 +243,77 @@ describe("proctor monitoring API", () => {
       expect(ev.metadata).not.toHaveProperty("answer");
       expect(ev.metadata).not.toHaveProperty("token");
       expect(ev.source).toBe("client_event");
+    });
+
+    it("applies the closed route-template projection to LEGACY rows — hostile stored routes are not re-exposed (#864)", async () => {
+      const examId = await createOpenExam("Monitor Exam Legacy Route");
+      const cand = await createCandidateViaApi(
+        ctx.app,
+        ctx.adminToken,
+        `cand-mon-lr-${Date.now()}`,
+        ctx.org.id,
+      );
+      const attemptId = await enrollAndStart(examId, {
+        profileId: cand.candidateProfileId,
+        token: cand.token,
+      });
+      // Rows written by the pre-#864 regime (raw pathnames persisted verbatim)
+      // plus one already-template row — read side must project every one of
+      // them through the same closed vocabulary used at ingest.
+      const CANARY = "EXAMAUDIT-CANARY-LEGACY";
+      await seedEvent(
+        attemptId,
+        examId,
+        "visibility_lost",
+        {},
+        "warn",
+        `/password-reset/${CANARY}`,
+      );
+      await seedEvent(
+        attemptId,
+        examId,
+        "browser_offline",
+        {},
+        "warn",
+        "/exam/a%2Fb%3Ftoken%3DSECRET-TAIL/take",
+      );
+      await seedEvent(attemptId, examId, "paste_detected", {}, "info", null);
+      await seedEvent(
+        attemptId,
+        examId,
+        "submit_failed",
+        {},
+        "warn",
+        "/exam/:attemptId/take", // already a template — passes through
+      );
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/attempts/${attemptId}/proctor-events?limit=20`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const bodyText = res.body;
+      // SECRET_AT_REST may exist in legacy rows, but the authorized timeline
+      // must not re-expose it: neither canary nor smuggled bytes survive.
+      expect(bodyText).not.toContain(CANARY);
+      expect(bodyText).not.toContain("SECRET-TAIL");
+      expect(bodyText).not.toContain("password-reset");
+      expect(bodyText).not.toContain("%2F");
+      // The already-safe template row keeps its diagnostic value unchanged.
+      const events = res.json().items as Array<{
+        name: string;
+        route?: string;
+      }>;
+      const templateRow = events.find((e) => e.name === "submit_failed");
+      expect(templateRow?.route).toBe("/exam/:attemptId/take");
+      // Projected-away routes are omitted entirely (route is optional on the
+      // wire schema); no event carries a non-template route value.
+      for (const e of events) {
+        if (e.route !== undefined) {
+          expect(SPA_ROUTE_TEMPLATES).toContain(e.route);
+        }
+      }
     });
 
     it("candidate CANNOT access (403)", async () => {
