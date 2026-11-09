@@ -1,0 +1,14 @@
+readiness base=200
+probe after kill: 502
+{"stage":"fault-upstream-refused","n":100,"perVariant":{"base":{"codes":{"502":100},"accessBytes":19376,"errorBytes":26476},"int":{"codes":{"502":100},"accessBytes":9100,"errorBytes":26474}}}
+--- base ---
+172.19.0.1 - - [08/Nov/2026:17:15:28 +0000] "GET /api/refused-250924 HTTP/1.1" 502 157 "-" "-"
+2026/11/08 17:15:28 [error] 23#23: *7 connect() failed (111: Connection refused) while connecting to upstream, client: 172.19.0.1, server: _, request: "GET /api/refused-8736 HTTP/1.1", upstream: "http://172.19.0.2:3000/api/refused-8736", host: "127.0.0.1:8301"
+2026/11/08 17:15:28 [error] 23#23: *7 connect() failed (111: Connection refused) while connecting to upstream, client: 172.19.0.1, server: _, request: "GET /api/refused-250924 HTTP/1.1", upstream: "http://172.19.0.2:3000/api/refused-250924", host: "127.0.0.1:8301"
+
+--- int ---
+172.19.0.1 - [08/Nov/2026:17:15:29 +0000] "GET /api" 502 157 rt=0.000 up=502/0.000 reqid=-
+2026/11/08 17:15:29 [error] 21#21: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.19.0.1, server: _, request: "GET /api/refused-200087 HTTP/1.1", upstream: "http://172.19.0.2:3000/api/refused-200087", host: "127.0.0.1:8302"
+2026/11/08 17:15:29 [error] 21#21: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.19.0.1, server: _, request: "GET /api/refused-550274 HTTP/1.1", upstream: "http://172.19.0.2:3000/api/refused-550274", host: "127.0.0.1:8302"
+
+F1_DONE

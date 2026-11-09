@@ -1,0 +1,1 @@
+{"op":"crypto.randomUUID()","n":200000,"reps":5,"medianNsPerOp":"103.3","minNs":"41.2","maxNs":"159.3","sinkUsed":true}

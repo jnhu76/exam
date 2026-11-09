@@ -1,0 +1,8 @@
+0
+172.19.0.1 - [08/Nov/2026:17:14:50 +0000] "GET /api" 502 157 rt=4.001 up=-/- reqid=-
+172.19.0.1 - [08/Nov/2026:17:14:54 +0000] "GET /api" 502 157 rt=3.838 up=-/- reqid=-
+---ERRLOG---
+2026/11/08 17:14:42 [error] 25#25: *770 app could not be resolved (2: Server failure), client: 172.19.0.1, server: _, request: "GET /api/attempts/z932757 HTTP/1.1", host: "127.0.0.1:8302"
+2026/11/08 17:14:46 [error] 25#25: *770 app could not be resolved (3: Host not found), client: 172.19.0.1, server: _, request: "GET /api/attempts/z263292 HTTP/1.1", host: "127.0.0.1:8302"
+2026/11/08 17:14:50 [error] 25#25: *770 app could not be resolved (2: Server failure), client: 172.19.0.1, server: _, request: "GET /api/attempts/z718663 HTTP/1.1", host: "127.0.0.1:8302"
+2026/11/08 17:14:54 [error] 25#25: *770 app could not be resolved (3: Host not found), client: 172.19.0.1, server: _, request: "GET /api/attempts/z397130 HTTP/1.1", host: "127.0.0.1:8302"

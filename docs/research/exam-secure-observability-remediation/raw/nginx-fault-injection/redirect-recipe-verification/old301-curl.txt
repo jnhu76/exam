@@ -1,0 +1,8 @@
+-- old bare 301: healthz (healthcheck would see this):
+301 https://127.0.0.1/healthz
+-- wget behavior exactly as compose healthcheck runs it (expect non-zero exit):
+288BBB03BD7F0000:error:0A000086:SSL routines:tls_post_process_server_certificate:certificate verify failed:ssl/statem/statem_clnt.c:2124:
+ssl_client: SSL_connect
+wget: error getting response: Connection reset by peer
+wget exit=1
+-- and with the NEW recipe the same wget (expect 0):

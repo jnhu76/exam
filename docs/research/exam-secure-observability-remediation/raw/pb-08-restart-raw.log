@@ -1,0 +1,56 @@
+# pb-08 — 2026-11-07T17:20:01Z — 重启服务端验证跨进程/重启后 requestId 唯一性
+
+## step1: pre-restart snapshot
+log_lines=1204
+1204
+pre_restart_distinct_reqids=489
+server pid: 773614
+ 773614 node /home/hoo/.nvm/versions/node/v24.22.1/bin/pnpm --filter @exam/api dev
+
+## step2: stop process group (RUNBOOK §4.2)
+server down confirmed
+
+## step3: restart (MANIFEST.json api.restartCommand, >> append to same server.log)
+healthy after ~5s
+{"status":"ok"}
+new pid: 787438
+
+## step4: post-restart traffic (fresh requests on new process)
+-- health + login-denied + replay cs=1 (cross-restart receipt replay) + fresh 400:
+{"status":"ok"}
+{"error":{"code":"AUTH_INVALID_CREDENTIALS","message":"用户名或密码错误","requestId":"c55dc308-912d-4810-905e-5dee9662d4f3"}}
+-- replay cs=1 on attempt C (cross-restart idempotency):
+{"accepted":true,"serverVersion":1,"savedAt":"2026-11-07T17:14:50.108Z"}
+-- fresh schema 400:
+{"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","details":{"fields":[{"field":"clientSeq","code":"TOO_SMALL","params":{"minimum":0},"message":"Number must be greater than or equal to 0"}]},"requestId":"26d373c0-c518-4808-86aa-04a7a78af346"}}
+
+## step5: uniqueness verification across restart
+-- post-restart incoming reqIds (log lines > 1204):
+26d373c0-c518-4808-86aa-04a7a78af346
+35a51d91-95a7-4f0a-8372-bfbdbf704d03
+377092f2-e673-4561-a477-b23e261206fc
+7582fad9-65fe-4970-ba9b-c8b6877f5989
+b66e589d-e08d-4daf-a2b7-475ca7b7a064
+c55dc308-912d-4810-905e-5dee9662d4f3
+post_restart_distinct_reqids=6
+
+-- intersection with pre-restart set (expect EMPTY):
+intersection_count=0
+
+-- any reqId with incoming lines on BOTH sides of the restart boundary:
+0
+
+-- pids seen in log (process generations):
+    946 773644
+    255 783608
+     22 787468
+
+-- replay request reqId (post-restart, accepted verbatim old ACK):
+{"t":"2026-11-07T17:20:26Z","reqId":"377092f2-e673-4561-a477-b23e261206fc","url":"/api/attempts/db3a024d-07e3-4517-9aee-33896939bca3/answers/c9e708fe-a009-4f66-bdec-463f4b336ac1"}
+{"t":"2026-11-07T17:20:27Z","reqId":"26d373c0-c518-4808-86aa-04a7a78af346","url":"/api/attempts/db3a024d-07e3-4517-9aee-33896939bca3/answers/c9e708fe-a009-4f66-bdec-463f4b336ac1"}
+-- receipt unchanged by replay (still original saved_at):
+1|1|2026-11-07 17:14:50.108
+2|2|2026-11-07 17:14:50.174
+
+## step6: final git-tracked-files untouched check
+?? ../../test-results/

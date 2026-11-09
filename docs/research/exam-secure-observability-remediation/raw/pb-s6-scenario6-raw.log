@@ -1,0 +1,43 @@
+# pb-s6 raw — 2026-11-07T17:19:10Z — 情形6：一个逻辑保存操作对应多个不同 requestId
+
+## part1: live triple on attempt C cs=2 (creator / replay / rejected)
+{"reqId":"54b7b764","t":1794071690168,"msg":"incoming request","status":null,"clientSeq":null,"reason":null}
+{"reqId":"54b7b764","t":1794071690193,"msg":"request completed","status":200,"clientSeq":null,"reason":null}
+{"reqId":"17dde44c","t":1794071690213,"msg":"incoming request","status":null,"clientSeq":null,"reason":null}
+{"reqId":"17dde44c","t":1794071690234,"msg":"request completed","status":200,"clientSeq":null,"reason":null}
+{"reqId":"8d751675","t":1794071690254,"msg":"incoming request","status":null,"clientSeq":null,"reason":null}
+{"reqId":"8d751675","t":1794071690274,"msg":"Answer save rejected","status":null,"clientSeq":2,"reason":"CONFLICTING_PAYLOAD"}
+{"reqId":"8d751675","t":1794071690275,"msg":"request completed","status":200,"clientSeq":null,"reason":null}
+receipt cs=2 saved_at epoch: 1794071690174 (=17:14:50.174Z)
+
+## part2: historical T08 concurrent pair (d9bc2a50 attempt, cs=7, both HTTP 200 accepted, ONE receipt row saved 17:04:10.503Z=1794071050503)
+$ incoming requests to d9bc2a50 URL in [1794071050300,1794071050800]:
+{"reqId":"14a695e7-c78e-4f86-8a1f-a91f8e28e53a","t":1794071050466}
+{"reqId":"1f5e1b70-b918-4d77-bdf9-65d229ad2b25","t":1794071050479}
+{"reqId":"afa8dc35-407b-4e3e-9c2a-b751695dea82","t":1794071050497}
+{"reqId":"3cf7742c-e50a-468d-bcc0-b8dfa5a65bab","t":1794071050498}
+$ their res lines:
+{"reqId":"14a695e7","t":1794071050466,"status":401,"rt":0.45667707920074463}
+{"reqId":"1f5e1b70","t":1794071050485,"status":403,"rt":5.857631087303162}
+{"reqId":"afa8dc35","t":1794071050523,"status":200,"rt":25.338329076766968}
+{"reqId":"3cf7742c","t":1794071050563,"status":200,"rt":64.45660901069641}
+$ receipt cs=7 row:
+ client_seq | accepted_version |                         answer_identity                          |          saved_at          |           utc           
+------------+------------------+------------------------------------------------------------------+----------------------------+-------------------------
+          7 |                3 | b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b | 2026-11-08 01:04:10.503+08 | 2026-11-07 17:04:10.503
+(1 row)
+
+
+## part3: receipt has no request attribution column (schema proof)
+organization_id
+attempt_id
+question_id
+client_seq
+answer_identity
+legacy_answer
+accepted_version
+saved_at
+
+## part4: ack-loss request (incoming only, no res) — receipt cs=10 still written
+{"t":"2026-11-07T17:07:15Z","msg":"incoming request"}
+10|6|2026-11-08 01:07:15.994+08|2026-11-07 17:07:15.994

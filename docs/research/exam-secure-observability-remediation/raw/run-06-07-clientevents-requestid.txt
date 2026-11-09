@@ -1,0 +1,102 @@
+############ 族6 client_events 引用冒用 + 族7 自报 requestId (2026-11-07T16:45:49Z) ############
+
+== 6.0 基线：candA1 为自己 attempt 发合法事件（产生受害者 eventId 供他人冒用）==
+--- [candA1 legit own-attempt event] POST /api/client-events
+BODY: {"events":[{"kind":"exam_telemetry","level":"info","name":"examaudit-canary-f6-baseline-a1","occurredAt":"2026-11-07T16:50:00.000Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","eventId":"EXAMAUDIT-CANARY-EV-A1-0001","clientSessionId":"EXAMAUDIT-CANARY-SESSION-A1-0001","metadata":{"marker":"f6-baseline"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.015429
+
+== 6.1 candA2 冒用 candA1 的 attemptId/examId/questionId/eventId/clientSessionId（同 org 未拥有）==
+--- [candA2 claims A1 refs+eventId+sessionId] POST /api/client-events
+BODY: {"events":[{"kind":"exam_telemetry","level":"warn","name":"examaudit-canary-f6-a2-claims-a1","occurredAt":"2026-11-07T16:50:01.000Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","eventId":"EXAMAUDIT-CANARY-EV-A1-0001","clientSessionId":"EXAMAUDIT-CANARY-SESSION-A1-0001","metadata":{"marker":"f6-a2-claims-a1","requestId":"e3fd1e42-be25-4283-bc52-2fc5e45647cb"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.013141
+
+== 6.2 candB1（Org B）冒用 Org A attempt/exam/question ==
+--- [candB1 claims OrgA refs] POST /api/client-events
+BODY: {"events":[{"kind":"exam_telemetry","level":"error","name":"examaudit-canary-f6-b1-claims-orga","occurredAt":"2026-11-07T16:50:02.000Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","eventId":"EXAMAUDIT-CANARY-EV-B1-0001","metadata":{"marker":"f6-b1-claims-orga","requestId":"e3fd1e42-be25-4283-bc52-2fc5e45647cb"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.010575
+
+== 6.3 proctorA1（staff，已分配）冒用考生 attemptId —— 断言无特权例外 ==
+--- [proctorA1 claims candidate attempt] POST /api/client-events
+BODY: {"events":[{"kind":"proctor","level":"info","name":"examaudit-canary-f6-proctor-claims","occurredAt":"2026-11-07T16:50:03.000Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","eventId":"EXAMAUDIT-CANARY-EV-P1-0001","metadata":{"marker":"f6-proctor-claims"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.011414
+
+== 6.4 adminA 冒用考生 attemptId ==
+--- [adminA claims candidate attempt] POST /api/client-events
+BODY: {"events":[{"kind":"log","level":"info","name":"examaudit-canary-f6-admin-claims","occurredAt":"2026-11-07T16:50:04.000Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","eventId":"EXAMAUDIT-CANARY-EV-ADM-0001","metadata":{"marker":"f6-admin-claims"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.011096
+
+== 6.5 candA1 自有 attempt + 伪造 examId（服务端 canonical exam 应胜出）==
+--- [candA1 own attempt + forged examId] POST /api/client-events
+BODY: {"events":[{"kind":"exam_telemetry","level":"info","name":"examaudit-canary-f6-a1-forged-exam","occurredAt":"2026-11-07T16:50:05.000Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","eventId":"EXAMAUDIT-CANARY-EV-A1-0002","metadata":{"marker":"f6-a1-forged-exam"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.011621
+
+== 6.6 candA1 自有 attempt + 不在冻结快照内的 questionId ==
+--- [candA1 own attempt + foreign questionId] POST /api/client-events
+BODY: {"events":[{"kind":"exam_telemetry","level":"info","name":"examaudit-canary-f6-a1-foreign-q","occurredAt":"2026-11-07T16:50:06.000Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","questionId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","eventId":"EXAMAUDIT-CANARY-EV-A1-0003","metadata":{"marker":"f6-a1-foreign-q"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.011938
+
+== 6.7 正例对照：candA2（真实 enrolled）仅声明 examId（exam_start_failed 生产者路径）==
+--- [candA2 own enrollment exam claim] POST /api/client-events
+BODY: {"events":[{"kind":"exam_telemetry","level":"info","name":"examaudit-canary-f6-a2-own-exam","occurredAt":"2026-11-07T16:50:07.000Z","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","eventId":"EXAMAUDIT-CANARY-EV-A2-0002","metadata":{"marker":"f6-a2-own-exam"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.011207
+
+== 6.8 eventId 重放幂等：candA1 原样重发 6.0 事件（同 user+eventId 应 dedup）==
+--- [candA1 replay same eventId] POST /api/client-events
+BODY: {"events":[{"kind":"exam_telemetry","level":"info","name":"examaudit-canary-f6-baseline-a1","occurredAt":"2026-11-07T16:50:00.000Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","eventId":"EXAMAUDIT-CANARY-EV-A1-0001","clientSessionId":"EXAMAUDIT-CANARY-SESSION-A1-0001","metadata":{"marker":"f6-baseline"}}]}
+{"accepted":1}
+>> HTTP_STATUS:200 TIME_TOTAL:0.012249
+
+== 6.9 混合批次：1 个可证明 + 1 个冒用（accepted 必须恒等于 N，无存在 oracle）==
+--- [candA2 mixed batch(provable+claim)] POST /api/client-events
+BODY: {"events":[{"kind":"exam_telemetry","level":"info","name":"examaudit-canary-f6-a2-mixed-ok","occurredAt":"2026-11-07T16:50:08.000Z","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","eventId":"EXAMAUDIT-CANARY-EV-A2-0003","metadata":{"marker":"f6-a2-mixed-ok"}},{"kind":"exam_telemetry","level":"warn","name":"examaudit-canary-f6-a2-mixed-claim","occurredAt":"2026-11-07T16:50:08.100Z","attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","examId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","questionId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","eventId":"EXAMAUDIT-CANARY-EV-A2-0004","metadata":{"marker":"f6-a2-mixed-claim","requestId":"e3fd1e42-be25-4283-bc52-2fc5e45647cb","status":"conflict","clientSeq":99}}]}
+{"accepted":2}
+>> HTTP_STATUS:200 TIME_TOTAL:0.012514
+
+############ 族7 客户端自报/冒用 requestId ############
+== 7.1 冒用他人真实 requestId（header 注入）不得改变授权结论 ==
+--- [candA1→GET /attempts/:A2 + x-request-id=e3fd1e42-be25-4283-bc52-2fc5e45647cb]（期望仍 404，响应 requestId 为服务端新 UUID）
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"f2893a02-1984-431e-b1c0-8d1586296ef4"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007479
+
+--- [candA1→GET own /attempts/:A1 + x-request-id=e3fd1e42-be25-4283-bc52-2fc5e45647cb]（期望仍 200，响应 requestId 为服务端新 UUID）
+
+>> HTTP_STATUS:200 TIME_TOTAL:0.012600
+
+== 7.2 冒用 requestId 的遥测不得进入受害者 attempt 时间线 ==
+--- [proctorA1→GET /admin/attempts/:A1/proctor-events?limit=50]（期望不含 f6-a2-*/f6-b1-*/f6-proctor-claims/f6-admin-claims 冒用事件名）
+{"error":{"code":"INTERNAL_ERROR","message":"服务器内部错误","requestId":"99442870-f8ef-4b90-90c0-2623da2bf98a"}}
+>> HTTP_STATUS:500 TIME_TOTAL:0.020100
+
+############ DB 终态核验（只读）############
+          username          |                name                |           event_id           |              attempt_id              |               exam_id                |             question_id              |        client_session_id         |      marker       |          claimed_request_id          |        received_at         
+----------------------------+------------------------------------+------------------------------+--------------------------------------+--------------------------------------+--------------------------------------+----------------------------------+-------------------+--------------------------------------+----------------------------
+ EXAMAUDIT-CANARY-candA1    | examaudit-canary-f6-baseline-a1    | EXAMAUDIT-CANARY-EV-A1-0001  | f665c325-f4a1-4547-89f5-5aa97bea026e | 6b8d0782-cee9-430f-9253-b0de3a905d07 | c9e708fe-a009-4f66-bdec-463f4b336ac1 | EXAMAUDIT-CANARY-SESSION-A1-0001 | f6-baseline       |                                      | 2026-11-08 00:45:49.599+08
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6-a2-claims-a1   | EXAMAUDIT-CANARY-EV-A1-0001  |                                      | 6b8d0782-cee9-430f-9253-b0de3a905d07 | c9e708fe-a009-4f66-bdec-463f4b336ac1 | EXAMAUDIT-CANARY-SESSION-A1-0001 | f6-a2-claims-a1   | e3fd1e42-be25-4283-bc52-2fc5e45647cb | 2026-11-08 00:45:49.621+08
+ EXAMAUDIT-CANARY-candB1    | examaudit-canary-f6-b1-claims-orga | EXAMAUDIT-CANARY-EV-B1-0001  |                                      |                                      |                                      |                                  | f6-b1-claims-orga | e3fd1e42-be25-4283-bc52-2fc5e45647cb | 2026-11-08 00:45:49.641+08
+ EXAMAUDIT-CANARY-proctorA1 | examaudit-canary-f6-proctor-claims | EXAMAUDIT-CANARY-EV-P1-0001  |                                      |                                      |                                      |                                  | f6-proctor-claims |                                      | 2026-11-08 00:45:49.66+08
+ admin                      | examaudit-canary-f6-admin-claims   | EXAMAUDIT-CANARY-EV-ADM-0001 |                                      |                                      |                                      |                                  | f6-admin-claims   |                                      | 2026-11-08 00:45:49.678+08
+ EXAMAUDIT-CANARY-candA1    | examaudit-canary-f6-a1-forged-exam | EXAMAUDIT-CANARY-EV-A1-0002  | f665c325-f4a1-4547-89f5-5aa97bea026e | 6b8d0782-cee9-430f-9253-b0de3a905d07 | c9e708fe-a009-4f66-bdec-463f4b336ac1 |                                  | f6-a1-forged-exam |                                      | 2026-11-08 00:45:49.697+08
+ EXAMAUDIT-CANARY-candA1    | examaudit-canary-f6-a1-foreign-q   | EXAMAUDIT-CANARY-EV-A1-0003  | f665c325-f4a1-4547-89f5-5aa97bea026e | 6b8d0782-cee9-430f-9253-b0de3a905d07 |                                      |                                  | f6-a1-foreign-q   |                                      | 2026-11-08 00:45:49.716+08
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6-a2-own-exam    | EXAMAUDIT-CANARY-EV-A2-0002  |                                      | 6b8d0782-cee9-430f-9253-b0de3a905d07 | c9e708fe-a009-4f66-bdec-463f4b336ac1 |                                  | f6-a2-own-exam    |                                      | 2026-11-08 00:45:49.735+08
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6-a2-mixed-ok    | EXAMAUDIT-CANARY-EV-A2-0003  |                                      | 6b8d0782-cee9-430f-9253-b0de3a905d07 |                                      |                                  | f6-a2-mixed-ok    |                                      | 2026-11-08 00:45:49.772+08
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6-a2-mixed-claim | EXAMAUDIT-CANARY-EV-A2-0004  |                                      |                                      |                                      |                                  | f6-a2-mixed-claim | e3fd1e42-be25-4283-bc52-2fc5e45647cb | 2026-11-08 00:45:49.772+08
+(10 rows)
+
+== 行数核对：f6 事件总行数（6.0+6.1+6.2+6.3+6.4+6.5+6.6+6.7+6.9 = 10 行；6.8 dedup 不新增）==
+10
+== 受害者时间线核验：A1 attempt 的 client_events 关联行（应只有 A1 自己发的 f6-baseline）==
+        username         |                name                |              attempt_id              
+-------------------------+------------------------------------+--------------------------------------
+ EXAMAUDIT-CANARY-candA1 | examaudit-canary-f6-baseline-a1    | f665c325-f4a1-4547-89f5-5aa97bea026e
+ EXAMAUDIT-CANARY-candA1 | examaudit-canary-f6-a1-forged-exam | f665c325-f4a1-4547-89f5-5aa97bea026e
+ EXAMAUDIT-CANARY-candA1 | examaudit-canary-f6-a1-foreign-q   | f665c325-f4a1-4547-89f5-5aa97bea026e
+(3 rows)
+

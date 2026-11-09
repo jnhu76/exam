@@ -1,0 +1,15 @@
+== diff web-error.conf vs web-crit.conf ==
+62c62
+<     error_log /var/log/nginx/error.log error;
+---
+>     error_log /var/log/nginx/error.log crit;
+== diff web-error.conf vs web-warn.conf ==
+62c62
+<     error_log /var/log/nginx/error.log error;
+---
+>     error_log /var/log/nginx/error.log warn;
+== diff web-error.conf vs web-resdead.conf (S06 variant) ==
+12c12
+< resolver 127.0.0.11 valid=10s ipv6=off;
+---
+> resolver 10.255.255.1 valid=10s ipv6=off;

@@ -1,0 +1,379 @@
+{
+  "variant": "base",
+  "rep": 2,
+  "generatedAt": "2026-11-08T16:07:22.769Z",
+  "phases": [
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "answers-c1",
+      "concurrency": 1,
+      "wall_ms": 12036,
+      "ts0": 1794153856940,
+      "ts1": 1794153868976,
+      "n": 307,
+      "rps": 25.506812894649386,
+      "statuses": {
+        "200": 307
+      },
+      "acceptedTrue": 307,
+      "acceptedFalse": 0,
+      "rejectReasons": {},
+      "headerRequestIdPresent": 0,
+      "p50": 38.05870099999993,
+      "p95": 51.614260000002105,
+      "p99": 58.49452999999994,
+      "latMin": 26.50466899999992,
+      "latMax": 87.89285799999925,
+      "cpuJiffies": 434,
+      "cpuMsPerReq": 14.136807817589576,
+      "pinoBytes": 162804,
+      "pinoBytesPerReq": 530.3061889250814,
+      "pg": {
+        "xact_commit": 1243,
+        "xact_rollback": 0,
+        "tup_inserted": 300,
+        "tup_updated": 303,
+        "tup_deleted": 0
+      },
+      "xactPerReq": 4.04885993485342,
+      "tables": {
+        "exam_answer_save_receipts": 307,
+        "client_events": 0,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    },
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "answers-c3",
+      "concurrency": 3,
+      "wall_ms": 12028,
+      "ts0": 1794153878433,
+      "ts1": 1794153890461,
+      "n": 627,
+      "rps": 52.12836714333222,
+      "statuses": {
+        "200": 627
+      },
+      "acceptedTrue": 627,
+      "acceptedFalse": 0,
+      "rejectReasons": {},
+      "headerRequestIdPresent": 0,
+      "p50": 53.89204299999983,
+      "p95": 84.6079280000049,
+      "p99": 114.773116999997,
+      "latMin": 38.50937800000247,
+      "latMax": 136.72437299999729,
+      "cpuJiffies": 904,
+      "cpuMsPerReq": 14.41786283891547,
+      "pinoBytes": 332408,
+      "pinoBytesPerReq": 530.1562998405103,
+      "pg": {
+        "xact_commit": 2594,
+        "xact_rollback": 0,
+        "tup_inserted": 638,
+        "tup_updated": 642,
+        "tup_deleted": 0
+      },
+      "xactPerReq": 4.137161084529506,
+      "tables": {
+        "exam_answer_save_receipts": 627,
+        "client_events": 0,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    },
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "answers-c8",
+      "concurrency": 8,
+      "wall_ms": 12161,
+      "ts0": 1794153900263,
+      "ts1": 1794153912424,
+      "n": 683,
+      "rps": 56.163144478250146,
+      "statuses": {
+        "200": 578,
+        "409": 105
+      },
+      "acceptedTrue": 578,
+      "acceptedFalse": 0,
+      "rejectReasons": {},
+      "headerRequestIdPresent": 0,
+      "p50": 135.03402899999492,
+      "p95": 291.9009489999953,
+      "p99": 338.3349489999964,
+      "latMin": 33.26928400000179,
+      "latMax": 403.13715299999603,
+      "cpuJiffies": 840,
+      "cpuMsPerReq": 12.298682284040996,
+      "pinoBytes": 471246,
+      "pinoBytesPerReq": 689.9648609077599,
+      "pg": {
+        "xact_commit": 2607,
+        "xact_rollback": 990,
+        "tup_inserted": 560,
+        "tup_updated": 562,
+        "tup_deleted": 0
+      },
+      "xactPerReq": 3.8169838945827235,
+      "tables": {
+        "exam_answer_save_receipts": 578,
+        "client_events": 0,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    },
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "reject-c8",
+      "concurrency": 8,
+      "wall_ms": 12062,
+      "ts0": 1794153921826,
+      "ts1": 1794153933888,
+      "n": 1017,
+      "rps": 84.31437572541867,
+      "statuses": {
+        "200": 1017
+      },
+      "acceptedTrue": 0,
+      "acceptedFalse": 1017,
+      "rejectReasons": {
+        "FUTURE_VERSION": 1017
+      },
+      "headerRequestIdPresent": 0,
+      "p50": 86.92231499998888,
+      "p95": 131.0987230000028,
+      "p99": 179.46493400000327,
+      "latMin": 37.062120000002324,
+      "latMax": 268.77949400000216,
+      "cpuJiffies": 906,
+      "cpuMsPerReq": 8.908554572271386,
+      "pinoBytes": 1114238,
+      "pinoBytesPerReq": 1095.6125860373647,
+      "pg": {
+        "xact_commit": 4185,
+        "xact_rollback": 0,
+        "tup_inserted": 0,
+        "tup_updated": 3,
+        "tup_deleted": 0
+      },
+      "xactPerReq": 4.115044247787611,
+      "tables": {
+        "exam_answer_save_receipts": 0,
+        "client_events": 0,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    },
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "events-safe-c8",
+      "concurrency": 8,
+      "wall_ms": 12015,
+      "ts0": 1794153943271,
+      "ts1": 1794153955286,
+      "n": 2588,
+      "rps": 215.39741989180192,
+      "statuses": {
+        "200": 2588
+      },
+      "acceptedTrue": 0,
+      "acceptedFalse": 0,
+      "rejectReasons": {},
+      "headerRequestIdPresent": 0,
+      "p50": 36.15555199999653,
+      "p95": 47.40270400000736,
+      "p99": 56.294398999991245,
+      "latMin": 23.373320999991847,
+      "latMax": 104.81626700000197,
+      "cpuJiffies": 1218,
+      "cpuMsPerReq": 4.706336939721793,
+      "pinoBytes": 1173303,
+      "pinoBytesPerReq": 453.362828438949,
+      "pg": {
+        "xact_commit": 12803,
+        "xact_rollback": 0,
+        "tup_inserted": 25510,
+        "tup_updated": 3,
+        "tup_deleted": 0
+      },
+      "xactPerReq": 4.947063369397218,
+      "tables": {
+        "exam_answer_save_receipts": 0,
+        "client_events": 25880,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    },
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "events-miss-c8",
+      "concurrency": 8,
+      "wall_ms": 12023,
+      "ts0": 1794153964511,
+      "ts1": 1794153976534,
+      "n": 2739,
+      "rps": 227.81335773101557,
+      "statuses": {
+        "200": 2739
+      },
+      "acceptedTrue": 0,
+      "acceptedFalse": 0,
+      "rejectReasons": {},
+      "headerRequestIdPresent": 0,
+      "p50": 33.283989999996265,
+      "p95": 43.85701999999583,
+      "p99": 90.23574400000507,
+      "latMin": 21.227597000004607,
+      "latMax": 123.93871200000285,
+      "cpuJiffies": 1168,
+      "cpuMsPerReq": 4.264330047462577,
+      "pinoBytes": 1241964,
+      "pinoBytesPerReq": 453.4370208105148,
+      "pg": {
+        "xact_commit": 13802,
+        "xact_rollback": 0,
+        "tup_inserted": 27530,
+        "tup_updated": 3,
+        "tup_deleted": 0
+      },
+      "xactPerReq": 5.039065352318365,
+      "tables": {
+        "exam_answer_save_receipts": 0,
+        "client_events": 27390,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    },
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "get-c8",
+      "concurrency": 8,
+      "wall_ms": 12021,
+      "ts0": 1794153985881,
+      "ts1": 1794153997902,
+      "n": 2782,
+      "rps": 231.4283337492721,
+      "statuses": {
+        "200": 2782
+      },
+      "acceptedTrue": 0,
+      "acceptedFalse": 0,
+      "rejectReasons": {},
+      "headerRequestIdPresent": 0,
+      "p50": 33.851928999996744,
+      "p95": 41.843479000002844,
+      "p99": 51.35380199999781,
+      "latMin": 20.886174000013852,
+      "latMax": 67.56165399999009,
+      "cpuJiffies": 1229,
+      "cpuMsPerReq": 4.417685118619698,
+      "pinoBytes": 1347688,
+      "pinoBytesPerReq": 484.431344356578,
+      "pg": {
+        "xact_commit": 16817,
+        "xact_rollback": 0,
+        "tup_inserted": 0,
+        "tup_updated": 2,
+        "tup_deleted": 0
+      },
+      "xactPerReq": 6.044931703810208,
+      "tables": {
+        "exam_answer_save_receipts": 0,
+        "client_events": 0,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    },
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "heartbeat-c3",
+      "concurrency": 3,
+      "wall_ms": 12006,
+      "ts0": 1794154007160,
+      "ts1": 1794154019166,
+      "n": 2146,
+      "rps": 178.743961352657,
+      "statuses": {
+        "200": 2146
+      },
+      "acceptedTrue": 0,
+      "acceptedFalse": 0,
+      "rejectReasons": {},
+      "headerRequestIdPresent": 0,
+      "p50": 16.572952999995323,
+      "p95": 20.19906399998581,
+      "p99": 22.29686300002504,
+      "latMin": 12.633150999987265,
+      "latMax": 31.247113000019453,
+      "cpuJiffies": 771,
+      "cpuMsPerReq": 3.5927306616961787,
+      "pinoBytes": 1063837,
+      "pinoBytesPerReq": 495.73019571295436,
+      "pg": {
+        "xact_commit": 13000,
+        "xact_rollback": 0,
+        "tup_inserted": 3,
+        "tup_updated": 2218,
+        "tup_deleted": 3
+      },
+      "xactPerReq": 6.0577819198508855,
+      "tables": {
+        "exam_answer_save_receipts": 0,
+        "client_events": 0,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    },
+    {
+      "variant": "base",
+      "rep": 2,
+      "phase": "httperr-c8",
+      "concurrency": 8,
+      "wall_ms": 11999,
+      "ts0": 1794154028379,
+      "ts1": 1794154040378,
+      "n": 76248,
+      "rps": 6354.529544128677,
+      "statuses": {
+        "404": 76248
+      },
+      "acceptedTrue": 0,
+      "acceptedFalse": 0,
+      "rejectReasons": {},
+      "headerRequestIdPresent": 0,
+      "p50": 1.1983909999835305,
+      "p95": 1.8916489999974146,
+      "p99": 2.378263999999035,
+      "latMin": 0.4204520000203047,
+      "latMax": 7.279637999978149,
+      "cpuJiffies": 1270,
+      "cpuMsPerReq": 0.1665617458818592,
+      "pinoBytes": 35151151,
+      "pinoBytesPerReq": 461.0107937257371,
+      "pg": {
+        "xact_commit": 21,
+        "xact_rollback": 0,
+        "tup_inserted": 0,
+        "tup_updated": 2,
+        "tup_deleted": 0
+      },
+      "xactPerReq": 0.00027541706011960967,
+      "tables": {
+        "exam_answer_save_receipts": 0,
+        "client_events": 0,
+        "audit_logs": 0,
+        "exam_attempts": 0
+      }
+    }
+  ]
+}
