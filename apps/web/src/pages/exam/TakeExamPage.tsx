@@ -410,6 +410,19 @@ export function TakeExamPage() {
   const [saveRejection, setSaveRejection] = useState<SaveRejection | null>(
     null,
   );
+  // #924: the correlation id a 200 business rejection's x-request-id response
+  // header carried (browser-observed, client-claimed — never a server
+  // authority). INVARIANT: written ONLY as the same-point unconditional
+  // overwrite as setSaveRejection (a null header clears the prior id) so the
+  // two states can never disagree — an alert showing q2's rejection copy
+  // with q1's residual id would misdirect support correlation. Cleared at
+  // exactly the three sites that clear saveRejection. Deliberately NOT
+  // saveFaultRequestId: that one is the ERROR-envelope id behind the
+  // server-fault banner with heartbeat live-probe supersede semantics —
+  // different writers, different lifecycle, never merged (#800 A2-F2).
+  const [saveRejectionRequestId, setSaveRejectionRequestId] = useState<
+    string | null
+  >(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [questionStates, setQuestionStates] = useState<QuestionState[]>([]);
   const [answers, setAnswers] = useState<Map<string, unknown>>(new Map());
@@ -721,6 +734,7 @@ export function TakeExamPage() {
     setAnswers(new Map());
     setSaveState("idle");
     setSaveRejection(null);
+    setSaveRejectionRequestId(null);
     setShowSubmitDialog(false);
     setTransientState("idle");
     setIsFlushing(false);
@@ -876,17 +890,22 @@ export function TakeExamPage() {
       let rejected = false;
 
       try {
-        const result = await api.post<SaveAnswerResponseDTO>(
-          `/api/attempts/${attemptId}/answers/${questionId}`,
-          {
-            attemptId,
-            questionId,
-            answer,
-            clientSeq,
-            clientSavedAt: new Date().toISOString(),
-            baseVersion,
-          },
-        );
+        // #924: postWithMeta surfaces the 200 response's x-request-id header
+        // so a BUSINESS rejection (accepted:false never forms an ApiError)
+        // still leaves a client-claimed correlation id. Same URL, same
+        // payload, same error contract — only the metadata wrapper differs.
+        const { data: result, meta } =
+          await api.postWithMeta<SaveAnswerResponseDTO>(
+            `/api/attempts/${attemptId}/answers/${questionId}`,
+            {
+              attemptId,
+              questionId,
+              answer,
+              clientSeq,
+              clientSavedAt: new Date().toISOString(),
+              baseVersion,
+            },
+          );
         // Scope guard again after the await: an in-flight save that settles
         // after a route change must NOT write the NEW page's state/refs.
         if (saveStale()) {
@@ -900,6 +919,7 @@ export function TakeExamPage() {
           setSaveServerFault(false);
           setSaveFaultRequestId(null);
           setSaveRejection(null);
+          setSaveRejectionRequestId(null);
           setTransientState((s) =>
             transientReducer(s, { type: "SAVE_SUCCESS" }),
           );
@@ -929,6 +949,7 @@ export function TakeExamPage() {
           setSaveServerFault(false);
           setSaveFaultRequestId(null);
           setSaveRejection(null);
+          setSaveRejectionRequestId(null);
           setTransientState((s) =>
             transientReducer(s, { type: "SAVE_SUCCESS" }),
           );
@@ -946,6 +967,9 @@ export function TakeExamPage() {
         rejected = true;
         setSaveState("error");
         setSaveRejection(result);
+        // Same-point unconditional overwrite (null clears a prior id) — see
+        // the state declaration INVARIANT above.
+        setSaveRejectionRequestId(meta.requestId);
         setTransientState((s) => transientReducer(s, { type: "SAVE_FAILED" }));
         trackExamEvent(
           "answer_autosave_failed",
@@ -953,6 +977,10 @@ export function TakeExamPage() {
             saveMode: "autosave",
             durationMs: Date.now() - saveStartedAt,
             errorCode: result.reason,
+            // Client-claimed correlation candidate from the response header
+            // (allowlisted in the monitoring projection); absent when the
+            // hop carried no header — never fabricated.
+            ...(meta.requestId ? { requestId: meta.requestId } : {}),
             clientSeq,
           },
           { attemptId, questionId, level: "warn" },
@@ -1554,6 +1582,16 @@ export function TakeExamPage() {
                     <AlertTitle>{t(display.titleKey as never)}</AlertTitle>
                     <AlertDescription>
                       {t(display.descriptionKey as never)}
+                      {saveRejectionRequestId && (
+                        <>
+                          {" "}
+                          <span>
+                            {t("candidateRuntime.saveRejection.requestId", {
+                              requestId: saveRejectionRequestId,
+                            })}
+                          </span>
+                        </>
+                      )}
                     </AlertDescription>
                   </Alert>
                 );

@@ -731,3 +731,220 @@ describe("API path-category vocabulary sync", () => {
     ).toEqual([]);
   });
 });
+
+describe("api client — X-Request-Id success-path consumption (#865)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setNavigate(() => {});
+    vi.clearAllMocks();
+    __resetNetworkFailureLimiterForTest();
+  });
+
+  function okResponse(body: unknown, headers: Record<string, string> = {}) {
+    return new Response(JSON.stringify(body), {
+      headers: { "Content-Type": "application/json", ...headers },
+    });
+  }
+
+  it("requestWithMeta exposes the server x-request-id from a 2xx response", async () => {
+    const requestId = "0b2f6f1e-7c1a-4c3f-9d2e-48464aa6b1f5";
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          okResponse({ accepted: 1 }, { "x-request-id": requestId }),
+        ),
+    );
+
+    const { data, meta } = await api.postWithMeta<{ accepted: number }>(
+      "/api/client-events",
+      { events: [] },
+    );
+
+    expect(data).toEqual({ accepted: 1 });
+    expect(meta.requestId).toBe(requestId);
+  });
+
+  it("meta.requestId is null when the header is absent (older server / hop)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okResponse({ ok: true })));
+
+    const { meta } = await api.getWithMeta<{ ok: boolean }>("/api/health");
+
+    expect(meta.requestId).toBeNull();
+  });
+
+  it("the plain request<T> API is unchanged (no meta leakage)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          okResponse({ ok: true }, { "x-request-id": "irrelevant-id" }),
+        ),
+    );
+
+    const result = await api.get<{ ok: boolean }>("/api/health");
+
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("error responses keep using the envelope requestId (existing contract)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "bad",
+              requestId: "envelope-req-id",
+            },
+          }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    await expect(api.get("/api/nope")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 400,
+      requestId: "envelope-req-id",
+    });
+  });
+
+  it("postWithMeta keeps the shared 401 redirect on the error path", async () => {
+    const navigateMock = vi.fn();
+    setNavigate(navigateMock);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+    );
+
+    await expect(
+      api.postWithMeta("/api/attempts/att-1/answers/q1", { answer: null }),
+    ).rejects.toThrow("401");
+    // The meta wrapper must not bypass the shared requestWithMeta error
+    // handling: an expired session still lands on /login.
+    expect(navigateMock).toHaveBeenCalledWith("/login");
+  });
+
+  it("envelope/header requestId mismatch: envelope stays authoritative, header is captured, one bounded warn records the inconsistency (#924 Case D)", async () => {
+    const mismatchResponse = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "INTERNAL_ERROR",
+            message: "boom",
+            requestId: "envelope-req-id",
+          },
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            "x-request-id": "header-req-id",
+          },
+        },
+      );
+    // Fresh Response per call — a body can only be consumed once.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => mismatchResponse()),
+    );
+
+    await expect(api.postWithMeta("/api/items", {})).rejects.toMatchObject({
+      name: "ApiError",
+      status: 500,
+      // Priority stays with the typed wire contract (the envelope); the
+      // header never reaches the ApiError — its observation lives only in
+      // the warn payload below.
+      requestId: "envelope-req-id",
+    });
+
+    // Not silently choosing one: the inconsistency itself is recorded as a
+    // bounded client-log warn (diagnostic trace, not an error framework).
+    const warnCalls = vi.mocked(logger.warn).mock.calls;
+    const mismatchWarns = warnCalls.filter(
+      ([name]) => name === "api.request_id_correlation_mismatch",
+    );
+    expect(mismatchWarns).toHaveLength(1);
+    expect(mismatchWarns[0]![1]).toEqual({
+      envelopeRequestId: "envelope-req-id",
+      headerRequestId: "header-req-id",
+    });
+
+    // Bounded: the fixed-key limiter caps persisted warns per window even
+    // under a storm of mismatching failures (same contract as
+    // api.network_failed).
+    for (let i = 0; i < 9; i += 1) {
+      await expect(api.get("/api/items")).rejects.toThrow();
+    }
+    expect(
+      warnCalls.filter(
+        ([name]) => name === "api.request_id_correlation_mismatch",
+      ).length,
+    ).toBeLessThanOrEqual(5);
+  });
+
+  it("no correlation warn when the envelope and header agree or only one exists", async () => {
+    // Both present and equal.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: { code: "A", message: "x", requestId: "same-id" },
+          }),
+          {
+            status: 500,
+            headers: {
+              "Content-Type": "application/json",
+              "x-request-id": "same-id",
+            },
+          },
+        ),
+      ),
+    );
+    await expect(api.get("/api/a")).rejects.toThrow();
+    // Envelope only (no header — older hop).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: { code: "A", message: "x", requestId: "env-only" },
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    await expect(api.get("/api/b")).rejects.toThrow();
+    // Header only (no envelope requestId): a lone header is not a mismatch —
+    // no warn fires (the header stays internal to the error parser).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "A", message: "x" } }), {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            "x-request-id": "header-only",
+          },
+        }),
+      ),
+    );
+    await expect(api.get("/api/c")).rejects.toThrow();
+
+    expect(
+      vi
+        .mocked(logger.warn)
+        .mock.calls.filter(
+          ([name]) => name === "api.request_id_correlation_mismatch",
+        ),
+    ).toHaveLength(0);
+  });
+});

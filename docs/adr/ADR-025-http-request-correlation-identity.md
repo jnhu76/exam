@@ -63,6 +63,43 @@ deployment); there is no central log store, and none is introduced here.
 - No generic observability/tracing framework is adopted by this decision
   (Observability Contract non-goals remain in force).
 
+## Addendum — 2026-11-08, #865 (scope 865-C): `x-request-id` response header
+
+> **Status: ACCEPTED (amended)** — recorded human decision: the 2026-11-08
+> final-remediation authorization reopened #865 under its own reopen clause
+> and scoped this fourth carrier (865-C). Form follows the ADR-010/ADR-019
+> amendment precedent; decisions 1–6 above are unchanged and nothing is
+> superseded.
+
+This addendum extends the identity correspondence invariant with a fourth
+carrier. It does not supersede any part of the Decision above: the id remains
+the single server-generated UUIDv4 from decision 1, `requestIdHeader: false`
+(decision 2) is unchanged, and decisions 4–6 (not a business identity,
+telemetry claims unverified, historical values immutable) apply unchanged.
+
+- **Carrier.** One root-scope `onRequest` hook
+  (`apps/api/src/plugins/requestIdHeader.ts`, registered in `server.ts`
+  before any scope) stamps `x-request-id: request.id` on every
+  Fastify-managed response. No second randomUUID call exists; the header
+  value IS the id from decision 1. With it, the invariant of decision 3
+  becomes four-way within one request: response header == pino `reqId` ==
+  error envelope `error.requestId` (when an envelope exists — errors only)
+  == HTTP audit `metadata.requestId` (where an audit row exists).
+- **Why a fourth carrier.** The envelope only exists on error responses;
+  success responses previously exposed no request id to the caller, so
+  2xx-side correlation relied on client-claimed telemetry ids. The header
+  closes that gap with the server-owned value. Web consumption is opt-in
+  (`api.getWithMeta`/`api.postWithMeta`); CORS exposes the header only to
+  the configured web origin.
+- **Documented non-carriable boundary.** Responses that are never sent —
+  connection destroyed mid-request, socket-level HTTP framing failures,
+  Node-level request/keepAlive timeouts — cannot carry the header; this is a
+  transport boundary, not a correlation break (the server's log lines for
+  such requests are keyed by the same id).
+- **Still not a credential.** A client reading the header gains correlation
+  only; it authenticates nothing, and a requestId presented in later client
+  telemetry remains an unverified claim (decision 5).
+
 ## Costs
 
 - Log and audit id volume grows (UUID string vs a short counter) — accepted
