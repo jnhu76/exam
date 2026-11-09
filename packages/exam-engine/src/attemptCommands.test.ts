@@ -2286,7 +2286,7 @@ describe("attemptCommands", () => {
         const attRepo = makeAttemptRepo([attempt]);
         await expect(
           restoreAttemptState(attempt, attRepo, restoreNow),
-        ).rejects.toThrow();
+        ).rejects.toThrow(InvalidStateTransitionError);
       }
     });
   });

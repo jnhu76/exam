@@ -40,17 +40,30 @@ export function isExamEnded(
   );
 }
 
+/** Options for {@link resolveAdminResultsAccess}. */
+export interface AdminResultsAccessOptions {
+  /**
+   * Export keeps the established headers-only CSV line for an ended exam with
+   * zero graded attempts; the score list rejects that state. Precedence above
+   * (canceled > unresolved > not-ended) is unchanged. Only the export route
+   * sets this.
+   */
+  allowZeroGraded?: boolean;
+}
+
 /**
  * Resolves whether admin results surfaces (score list / score export) may
  * expose an exam's results. The verdict order is the wire precedence both
  * routes must preserve: canceled > unresolved attempts > not-ended >
- * no-graded-attempts.
+ * no-graded-attempts (export opts out of the last block because the
+ * established zero-graded CSV is headers-only 200).
  */
 export function resolveAdminResultsAccess(
   exam: Pick<Exam, "status" | "closeAt">,
   now: Date,
   unresolvedCount: number,
   gradedCount: number,
+  options: AdminResultsAccessOptions = {},
 ): AdminResultsAccess {
   if (exam.status === "canceled") {
     return { allowed: false, verdict: "EXAM_CANCELED" };
@@ -65,7 +78,7 @@ export function resolveAdminResultsAccess(
   if (!isExamEnded(exam, now)) {
     return { allowed: false, verdict: "EXAM_NOT_FINISHED" };
   }
-  if (gradedCount === 0) {
+  if (gradedCount === 0 && !options.allowZeroGraded) {
     return { allowed: false, verdict: "NO_GRADED_ATTEMPTS" };
   }
   return { allowed: true, verdict: "allowed" };

@@ -5,7 +5,7 @@ import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
 import { createExamRepo } from "@exam/db/repository/examRepo";
 import { createCandidateFieldRepo } from "@exam/db/repository/candidateFieldRepo";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
-import { isExamEnded } from "./resultsAccessPolicy.js";
+import { resolveAdminResultsAccess } from "./resultsAccessPolicy.js";
 import { generateCSV } from "@exam/import-export";
 import { Permission } from "@exam/authz";
 import { buildErrorResponse } from "../lib/errorResponse.js";
@@ -64,43 +64,46 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      // ADR-005: canceled exams never export.
-      if (exam.status === "canceled") {
-        return reply
-          .code(409)
-          .send(
-            buildErrorResponse(
-              request.id,
-              "EXAM_CANCELED_RESULTS_UNAVAILABLE",
-              { reason: "CANCELLATION_MARKER_NOT_IMPLEMENTED" },
-            ),
-          );
-      }
-      // ADR-005 close & export policy: do not export while unresolved attempts
-      // remain, so an admin cannot export partial results mid-exam.
       const unresolvedCount = await attemptRepo.countUnresolvedByExam(
         ctx,
         examId,
       );
-      if (unresolvedCount > 0) {
-        return reply.code(409).send(
-          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
-            reason: "UNRESOLVED_ATTEMPTS_EXIST",
-            activeAttemptCount: unresolvedCount,
-          }),
-        );
-      }
-      // ADR-005 §Close & export policy (binding): results may not be exported
-      // before the exam has ended, even with no unresolved attempts — the
-      // same gate GET /exams/:id/scores enforces via the shared
-      // resultsAccessPolicy predicate. Zero graded attempts still export
-      // (headers-only CSV), preserving the established export line.
-      if (!isExamEnded(exam, now)) {
-        return reply.code(409).send(
-          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
-            reason: "EXAM_NOT_FINISHED",
-          }),
-        );
+      // ADR-005 §Close & export policy (binding): one shared policy authority
+      // for the score list, scores, and export. This route only maps the
+      // verdict to its wire responses. Export opts out of the zero-graded
+      // block so the established headers-only CSV line stays 200.
+      const access = resolveAdminResultsAccess(exam, now, unresolvedCount, 0, {
+        allowZeroGraded: true,
+      });
+      if (!access.allowed) {
+        switch (access.verdict) {
+          case "EXAM_CANCELED":
+            return reply
+              .code(409)
+              .send(
+                buildErrorResponse(
+                  request.id,
+                  "EXAM_CANCELED_RESULTS_UNAVAILABLE",
+                  { reason: "CANCELLATION_MARKER_NOT_IMPLEMENTED" },
+                ),
+              );
+          case "UNRESOLVED_ATTEMPTS_EXIST":
+            return reply.code(409).send(
+              buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+                reason: "UNRESOLVED_ATTEMPTS_EXIST",
+                activeAttemptCount: access.unresolvedCount,
+              }),
+            );
+          case "EXAM_NOT_FINISHED":
+          // Unreachable under allowZeroGraded; kept for an exhaustive wire
+          // mapping if the option is ever removed.
+          case "NO_GRADED_ATTEMPTS":
+            return reply.code(409).send(
+              buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+                reason: "EXAM_NOT_FINISHED",
+              }),
+            );
+        }
       }
       const results = await attemptRepo.listGradedByExam(ctx, examId);
 

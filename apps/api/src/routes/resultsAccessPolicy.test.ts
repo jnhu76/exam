@@ -96,4 +96,29 @@ describe("resolveAdminResultsAccess", () => {
       verdict: "allowed",
     });
   });
+
+  it("allowZeroGraded opts export out of the no-graded block without changing precedence", () => {
+    const opts = { allowZeroGraded: true };
+    expect(
+      resolveAdminResultsAccess(exam("closed", null), now, 0, 0, opts),
+    ).toEqual({ allowed: true, verdict: "allowed" });
+    expect(
+      resolveAdminResultsAccess(exam("canceled", null), now, 0, 0, opts),
+    ).toEqual({ allowed: false, verdict: "EXAM_CANCELED" });
+    expect(
+      resolveAdminResultsAccess(exam("published", future), now, 0, 0, opts),
+    ).toEqual({ allowed: false, verdict: "EXAM_NOT_FINISHED" });
+    expect(
+      resolveAdminResultsAccess(exam("closed", null), now, 1, 0, opts),
+    ).toEqual({
+      allowed: false,
+      verdict: "UNRESOLVED_ATTEMPTS_EXIST",
+      unresolvedCount: 1,
+    });
+    // The default remains the score-list behavior.
+    expect(resolveAdminResultsAccess(exam("closed", null), now, 0, 0)).toEqual({
+      allowed: false,
+      verdict: "NO_GRADED_ATTEMPTS",
+    });
+  });
 });
