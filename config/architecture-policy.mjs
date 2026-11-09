@@ -173,9 +173,6 @@ export const LIFECYCLE_STATE_WRITE_RULES = Object.freeze([
       "packages/exam-engine/src/proctorAssignmentCommands.ts",
       "apps/api/src/routes/teacherAssignments.admin.ts",
       "apps/api/src/routes/graderAssignments.admin.ts",
-      "packages/db/src/repository/proctorAssignmentRepo.ts",
-      "packages/db/src/repository/graderExamAssignmentRepo.ts",
-      "packages/db/src/repository/teacherCourseAssignmentRepo.ts",
     ]),
     rationale:
       "assignment revocation is a named lifecycle funnel (proctor/grader/teacher assignment commands) — new callers of revokeAssignment must be reviewed into this allowlist",

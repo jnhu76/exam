@@ -131,7 +131,7 @@ Authorization/Tenant Scope → Search/Status Predicate → Stable Ordering (crea
 **B05_StatusVsScorePermission**
 - Given published（未结束）、closed（无成绩）等状态与成绩准备情况不同的考试
 - When 打开成绩总览
-- Then 状态标签反映 status；按钮可用性仅由 canViewScores 决定；published 不等于可查看；closed 无成绩仍禁用并显示 `NO_GRADED_ATTEMPTS` 文案；考试已结束但仍有未完成作答时禁用并显示 `UNRESOLVED_ATTEMPTS_EXIST`（与 GET /scores 的 409 一致）；列表成员资格不受影响
+- Then 状态标签反映 status；按钮可用性仅由 canViewScores 决定；published 不等于可查看；closed 无成绩仍禁用并显示 `NO_GRADED_ATTEMPTS` 文案；存在未完成作答时（无论考试是否已结束）禁用并显示 `UNRESOLVED_ATTEMPTS_EXIST`，优先于 `EXAM_NOT_FINISHED`（与 GET /scores 的 409 一致）；列表成员资格不受影响
 
 **B06_StatusFilterPaginationCombo**
 - Given 六种状态各有 >pageSize/2 条（跨分页边界）

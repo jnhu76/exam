@@ -68,9 +68,6 @@ const REVOKE_ALLOWED = [
   "packages/exam-engine/src/proctorAssignmentCommands.ts",
   "apps/api/src/routes/teacherAssignments.admin.ts",
   "apps/api/src/routes/graderAssignments.admin.ts",
-  "packages/db/src/repository/proctorAssignmentRepo.ts",
-  "packages/db/src/repository/graderExamAssignmentRepo.ts",
-  "packages/db/src/repository/teacherCourseAssignmentRepo.ts",
 ];
 
 interface LifecycleStateWriteRule {

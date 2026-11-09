@@ -1589,6 +1589,74 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
     expect(oldAttemptSavePaths).toHaveLength(0);
   });
 
+  it("attempt switch during the post-submit authoritative reload: no navigation to the old result", async () => {
+    installRecordingBuffer();
+    const farDeadline = new Date(T0.getTime() + 600_000).toISOString();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    const editableB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+    });
+    let aGets = 0;
+    let resolveReload!: (value: unknown) => void;
+    const reloadGate = new Promise<unknown>((resolve) => {
+      resolveReload = resolve;
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        if (path.includes("att-1")) {
+          aGets += 1;
+          return aGets === 1 ? editableA : reloadGate;
+        }
+        return editableB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        return { ok: true };
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    // The submit POST resolved; its authoritative reload GET is in flight.
+    expect(aGets).toBe(2);
+
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+
+    // The abandoned reload settles after the switch; it must not navigate.
+    await act(async () => {
+      resolveReload(editableA);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+  });
+
   it("ExamTimer onTimeout and the deadline effect in the same window: one declaration, one submit POST, one real failure record", async () => {
     const send = installRecordingBuffer();
     const capture = captureDiscardedSubmitRejections();

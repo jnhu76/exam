@@ -199,15 +199,20 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
     },
     /**
      * PROTOCOL / INVARIANT (EXSEM-014, ADR-005 lock-reconcile-assert-mutate):
-     * the ONLY named write path that may include lifecycle state columns
-     * (`status`, `gradingStatus`) on lifecycle-owned tables. Ordinary
-     * `update` input excludes them; the production writers of lifecycle
-     * state are the engine command funnels (apps/api/src/adapters/
-     * repoAdapters.ts, packages/exam-engine/src/incidentCommands.ts), which
-     * reconcile and assert legality under the row lock before mutating.
-     * A member call of this seam is arch-anchored (pnpm lint:arch,
-     * EXSEM014_* rules in config/architecture-policy.mjs): a new caller
-     * must be reviewed into that allowlist, never added silently.
+     * the named write path for lifecycle state columns (`status`,
+     * `gradingStatus`) on lifecycle-owned tables. Ordinary `update` input
+     * excludes them; the production writers are the engine command funnels
+     * (apps/api/src/adapters/repoAdapters.ts,
+     * packages/exam-engine/src/incidentCommands.ts), which reconcile and
+     * assert legality under the row lock before mutating. Initial `create`
+     * state is domain creation, not a lifecycle transition.
+     *
+     * A member call of this seam is a TEXTUAL, name-anchored backstop
+     * (pnpm lint:arch, EXSEM014_* rules in config/architecture-policy.mjs):
+     * aliased/destructured calls, insert-time state, and direct SQL are
+     * outside it. The primary boundary is the compile-time narrowed update
+     * input, not runtime database enforcement. A new direct caller must be
+     * reviewed into the allowlist, never added silently.
      */
     updateIncludingLifecycleState(
       ctx: TenantContext | RequestContext,
