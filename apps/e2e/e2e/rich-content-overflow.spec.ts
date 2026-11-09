@@ -549,6 +549,16 @@ test.describe.serial("rich-content overflow contract", () => {
     const promptViewport = section
       .locator('[data-slot="content-scroll-viewport"][data-kind="block"]')
       .first();
+    // INVARIANT under test: the SETTLED rich prompt, not the lazy boundary's
+    // loading state. Before the KaTeX chunk (JS+CSS+fonts) lands, the block
+    // viewport holds the raw-LaTeX `<code>` fallback, which also measures
+    // overflowing; mid-swap the styled formula can transiently measure as
+    // fitting (fallback-font metrics) before the web fonts restore the
+    // designed overflow. A scroll probe in that window reads scrollLeft 0 on
+    // a viewport that is not (yet/anymore) scrollable. Await the rendered
+    // formula first, then the overflow fact — both retry to the same settled
+    // state the rest of this test reasons about.
+    await expect(promptViewport.locator(".katex")).toBeAttached();
     await expect(promptViewport).toHaveAttribute("data-overflowing", "true");
     await section.getByRole("button", { name: "标记本题" }).click();
     await page.keyboard.press("Tab");
