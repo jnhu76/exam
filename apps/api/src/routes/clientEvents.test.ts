@@ -5,6 +5,7 @@ import authRoutes from "./auth.js";
 import clientEventRoutes from "./clientEvents.js";
 import { buildTestApp } from "./testHelpers.js";
 import { schema } from "@exam/db/schema/pg";
+import { SPA_ROUTE_TEMPLATES } from "@exam/contracts";
 import { signJWT } from "@exam/auth/session";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
@@ -45,6 +46,15 @@ describe("POST /api/client-events", () => {
       occurredAt: "2026-06-25T00:00:00.000Z",
       ...overrides,
     };
+  }
+
+  /** Fetches the single client_event row persisted under a test event name. */
+  async function fetchRow(name: string) {
+    const rows = await ctx.db
+      .select()
+      .from(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, name));
+    return rows[0] ?? null;
   }
 
   it("writes a valid batch scoped to the authenticated user/org", async () => {
@@ -203,14 +213,6 @@ describe("POST /api/client-events", () => {
     const jwt =
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
 
-    async function fetchRow(name: string) {
-      const rows = await ctx.db
-        .select()
-        .from(schema.clientEvents)
-        .where(eq(schema.clientEvents.name, name));
-      return rows[0] ?? null;
-    }
-
     it("redacts a credential-shaped metadata VALUE under an innocent key before persist", async () => {
       const response = await ctx.app.inject({
         method: "POST",
@@ -246,7 +248,7 @@ describe("POST /api/client-events", () => {
         .where(eq(schema.clientEvents.name, "test.event.value875"));
     });
 
-    it("persists route as pathname only — query-string credentials never reach storage", async () => {
+    it("persists route as a closed template — query credentials never reach storage (#864)", async () => {
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/client-events",
@@ -255,7 +257,7 @@ describe("POST /api/client-events", () => {
           events: [
             validEvent({
               name: "test.event.route875",
-              route: "/exam/123?token=supersecret&invite=alice%40x.local#frag",
+              route: "/exam/list?token=supersecret&invite=alice%40x.local#frag",
             }),
           ],
         },
@@ -263,7 +265,7 @@ describe("POST /api/client-events", () => {
       expect(response.statusCode).toBe(200);
       const row = await fetchRow("test.event.route875");
       expect(row).not.toBeNull();
-      expect(row!.route).toBe("/exam/123");
+      expect(row!.route).toBe("/exam/list");
       expect(JSON.stringify(row)).not.toContain("supersecret");
       expect(JSON.stringify(row)).not.toContain("invite");
 
@@ -272,7 +274,7 @@ describe("POST /api/client-events", () => {
         .where(eq(schema.clientEvents.name, "test.event.route875"));
     });
 
-    it("strips query/fragment even from an UNPARSEABLE route (fallback must stay query-free)", async () => {
+    it("persists NULL for an unparseable route — no fallback bytes of any kind (#864)", async () => {
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/client-events",
@@ -289,9 +291,12 @@ describe("POST /api/client-events", () => {
       expect(response.statusCode).toBe(200);
       const row = await fetchRow("test.event.route875bad");
       expect(row).not.toBeNull();
-      expect(row!.route).toBe("http://[");
+      // Fail-closed: the old hand-trimmed fallback (prefix before ?/#) is
+      // gone; nothing from an unparseable input may be persisted.
+      expect(row!.route).toBeNull();
       expect(JSON.stringify(row)).not.toContain("supersecret");
       expect(JSON.stringify(row)).not.toContain("invite");
+      expect(JSON.stringify(row)).not.toContain("http://[");
 
       await ctx.db
         .delete(schema.clientEvents)
@@ -330,6 +335,142 @@ describe("POST /api/client-events", () => {
       await ctx.db
         .delete(schema.clientEvents)
         .where(eq(schema.clientEvents.name, "test.event.session875b"));
+    });
+  });
+
+  describe("closed route-template projection (#864)", () => {
+    /**
+     * Audit RT-series attack matrix (2026-11 secure-correlation audit, #922
+     * archive 02-SECURITY-EVIDENCE.md). Every adversarial route must persist
+     * as a member of the closed template vocabulary or NULL — never raw
+     * client bytes. SECRET_AT_REST must be 0 across the whole batch.
+     */
+    const CANARY = "EXAMAUDIT-CANARY";
+    const attackMatrix: Array<{
+      id: string;
+      route: string;
+      expected: string | null;
+    }> = [
+      // RT-3 plaintext path secret (hostile root and real-root tail).
+      { id: "rt3a", route: `/password-reset/${CANARY}-RT3`, expected: null },
+      {
+        id: "rt3b",
+        route: `/exam/${CANARY}-RT3-SECRET/start`,
+        expected: "/exam/:examId/start",
+      },
+      // RT-8 encoded query smuggling.
+      { id: "rt8a", route: `/a%2Fb%3Ftoken%3D${CANARY}-RT8`, expected: null },
+      {
+        id: "rt8b",
+        route: `/exam/a%2Fb%3Ftoken%3D${CANARY}-RT8/take`,
+        expected: "/exam/:attemptId/take",
+      },
+      // RT-12B opaque-scheme userinfo credentials.
+      {
+        id: "rt12b",
+        route: `user:${CANARY}-RT12B@example.com/path`,
+        expected: null,
+      },
+      // RT-12C data: URL payload.
+      { id: "rt12c", route: `data:text/html,${CANARY}-RT12C`, expected: null },
+      // RT-14B malformed with raw CRLF.
+      { id: "rt14b", route: `http://[\r\n${CANARY}-RT14B?x=y`, expected: null },
+      // Semantic-equivalence variants.
+      { id: "case", route: "/EXAM/list", expected: null },
+      { id: "unicode", route: `/${CANARY}-中文/list`, expected: null },
+      {
+        id: "crlf-param",
+        route: "/exam/a\r\nb/start",
+        expected: "/exam/:examId/start",
+      },
+      {
+        id: "double-enc",
+        route: `/exam/%252F%253Ftoken%253D${CANARY}/take`,
+        expected: "/exam/:attemptId/take",
+      },
+      {
+        id: "opaque-id",
+        route: "/admin/attempts/not-a-uuid-opaque",
+        expected: "/admin/attempts/:id",
+      },
+      {
+        id: "secret-tail",
+        route: `/admin/exams/${CANARY}-TAIL`,
+        expected: "/admin/exams/:id",
+      },
+      { id: "unknown", route: "/admin/nonexistent-page", expected: null },
+      // WHATWG URL normalization decodes percent-encoded dot segments
+      // (%2e%2e == ".."), resolving this to the canonical /admin/users —
+      // the same thing the browser address bar would show. Output stays a
+      // member of the closed set; %2F/%3F stay opaque (see rt8b).
+      {
+        id: "traversal",
+        route: "/exam/%2e%2e/admin/users",
+        expected: "/admin/users",
+      },
+      { id: "empty-seg", route: "/admin//users", expected: null },
+      { id: "root", route: "/", expected: null },
+      // Registered routes keep their diagnostic signal.
+      {
+        id: "legit-take",
+        route: "/exam/e3b0c442-2fc8-4570-b9f2-9a2807b1b1e1/take",
+        expected: "/exam/:attemptId/take",
+      },
+      { id: "legit-list", route: "/exam/list", expected: "/exam/list" },
+    ];
+
+    it("HTTP ingest: every adversarial route lands at-rest as a template or NULL, zero canary bytes", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: attackMatrix.map((c) =>
+            validEvent({
+              name: `test.event.route864.${c.id}`,
+              route: c.route,
+              eventId: `rt864-${c.id}-0000000000`,
+            }),
+          ),
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ accepted: attackMatrix.length });
+
+      const templateSet = new Set(SPA_ROUTE_TEMPLATES);
+      for (const c of attackMatrix) {
+        const row = await fetchRow(`test.event.route864.${c.id}`);
+        expect(row, c.id).not.toBeNull();
+        expect(row!.route, c.id).toBe(c.expected);
+        if (row!.route !== null) {
+          expect(templateSet.has(row!.route!), c.id).toBe(true);
+        }
+        expect(JSON.stringify(row), c.id).not.toContain(CANARY);
+      }
+
+      for (const c of attackMatrix) {
+        await ctx.db
+          .delete(schema.clientEvents)
+          .where(eq(schema.clientEvents.name, `test.event.route864.${c.id}`));
+      }
+    });
+
+    it("a batch WITHOUT route (undefined) still persists route = NULL", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/client-events",
+        cookies: { "auth-token": ctx.adminToken },
+        payload: {
+          events: [validEvent({ name: "test.event.route864.absent" })],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const row = await fetchRow("test.event.route864.absent");
+      expect(row!.route).toBeNull();
+
+      await ctx.db
+        .delete(schema.clientEvents)
+        .where(eq(schema.clientEvents.name, "test.event.route864.absent"));
     });
   });
 
