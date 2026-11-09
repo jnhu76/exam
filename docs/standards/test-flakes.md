@@ -1185,12 +1185,16 @@ REPAIR_MECHANISM = apps/e2e/e2e/rich-content-overflow.spec.ts 新增
   expect.poll(scrollLeft).toBeGreaterThan(before)；替换 :564 / :921 / :998 / :1079 /
   :1120 五处 waitForTimeout(150) 固定采样。断言（一次真实按键必须推动 viewport）
   逐字保留。
-REPAIR_EVIDENCE = 修复后完整 `bash scripts/e2e/run.sh`（隔离栈 exam-gov927，
-  E2E_WORKERS=2，DB_HOST_PORT=55432 / REDIS_HOST_PORT=56379，shard API 端口
-  13100/13101）通过 2 次：1 次捕获 E2E_EXIT=0；另 1 次 runner 输出两个 shard 均
-  通过但管道未保留 runner 退出码。merged blob report 中
-  `candidate take → rich answer → graded result: local scroll, keyboard, stable
-  geometry` status=passed（8580ms，errors=[]），全量 26 passed | 1 skipped。
+REPAIR_EVIDENCE = 集成后验收（2026-11-09）：
+  (a) #929 分支 7110662e：完整 `bash scripts/e2e/run.sh`（隔离栈 exam-review929，
+      E2E_WORKERS=2，DB_HOST_PORT=55434 / REDIS_HOST_PORT=56381，shard API 端口
+      13200/13201）连续 5 轮全部 E2E_EXIT=0；每轮 shard 1/2 与 2/2 均通过
+      （16:57:46–17:11:39，约 2m50s/轮）。
+  (b) 集成树 45d2ac99（#922→#923→#924→#926→#929）：同一 2-shard 拓扑完整
+      E2E 通过（shard 1/2 + 2/2）。集成把 #923 的“采样前等待 settled KaTeX
+      投影 + fonts.ready”并入 prompt 点位；五处几何断言共用同一个
+      pressArrowRightUntilScrolled helper，不保留第二套同步策略。
+  历史证据：修复后首次运行通过（8580ms，errors=[]，全量 26 passed | 1 skipped）。
 FORBIDDEN_WORKAROUNDS_NOT_USED = 未调大 timeout、未加 retry、未减少 shard、未跳过
   测试、未削弱断言、未 mock 真实依赖。
 ```
@@ -3433,7 +3437,7 @@ AGGREGATION_BASIS = 不聚合（与 CASE-2026-11-03-CI-COVERAGE-BUDGETS 的 cove
 
 ### 后续动作 / NEXT_DIAGNOSTIC_ACTION
 
-#878：已在 2026-11-09 完成（见 OBS-2026-11-09-001 / CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE）：仪器化 witness 取得动画采样序列（keydown 0 → t+50ms 7 → t+150ms 40），5 处固定等待已统一替换为显式条件等待；修复后 2-shard 全量 E2E 通过 2 次（1 次捕获 E2E_EXIT=0）。历史归因仍为 HYPOTHESIS（失败轮自身采样序列未捕获）。
+#878：已在 2026-11-09 完成（见 OBS-2026-11-09-001 / CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE）：仪器化 witness 取得动画采样序列（keydown 0 → t+50ms 7 → t+150ms 40），5 处固定等待已统一替换为显式条件等待；修复后 2-shard 全量 E2E 连续 5 轮通过（每轮 E2E_EXIT=0，两个 shard 均 PASS），集成树 45d2ac99 同拓扑再通过 1 轮。历史归因仍为 HYPOTHESIS（失败轮自身采样序列未捕获）。
 
 ---
 
