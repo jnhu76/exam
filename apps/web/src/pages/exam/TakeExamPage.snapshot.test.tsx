@@ -1,12 +1,24 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
-import type { CandidateTakeSnapshot } from "@exam/contracts";
+import type { CandidateTakeSnapshot, ClientEvent } from "@exam/contracts";
 import { permissionsForRole } from "@exam/authz";
+import { ApiError } from "@/lib/api";
+import { toast } from "sonner";
+import { ClientEventBuffer } from "@/lib/clientEventBuffer";
+import { getBuffer, setBuffer } from "@/lib/logger";
+import { __resetExamTelemetryForTest } from "@/lib/examTelemetry";
 
 /**
  * P3-FSM-0 integration tests — authoritative CandidateTakeSnapshot read path.
@@ -162,6 +174,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setBuffer(null);
+  __resetExamTelemetryForTest();
   vi.useRealTimers();
 });
 
@@ -915,5 +929,308 @@ describe("submit-freeze UI proof", () => {
       },
       { timeout: 3000 },
     );
+  });
+});
+
+describe("deadline auto-submit trigger declaration and result recording (F16)", () => {
+  const T0 = new Date("2026-07-04T10:00:00.000Z");
+  const T0_ISO = T0.toISOString();
+  const nearDeadline = new Date(T0.getTime() + 3_000).toISOString();
+
+  /** Recording telemetry buffer (same persistence seam as the saveFault suite). */
+  function installRecordingBuffer() {
+    const send = vi.fn(async (events: ClientEvent[]) => ({
+      acknowledgedCount: events.length,
+      rejected: [],
+    }));
+    setBuffer(
+      new ClientEventBuffer({
+        send,
+        batchSize: 100,
+        flushIntervalMs: 0,
+      }),
+    );
+    return send;
+  }
+
+  async function flushAll(): Promise<void> {
+    await getBuffer().flush();
+  }
+
+  /** All buffered exam_telemetry records with the given event name. */
+  function telemetryEvents(
+    send: ReturnType<typeof vi.fn>,
+    name: string,
+  ): Array<Record<string, unknown>> {
+    const out: Array<Record<string, unknown>> = [];
+    for (const call of send.mock.calls) {
+      for (const ev of call[0] as Array<Record<string, unknown>>) {
+        if (ev.kind === "exam_telemetry" && ev.name === name) out.push(ev);
+      }
+    }
+    return out;
+  }
+
+  /** A /submit POST that stays in flight until the test settles it. */
+  interface DeferredSubmit {
+    promise: Promise<unknown>;
+    reject: (err: unknown) => void;
+  }
+
+  function deferredSubmit(): DeferredSubmit {
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<unknown>((_, rej) => {
+      reject = rej;
+    });
+    return { promise, reject: (err: unknown) => reject(err) };
+  }
+
+  function submitPostCount(): number {
+    return apiPost.mock.calls.filter(
+      ([p]) => typeof p === "string" && p.includes("/submit"),
+    ).length;
+  }
+
+  /**
+   * The dialog and timer entries invoke `void handleSubmit()` and DELIBERATELY
+   * discard the submit failure (the toast is the candidate feedback). Node
+   * raises that discarded rejection as a global unhandled rejection, and
+   * vitest's own listener would fail the run for it. This capture attaches a
+   * second listener for the duration of one test: vitest's handler explicitly
+   * yields when another listener exists ("assume that it's handled by user
+   * code"), and the capture keeps the discard ASSERTED (exact count) instead
+   * of silently suppressed.
+   */
+  function captureDiscardedSubmitRejections() {
+    const discarded: unknown[] = [];
+    const listener = (err: unknown) => {
+      discarded.push(err);
+    };
+    process.on("unhandledRejection", listener);
+    return {
+      discarded,
+      stop() {
+        process.off("unhandledRejection", listener);
+      },
+    };
+  }
+
+  /** Fake timers pinned at T0 so the server clock offset is zero. */
+  function renderWithFakeClock() {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    return renderPage();
+  }
+
+  it("deadline tick with the user's submit POST in flight: no phantom success, episode re-arms once idle, real failure surfaces the retry entry", async () => {
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      // timingMode "deadline" mounts no ExamTimer: the page's 1s tick is the
+      // only trigger, isolating the effect-vs-in-flight-submit interleave.
+      const editable = buildSnapshot({
+        timingMode: "deadline",
+        serverNow: T0_ISO,
+        effectiveDeadline: nearDeadline,
+      });
+      // The frozen snapshot the authoritative re-read returns after the
+      // terminal heartbeat (lockReason 'deadline' = locked pre-reconcile).
+      // serverNow is the SERVER's live clock — past the deadline — so the
+      // re-read does not re-base the client clock backwards below it.
+      const locked = buildSnapshot({
+        timingMode: "deadline",
+        serverNow: new Date(T0.getTime() + 35_000).toISOString(),
+        effectiveDeadline: nearDeadline,
+        isEditable: false,
+        canSave: false,
+        canSubmit: false,
+        lockReason: "deadline",
+      });
+      let takeCalls = 0;
+      apiGet.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+          takeHandler(path);
+          takeCalls += 1;
+          return takeCalls === 1 ? editable : locked;
+        }
+        throw new Error(`unexpected GET ${path}`);
+      });
+      const pendingSubmits: DeferredSubmit[] = [];
+      apiPost.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/submit")) {
+          const d = deferredSubmit();
+          pendingSubmits.push(d);
+          return d.promise;
+        }
+        if (typeof path === "string" && path.includes("/heartbeat")) {
+          // Past the deadline the server froze the attempt; the terminal
+          // heartbeat is the authority signal that drives the re-read.
+          throw new ApiError(
+            409,
+            "attempt no longer in_progress",
+            "INVALID_STATE_TRANSITION",
+          );
+        }
+        return { ok: true, serverNow: T0_ISO };
+      });
+
+      renderWithFakeClock();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(takeCalls).toBe(1);
+
+      // User submit: dialog open → confirm; the POST stalls in flight.
+      fireEvent.click(screen.getByTestId("take-submit-btn"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByTestId("confirm-submit-btn"),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(pendingSubmits).toHaveLength(1);
+
+      // The deadline passes while the user's POST is still in flight.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_100);
+      });
+      // The tick must not double-submit…
+      expect(pendingSubmits).toHaveLength(1);
+      // …must not declare an episode it did not start…
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(0);
+      // …and above all must not record success for a submit that never ran.
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+
+      // The user's POST settles FAILED: submittingRef is released again.
+      await act(async () => {
+        pendingSubmits[0]!.reject(new Error("network down"));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Next tick (submit idle) REALLY initiates the deadline auto-submit.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_100);
+      });
+      expect(pendingSubmits).toHaveLength(2);
+
+      // That real auto-submit fails → the failure branch records real results.
+      await act(async () => {
+        pendingSubmits[1]!.reject(new Error("network down"));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(1);
+      const failures = telemetryEvents(send, "deadline_auto_submit_failed");
+      expect(failures).toHaveLength(1);
+      expect((failures[0]!.metadata as { stage?: string }).stage).toBe(
+        "submit",
+      );
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+      expect(toast.error).toHaveBeenCalledWith("自动提交失败，请点击重试");
+      // Exactly the dialog-invoked user submit is discarded by production's
+      // fire-and-forget; the auto-submit flow handles its own failure.
+      expect(capture.discarded).toHaveLength(1);
+
+      // Dismiss the still-open submit dialog: while it is open, Radix
+      // aria-hides the page around it, which blanks the lock overlay's
+      // accessibility subtree for role queries.
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "继续答题",
+        }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Heartbeat 409 → authoritative re-read locks the page; with the real
+      // failure recorded, the lock overlay offers the candidate a retry entry.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(takeCalls).toBe(2);
+      const overlay = screen.getByTestId("deadline-overlay");
+      expect(overlay).toHaveAttribute("data-lock-reason", "deadline");
+      expect(
+        within(overlay).getByRole("button", { name: "重试提交" }),
+      ).toBeInTheDocument();
+    } finally {
+      capture.stop();
+    }
+  });
+
+  it("ExamTimer onTimeout and the deadline effect in the same window: one declaration, one submit POST, one real failure record", async () => {
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      // timed_window mounts ExamTimer: at the deadline instant its onTimeout
+      // and the page's 1s tick fire in the same window — one episode, not two
+      // competing flows (the two triggers must not double-declare/submit).
+      installTakeRoute(
+        buildSnapshot({
+          timingMode: "timed_window",
+          serverNow: T0_ISO,
+          effectiveDeadline: nearDeadline,
+        }),
+      );
+      const pendingSubmits: DeferredSubmit[] = [];
+      apiPost.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/submit")) {
+          const d = deferredSubmit();
+          pendingSubmits.push(d);
+          return d.promise;
+        }
+        return { ok: true, serverNow: T0_ISO };
+      });
+
+      renderWithFakeClock();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Cross the deadline: both triggers land in the same window.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_100);
+      });
+      // Exactly one submit POST, declared by exactly one episode.
+      expect(pendingSubmits).toHaveLength(1);
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(1);
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+
+      // The auto-submit POST fails; later ticks must not re-submit.
+      await act(async () => {
+        pendingSubmits[0]!.reject(new Error("network down"));
+        await vi.advanceTimersByTimeAsync(1_100);
+      });
+      expect(pendingSubmits).toHaveLength(1);
+      await flushAll();
+      const failures = telemetryEvents(send, "deadline_auto_submit_failed");
+      expect(failures).toHaveLength(1);
+      expect((failures[0]!.metadata as { stage?: string }).stage).toBe(
+        "submit",
+      );
+      expect(toast.error).toHaveBeenCalledWith("自动提交失败，请点击重试");
+      // The unified flow awaits its own submit, so nothing is discarded.
+      expect(capture.discarded).toHaveLength(0);
+    } finally {
+      capture.stop();
+    }
   });
 });
