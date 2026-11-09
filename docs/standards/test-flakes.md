@@ -3345,15 +3345,37 @@ NONDETERMINISM_CONFIRMED = YES（同 spec 在隔离负载通过、在 2-shard �
 
 INTERPRETATION_AT_RECORD_TIME = HYPOTHESIS：`:568` 是单次 `ArrowRight` + 固定 `waitForTimeout(150)` 后采样；2-shard 负载下 Chrome 平滑滚动首帧尚未提交，采样到 0。依据：同文件 `:334` 的 `scrollToHorizontalEnd` 注释明确 "Chrome animates arrow-key scrolling"，并用"两次相同采样"判定落定；该 helper 只用于 `:755`/`:1193`，另有 5 处固定 150ms（`:564`/`:921`/`:998`/`:1079`/`:1120`）。
 
-CURRENT_INTERPRETATION = 同上（尚未做负载下复现，故不升级为 PROVEN_ROOT_CAUSE）
-CURRENT_INTERPRETATION_UPDATED_AT = 2026-11-03
+CURRENT_INTERPRETATION = 同 `INTERPRETATION_AT_RECORD_TIME`（未升级为 PROVEN_ROOT_CAUSE：负载下 instrumented `scrollLeft` 采样序列仍未取得；多次权威失败仅支持机制方向）
+CURRENT_INTERPRETATION_UPDATED_AT = 2026-11-09
 
 CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED（CONTROLLED_EXCLUSION）
-ROOT_CAUSE_CONFIDENCE = HYPOTHESIS（机制方向有源码证据；负载下复现未执行）
-FIRST_CAUSAL_DIVERGENCE = 未执行（待 #878：负载下重复失败或 instrumented 采样序列）
-
-CASE_ID = NONE（未建 case；登记为独立 occurrence）
+ROOT_CAUSE_CONFIDENCE = HYPOTHESIS（机制方向有源码证据 + 本地 KaTeX/原始-LaTeX 宽度测量；负载下 instrumented 复现未执行）
+FIRST_CAUSAL_DIVERGENCE = 未执行（#878 要求的 instrumented `scrollLeft` 采样序列仍未取得；负载下重复失败已多次观察）
+CASE_ID = NONE（仍未建 case：#878 的 4 条 Acceptance 未满足；登记为独立 occurrence + 后续 occurrence）
 AGGREGATION_BASIS = 不聚合（与 CASE-2026-11-03-CI-COVERAGE-BUDGETS 的 coverage 预算族机制不同：这是 E2E oracle 同步，不是 coverage lane 固定预算）
+ISSUE_STATE = OPEN（#878，4 条 Acceptance 未勾选）
+OWNER_DECISION = 2026-11-09 明确 defer：本轮不再扩展 flaky-E2E 工作；禁止 retry / 提高 timeout / 减少 shard / 跳过断言
+
+### 后续权威 occurrence（同签名，均 2-shard 负载）
+
+证据见 #878 评论与 `1f29b614` commit message；部分 occurrence 的 `gh run rerun --failed` 双 shard
+success，复跑通过 ≠ 根因消除。
+
+- run 42378974125 / job 128423206301，2026-11-07T14:00:36Z，HEAD `2d471334`（PR #915：13 文件均为注释/日志/文案，未触达该 spec）。
+- run 42389069178 / job 128453229700，2026-11-07，HEAD `d26a6f5d`（PR #918 仅 release metadata、零源码改动；紧邻同树 `fd82a7c1` 双 shard green）。
+- run 42518523050 / job 128847373789，2026-11-08T20:10Z，HEAD `d3580f3e`（PR #923）。
+- run 42564029701 / job 128987131154、run 42563996915 / job 128987063313（PR #924 shard 2），2026-11-09（均为 `1f29b614` 修复前的权威失败）。
+
+### 已交付的部分修复（不是 closure，#878 仍 OPEN）
+
+`1f29b614`（`test(e2e): settled-state sampling for rich-content-overflow geometry (#878)`）只改
+`:528 stable geometry` 一个探针：采样前等待 `.katex` 投影与 `document.fonts.ready`、重新断言仍聚焦且
+`data-overflowing="true"`，再用有界 `expect.poll(scrollLeft > before, timeout 5s)` 取代该处固定
+`waitForTimeout(150)`。未删除/放宽断言，未加 retry、全局 timeout 或 skip。
+
+同一族其余 4 处固定 150ms（修复后 `:934`/`:1011`/`:1092`/`:1133`）未纳入；
+`FIRST_CAUSAL_DIVERGENCE` 仍未执行；修复后无 2-shard 负载下 instrumented 采样证据，也无 post-fix
+权威 CI 绿灯（GitHub 账户计费故障，外部非代码）。本地 `pnpm e2e` 通过不构成 flake-rate 证明。
 
 ### 已知不是的原因（附证据）
 
@@ -3362,11 +3384,15 @@ AGGREGATION_BASIS = 不聚合（与 CASE-2026-11-03-CI-COVERAGE-BUDGETS 的 cove
 
 ### 当前缓解
 
-无。禁止用调大 timeout / 加 retry / 减少 shard 掩盖。
+无掩盖性缓解。`1f29b614` 是 1/5 探针的显式条件等待（真修复尝试，非缓解）；其余 4 处仍为固定等待、
+本 occurrence 仍活跃。禁止用调大 timeout / 加 retry / 减少 shard 掩盖。
 
 ### 后续动作 / NEXT_DIAGNOSTIC_ACTION
 
-#878：先在 2-shard 负载下取得可重复失败或 instrumented（`scrollLeft` 采样序列）证据，再把 5 处固定等待统一到显式条件等待；完成后登记 case。
+#878（Owner 2026-11-09 defer 至下一轮）：先在 2-shard 负载下取得 instrumented（`scrollLeft` 采样序列）
+证据，再把 5 处固定等待统一到显式条件等待（或逐处给出不纳入理由），重复 2-shard 通过到 flake 阈值，
+并把本登记册标为 CASE_STATE、同步 `CURRENT_INTERPRETATION` / `ROOT_CAUSE_CONFIDENCE`。当前 `CASE_ID`
+仍为 NONE，本条目保持 OPEN / DEFER，不表述为「已修复」或「完整 CI 通过」。
 
 ---
 
